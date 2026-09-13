@@ -16,6 +16,13 @@ import {
 } from "../api/client.js";
 import { ALLERGEN_CODES, allergenName, vatClassName } from "../i18n/domain.js";
 import { t } from "../i18n/t.js";
+import {
+  nameFields,
+  nonBlankNames,
+  switchField,
+  textField,
+  type FieldContext,
+} from "./form-fields.js";
 
 /**
  * One modifier choice as this modal edits it: the shared fields (name, availability) plus, for an
@@ -34,8 +41,6 @@ export type ChoiceDraft = ModifierEffects & {
 
 /** The largest integer the server's modifier contract accepts. */
 const MAX_INTEGER = 2147483647;
-const clean = (value: Record<string, string>) =>
-  Object.fromEntries(Object.entries(value).filter(([, text]) => text.trim()));
 
 @customElement("dashboard-choice-form")
 export class ChoiceForm extends LitElement {
@@ -146,7 +151,7 @@ export class ChoiceForm extends LitElement {
     if (Object.keys(errors).length) return;
     const value: ChoiceDraft = {
       id: this.#choiceId,
-      name: clean(this.name),
+      name: nonBlankNames(this.name),
       available: this.available,
       ...this.effects,
       ...(this.kind === "extras"
@@ -161,62 +166,8 @@ export class ChoiceForm extends LitElement {
       new CustomEvent("wt-choice-save", { detail: { value }, bubbles: true, composed: true }),
     );
   }
-  #input(
-    key: string,
-    label: string,
-    value: string,
-    change: (value: string) => void,
-    required = false,
-  ) {
-    return html`<wt-input
-      name=${key}
-      label=${label}
-      .value=${value}
-      .required=${required}
-      .disabled=${this.busy}
-      .error=${this.#error(key)}
-      .invalid=${!!this.#error(key)}
-      @wt-change=${(event: CustomEvent<{ value: string }>) => {
-        event.stopPropagation();
-        change(event.detail.value);
-      }}
-    ></wt-input>`;
-  }
-  #names(
-    key: string,
-    label: string,
-    value: Record<string, string>,
-    change: (value: Record<string, string>) => void,
-  ) {
-    return this.locales.map((locale) => {
-      const required = locale === currentContentLanguages().defaultLanguage;
-      const error = this.#error(`${key}-${locale}`) || (required ? this.#error(key) : "");
-      return html`<wt-input
-        name=${`${key}-${locale}`}
-        label=${`${label} (${locale})`}
-        .value=${value[locale] ?? ""}
-        .required=${required}
-        .disabled=${this.busy}
-        .error=${error}
-        .invalid=${!!error}
-        @wt-change=${(event: CustomEvent<{ value: string }>) => {
-          event.stopPropagation();
-          change({ ...value, [locale]: event.detail.value });
-        }}
-      ></wt-input>`;
-    });
-  }
-  #toggle(key: string, label: string, checked: boolean, change: (checked: boolean) => void) {
-    return html`<wt-switch
-      name=${key}
-      label=${label}
-      .checked=${checked}
-      .disabled=${this.busy}
-      @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
-        event.stopPropagation();
-        change(event.detail.checked);
-      }}
-    ></wt-switch>`;
+  #fields(): FieldContext {
+    return { busy: this.busy, locales: this.locales, error: (key) => this.#error(key) };
   }
   #effectList(key: "removeAllergens", label: string, options: readonly string[]) {
     const selected = this.effects[key] ?? [];
@@ -241,7 +192,8 @@ export class ChoiceForm extends LitElement {
     const reviewed =
       this.effects.dietaryEffect !== undefined && this.effects.dietaryEffect !== null;
     const selected = this.effects.dietaryEffect?.invalidates ?? [];
-    return html`${this.#toggle(
+    return html`${switchField(
+      this.#fields(),
       "dietary-reviewed",
       t("modifiers.dietary_reviewed"),
       reviewed,
@@ -383,15 +335,22 @@ export class ChoiceForm extends LitElement {
         .errors=${Object.values({ ...this.serverErrors, ...this.errors })}
       ></wt-form-error-summary>
       <div class="fields">
-        ${this.#names("name", t("modifiers.name"), this.name, (name) => {
+        ${nameFields(this.#fields(), "name", t("modifiers.name"), this.name, (name) => {
           this.name = name;
         })}
-        ${this.#toggle("available", t("modifiers.available"), this.available, (available) => {
-          this.available = available;
-        })}
+        ${switchField(
+          this.#fields(),
+          "available",
+          t("modifiers.available"),
+          this.available,
+          (available) => {
+            this.available = available;
+          },
+        )}
         ${
           this.kind === "extras"
-            ? html`${this.#input(
+            ? html`${textField(
+                  this.#fields(),
                   "priceDelta",
                   t("modifiers.price"),
                   this.priceDelta,
@@ -399,7 +358,8 @@ export class ChoiceForm extends LitElement {
                     this.priceDelta = priceDelta;
                   },
                   true,
-                )}${this.#input(
+                )}${textField(
+                  this.#fields(),
                   "maxQuantity",
                   t("modifiers.max_quantity"),
                   this.maxQuantity,

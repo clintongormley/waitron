@@ -216,6 +216,28 @@ it("clears an option default when its choice becomes unavailable", async () => {
   await click(el, "save");
   expect(submit.mock.calls[0]![0].detail.value.defaultChoiceId).toBeNull();
 });
+it("clears the preselection and the default of a choice saved from the modal as unavailable", async () => {
+  const saveUnavailable = async (el: ModifierForm, value: Record<string, unknown>) => {
+    el.shadowRoot!.querySelector("dashboard-choice-form")!.dispatchEvent(
+      new CustomEvent("wt-choice-save", {
+        bubbles: true,
+        composed: true,
+        detail: { value: { ...value, available: false } },
+      }),
+    );
+    await el.updateComplete;
+    const submit = vi.fn();
+    el.addEventListener("wt-submit", submit);
+    await click(el, "save");
+    return submit.mock.calls[0]![0].detail.value;
+  };
+  const withExtras = await mount(extra);
+  const saved = await saveUnavailable(withExtras, extra.choices[0]!);
+  expect(choiceById({ value: saved }, "a").preselected).toBe(false);
+  cleanupWidgets();
+  const withOptions = await mount({ ...options, defaultChoiceId: "c1" });
+  expect((await saveUnavailable(withOptions, options.choices[0]!)).defaultChoiceId).toBeNull();
+});
 it("rejects more preselected extras than the total quantity cap allows", async () => {
   const el = await mount(extra);
   const submit = vi.fn();

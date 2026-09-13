@@ -20,6 +20,13 @@ import type { ChoiceDraft } from "./choice-form.js";
 import { reorder } from "./reorder.js";
 import { type Modifier, type ModifierInput, type ModifierExtraChoice } from "../api/client.js";
 import { t } from "../i18n/t.js";
+import {
+  nameFields,
+  nonBlankNames,
+  switchField,
+  textField,
+  type FieldContext,
+} from "./form-fields.js";
 
 /** A choice as the modifier form holds it while editing: the modal's `ChoiceDraft` (name,
  * availability, and — for an extra — price, quantity, tax and effects) plus `preselected`, which
@@ -27,8 +34,6 @@ import { t } from "../i18n/t.js";
  * is unused; the single options default is tracked separately as `defaultChoiceId`. */
 type FormChoice = ChoiceDraft & { preselected: boolean };
 const TYPES = ["text", "extras", "options", "yes-no"] as const;
-const clean = (value: Record<string, string>) =>
-  Object.fromEntries(Object.entries(value).filter(([, text]) => text.trim()));
 
 @customElement("dashboard-modifier-form")
 export class ModifierForm extends LitElement {
@@ -177,19 +182,17 @@ export class ModifierForm extends LitElement {
     const language = currentContentLanguages().defaultLanguage;
     return `${t("modifiers.choice_problem")} ${choice.name[language] || t("modifiers.choice")}`;
   }
+  /** An unavailable choice is neither preselected nor the single default, because the till reads
+   * both. Every write of a choice into `choices` — a row edit or a modal save — passes through here. */
+  #clearSelectionIfUnavailable(choice: FormChoice): FormChoice {
+    if (choice.available) return choice;
+    if (this.defaultChoiceId === choice.id) this.defaultChoiceId = null;
+    return { ...choice, preselected: false };
+  }
   #changeChoice(id: string, patch: Partial<FormChoice>): void {
     this.choices = this.choices.map((choice) =>
-      choice.id === id ? { ...choice, ...patch } : choice,
+      choice.id === id ? this.#clearSelectionIfUnavailable({ ...choice, ...patch }) : choice,
     );
-    // Turning a choice off must not leave it preselected or the single default, and the till reads
-    // both — so clear them here, where availability changes, whether toggled from the row or resaved
-    // from the modal as unavailable.
-    if (patch.available === false) {
-      this.choices = this.choices.map((choice) =>
-        choice.id === id ? { ...choice, preselected: false } : choice,
-      );
-      if (this.defaultChoiceId === id) this.defaultChoiceId = null;
-    }
   }
   #switchType(type: ModifierInput["type"]): void {
     this.type = type;
@@ -210,11 +213,10 @@ export class ModifierForm extends LitElement {
     event.stopPropagation();
     const value = event.detail.value;
     const existing = this.choices.find((choice) => choice.id === value.id);
-    const merged: FormChoice = { ...value, preselected: existing?.preselected ?? false };
-    if (!merged.available) {
-      merged.preselected = false;
-      if (this.defaultChoiceId === merged.id) this.defaultChoiceId = null;
-    }
+    const merged = this.#clearSelectionIfUnavailable({
+      ...value,
+      preselected: existing?.preselected ?? false,
+    });
     this.choices = existing
       ? this.choices.map((choice) => (choice.id === value.id ? merged : choice))
       : [...this.choices, merged];
@@ -350,10 +352,10 @@ export class ModifierForm extends LitElement {
     }
     this.errors = errors;
     if (Object.keys(errors).length) return;
-    const common = { name: clean(this.name), available: this.available };
+    const common = { name: nonBlankNames(this.name), available: this.available };
     const choices = this.choices.map((choice) => ({
       id: choice.id,
-      name: clean(choice.name),
+      name: nonBlankNames(choice.name),
       available: choice.available,
       ...(choice.addAllergens === undefined ? {} : { addAllergens: choice.addAllergens }),
       ...(choice.removeAllergens === undefined ? {} : { removeAllergens: choice.removeAllergens }),
@@ -391,62 +393,8 @@ export class ModifierForm extends LitElement {
       new CustomEvent("wt-submit", { detail: { value }, bubbles: true, composed: true }),
     );
   }
-  #input(
-    key: string,
-    label: string,
-    value: string,
-    change: (value: string) => void,
-    required = false,
-  ) {
-    return html`<wt-input
-      name=${key}
-      label=${label}
-      .value=${value}
-      .required=${required}
-      .disabled=${this.busy}
-      .error=${this.#error(key)}
-      .invalid=${!!this.#error(key)}
-      @wt-change=${(event: CustomEvent<{ value: string }>) => {
-        event.stopPropagation();
-        change(event.detail.value);
-      }}
-    ></wt-input>`;
-  }
-  #names(
-    key: string,
-    label: string,
-    value: Record<string, string>,
-    change: (value: Record<string, string>) => void,
-  ) {
-    return this.locales.map((locale) => {
-      const required = locale === currentContentLanguages().defaultLanguage;
-      const error = this.#error(`${key}-${locale}`) || (required ? this.#error(key) : "");
-      return html`<wt-input
-        name=${`${key}-${locale}`}
-        label=${`${label} (${locale})`}
-        .value=${value[locale] ?? ""}
-        .required=${required}
-        .disabled=${this.busy}
-        .error=${error}
-        .invalid=${!!error}
-        @wt-change=${(event: CustomEvent<{ value: string }>) => {
-          event.stopPropagation();
-          change({ ...value, [locale]: event.detail.value });
-        }}
-      ></wt-input>`;
-    });
-  }
-  #toggle(key: string, label: string, checked: boolean, change: (checked: boolean) => void) {
-    return html`<wt-switch
-      name=${key}
-      label=${label}
-      .checked=${checked}
-      .disabled=${this.busy}
-      @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
-        event.stopPropagation();
-        change(event.detail.checked);
-      }}
-    ></wt-switch>`;
+  #fields(): FieldContext {
+    return { busy: this.busy, locales: this.locales, error: (key) => this.#error(key) };
   }
   #choiceRow(choice: FormChoice, language: string, extras: boolean) {
     const label = choice.name[language] || t("modifiers.choice");
@@ -598,7 +546,7 @@ export class ModifierForm extends LitElement {
     >
       ${Object.keys(this.errors).length || Object.keys(this.fieldErrors).length ? html`<p class="error" role="alert">${t("modifiers.problem")}</p>` : nothing}${this.#error("_form") ? html`<p class="error">${this.#error("_form")}</p>` : nothing}
       <div class="fields">
-        ${this.#names("name", t("modifiers.name"), this.name, (name) => {
+        ${nameFields(this.#fields(), "name", t("modifiers.name"), this.name, (name) => {
           this.name = name;
         })}<label
           >${t("modifiers.type")}<select
@@ -612,13 +560,20 @@ export class ModifierForm extends LitElement {
             ${TYPES.map((type) => html`<option value=${type} ?selected=${this.type === type}>${t(`modifiers.${type}`)}</option>`)}
           </select></label
         >
-        ${this.#toggle("available", t("modifiers.available"), this.available, (value) => {
-          this.available = value;
-        })}
+        ${switchField(
+          this.#fields(),
+          "available",
+          t("modifiers.available"),
+          this.available,
+          (value) => {
+            this.available = value;
+          },
+        )}
         ${this.type === "text" ? html`<p>${t("modifiers.text_help")}</p>` : nothing}
         ${
           this.type === "yes-no"
-            ? this.#toggle(
+            ? switchField(
+                this.#fields(),
                 "defaultValue",
                 t("modifiers.default_value"),
                 this.defaultValue,
@@ -630,11 +585,23 @@ export class ModifierForm extends LitElement {
         }
         ${
           this.type === "extras"
-            ? html`${this.#toggle("required", t("modifiers.required"), this.required, (value) => {
-                this.required = value;
-              })}${this.#input("maxTotalQuantity", t("modifiers.max_total"), this.cap, (value) => {
-                this.cap = value;
-              })}`
+            ? html`${switchField(
+                this.#fields(),
+                "required",
+                t("modifiers.required"),
+                this.required,
+                (value) => {
+                  this.required = value;
+                },
+              )}${textField(
+                this.#fields(),
+                "maxTotalQuantity",
+                t("modifiers.max_total"),
+                this.cap,
+                (value) => {
+                  this.cap = value;
+                },
+              )}`
             : nothing
         }
         ${this.type === "extras" || this.type === "options" ? this.#choicesSection() : nothing}
