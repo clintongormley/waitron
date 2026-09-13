@@ -23,7 +23,7 @@ export interface Mounted<T extends HTMLElement> {
 /**
  * Mounts a custom element `tag` with `props` assigned before connection, inside a fresh themed
  * host, and waits for its first render. The host is always painted `--wt-color-surface-raised`,
- * matching the `<wt-modal>` every wizard screen now renders inside (`setup-app.ts:703`) rather than
+ * matching the `<wt-modal>` every wizard screen now renders inside (`SetupApp`'s render in `setup-app.ts`) rather than
  * the page background behind it, so a color-contrast a11y check means what it means in the app. Pass
  * `theme` to additionally pin `data-theme`; omit it to render in whatever theme the environment
  * resolves to.

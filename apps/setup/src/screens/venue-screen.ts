@@ -140,10 +140,10 @@ const LOCALE_LABELS: Readonly<Record<string, string>> = {
  * operator can untick either. Two is the most this ever returns, which keeps a fresh form inside the
  * one-or-two every layer below insists on: `#next` refuses a selection outside 1–2, the server
  * refuses it in the pure planner before any admin connection is spent
- * (`packages/provisioning/src/venue-plan.ts:125`), and the stored list is bounded by the
+ * (`planVenue` in `packages/provisioning/src/venue-plan.ts`), and the stored list is bounded by the
  * `locations_invoice_locales_len` check constraint (`packages/db/src/schema/tenants.ts:183`). The
  * setup boundary also refuses a locale the country pack does not offer
- * (`apps/server/src/setup-api.ts:339`).
+ * (`parseVenue` in `apps/server/src/setup-api.ts`).
  */
 function defaultInvoiceLocales(
   pack: CountryPack | undefined,
@@ -351,7 +351,7 @@ export class SetupVenueScreen extends LitElement {
     if (loc.invoiceLocales !== undefined) {
       // Order-sensitive ON PURPOSE, unlike the compare-by-value rule for saved selections
       // (CLAUDE.md §3): `locales[0]` is the venue's PRIMARY invoice locale
-      // (`packages/provisioning/src/venue-plan.ts:170`), so a reordered list is a different choice
+      // (`planVenue` in `packages/provisioning/src/venue-plan.ts`), so a reordered list is a different choice
       // and must stop the province from overwriting it.
       this.#invoiceLocalesFollowAreaDefault =
         pack !== undefined && JSON.stringify(loc.invoiceLocales) === JSON.stringify(defaults);
@@ -641,8 +641,9 @@ export class SetupVenueScreen extends LitElement {
                 <legend>
                   Invoice languages (pick one or two) *
                   <wt-help-tooltip aria-label="Help with invoice languages"
-                    >Choose the languages printed on invoices. The province suggests the first
-                    language; the operation description is kept separately.</wt-help-tooltip
+                    >Choose the languages printed on invoices. The country's language is ticked
+                    first, and a province with a language of its own adds it second; the operation
+                    description is kept separately.</wt-help-tooltip
                   >
                 </legend>
                 ${(pack?.invoiceLocales ?? []).map(
