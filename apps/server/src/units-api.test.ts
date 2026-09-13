@@ -18,7 +18,11 @@ let tenantId: string;
 let cookie: string;
 
 beforeEach(async () => {
+  // Child-to-parent order: product_units RESTRICTs deletes of the units and products it references.
+  await suite.db.execute(sql`delete from product_units`);
   await suite.db.execute(sql`delete from units`);
+  await suite.db.execute(sql`delete from products`);
+  await suite.db.execute(sql`delete from catalogues`);
   await suite.db.execute(sql`delete from management_sessions`);
   await suite.db.execute(sql`delete from persons`);
   tenantId = await seedTenant(suite.db);
@@ -91,6 +95,41 @@ describe("unit management routes", () => {
   it("requires a session", async () => {
     const response = await app().request("/management-api/units");
     expect(response.status).toBe(401);
+  });
+
+  it("lists the products using a unit with availability, and 404s a foreign unit", async () => {
+    const unit = (await (
+      await send("POST", "/management-api/units", { name: { en: "portion" }, precision: 0 })
+    ).json()) as { id: string };
+
+    const empty = await send("GET", `/management-api/units/${unit.id}/products`);
+    expect(empty.status).toBe(200);
+    expect(await empty.json()).toEqual([]);
+
+    const productId = await withTenant(suite.db, tenantId, async (tx) => {
+      const menu = await tx.execute<{ id: string }>(sql`
+        insert into catalogues (tenant_id, name) values (${tenantId}, 'Menu') returning id`);
+      const product = await tx.execute<{ id: string }>(sql`
+        insert into products (tenant_id, catalogue_id, descriptions, pricing_unit, unit_price, vat_class, active)
+        values (${tenantId}, ${menu.rows[0]!.id}, ${JSON.stringify({ en: "Soup" })}::jsonb, 'each', '1', 'general', false)
+        returning id`);
+      await tx.execute(sql`
+        insert into product_units (tenant_id, product_id, unit_id)
+        values (${tenantId}, ${product.rows[0]!.id}, ${unit.id})`);
+      return product.rows[0]!.id;
+    });
+
+    const listed = await send("GET", `/management-api/units/${unit.id}/products`);
+    expect(listed.status).toBe(200);
+    expect(await listed.json()).toEqual([
+      { id: productId, name: { en: "Soup" }, available: false },
+    ]);
+
+    const foreign = await send(
+      "GET",
+      "/management-api/units/00000000-0000-4000-8000-000000000000/products",
+    );
+    expect(foreign.status).toBe(404);
   });
 
   it("does not expose or mutate another tenant's unit through either manager session", async () => {

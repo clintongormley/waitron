@@ -10,6 +10,7 @@ import {
   deleteUnit,
   getUnit,
   listUnits,
+  productsUsingUnit,
   updateUnit,
 } from "./units.js";
 import { assertQuantityPrecision } from "./units.js";
@@ -46,8 +47,32 @@ describe("unit operations", () => {
         update products set active = false where tenant_id = ${tenantId} and id = ${productId}`);
       await expect(deleteUnit(tx, tenantId, unit.id)).rejects.toMatchObject({
         code: "unit.in_use",
-        params: { products: [{ en: "Soup" }] },
+        params: { products: [{ id: productId, name: { en: "Soup" }, available: false }] },
       });
+    });
+  });
+
+  it("lists the products using a unit, with each product's availability", async () => {
+    const tenantId = await seedTenant(suite.db);
+    await withTenant(suite.db, tenantId, async (tx) => {
+      const unit = await createUnit(tx, tenantId, { name: { en: "portion" }, precision: 0 }, "en");
+      expect(await productsUsingUnit(tx, tenantId, unit.id)).toEqual([]);
+
+      const soup = await product(tx, tenantId, "Soup");
+      const tea = await product(tx, tenantId, "Tea");
+      await assignProductUnit(tx, tenantId, soup, unit.id);
+      await assignProductUnit(tx, tenantId, tea, unit.id);
+      await tx.execute(sql`
+        update products set active = false where tenant_id = ${tenantId} and id = ${tea}`);
+
+      const using = await productsUsingUnit(tx, tenantId, unit.id);
+      expect(using).toHaveLength(2);
+      expect(using).toEqual(
+        expect.arrayContaining([
+          { id: soup, name: { en: "Soup" }, available: true },
+          { id: tea, name: { en: "Tea" }, available: false },
+        ]),
+      );
     });
   });
 

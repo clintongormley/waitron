@@ -1,9 +1,9 @@
 import type { ContentLanguages } from "@waitron/shared";
 import { baseStyles, setContentLanguages } from "@waitron/ui";
 import type { DataTableColumn } from "@waitron/ui/src/components/wt-data-table.js";
-import { LitElement, css, html, nothing } from "lit";
+import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import type { DashboardApi, Unit, UnitInput } from "../api/client.js";
+import type { DashboardApi, ProductUsingUnit, Unit, UnitInput } from "../api/client.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import { codeMessage } from "../i18n/codes.js";
 import { localizedName } from "../i18n/localized.js";
@@ -16,7 +16,7 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 
-type UnitError = { code?: string; params?: { products?: Record<string, string>[] } };
+type UnitError = { code?: string; params?: { products?: ProductUsingUnit[] } };
 
 @customElement("dashboard-units-screen")
 export class UnitsScreen extends LitElement {
@@ -46,8 +46,9 @@ export class UnitsScreen extends LitElement {
       .error {
         color: var(--wt-color-danger);
       }
-      .references {
-        margin: var(--wt-space-2) 0 0;
+      .in-use-search {
+        display: block;
+        margin: var(--wt-space-3) 0;
       }
     `,
   ];
@@ -70,6 +71,14 @@ export class UnitsScreen extends LitElement {
   @state() private error: UnitError | null = null;
   @state() private fieldErrors: { name?: string; precision?: string } = {};
   @state() private deleteTarget: Unit | null = null;
+  /** The unit whose deletion is blocked, driving the in-use modal; null when the modal is closed. */
+  @state() private inUseUnitId: string | null = null;
+  @state() private inUseProducts: ProductUsingUnit[] = [];
+  @state() private inUseSearch = "";
+  /** Set by the shell after a product save to reopen the in-use modal for that unit with a fresh
+   * list; consumed once (the shell clears it on the `wt-reopen-consumed` reply). */
+  @property({ attribute: false }) reopenUnitId: string | null = null;
+  #reopenHandled: string | null = null;
   private focusTarget: HTMLElement | null = null;
 
   override connectedCallback(): void {
@@ -168,11 +177,115 @@ export class UnitsScreen extends LitElement {
       this.units = this.units.filter((unit) => unit.id !== target.id);
       this.#closeDelete();
     } catch (error) {
-      this.error = error as UnitError;
-      this.#closeDelete();
+      const failure = error as UnitError;
+      if (failure.code === "unit.in_use") {
+        // Hand off from the confirm dialog to the in-use modal, which takes focus itself.
+        this.deleteTarget = null;
+        this.inUseUnitId = target.id;
+        this.inUseProducts = failure.params?.products ?? [];
+        this.inUseSearch = "";
+      } else {
+        this.error = failure;
+        this.#closeDelete();
+      }
     } finally {
       this.busy = false;
     }
+  }
+
+  #closeInUse(): void {
+    this.inUseUnitId = null;
+    this.inUseProducts = [];
+    this.inUseSearch = "";
+    requestAnimationFrame(() => this.focusTarget?.focus());
+  }
+
+  /** Retry the delete from inside the modal. Success removes the unit and closes; a still-in-use
+   * refusal refreshes the list (a product was reassigned); any other error becomes an inline banner. */
+  async #deleteUnitFromModal(): Promise<void> {
+    if (this.inUseUnitId === null || this.busy) return;
+    const id = this.inUseUnitId;
+    this.busy = true;
+    this.error = null;
+    try {
+      await this.api.deleteUnit(id);
+      this.units = this.units.filter((unit) => unit.id !== id);
+      this.#closeInUse();
+    } catch (error) {
+      const failure = error as UnitError;
+      if (failure.code === "unit.in_use") {
+        this.inUseProducts = failure.params?.products ?? [];
+      } else {
+        this.error = failure;
+        this.#closeInUse();
+      }
+    } finally {
+      this.busy = false;
+    }
+  }
+
+  /** The shell navigates to the product's editor and, on save, returns and reopens this modal. */
+  #editProduct(productId: string, event: Event): void {
+    event.stopPropagation();
+    this.dispatchEvent(
+      new CustomEvent("wt-edit-product", {
+        detail: { productId, returnToUnitId: this.inUseUnitId },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
+  override updated(changed: PropertyValues): void {
+    if (!changed.has("reopenUnitId")) return;
+    if (this.reopenUnitId === null) {
+      this.#reopenHandled = null;
+    } else if (this.reopenUnitId !== this.#reopenHandled) {
+      this.#reopenHandled = this.reopenUnitId;
+      void this.#reopenInUse(this.reopenUnitId);
+    }
+  }
+
+  async #reopenInUse(unitId: string): Promise<void> {
+    this.inUseSearch = "";
+    this.inUseUnitId = unitId;
+    try {
+      this.inUseProducts = await this.api.productsUsingUnit(unitId);
+    } catch (error) {
+      this.error = error as UnitError;
+      this.inUseUnitId = null;
+    }
+    this.dispatchEvent(new CustomEvent("wt-reopen-consumed", { bubbles: true, composed: true }));
+  }
+
+  #productColumns(): DataTableColumn<ProductUsingUnit>[] {
+    return [
+      {
+        key: "name",
+        label: t("units.name"),
+        cell: (product) => localizedName(product.name),
+        sortValue: (product) => localizedName(product.name),
+      },
+      {
+        key: "availability",
+        label: t("units.availability"),
+        cell: (product) =>
+          product.available ? t("product.active_badge") : t("product.inactive_badge"),
+        sortValue: (product) => (product.available ? 1 : 0),
+      },
+      {
+        key: "actions",
+        label: t("units.actions"),
+        cell: (product) => html`
+          <wt-button
+            data-test=${`edit-product-${product.id}`}
+            variant="ghost"
+            @click=${(event: Event) => this.#editProduct(product.id, event)}
+            >${t("action.edit")}</wt-button
+          >
+        `,
+      },
+    ];
   }
 
   #columns(): DataTableColumn<Unit>[] {
@@ -226,7 +339,15 @@ export class UnitsScreen extends LitElement {
         : this.units.filter((unit) =>
             Object.values(unit.name).some((name) => name.toLocaleLowerCase().includes(needle)),
           );
-    const references = this.error?.params?.products ?? [];
+    const productNeedle = this.inUseSearch.trim().toLocaleLowerCase();
+    const inUseRows =
+      productNeedle === ""
+        ? this.inUseProducts
+        : this.inUseProducts.filter((product) =>
+            Object.values(product.name).some((name) =>
+              name.toLocaleLowerCase().includes(productNeedle),
+            ),
+          );
     return html`
       <h1>${t("units.title")}</h1>
       <p class="description">${t("units.description")}</p>
@@ -249,18 +370,9 @@ export class UnitsScreen extends LitElement {
         this.error
           ? html`<div class="error" role="alert">
               ${
-                this.error.code === "unit.in_use"
-                  ? codeMessage("unit.in_use")
-                  : this.editorOpen && this.error.code
-                    ? codeMessage(this.error.code)
-                    : t("units.load_error")
-              }
-              ${
-                references.length
-                  ? html`<ul class="references">
-                      ${references.map((name) => html`<li>${localizedName(name)}</li>`)}
-                    </ul>`
-                  : nothing
+                this.editorOpen && this.error.code
+                  ? codeMessage(this.error.code)
+                  : t("units.load_error")
               }
             </div>`
           : nothing
@@ -305,6 +417,52 @@ export class UnitsScreen extends LitElement {
             ?disabled=${this.busy}
             @click=${() => void this.#delete()}
             >${t("action.delete")}</wt-button
+          >
+        </wt-form-actions>
+      </wt-dialog>
+      <wt-dialog
+        data-test="in-use-dialog"
+        .open=${this.inUseUnitId !== null}
+        heading=${this.inUseProducts.length === 0 ? t("units.delete_unit") : t("units.in_use_title")}
+        @wt-close=${this.#closeInUse}
+      >
+        <p>${this.inUseProducts.length === 0 ? t("units.in_use_empty") : t("units.in_use_body")}</p>
+        ${
+          this.inUseProducts.length > 0
+            ? html`
+                <wt-input
+                  class="in-use-search"
+                  data-test="in-use-search"
+                  name="in-use-search"
+                  label=${t("units.in_use_search")}
+                  @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                    event.stopPropagation();
+                    this.inUseSearch = event.detail.value;
+                  }}
+                ></wt-input>
+                <wt-data-table
+                  aria-label=${t("units.in_use_title")}
+                  .rows=${inUseRows}
+                  .columns=${this.#productColumns()}
+                  .rowKey=${(product: ProductUsingUnit) => product.id}
+                ></wt-data-table>
+              `
+            : nothing
+        }
+        <wt-form-actions slot="footer">
+          <wt-button
+            slot="cancel"
+            data-test="close-in-use"
+            variant="secondary"
+            @click=${this.#closeInUse}
+            >${t("action.close")}</wt-button
+          >
+          <wt-button
+            data-test="delete-unit"
+            variant="danger"
+            ?disabled=${this.busy}
+            @click=${() => void this.#deleteUnitFromModal()}
+            >${t("units.delete_unit")}</wt-button
           >
         </wt-form-actions>
       </wt-dialog>

@@ -22,6 +22,10 @@ function api(): DashboardApi {
     createUnit: vi.fn(),
     updateUnit: vi.fn(),
     deleteUnit: vi.fn(),
+    productsUsingUnit: vi.fn().mockResolvedValue([
+      { id: "p1", name: { es: "Café", en: "Coffee" }, available: true },
+      { id: "p2", name: { es: "Té", en: "Tea" }, available: false },
+    ]),
   } as unknown as DashboardApi;
 }
 
@@ -38,6 +42,20 @@ describe.each(["light", "dark"] as const)("units-screen a11y (%s theme)", (theme
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=create]")!.click();
     await el.updateComplete;
     await el.shadowRoot!.querySelector("dashboard-unit-form")!.updateComplete;
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders the in-use modal accessibly", async () => {
+    const { el, host } = await mountWidget<UnitsScreen>(
+      "dashboard-units-screen",
+      { api: api() },
+      theme,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await el.updateComplete;
+    el.reopenUnitId = "u1";
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await el.updateComplete;
     await expectNoA11yViolations(host);
   });
 });

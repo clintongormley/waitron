@@ -145,6 +145,23 @@ describe("catalogue-screen", () => {
     expect(api.listProducts).toHaveBeenCalledTimes(4);
   });
 
+  it("announces a saved product so the shell can return to whoever sent the editor", async () => {
+    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", {
+      api: stubApi(),
+    });
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-product]")!.click();
+    await el.updateComplete;
+    const saved = new Promise<CustomEvent>((resolve) =>
+      el.addEventListener("wt-product-saved", (event) => resolve(event as CustomEvent), {
+        once: true,
+      }),
+    );
+    emit(editor(el), "wt-submit", { value: value as ProductEditorInput });
+    const event = await saved;
+    expect(event.detail).toEqual({ productId: "new" });
+  });
+
   it("loads the aggregate on edit and keeps the editor open after a failed save", async () => {
     const api = stubApi({
       updateProductEditor: vi.fn().mockRejectedValue({ code: "product.invalid" }),

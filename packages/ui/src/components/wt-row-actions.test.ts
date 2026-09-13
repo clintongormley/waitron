@@ -1,4 +1,4 @@
-import { html } from "lit";
+import { html, nothing } from "lit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "@vitest/browser/context";
 import type { WtButton } from "./wt-button.js";
@@ -64,7 +64,9 @@ describe("row actions", () => {
       "Department actions",
     );
   });
-  it("positions the popup beside the trigger before the first painted frame", async () => {
+  async function openInTable(
+    align: "start" | "end" | undefined,
+  ): Promise<{ bounds: DOMRect; anchor: DOMRect }> {
     const { el: table } = await mountWidget<WtDataTable>("wt-data-table", {
       ariaLabel: "Print agents",
       rows: [{}],
@@ -75,12 +77,14 @@ describe("row actions", () => {
           label: "Actions",
           align: "end",
           cell: () =>
-            html`<wt-row-actions label="Agent actions"
+            html`<wt-row-actions label="Agent actions" align=${align ?? nothing}
               ><wt-button>Edit</wt-button><wt-button>Delete</wt-button></wt-row-actions
             >`,
         },
       ],
     });
+    // A narrow table leaves room on both sides so alignment is observed, not clamped to the viewport.
+    table.style.width = "320px";
     table.style.marginTop = "150px";
     const actions = table.shadowRoot!.querySelector<WtRowActions>("wt-row-actions")!;
     await actions.updateComplete;
@@ -94,8 +98,17 @@ describe("row actions", () => {
       );
     });
     await userEvent.click(trigger);
-    const bounds = await firstFrame;
-    const anchor = trigger.getBoundingClientRect();
+    return { bounds: await firstFrame, anchor: trigger.getBoundingClientRect() };
+  }
+
+  it("aligns the popup's left edge under the trigger before the first painted frame", async () => {
+    const { bounds, anchor } = await openInTable(undefined);
+    expect(bounds.top).toBeCloseTo(anchor.bottom, 0);
+    expect(bounds.left).toBeCloseTo(anchor.left, 0);
+  });
+
+  it("aligns the popup's right edge under the trigger when align is end (e.g. the account menu)", async () => {
+    const { bounds, anchor } = await openInTable("end");
     expect(bounds.top).toBeCloseTo(anchor.bottom, 0);
     expect(bounds.right).toBeCloseTo(anchor.right, 0);
   });

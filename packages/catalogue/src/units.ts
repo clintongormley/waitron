@@ -17,6 +17,13 @@ export interface Unit {
   precision: number;
 }
 
+/** A product that assigns a given unit — the shape both the deletion refusal and the read return. */
+export interface ProductUsingUnit {
+  id: string;
+  name: Record<string, string>;
+  available: boolean;
+}
+
 export interface SellableUnit extends Unit {
   hardwareUnit: "kg" | "g" | "mg" | null;
 }
@@ -169,15 +176,15 @@ export async function readProductUnitId(
   return row.unitId;
 }
 
-export async function deleteUnit(tx: Transaction, tenantId: string, unitId: string): Promise<void> {
-  const [locked] = await tx
-    .select({ id: units.id })
-    .from(units)
-    .where(and(eq(units.tenantId, tenantId), eq(units.id, unitId)))
-    .for("update");
-  if (locked === undefined) throw new AppError("unit.not_found", { unitId });
-  const references = await tx
-    .select({ name: products.descriptions })
+/** The products that assign this unit, each with its availability, ordered stably by product id.
+ * Tenant-scoped on both tables (one tenant per database is not the query's isolation boundary). */
+export async function productsUsingUnit(
+  tx: Transaction,
+  tenantId: string,
+  unitId: string,
+): Promise<ProductUsingUnit[]> {
+  return tx
+    .select({ id: products.id, name: products.descriptions, available: products.active })
     .from(productUnits)
     .innerJoin(
       products,
@@ -185,8 +192,18 @@ export async function deleteUnit(tx: Transaction, tenantId: string, unitId: stri
     )
     .where(and(eq(productUnits.tenantId, tenantId), eq(productUnits.unitId, unitId)))
     .orderBy(asc(products.id));
+}
+
+export async function deleteUnit(tx: Transaction, tenantId: string, unitId: string): Promise<void> {
+  const [locked] = await tx
+    .select({ id: units.id })
+    .from(units)
+    .where(and(eq(units.tenantId, tenantId), eq(units.id, unitId)))
+    .for("update");
+  if (locked === undefined) throw new AppError("unit.not_found", { unitId });
+  const references = await productsUsingUnit(tx, tenantId, unitId);
   if (references.length > 0) {
-    throw new AppError("unit.in_use", { products: references.map(({ name }) => name) });
+    throw new AppError("unit.in_use", { products: references });
   }
   await tx.delete(units).where(and(eq(units.tenantId, tenantId), eq(units.id, unitId)));
 }

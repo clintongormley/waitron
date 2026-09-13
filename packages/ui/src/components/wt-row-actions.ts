@@ -52,6 +52,10 @@ export class WtRowActions extends LitElement {
   /** wt-icon's own size scale — a per-row kebab wants the default; a banner-level trigger (e.g.
    * the account menu) reads better larger. */
   @property() iconSize: WtIconSize = "md";
+  /** Which trigger edge the popup lines up with. "start" (the default) pins the popup's left edge
+   * under the trigger so a per-row menu opens into the margin beside the table; "end" pins its right
+   * edge for a menu anchored at the trailing edge (e.g. the banner account menu) so it opens inward. */
+  @property() align: "start" | "end" = "start";
   @state() private expanded = false;
   @query("button") private trigger!: HTMLButtonElement;
   @query("[popover]") private popup!: HTMLElement;
@@ -74,7 +78,8 @@ export class WtRowActions extends LitElement {
   private positionPopup(): void {
     const anchor = this.trigger.getBoundingClientRect();
     const popup = this.popup.getBoundingClientRect();
-    this.popup.style.left = `${Math.max(8, Math.min(anchor.right - popup.width, innerWidth - popup.width - 8))}px`;
+    const desiredLeft = this.align === "end" ? anchor.right - popup.width : anchor.left;
+    this.popup.style.left = `${Math.max(8, Math.min(desiredLeft, innerWidth - popup.width - 8))}px`;
     this.popup.style.top = `${Math.max(8, Math.min(anchor.bottom, innerHeight - popup.height - 8))}px`;
   }
 

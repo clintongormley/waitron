@@ -1,6 +1,6 @@
 import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { DashboardApi, Unit } from "../api/client.js";
+import type { DashboardApi, ProductUsingUnit, Unit } from "../api/client.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import type { UnitsScreen } from "./units-screen.js";
 import "./units-screen.js";
@@ -28,8 +28,32 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     createUnit: vi.fn().mockResolvedValue({ id: "u3", name: { es: "caja" }, precision: 0 }),
     updateUnit: vi.fn().mockResolvedValue(units[0]),
     deleteUnit: vi.fn().mockResolvedValue(undefined),
+    productsUsingUnit: vi.fn().mockResolvedValue([]),
     ...overrides,
   } as unknown as DashboardApi;
+}
+
+const inUseProducts: ProductUsingUnit[] = [
+  { id: "p1", name: { es: "Café", en: "Coffee" }, available: true },
+  { id: "p2", name: { es: "Té", en: "Tea" }, available: false },
+];
+
+function inUseApi(products = inUseProducts): DashboardApi {
+  return stubApi({
+    deleteUnit: vi.fn().mockRejectedValue({ code: "unit.in_use", params: { products } }),
+  });
+}
+
+async function openInUseModal(el: UnitsScreen): Promise<HTMLElement & { open: boolean }> {
+  el.shadowRoot!.querySelector("wt-data-table")!
+    .shadowRoot!.querySelector<HTMLElement>("[data-test=delete-u1]")!
+    .click();
+  await el.updateComplete;
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!.click();
+  await flush(el);
+  return el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
+    "[data-test=in-use-dialog]",
+  )!;
 }
 
 async function flush(el: UnitsScreen): Promise<void> {
@@ -158,20 +182,126 @@ describe("units-screen", () => {
     expect(api.background.listUnits).toHaveBeenCalled();
   });
 
-  it("confirms deletion and shows referencing product names when refused", async () => {
-    const api = stubApi({
-      deleteUnit: vi
-        .fn()
-        .mockRejectedValue({ code: "unit.in_use", params: { products: [{ es: "Café" }] } }),
-    });
-    const el = await mount(api);
-    el.shadowRoot!.querySelector("wt-data-table")!
-      .shadowRoot!.querySelector<HTMLElement>("[data-test=delete-u1]")!
-      .click();
+  it("opens a modal listing the products with availability when a delete is refused", async () => {
+    const el = await mount(inUseApi());
+    const dialog = await openInUseModal(el);
+    expect(dialog.open).toBe(true);
+    expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+    const productTable = dialog.querySelector("wt-data-table")!;
+    expect((productTable.rows as ProductUsingUnit[]).map((product) => product.id)).toEqual([
+      "p1",
+      "p2",
+    ]);
+    expect(productTable.shadowRoot!.textContent).toContain("Café");
+    // The availability column reuses the product active/inactive labels (es-ES is the test locale).
+    expect(productTable.shadowRoot!.textContent).toContain("Inactivo");
+  });
+
+  it("filters the product list in the modal", async () => {
+    const el = await mount(inUseApi());
+    const dialog = await openInUseModal(el);
+    dialog
+      .querySelector("[data-test=in-use-search]")!
+      .dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value: "té" }, bubbles: true, composed: true }),
+      );
     await el.updateComplete;
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!.click();
+    const productTable = dialog.querySelector("wt-data-table")!;
+    expect((productTable.rows as ProductUsingUnit[]).map((product) => product.id)).toEqual(["p2"]);
+  });
+
+  it("emits an edit-product event carrying the unit to return to", async () => {
+    const el = await mount(inUseApi());
+    const dialog = await openInUseModal(el);
+    const edited = new Promise<CustomEvent>((resolve) =>
+      el.addEventListener("wt-edit-product", (event) => resolve(event as CustomEvent), {
+        once: true,
+      }),
+    );
+    dialog
+      .querySelector("wt-data-table")!
+      .shadowRoot!.querySelector<HTMLElement>("[data-test=edit-product-p1]")!
+      .click();
+    const event = await edited;
+    expect(event.detail).toEqual({ productId: "p1", returnToUnitId: "u1" });
+  });
+
+  it("deletes the unit from the modal once nothing uses it", async () => {
+    const deleteUnit = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "unit.in_use", params: { products: inUseProducts } })
+      .mockResolvedValueOnce(undefined);
+    const el = await mount(stubApi({ deleteUnit }));
+    const dialog = await openInUseModal(el);
+    dialog.querySelector<HTMLElement>("[data-test=delete-unit]")!.click();
     await flush(el);
-    expect(el.shadowRoot!.textContent).toContain("Café");
+    expect(deleteUnit).toHaveBeenCalledTimes(2);
+    expect(dialog.open).toBe(false);
+    const rows = el.shadowRoot!.querySelector("wt-data-table")!.rows as readonly Unit[];
+    expect(rows.some((unit) => unit.id === "u1")).toBe(false);
+  });
+
+  it("refreshes the modal list when a retried delete is still refused", async () => {
+    const deleteUnit = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "unit.in_use", params: { products: inUseProducts } })
+      .mockRejectedValueOnce({ code: "unit.in_use", params: { products: [inUseProducts[1]] } });
+    const el = await mount(stubApi({ deleteUnit }));
+    const dialog = await openInUseModal(el);
+    dialog.querySelector<HTMLElement>("[data-test=delete-unit]")!.click();
+    await flush(el);
+    expect(dialog.open).toBe(true);
+    const productTable = dialog.querySelector("wt-data-table")!;
+    expect((productTable.rows as ProductUsingUnit[]).map((product) => product.id)).toEqual(["p2"]);
+  });
+
+  it("reopens the modal for a unit on request, fetching its current products", async () => {
+    const productsUsingUnit = vi.fn().mockResolvedValue([inUseProducts[0]]);
+    const el = await mount(stubApi({ productsUsingUnit }));
+    const consumed = new Promise<void>((resolve) =>
+      el.addEventListener("wt-reopen-consumed", () => resolve(), { once: true }),
+    );
+    el.reopenUnitId = "u1";
+    await consumed;
+    await flush(el);
+    expect(productsUsingUnit).toHaveBeenCalledWith("u1");
+    const dialog = el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
+      "[data-test=in-use-dialog]",
+    )!;
+    expect(dialog.open).toBe(true);
+    expect(
+      (dialog.querySelector("wt-data-table")!.rows as ProductUsingUnit[]).map((p) => p.id),
+    ).toEqual(["p1"]);
+  });
+
+  it("shows an empty state and deletes once no product is left, from the modal", async () => {
+    const deleteUnit = vi.fn().mockResolvedValue(undefined);
+    const productsUsingUnit = vi.fn().mockResolvedValue([]);
+    const el = await mount(stubApi({ deleteUnit, productsUsingUnit }));
+    const consumed = new Promise<void>((resolve) =>
+      el.addEventListener("wt-reopen-consumed", () => resolve(), { once: true }),
+    );
+    el.reopenUnitId = "u1";
+    await consumed;
+    await flush(el);
+    const dialog = el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
+      "[data-test=in-use-dialog]",
+    )!;
+    expect(dialog.open).toBe(true);
+    expect(dialog.querySelector("wt-data-table")).toBeNull();
+    dialog.querySelector<HTMLElement>("[data-test=delete-unit]")!.click();
+    await flush(el);
+    expect(deleteUnit).toHaveBeenCalledWith("u1");
+    expect(dialog.open).toBe(false);
+  });
+
+  it("closes the in-use modal without deleting when Close is clicked", async () => {
+    const el = await mount(inUseApi());
+    const dialog = await openInUseModal(el);
+    expect(dialog.open).toBe(true);
+    dialog.querySelector<HTMLElement>("[data-test=close-in-use]")!.click();
+    await el.updateComplete;
+    expect(dialog.open).toBe(false);
   });
 
   it("restores focus when deletion is cancelled", async () => {

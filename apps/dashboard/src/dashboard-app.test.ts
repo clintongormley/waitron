@@ -279,6 +279,9 @@ const overview = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-o
 const sales = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-sales-screen");
 const staff = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-staff-screen");
 const catalogue = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-catalogue-screen");
+const units = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-units-screen");
+const navUnits = (el: DashboardApp) =>
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-units]");
 const receipt = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-receipt-screen");
 const statuses = (el: DashboardApp) =>
   el.shadowRoot!.querySelector("dashboard-service-status-screen");
@@ -822,6 +825,8 @@ describe("dashboard-app", () => {
     const bannerBox = banner.getBoundingClientRect();
     const trailingPadding = Number.parseFloat(getComputedStyle(banner).paddingRight);
     expect(trigger.getBoundingClientRect().right).toBeCloseTo(bannerBox.right - trailingPadding, 0);
+    // Anchored at the trailing edge, it must open inward (right edge under the trigger), not off-screen.
+    expect(trigger.getAttribute("align")).toBe("end");
   });
 
   it("puts the full-width banner above both the sidebar and page content", async () => {
@@ -1474,6 +1479,66 @@ describe("dashboard-app", () => {
 
   // The logged-in shell gains a nav between the staff and catalogue screens. It opens on overview (the
   // probe's landing, Task 9), and the nav switches the mounted screen — exactly one shows at a time.
+  it("sends a product from the units in-use modal to its editor and reopens the unit on save", async () => {
+    const productsUsingUnit = vi
+      .fn()
+      .mockResolvedValue([{ id: "p1", name: { es: "Café" }, available: true }]);
+    const api = stubApi({
+      listStaff: vi.fn().mockResolvedValue([]),
+      listUnits: vi.fn().mockResolvedValue([{ id: "u1", name: { es: "kg" }, precision: 0 }]),
+      productsUsingUnit,
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    navUnits(el)!.click();
+    await flush(el);
+    expect(units(el)).toBeTruthy();
+
+    units(el)!.dispatchEvent(
+      new CustomEvent("wt-edit-product", {
+        detail: { productId: "p1", returnToUnitId: "u1" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await flush(el);
+    expect(catalogue(el)).toBeTruthy();
+    expect(units(el)).toBeNull();
+
+    catalogue(el)!.dispatchEvent(
+      new CustomEvent("wt-product-saved", {
+        detail: { productId: "p1" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await flush(el);
+    expect(units(el)).toBeTruthy();
+    expect(productsUsingUnit).toHaveBeenCalledWith("u1");
+    const dialog = units(el)!.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
+      "[data-test=in-use-dialog]",
+    )!;
+    expect(dialog.open).toBe(true);
+  });
+
+  it("does not return to a unit when a product is saved on its own", async () => {
+    const api = stubApi({ listStaff: vi.fn().mockResolvedValue([]) });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    navCatalogue(el)!.click();
+    await flush(el);
+    catalogue(el)!.dispatchEvent(
+      new CustomEvent("wt-product-saved", {
+        detail: { productId: "p1" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await flush(el);
+    expect(catalogue(el)).toBeTruthy();
+    expect(units(el)).toBeNull();
+  });
+
   it("navigates between the staff and catalogue screens", async () => {
     const api = stubApi({ listStaff: vi.fn().mockResolvedValue([]) });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });

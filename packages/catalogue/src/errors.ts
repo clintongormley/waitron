@@ -19,8 +19,11 @@ declare module "@waitron/shared" {
     "quantity.invalid": { reason: "format" | "positive" | "precision" | "limit" };
     /** A unit id is absent from the caller's tenant. */
     "unit.not_found": { unitId: string };
-    /** A unit cannot be deleted while products retain real assignments to it. */
-    "unit.in_use": { products: Record<string, string>[] };
+    /** A unit cannot be deleted while products retain real assignments to it; each product carries
+     * its id and availability so a caller can list them and link to each product's editor. */
+    "unit.in_use": {
+      products: { id: string; name: Record<string, string>; available: boolean }[];
+    };
     /** Content configuration requires distinct languages and an enabled default. */
     "content.languages_invalid": Record<string, never>;
     /** A translation map contains a non-text value. */

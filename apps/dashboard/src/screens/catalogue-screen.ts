@@ -216,10 +216,19 @@ export class CatalogueScreen extends LitElement {
     this.busy = true;
     this.errorKey = null;
     try {
-      if (this.editorValue === null)
-        await this.api.createProductEditor(this.selectedCatalogueId, event.detail.value);
-      else await this.api.updateProductEditor(this.editorValue.id, event.detail.value);
+      const saved =
+        this.editorValue === null
+          ? await this.api.createProductEditor(this.selectedCatalogueId, event.detail.value)
+          : await this.api.updateProductEditor(this.editorValue.id, event.detail.value);
       this.#closeEditor();
+      // A caller (e.g. the units in-use modal) can navigate here to edit a product and return on save.
+      this.dispatchEvent(
+        new CustomEvent("wt-product-saved", {
+          detail: { productId: saved.id },
+          bubbles: true,
+          composed: true,
+        }),
+      );
       await this.#reloadProducts();
     } catch (error) {
       this.errorKey = codeOf(error);
