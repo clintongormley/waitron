@@ -9,12 +9,40 @@ test, especially one that touches real PostgreSQL or runs in browser mode.
 
 ## Two targets.
 
-**PGlite** (`createPgliteDb` + `runMigrations`) is hermetic and fast, but every connection is a
-superuser (grants are not enforced; triggers still fire) and every query serialises onto one
-backend, so a contention test on PGlite is a **false pass**. **Real Postgres** via Testcontainers
-is required for anything about privileges, triggers as the deployment role, or concurrency;
-`describeEachTarget` (`packages/db/src/testing/harness.ts`) runs a suite against both. Pick the
-lighter one when the heavier one's justification does not apply, and say why in a comment.
+**PGlite** (`createPgliteDb` + `runMigrations`) is hermetic and fast. Its connection arrives as a
+superuser, so a privilege test that never switches role runs as the owner and asserts nothing;
+triggers still fire. Every query serialises onto its single backend, so a contention test on PGlite
+is a **false pass**. **Real Postgres** via Testcontainers is required for concurrency, for triggers
+running as the deployment role, and for anything that depends on who CONNECTED rather than who the
+session made itself. `describeEachTarget` (`packages/db/src/testing/harness.ts`) runs a suite against
+both. Pick the lighter one when the heavier one's justification does not apply, and say why in a
+comment.
+
+**Grants ARE enforced on PGlite once the session assumes the role.** This file and `CLAUDE.md` both
+used to say the opposite — "grants are not enforced" — which sends a reader to a Docker container
+they do not need. It is false. Corrected on the `onboarding` branch (2026-09-13) after running a
+probe directly against PGlite 0.5.4, with a control in the other direction:
+
+- The default connection reports `current_user = postgres`, `usesuper = true`. In that session, a
+  `delete` on a table it holds no `delete` grant for **succeeds**. That is the control: this is what
+  "grants are not enforced" would look like, and it is the only case where it is true.
+- In the same session after `set local role app_user`, `current_user` is `app_user`; a `select` the
+  role holds a grant for succeeds, and the `delete` it does not hold is **refused with SQLSTATE
+  42501, "permission denied for table"**.
+- Column-scoped grants are enforced too, which is the shape `packages/db/src/allocate-number.test.ts`
+  ("allocates as the app role") depends on: under `grant select, update (next_number)`, updating
+  `next_number` succeeds and updating an ungranted column in the same table is refused `42501`.
+- A privilege held only through group membership is honoured as well: a `select` granted to a group
+  the role is a member of succeeds.
+
+Two real limits remain, and they are why the rule above still exists. PGlite has one backend
+(`select count(*) from pg_stat_activity` returns 1), so nothing can contend. And a session that
+assumed the role with `set role` can leave it again — after `reset role`, `current_user` is back to
+`postgres` and the same `delete` succeeds — so PGlite can show that a grant is enforced, but not that
+code is CONFINED to a role the way a real connection as that role confines it.
+
+Note what this does NOT license. `asAppUser(tx)` is still mandatory in a grant assertion on either
+target (see the rule further down this file), and nothing here changes the concurrency rule.
 
 **Owning and cleaning up a database in a suite**
 
@@ -262,8 +290,9 @@ it — an `applyTo: "**"` instructions file would be picked up there.
 
 ## A grant assertion must call `asAppUser(tx)` before the query under test
 
-PGlite runs every connection as a superuser, so a privilege test that never switches role passes
-green while asserting nothing — it runs as the owner. Every grant assertion must call
+PGlite's connection arrives as a superuser, so a privilege test that never switches role passes
+green while asserting nothing — it runs as the owner. (Once it does switch, the grant is enforced —
+see "Two targets" above.) Every grant assertion must call
 `asAppUser(tx)` (`packages/db/src/testing/roles.ts` — `set local role app_user`) before the query
 under test; a grant test that skips this checks nothing about `app_user`'s reach regardless of what
 it asserts.

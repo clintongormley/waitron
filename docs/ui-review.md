@@ -63,7 +63,7 @@ needs CLAUDE.md §3's classification line and nothing else.
 
 | # | Area | App | Status | Corrections logged |
 | --- | --- | --- | --- | --- |
-| 1 | First-run setup & onboarding wizard | setup | ⬜ | B1 connection flow implemented on its feature branch; device trust walkthrough and A2 wizard corrections open |
+| 1 | First-run setup & onboarding wizard | setup | 🔧 | B1 connection flow implemented on its feature branch. Walked on the real box 2026-09-13; what that walk found is specced in [onboarding flow corrections](superpowers/specs/2026-09-13-onboarding-flow-corrections-design.md) and fixed on the `onboarding` branch — the wizard is a centred modal instead of a full-width page, it asks your name before your display name, tooltips stay on screen, the province question comes before the answer derived from it, your account is created in your browser's language, and a first sign-in offers you a passkey. Not merged at the time of writing. Still open: the device trust walkthrough, and the A2 wizard items — chiefly that the wizard's own text is English only, with no language chooser |
 | 2 | Till login & shift start (PIN) | till | 🔍 | shown 2026-09-01 — see candidates below, awaiting owner |
 | 3 | Counter / walk-up sales — menu, basket, modifiers, notes/doneness, park/retrieve, pay, receipt | till | 🔍 | shown 2026-09-01 — candidates below, awaiting owner |
 | 4 | Tables & tabs — floor view, open / move / join / merge / transfer / split | till | ⬜ | |

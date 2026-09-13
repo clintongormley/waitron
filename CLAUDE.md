@@ -21,6 +21,7 @@ to check a claim rather than follow it.
 | [testing-guide.md](docs/developers/testing-guide.md)       | a test — especially real-PostgreSQL, container or browser tests               |
 | [workflow-guide.md](docs/developers/workflow-guide.md)     | starting or landing a branch, or running the dev stack from a worktree        |
 | [design-system.md](docs/developers/design-system.md)       | anything visual — it is the UI contract and it grows as screens land          |
+| [writing-claims.md](docs/developers/writing-claims.md)     | writing a sentence about how something behaves — a comment, a doc, a spec     |
 
 `docs/backlog.md` answers "what should I work on?"; this file answers "how".
 
@@ -46,6 +47,11 @@ wide margin. This section stays in full deliberately: it applies to every change
   probe. A control in the other direction is the cheapest fix. A receipt someone hands you is still a
   claim. Cost: a zero-byte `pnpm --filter "...[origin/main]"` reading offered as proof the filter was
   broken, taken where zero was also the correct answer.
+- **A sentence about what ANOTHER part of the system does is checked by following the call chain to
+  that part, not by reading the boundary you just edited.** The fix can be right and the sentence
+  describing it still too wide: you had one edge open, and you wrote about the whole path. Cost: on
+  one branch this exact shape reached review again and again, from different people, the controller
+  included; the instances are in [writing-claims.md](docs/developers/writing-claims.md).
 - **"Pre-existing", "not a regression", "harmless", "unreachable" and "narrow" are claims.** Check
   with `git log`/`git blame` first; unchecked, say "I believe this predates the branch".
 - **The correction is a new claim, and deserves MORE scrutiny than the text it replaces.** This is the
@@ -318,11 +324,16 @@ One line each; the mechanism, the measurement and the incident behind every one 
 [testing-guide.md](docs/developers/testing-guide.md). **Read it before writing a real-PostgreSQL,
 container or browser test** — most of these rules exist because a test passed while proving nothing.
 
-- **Two targets.** **PGlite** is hermetic and fast, but every connection is a superuser (grants are
-  not enforced) and every query serialises onto one backend, so a contention test on PGlite is a
-  **false pass**. **Real Postgres** via Testcontainers is required for privileges, triggers as the
-  deployment role, or concurrency. `describeEachTarget` runs a suite against both. Pick the lighter
-  one when the heavier one's justification does not apply, and say why in a comment.
+- **Two targets.** **PGlite** is hermetic and fast, and its connection arrives as a superuser — so a
+  grant assertion that forgets `asAppUser(tx)` silently asserts nothing. Grants themselves ARE
+  enforced once the session assumes the role, table-wide and column-scoped alike, so an ordinary
+  grant test belongs here and needs no container. Two things PGlite cannot show: every query
+  serialises onto its one backend, so a contention test on it is a **false pass**; and the session
+  can step back out with `reset role`, so it cannot prove code is confined to a role. **Real
+  Postgres** via Testcontainers is required for concurrency, for triggers running as the deployment
+  role, and for anything that turns on who CONNECTED rather than who the session made itself.
+  `describeEachTarget` runs a suite against both. Pick the lighter one when the heavier one's
+  justification does not apply, and say why in a comment.
 - **A grant assertion must call `asAppUser(tx)` before the query under test.** Without it the test
   runs as the owner and asserts nothing, however much it asserts.
 - **Don't own a database in a suite — let a helper own it** (`usePgliteDb` / `useRealPostgres`). Raw

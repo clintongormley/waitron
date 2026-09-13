@@ -139,6 +139,25 @@ components, then make the guard and both documents agree — one of them is curr
 something CI will not enforce. Whoever picks up the next screen should settle this first, because
 every screen after it inherits the answer.
 
+**Also open, and product-wide: the primary blue fails the accessibility contrast bar as text on the
+page background, in the light theme.** Measured against the shipped values in
+`packages/ui/src/tokens/colors.css`: light `--wt-color-primary` (`#1f6feb`) on `--wt-color-bg`
+(`#f7f7f8`) is 4.33 to 1, under the 4.5 to 1 WCAG AA minimum for normal text. The dark theme is
+fine (`#4c8dff` on `#101216`, 5.86 to 1), and so is the same blue on a card or modal surface (4.63
+to 1 on white) — which is why it goes unnoticed: only primary-coloured text sitting directly on the
+light theme's page background falls short, and the token is used as text in a number of places
+across the dashboard and the shared components. The setup wizard was the only place a test rendered
+that exact pairing, and the 2026-09-13 corrections moved the wizard onto a modal surface, so nothing
+renders it under test any more. Recorded rather than fixed there (owner scope, 2026-09-13), because
+changing a shared colour token mid-branch touches every app. **Nothing guards it as a token pair:**
+the `*.a11y.test.ts` suites do run axe's full default ruleset, colour contrast included
+(`packages/ui/src/a11y-helpers.ts` paints the themed background precisely so that check means what
+it means in the app), but axe only sees pairings a mounted component actually paints — no test
+enumerates the tokens against each other, and `packages/ui/src/no-hardcoded-chrome.test.ts` scans
+for hardcoded colours, not for contrast. **Next action:** an owner colour call — darken the light
+theme's primary until it clears 4.5 to 1 as text, or rule that the token is never text on the page
+background and add a check that says so.
+
 Done so far: the dashboard shell itself — the sidebar, the banner and the account menu — plus
 **Account settings** (Your profile) and the **user administration** section (#333; what changed is
 under A7).
@@ -516,6 +535,14 @@ Landed in #334 (2026-09-12). [Design](superpowers/specs/2026-09-12-setup-wizard-
 
 **Still open after #334**, each one something the branch consciously did not take:
 
+- *The wizard has no translated text and no language chooser.* It is English only, on a box whose
+  venue may well not be. The account it creates now gets the operator's browser language, so the
+  dashboard opens in the right language, but the wizard itself does not. Translating it means every
+  visible string across its screens plus the per-operating-system certificate instructions, into
+  English and Spanish, using the same catalogue the dashboard registers through
+  `@waitron/dashboard-kit`, and a chooser seeded from the browser's preference. Deferred from the
+  2026-09-13 corrections by owner decision, as much bigger than everything else in that branch put
+  together.
 - *The certificate export help has never been followed on a real machine.* Nobody exported a
   certificate through Windows', macOS' or Firefox's own certificate store while reading the new
   guidance, so the instructions are unverified against the thing they describe. Fold this into the
@@ -708,6 +735,15 @@ ongoing overhaul listed at the top of Track A.
 
 ### A9. Product depth — after the primary works
 
+- **Product languages are hard-coded at setup** (owner, 2026-09-13). A Spanish venue is seeded with
+  Spanish as its default product language and Catalan and English alongside, whatever its province —
+  right for the deli, wrong for a Spanish venue outside Catalonia. It replaced a derivation that gave
+  a Barcelona venue Catalan alone, which was worse. The proper fix drives the list from the venue's
+  region and the languages it actually chose, which probably means setup asking. Do it when there is
+  a second region or a second country to be wrong about. The hard-code is in
+  `packages/catalogue/src/provisioning.ts` and names this entry; every other country still derives
+  its language from geography. Receipt languages are a separate setting and already follow the
+  province.
 - **Category-driven routing to multiple printers/destinations** (owner, 2026-09-12): deferred from
   the [Products overhaul](superpowers/specs/2026-09-12-products-overhaul-design.md). Decide how a
   product's category memberships select one or more preparation/printing destinations, how matching
@@ -992,6 +1028,17 @@ turns out to need a design moves to its track.
 
 **Dashboard, till and setup:**
 
+- **An imported configuration carries "already offered a passkey" but no passkeys** (found
+  2026-09-13, not fixed). A configuration transfer copies the `persons` rows with six columns
+  stripped — `packages/identity/src/configuration-transfer.ts` names them, and the import in
+  `apps/server/src/configuration-transfer.ts` blanks them again on the way in — but
+  `passkey_offered_at` is not one of them, so it travels. No passkey rows travel at all: identity
+  contributes only `persons`, and nothing contributes `webauthn_credentials`. So a person who had
+  been offered a passkey on the source box arrives on the new one holding none and already stamped,
+  and `shouldOfferPasskey` (`packages/identity/src/passkey-offer.ts`) never offers again. It does
+  not bite immediately, because imported people arrive suspended with their PIN and password wiped —
+  it bites once someone reactivates them and they sign in for the first time. The fix is one line:
+  strip the column on transfer, the way the six secrets are stripped.
 - **Timestamps across the printers and devices screens show UTC** — `formatIsoMinute`
   (`apps/dashboard/src/date-utils.ts:27`) slices the ISO string. One shared formatter, not a per-call-site patch.
 - Profile follow-ups (owner, 2026-09-12): keep Display name in step with the person's name as it is
@@ -1036,7 +1083,9 @@ turns out to need a design moves to its track.
   and backticked paths under `apps/`, `packages/`, `docs/`, `scripts/`, `deploy/`, `bench/`,
   `.github/` and `.husky/`. It does NOT check a root-level filename such as `eslint.config.js` — a
   pointer `CLAUDE.md` really does give a reader — nor a bare directory. `CLAUDE.md` §7 says so; widen
-  the guard if that gap ever costs something.
+  the guard if that gap ever costs something. **Its topic-file list is also hand-maintained, and
+  `docs/developers/writing-claims.md` (added 2026-09-13) is not on it**, so that file's own pointers
+  are unchecked while every other topic file's are. One line to fix, in the guard's `TOPIC_FILES`.
 - **Eight historical plans and specs carry a dated pointer to the deleted
   `.github/instructions/waitron.instructions.md`** (#337 deleted it after moving its rules into the
   `docs/developers/` files; it read nowhere after Copilot's review was switched off on 2026-09-06).
