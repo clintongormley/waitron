@@ -116,11 +116,11 @@ through a token.
 
 Minimum interactive target, 44px, **on both axes**. POS screens are touched under time pressure by
 staff who are not looking carefully — a numpad key ("1", "+", "−") fails just as badly if it's
-44px tall but only 32px wide as if it were too short. `wt-button`, `wt-input`, and `wt-switch`
-apply `min-width` and `min-height` to the element that actually forms the hit target (the inner
-`button` for `wt-button`; the inner `input` for `wt-input`; both `:host` and `.control` for
-`wt-switch`) — never to an element that can overflow its own container (see "Hit targets must not
-overflow their container" below).
+44px tall but only 32px wide as if it were too short. `wt-button`, `wt-input`, `wt-switch` and
+`wt-combobox` apply `min-width` and `min-height` to the element that actually forms the hit target
+(the inner `button` for `wt-button`; the inner `input` for `wt-input`; both `:host` and `.control`
+for `wt-switch`; the `.trigger` button for `wt-combobox`) — never to an element that can overflow
+its own container (see "Hit targets must not overflow their container" below).
 
 `min-width` is a floor, not a request: `wt-input`'s inner `<input>` sets both `width: 100%` (to
 fill its container) and `min-width: var(--wt-tap-min)`, so in a grid or flex cell narrower than
@@ -240,12 +240,13 @@ kebab opens a small menu of actions for one specific item (used once per row/car
 wrong one to either reads as a UI mismatch — a per-row menu answering the "open navigation" icon,
 or the nav toggle looking like just another row's overflow menu.
 
-### Accessible, clickable labels (`wt-input`, `wt-switch`)
+### Accessible, clickable labels (`wt-input`, `wt-switch`, `wt-combobox`)
 
-Both associate their visible `<label>` with the native control through a real `for`/`id` pair —
+All three associate their visible `<label>` with the control through a real `for`/`id` pair —
 not by wrapping the control inside the `<label>` — so the existing layout and font sizing stay
-untouched. A named `wt-input` uses that semantic name for its native `name` and `id`. An unnamed
-legacy input and every `wt-switch` use a module-level counter (`wt-input-N` / `wt-switch-N`).
+untouched. A named `wt-input` or `wt-combobox` uses that semantic name for its `name` and `id`. An
+unnamed legacy input, an unnamed combobox and every `wt-switch` use a module-level counter
+(`wt-input-N` / `wt-combobox-trigger-N` / `wt-switch-N`).
 
 - `wt-input name="email"`: `<label for="email">` + `<input id="email" name="email">`. The label
   supplies the input's accessible name through that native association, while automation and
@@ -256,13 +257,17 @@ legacy input and every `wt-switch` use a module-level counter (`wt-input-N` / `w
   `<input>` *additionally* sets `aria-label` directly from the `label` property, so the accessible
   name doesn't depend on how a given screen reader resolves a `for`/`id` pair against a
   non-default role.
+- `wt-combobox`: the visible `<label>`'s `for` points at the inner `.trigger` button's `id`, which
+  is the `name` when one is set and a generated `wt-combobox-trigger-N` otherwise. The trigger also
+  carries `aria-labelledby` pointing at that same `<label>`, so the accessible name does not depend
+  on the `for`/`id` pair alone.
 
 This is a fix, not the original shape: both primitives used to render `<label>` and the control as
 unconnected siblings — no `for`/`id`, no `aria-label` — which left every `wt-input` silent to a
 screen reader and made `wt-switch`'s visibly pointer-cursored label inert on click. If you add a
 labelled primitive, follow this pattern, not the unconnected-siblings one.
 
-### Accessible names (`wt-button`, `wt-dialog`, `wt-input`)
+### Accessible names (`wt-button`, `wt-dialog`, `wt-input`, `wt-combobox`)
 
 A shadow-DOM host's own `aria-label` attribute does not reach the focusable element inside its
 shadow root on its own — the native `ariaLabel` accessor every `HTMLElement` carries just
@@ -291,6 +296,10 @@ primitive that can otherwise end up with no accessible name explicitly forwards 
 - `wt-input`: the `invalid` property was visual-only (it only reddened the border). It now also
   sets `aria-invalid="true"|"false"` on the inner `<input>`, so a screen reader user gets the same
   signal a sighted user gets from the red border.
+- `wt-combobox`: declares the same `@property({ attribute: "aria-label" }) override ariaLabel` as
+  `wt-button` and binds it onto the inner `.trigger` button whenever there is no visible `label` to
+  point `aria-labelledby` at. The same fallback names the panel's search `<input>`, so a combobox
+  named only by a forwarded `aria-label` does not leave its search box called just "Search".
 
 ### Hit targets must not overflow their container
 
@@ -304,7 +313,7 @@ the input fill exactly that box via `inset: 0` with no size of its own. If you b
 where the hit target is a covering, invisible native control, size the *container*, not the
 control.
 
-### Focus delegation (`wt-button`, `wt-input`, `wt-switch`)
+### Focus delegation (`wt-button`, `wt-input`, `wt-switch`, `wt-combobox`)
 
 Each interactive primitive sets:
 
@@ -778,12 +787,19 @@ have caught the defect it's named after.
 `*.a11y.test.ts` files. As of this writing axe reports zero contrast violations for any `--wt-color-*`
 pairing actually used by every primitive in the table above, in either theme, across every documented state (`wt-input`
 invalid, `wt-switch` checked/unchecked, `wt-dialog` open, `wt-button` icon-only and every variant,
-disabled and loading states; `wt-spinner` as a status region and decorative, 2026-09-11). No token
-values needed changing. (axe does flag two unrelated `incomplete` — not
-violation — results on `wt-dialog`: a `color-contrast` "background partially obscured" reading on the
+disabled and loading states; `wt-spinner` as a status region and decorative — all verified
+2026-09-11; `wt-combobox` closed, closed and named only by a forwarded `aria-label`, open with
+results, open with the add row, open with no matches, multi-select with a selection, invalid with an
+error message, disabled and required — verified 2026-09-13 by running
+`packages/ui/src/components/wt-combobox.a11y.test.ts`, which covers those states in both themes). No
+token values needed changing. (axe does flag unrelated `incomplete` — not
+violation — results: a `color-contrast` "background partially obscured" reading on `wt-dialog`'s
 `.body` slot, an [axe/shadow-DOM slot-content limitation](https://github.com/dequelabs/axe-core), and
-an `aria-prohibited-attr` note about `aria-label` on the light-DOM `<wt-dialog>` host itself, which axe
-can't know is deliberately forwarded into the shadow root. Both are engine limitations, not defects —
+an `aria-prohibited-attr` note about `aria-label` on a light-DOM host that forwards it inward, which
+axe can't know is deliberate. `wt-dialog` and `wt-combobox` both have that shape and both draw the
+note — measured 2026-09-13 by running axe over `<wt-combobox aria-label="Dietary tags">` and, as a
+control, over the same component with a visible `label` instead, which drew none. Both are engine
+limitations, not defects —
 verified by hand: `--wt-color-text` on `--wt-color-surface-raised` computes to ~13:1 in dark and >15:1
 in light, both far past the 4.5:1 AA floor for the 15px body text involved.)
 

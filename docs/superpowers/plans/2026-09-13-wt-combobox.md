@@ -16,6 +16,28 @@ Popover API disclosure (open/close, Escape handling, viewport-clamped positionin
 
 **Spec:** `docs/superpowers/specs/2026-09-13-wt-combobox-design.md`
 
+> **2026-09-13 — this plan predates a review pass that corrected the implementation, and it is left
+> as written.** The review changed both markup shapes and behaviour: popup positioning, several
+> keyboard-navigation edge cases, the empty-value sentinel, and the label/name accessibility
+> association, on top of the markup shapes listed below. Treat
+> `packages/ui/src/components/wt-combobox.ts` and its test files as authoritative over any code
+> shown anywhere in this plan; the pointers below are the specific ones worth knowing about, not the
+> complete list of what changed.
+>
+> - **Popup positioning.** The `Math.max(8, …)` left clamp was rejected: it is right for
+>   `wt-row-actions`' right-aligned popup, but it can push this left-aligned panel right of its own
+>   trigger. See the comment above `maxLeft` in `packages/ui/src/components/wt-combobox.ts`.
+> - **The empty state.** `<li class="empty" role="presentation">` inside the listbox is an axe
+>   `aria-required-children` violation. The shipped render puts a plain `<div class="empty">`
+>   outside the `<ul>`, with its own explanatory comment.
+> - **The multi-select indicator.** A real `<input type="checkbox">` inside `role="option"` is an
+>   axe `nested-interactive` violation. The shipped code draws a decorative, non-interactive
+>   `<span class="check">` instead — see the comment above `.check` in the component's styles.
+> - **`searchPlaceholder` in HTML.** `search-placeholder="…"` binds to nothing: the property
+>   declares no custom `attribute:` name, so lit's default is the all-lowercase
+>   `searchplaceholder`. The demo sets the JS property directly instead — see
+>   `packages/ui/demo/main.ts`, which carries a comment saying exactly this.
+
 ## Global Constraints
 
 Copied verbatim from the spec and the design-system conventions it builds on — every task below

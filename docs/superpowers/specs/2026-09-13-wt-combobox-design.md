@@ -85,10 +85,14 @@ Follows the ARIA combobox pattern rather than inventing one:
 - Keyboard: ArrowUp/ArrowDown move the active option, Enter selects/toggles it, Escape closes the
   panel and returns focus to the trigger, typing filters the list and resets the active option to
   the first match.
-- Popover positioning reuses `wt-row-actions`' existing pattern rather than a new one: open with
+- Popover positioning borrows `wt-row-actions`' opening sequence but not its clamp: open with
   `showPopover()` synchronously (so its dimensions are available before first paint — see the
   positioning trap in `docs/developers/testing-guide.md`), then measure and clamp against the
-  viewport in the same way `positionPopup()` does today.
+  viewport with a rule of its own. `wt-row-actions` floors the left edge at 8px, which suits a
+  right-aligned popup that can compute a negative left; this panel is left-aligned with its trigger
+  and must never be pushed right of it, so the horizontal rule differs — the shipped formula and
+  the reason for it are in the comment above `maxLeft` in
+  `packages/ui/src/components/wt-combobox.ts`.
 
 Closing rule: selecting an existing option closes the panel when `multiple` is false (pick one,
 done) and leaves it open when `multiple` is true, matching the checkbox behaviour in the original

@@ -6,7 +6,8 @@
  * - kebab: wt-row-actions' per-row "more actions" trigger (three dots — a small, local menu, not
  *   the same thing a hamburger means; wt-row-actions requires its consuming app to register this).
  * - chevron-down: a collapsible section header's disclosure indicator, rotated via CSS to point up
- *   when expanded rather than needing a second registered icon.
+ *   when expanded rather than needing a second registered icon. wt-combobox's trigger also draws
+ *   this icon, so an app using that primitive has to register it too.
  * - gear: the Settings nav group's header icon. Generated (not hand-plotted) — an 8-tooth ring
  *   computed with trigonometry at 16x16, verified by rendering it large before use.
  * - person: the banner's account-menu trigger (head + shoulders bust).
