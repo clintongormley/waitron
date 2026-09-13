@@ -407,6 +407,13 @@ What it left open:
   The consequence is that a unit you invent yourself, and the volume units, can never be filled in by
   weighing — the quantity is typed. That is the intended design, not an oversight, but it is the kind
   of boundary somebody will otherwise rediscover by trying it.
+- **Deleting a unit no longer asks first, and a blocked delete now offers a way out.** Delete attempts
+  the delete straight away; when products still use the unit, a searchable modal lists them, lets them
+  be ticked and moved onto another unit in one go, and deletes the unit once none are left
+  (`apps/dashboard/src/screens/units-screen.ts`). That work also found the table recording a product's
+  unit had only a unique constraint, so Postgres refused the reassignment's UPDATE on a published
+  table with `55000` — `packages/catalogue/drizzle/0010_product_units_primary_key.sql` gives it a
+  primary key. The design doc's older deletion paragraph is marked superseded rather than rewritten.
 - **Its migrations cannot run over a populated development database, and nothing here said so.**
   `packages/venue-service/drizzle/0005_unit_snapshots.sql` and `0006_unit_snapshot_identity.sql` add
   three `NOT NULL` columns to `working_line_contexts` with no default — the same shape as

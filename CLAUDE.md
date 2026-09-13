@@ -282,8 +282,9 @@ area** — these lines tell you what the rule is, not why it exists or how it br
 - **A new table is classified `ledger`, `state` or `local` in its module's `<MODULE>_CLASSIFICATION`
   list, and an append-only table's `reject_mutation()` triggers are `ENABLE ALWAYS`** — the
   replication apply worker skips ordinary triggers. No policies, no RLS: one tenant per database.
-  Guards: `scripts/classification-complete.test.ts`, `scripts/append-only-enable-always.test.ts` — run
-  them after adding any table anywhere.
+  Guards, on a new table: `scripts/classification-complete.test.ts`,
+  `scripts/append-only-enable-always.test.ts`. Nothing guards the next rule: a PUBLISHED table needs
+  a primary key, not just a UNIQUE, or Postgres refuses its UPDATEs (`55000`). `product_units` paid.
 - **The two publications a node holds are created by the table OWNER, and the replication role is a
   bootstrap the app provisioner only verifies** (`assertReplicationReady`). A subscription's
   connection string carries a password, so its statement is never logged and a failure throws only a

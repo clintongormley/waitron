@@ -26,6 +26,13 @@ are allowed while in use; new quantities use the new rule, existing locked quant
 snapshot. Historical references must not prevent deletion when only copied values remain. If an
 actual retained reference exists, refuse deletion rather than invalidating that record.
 
+**2026-09-13 update:** the deletion flow described in the paragraph above has been superseded. There
+is no confirmation step any more — Delete attempts the delete straight away, and a refusal opens a
+searchable modal of the products using the unit, where they can be ticked and moved onto another unit
+in one go; when none are left, the same modal deletes the unit. What is unchanged is what may be
+refused and why. Current behaviour is in `apps/dashboard/src/screens/units-screen.ts`, and the
+`docs/backlog.md` Units entry records it.
+
 The product form defaults to each, offers existing units and opens this same unit form through
 “Add unit”. If the seeded each was deleted, choose explicitly rather than assuming an ID or silently
 recreating it. A successful nested create selects the returned unit and retains the product draft.
