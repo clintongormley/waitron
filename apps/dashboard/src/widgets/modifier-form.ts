@@ -189,7 +189,7 @@ export class ModifierForm extends LitElement {
     return `${t("modifiers.choice_problem")} ${choice.name[language] || t("modifiers.choice")}`;
   }
   /** An unavailable choice is neither preselected nor the single default, because the till reads
-   * both. Every write of a choice into `choices` — a row edit or a modal save — passes through here. */
+   * both. A row edit and a modal save pass through here. */
   #clearSelectionIfUnavailable(choice: FormChoice): FormChoice {
     if (choice.available) return choice;
     if (this.defaultChoiceId === choice.id) this.defaultChoiceId = null;

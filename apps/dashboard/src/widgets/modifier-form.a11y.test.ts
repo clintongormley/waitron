@@ -56,7 +56,7 @@ describe.each(["light", "dark"] as const)("modifier form (%s)", (theme) => {
     await expectNoA11yViolations(host);
   });
 });
-it("focuses the modal, submits Enter and cancels Escape", async () => {
+it("submits on Enter and cancels on Escape from a focused field", async () => {
   const { el } = await mountWidget<ModifierForm>("dashboard-modifier-form", {
     open: true,
     locales: ["es"],

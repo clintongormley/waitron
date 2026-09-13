@@ -63,7 +63,7 @@ async function focusName(choice: ChoiceForm) {
   expect((input.getRootNode() as ShadowRoot).activeElement).toBe(input);
 }
 
-it("focuses the modal, submits Enter and cancels Escape", async () => {
+it("submits on Enter and cancels on Escape from a focused field", async () => {
   const { el } = await mountWidget<ChoiceForm>("dashboard-choice-form", {
     open: true,
     kind: "options",

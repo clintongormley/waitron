@@ -75,9 +75,7 @@ export class ChoiceForm extends LitElement {
   @property({ attribute: false }) locales: string[] = [];
   @property() kind: "extras" | "options" = "extras";
   @property({ attribute: false }) value: ChoiceDraft | null = null;
-  @property({ attribute: false }) fieldErrors: Record<string, string> = {};
   @state() private errors: Record<string, string> = {};
-  @state() private serverErrors: Record<string, string> = {};
   @state() private name: Record<string, string> = {};
   @state() private available = true;
   @state() private priceDelta = "0.00";
@@ -85,14 +83,6 @@ export class ChoiceForm extends LitElement {
   @state() private vatClass?: VatClass | null;
   @state() private effects: ModifierEffects = {};
   override willUpdate(changed: PropertyValues<this>): void {
-    if (changed.has("fieldErrors")) {
-      this.serverErrors = Object.fromEntries(
-        Object.entries(this.fieldErrors).map(([key, message]) => [
-          key.replace(/^name\./, "name-"),
-          message,
-        ]),
-      );
-    }
     if (!(changed.has("open") && this.open) && !changed.has("value")) return;
     const value = this.value;
     this.#choiceId = value?.id ?? crypto.randomUUID();
@@ -116,7 +106,7 @@ export class ChoiceForm extends LitElement {
   }
   #choiceId = "";
   #error(key: string): string {
-    return this.errors[key] ?? this.serverErrors[key] ?? "";
+    return this.errors[key] ?? "";
   }
   #patch(patch: Partial<ModifierEffects>): void {
     this.effects = { ...this.effects, ...patch };
@@ -134,8 +124,8 @@ export class ChoiceForm extends LitElement {
     const errors: Record<string, string> = {};
     const language = currentContentLanguages().defaultLanguage;
     if (!this.name[language]?.trim()) errors.name = t("modifiers.name_required");
-    // The checks use the server's limits, so a value it would refuse is caught here, on its own
-    // field, rather than as a problem with the whole modifier.
+    // The price and quantity checks use the server's limits, so either value it would refuse is
+    // caught here, on its own field, rather than as a problem with the whole modifier.
     if (this.kind === "extras") {
       if (!isModifierPrice(this.priceDelta)) errors.priceDelta = t("modifiers.price_invalid");
       if (!isPositiveInteger(this.maxQuantity))
@@ -326,7 +316,7 @@ export class ChoiceForm extends LitElement {
     >
       <wt-form-error-summary
         heading=${t("form.error_heading")}
-        .errors=${Object.values({ ...this.serverErrors, ...this.errors })}
+        .errors=${Object.values(this.errors)}
       ></wt-form-error-summary>
       <div class="fields">
         ${nameFields(this.#fields(), "name", t("modifiers.name"), this.name, (name) => {
