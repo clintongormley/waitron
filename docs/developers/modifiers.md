@@ -54,7 +54,9 @@ and closes the editor after a successful write. A choice-level validation error 
 check, or a `choices.<index>.<field>` rejection from the server — is shown as one message under the
 choices table naming the choice by its current label, so a rejection never lands on a field the
 manager cannot see. Every error is also listed in the form's `wt-form-error-summary`, including a
-server refusal that names no field (such as `modifier.in_use`), which appears only there. The
+server refusal that names no field (such as `modifier.in_use`) or a field the form does not draw
+an input for (such as `defaultChoiceId`, or a name in a language the form does not show), which
+appears only there. The
 screen's reads use the existing option-group, item and content-language live sources.
 
 One choice is edited in `dashboard-choice-form` (`apps/dashboard/src/widgets/choice-form.ts`), a
