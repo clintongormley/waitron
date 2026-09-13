@@ -149,10 +149,10 @@ Still to do, roughly in the order a venue meets them. As each one lands, add the
 1. **Overview and Sales** — `dashboard-overview-screen.ts`, `dashboard-sales-screen.ts`.
 2. **Catalogue and product depth** — `catalogue-screen.ts` and `purchases-screen.ts`. The owner-requested
    Products overhaul is specified as four parallel builds: Units, Modifiers, Categories and Products.
-   Categories has landed (#340, see below), with [integration notes](developers/product-categories.md).
-   Modifiers is implemented on `products-modifiers` and awaits landing; see its
+   Categories has landed (#340, see below), with [integration notes](developers/product-categories.md),
+   and Modifiers has landed (#341, see below), with its
    [integration contract](developers/modifiers.md). Units and Products have specs and plans written
-   ([units](superpowers/specs/2026-09-12-product-units-design.md),
+   but no code yet ([units](superpowers/specs/2026-09-12-product-units-design.md),
    [products](superpowers/specs/2026-09-12-product-editor-design.md)). The
    [shared design](superpowers/specs/2026-09-12-products-overhaul-design.md) defines the branch contracts.
    Products integrates the other three; recipes are deferred for
@@ -243,6 +243,49 @@ What it left open:
 - **Routing from category memberships is still not designed** — that item is unchanged and sits under
   A9 below. This merge kept the existing single-route behaviour on purpose; choosing the primary
   category as the reporting label does not decide anything about the later routing design.
+
+**Product modifiers — LANDED #341 (2026-09-13).** Modifiers are now written once and attached to as
+many products as you like, instead of being retyped per product. There are four kinds: free text (a
+note the kitchen sees), extras (priced additions), options (pick from a list) and a plain yes/no.
+They get their own dashboard page, and the till asks for them when the dish is ordered. What the
+customer chose is stored on the order line as a fact rather than recalculated later, so a held order,
+a fiscal invoice, the kitchen ticket and the printed receipt all show the same answers even after
+somebody edits the modifier afterwards. Extras are priced in decimals and multiply by the parent
+quantity, fractional quantities included. Menus keep their existing publication boundary: only
+modifiers published for that menu offer can be chosen from it, and a menu's own price overrides and
+choice availability still win.
+[Design](superpowers/specs/2026-09-12-product-modifiers-design.md),
+[plan and review evidence](superpowers/plans/2026-09-12-product-modifiers.md),
+[integration contract](developers/modifiers.md).
+
+What it left open:
+
+- **Two ways to attach a modifier to a product exist side by side, and you must not use both at
+  once.** The new ordered `modifierIds` field is the canonical one; the old `optionGroupIds` field and
+  its group/item endpoints stay alive purely because the combined catalogue screen still uses them.
+  They write to the same underlying tables, so this is one store with two doors, not two stores — but
+  sending both fields in a single request is rejected. **Next action:** the Products build deletes the
+  combined editor and the old field with it. Until then, anything new writes `modifierIds`.
+- **Catalogue rows created before this migration keep their old caps, and nothing upgrades them.**
+  The old per-group `max_select` limit does not become the new `maxTotalQuantity` cap. Following the
+  repo's no-backfill rule, the fix is to recreate disposable pre-production catalogue data under the
+  new schema rather than to write a data migration. Unlike Categories' migration this one does not
+  force a database reset by itself — it is the old rows that will look wrong, not the schema.
+- **The Units build has to keep its own quantity and precision checks.** Modifier validation runs
+  independently of the product's selling unit, and extras multiply by the parent quantity even when
+  that quantity is fractional. **Next action:** whoever builds Units adds its validator alongside this
+  one and does not gate either on `pricingUnit === "each"` — that shortcut would silently skip
+  modifier validation for anything not sold by the each.
+- **The Products build inherits a small cleanup in the modifier editor.** `dashboard-modifier-form`
+  renders allergen and origin effects through its own private methods; the shared pickers exist and
+  should replace them during Products integration. Cosmetic, but it is the sort of duplication that
+  hardens if nobody names it.
+- **The independent review did not cover the browser and rendering paths.** Claude's run-it reviewer
+  worked to a bounded brief and said so; what it did run found a real repricing bug — reordering
+  unchanged selections on a held order repriced an extra from 1.00 to 9.00 — which was fixed by
+  comparing saved answers by value rather than by their order in the payload. The browser, receipt and
+  kitchen-rendering evidence comes from the build's own focused tests plus CI's package suites, not
+  from a second pair of eyes. Worth knowing before anyone treats those paths as double-checked.
 
 ### A1. Checking a fiscal record before it is written — LANDED #331 (2026-09-12)
 
