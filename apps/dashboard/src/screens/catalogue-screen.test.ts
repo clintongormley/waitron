@@ -162,6 +162,21 @@ describe("catalogue-screen", () => {
     expect(event.detail).toEqual({ productId: "new" });
   });
 
+  it("announces a cancelled editor so the shell can return whoever sent it", async () => {
+    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", {
+      api: stubApi(),
+    });
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-product]")!.click();
+    await el.updateComplete;
+    const closed = new Promise<void>((resolve) =>
+      el.addEventListener("wt-product-editor-closed", () => resolve(), { once: true }),
+    );
+    emit(editor(el), "wt-cancel", {});
+    await closed;
+    expect(editor(el).open).toBe(false);
+  });
+
   it("loads the aggregate on edit and keeps the editor open after a failed save", async () => {
     const api = stubApi({
       updateProductEditor: vi.fn().mockRejectedValue({ code: "product.invalid" }),

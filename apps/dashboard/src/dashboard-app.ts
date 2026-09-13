@@ -1057,7 +1057,8 @@ export class DashboardApp extends LitElement {
             <div
               class="body"
               @wt-edit-product=${this.#onEditProduct}
-              @wt-product-saved=${this.#onProductSaved}
+              @wt-product-saved=${this.#returnFromProductEditor}
+              @wt-product-editor-closed=${this.#returnFromProductEditor}
               @wt-reopen-consumed=${() => {
                 this.unitsReopen = null;
               }}
@@ -1170,8 +1171,9 @@ export class DashboardApp extends LitElement {
     this.drawerOpen = false;
   }
 
-  /** A product save returns to the unit that sent us here (if any) and reopens its in-use modal. */
-  #onProductSaved(): void {
+  /** Closing the product editor — by save or cancel — returns to the unit that sent us here (if
+   * any) and reopens its in-use modal. */
+  #returnFromProductEditor(): void {
     const reopen = this.#pendingUnitReopen;
     this.#pendingUnitReopen = null;
     if (reopen === null) return;

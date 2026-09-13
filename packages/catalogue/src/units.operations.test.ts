@@ -11,6 +11,7 @@ import {
   getUnit,
   listUnits,
   productsUsingUnit,
+  reassignProductsToUnit,
   updateUnit,
 } from "./units.js";
 import { assertQuantityPrecision } from "./units.js";
@@ -94,6 +95,37 @@ describe("unit operations", () => {
       await expect(assignProductUnit(tx, other, productId, unit.id)).rejects.toMatchObject({
         code: "unit.not_found",
       });
+    });
+  });
+
+  it("reassigns products from one unit to another", async () => {
+    const tenantId = await seedTenant(suite.db);
+    await withTenant(suite.db, tenantId, async (tx) => {
+      const from = await createUnit(tx, tenantId, { name: { en: "each" }, precision: 0 }, "en");
+      const to = await createUnit(tx, tenantId, { name: { en: "kg" }, precision: 3 }, "en");
+      const a = await product(tx, tenantId, "A");
+      const b = await product(tx, tenantId, "B");
+      await assignProductUnit(tx, tenantId, a, from.id);
+      await assignProductUnit(tx, tenantId, b, from.id);
+      expect(await productsUsingUnit(tx, tenantId, from.id)).toHaveLength(2);
+
+      await reassignProductsToUnit(tx, tenantId, [a, b], to.id);
+      expect(await productsUsingUnit(tx, tenantId, from.id)).toEqual([]);
+      expect((await productsUsingUnit(tx, tenantId, to.id)).map((p) => p.id).sort()).toEqual(
+        [a, b].sort(),
+      );
+    });
+  });
+
+  it("refuses to reassign to a unit that does not exist", async () => {
+    const tenantId = await seedTenant(suite.db);
+    await withTenant(suite.db, tenantId, async (tx) => {
+      const from = await createUnit(tx, tenantId, { name: { en: "each" }, precision: 0 }, "en");
+      const a = await product(tx, tenantId, "A");
+      await assignProductUnit(tx, tenantId, a, from.id);
+      await expect(
+        reassignProductsToUnit(tx, tenantId, [a], "00000000-0000-4000-8000-000000000000"),
+      ).rejects.toMatchObject({ code: "unit.not_found" });
     });
   });
 

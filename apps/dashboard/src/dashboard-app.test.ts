@@ -1521,6 +1521,37 @@ describe("dashboard-app", () => {
     expect(dialog.open).toBe(true);
   });
 
+  it("returns to the unit when the product editor is cancelled", async () => {
+    const productsUsingUnit = vi
+      .fn()
+      .mockResolvedValue([{ id: "p1", name: { es: "Café" }, available: true }]);
+    const api = stubApi({
+      listStaff: vi.fn().mockResolvedValue([]),
+      listUnits: vi.fn().mockResolvedValue([{ id: "u1", name: { es: "kg" }, precision: 0 }]),
+      productsUsingUnit,
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    navUnits(el)!.click();
+    await flush(el);
+    units(el)!.dispatchEvent(
+      new CustomEvent("wt-edit-product", {
+        detail: { productId: "p1", returnToUnitId: "u1" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await flush(el);
+    expect(catalogue(el)).toBeTruthy();
+
+    catalogue(el)!.dispatchEvent(
+      new CustomEvent("wt-product-editor-closed", { bubbles: true, composed: true }),
+    );
+    await flush(el);
+    expect(units(el)).toBeTruthy();
+    expect(productsUsingUnit).toHaveBeenCalledWith("u1");
+  });
+
   it("does not return to a unit when a product is saved on its own", async () => {
     const api = stubApi({ listStaff: vi.fn().mockResolvedValue([]) });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });

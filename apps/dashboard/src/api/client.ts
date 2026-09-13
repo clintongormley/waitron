@@ -1980,6 +1980,19 @@ export class DashboardApi {
     return this.#request<ProductUsingUnit[]>(`/management-api/units/${id}/products`, "GET");
   }
 
+  /** Move the listed products onto `targetUnitId` and return the products still using `id`. */
+  reassignProductsUnit(
+    id: string,
+    productIds: string[],
+    targetUnitId: string,
+  ): Promise<ProductUsingUnit[]> {
+    return this.#request<ProductUsingUnit[]>(
+      `/management-api/units/${id}/products/reassign`,
+      "POST",
+      { productIds, unitId: targetUnitId },
+    );
+  }
+
   /** `GET /management-api/catalogues/:id/products` — the products of one catalogue. */
   listProducts(catalogueId: string): Promise<Product[]> {
     return this.#request<Product[]>(`/management-api/catalogues/${catalogueId}/products`, "GET");

@@ -29,6 +29,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     updateUnit: vi.fn().mockResolvedValue(units[0]),
     deleteUnit: vi.fn().mockResolvedValue(undefined),
     productsUsingUnit: vi.fn().mockResolvedValue([]),
+    reassignProductsUnit: vi.fn().mockResolvedValue([]),
     ...overrides,
   } as unknown as DashboardApi;
 }
@@ -45,11 +46,10 @@ function inUseApi(products = inUseProducts): DashboardApi {
 }
 
 async function openInUseModal(el: UnitsScreen): Promise<HTMLElement & { open: boolean }> {
+  // No confirmation step: clicking Delete attempts the delete, which the stub refuses as in-use.
   el.shadowRoot!.querySelector("wt-data-table")!
     .shadowRoot!.querySelector<HTMLElement>("[data-test=delete-u1]")!
     .click();
-  await el.updateComplete;
-  el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!.click();
   await flush(el);
   return el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
     "[data-test=in-use-dialog]",
@@ -295,28 +295,64 @@ describe("units-screen", () => {
     expect(dialog.open).toBe(false);
   });
 
-  it("closes the in-use modal without deleting when Close is clicked", async () => {
+  it("deletes a unit immediately, with no confirmation step, when nothing uses it", async () => {
+    const deleteUnit = vi.fn().mockResolvedValue(undefined);
+    const el = await mount(stubApi({ deleteUnit }));
+    el.shadowRoot!.querySelector("wt-data-table")!
+      .shadowRoot!.querySelector<HTMLElement>("[data-test=delete-u1]")!
+      .click();
+    await flush(el);
+    expect(deleteUnit).toHaveBeenCalledWith("u1");
+    expect(
+      el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>("[data-test=in-use-dialog]")!
+        .open,
+    ).toBe(false);
+    const rows = el.shadowRoot!.querySelector("wt-data-table")!.rows as readonly Unit[];
+    expect(rows.some((unit) => unit.id === "u1")).toBe(false);
+  });
+
+  it("reassigns the checked products to another unit and refreshes the list", async () => {
+    const reassignProductsUnit = vi.fn().mockResolvedValue([inUseProducts[1]]);
+    const el = await mount(
+      stubApi({
+        deleteUnit: vi
+          .fn()
+          .mockRejectedValue({ code: "unit.in_use", params: { products: inUseProducts } }),
+        reassignProductsUnit,
+      }),
+    );
+    const dialog = await openInUseModal(el);
+    const productTable = dialog.querySelector("wt-data-table")!;
+    productTable.shadowRoot!.querySelector<HTMLInputElement>("[data-test=select-p1]")!.click();
+    await el.updateComplete;
+    const select = dialog.querySelector<HTMLSelectElement>("[data-test=reassign-unit]")!;
+    select.value = "u2";
+    select.dispatchEvent(new Event("change"));
+    await el.updateComplete;
+    dialog.querySelector<HTMLElement>("[data-test=change-unit]")!.click();
+    await flush(el);
+    expect(reassignProductsUnit).toHaveBeenCalledWith("u1", ["p1"], "u2");
+    expect((productTable.rows as ProductUsingUnit[]).map((product) => product.id)).toEqual(["p2"]);
+  });
+
+  it("closes the in-use modal without deleting when Cancel is clicked", async () => {
     const el = await mount(inUseApi());
     const dialog = await openInUseModal(el);
     expect(dialog.open).toBe(true);
-    dialog.querySelector<HTMLElement>("[data-test=close-in-use]")!.click();
+    dialog.querySelector<HTMLElement>("[data-test=cancel-in-use]")!.click();
     await el.updateComplete;
     expect(dialog.open).toBe(false);
   });
 
-  it("restores focus when deletion is cancelled", async () => {
-    const el = await mount();
+  it("restores focus to the row menu when the in-use modal is cancelled", async () => {
+    const el = await mount(inUseApi());
     const menu = el
       .shadowRoot!.querySelector("wt-data-table")!
       .shadowRoot!.querySelector("wt-row-actions")!;
     const trigger = menu.shadowRoot!.querySelector<HTMLButtonElement>("button")!;
-    const remove = el
-      .shadowRoot!.querySelector("wt-data-table")!
-      .shadowRoot!.querySelector<HTMLElement>("[data-test=delete-u1]")!;
     trigger.focus();
-    remove.click();
-    await el.updateComplete;
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel-delete]")!.click();
+    const dialog = await openInUseModal(el);
+    dialog.querySelector<HTMLElement>("[data-test=cancel-in-use]")!.click();
     await new Promise((resolve) => requestAnimationFrame(resolve));
     expect(menu.shadowRoot!.activeElement).toBe(trigger);
   });

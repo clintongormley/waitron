@@ -9,6 +9,7 @@ import {
   deleteUnit,
   getUnit,
   listUnits,
+  readProductUnitId,
   updateUnit,
 } from "./units.js";
 
@@ -34,6 +35,31 @@ async function product(tenantId: string): Promise<string> {
       values (${tenantId}, ${menu.rows[0]!.id}, '{"en":"Soup"}', 'each', 1, 'general') returning id`)
   ).rows[0]!.id;
 }
+
+it("changes a product's unit even while product_units publishes updates for replication", async () => {
+  const tenantId = await seedTenant(suite.admin);
+  const productId = await product(tenantId);
+  const each = await app(suite.admin, tenantId, (tx) =>
+    createUnit(tx, tenantId, { name: { en: "each" }, precision: 0 }, "en"),
+  );
+  const kg = await app(suite.admin, tenantId, (tx) =>
+    createUnit(tx, tenantId, { name: { en: "kg" }, precision: 3 }, "en"),
+  );
+  await app(suite.admin, tenantId, (tx) => assignProductUnit(tx, tenantId, productId, each.id));
+  // Reproduce production: the table publishes UPDATEs. Without a replica identity (its primary key)
+  // Postgres refuses the reassignment upsert's UPDATE — the defect this guards against.
+  await suite.admin.execute(
+    sql`create publication test_product_units_updates for table product_units`,
+  );
+  try {
+    await app(suite.admin, tenantId, (tx) => assignProductUnit(tx, tenantId, productId, kg.id));
+    expect(
+      await app(suite.admin, tenantId, (tx) => readProductUnitId(tx, tenantId, productId)),
+    ).toBe(kg.id);
+  } finally {
+    await suite.admin.execute(sql`drop publication if exists test_product_units_updates`);
+  }
+});
 
 async function blocked(pid: number): Promise<void> {
   await expect

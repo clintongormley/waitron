@@ -346,6 +346,10 @@ export class CatalogueScreen extends LitElement {
         @wt-cancel=${(event: Event) => {
           event.stopPropagation();
           this.#closeEditor();
+          // Let a caller that sent us here (the units in-use modal) return without a save.
+          this.dispatchEvent(
+            new CustomEvent("wt-product-editor-closed", { bubbles: true, composed: true }),
+          );
         }}
         @wt-create-related=${(event: CustomEvent<{ kind: ProductChildKind }>) => {
           event.stopPropagation();

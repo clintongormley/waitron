@@ -158,6 +158,19 @@ export async function assignProductUnit(
     });
 }
 
+/** Move every listed product onto the target unit, in one transaction. Reuses the single-product
+ * assignment, so a missing product or unit throws the same domain error it does. */
+export async function reassignProductsToUnit(
+  tx: Transaction,
+  tenantId: string,
+  productIds: readonly string[],
+  targetUnitId: string,
+): Promise<void> {
+  for (const productId of productIds) {
+    await assignProductUnit(tx, tenantId, productId, targetUnitId);
+  }
+}
+
 export async function readProductUnitId(
   tx: Transaction,
   tenantId: string,

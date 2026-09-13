@@ -80,6 +80,19 @@ it("saves and reads the canonical editor shape with independent content and vari
   });
 });
 
+it("changes the product's unit on update", async () => {
+  const saved = await withTenant(fx.db, tenantId, (tx) =>
+    saveProductEditor(tx, tenantId, null, catalogueId, input, "en"),
+  );
+  const other = await withTenant(fx.db, tenantId, (tx) =>
+    createUnit(tx, tenantId, { name: { en: "kg" }, precision: 3 }, "en"),
+  );
+  const updated = await withTenant(fx.db, tenantId, (tx) =>
+    saveProductEditor(tx, tenantId, saved.id, catalogueId, { ...saved, unitId: other.id }, "en"),
+  );
+  expect(updated.unitId).toBe(other.id);
+});
+
 it("writes direct declarations without reviving or rewriting stale recipe derivation", async () => {
   const saved = await withTenant(fx.db, tenantId, (tx) =>
     saveProductEditor(tx, tenantId, null, catalogueId, input, "en"),

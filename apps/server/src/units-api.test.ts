@@ -132,6 +132,50 @@ describe("unit management routes", () => {
     expect(foreign.status).toBe(404);
   });
 
+  it("reassigns selected products to another unit and returns the shrunk list", async () => {
+    const from = (await (
+      await send("POST", "/management-api/units", { name: { en: "each" }, precision: 0 })
+    ).json()) as { id: string };
+    const to = (await (
+      await send("POST", "/management-api/units", { name: { en: "kg" }, precision: 3 })
+    ).json()) as { id: string };
+
+    const [a, b] = await withTenant(suite.db, tenantId, async (tx) => {
+      const menu = await tx.execute<{ id: string }>(sql`
+        insert into catalogues (tenant_id, name) values (${tenantId}, 'Menu') returning id`);
+      const ids: string[] = [];
+      for (const name of ["A", "B"]) {
+        const product = await tx.execute<{ id: string }>(sql`
+          insert into products (tenant_id, catalogue_id, descriptions, pricing_unit, unit_price, vat_class)
+          values (${tenantId}, ${menu.rows[0]!.id}, ${JSON.stringify({ en: name })}::jsonb, 'each', '1', 'general')
+          returning id`);
+        await tx.execute(sql`
+          insert into product_units (tenant_id, product_id, unit_id)
+          values (${tenantId}, ${product.rows[0]!.id}, ${from.id})`);
+        ids.push(product.rows[0]!.id);
+      }
+      return ids;
+    });
+
+    const response = await send("POST", `/management-api/units/${from.id}/products/reassign`, {
+      productIds: [a],
+      unitId: to.id,
+    });
+    expect(response.status).toBe(200);
+    expect(((await response.json()) as { id: string }[]).map((p) => p.id)).toEqual([b]);
+  });
+
+  it("rejects a reassign with a malformed body", async () => {
+    const unit = (await (
+      await send("POST", "/management-api/units", { name: { en: "each" }, precision: 0 })
+    ).json()) as { id: string };
+    const response = await send("POST", `/management-api/units/${unit.id}/products/reassign`, {
+      productIds: "nope",
+      unitId: unit.id,
+    });
+    expect(response.status).toBe(400);
+  });
+
   it("does not expose or mutate another tenant's unit through either manager session", async () => {
     const otherTenantId = await seedTenant(suite.db);
     const other = await withTenant(suite.db, otherTenantId, async (tx) => {
