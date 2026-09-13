@@ -201,6 +201,34 @@ What it left open:
   choosing a language are built and tested; the customer-facing online ordering surface they were
   built for does not exist. This is a prerequisite that landed early, not a half-finished feature.
 
+**Follow-up — the image library was unusable as shipped, fixed in #344 (2026-09-13).** Three things
+were wrong, all in `packages/media`. **It would not load at all**: opening the screen returned a 500
+every time, because the library's first request asks for "sort by best match" with nothing typed in
+the search box, and with nothing to match the ranking is all zeroes — PostgreSQL refuses to sort by a
+bare constant. No test caught it because every search test that used relevance ordering also supplied
+a search term, and an empty search fell through to date ordering, so the two conditions never met in
+one test. It now treats "best match with nothing to match" as "newest first", and a real-PostgreSQL
+test pins that. **Alt text is no longer required** — saving a picture needs only the picture and a
+name in the default language. The same requirement had also been sitting inside the check that
+decides whether a venue may switch its default content language, so a picture with a name but no alt
+text used to block that switch, and no longer does. **The upload and edit dialog now shows a
+preview** of the picture you chose before it is uploaded, or the existing one when editing.
+
+What that leaves open:
+
+- **Nothing tells you which pictures have no alt text.** Making it optional was right — being unable
+  to save a photograph because you had not written a description was worse — but there is now no
+  prompt, no warning and no report anywhere. A venue can end up with a library where most pictures
+  have no alt text and nothing ever surfaces it, which is the accessibility cost of the fix.
+  **Next action:** decide whether the library should mark pictures with missing alt text, the way the
+  translation-gap check marks missing names. Cheap to add; it just has not been decided.
+- **A whole screen shipped broken through the full ceremony, and the reason is worth keeping.** #339
+  went through `finish-branch`, an independent review, and green CI, and the first person to open the
+  screen got a 500. Every layer read code or ran tests; none opened the page. The test-shape lesson —
+  a matrix that varies two things separately and never crosses them proves less than it looks — is the
+  reusable half. **Next action for whoever agrees:** this belongs in `CLAUDE.md` §4 as a rule, not
+  here, and the root file takes the normal branch-and-PR flow.
+
 **Product categories — LANDED #340 (2026-09-13).** A product can now belong to several categories
 without its sales being counted twice. One membership is the primary one: its name is the label
 written onto new order lines, and its existing preparation route is the one the kitchen sees. The
