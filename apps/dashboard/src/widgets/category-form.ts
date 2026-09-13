@@ -1,7 +1,7 @@
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, selectStyles, submitOnEnter } from "@waitron/ui";
+import { baseStyles, selectStyles, submitOnEnter, CATEGORY_PALETTE } from "@waitron/ui";
 import { resolveEnabledContentText, type ContentLanguages } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -53,6 +53,55 @@ export class CategoryForm extends LitElement {
         display: grid;
         gap: var(--wt-space-2);
       }
+      fieldset.color {
+        display: grid;
+        gap: var(--wt-space-2);
+        border: none;
+        margin: 0;
+        padding: 0;
+      }
+      fieldset.color legend {
+        padding: 0;
+        font: inherit;
+      }
+      .swatches {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--wt-space-2);
+      }
+      .swatch {
+        width: var(--wt-space-6);
+        height: var(--wt-space-6);
+        padding: 0;
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-sm);
+        cursor: pointer;
+      }
+      .swatch.on {
+        outline: var(--wt-selected-ring);
+        outline-offset: var(--wt-selected-ring-offset);
+      }
+      .swatch.none {
+        width: auto;
+        padding: 0 var(--wt-space-2);
+        background: var(--wt-color-surface);
+        color: var(--wt-color-text);
+        font-size: var(--wt-font-size-sm);
+      }
+      .custom {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--wt-space-2);
+        font-size: var(--wt-font-size-sm);
+      }
+      .custom input[type="color"] {
+        width: var(--wt-space-6);
+        height: var(--wt-space-6);
+        padding: 0;
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-sm);
+        cursor: pointer;
+      }
     `,
   ];
   @property({ type: Boolean }) open = false;
@@ -65,6 +114,7 @@ export class CategoryForm extends LitElement {
   @state() private names: Record<string, string> = {};
   @state() private parentId: string | null = null;
   @state() private image: string | null = null;
+  @state() private color: string | null = null;
   @state() private validation: Record<string, string> = {};
   @state() private pickerOpen = false;
   protected override willUpdate(changes: PropertyValues<this>): void {
@@ -77,6 +127,7 @@ export class CategoryForm extends LitElement {
       for (const locale of this.locales) this.names[locale] ??= "";
       this.parentId = this.value?.parentId ?? null;
       this.image = this.value?.image ?? null;
+      this.color = this.value?.color ?? null;
       this.validation = {};
     }
   }
@@ -98,7 +149,12 @@ export class CategoryForm extends LitElement {
     }
     this.validation = {};
     this.#emit(event, "wt-submit", {
-      value: { name: { ...this.names }, parentId: this.parentId, image: this.image },
+      value: {
+        name: { ...this.names },
+        parentId: this.parentId,
+        image: this.image,
+        color: this.color,
+      },
     });
   }
   #parents(): CategorySummary[] {
@@ -169,6 +225,53 @@ export class CategoryForm extends LitElement {
             ${this.#parents().map((category) => html`<option value=${category.id} .selected=${category.id === this.parentId}>${categoryPath(category, this.categories, this.locales[0] ?? "en")}</option>`)}</select
           ><span class="field-error" id="category-parent-error">${errors.parent ?? ""}</span></label
         >
+        <fieldset class="color">
+          <legend>${t("categories.color")}</legend>
+          <div class="swatches" role="radiogroup" aria-label=${t("categories.color")}>
+            <button
+              type="button"
+              class="swatch none ${this.color === null ? "on" : ""}"
+              role="radio"
+              aria-checked=${this.color === null}
+              data-color=""
+              .disabled=${this.busy}
+              @click=${(event: Event) => {
+                event.stopPropagation();
+                this.color = null;
+              }}
+            >
+              ${t("categories.color_none")}
+            </button>
+            ${CATEGORY_PALETTE.map(
+              (c) =>
+                html`<button
+                  type="button"
+                  class="swatch ${this.color === c ? "on" : ""}"
+                  style=${`background:${c}`}
+                  role="radio"
+                  aria-checked=${this.color === c}
+                  aria-label=${c}
+                  data-color=${c}
+                  .disabled=${this.busy}
+                  @click=${(event: Event) => {
+                    event.stopPropagation();
+                    this.color = c;
+                  }}
+                ></button>`,
+            )}
+          </div>
+          <label class="custom"
+            >${t("categories.color_custom")}
+            <input
+              type="color"
+              .value=${this.color ?? "#000000"}
+              .disabled=${this.busy}
+              @input=${(event: Event) => {
+                event.stopPropagation();
+                this.color = (event.target as HTMLInputElement).value;
+              }}
+          /></label>
+        </fieldset>
         <dashboard-image-upload
           aria-describedby="category-image-error"
           .api=${this.api}

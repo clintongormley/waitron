@@ -1,4 +1,4 @@
-import { afterEach, describe, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import { CategoryForm } from "./category-form.js";
 import { CategoryMembershipPicker } from "./category-membership-picker.js";
@@ -36,6 +36,22 @@ describe.each(["light", "dark"] as const)("category forms (%s)", (theme) => {
       await expectNoA11yViolations(host);
     },
   );
+  it("names the colour radiogroup and every one of its options", async () => {
+    const { el } = await mountWidget<CategoryForm>(
+      "dashboard-category-form",
+      { open: true, locales: ["en"], categories: [category] },
+      theme,
+    );
+    const group = el.shadowRoot!.querySelector('[role="radiogroup"]')!;
+    expect(group.getAttribute("aria-label")).toBeTruthy();
+    const options = [...group.querySelectorAll('[role="radio"]')];
+    expect(options.length).toBeGreaterThan(1);
+    for (const option of options) {
+      const name = option.getAttribute("aria-label") ?? option.textContent?.trim();
+      expect(name).toBeTruthy();
+    }
+  });
+
   it.each(["empty", "selected", "invalid"] as const)(
     "renders %s membership accessibly",
     async (state) => {
