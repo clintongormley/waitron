@@ -241,6 +241,9 @@ area** — these lines tell you what the rule is, not why it exists or how it br
 - **A `sql` scalar subquery correlated to the OUTER query's table breaks silently when that table is
   the `.from()` base rather than a join** — no error, a wrong answer. Check base-vs-join and READ the
   emitted SQL with `.toSQL()`.
+- **Resolve shared catalogue data once before a basket's line loop.** Never await a zone, product or
+  variant read per line. Guard: `apps/server/src/working-order.test.ts` (one zone snapshot, no
+  per-line resolver).
 - **Never widen a grant to make a test pass.** `app_user` holds `SELECT` on `tenants` and not `INSERT`
   deliberately. If a test needs a privilege the role does not have, the test is asserting the wrong
   thing or the code is reaching somewhere it should not — establish which before touching any grant.

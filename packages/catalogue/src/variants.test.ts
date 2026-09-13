@@ -138,6 +138,9 @@ describe("product variants", () => {
 
   it("refuses another tenant's product and hides its variants", async () => {
     const other = await seedTenant(fx.db);
+    await run((tx) =>
+      setProductVariants(tx, tenantId, productId, [variant("Small", "2.00")], "en"),
+    );
     await expect(
       run((tx) => setProductVariants(tx, other, productId, [variant("Small", "2.00")], "en")),
     ).rejects.toMatchObject({ code: "product.not_found" });
@@ -198,6 +201,18 @@ describe("product variants", () => {
         unitPrice: "4.00",
         available: true,
       },
+    ]);
+    await run((tx) =>
+      setProductVariants(
+        tx,
+        tenantId,
+        productId,
+        [{ ...variants[0]!, unitPrice: "2.50", available: false }, variants[1]!],
+        "en",
+      ),
+    );
+    expect((await run((tx) => listMenuOffers(tx, tenantId, [menuId])))[0]!.variants).toEqual([
+      expect.objectContaining({ id: variants[0]!.id, available: false }),
     ]);
     await expect(
       run((tx) => setProductVariants(tx, tenantId, productId, [variants[1]!], "en")),

@@ -107,6 +107,15 @@ resolves outward, but a base table's bare `"id"` binds to the SUBQUERY's table â
 answer (#152: a null table label). Copying a correlated subquery: check base-vs-join and READ the
 emitted SQL with `.toSQL()`.
 
+## Resolve shared catalogue data once before a basket's line loop
+
+The Products review found that each basket line called `resolveZoneOffer`, which reloaded the whole
+zone offer catalogue, then performed separate product-variant and menu-variant reads. Repeated items
+therefore repeated the same sequential database work. `priceOrderLines` now reads one zone snapshot
+and one tenant-scoped batch of product variants before its in-memory line loop. The focused
+`working-order.test.ts` probe spies on both contribution methods: one `listZoneOffers` call and no
+per-line `resolveZoneOffer` calls for a repeated-offer basket.
+
 **Grants and roles**
 
 ## Never widen a grant to make a test pass

@@ -55,13 +55,14 @@ import {
   deriveAsServedAllergens,
   applyDietaryEffects,
   expandDietaryDeclarations,
+  listProductVariantsForProducts,
   listAvailableProducts,
   priceBasket,
   priceBasketWithOptions,
   priceLockedLines,
   toInvoiceLineDescriptions,
   readContentLanguages,
-  resolveMenuVariant,
+  selectMenuVariant,
   productPresentationName,
 } from "@waitron/catalogue";
 import type {
@@ -181,18 +182,32 @@ async function priceOrderLines(
     Awaited<ReturnType<typeof VENUE_SERVICE.resolveZoneOffer>>
   >();
   if (usesOffers) {
+    const offers = await VENUE_SERVICE.listZoneOffers(tx, cfg, zoneId!);
+    const availableById = new Map(offers.offers.map((offer) => [offer.id, offer]));
     for (const line of requestedLines) {
       if (line.menuItemId === undefined || line.productId !== undefined) {
         throw new AppError("management.request_invalid", { field: "lines" });
       }
-      const offer = await VENUE_SERVICE.resolveZoneOffer(tx, cfg, zoneId!, line.menuItemId);
+      const offer = availableById.get(line.menuItemId);
+      if (offer === undefined) {
+        throw new AppError("service_zone.offer_not_allowed", {
+          zoneId: zoneId!,
+          menuItemId: line.menuItemId,
+        });
+      }
       offerBySelectionId.set(line.menuItemId, offer);
     }
   }
+  const productVariantsByProduct = usesOffers
+    ? await listProductVariantsForProducts(tx, cfg.tenantId, [
+        ...new Set([...offerBySelectionId.values()].map((offer) => offer.productId)),
+      ])
+    : new Map();
   const available = usesOffers
     ? [...offerBySelectionId.values()].map((offer) => ({
         id: offer.id,
         descriptions: offer.descriptions,
+        kitchenName: offer.kitchenName,
         unit: offer.unit,
         pricingUnit: offer.unit.hardwareUnit === null ? "each" : "weight",
         unitPrice: offer.grossPrice,
@@ -274,9 +289,15 @@ async function priceOrderLines(
       throw new AppError("sale.unknown_product", { productId: line.productId });
     }
     const underlyingProductId = offerBySelectionId.get(line.productId)?.productId ?? line.productId;
-    const presentation = usesOffers
-      ? await resolveMenuVariant(tx, cfg.tenantId, line.menuItemId!, line.variantId ?? null)
-      : null;
+    const offer = offerBySelectionId.get(line.productId);
+    const presentation =
+      offer === undefined
+        ? null
+        : selectMenuVariant(
+            offer,
+            productVariantsByProduct.get(offer.productId) ?? [],
+            line.variantId ?? null,
+          );
     if (!usesOffers && line.variantId !== undefined) {
       throw new AppError("management.request_invalid", { field: "variantId" });
     }

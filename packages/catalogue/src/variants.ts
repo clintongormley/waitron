@@ -56,11 +56,38 @@ export async function listProductVariants(
   tenantId: TenantId,
   productId: string,
 ): Promise<ProductVariant[]> {
-  return tx
-    .select(variantColumns)
+  return (await listProductVariantsForProducts(tx, tenantId, [productId])).get(productId) ?? [];
+}
+
+/** Read variants for several products in one tenant-scoped query. */
+export async function listProductVariantsForProducts(
+  tx: Transaction,
+  tenantId: TenantId,
+  productIds: readonly string[],
+): Promise<Map<string, ProductVariant[]>> {
+  const grouped = new Map<string, ProductVariant[]>();
+  if (productIds.length === 0) return grouped;
+  const rows = await tx
+    .select({ productId: productVariants.productId, ...variantColumns })
     .from(productVariants)
-    .where(and(eq(productVariants.tenantId, tenantId), eq(productVariants.productId, productId)))
-    .orderBy(asc(productVariants.displayOrder), asc(productVariants.id));
+    .where(
+      and(
+        eq(productVariants.tenantId, tenantId),
+        inArray(productVariants.productId, [...new Set(productIds)]),
+      ),
+    )
+    .orderBy(
+      asc(productVariants.productId),
+      asc(productVariants.displayOrder),
+      asc(productVariants.id),
+    );
+  for (const row of rows) {
+    const variants = grouped.get(row.productId) ?? [];
+    const { productId, ...variant } = row;
+    variants.push(variant);
+    grouped.set(productId, variants);
+  }
+  return grouped;
 }
 
 /** The caller owns the transaction, including product fields and supporting associations. */
@@ -241,6 +268,43 @@ export interface SelectedVariant {
   variantName: Record<string, string> | null;
   kitchenName: string | null;
   unitPrice: string;
+}
+
+export function selectMenuVariant(
+  offer: {
+    productId: string;
+    descriptions: Record<string, string>;
+    kitchenName: string | null;
+    grossPrice: string;
+    variants: readonly ProductVariant[];
+  },
+  productVariants: readonly ProductVariant[],
+  variantId: string | null,
+): SelectedVariant {
+  if (productVariants.length > 0 && variantId === null) {
+    throw new AppError("product.variant_required", { productId: offer.productId });
+  }
+  if (variantId === null) {
+    return {
+      variantId: null,
+      productName: offer.descriptions,
+      variantName: null,
+      kitchenName: offer.kitchenName,
+      unitPrice: offer.grossPrice,
+    };
+  }
+  const variant = productVariants.find((candidate) => candidate.id === variantId);
+  const published = offer.variants.find((candidate) => candidate.id === variantId);
+  if (!variant?.available || !published?.available) {
+    throw new AppError("product.variant_unavailable", { variantId });
+  }
+  return {
+    variantId,
+    productName: offer.descriptions,
+    variantName: variant.name,
+    kitchenName: offer.kitchenName,
+    unitPrice: published.unitPrice,
+  };
 }
 
 export async function resolveMenuVariant(

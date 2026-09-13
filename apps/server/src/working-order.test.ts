@@ -81,6 +81,7 @@ import type { PrintConfig } from "@waitron/printing";
 import { attachPrinterToStation } from "./station-printers.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
+import { VENUE_SERVICE } from "./modules.js";
 import "./errors.js";
 
 // PGlite exercises working-order state, validation, foreign keys, triggers and node-scoped reads.
@@ -273,6 +274,27 @@ describe("parkOrder", () => {
         department_name: "Restaurant",
       },
     ]);
+  });
+
+  it("loads one zone-offer snapshot for a basket with repeated offers", async () => {
+    const { cfg, zoneId, premiumCafeOfferId } = await setupVenue();
+    const listOffers = vi.spyOn(VENUE_SERVICE, "listZoneOffers");
+    const resolveOffer = vi.spyOn(VENUE_SERVICE, "resolveZoneOffer");
+    try {
+      await parkOrder({ db }, cfg, {
+        id: randomUUID(),
+        zoneId,
+        lines: [
+          { menuItemId: premiumCafeOfferId, quantity: "1" },
+          { menuItemId: premiumCafeOfferId, quantity: "1" },
+        ],
+      });
+      expect(listOffers).toHaveBeenCalledTimes(1);
+      expect(resolveOffer).not.toHaveBeenCalled();
+    } finally {
+      listOffers.mockRestore();
+      resolveOffer.mockRestore();
+    }
   });
 
   it("parks an open working order with number 1 and its priced lines", async () => {

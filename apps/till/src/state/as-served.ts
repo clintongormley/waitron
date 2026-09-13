@@ -56,7 +56,7 @@ export function asServedAllergens(line: OrderLine): AsServedAllergens {
   return deriveAsServedAllergens(line.product.allergens ?? null, overlays);
 }
 
-/** Unknown derivations remain pending; staff overrides are applied after selected origin effects. */
+/** Direct declarations take precedence; an omitted field retains the derived-profile fallback. */
 export function asServedDiet(line: OrderLine): DietProfile {
   if (line.product.dietaryDeclarations !== undefined) {
     const declarations = asServedDietaryDeclarations(line);

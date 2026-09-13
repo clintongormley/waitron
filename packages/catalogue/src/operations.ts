@@ -99,6 +99,7 @@ export interface MenuOffer extends MenuItem {
   menuName: string;
   sectionName: Record<string, string>;
   descriptions: Record<string, string>;
+  kitchenName: string | null;
   unit: SellableUnit;
   vatClass: VatClass;
   category: string | null;
@@ -812,6 +813,7 @@ export async function listMenuOffers(
       menuName: catalogues.name,
       sectionName: menuSections.name,
       descriptions: products.descriptions,
+      kitchenName: products.kitchenName,
       unitId: units.id,
       unitName: units.name,
       unitPrecision: units.precision,
@@ -967,7 +969,8 @@ export async function listMenuOffers(
       id: productVariants.id,
       name: productVariants.name,
       unitPrice: menuItemVariants.unitPrice,
-      available: menuItemVariants.available,
+      productAvailable: productVariants.available,
+      menuAvailable: menuItemVariants.available,
     })
     .from(menuItemVariants)
     .innerJoin(
@@ -999,6 +1002,7 @@ export async function listMenuOffers(
     menuName: row.menuName,
     sectionName: row.sectionName,
     descriptions: row.descriptions,
+    kitchenName: row.kitchenName,
     unit: sellableUnit(
       row.unitId,
       row.unitName,
@@ -1026,7 +1030,7 @@ export async function listMenuOffers(
         id: variant.id,
         name: variant.name,
         unitPrice: variant.unitPrice,
-        available: variant.available,
+        available: variant.productAvailable && variant.menuAvailable,
       })),
   }));
 }

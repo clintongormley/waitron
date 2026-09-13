@@ -185,14 +185,21 @@ describe("seedDemoRestaurant", () => {
       };
     });
 
-    // Ordering modifiers (Phase 4, Task 13): the coffee carries Size + Milk, the steak carries
-    // Extras + Cooking, and the back-dated sales generator actually rang at least one of them with a
-    // selection — the whole point of seeding modifiers into the demo.
+    // The coffee keeps the retained Size + Milk groups and demonstrates all four current modifier
+    // modes; the steak carries Extras + Cooking. The back-dated sales generator rings at least one
+    // selection so the demo also contains persisted modifier sub-lines.
     const coffee = read.products.find((p) => p.descriptions[LOCALE] === "Coffee");
     const steak = read.products.find((p) => p.descriptions[LOCALE] === "Sirloin in whisky sauce");
     expect(coffee).toBeDefined();
     expect(steak).toBeDefined();
-    expect(coffee!.optionGroups.map((g) => g.name[LOCALE]).sort()).toEqual(["Milk", "Size"]);
+    expect(coffee!.optionGroups.map((g) => g.name[LOCALE]).sort()).toEqual([
+      "Demo add-ons",
+      "Demo cup",
+      "Demo decaf",
+      "Demo preparation note",
+      "Milk",
+      "Size",
+    ]);
     expect(steak!.optionGroups.map((g) => g.name[LOCALE]).sort()).toEqual(["Cooking", "Extras"]);
     expect(read.modifierLines).toBeGreaterThan(0);
 

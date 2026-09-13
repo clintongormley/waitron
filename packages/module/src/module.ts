@@ -113,6 +113,7 @@ export interface ZoneMenuOffer {
   readonly menuName: string;
   readonly sectionName: Readonly<Record<string, string>>;
   readonly descriptions: Readonly<Record<string, string>>;
+  readonly kitchenName: string | null;
   readonly unit: {
     readonly id: string;
     readonly name: Readonly<Record<string, string>>;

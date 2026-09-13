@@ -37,8 +37,9 @@ declare module "@waitron/shared" {
     "allergen.invalid_source": { code: string };
     /** An option's allergen overlay adds and removes the same EU-14 code — a contradiction. */
     "allergen.add_remove_conflict": { code: string };
-    /** A supplied dietary origin is not one of the `DIETARY_ORIGINS`. */
+    /** A direct dietary declaration is not one of the supported suitability labels. */
     "diet.declaration_invalid": Record<string, never>;
+    /** A supplied dietary origin is not one of the `DIETARY_ORIGINS`. */
     "diet.invalid_origin": { origin: string };
     /** A supplied diet label (`vegan`/`vegetarian`/…) is not an accepted value for `field`. */
     "diet.invalid_label": { field: string; value: string };
@@ -64,12 +65,19 @@ declare module "@waitron/shared" {
     "catalogue.not_found": { catalogueId: string };
     /** A menu offer operation names no active item; menuId is present when the route supplies it. */
     "menu_item.not_found": { menuId?: string; menuItemId: string };
+    /** A variant field is malformed or a submitted variant identity is duplicated. */
     "product.variant_invalid": { field: string };
+    /** A submitted variant identity does not belong to the product. */
     "product.variant_not_found": { variantId: string };
+    /** A variant cannot be removed while menu offers still publish it. */
     "product.variant_in_use": { variantId: string; menuItemIds: string[] };
+    /** A product or its menu path is disabled. */
     "product.unavailable": { productId: string };
+    /** A product with variants cannot be sold without selecting one. */
     "product.variant_required": { productId: string };
+    /** A selected variant is disabled or absent from the menu offer. */
     "product.variant_unavailable": { variantId: string };
+    /** A product-editor field is missing or malformed. */
     "product.invalid": { field: string };
     "product.not_found": { productId: string };
     "menu_section.not_found": { menuId?: string; sectionId: string };

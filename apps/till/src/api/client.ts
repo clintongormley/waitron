@@ -486,6 +486,7 @@ export interface TillMenuOffer {
   menuName: string;
   sectionName: Record<string, string>;
   descriptions: Record<string, string>;
+  kitchenName: string | null;
   unit?: TillProduct["unit"];
   pricingUnit?: "each" | "weight";
   vatClass: "general" | "reduced" | "super_reduced" | "zero";
@@ -552,6 +553,7 @@ export function menuOfferToTillProduct(offer: TillMenuOffer): TillProduct {
     productId: offer.productId,
     menuItemId: offer.id,
     descriptions: offer.descriptions,
+    kitchenName: offer.kitchenName,
     unit: offer.unit,
     pricingUnit: offer.pricingUnit,
     unitPrice: offer.grossPrice,
