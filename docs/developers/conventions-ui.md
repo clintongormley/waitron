@@ -87,10 +87,14 @@ Log out) at the trailing edge only when a session exists. Use the tenant name, n
 deployment database has one tenant and that tenant can contain several locations
 (`packages/db/src/schema/tenants.ts`).
 
-## Dashboard sign-in matches the browser's `Accept-Language` preferences
+## The dashboard matches the browser's `Accept-Language` for anyone with no saved language
 
-The public locale response carries a separate `loginDefault`; `venueDefault` still describes the
-venue and remains the fallback for signed-in people without a saved language. Returning to login
+The public locale response carries a separate `loginDefault`, and `venueDefault` still describes the
+venue. A signed-in person with no saved language gets `sessionDefault` from
+`GET /management-api/session/me`: that request's own browser match, floored at the venue locale when
+the browser asks for nothing Waitron ships. It is derived per request and never stored, and a saved
+language still wins. The till and account emails have no browser to ask, so a person with no saved
+language gets the venue default there. Returning to login
 after logout or session expiry uses the last browser match, or the venue default until that match is
 available. Guard late locale responses so they cannot overwrite a newly authenticated person's
 language or an explicit choice on sign-in (`apps/dashboard/src/dashboard-app.test.ts`).

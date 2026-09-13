@@ -142,8 +142,8 @@ this floor — removing the `min-width` regresses that guard.
 | `wt-card` | `raised`; default slot (body), `header` slot | — |
 | `wt-input` | `value`, `label`, `name`, `type`, `autocomplete`, `placeholder`, `required`, `disabled`, `invalid`, `error`; `help` and `end` slots | `wt-change` — `detail: { value: string }` |
 | `wt-switch` | `checked`, `disabled`, `label`, `name` | `wt-change` — `detail: { checked: boolean }` |
-| `wt-dialog` | `open`, `heading`, `aria-label` (fallback name when there is no `heading`); default slot (body), `footer` slot | `wt-close` |
-| `wt-modal` | `open`, `heading`, `aria-label`; default slot (scrolling body), `footer` slot (fixed actions) | `wt-close` |
+| `wt-dialog` | `open`, `heading`, `aria-label` (fallback name when there is no `heading`), `dismissible` (default true; set the property `.dismissible=${false}` so Escape cannot close it); default slot (body), `footer` slot | `wt-close` |
+| `wt-modal` | `open`, `heading`, `aria-label`, `dismissible`; default slot (scrolling body), `footer` slot (fixed actions) | `wt-close` |
 | `wt-form-error-summary` | `heading`, `errors` | — |
 | `wt-form-actions` | `cancel`, `secondary`, and default slots | — |
 | `wt-help-tooltip` | `aria-label`; default slot | — |
@@ -168,7 +168,9 @@ Use `wt-modal` for an add or edit form. Its portrait panel fills the viewport he
 top and bottom margins. The body scrolls independently, so your footer actions stay visible.
 It uses the raised surface and shadow tokens: white in the light theme, with the matching dark
 surface in the dark theme. Put `wt-form-actions` in its `footer` slot to keep Cancel on the left
-and Save on the right:
+and Save on the right. The one standing exception is the setup wizard, which uses a non-dismissible
+`wt-modal` as its whole page and keeps Back and Next in the scrolling body, by owner decision
+(`docs/superpowers/specs/2026-09-13-onboarding-flow-corrections-design.md`):
 
 ```html
 <wt-modal heading="Add printer">

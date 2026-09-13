@@ -26,7 +26,7 @@ const UNIT_NAMES = {
 
 export const CATALOGUE_PROVISIONING: ModuleProvisioning = {
   seed: {
-    summary: "Create the venue's initial menu and content language",
+    summary: "Create the venue's initial menu and content languages",
     async run(tx, node) {
       const location = await tx.execute<{
         catalogue_id: string | null;

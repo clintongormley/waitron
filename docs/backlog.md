@@ -937,6 +937,13 @@ image constraints under *Detail → Box image*.
   versus keep-serving, to settle before the first consumer relies on it.
 - **Two near-identical node-forge certificate builders** (`self-signed-cert.ts`, `testing/tls.ts`,
   plus the fiscal module's byte-copy). Extract one; its own PR, it touches the mTLS fixture.
+- **The same hand-built SQL array appears in several packages** — `sql.join` of each value inside
+  `array[...]::text[]`, in `packages/catalogue/src/provisioning.ts`,
+  `packages/provisioning/src/venue-apply.ts` and `apps/server/src/configuration-transfer.ts` (find
+  others with `grep -rn "::text\[\]"`). It is rebuilt by hand because interpolating a JavaScript
+  array as one value makes Drizzle emit a list of values rather than an array, which PostgreSQL
+  refuses. One shared helper would stop a wrong copy being written; its home has to be added to
+  `@waitron/db`'s enumerated `exports` map, which is why it is not a five-minute change.
 - **A box that mints its certificate before NTP sync persists a wrong validity window**, with no
   renewal path yet. Ties to a time-health check and certificate renewal.
 - **Hardening from onboarding 2b:** a DB-level advisory lock on `tenantId` spanning
@@ -989,6 +996,16 @@ image constraints under *Detail → Box image*.
   (15 tests) and in a full dashboard coverage run (1,682 tests) with no code change. The original log
   and screenshot were kept; the cause is unexplained, so retain them again on the next sighting
   rather than re-running to green.
+- **Comments across the tree still say PGlite cannot check a database permission** — the belief
+  CLAUDE.md §4 corrected on 2026-09-13. PGlite's default connection holds every permission, but a
+  session that switches to `app_user` (`asAppUser(tx)`) is refused anything that role lacks, column
+  permissions included (receipt in `docs/developers/testing-guide.md`). Many test comments give the
+  old belief as their reason for using a real PostgreSQL container, often citing "CLAUDE.md §4" by
+  number, which now points at text saying the opposite. The ones in files the onboarding
+  corrections touched were fixed; find the rest with `grep -rn "PGlite" apps packages scripts`. A
+  sweep, not a one-liner: for each suite, check whether anything else still needs the container
+  (concurrency, triggers running as the deployment role, or who connected) before moving it, and
+  correct the comment either way.
 - **`replication-arc`'s isolation was reverted** (vitest `projects` are incompatible with `--shard`);
   if it flakes on `test-server` it needs a `--shard`-compatible isolation.
 - **Job-sharding levers:** `--shard` splits by FILE COUNT; bump `shard: [1..N]` and the denominator
@@ -1069,7 +1086,12 @@ turns out to need a design moves to its track.
 - Profile follow-ups (owner, 2026-09-12): keep Display name in step with the person's name as it is
   typed, in all three forms (`person-form.ts`, `person-edit.ts`, `profile-screen.ts` under
   `apps/dashboard/src`); Your profile calls the display name just "Name" (`profile.name`) — one
-  field, one label.
+  field, one label. Since 2026-09-13 two forms work the display name out independently, each with
+  its own tests: the add-person form (`person-form.ts`) and the setup wizard's account screen
+  (`apps/setup/src/screens/admin-screen.ts`). Extract one shared helper before a third copy appears.
+  Decide one thing first: that branch's review judged an EDIT form should not follow the names as
+  they are typed, because it would overwrite a display name somebody chose while they correct a
+  surname — which is in tension with "all three forms" above. An owner call.
 - The till renders `person.suspended` as "Account suspended" — align with the dashboard's Disabled
   terminology.
 - The dev `?dev` chooser shows `label · kind` rather than `name · profile · register`; the Spanish

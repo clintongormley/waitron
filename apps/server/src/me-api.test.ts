@@ -22,12 +22,11 @@ import type { AccountEmail } from "./account-email.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import "./errors.js";
 
-// PGlite, not real Postgres: the me routes are LOGIC (management session → verb → JSON) over mutable
-// planning rows, the browser twin of `schedule-api.ts`. Every DB touch runs through `withTenant` +
-// `asAppUser` exactly as production does, but the app role's grants and — the crux — the
-// "requester is the SESSION's personId, never the body's" identity property need a real non-superuser
-// role to MEAN anything, so they are proven against real Postgres in `me-api.pg.test.ts`. Here we
-// prove the route mechanics: whoami, the happy paths, the request-shape 400s and the not-logged-in 401.
+// The me routes are LOGIC (management session → verb → JSON) over mutable planning rows, the browser
+// twin of `schedule-api.ts`. Every DB touch runs through `withTenant` + `asAppUser` exactly as
+// production does. The crux — "the requester is the SESSION's personId, never the body's" — is
+// proven in `me-api.pg.test.ts`; here we prove the route mechanics: whoami, the happy paths, the
+// request-shape 400s and the not-logged-in 401.
 
 const noopLog: Logger = () => {};
 let tenantId: string;

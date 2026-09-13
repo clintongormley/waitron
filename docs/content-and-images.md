@@ -8,12 +8,14 @@ default-language translation check.
 
 ## Choose your content languages
 
-Open **Products**, then **Content languages**. Keep the language you already use as the default,
-choose an additional language and select **Add**. Save the settings to make its translation fields
-available throughout your content editors.
+A new venue starts with its content languages already chosen. A venue in Spain starts with Spanish
+as the default and Catalan and English alongside; a venue anywhere else starts with one language,
+worked out from where it is. To add another, open **Products**, then **Content languages**, keep
+your default, choose the language and select **Add**. Save the settings to make its translation
+fields available throughout your content editors.
 
-For example, keep Spanish as the default and add English. A product named **Pan de verano** can
-leave its English description empty while you prepare the translation. Where English content is
+For example, with Spanish as the default and English alongside, a product named **Pan de verano**
+can leave its English description empty while you prepare the translation. Where English content is
 requested, it displays **Pan de verano** until you enter **Summer bread**. This fallback uses the
 Spanish text without copying it into the English field, so later Spanish edits remain visible
 where the translation is still missing.
