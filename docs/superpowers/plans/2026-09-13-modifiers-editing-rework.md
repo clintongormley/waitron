@@ -486,19 +486,16 @@ and opens the same new-modifier form."
 **Files:**
 - Create: `apps/dashboard/src/widgets/choice-form.ts`
 - Test: `apps/dashboard/src/widgets/choice-form.test.ts`, `apps/dashboard/src/widgets/choice-form.a11y.test.ts`
-- Modify: `apps/dashboard/src/api/client.ts` (types), `apps/dashboard/src/i18n/strings.ts` (only if new keys are needed beyond the existing `modifiers.*` set)
+
+This task is purely additive: it creates a new element and touches no shared file, so the whole `apps/dashboard` package stays green (typecheck, lint, all existing tests). The dashboard type flip (`defaultQuantity` → `preselected`, dropping the yes-no labels) and the deletion of the effects markup from `modifier-form.ts` both happen in Task 6, together with the form rewrite that depends on them.
 
 **Interfaces:**
-- Consumes: the dashboard's `ModifierExtraChoice`/`ModifierChoice` types (updated here: `defaultQuantity` → `preselected`, yes-no member loses labels — see Step 3).
-- Produces: `<dashboard-choice-form>` custom element with props `open: boolean`, `busy: boolean`, `locales: string[]`, `kind: "extras" | "options"`, `value: ChoiceDraft | null`, `fieldErrors: Record<string,string>`; emits `wt-choice-save` with `{ detail: { value: ChoiceDraft } }` (bubbles, composed) and `wt-choice-cancel`. `ChoiceDraft` is the per-choice draft shape (id, per-language names, available, and for extras priceDelta/maxQuantity/vatClass/effects) — exported from this file for Task 6 to consume.
+- Consumes: the STABLE effect types from `apps/dashboard/src/api/client.ts` — `ModifierEffects`, `AllergenDeclaration`, `DietaryLabel` — which this task does NOT change. It does NOT import `ModifierExtraChoice` (that type is flipped in Task 6); `ChoiceDraft` is defined locally instead.
+- Produces: `<dashboard-choice-form>` custom element with props `open: boolean`, `busy: boolean`, `locales: string[]`, `kind: "extras" | "options"`, `value: ChoiceDraft | null`, `fieldErrors: Record<string,string>`; emits `wt-choice-save` with `{ detail: { value: ChoiceDraft } }` (bubbles, composed) and `wt-choice-cancel`. `ChoiceDraft` is a NEW type EXPORTED from this file for Task 6 to consume: `{ id: string; name: Record<string,string>; available: boolean; priceDelta?: string; maxQuantity?: number; vatClass?: VatClass | null } & ModifierEffects`. `available` lives in the draft because the modal edits it; the table (Task 6) also mirrors it inline — that is one value, edited in two places, not two values.
 
-This element holds the fields the table does not show. It renders a `wt-modal` (guarding its close so a consumer's outer modal is not also dismissed — see the nested-modal rule in `design-system.md`), the per-language name inputs, the Available switch, and for `kind: "extras"` the Price, Maximum quantity and VAT selectors plus the allergen/dietary Effects `details` block. Move the effects markup (`#effects`, `#effectList`, `#dietaryEffect`) out of `modifier-form.ts` into this element; Task 6 deletes the originals.
+This element holds the fields the table does not show. It renders a `wt-modal` (guarding its close so a consumer's outer modal is not also dismissed — see the nested-modal rule in `design-system.md`), the per-language name inputs, the Available switch, and for `kind: "extras"` the Price, Maximum quantity and VAT selectors plus the allergen/dietary Effects `details` block. COPY (do not delete from `modifier-form.ts`) the effects markup (`#effects`, `#effectList`, `#dietaryEffect`) into this element; Task 6 deletes the originals when it rewrites the form. A brief window of duplication between Task 5 and Task 6 is intended (Ruling B).
 
-- [ ] **Step 1: Update the dashboard types**
-
-In `apps/dashboard/src/api/client.ts`: in `ModifierExtraChoice` (line 421) replace `defaultQuantity: number;` with `preselected: boolean;`. In the `ModifierInput` yes-no member (lines 435–439) drop `yesLabel`/`noLabel`, keep `defaultValue`. This will break `modifier-form.ts` compilation until Task 6; that is expected — this task's deliverable (`choice-form.ts` + its tests) compiles and passes on its own, and Task 6 restores the workspace typecheck. Do not run a whole-workspace typecheck at the end of this task; run the scoped checks in Step 6.
-
-- [ ] **Step 2: Write the failing choice-form tests**
+- [ ] **Step 1: Write the failing choice-form tests**
 
 Create `apps/dashboard/src/widgets/choice-form.test.ts`, modelled on `modifier-form.test.ts`'s mount/change/click helpers:
 
@@ -536,36 +533,38 @@ Adapt selectors to the element's real `data-test` ids as you build it; keep the 
 
 Create `apps/dashboard/src/widgets/choice-form.a11y.test.ts` modelled on `modifier-form.a11y.test.ts`: mount the element open in both themes for `kind: "extras"` and `kind: "options"`, open the effects `details`, and `expectNoA11yViolations`.
 
-- [ ] **Step 3: Run; verify they fail**
+- [ ] **Step 2: Run; verify they fail**
 
 Run: `pnpm --filter @waitron/dashboard test choice-form`
 Expected: FAIL — the element does not exist.
 
-- [ ] **Step 4: Build the element**
+- [ ] **Step 3: Build the element**
 
-Create `apps/dashboard/src/widgets/choice-form.ts`. Reuse the input/name/toggle/select helpers and the effects markup lifted from `modifier-form.ts` (the `#names`, `#input`, `#toggle`, `#effects`, `#effectList`, `#dietaryEffect` methods and the price/maxQuantity/vatClass fields). Render inside a `wt-modal`; on the modal's `wt-close` call `event.stopPropagation()` and emit `wt-choice-cancel`. Validate on save: name required in the default content language; for extras the price matches `/^\d+(?:\.\d{1,2})?$/` and maxQuantity is an integer ≥ 1 (mirror the existing checks in `modifier-form.ts` `#save`). Export the `ChoiceDraft` type. Register the tag in `HTMLElementTagNameMap`.
+Create `apps/dashboard/src/widgets/choice-form.ts`. Reuse the input/name/toggle/select helper PATTERNS and COPY the effects markup from `modifier-form.ts` (the `#names`, `#input`, `#toggle`, `#effects`, `#effectList`, `#dietaryEffect` methods and the price/maxQuantity/vatClass fields) — copy, do not delete the originals (Task 6 deletes them). Import the stable effect types (`ModifierEffects`, `AllergenDeclaration`, `DietaryLabel`, `VatClass`) from `apps/dashboard/src/api/client.js`; do NOT import or modify `ModifierExtraChoice`. Define and export the local `ChoiceDraft` type. Render inside a `wt-modal`; on the modal's `wt-close` call `event.stopPropagation()` and emit `wt-choice-cancel` (so the consumer's outer modal is not also dismissed). Validate on save: name required in the default content language; for extras the price matches `/^\d+(?:\.\d{1,2})?$/` and maxQuantity is an integer ≥ 1 (mirror the existing checks in `modifier-form.ts` `#save`). Reuse existing `modifiers.*` strings; add a new `modifiers.*` key (en + es) only if genuinely needed. Register the tag in `HTMLElementTagNameMap`.
 
-- [ ] **Step 5: Run; verify they pass**
+- [ ] **Step 4: Run; verify they pass**
 
 Run: `pnpm --filter @waitron/dashboard test choice-form`
 Expected: PASS.
 
-- [ ] **Step 6: Scoped typecheck of the new element**
+- [ ] **Step 5: Verify the whole package stays green**
 
-Run: `pnpm --filter @waitron/dashboard test choice-form && pnpm exec tsc --noEmit -p apps/dashboard 2>&1 | grep -c "choice-form"`
-Expected: the second command prints `0` (no type errors originate in `choice-form.ts`). Workspace-wide errors from `modifier-form.ts` are expected here and resolved in Task 6.
+Because this task touches no shared file, every dashboard check must still pass:
+Run: `pnpm --filter @waitron/dashboard test && pnpm --filter @waitron/dashboard typecheck && pnpm --filter @waitron/dashboard lint && pnpm --filter @waitron/dashboard exec prettier --check "src/**/*.ts"`
+Expected: all green. If `modifier-form.ts` shows type errors here, you accidentally changed a shared type — revert that; the flip belongs to Task 6.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add apps/dashboard/src/widgets/choice-form.ts apps/dashboard/src/widgets/choice-form.test.ts apps/dashboard/src/widgets/choice-form.a11y.test.ts apps/dashboard/src/api/client.ts
+git add apps/dashboard/src/widgets/choice-form.ts apps/dashboard/src/widgets/choice-form.test.ts apps/dashboard/src/widgets/choice-form.a11y.test.ts
 git commit -s -m "Add a modal for editing one modifier choice
 
 A new choice-form element holds the fuller fields of a single choice — its
 names in each language, availability, and for an extra its price, maximum
 quantity, tax class and allergen effects — in a modal that guards its own
-close so it can nest inside the modifier form's modal. The dashboard types
-move to the preselected, label-free shape."
+close so it can nest inside the modifier form's modal. It is self-contained;
+the modifier form starts using it, and the fuller fields leave the form
+itself, in the next change."
 ```
 
 ---
@@ -573,12 +572,14 @@ move to the preselected, label-free shape."
 ## Task 6: The choices table in the modifier form
 
 **Files:**
+- Modify: `apps/dashboard/src/api/client.ts` (the type flip — moved here from Task 5)
 - Modify: `apps/dashboard/src/widgets/modifier-form.ts`
 - Test: `apps/dashboard/src/widgets/modifier-form.test.ts`, `apps/dashboard/src/widgets/modifier-form.a11y.test.ts`
 - Modify: `apps/dashboard/src/i18n/strings.ts` (en + es)
 
 **Interfaces:**
-- Consumes: `<dashboard-choice-form>` and its `ChoiceDraft` (Task 5); the updated dashboard types; the `grip` icon and `wt-row-actions` primitive.
+- Consumes: `<dashboard-choice-form>` and its `ChoiceDraft` (Task 5); the `grip` icon and `wt-row-actions` primitive.
+- Produces (types): flips `apps/dashboard/src/api/client.ts` — `ModifierExtraChoice.defaultQuantity` → `preselected: boolean`, and the yes-no `ModifierInput` member drops `yesLabel`/`noLabel` (keeps `defaultValue`). This is the change the form rewrite depends on, done in the same task so the package ends green.
 - Produces: the modifier form renders extras/options choices as a `<table>` with columns Handle, Name, Price (extras), Available, Default, Row menu; a radio sets the single options default and a checkbox toggles each extras preselection; Add choice and a row's Edit open `dashboard-choice-form`; Remove drops the row. The old inline choice blocks, the Move up/down buttons, the "Default choice" dropdown and the yes-no label inputs are gone.
 
 - [ ] **Step 1: Write the failing form tests**
@@ -629,8 +630,10 @@ Expected: FAIL — no table, no per-row radio/checkbox, `defaultQuantity` gone f
 
 - [ ] **Step 3: Rework the form**
 
-In `apps/dashboard/src/widgets/modifier-form.ts`:
-- Change the `ChoiceDraft` local type: `defaultQuantity: string` → `preselected: boolean`; drop `yesLabel`/`noLabel` state and the yes-no label rendering.
+First flip the shared dashboard types in `apps/dashboard/src/api/client.ts` (moved here from Task 5): in `ModifierExtraChoice` replace `defaultQuantity: number;` with `preselected: boolean;`; in the `ModifierInput` yes-no member drop `yesLabel`/`noLabel` and keep `defaultValue`. The rest of this step rewrites `modifier-form.ts` to match, so the package typechecks again by the end of the task.
+
+Then in `apps/dashboard/src/widgets/modifier-form.ts`:
+- Change the `ChoiceDraft` local state type: `defaultQuantity: string` → `preselected: boolean`; drop `yesLabel`/`noLabel` state and the yes-no label rendering.
 - `willUpdate` seeding: map `preselected` from the value; drop `yesLabel`/`noLabel`.
 - Delete `#choice`, `#effects`, `#effectList`, `#dietaryEffect`, `#move`, and the "Default choice" dropdown block; those move to / are replaced by the table and `choice-form`.
 - Add a `#choicesTable()` renderer: a `<table>` with a header row (Handle, Name, Price for extras, Available, Default, empty for the menu) and one `<tbody>` row per choice. Each row: a drag-handle button (`data-test="drag-<id>"`, `<wt-icon name="grip">`, `aria-label` from a `modifiers.reorder` string) in the first cell; the name in the default language; the price for extras; a `wt-switch` for available (`data-test="available-<id>"`); a Default cell holding a radio (`type="radio"`, `name="default"`, `data-test="default-<id>"`) for options or a checkbox (`data-test="preselect-<id>"`) for extras, `disabled` when the row is unavailable; and a `wt-row-actions` menu with Edit (`data-test="edit-<id>"`, opens `choice-form` on the row) and Remove (`data-test="remove-<id>"`).
@@ -661,7 +664,7 @@ The dashboard is a browser-mode package but these are unit mounts. Render the mo
 - [ ] **Step 8: Commit**
 
 ```bash
-git add apps/dashboard/src/widgets/modifier-form.ts apps/dashboard/src/widgets/modifier-form.test.ts apps/dashboard/src/widgets/modifier-form.a11y.test.ts apps/dashboard/src/i18n/strings.ts
+git add apps/dashboard/src/api/client.ts apps/dashboard/src/widgets/modifier-form.ts apps/dashboard/src/widgets/modifier-form.test.ts apps/dashboard/src/widgets/modifier-form.a11y.test.ts apps/dashboard/src/i18n/strings.ts
 git commit -s -m "Edit a modifier's choices in a table
 
 Extras and options are now edited as a table: one row per choice with the
