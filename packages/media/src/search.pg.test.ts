@@ -161,6 +161,38 @@ it.each([
   });
 });
 
+it("returns rows for the default relevance sort when the search is empty", async () => {
+  // The library's first load sends sort=relevance with no query. Without a query the rank and
+  // name-match expressions collapse to bare constants (`0`, `false`), which PostgreSQL rejects in
+  // ORDER BY ("non-integer constant in ORDER BY") — a 500 on every first load. No earlier test
+  // exercised this combination: the search suite only used relevance WITH a query, and an empty
+  // query fell through to the date default. listImages must fall back to a date ordering instead.
+  const tenantId = await seedTenant(suite.admin);
+  await withTenant(suite.admin, tenantId, async (tx) => {
+    await asAppUser(tx);
+    for (const [index, name] of ["First", "Second"].entries()) {
+      await uploadImage(
+        tx,
+        tenantId,
+        {
+          bytes: new Uint8Array([0xff, 0xd8, 0xff, index]),
+          names: { en: name },
+          altText: { en: "Photo" },
+          labels: [],
+        },
+        { fallbackLanguage: "en", maxUploadBytes: 100 },
+      );
+    }
+    const result = await listImages(tx, tenantId, {
+      query: "",
+      sort: "relevance",
+      fallbackLanguage: "en",
+    });
+    expect(result.total).toBe(2);
+    expect(result.images.map((image) => image.names.en).sort()).toEqual(["First", "Second"]);
+  });
+});
+
 it("separates parser tokens from rewrite placeholders and expands an empty query safely", async () => {
   const result = await suite.admin.execute<{ tokens: string[]; query: string; empty: number }>(sql`
     select tsvector_to_array(to_tsvector('pg_catalog.simple', chr(1) || '1 ' || chr(1) || '2 bread')) as tokens,

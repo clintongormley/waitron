@@ -98,19 +98,21 @@ async function metadata(
   fallbackLanguage: string,
 ): Promise<ImageMetadataInput> {
   const value = normalizeImageMetadata(input);
-  for (const field of ["names", "altText"] as const) {
-    try {
-      await validateContentTranslations(tx, tenantId, value[field], fallbackLanguage);
-    } catch (error) {
-      if (error instanceof AppError && error.code === "content.translation_required") {
-        const config = await readContentLanguages(tx, tenantId, fallbackLanguage);
-        throw new AppError("image.translation_required", {
-          field,
-          language: config.defaultLanguage,
-        });
-      }
-      throw error;
+  // A name in the default language is required; alt text is optional (its language codes and lengths
+  // are still validated by normalizeImageMetadata above). validateContentTranslations also takes the
+  // content-language advisory lock, so naming it once here serializes the whole save against a
+  // default-language change — alt text needs no second call.
+  try {
+    await validateContentTranslations(tx, tenantId, value.names, fallbackLanguage);
+  } catch (error) {
+    if (error instanceof AppError && error.code === "content.translation_required") {
+      const config = await readContentLanguages(tx, tenantId, fallbackLanguage);
+      throw new AppError("image.translation_required", {
+        field: "names",
+        language: config.defaultLanguage,
+      });
     }
+    throw error;
   }
   const existing = new Map(
     (await listImageLabels(tx, tenantId)).map((label) => [label.toLowerCase(), label]),
@@ -263,15 +265,13 @@ export async function listImageTranslationGaps(
 ): Promise<{ kind: "image"; id: string }[]> {
   const code = contentLanguageCode(language);
   const rows = await tx
-    .select({ id: mediaImages.id, names: mediaImages.names, altText: mediaImages.altText })
+    .select({ id: mediaImages.id, names: mediaImages.names })
     .from(mediaImages)
     .where(eq(mediaImages.tenantId, tenantId));
+  // Only a missing name is a gap; alt text is optional, so its absence never blocks a
+  // default-language change.
   return rows
-    .filter(
-      (row) =>
-        resolveContentText(row.names, code, code) === "" ||
-        resolveContentText(row.altText, code, code) === "",
-    )
+    .filter((row) => resolveContentText(row.names, code, code) === "")
     .map((row) => ({ kind: "image", id: row.id }));
 }
 
@@ -339,6 +339,11 @@ export async function listImages(
   const language = config.languages.includes(requestedLanguage)
     ? requestedLanguage
     : config.defaultLanguage;
+  // Relevance ranking is meaningless without a search term: its rank and name-match expressions
+  // would collapse to the bare constants `0` and `false`, which PostgreSQL rejects in ORDER BY
+  // ("non-integer constant in ORDER BY"). Fall back to the date ordering — the same ordering an
+  // absent `sort` already resolves to — so an empty-search library still loads.
+  const effectiveSort = sort === "relevance" && !query ? "date" : sort;
   const vector = sql`media_search_vector(m.names, m.alt_text, m.labels)`;
   const search = sql`media_search_query(${query})`;
   const where = sql`m.tenant_id = ${tenantId}
@@ -350,9 +355,9 @@ export async function listImages(
     : sql`false`;
   const name = sql`lower(coalesce(nullif(btrim(m.names ->> ${language}), ''), m.names ->> ${config.defaultLanguage}, '')) collate pg_catalog."und-x-icu"`;
   const order =
-    sort === "relevance"
+    effectiveSort === "relevance"
       ? sql`${nameMatch} desc, ${rank} desc`
-      : sql`${sort === "name" ? name : sql`m.created_at`} ${direction === "asc" ? sql`asc` : sql`desc`}`;
+      : sql`${effectiveSort === "name" ? name : sql`m.created_at`} ${direction === "asc" ? sql`asc` : sql`desc`}`;
   const count = await tx.execute<{ total: number }>(
     sql`select count(*)::int as total from media_images m where ${where}`,
   );

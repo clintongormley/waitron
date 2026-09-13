@@ -141,7 +141,7 @@ afterEach(() => {
   el?.remove();
 });
 
-it("requires file and default-language name and alt text, keeping optional translations optional", async () => {
+it("requires file and default-language name but keeps alt text optional", async () => {
   const client = await mount();
   click("[data-test=upload]");
   await el.updateComplete;
@@ -152,7 +152,11 @@ it("requires file and default-language name and alt text, keeping optional trans
   expect(
     el.shadowRoot!.querySelector("wt-input[name=name-es]")!.getAttribute("error"),
   ).toBeTruthy();
-  expect(el.shadowRoot!.querySelector("wt-input[name=alt-es]")!.getAttribute("error")).toBeTruthy();
+  // Alt text is optional: the default-language alt field is neither required nor flagged as missing.
+  expect(el.shadowRoot!.querySelector("wt-input[name=alt-es]")!.getAttribute("error")).toBeFalsy();
+  expect(el.shadowRoot!.querySelector("wt-input[name=alt-es]")!.hasAttribute("required")).toBe(
+    false,
+  );
   expect(el.shadowRoot!.querySelector("wt-input[name=name-fr]")!.hasAttribute("required")).toBe(
     false,
   );
@@ -162,18 +166,42 @@ it("requires file and default-language name and alt text, keeping optional trans
   file.files = transfer.files;
   file.dispatchEvent(new Event("change"));
   field("name-es", "Pan");
-  field("alt-es", "Pan recién hecho");
   field("image-labels", "Food, Summer menu");
   await el.updateComplete;
   click("[data-test=save]");
   await vi.waitFor(() => expect(client.uploadImage).toHaveBeenCalledOnce());
   expect(client.uploadImage.mock.calls[0]![1]).toEqual({
     names: { es: "Pan" },
-    altText: { es: "Pan recién hecho" },
+    altText: {},
     labels: ["Food", "Summer menu"],
   });
   await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[data-test=save]")).toBeNull());
   expect(el.shadowRoot!.querySelector("[data-test=duplicate-upload]")).toBeNull();
+});
+
+it("previews the chosen file when uploading and the stored image when editing", async () => {
+  await mount();
+  click("[data-test=edit-one]");
+  await el.updateComplete;
+  const editing = el.shadowRoot!.querySelector<HTMLImageElement>("[data-test=preview]");
+  expect(editing).not.toBeNull();
+  expect(editing!.src).toContain("/media/one.jpg");
+  el.shadowRoot!.querySelector("wt-modal")!.dispatchEvent(
+    new CustomEvent("wt-close", { bubbles: true, composed: true }),
+  );
+  await el.updateComplete;
+  click("[data-test=upload]");
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("[data-test=preview]")).toBeNull();
+  const transfer = new DataTransfer();
+  transfer.items.add(new File(["photo"], "bread.jpg", { type: "image/jpeg" }));
+  const file = el.shadowRoot!.querySelector<HTMLInputElement>("input[name=image-file]")!;
+  file.files = transfer.files;
+  file.dispatchEvent(new Event("change"));
+  await el.updateComplete;
+  const preview = el.shadowRoot!.querySelector<HTMLImageElement>("[data-test=preview]");
+  expect(preview).not.toBeNull();
+  expect(preview!.src.startsWith("blob:")).toBe(true);
 });
 
 it("explains when a duplicate photo reuses the existing image and keeps its metadata", async () => {

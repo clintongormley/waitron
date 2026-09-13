@@ -57,15 +57,15 @@ describe("image library", () => {
 });
 
 describe("metadata, labels and references", () => {
-  it("requires default names and alt text, rejects bad metadata and oversize or unsupported bytes", async () => {
+  it("requires a default name, keeps alt text optional, and rejects bad or oversize bytes", async () => {
     const tenantId = await seedTenant(suite.db);
     const good = { bytes: photo, names: { en: "Bread" }, altText: { en: "Loaf" }, labels: [] };
     const options = { fallbackLanguage: "en", maxUploadBytes: 100 };
     for (const [input, code] of [
       [{ ...good, names: { fr: "Pain" } }, "image.translation_required"],
-      [{ ...good, altText: { en: " " } }, "image.translation_required"],
       [{ ...good, labels: [" "] }, "image.invalid_metadata"],
       [{ ...good, names: { en: "a".repeat(201) } }, "image.invalid_metadata"],
+      [{ ...good, altText: { en: "a".repeat(2001) } }, "image.invalid_metadata"],
       [{ ...good, bytes: new Uint8Array(101) }, "image.too_large"],
       [{ ...good, bytes: new Uint8Array([1, 2, 3]) }, "media.unsupported_type"],
     ] as const) {
@@ -76,6 +76,15 @@ describe("metadata, labels and references", () => {
       ).rejects.toMatchObject({ code });
     }
     await withTenant(suite.db, tenantId, async (tx) => {
+      // Alt text is optional: an upload with no alt text succeeds and stores an empty map.
+      const { created, image } = await uploadImage(
+        tx,
+        tenantId,
+        { bytes: photo, names: { en: "Bread" }, altText: {}, labels: [] },
+        options,
+      );
+      expect(created).toBe(true);
+      expect(image.altText).toEqual({});
       expect(await listImageLabels(tx, tenantId)).toEqual([]);
     });
   });
@@ -186,6 +195,34 @@ describe("metadata, labels and references", () => {
         { kind: "image", id: image.id },
       ]);
       expect(await listImageTranslationGaps(tx, a, "en")).toEqual([]);
+    });
+  });
+
+  it("reports a missing name but not missing alt text as a translation gap", async () => {
+    const tenantId = await seedTenant(suite.db);
+    await withTenant(suite.db, tenantId, async (tx) => {
+      // Alt text is optional, so an image named in French but without French alt text is complete;
+      // only a missing name in the target language is a gap that blocks a default-language change.
+      await uploadImage(
+        tx,
+        tenantId,
+        { bytes: photo, names: { en: "Bread", fr: "Pain" }, altText: {}, labels: [] },
+        { fallbackLanguage: "en", maxUploadBytes: 100 },
+      );
+      const nameless = await uploadImage(
+        tx,
+        tenantId,
+        {
+          bytes: new Uint8Array([...photo, 7]),
+          names: { en: "Cake" },
+          altText: { en: "Slice" },
+          labels: [],
+        },
+        { fallbackLanguage: "en", maxUploadBytes: 100 },
+      );
+      expect(await listImageTranslationGaps(tx, tenantId, "fr")).toEqual([
+        { kind: "image", id: nameless.image.id },
+      ]);
     });
   });
 });
