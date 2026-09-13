@@ -17,7 +17,7 @@ const extra: Modifier = {
       available: true,
       priceDelta: "1.00",
       maxQuantity: 2,
-      defaultQuantity: 1,
+      preselected: true,
       dietaryEffect: { invalidates: ["halal"] },
     },
     {
@@ -26,8 +26,17 @@ const extra: Modifier = {
       available: true,
       priceDelta: "2.00",
       maxQuantity: 1,
-      defaultQuantity: 0,
+      preselected: false,
     },
+  ],
+};
+const options: Modifier = {
+  ...base,
+  type: "options",
+  defaultChoiceId: null,
+  choices: [
+    { id: "c1", name: { es: "Uno" }, available: true },
+    { id: "c2", name: { es: "Dos" }, available: true },
   ],
 };
 async function mount(value: Modifier | null = null) {
@@ -56,6 +65,9 @@ async function click(el: ModifierForm, id: string) {
   el.shadowRoot!.querySelector<HTMLElement>(`[data-test="${id}"]`)!.click();
   await el.updateComplete;
 }
+function choiceById(detail: { value: { choices: { id: string }[] } }, id: string) {
+  return detail.value.choices.find((choice) => choice.id === id) as Record<string, unknown>;
+}
 it("shows required name feedback and emits the shared event with translations", async () => {
   const el = await mount();
   const submit = vi.fn();
@@ -76,83 +88,153 @@ it("changes an unused type without leaking fields and retains disabled-language 
   const submit = vi.fn();
   el.addEventListener("wt-submit", submit);
   await change(el, "type", "yes-no");
-  await change(el, "yesLabel-es", "Sí");
-  await change(el, "noLabel-es", "No");
   await click(el, "save");
   expect(submit.mock.calls[0]![0].detail.value).toEqual({
     type: "yes-no",
     name: base.name,
     available: true,
-    yesLabel: { es: "Sí" },
-    noLabel: { es: "No" },
     defaultValue: false,
   });
 });
-it("reorders choices, adds and removes a stable choice, and preserves effects", async () => {
+it("renders extras choices as a table with a preselect checkbox per row", async () => {
   const el = await mount(extra);
+  const rows = el.shadowRoot!.querySelectorAll("tbody tr");
+  expect(rows.length).toBe(2);
+  const check = el.shadowRoot!.querySelector<HTMLInputElement>(
+    `input[type="checkbox"][data-test="preselect-b"]`,
+  )!;
+  expect(check).not.toBeNull();
+  expect(check.checked).toBe(false);
   const submit = vi.fn();
   el.addEventListener("wt-submit", submit);
-  await click(el, "down-a");
+  check.checked = true;
+  check.dispatchEvent(new Event("change"));
+  await el.updateComplete;
+  await click(el, "save");
+  const detail = submit.mock.calls[0]![0].detail;
+  expect(choiceById(detail, "a").preselected).toBe(true);
+  expect(choiceById(detail, "b").preselected).toBe(true);
+  // The submitted extras choice carries preselected, never a defaultQuantity.
+  expect(choiceById(detail, "a")).not.toHaveProperty("defaultQuantity");
+});
+it("uses a radio for the options default and clears it", async () => {
+  const el = await mount(options);
+  const submit = vi.fn();
+  el.addEventListener("wt-submit", submit);
+  expect(el.shadowRoot!.querySelector('[data-test="clear-default"]')).toBeNull();
+  const radio = el.shadowRoot!.querySelector<HTMLInputElement>(
+    `input[type="radio"][data-test="default-c1"]`,
+  )!;
+  expect(radio).not.toBeNull();
+  radio.checked = true;
+  radio.dispatchEvent(new Event("change"));
+  await el.updateComplete;
+  await click(el, "save");
+  expect(submit.mock.calls[0]![0].detail.value.defaultChoiceId).toBe("c1");
+  submit.mockClear();
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="clear-default"]')!.click();
+  await el.updateComplete;
+  await click(el, "save");
+  expect(submit.mock.calls[0]![0].detail.value.defaultChoiceId).toBeNull();
+});
+it("opens the choice modal to add and to edit, and removes a row", async () => {
+  const el = await mount(extra);
   await click(el, "add-choice");
-  expect(el.shadowRoot!.querySelectorAll("[data-choice]")).toHaveLength(3);
-  const id = el.shadowRoot!.querySelectorAll<HTMLElement>("[data-choice]")[2]!.dataset.choice!;
-  await click(el, `remove-${id}`);
-  await click(el, "save");
-  expect(submit.mock.calls[0]![0].detail.value.choices.map((c: { id: string }) => c.id)).toEqual([
-    "b",
-    "a",
-  ]);
-  expect(submit.mock.calls[0]![0].detail.value.choices[1].dietaryEffect).toEqual({
-    invalidates: ["halal"],
-  });
+  const modal = el.shadowRoot!.querySelector("dashboard-choice-form")!;
+  expect(modal.getAttribute("open")).not.toBeNull();
+  expect((modal as unknown as { value: unknown }).value).toBeNull();
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="edit-a"]')!.click();
+  await el.updateComplete;
+  expect(modal.getAttribute("open")).not.toBeNull();
+  expect((modal as unknown as { value: { id: string } }).value.id).toBe("a");
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="remove-b"]')!.click();
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelectorAll("tbody tr").length).toBe(1);
+  expect(el.shadowRoot!.querySelector('[data-choice="b"]')).toBeNull();
 });
-it("rejects negative prices, fractional limits and defaults above the total cap", async () => {
+it("writes a saved choice from the modal back into the table", async () => {
+  const el = await mount(extra);
+  const inner = el.shadowRoot!.querySelector("dashboard-choice-form")!;
+  const submit = vi.fn();
+  el.addEventListener("wt-submit", submit);
+  inner.dispatchEvent(
+    new CustomEvent("wt-choice-save", {
+      bubbles: true,
+      composed: true,
+      detail: {
+        value: {
+          id: "a",
+          name: { es: "Gouda" },
+          available: true,
+          priceDelta: "1.50",
+          maxQuantity: 2,
+        },
+      },
+    }),
+  );
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector('[data-choice="a"]')!.textContent).toContain("Gouda");
+  await click(el, "save");
+  const a = choiceById(submit.mock.calls[0]![0].detail, "a");
+  expect(a.name).toEqual({ es: "Gouda" });
+  // The row's preselection is owned by the table, not overwritten by the modal save.
+  expect(a.preselected).toBe(true);
+});
+it("disables the default control of an unavailable choice and clears its preselection", async () => {
+  const el = await mount(extra);
+  const check = el.shadowRoot!.querySelector<HTMLInputElement>('input[data-test="preselect-a"]')!;
+  expect(check.checked).toBe(true);
+  await change(el, "available-a", false);
+  const cleared = el.shadowRoot!.querySelector<HTMLInputElement>('input[data-test="preselect-a"]')!;
+  expect(cleared.disabled).toBe(true);
+  expect(cleared.checked).toBe(false);
+  const submit = vi.fn();
+  el.addEventListener("wt-submit", submit);
+  await click(el, "save");
+  expect(choiceById(submit.mock.calls[0]![0].detail, "a").preselected).toBe(false);
+});
+it("clears an option default when its choice becomes unavailable", async () => {
+  const el = await mount({ ...options, defaultChoiceId: "c1" });
+  const submit = vi.fn();
+  el.addEventListener("wt-submit", submit);
+  const radio = el.shadowRoot!.querySelector<HTMLInputElement>('input[data-test="default-c1"]')!;
+  expect(radio.checked).toBe(true);
+  await change(el, "available-c1", false);
+  const disabled = el.shadowRoot!.querySelector<HTMLInputElement>('input[data-test="default-c1"]')!;
+  expect(disabled.disabled).toBe(true);
+  expect(disabled.checked).toBe(false);
+  await click(el, "save");
+  expect(submit.mock.calls[0]![0].detail.value.defaultChoiceId).toBeNull();
+});
+it("rejects more preselected extras than the total quantity cap allows", async () => {
   const el = await mount(extra);
   const submit = vi.fn();
   el.addEventListener("wt-submit", submit);
-  await change(el, "priceDelta-a", "-1");
-  await change(el, "maxQuantity-a", "1.5");
-  await change(el, "maxTotalQuantity", "0");
-  await click(el, "save");
-  expect(submit).not.toHaveBeenCalled();
-  expect(el.shadowRoot!.querySelectorAll("wt-input[invalid]").length).toBeGreaterThanOrEqual(3);
-  await change(el, "priceDelta-a", "1.00");
-  await change(el, "maxQuantity-a", "2");
+  const check = el.shadowRoot!.querySelector<HTMLInputElement>('input[data-test="preselect-b"]')!;
+  check.checked = true;
+  check.dispatchEvent(new Event("change"));
+  await el.updateComplete;
   await change(el, "maxTotalQuantity", "1");
-  await change(el, "defaultQuantity-a", "2");
   await click(el, "save");
   expect(submit).not.toHaveBeenCalled();
+  expect(
+    (el.shadowRoot!.querySelector('[name="maxTotalQuantity"]') as unknown as { invalid: boolean })
+      .invalid,
+  ).toBe(true);
+  await change(el, "maxTotalQuantity", "2");
+  await click(el, "save");
+  expect(submit).toHaveBeenCalledTimes(1);
 });
-it("clears unavailable defaults visibly and blocks an available required empty choice set", async () => {
+it("blocks an available required empty choice set", async () => {
   const el = await mount({ ...extra, required: true, choices: [extra.choices[0]!] });
   const submit = vi.fn();
   el.addEventListener("wt-submit", submit);
   await change(el, "available-a", false);
-  expect(
-    (el.shadowRoot!.querySelector('[name="defaultQuantity-a"]') as unknown as { value: string })
-      .value,
-  ).toBe("0");
   await click(el, "save");
   expect(submit).not.toHaveBeenCalled();
   await change(el, "available", false);
   await click(el, "save");
-  expect(submit.mock.calls[0]![0].detail.value.choices[0].defaultQuantity).toBe(0);
-});
-it("clears an option default when its choice becomes unavailable", async () => {
-  const el = await mount({
-    ...base,
-    type: "options",
-    defaultChoiceId: "a",
-    choices: [
-      { id: "a", name: { es: "Uno" }, available: true },
-      { id: "b", name: { es: "Dos" }, available: true },
-    ],
-  });
-  const submit = vi.fn();
-  el.addEventListener("wt-submit", submit);
-  await change(el, "available-a", false);
-  await click(el, "save");
-  expect(submit.mock.calls[0]![0].detail.value.defaultChoiceId).toBeNull();
+  expect(submit).toHaveBeenCalledTimes(1);
 });
 it("retains a draft across busy/server errors and emits cancel once", async () => {
   const el = await mount();
@@ -174,34 +256,4 @@ it("retains a draft across busy/server errors and emits cancel once", async () =
   await click(el, "cancel");
   expect(cancel).toHaveBeenCalledTimes(1);
   expect(cancel.mock.calls[0]![0].detail).toEqual({});
-});
-it("authors source-free allergen and direct dietary effects while preserving existing specificity", async () => {
-  const el = await mount({
-    ...extra,
-    choices: [
-      { ...extra.choices[0]!, addAllergens: { milk: { presence: "contains", source: "queso" } } },
-    ],
-  });
-  const submit = vi.fn();
-  el.addEventListener("wt-submit", submit);
-  await change(el, "addAllergens-a", "eggs");
-  await change(el, "presence-a-eggs", "may_contain");
-  await change(el, "dietaryEffect-a", "vegan");
-  await click(el, "save");
-  expect(submit.mock.calls[0]![0].detail.value.choices[0]).toMatchObject({
-    addAllergens: {
-      milk: { presence: "contains", source: "queso" },
-      eggs: { presence: "may_contain" },
-    },
-    dietaryEffect: { invalidates: ["halal", "vegan"] },
-  });
-  expect(el.shadowRoot!.querySelector('input[name*="source"]')).toBeNull();
-});
-it("associates server choice paths with the submitted choice fields", async () => {
-  const el = await mount(extra);
-  el.fieldErrors = { "choices.0.priceDelta": "Rejected price" };
-  await el.updateComplete;
-  expect(
-    (el.shadowRoot!.querySelector('[name="priceDelta-a"]') as unknown as { error: string }).error,
-  ).toBe("Rejected price");
 });
