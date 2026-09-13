@@ -224,7 +224,10 @@ export class WtDataTable<Row = unknown> extends LitElement {
                         aria-label=${this.selectAllLabel}
                         .checked=${allSelected}
                         .indeterminate=${someSelected && !allSelected}
-                        @change=${() => this.#toggleAll(visibleKeys)}
+                        @change=${(event: Event) => {
+                          event.stopPropagation();
+                          this.#toggleAll(visibleKeys);
+                        }}
                       />
                     </th>`
                   : nothing
@@ -279,7 +282,10 @@ export class WtDataTable<Row = unknown> extends LitElement {
                             data-test=${`select-${key}`}
                             aria-label=${this.selectionLabel(row)}
                             .checked=${this.selected.includes(key)}
-                            @change=${() => this.#toggleRow(key)}
+                            @change=${(event: Event) => {
+                              event.stopPropagation();
+                              this.#toggleRow(key);
+                            }}
                           />
                         </td>`
                       : nothing
