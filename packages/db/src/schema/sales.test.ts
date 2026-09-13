@@ -591,15 +591,31 @@ describeEachTarget("sales — immutability as the app role", (target) => {
     }
   });
 
-  it("carries no reference to a catalogue on sale_lines", async () => {
+  it("carries only the chosen variant snapshot identifier, with no live catalogue link", async () => {
     const cols = await rows<{ column_name: string }>(
       db,
       sql`select column_name from information_schema.columns where table_name = 'sale_lines'`,
     );
-    const offenders = cols
+    const catalogueShapedIds = cols
       .map((c) => c.column_name)
       .filter((n) => /(product|item|catalogue|catalog|menu|sku|variant)_id$/i.test(n));
-    expect(offenders).toEqual([]);
+    expect(catalogueShapedIds).toEqual(["variant_id"]);
+
+    const variantForeignKeys = await rows<{ foreign_table: string }>(
+      db,
+      sql`select ccu.table_name as foreign_table
+          from information_schema.table_constraints tc
+          join information_schema.key_column_usage kcu
+            on kcu.constraint_schema = tc.constraint_schema
+           and kcu.constraint_name = tc.constraint_name
+          join information_schema.constraint_column_usage ccu
+            on ccu.constraint_schema = tc.constraint_schema
+           and ccu.constraint_name = tc.constraint_name
+          where tc.constraint_type = 'FOREIGN KEY'
+            and tc.table_name = 'sale_lines'
+            and kcu.column_name = 'variant_id'`,
+    );
+    expect(variantForeignKeys).toEqual([]);
   });
 });
 
@@ -823,8 +839,8 @@ describeEachTarget("sales — corrective link and negative total", (target) => {
  * The composite (tenant_id, parent_line_id) → sale_lines(tenant_id, id) FK keeps the link
  * tenant-consistent (mirrors sale_lines_sale_fk); MATCH SIMPLE means a NULL parent satisfies it, so
  * ordinary lines are untouched. sale_lines carries NO reference to any option/catalogue table — the
- * "carries no reference to a catalogue on sale_lines" test above guards that, and `option_group_item_id`
- * lives on the MUTABLE working_order_lines draft only, never here.
+ * "carries only the chosen variant snapshot identifier" test above guards that, and
+ * `option_group_item_id` lives on the MUTABLE working_order_lines draft only, never here.
  */
 describeEachTarget("sale_lines — parent line self-link", (target) => {
   let db: Database;
