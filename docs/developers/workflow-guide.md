@@ -97,11 +97,13 @@ whole list — `ensure_env` has a third path). The volume is seeded, so between 
 rows written weeks and branches ago. A branch's migrations can then be unable to run over them:
 migrations here carry no data-preservation code on purpose (`CLAUDE.md` §3 — schema changes drop and
 recreate until Waitron is in production), so one that adds a column no existing row can fill stops
-the boot dead inside `applyMigrations`. Vite keeps serving the pages, so the dashboard still loads.
-Its own calls then fail quietly — an operator's log from 2026-09-13 shows repeated
-`http proxy error: /management-api/session/me … ECONNREFUSED 127.0.0.1:8080` with nothing on screen —
-and the failure only becomes words when they sign in, as the generic
-"Something went wrong, try again" (`apps/dashboard/src/i18n/codes.ts`).
+the boot dead inside `applyMigrations`. Vite keeps serving the pages, so the dashboard still loads
+while its calls fail — vite logs each one as `http proxy error … ECONNREFUSED`. On screen it shows
+nothing: `#probeSession` (`apps/dashboard/src/dashboard-app.ts`) catches the rejection and drops to
+the login screen without a banner. The failure only becomes words at sign-in, where no code comes
+back and the dashboard falls back to `server.internal` — "Something went wrong, try again"
+(`apps/dashboard/src/screens/login-screen.ts`, `apps/dashboard/src/i18n/codes.ts`; the fallback is
+carried both by the request primitive and by `codeOf`).
 `packages/db/drizzle/0020_category_names.sql` did exactly this on 2026-09-13: it drops the old text
 `categories.name` and recreates it as `jsonb NOT NULL`, which the seeded demo categories cannot
 satisfy — SQLSTATE `23502`. `wa-wt reset demo <name>` rebuilds the database.
@@ -117,10 +119,12 @@ of SQLSTATEs where a constraint met row data.
 say whether the offending rows were already in the table or were inserted by the same migration —
 and a migration free to write rows can produce any state on the list against a database that was
 empty a moment earlier, which a wipe would not fix and a second wipe would not fix either. The
-review put each listed state through the real migration runner with purpose-written SQL on
-PostgreSQL 18 and got the same code both ways; only the `23502` case was also reproduced against
-this repository's own migrations (below), and no migration here declares an exclusion constraint at
-all, so `23P01` is on the list for completeness rather than from a case seen in this tree. So the
+review put each listed state through the real migration runner on PostgreSQL 18 on 2026-09-13,
+using SQL written for the experiment, and got the same SQLSTATE both when the offending rows were
+already in the table and when the migration inserted them itself. Only `23502` was also reproduced
+against this repository's own migrations (below); no migration here declares an exclusion constraint
+at all, so `23P01` is on the list from that experiment and from what the state means, not from a
+case seen in this tree. So the
 line reports the failure as fact and offers the reset as a CONDITIONAL remedy; naming it outright
 would send a developer to wipe a healthy database over a broken migration, twice.
 `classifyBootFailure` (`apps/server/src/boot-failure.ts`) answered the same problem the other way,

@@ -93,9 +93,9 @@ describe("withDevMigrationHint", () => {
 
   it("still re-throws the original failure when the log sink itself throws", async () => {
     // No sink this process builds today is known to throw: `createRotatingFileSink` catches its own
-    // IO failures and degrades to a no-op, and `boot.ts`'s stdout sink writes asynchronously on a
-    // pipe (under `wa-wt` that stdout is a FILE, which is a synchronous write and simply untested
-    // here). But `tee` does not catch, so ANY sink that ever does throw propagates from here — and
+    // IO failures and degrades to a no-op, and `boot.ts`'s stdout sink discards its write's return
+    // value and passes no callback. But `tee` does not catch, so ANY sink that ever throws
+    // propagates from here — and
     // reporting a logging failure in place of the migration failure would send the reader after
     // entirely the wrong problem. Cheap insurance on the one error that must survive.
     const failure = failedMigration("23502");

@@ -30,7 +30,7 @@ const CONSTRAINT = new Set(MIGRATION_CONSTRAINT_SQL_STATES);
  * development Postgres is one shared, seeded volume that every worktree boots against, and moving
  * between worktrees does not normally wipe it (`wa-wt` decides when it does; the guide says where).
  * So a migration that adds a column no existing row can fill dies at boot with a raw driver stack
- * trace, and the first page that needs the server is left with a generic failure.
+ * trace, while the dashboard still loads and shows nothing until someone tries to sign in.
  * `docs/developers/workflow-guide.md` works the case through.
  *
  * WHAT THE LINE MAY AND MAY NOT CLAIM. A constraint violation says a rule was broken; it does not
