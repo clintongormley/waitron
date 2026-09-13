@@ -11,6 +11,7 @@ import {
   replaceProductCategories,
   readProductCategories,
   categoryDependants,
+  addProductsToCategory,
 } from "./categories.js";
 import { writeContentLanguages } from "./content-languages.js";
 import { createCatalogue, createProduct } from "./operations.js";
@@ -372,5 +373,78 @@ it("dependants is tenant-scoped", async () => {
   const { otherTenantId, xId } = await dependantsFixture();
   await expect(
     app(suite.admin, otherTenantId, (tx) => categoryDependants(tx, otherTenantId, xId)),
+  ).rejects.toMatchObject({ code: "category.not_found" });
+});
+// The bulk add runs here rather than on PGlite because its write is one multi-row
+// `insert … on conflict do nothing` plus one set-based update, and only real PostgreSQL runs those
+// under the non-superuser `app_user` role that production uses.
+async function bulkAddFixture() {
+  const { tenantId, a: c, b: d } = await fixture();
+  const p1Id = await seedProduct(tenantId);
+  const p2Id = await seedProduct(tenantId);
+  // p2 starts as a member of D with D as its reporting category; p1 has neither.
+  await app(suite.admin, tenantId, (tx) =>
+    replaceProductCategories(tx, tenantId, p2Id, {
+      categoryIds: [d.id],
+      primaryCategoryId: d.id,
+    }),
+  );
+  return { tenantId, cId: c.id, dId: d.id, p1Id, p2Id };
+}
+async function otherTenantProduct() {
+  const otherTenantId = await seedTenant(suite.admin);
+  await seedLegacySellingUnits(suite.admin, otherTenantId);
+  return seedProduct(otherTenantId);
+}
+it("bulk-adds products, setting the reporting category only where absent", async () => {
+  const { tenantId, cId, dId, p1Id, p2Id } = await bulkAddFixture();
+  await app(suite.admin, tenantId, (tx) => addProductsToCategory(tx, tenantId, cId, [p1Id, p2Id]));
+  expect(
+    await app(suite.admin, tenantId, (tx) => readProductCategories(tx, tenantId, p1Id)),
+  ).toEqual({ categoryIds: [cId], primaryCategoryId: cId });
+  expect(
+    await app(suite.admin, tenantId, (tx) => readProductCategories(tx, tenantId, p2Id)),
+  ).toEqual({ categoryIds: [cId, dId].sort(), primaryCategoryId: dId });
+});
+it("a repeated bulk add and an empty list change nothing", async () => {
+  const { tenantId, cId, dId, p2Id } = await bulkAddFixture();
+  await app(suite.admin, tenantId, async (tx) => {
+    await addProductsToCategory(tx, tenantId, cId, [p2Id]);
+    await addProductsToCategory(tx, tenantId, cId, [p2Id]);
+    await addProductsToCategory(tx, tenantId, cId, []);
+  });
+  expect(
+    await app(suite.admin, tenantId, (tx) => readProductCategories(tx, tenantId, p2Id)),
+  ).toEqual({ categoryIds: [cId, dId].sort(), primaryCategoryId: dId });
+});
+it("refuses a bulk add whose product ids are not an array", async () => {
+  const { tenantId, cId } = await bulkAddFixture();
+  await expect(
+    app(suite.admin, tenantId, (tx) =>
+      // A request body coerced to a bare string: the type says string[], the wire does not.
+      addProductsToCategory(tx, tenantId, cId, "not-a-list" as unknown as string[]),
+    ),
+  ).rejects.toMatchObject({ code: "category.membership_invalid" });
+});
+const badProductIds: [string, (p1Id: string) => Promise<string>][] = [
+  ["repeats a product id", (p1Id) => Promise.resolve(p1Id)],
+  ["names a malformed product id", () => Promise.resolve("not-a-uuid")],
+  ["names another tenant's product", () => otherTenantProduct()],
+];
+it.each(badProductIds)("refuses a bulk add that %s, applying nothing", async (_what, badId) => {
+  const { tenantId, cId, p1Id } = await bulkAddFixture();
+  const bad = await badId(p1Id);
+  await expect(
+    app(suite.admin, tenantId, (tx) => addProductsToCategory(tx, tenantId, cId, [p1Id, bad])),
+  ).rejects.toMatchObject({ code: "category.membership_invalid" });
+  expect(
+    await app(suite.admin, tenantId, (tx) => readProductCategories(tx, tenantId, p1Id)),
+  ).toEqual({ categoryIds: [], primaryCategoryId: null });
+});
+it("bulk add is tenant-scoped on the category", async () => {
+  const { cId } = await bulkAddFixture();
+  const otherTenantId = await seedTenant(suite.admin);
+  await expect(
+    app(suite.admin, otherTenantId, (tx) => addProductsToCategory(tx, otherTenantId, cId, [])),
   ).rejects.toMatchObject({ code: "category.not_found" });
 });

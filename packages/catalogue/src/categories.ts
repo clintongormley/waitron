@@ -1,6 +1,6 @@
 import { categories, products, type Transaction } from "@waitron/db";
-import { AppError, FALLBACK_LOCALE } from "@waitron/shared";
-import { and, eq, sql } from "drizzle-orm";
+import { AppError, FALLBACK_LOCALE, isUuid } from "@waitron/shared";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { categoryDetails, productCategories } from "./schema/categories.js";
 import { validateContentTranslations } from "./content-languages.js";
@@ -327,6 +327,43 @@ export async function replaceProductCategories(
     .set({ categoryId: primary, updatedAt: sql`now()` })
     .where(and(eq(products.tenantId, tenantId), eq(products.id, productId)));
   return { categoryIds: [...input.categoryIds].sort(), primaryCategoryId: primary };
+}
+/**
+ * Add many products to one category. A product with no reporting category gets this one; a product
+ * that already has one keeps it. Adding a product that is already a member is a no-op, so the
+ * caller may resubmit its whole selection.
+ */
+export async function addProductsToCategory(
+  tx: Transaction,
+  tenantId: string,
+  categoryId: string,
+  productIds: string[],
+): Promise<void> {
+  await lockCategories(tx, tenantId);
+  await readCategory(tx, tenantId, categoryId); // 404s a foreign/absent category, tenant-scoped
+  // A coerced non-array, or a malformed id reaching a uuid column, would otherwise surface as a
+  // TypeError or a 22P02 — neither of which a route can serve as anything but a 500.
+  if (!Array.isArray(productIds) || productIds.some((id) => !isUuid(id)))
+    throw new AppError("category.membership_invalid", {});
+  if (productIds.length === 0) return;
+  // Resolve the whole selection in one tenant-scoped read, so an unknown, foreign or repeated id is
+  // refused before anything is written rather than part-way through a loop: a repeat leaves the
+  // count short exactly as an absent id does.
+  const found = await tx
+    .select({ id: products.id, primaryCategoryId: products.categoryId })
+    .from(products)
+    .where(and(eq(products.tenantId, tenantId), inArray(products.id, productIds)));
+  if (found.length !== productIds.length) throw new AppError("category.membership_invalid", {});
+  await tx
+    .insert(productCategories)
+    .values(productIds.map((productId) => ({ tenantId, productId, categoryId })))
+    .onConflictDoNothing();
+  const needReporting = found.filter((p) => p.primaryCategoryId === null).map((p) => p.id);
+  if (needReporting.length)
+    await tx
+      .update(products)
+      .set({ categoryId, updatedAt: sql`now()` })
+      .where(and(eq(products.tenantId, tenantId), inArray(products.id, needReporting)));
 }
 export async function listCategoryProducts(tx: Transaction, tenantId: string, categoryId: string) {
   await readCategory(tx, tenantId, categoryId);
