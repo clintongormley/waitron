@@ -153,9 +153,9 @@ Still to do, roughly in the order a venue meets them. As each one lands, add the
    and Modifiers has landed (#341, see below), with its
    [integration contract](developers/modifiers.md). Units has landed too (#342, see below). The Products
    branch now integrates all three sections into the replacement editor, withdraws recipe authoring,
-   carries variants through menus and saved sales, and adds [operator guidance](products.md). Its
-   remaining blocker is the fiscal cause for the explicit No tax choice: AEAT requires choosing N1 or
-   N2, while the current product decision establishes only that no VAT applies. See the
+   carries variants through menus and saved sales, and adds [operator guidance](products.md). The
+   existing zero-rate class is shown as **No tax (0%)**; asesor Q20 asks whether the venue has any
+   intended case that legally needs N1 or N2 instead before live use. See the
    [checkpoint](superpowers/plans/2026-09-13-product-editor-checkpoint.md),
    [spec and plan](superpowers/specs/2026-09-12-product-editor-design.md) and
    [shared design](superpowers/specs/2026-09-12-products-overhaul-design.md).

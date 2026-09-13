@@ -31,7 +31,7 @@ memberships and modifier attachments. It never makes a temporary product just to
 | Unit                | Required, defaults to the existing each unit; picker plus Add unit.                        |
 | Price per unit      | Required nonnegative gross decimal amount; retains the existing currency/money rules.      |
 | Available           | Defaults to true; false prevents new sale selection.                                       |
-| Tax/VAT             | Configured tax choice or explicit None; labels include the effective percentage.           |
+| Tax/VAT             | Configured tax choice, including No tax at the existing zero rate; labels include the effective percentage. |
 | Variants            | Ordered list, each with translated name, absolute price per unit and availability.         |
 | Modifiers           | Ordered selection of zero or more reusable definitions; picker plus Add modifier.          |
 | Categories          | Zero or more memberships, with one selected as Reporting Category if any; picker plus Add category.        |
@@ -102,19 +102,20 @@ price the sale, such as `Standard (23%)` only when the resolver actually returns
 percentages without unnecessary trailing zeroes. Do not introduce editable tax rates, a country
 rate catalogue or new rate values as part of this label change.
 
-Owner decision, 2026-09-12: No tax means no VAT/tax applies. Offer it within the tax selector where
-applicable, using an existing treatment if it has that meaning. This is not unset configuration.
-Distinguish it from omitted input and an invalid ID; do not assume a configured 0% treatment is
-semantically identical. Do not use JavaScript truthiness to choose a default or silently fall back
-to the general rate.
+Owner decision, clarified 2026-09-13: No tax uses the existing `zero` VAT class. Offer it within the
+tax selector as **No tax (0%)**. It is an explicit selection rather than unset configuration, so
+distinguish it from omitted input and an invalid ID. Do not use JavaScript truthiness to choose a
+default or silently fall back to the general rate.
 
 Before implementing this part, record the tax classification carried into
 pricing, stored sale facts, reporting and the enabled fiscal backend. The current four-class VAT
 resolver alone does not establish a correct no-tax filing representation. For the no-tax choice,
 reuse or extend tax treatment through the existing fiscal contract and verify its mapping with
-the real record validator. Consult current primary sources for any external fiscal claims and
-record their exact scope. Do not turn this into a guessed exemption reason or an automatic 0% alias.
-This is part of Products implementation, not a reason to ask the owner the same meaning question again.
+the real record validator. The existing class has an effective rate of `0.00`, and its existing fiscal
+qualification remains `S1`. Consult current primary sources for any external fiscal claims and record
+their exact scope. The separate question of whether the venue has real operations that instead require
+`N1` or `N2` is recorded for the fiscal asesor; it does not introduce another product selector entry
+now.
 
 ## Allergens, dietary suitability and recipes
 
@@ -165,5 +166,5 @@ supported product feature. Add dated deferral pointers to recipe designs and upd
 - The allergen/dietary UI shows only selected items and pickers, with no origin/source fields.
 - Unreviewed allergens and unknown dietary suitability retain their distinct meanings.
 - Recipe navigation and direct authoring are unavailable; direct declarations control new products.
-- Tax None/zero/configured/invalid behaviors follow the recorded decision and actual backend tests.
+- Tax No tax/zero, configured, missing and invalid behaviors follow the recorded decision and actual backend tests.
 - Multiple categories do not duplicate menu rows, kitchen tickets or reporting totals.

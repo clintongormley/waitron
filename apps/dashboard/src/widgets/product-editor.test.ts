@@ -278,6 +278,9 @@ it("shows the resolver's rates, including a fractional rate supplied by a contro
       `(${Number(resolveVatRate(option.value as ProductEditorDraft["vatClass"]))}%)`,
     );
   }
+  expect([...options()].find((option) => option.value === "zero")!.textContent).toBe(
+    "Sin impuestos (0%)",
+  );
   el.taxChoices = [{ id: "reduced", rate: "2.50", label: "Fixture rate" }];
   await el.updateComplete;
   expect(options()[0]!.textContent).toBe("Fixture rate (2.5%)");

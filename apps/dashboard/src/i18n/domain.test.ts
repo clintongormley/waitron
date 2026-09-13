@@ -49,7 +49,8 @@ it("resolves a VAT-class token to Spanish and English, unknown value raw", () =>
   expect(vatClassName("general", "es")).toBe("General");
   expect(vatClassName("reduced", "es")).toBe("Reducido");
   expect(vatClassName("super_reduced", "es")).toBe("Superreducido");
-  expect(vatClassName("zero", "es")).toBe("Cero");
+  expect(vatClassName("zero", "es")).toBe("Sin impuestos");
+  expect(vatClassName("zero", "en")).toBe("No tax");
   expect(vatClassName("reduced", "en")).toBe("Reduced");
   expect(vatClassName("luxury", "es")).toBe("luxury");
 });
@@ -198,7 +199,7 @@ it("defaults to the active locale when none is passed", () => {
   // No locale arg → currentLocale(). The shipped default is es-ES; setLocale drives it.
   expect(roleName("manager")).toBe("Encargado");
   expect(statusName("active")).toBe("Activo");
-  expect(vatClassName("zero")).toBe("Cero");
+  expect(vatClassName("zero")).toBe("Sin impuestos");
   expect(unitName("each")).toBe("Por unidad");
   expect(allergenStateName("none")).toBe("Ninguno");
   expect(allergenName("eggs")).toBe("Huevos");

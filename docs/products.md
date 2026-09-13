@@ -8,6 +8,9 @@ Open **Products** in the management dashboard and choose **Add product**. Give t
 your default content language, choose its selling unit, enter its price and choose its tax treatment.
 The tax label shows the same percentage that Waitron uses to calculate the sale.
 
+Choose **No tax (0%)** when you want the existing zero-rate tax class. This is a real selection, so
+leaving the field blank still prevents the product from being saved.
+
 You can add translations, a customer-facing description, a kitchen name and a picture. The kitchen
 name is useful when the short label printed or shown to the kitchen should differ from the product
 name. If you leave it blank, the kitchen uses the product name.
