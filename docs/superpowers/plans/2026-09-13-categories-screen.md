@@ -306,7 +306,7 @@ declare global {
 }
 ```
 
-If `--wt-font-weight-normal` is not a real token, check `packages/ui/src/tokens/*.css` and use the real normal-weight token (or drop the override and let the chip inherit normal weight). Verify with `grep -rn "font-weight" packages/ui/src/tokens`.
+`--wt-font-weight-normal` is a real token (confirmed in `packages/ui/src/tokens/`), so the colourless-chip override can use it directly, no fallback needed.
 
 - [ ] **Step 4: Run and pass**
 
@@ -363,14 +363,20 @@ git commit -s -m "Add the wt-lozenge pill for category colours"
 
 ```ts
 // add to packages/ui/src/components/wt-button.test.ts
-test("a round button is circular and keeps its accessible name", async () => {
-  const el = (await mount('<wt-button round aria-label="Create category">+</wt-button>')) as WtButton;
-  await el.updateComplete;
-  const button = el.shadowRoot!.querySelector("button")!;
-  const style = getComputedStyle(button);
-  expect(style.borderRadius).toBe(style.height === "" ? style.borderRadius : style.borderRadius); // radius-full
-  expect(button.getAttribute("aria-label")).toBe("Create category");
-  expect(parseFloat(style.width)).toBeCloseTo(parseFloat(style.height), 0);
+test("a round button is circular, uses the full radius, and keeps its accessible name", async () => {
+  const round = (await mount('<wt-button round aria-label="Create category">+</wt-button>')) as WtButton;
+  const plain = (await mount("<wt-button>Save</wt-button>")) as WtButton;
+  await round.updateComplete;
+  await plain.updateComplete;
+  const rb = round.shadowRoot!.querySelector("button")!;
+  const rs = getComputedStyle(rb);
+  const ps = getComputedStyle(plain.shadowRoot!.querySelector("button")!);
+  expect(rb.getAttribute("aria-label")).toBe("Create category");
+  // circular: width equals height
+  expect(parseFloat(rs.width)).toBeCloseTo(parseFloat(rs.height), 0);
+  // radius-full, not the ordinary --wt-radius-md a plain button has
+  expect(rs.borderRadius).not.toBe(ps.borderRadius);
+  expect(parseFloat(rs.borderRadius)).toBeGreaterThan(parseFloat(ps.borderRadius));
 });
 ```
 
@@ -379,7 +385,7 @@ test("a round button is circular and keeps its accessible name", async () => {
 - [ ] **Step 2: Run and watch it fail**
 
 Run: `pnpm --filter @waitron/ui test wt-button`
-Expected: FAIL, width not equal to height (button is not yet circular).
+Expected: FAIL — width not equal to height and border radius equal to the plain button's (round is not yet applied).
 
 - [ ] **Step 3: Implement**
 
@@ -614,7 +620,15 @@ Replace `#sortedRows()` usage in `render()` for tree mode. Add a helper that pro
 }
 ```
 
-In `render()`, when `this.rowParent` is set, give the `<table>` `role="treegrid"`, iterate `#treeRows()` instead of `#sortedRows()`, and for each row set `aria-level`, and `aria-expanded` on rows with children; in the **first** column's cell prepend the toggle/spacer and an indent equal to `depth`:
+In `render()`, when `this.rowParent` is set, iterate `#treeRows()` instead of `#sortedRows()`. **The `treegrid` role has required-children rules that the default axe ruleset enforces** (`wt-data-table.a11y.test.ts` runs the full ruleset), so set the ARIA roles explicitly throughout the tree markup, not just on the table:
+
+- `<table role="treegrid">`
+- `<thead role="rowgroup">`, `<tbody role="rowgroup">`
+- `<tr role="row">` on both the header row and body rows
+- `<th role="columnheader">` on header cells
+- `<td role="gridcell">` on body cells
+
+Per body row also set `aria-level` (depth + 1) and, on rows with children, `aria-expanded`; in the **first** column's cell prepend the toggle/spacer and an indent equal to `depth`:
 
 ```ts
 // inside the tbody map when tree mode is on:
@@ -629,13 +643,13 @@ ${entries.map(({ row, depth, hasChildren }, index) => {
     aria-level=${depth + 1}
     aria-expanded=${hasChildren ? String(expanded) : nothing}
   >
-    ${this.columns.map((column, ci) => html`<td data-align=${column.align ?? "start"}>
+    ${this.columns.map((column, ci) => html`<td role="gridcell" data-align=${column.align ?? "start"}>
       ${ci === 0
         ? html`<span class="tree-cell" style=${`padding-inline-start: calc(${depth} * var(--wt-space-4))`}>
             ${hasChildren
               ? html`<button
                   class="tree-toggle"
-                  aria-label=${expanded ? "Collapse" : "Expand"}
+                  aria-label=${expanded ? this.collapseLabel : this.expandLabel}
                   @click=${() => this.#toggle(key)}
                 >${expanded ? "▾" : "▸"}</button>`
               : html`<span class="tree-spacer"></span>`}
@@ -647,7 +661,9 @@ ${entries.map(({ row, depth, hasChildren }, index) => {
 })}
 ```
 
-Keep the non-tree path exactly as it is today (guard on `this.rowParent === undefined`). The chevron `aria-label` strings ("Collapse"/"Expand") should be overridable; add two optional properties `collapseLabel = "Collapse"` and `expandLabel = "Expand"` so the screen can localize them, and use those instead of the literals.
+Keep the non-tree path exactly as it is today (guard on `this.rowParent === undefined`) — do NOT add these explicit roles to the plain table, whose native `<table>` semantics already pass axe. The chevron labels are two optional properties `collapseLabel = "Collapse"` and `expandLabel = "Expand"` so the screen can localize them.
+
+After implementing, run the a11y test (Task 4 Step 5) and confirm axe reports zero violations for the tree case; if `aria-required-children` still fires, the roles above are the fix.
 
 - [ ] **Step 4: Run and pass**
 
@@ -753,14 +769,14 @@ In `updateCategory`, compute `const color = patch.color === undefined ? current.
 Run: `pnpm --filter @waitron/catalogue test categories.pg`
 Expected: PASS.
 
-- [ ] **Step 7: Verify configuration transfer carries the column**
+- [ ] **Step 7: Confirm configuration transfer needs no change**
 
-Run: `grep -n "color\|category_details\|image\|parent_id" packages/catalogue/src/configuration-transfer.ts`. If it selects `category_details` columns explicitly, add `color`; if it copies the whole row, nothing to do. Add or extend a transfer test asserting `color` round-trips if the file enumerates columns.
+`CATALOGUE_CONFIGURATION_TRANSFER` copies `category_details` as a whole table by name (kind `"tables"`), not by an enumerated column list, so `color` carries automatically. Confirm with `grep -n "category_details" packages/catalogue/src/configuration-transfer.ts` (you should see a `{ name: "category_details" }` entry and no column list). No code change and no `git add` of that file.
 
 - [ ] **Step 8: Commit**
 
 ```bash
-git add packages/catalogue/src/schema/categories.ts packages/catalogue/src/categories.ts packages/catalogue/src/errors.ts packages/catalogue/drizzle/ packages/catalogue/src/categories.pg.test.ts packages/catalogue/src/configuration-transfer.ts
+git add packages/catalogue/src/schema/categories.ts packages/catalogue/src/categories.ts packages/catalogue/src/errors.ts packages/catalogue/drizzle/ packages/catalogue/src/categories.pg.test.ts
 git commit -s -m "Store an optional colour on a category"
 ```
 
@@ -904,13 +920,34 @@ it("deleting a top-level category makes its children top-level", async () => {
 });
 ```
 
-For the route case (needs the `preparation_routes` table, which lives in venue-service migrations, not core), put it where the venue tables are available. `packages/venue-service/src/category-dependencies.test.ts` already migrates core + venue-service and imports `createPreparationRoute`/`deletePreparationRoute`. Add there:
+For the route case (needs the `preparation_routes` table, which lives in venue-service migrations, not core), put it where the venue tables are available. `packages/venue-service/src/category-dependencies.test.ts` already migrates core + venue-service and imports `createPreparationRoute`/`deletePreparationRoute`.
+
+**First, replace the existing refusal test** at `packages/venue-service/src/category-dependencies.test.ts:32-54` — it currently asserts `deleteCategory(...).rejects.toMatchObject({ code: "category.in_use", params: { children: 0, products: 0, routes: 1 } })`, which the cascade will break. Rewrite that whole `it(...)` block to the new behaviour:
 
 ```ts
-it("deleting a category removes its preparation routes", async () => {
-  // create a category route to a station, then deleteCategory, expect the route gone and the delete to succeed
+it("deleting a category removes its preparation routes and the category", async () => {
+  const { tenantId, locationId } = await venue();
+  await withTenant(suite.db, tenantId, async (tx) => {
+    await asAppUser(tx);
+    const category = await createCategory(tx, tenantId, { name: { en: "Drinks" } });
+    await createPreparationRoute(
+      tx,
+      { tenantId, locationId },
+      { categoryId: category.id, target: { kind: "no_preparation" } },
+    );
+    await expect(deleteCategory(tx, tenantId, category.id)).resolves.toBeUndefined();
+    const routes = await tx.execute(
+      sql`select 1 from preparation_routes where tenant_id = ${tenantId} and category_id = ${category.id}`,
+    );
+    expect(routes.rows).toHaveLength(0);
+    await expect(readCategory(tx, tenantId, category.id)).rejects.toMatchObject({
+      code: "category.not_found",
+    });
+  });
 });
 ```
+
+Import `readCategory` and `sql` if not already imported. Do NOT leave the old refusal test in place — it is asserting behaviour this task removes (CLAUDE.md: a rewritten test that matches the new code must still catch the regression it guards; here the regression it guarded — a refusal — no longer exists, so the assertion changes to the cascade).
 
 - [ ] **Step 2: Run and watch fail**
 
@@ -1232,7 +1269,7 @@ it("accepts a null reporting category on the membership PUT", async () => {
 });
 ```
 
-Add the `category.color_invalid` → 400 mapping check by reading `apps/server/src/catalogue-api.ts`'s status map (around line 137) and adding the entry.
+Add the `category.color_invalid` → 400 mapping by adding the entry to the `STATUS` map (the constant at line 129 in `apps/server/src/catalogue-api.ts`).
 
 - [ ] **Step 2: Run and watch fail**
 
@@ -1241,38 +1278,48 @@ Expected: FAIL — routes/mappings missing.
 
 - [ ] **Step 3: Implement**
 
-In `apps/server/src/catalogue-api.ts`:
+In `apps/server/src/catalogue-api.ts`. The route helpers are already what every category route uses: `run(c, log, async () => { … })` wraps the handler; `requireManagementSession(c)` returns the session id; `requireUuidParam(c.req.param("id"), "CategoryId")` screens the path id (a non-uuid id becomes `shared.invalid_id` → 400, never a `22P02` 500); `gated(session, (tx) => …)` opens the tenant transaction as the app role, checks the manager permission, compares the session tenant, and runs the callback. `gated` closes over the route-scope `tenantId` — the callback takes only `(tx)`. There is no `withManager`; do not invent one.
 
-- Add `"category.color_invalid": 400,` to the status map.
-- In `categoryInput` (the body screen near line 103), pass `color` through when present, validating only that it is a string or null (the operation does the format check):
+- Add `"category.color_invalid": 400,` to the `STATUS` map (the constant at line 129, beside `"category.in_use": 409`).
+- In `categoryInput` (the body screen at line 103; its local accumulator is named `result`, not `input`), pass `color` through when present, validating only that it is a string or null (the operation does the format check):
 
 ```ts
 if (body.color !== undefined) {
   if (body.color !== null && typeof body.color !== "string")
     throw new AppError("management.request_invalid", { field: "color" });
-  input.color = body.color;
+  result.color = body.color;
 }
 ```
 
-- Relax the PUT membership screen (near line 756) so a null `primaryCategoryId` with a non-empty set is allowed; the operation enforces membership. Keep the id-shape checks.
-- Add the two routes beside the others (mirror the existing `.get`/`.post` handler style, all inside `withTenant` + `asAppUser` + `authorizeManager`, comparing the session tenant as the sibling routes do):
+- **Do NOT touch the PUT membership screen.** It already accepts a null/absent `primaryCategoryId` (it only rejects a present, non-null, non-uuid value); the "primary required" rule lived only in `replaceProductCategories`, which Task 6 relaxed. This task only adds a test proving a null primary now succeeds end to end.
+- Add the two routes beside the sibling category routes, in their exact style:
 
 ```ts
 app.get("/management-api/categories/:id/dependants", (c) =>
-  withManager(c, (tx, tenantId) => categoryDependants(tx, tenantId, c.req.param("id"))),
+  run(c, log, async () => {
+    const session = requireManagementSession(c);
+    const id = requireUuidParam(c.req.param("id"), "CategoryId");
+    return c.json(await gated(session, (tx) => categoryDependants(tx, tenantId, id)));
+  }),
 );
-app.post("/management-api/categories/:id/products", async (c) => {
-  const body = await readJsonBody<{ productIds?: unknown }>(c);
-  if (!Array.isArray(body.productIds) || body.productIds.some((v) => typeof v !== "string" || !isUuid(v)))
-    throw new AppError("management.request_invalid", { field: "productIds" });
-  await withManager(c, (tx, tenantId) =>
-    addProductsToCategory(tx, tenantId, c.req.param("id"), body.productIds as string[]),
-  );
-  return c.body(null, 204);
-});
+app.post("/management-api/categories/:id/products", (c) =>
+  run(c, log, async () => {
+    const session = requireManagementSession(c);
+    const id = requireUuidParam(c.req.param("id"), "CategoryId");
+    const body = await readJsonBody<{ productIds?: unknown }>(c);
+    if (
+      !Array.isArray(body.productIds) ||
+      body.productIds.some((v) => typeof v !== "string")
+    )
+      throw new AppError("management.request_invalid", { field: "productIds" });
+    for (const pid of body.productIds) requireUuidParam(pid, "ProductId");
+    await gated(session, (tx) => addProductsToCategory(tx, tenantId, id, body.productIds as string[]));
+    return c.body(null, 204);
+  }),
+);
 ```
 
-Use whatever the file's real manager-scoped helper is called (read the existing category routes near line 689–775 and copy their exact wrapper — the snippet's `withManager` is a stand-in name).
+`tenantId` here is the route-scope variable the sibling routes already use (the same one `gated` closes over). Reuse `requireUuidParam` for each product id rather than a bespoke `isUuid` check, matching the file.
 
 - [ ] **Step 4: Run and pass**
 
@@ -1532,9 +1579,19 @@ Expected: FAIL — current code blocks the empty primary.
 
 - [ ] **Step 3: Implement**
 
-In `category-membership-picker.ts`: remove the `#emit` guard that sets `this.error = t("categories.primary_required")` and returns; allow `primaryCategoryId: null`. Add a `<option value="">${t("categories.none")}</option>` to the primary `<select>` and let the empty value map to null (it already does via `|| null`). Rename the visible label from `categories.primary` to `editor.reporting_category`.
+In `category-membership-picker.ts`: remove the `#emit` guard that sets `this.error = t("categories.primary_required")` and returns; allow `primaryCategoryId: null`. Add a `<option value="">${t("categories.none")}</option>` to the primary `<select>` and let the empty value map to null (it already does via `|| null`). Rename the visible label from `categories.primary` to `editor.reporting_category`, and remove any required marker on it.
 
-In `product-editor.ts`: delete the block that sets `errors.primary = t("editor.reporting_category_required")` when a primary is absent (keep rejecting a primary that is not in the set). The `<select>` should keep a "None" option and allow `primaryCategoryId: null`.
+In `product-editor.ts`: the check at lines 251-254 is a single `if` that both rejects a missing primary AND a primary not in the set — **narrow it, do not delete it** (the spec still requires the primary to be a member when present):
+
+```ts
+if (
+  this.draft.primaryCategoryId !== null &&
+  !this.draft.categoryIds.includes(this.draft.primaryCategoryId)
+)
+  errors.primary = t("editor.reporting_category_required"); // now only "must be a member", never "required"
+```
+
+Also the reporting-category field still renders a required marker and `aria-required` (line ~428: `${t("editor.reporting_category")} *` with `aria-required="true"`). Remove the `*` and the `aria-required="true"` since the field is now optional; the `<option value="">${t("editor.choose")}</option>` already lets it be left unset and maps to null. Leaving the `*` would violate the forms convention that only required fields are visibly marked.
 
 - [ ] **Step 4: Run and pass**
 
@@ -1584,6 +1641,13 @@ it("filters by name keeping ancestors in tree mode", async () => {
 it("renders each name with its colour square", async () => {
   // a category with color '#b12525'; assert a colour swatch element carries that colour
 });
+it("opens the category editor from a ?category= deep link", async () => {
+  history.replaceState(null, "", "/manage/categories?category=<seeded-id>");
+  const el = await mountScreen();
+  await el.updateComplete;
+  // assert the category form is open in edit mode for that id (mirror how other tests read editorOpen/edited)
+  expect((el as unknown as { editorOpen: boolean }).editorOpen).toBe(true);
+});
 ```
 
 - [ ] **Step 2: Run and watch fail**
@@ -1613,6 +1677,7 @@ Rework `render()` and columns:
 - In tree mode omit the Parent column; in flat mode include a sortable Parent column using `categoryPath(parent, …)`.
 - Filtering: compute matches by name (`this.#text(c.name).toLocaleLowerCase().includes(...)`). In flat mode pass the matches straight to `rows`. In tree mode pass matches plus all their ancestors (walk `parentId` up), so `wt-data-table` can nest them; ancestors that are not themselves matches render muted (add a `data-muted` style hook on the name).
 - Pass `collapseLabel`/`expandLabel` from strings.
+- **Change the `?category=<id>` deep-link handler.** Today `#load` sets `this.selected = linked` (the old "select and show products below" layout). The spec requires it to open the category **editor**. Change that branch to call `this.#edit(category)` for the matching category (guard: only when a category with that id is loaded; an unknown id is ignored), and clear the param afterwards with `history.replaceState` so a refresh does not reopen. This is the target of the delete modal's child links from Task 16.
 - Keep the existing category form and delete/membership modals in place for now; Task 16 replaces the products/membership/delete UI.
 
 Verify `wt-icon` is imported in the screen.
@@ -1714,53 +1779,46 @@ git commit -s -m "Add the products modal, checkbox add, and delete preview to ca
 
 ---
 
-## Task 17: Catalogue screen `?product=` deep link
+## Task 17: Confirm the catalogue `?product=` deep link
 
 **Files:**
-- Modify: `apps/dashboard/src/screens/catalogue-screen.ts`
-- Test: `apps/dashboard/src/screens/catalogue-screen.test.ts`
+- Test only (add to): `apps/dashboard/src/screens/catalogue-screen.test.ts`
 
-**Interfaces:**
-- Produces: on load, the catalogue screen opens the product named by `?product=<id>` once; an unknown id does nothing.
+**This feature already exists — do NOT reimplement it.** `catalogue-screen.ts` already opens `?product=<id>` through `UrlStateController`: `#linkedProduct`, the `#url` callback that reads the `product` param and calls `#openLinkedProduct()`, `await this.#openLinkedProduct()` after products load, `#openProduct` and `#openLinkedProduct` both guarding an unknown id, and `#closeEditor` clearing the param via `this.#url.write({ product: null }, true)`. This task only proves it with a test if one is missing, and confirms it interoperates with the delete-modal links from Task 16 (which navigate to `/manage/catalogue?product=<id>`).
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: Check for an existing test**
+
+Run: `grep -n "product=" apps/dashboard/src/screens/catalogue-screen.test.ts`. If the open-from-address and unknown-id cases are already covered, this task is a no-op beyond confirming they pass — skip to Step 4.
+
+- [ ] **Step 2: Add the tests if absent**
 
 ```ts
-it("opens the product named in the address once", async () => {
-  history.replaceState(null, "", "/manage/catalogue?product=<seeded-id>");
-  const el = await mountCatalogue(); // mirror existing mount + api stub
+it("opens the product named in the address", async () => {
+  history.replaceState(null, "", "/manage/catalogue?product=<seeded-id>"); // use the fixture's real id
+  const el = await mountCatalogue(); // mirror the file's existing mount + api stub
   await el.updateComplete;
-  expect(el.shadowRoot!.querySelector("dashboard-product-editor")!.hasAttribute("open") || (el as any).editorOpen).toBeTruthy();
+  expect((el as unknown as { editorOpen: boolean }).editorOpen).toBe(true);
 });
 it("ignores an unknown product id", async () => {
-  history.replaceState(null, "", "/manage/catalogue?product=unknown");
+  history.replaceState(null, "", "/manage/catalogue?product=00000000-0000-4000-8000-000000000000");
   const el = await mountCatalogue();
   await el.updateComplete;
-  expect((el as any).editorOpen).toBe(false);
+  expect((el as unknown as { editorOpen: boolean }).editorOpen).toBe(false);
 });
 ```
 
-Match the file's real test harness (`catalogue-screen.test.ts`) for mounting and the products fixture.
+Use the file's real mount helper and product fixture; the deep-link path is `#openLinkedProduct`, which already exists.
 
-- [ ] **Step 2: Run and watch fail**
-
-Run: `pnpm --filter @waitron/dashboard test catalogue-screen`
-Expected: FAIL.
-
-- [ ] **Step 3: Implement**
-
-In `catalogue-screen.ts`, after products load (in the same `updated`/load path that already populates `this.products`), read `new URL(location.href).searchParams.get("product")` once (guard with a `#deepLinked` boolean so it fires a single time), and if it matches a loaded product id call the existing `#openProduct(id)`. An unknown id is ignored. Clear the param from the URL with `history.replaceState` (mirror the `login=google` cleanup near line 680) so a refresh does not reopen.
-
-- [ ] **Step 4: Run and pass**
+- [ ] **Step 3: Run and pass**
 
 Run: `pnpm --filter @waitron/dashboard test catalogue-screen`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 4: Commit (only if a test was added)**
 
 ```bash
-git add apps/dashboard/src/screens/catalogue-screen.ts apps/dashboard/src/screens/catalogue-screen.test.ts
-git commit -s -m "Open a product from the catalogue address for deep links"
+git add apps/dashboard/src/screens/catalogue-screen.test.ts
+git commit -s -m "Cover the catalogue product deep link used by the delete preview"
 ```
 
 ---
@@ -1824,7 +1882,9 @@ Report to the owner that branch work and validation are complete and you are rea
 
 **Spec coverage** — every spec section maps to a task:
 
-- Colour storage/API → Task 5, 10, 11. Reporting optional → Task 6, 10, 14. Delete cascade → Task 7, 16. Delete preview → Task 8, 10, 16. Bulk add → Task 9, 10, 16. Deep link → Task 17. `wt-lozenge` + contrast → Task 1, 2. Palette → Task 1, 13. Tree table → Task 4, 15. Round button → Task 3, 15. Page shell/filter/modes → Task 15. Modals → Task 16. Strings/rename → Task 12, 14, 15. Docs → Task 18. Testing → folded into each task; whole-branch → Task 19.
+- Colour storage/API → Task 5, 10, 11. Reporting optional → Task 6, 10, 14. Delete cascade → Task 7 (which also rewrites the old refusal test), 16. Delete preview → Task 8, 10, 16. Bulk add → Task 9, 10, 16. Product deep link → already implemented, only tested in Task 17. `?category=` opens the editor → Task 15 (the deep-link handler change). `wt-lozenge` + contrast → Task 1, 2. Palette → Task 1, 13. Tree table → Task 4, 15. Round button → Task 3, 15. Page shell/filter/modes → Task 15. Modals → Task 16. Strings/rename (including removing the reporting-category required marker) → Task 12, 14, 15. Docs → Task 18. Testing → folded into each task; whole-branch → Task 19.
+
+**Corrections applied after a fresh-context review against the code** (2026-09-13): Task 17 no longer reimplements the product deep link (it already exists via `UrlStateController`); Task 7 now rewrites the pre-existing `category.in_use` refusal test that the cascade breaks; Task 15 now changes the `?category=` handler to open the editor; Task 10 drops the no-op PUT-membership "relax" and uses the real `run`/`requireManagementSession`/`requireUuidParam`/`gated` route helpers (there is no `withManager`), with the correct `STATUS` and `result` names; Task 3's radius assertion is no longer vacuous; Task 4 sets explicit `treegrid`/`rowgroup`/`row`/`columnheader`/`gridcell` roles so axe passes; Task 14 narrows rather than deletes the primary-membership check and removes the required marker; Task 5 confirms configuration transfer needs no change.
 
 **Type consistency** — `CategoryDependants` has the same shape in catalogue (Task 8), the client (Task 11) and the screen (Task 16). `color: string | null` on the shape, `color?: string | null` on inputs, consistently. `readableTextColor` / `CATEGORY_PALETTE` / `isHexColor` names match across Tasks 1, 2, 13. `rowParent` / `collapseLabel` / `expandLabel` names match across Tasks 4 and 15. `addProductsToCategory` and `categoryDependants` names match catalogue → client → server.
 
