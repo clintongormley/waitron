@@ -1,6 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { ChoiceForm, type ChoiceDraft } from "./choice-form.js";
+import { t } from "../i18n/t.js";
 
 afterEach(cleanupWidgets);
 
@@ -31,6 +32,21 @@ async function click(el: ChoiceForm, id: string) {
   el.shadowRoot!.querySelector<HTMLElement>(`[data-test="${id}"]`)!.click();
   await el.updateComplete;
 }
+function field(el: ChoiceForm, name: string) {
+  return el.shadowRoot!.querySelector(`[name="${name}"]`) as unknown as {
+    invalid: boolean;
+    error: string;
+  };
+}
+async function summaryEntries(el: ChoiceForm) {
+  const summary = el.shadowRoot!.querySelector("wt-form-error-summary");
+  if (summary === null) return null;
+  await summary.updateComplete;
+  return {
+    heading: summary.heading,
+    entries: [...summary.shadowRoot!.querySelectorAll("li")].map((item) => item.textContent),
+  };
+}
 
 it("emits an extras choice with names, price and effects, and validates the price", async () => {
   const el = await mountChoice({ kind: "extras" });
@@ -41,7 +57,7 @@ it("emits an extras choice with names, price and effects, and validates the pric
   await change(el, "name-es", "Queso");
   await change(el, "priceDelta", "1.5x");
   await click(el, "choice-save");
-  expect(el.shadowRoot!.querySelector("[role=alert]")).not.toBeNull(); // bad price
+  expect((await summaryEntries(el))?.entries).toEqual([t("modifiers.price_invalid")]); // bad price
   await change(el, "priceDelta", "1.50");
   await change(el, "maxQuantity", "2");
   await click(el, "choice-save");
@@ -53,6 +69,43 @@ it("emits an extras choice with names, price and effects, and validates the pric
     maxQuantity: 2,
   });
   expect((save.mock.calls[0]![0] as CustomEvent).composed).toBe(true);
+});
+
+it("explains every bad field in the shared error summary under the form heading", async () => {
+  const el = await mountChoice({ kind: "extras" });
+  expect((await summaryEntries(el))?.entries ?? []).toEqual([]);
+  await change(el, "priceDelta", "free");
+  await change(el, "maxQuantity", "0");
+  await click(el, "choice-save");
+  expect(await summaryEntries(el)).toEqual({
+    heading: t("form.error_heading"),
+    entries: [
+      t("modifiers.name_required"),
+      t("modifiers.price_invalid"),
+      t("modifiers.quantity_invalid"),
+    ],
+  });
+  expect(field(el, "name-es").error).toBe(t("modifiers.name_required"));
+  expect(field(el, "priceDelta").error).toBe(t("modifiers.price_invalid"));
+  expect(field(el, "maxQuantity").error).toBe(t("modifiers.quantity_invalid"));
+});
+
+it("rejects a price or quantity beyond what the server stores, on that field", async () => {
+  const el = await mountChoice({ kind: "extras" });
+  const save = vi.fn();
+  el.addEventListener("wt-choice-save", save);
+  await change(el, "name-es", "Queso");
+  await change(el, "priceDelta", "12345678901");
+  await change(el, "maxQuantity", "2147483648");
+  await click(el, "choice-save");
+  expect(save).not.toHaveBeenCalled();
+  expect(field(el, "priceDelta").invalid).toBe(true);
+  expect(field(el, "maxQuantity").invalid).toBe(true);
+  // The largest values the server accepts still save.
+  await change(el, "priceDelta", "1234567890.99");
+  await change(el, "maxQuantity", "2147483647");
+  await click(el, "choice-save");
+  expect(save).toHaveBeenCalledTimes(1);
 });
 
 it("authors allergen and dietary effects on an extras choice", async () => {
@@ -70,6 +123,8 @@ it("authors allergen and dietary effects on an extras choice", async () => {
   });
   const save = vi.fn();
   el.addEventListener("wt-choice-save", save);
+  // A choice declares only presence; an existing source is carried through but never edited here.
+  expect(el.shadowRoot!.querySelector('input[name*="source"]')).toBeNull();
   await change(el, "addAllergens", "eggs");
   await change(el, "presence-eggs", "may_contain");
   await change(el, "dietaryEffect", "vegan");

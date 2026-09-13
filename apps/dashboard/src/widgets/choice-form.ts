@@ -6,6 +6,7 @@ import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
+import "@waitron/ui/src/components/wt-form-error-summary.js";
 import {
   DIETARY_LABELS,
   type AllergenDeclaration,
@@ -31,6 +32,8 @@ export type ChoiceDraft = ModifierEffects & {
   vatClass?: VatClass | null;
 };
 
+/** The largest integer the server's modifier contract accepts. */
+const MAX_INTEGER = 2147483647;
 const clean = (value: Record<string, string>) =>
   Object.fromEntries(Object.entries(value).filter(([, text]) => text.trim()));
 
@@ -56,9 +59,6 @@ export class ChoiceForm extends LitElement {
         flex-wrap: wrap;
         align-items: center;
         gap: var(--wt-space-2);
-      }
-      .error {
-        color: var(--wt-color-danger);
       }
       summary {
         cursor: pointer;
@@ -130,13 +130,15 @@ export class ChoiceForm extends LitElement {
     const errors: Record<string, string> = {};
     const language = currentContentLanguages().defaultLanguage;
     if (!this.name[language]?.trim()) errors.name = t("modifiers.name_required");
+    // The bounds are the server's (packages/catalogue/src/modifier-contract.ts), so a value it would
+    // refuse is caught here, on its own field, rather than as a problem with the whole modifier.
     if (this.kind === "extras") {
-      if (!/^\d+(?:\.\d{1,2})?$/.test(this.priceDelta))
+      if (!/^\d{1,10}(?:\.\d{1,2})?$/.test(this.priceDelta))
         errors.priceDelta = t("modifiers.price_invalid");
       if (
         !/^\d+$/.test(this.maxQuantity) ||
-        !Number.isSafeInteger(Number(this.maxQuantity)) ||
-        Number(this.maxQuantity) < 1
+        Number(this.maxQuantity) < 1 ||
+        Number(this.maxQuantity) > MAX_INTEGER
       )
         errors.maxQuantity = t("modifiers.quantity_invalid");
     }
@@ -376,7 +378,10 @@ export class ChoiceForm extends LitElement {
         );
       }}
     >
-      ${Object.keys(this.errors).length || Object.keys(this.fieldErrors).length ? html`<p class="error" role="alert">${t("modifiers.problem")}</p>` : nothing}
+      <wt-form-error-summary
+        heading=${t("form.error_heading")}
+        .errors=${Object.values({ ...this.serverErrors, ...this.errors })}
+      ></wt-form-error-summary>
       <div class="fields">
         ${this.#names("name", t("modifiers.name"), this.name, (name) => {
           this.name = name;
