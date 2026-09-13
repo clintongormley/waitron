@@ -4,6 +4,7 @@ import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { ModifiersScreen } from "./modifiers-screen.js";
 import type { DashboardApi, Modifier } from "../api/client.js";
 import type { ModifierForm } from "../widgets/modifier-form.js";
+import { t } from "../i18n/t.js";
 afterEach(cleanupWidgets);
 const modifier: Modifier = { id: "m", type: "text", name: { es: "Nota" }, available: true };
 function api(overrides: Partial<DashboardApi> = {}) {
@@ -38,6 +39,16 @@ it("shows searchable rows and opens the shared form", async () => {
   await el.updateComplete;
   expect(table.rows).toEqual([]);
   expect((await create(el)).open).toBe(true);
+});
+it("opens the new-modifier form from a round add button with an accessible name", async () => {
+  const el = await mount();
+  const add = el.shadowRoot!.querySelector<HTMLElement>('[data-test="create"]')!;
+  expect(add.getAttribute("shape")).toBe("round");
+  expect(add.getAttribute("aria-label")).toBe(t("modifiers.new"));
+  expect(el.shadowRoot!.querySelector("wt-row-actions")).toBeNull(); // the old kebab is gone from the heading
+  add.click();
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector<ModifierForm>("dashboard-modifier-form")!.open).toBe(true);
 });
 it("keeps failed saves in the form and closes after successful writes even if reload fails", async () => {
   const client = api({

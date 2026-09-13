@@ -8,6 +8,7 @@ import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
+import "@waitron/ui/src/components/wt-icon.js";
 import "../widgets/modifier-form.js";
 import type { DashboardApi, Modifier, ModifierInput } from "../api/client.js";
 import { DashboardQueries } from "../api/query-controller.js";
@@ -200,16 +201,15 @@ export class ModifiersScreen extends LitElement {
     ];
     return html`<div class="heading">
         <h1>${t("modifiers.title")}</h1>
-        <wt-row-actions label=${t("modifiers.title")}
-          ><wt-button
-            data-test="create"
-            align="start"
-            variant="ghost"
-            .disabled=${!this.locales}
-            @click=${() => this.#edit(null)}
-            >${t("modifiers.new")}</wt-button
-          ></wt-row-actions
-        >
+        <wt-button
+          data-test="create"
+          shape="round"
+          variant="primary"
+          aria-label=${t("modifiers.new")}
+          .disabled=${!this.locales}
+          @click=${() => this.#edit(null)}
+          ><wt-icon name="plus"></wt-icon
+        ></wt-button>
       </div>
       ${this.loading ? html`<p role="status">${t("modifiers.loading")}</p>` : nothing}
       ${
