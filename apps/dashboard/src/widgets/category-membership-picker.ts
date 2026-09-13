@@ -71,10 +71,6 @@ export class CategoryMembershipPicker extends LitElement {
   #emit(event: Event, type: "wt-submit" | "wt-cancel"): void {
     event.stopPropagation();
     if (this.busy) return;
-    if (type === "wt-submit" && this.draft.categoryIds.length && !this.draft.primaryCategoryId) {
-      this.error = t("categories.primary_required");
-      return;
-    }
     this.dispatchEvent(
       new CustomEvent(type, {
         detail:
@@ -116,7 +112,7 @@ export class CategoryMembershipPicker extends LitElement {
           }}
         >
           <option value="" .selected=${this.draft.primaryCategoryId === null}>
-            ${t("categories.choose_primary")}
+            ${t("categories.none")}
           </option>
           ${this.categories.filter((category) => this.draft.categoryIds.includes(category.id)).map((category) => html`<option value=${category.id} .selected=${category.id === this.draft.primaryCategoryId}>${categoryPath(category, this.categories, this.locales[0] ?? "en")}</option>`)}
         </select></label

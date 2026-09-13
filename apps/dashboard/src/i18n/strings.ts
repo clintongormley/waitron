@@ -773,6 +773,8 @@ export const en = {
   "editor.tax_required": "Choose a tax treatment.",
   "editor.variant_name_required": "Enter a variant name in the default language.",
   "editor.reporting_category_required": "Choose a reporting category.",
+  "editor.reporting_category_invalid":
+    "Choose a reporting category that is one of the selected categories.",
   "editor.variants": "Variants",
   "editor.price": "Price per unit",
   "editor.available": "Available",
@@ -1925,6 +1927,8 @@ export const es: Record<StringKey, string> = {
   "editor.tax_required": "Elige un tratamiento fiscal.",
   "editor.variant_name_required": "Introduce un nombre de variante en el idioma predeterminado.",
   "editor.reporting_category_required": "Elige una categoría de informes.",
+  "editor.reporting_category_invalid":
+    "Elige una categoría de informes que esté entre las categorías seleccionadas.",
   "editor.variants": "Variantes",
   "editor.price": "Precio por unidad",
   "editor.available": "Disponible",

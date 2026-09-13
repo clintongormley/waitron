@@ -3,6 +3,7 @@ import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { ProductEditor } from "./product-editor.js";
 import type { ProductEditorDraft } from "./product-editor-model.js";
 import { resolveVatRate, priceLockedLines } from "@waitron/catalogue/src/pricing.js";
+import { t } from "../i18n/t.js";
 
 afterEach(cleanupWidgets);
 const unit = { id: "unit-each", name: { en: "Each" } };
@@ -170,6 +171,57 @@ it("shows only selected memberships and lets you search, add, reorder and remove
   el.shadowRoot!.querySelectorAll<HTMLElement>("[data-test=modifier-remove]")[0]!.click();
   await el.updateComplete;
   expect(el.currentValue.modifierIds).toEqual(["ice", "sugar"]);
+});
+
+it("saves a product with categories and no reporting category", async () => {
+  const categories = [
+    { id: "drinks", name: { en: "Drinks" } },
+    { id: "snacks", name: { en: "Snacks" } },
+  ];
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: { ...product, categoryIds: ["drinks", "snacks"], primaryCategoryId: "drinks" },
+    locales: ["en"],
+    units: [unit],
+    taxChoices: [{ id: "reduced", rate: "10.00", label: "Reduced" }],
+    categories,
+  });
+  const submit = vi.fn();
+  el.addEventListener("wt-submit", submit);
+  const reporting = el.shadowRoot!.querySelector<HTMLSelectElement>("[name=reporting-category]")!;
+  reporting.value = "";
+  reporting.dispatchEvent(new Event("change", { bubbles: true }));
+  await el.updateComplete;
+  save(el);
+  expect(submit).toHaveBeenCalledOnce();
+  expect(submit.mock.calls[0]![0].detail.value.primaryCategoryId).toBeNull();
+  expect(
+    el.shadowRoot!.querySelector<HTMLElement & { errors: string[] }>("wt-form-error-summary")!
+      .errors,
+  ).toEqual([]);
+});
+
+it("flags a reporting category that is not one of the selected categories", async () => {
+  const categories = [
+    { id: "drinks", name: { en: "Drinks" } },
+    { id: "snacks", name: { en: "Snacks" } },
+  ];
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: { ...product, categoryIds: ["drinks"], primaryCategoryId: "snacks" },
+    locales: ["en"],
+    units: [unit],
+    taxChoices: [{ id: "reduced", rate: "10.00", label: "Reduced" }],
+    categories,
+  });
+  const submit = vi.fn();
+  el.addEventListener("wt-submit", submit);
+  save(el);
+  await el.updateComplete;
+  expect(submit).not.toHaveBeenCalled();
+  expect(el.shadowRoot!.getElementById("primary-error")!.textContent).toBe(
+    t("editor.reporting_category_invalid"),
+  );
 });
 
 it("shows inferred dietary badges without saving them as declarations", async () => {

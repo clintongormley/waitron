@@ -59,8 +59,8 @@ async function mount() {
   );
   return { ...fx, ...mounted };
 }
-it("counts direct memberships, opens category products and requires replacement on primary removal", async () => {
-  const { el, api } = await mount();
+it("counts direct memberships and opens category products", async () => {
+  const { el } = await mount();
   const table = el.shadowRoot!.querySelector("wt-data-table")!;
   await table.updateComplete;
   table.shadowRoot!.querySelector<HTMLElement>('[data-category="food"]')!.click();
@@ -70,12 +70,45 @@ it("counts direct memberships, opens category products and requires replacement 
   )!;
   await products.updateComplete;
   expect(products.rows.map((row) => (row as { id: string }).id)).toEqual(["p"]);
+});
+// Removing a membership that was the reporting category clears it (see #assign); the picker now
+// accepts that as a valid, final choice instead of demanding a replacement before submission.
+it("saves a membership with no reporting category after removing the primary", async () => {
+  const { el, api } = await mount();
+  const table = el.shadowRoot!.querySelector("wt-data-table")!;
+  await table.updateComplete;
+  table.shadowRoot!.querySelector<HTMLElement>('[data-category="food"]')!.click();
+  await el.updateComplete;
+  const products = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>(
+    'wt-data-table[data-test="category-products"]',
+  )!;
+  await products.updateComplete;
   products.shadowRoot!.querySelector<HTMLElement>('[data-test="remove-membership"]')!.click();
   await el.updateComplete;
   const picker = el.shadowRoot!.querySelector("dashboard-category-membership-picker")!;
   await picker.updateComplete;
   picker.shadowRoot!.querySelector<HTMLElement>('[data-test="save-membership"]')!.click();
-  expect(api.replaceProductCategories).not.toHaveBeenCalled();
+  await vi.waitFor(() =>
+    expect(api.replaceProductCategories).toHaveBeenCalledWith("p", {
+      categoryIds: ["drink"],
+      primaryCategoryId: null,
+    }),
+  );
+});
+it("still lets you choose a replacement reporting category before saving", async () => {
+  const { el, api } = await mount();
+  const table = el.shadowRoot!.querySelector("wt-data-table")!;
+  await table.updateComplete;
+  table.shadowRoot!.querySelector<HTMLElement>('[data-category="food"]')!.click();
+  await el.updateComplete;
+  const products = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>(
+    'wt-data-table[data-test="category-products"]',
+  )!;
+  await products.updateComplete;
+  products.shadowRoot!.querySelector<HTMLElement>('[data-test="remove-membership"]')!.click();
+  await el.updateComplete;
+  const picker = el.shadowRoot!.querySelector("dashboard-category-membership-picker")!;
+  await picker.updateComplete;
   const primary = picker.shadowRoot!.querySelector<HTMLSelectElement>(
     'select[name="primary-category"]',
   )!;

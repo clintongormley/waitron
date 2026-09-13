@@ -52,7 +52,7 @@ describe.each(["light", "dark"] as const)("category forms (%s)", (theme) => {
     }
   });
 
-  it.each(["empty", "selected", "invalid"] as const)(
+  it.each(["empty", "selected", "none"] as const)(
     "renders %s membership accessibly",
     async (state) => {
       const { el, host } = await mountWidget<CategoryMembershipPicker>(
@@ -67,7 +67,9 @@ describe.each(["light", "dark"] as const)("category forms (%s)", (theme) => {
         },
         theme,
       );
-      if (state === "invalid") {
+      // "none" saves with a category chosen and no reporting category — no longer an error state,
+      // but still worth checking it renders (and submits) accessibly.
+      if (state === "none") {
         el.shadowRoot!.querySelector<HTMLElement>('[data-test="save-membership"]')!.click();
         await el.updateComplete;
       }
