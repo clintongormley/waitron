@@ -393,6 +393,12 @@ function legacyPricingUnit(unit: SellableUnit): PricingUnit {
   return unit.hardwareUnit === null ? "each" : "weight";
 }
 
+function legacyUnitSeed(pricingUnit: PricingUnit): "each" | "kg" {
+  if (pricingUnit === "each") return "each";
+  if (pricingUnit === "weight") return "kg";
+  throw new AppError("management.request_invalid", { field: "pricingUnit" });
+}
+
 export async function createCatalogue(
   tx: Transaction,
   tenantId: TenantId,
@@ -1113,7 +1119,7 @@ export async function createProduct(
   }
   const selectedUnit =
     input.unitId === undefined
-      ? await getSeededUnit(tx, tenantId, input.pricingUnit === "weight" ? "kg" : "each")
+      ? await getSeededUnit(tx, tenantId, legacyUnitSeed(input.pricingUnit!))
       : await getSellableUnit(tx, tenantId, input.unitId);
   if (selectedUnit === null) {
     throw new AppError("management.request_invalid", { field: "unitId" });
@@ -1245,7 +1251,7 @@ export async function updateProduct(
   // reaches `manual_allergens`. The remaining `rest` keys map 1:1 to `products` columns, so the
   // spread stays fully typed against `.set()` — no `Record<string, unknown>` widening. Republish only
   // when `allergens` was in the patch: an unrelated edit must not disturb the published declaration.
-  const { allergens, dietOverride, categoryId, unitId, ...rest } = patch;
+  const { allergens, dietOverride, categoryId, unitId, pricingUnit, ...rest } = patch;
   if (categoryId !== undefined) {
     // Choosing a primary retains other memberships; clearing is allowed only for the final membership.
     await lockCategories(tx, tenantId);
@@ -1263,7 +1269,15 @@ export async function updateProduct(
   // column, and `diet` is republished only when the override was in the patch — an unrelated edit
   // must not disturb the published diet profile. Mirrors the allergen republish guard exactly.
   if (dietOverride !== undefined) validateDietOverride(dietOverride);
-  const selectedUnit = unitId === undefined ? null : await getSellableUnit(tx, tenantId, unitId);
+  const selectedUnit =
+    unitId !== undefined
+      ? await getSellableUnit(tx, tenantId, unitId)
+      : pricingUnit === undefined
+        ? null
+        : await getSeededUnit(tx, tenantId, legacyUnitSeed(pricingUnit));
+  if (pricingUnit !== undefined && selectedUnit === null) {
+    throw new AppError("management.request_invalid", { field: "unitId" });
+  }
   await tx
     .update(products)
     .set({
@@ -1274,7 +1288,7 @@ export async function updateProduct(
       updatedAt: sql`now()`,
     })
     .where(and(eq(products.tenantId, tenantId), eq(products.id, id)));
-  if (unitId !== undefined) await assignProductUnit(tx, tenantId, id, unitId);
+  if (selectedUnit !== null) await assignProductUnit(tx, tenantId, id, selectedUnit.id);
   // Republish exactly the overlays that changed. When BOTH did, one combined SELECT+UPDATE
   // (`republishProductOverlays`) does the work of the two single-overlay round trips, landing the same
   // `allergens` and `diet` values; when only one changed, the matching single-overlay function runs so

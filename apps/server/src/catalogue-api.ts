@@ -779,8 +779,11 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       if (body.unitId !== undefined && (typeof body.unitId !== "string" || !isUuid(body.unitId))) {
         throw new AppError("management.request_invalid", { field: "unitId" });
       }
-      if (body.unitId === undefined && typeof body.pricingUnit !== "string") {
+      if (body.unitId === undefined && body.pricingUnit === undefined) {
         throw new AppError("management.request_invalid", { field: "unitId" });
+      }
+      if (body.pricingUnit !== undefined && typeof body.pricingUnit !== "string") {
+        throw new AppError("management.request_invalid", { field: "pricingUnit" });
       }
       if (typeof body.unitPrice !== "string") {
         throw new AppError("management.request_invalid", { field: "unitPrice" });

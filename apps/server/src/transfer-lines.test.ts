@@ -34,6 +34,7 @@ import {
   parkOrder,
   transferLines,
 } from "./working-order.js";
+import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import "./errors.js";
 
 // PGlite, not real Postgres: this suite proves the WRITE behaviour of `transferLines` and
@@ -64,6 +65,7 @@ interface Seeded {
 
 async function setupVenue(): Promise<Seeded> {
   const tenantId = await seedTenant(db);
+  await seedLegacySellingUnits(db, tenantId);
   const loc = await db.execute<{ id: string }>(sql`
     insert into locations (tenant_id, name, invoice_locales, operation_description)
     values (${tenantId}, 'Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);

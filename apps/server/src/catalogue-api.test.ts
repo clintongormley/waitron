@@ -9,6 +9,7 @@ import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import type { Logger } from "./logger.js";
 import { mountCatalogueApi } from "./catalogue-api.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
+import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import "./errors.js";
 
 // PGlite, not real Postgres: this suite proves the ROUTES — the request/response boundary, the body +
@@ -31,6 +32,7 @@ const suite = usePgliteDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     tenantId = await seedTenant(db);
+    await seedLegacySellingUnits(db, tenantId);
     // One location for the tenant, seeded as the owner (fixture setup like seedTenant) so
     // the location↔menu membership routes have a `:locationId` to act on. Minimal required columns only.
     const loc = await db.execute<{ id: string }>(sql`
@@ -876,6 +878,16 @@ describe("mountCatalogueApi — product request-shape screens", () => {
       ).toMatchObject({ error: { code: "management.request_invalid", params: { field } } });
     },
   );
+
+  it("POST /products rejects an unknown legacy pricingUnit", async () => {
+    const res = await send(mountApp(), "POST", "/management-api/products", {
+      body: { ...productBase, pricingUnit: "portion" },
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "pricingUnit" } },
+    });
+  });
 
   it.each([
     ["descriptions", { descriptions: "nope" }],

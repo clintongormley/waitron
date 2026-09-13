@@ -446,6 +446,31 @@ describe("catalogue operations", () => {
     });
   });
 
+  it("keeps the real unit assignment coherent when a legacy product changes pricing basis", async () => {
+    await asTenant(async (tx) => {
+      const catalogue = await createCatalogue(tx, tenantId, { name: "Deli" });
+      const product = await createProduct(tx, tenantId, {
+        catalogueId: catalogue.id,
+        categoryId: null,
+        descriptions: { en: "ham" },
+        pricingUnit: "each",
+        unitPrice: "24.90",
+        vatClass: "reduced",
+      });
+      await updateProduct(tx, tenantId, product.id, { pricingUnit: "weight" });
+      const assignments = await tx.execute<{ unit_id: string }>(sql`
+        select unit_id from product_units
+        where tenant_id = ${tenantId} and product_id = ${product.id}`);
+      expect(assignments.rows).toEqual([{ unit_id: kgUnitId }]);
+      const [updated] = await listProducts(tx, tenantId, catalogue.id);
+      expect(updated).toMatchObject({
+        unitId: kgUnitId,
+        pricingUnit: "weight",
+        unit: { id: kgUnitId, precision: 3, hardwareUnit: "kg" },
+      });
+    });
+  });
+
   it("updates a product's price and description", async () => {
     await asTenant(async (tx) => {
       const cat = await createCatalogue(tx, tenantId, { name: "Deli" });
