@@ -7,8 +7,9 @@ import type { Logger } from "./logger.js";
  * `boot-failure.ts` pins its tables: the line below names an action, so each entry has to be
  * unambiguously about a constraint meeting row data.
  *
- * Disjoint from that file's tables, which is pinned by a test rather than asserted here — the two
- * carry OPPOSITE remedies (wipe this database, versus restore it from a backup).
+ * Shares no code with any table in `boot-failure.ts`, which a test pins rather than a comment
+ * asserting it: that file's advice for a schema mismatch is to RESTORE the database, and sending a
+ * reader to wipe one instead is the failure worth a guard.
  */
 export const MIGRATION_CONSTRAINT_SQL_STATES: readonly string[] = [
   "23502", // not_null_violation
@@ -26,18 +27,17 @@ const CONSTRAINT = new Set(MIGRATION_CONSTRAINT_SQL_STATES);
  *
  * Why this is worth a line: migrations here are written with no data-preservation code on purpose
  * (CLAUDE.md §3 — schema changes drop and recreate until Waitron is in production), while the
- * development Postgres is one shared, seeded volume that every worktree boots against and that
- * `wa-wt` wipes only when the target changes. So a migration that adds a column no existing row can
- * fill dies at boot with a raw driver stack trace, and the browser shows nothing but a failure to
- * reach a server that never started. `docs/developers/workflow-guide.md` works the case through.
+ * development Postgres is one shared, seeded volume that every worktree boots against, and moving
+ * between worktrees on the same target does not wipe it. So a migration that adds a column no
+ * existing row can fill dies at boot with a raw driver stack trace, and the browser is left with a
+ * generic failure. `docs/developers/workflow-guide.md` works the case through.
  *
- * WHAT THE LINE MAY AND MAY NOT CLAIM. A SQLSTATE cannot tell "rows that were already here break a
- * new rule" from "this migration inserted rows that break its own rule": every state above is
- * equally reachable either way, so the line reports the constraint failure as fact and offers the
- * reset as a CONDITIONAL remedy. Naming the reset outright would send a developer to wipe a healthy
- * database over a broken migration, and then to wipe it again. The measurement behind that, and why
- * `boot-failure.ts` answered the same ambiguity by dropping `22P02` from its table instead, are in
- * `docs/developers/workflow-guide.md`.
+ * WHAT THE LINE MAY AND MAY NOT CLAIM. A constraint violation says a rule was broken; it does not
+ * say whether the offending rows were already in the table or were inserted by this same migration.
+ * So the line reports the failure as fact and offers the reset as a CONDITIONAL remedy — naming it
+ * outright would send a developer to wipe a healthy database over a broken migration, and then to
+ * wipe it again. `docs/developers/workflow-guide.md` carries the receipt and the comparison with
+ * how `boot-failure.ts` answered the same ambiguity.
  *
  * DEV ONLY, because the remedy named is `wa-wt reset`, which exists nowhere else; on a real box the
  * same SQLSTATE means something else and wiping would be wrong advice. It is a separate seam from
@@ -47,7 +47,7 @@ const CONSTRAINT = new Set(MIGRATION_CONSTRAINT_SQL_STATES);
  * `wa-wt` lives outside this repository, so nothing here can prove its command line is still
  * spelled this way; the worst a stale string can do is misname a development convenience.
  *
- * The error is re-thrown untouched — including when the log sink itself throws, since the migration
+ * The error is re-thrown untouched — including if the log sink throws, since the migration
  * failure is the one the reader needs.
  */
 export async function withDevMigrationHint(

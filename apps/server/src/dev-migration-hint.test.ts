@@ -45,10 +45,10 @@ describe("MIGRATION_CONSTRAINT_SQL_STATES", () => {
     ]);
   });
 
-  // The module comment claims it shares no table with `classifyBootFailure`. That claim is the kind
-  // this repo asks to be pinned rather than asserted: nothing else would fail if a later edit put a
-  // state in both, and the two tables carry OPPOSITE remedies — wipe this database, versus restore
-  // it from a backup.
+  // The module claims it shares no code with `classifyBootFailure`'s tables, and nothing else would
+  // fail if a later edit put one in both. It matters most against `SCHEMA_MISMATCH_SQL_STATES`,
+  // whose operator advice is to RESTORE the database — the opposite of wiping it. The socket codes
+  // can never collide with a five-character SQLSTATE, so that third of the assertion is free.
   it("never names a code `boot-failure.ts` classifies, in any of its three tables", () => {
     const theirs = new Set([
       ...UNREACHABLE_SOCKET_CODES,
@@ -91,10 +91,11 @@ describe("withDevMigrationHint", () => {
   });
 
   it("still re-throws the original failure when the log sink itself throws", async () => {
-    // NOT the rotating file sink: `createRotatingFileSink` catches its own IO failures and degrades
-    // to a no-op (`log-file.ts`), so it never throws at a caller. `tee` does not catch, so what can
-    // propagate is the stdout write itself — a closed or full pipe. Losing the migration failure and
-    // reporting the sink's failure in its place would send the reader after the wrong problem.
+    // No sink this process builds today is known to throw: `createRotatingFileSink` catches its own
+    // IO failures and degrades to a no-op, and `boot.ts`'s stdout sink writes asynchronously on a
+    // pipe. But `tee` does not catch, so ANY sink that ever does throw propagates from here — and
+    // reporting a logging failure in place of the migration failure would send the reader after
+    // entirely the wrong problem. Cheap insurance on the one error that must survive.
     const failure = failedMigration("23502");
     const throwing: Logger = () => {
       throw new Error("EPIPE: broken pipe");

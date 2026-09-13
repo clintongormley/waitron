@@ -91,12 +91,14 @@ target and copy its new `.env` to every checkout. Cost: a
 round trip each on 2026-09-05 and 2026-09-06 while the two rules were manual. Detail:
 `docs/ui-review.md` → _Running the stack from a worktree_.
 
-TWO things wipe that volume, then: a target change, and a `wa-wt reset`. Switching between worktrees
-on the SAME target does neither, and the volume is seeded, so it keeps demo rows written weeks and
-branches ago. A branch's migrations can then be unable to run over them: migrations here carry no
+What does NOT wipe that volume is the common case: switching between worktrees on the same target.
+A target change wipes it, and so does `wa-wt reset` (read the script before assuming that is the
+whole list — `ensure_env` has a third path). The volume is seeded, so between wipes it keeps demo
+rows written weeks and branches ago. A branch's migrations can then be unable to run over them: migrations here carry no
 data-preservation code on purpose (`CLAUDE.md` §3 — schema changes drop and recreate until Waitron is
 in production), so one that adds a column no existing row can fill stops the boot dead inside
-`applyMigrations`, and the browser shows only a failure to reach a server that never started.
+`applyMigrations`, and the dashboard is left showing its generic "Something went wrong, try again"
+(`apps/dashboard/src/i18n/codes.ts`) because nothing is there to answer it.
 `packages/db/drizzle/0020_category_names.sql` did exactly this on 2026-09-13: it drops the old text
 `categories.name` and recreates it as `jsonb NOT NULL`, which the seeded demo categories cannot
 satisfy — SQLSTATE `23502`. `wa-wt reset demo <name>` rebuilds the database.
@@ -108,18 +110,22 @@ original error untouched — including when the log sink itself throws. It fires
 `dev-onboard` write, though a `.env` copied from `.env.example` does not; and only for a pinned list
 of SQLSTATEs where a constraint met row data.
 
-**What that line may and may not claim.** A SQLSTATE cannot tell "rows that were already here break a
-new rule" from "this migration inserted rows that break its own rule" — measured 2026-09-13 against
-real migrations on PostgreSQL 18: for every state in the list, a migration inserting bad rows into an
-EMPTY database raises the same code, and raises it again after a wipe. So the line reports the
-constraint failure as fact and offers the reset as a CONDITIONAL remedy; naming the reset outright
+**What that line may and may not claim.** A constraint violation says a rule was broken. It does not
+say whether the offending rows were already in the table or were inserted by the same migration —
+and a migration free to write rows can produce any state on the list against a database that was
+empty a moment earlier, which a wipe would not fix and a second wipe would not fix either. The
+review put each listed state through the real migration runner with purpose-written SQL on
+PostgreSQL 18 and got the same code both ways; only the `23502` case was also reproduced against
+this repository's own migrations (below), and no migration here declares an exclusion constraint at
+all, so `23P01` is on the list for completeness rather than from a case seen in this tree. So the
+line reports the failure as fact and offers the reset as a CONDITIONAL remedy; naming it outright
 would send a developer to wipe a healthy database over a broken migration, twice.
 `classifyBootFailure` (`apps/server/src/boot-failure.ts`) answered the same problem the other way,
 by DROPPING the ambiguous `22P02` from its table so the ambiguous case gets no advice at all — same
 principle, opposite move, because a dev database is cheap to rebuild and a box's is not. That is also
 why the two share no SQLSTATE table, which a test pins rather than a comment asserting it: their
-remedies are opposites. The other "database too old" failure is not this one and does not reach this
-line — an ahead-of-image database throws `provisioning.database_ahead`, an `AppError` with no
+remedies are opposites. The other version-mismatch failure — a database NEWER than the image, not
+older — does not reach this line at all: it throws `provisioning.database_ahead`, an `AppError` with no
 SQLSTATE, and its operator text deliberately never suggests wiping anything ("Restore it from a
 backup, or reinstall", `apps/server/src/recovery-surface.ts` — owner decision 2026-09-10, because a
 real venue's fiscal records cannot be re-created).
