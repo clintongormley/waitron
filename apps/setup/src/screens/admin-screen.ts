@@ -1,6 +1,7 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { submitOnEnter, baseStyles } from "@waitron/ui";
+import { deriveDisplayName } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
@@ -50,12 +51,6 @@ export class SetupAdminScreen extends LitElement {
   /** Guards {@link SetupAdminScreen.#seedFromDraft} to run only on the first update. */
   #seeded = false;
 
-  /**
-   * Once the operator types into Display name it stops following the two name fields. Seeding from a
-   * draft counts as edited: stepping back must not overwrite a name they chose.
-   */
-  #displayNameEdited = false;
-
   override willUpdate(): void {
     if (this.#seeded) return;
     this.#seeded = true;
@@ -77,15 +72,22 @@ export class SetupAdminScreen extends LitElement {
       password: admin.password ?? this.values.password,
       pin: admin.pin ?? this.values.pin,
     };
-    if (admin.displayName !== undefined) this.#displayNameEdited = true;
   }
 
   #onField(key: AdminField, event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
-    const values = { ...this.values, [key]: event.detail.value };
-    if (key === "displayName") this.#displayNameEdited = true;
-    else if (!this.#displayNameEdited && (key === "firstNames" || key === "lastNames")) {
-      values.displayName = `${values.firstNames} ${values.lastNames}`.trim();
+    const prev = this.values;
+    const values = { ...prev, [key]: event.detail.value };
+    // A first/last-name change re-derives the display name; `deriveDisplayName` keeps a customised
+    // one and regenerates an auto one, judged against the names it was last generated against.
+    if (key === "firstNames" || key === "lastNames") {
+      values.displayName = deriveDisplayName(
+        prev.displayName,
+        prev.firstNames,
+        prev.lastNames,
+        values.firstNames,
+        values.lastNames,
+      );
     }
     this.values = values;
   }

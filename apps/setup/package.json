@@ -15,6 +15,7 @@
   "dependencies": {
     "@waitron/country": "workspace:*",
     "@waitron/country-packs": "workspace:*",
+    "@waitron/shared": "workspace:*",
     "@waitron/ui": "workspace:*",
     "lit": "^3.2.0"
   },
