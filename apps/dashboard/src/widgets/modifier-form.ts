@@ -596,7 +596,7 @@ export class ModifierForm extends LitElement {
         submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]'));
       }}
     >
-      ${Object.keys(this.errors).length || Object.keys(this.fieldErrors).length ? html`<p class="error" role="alert">${t("modifiers.problem")}</p>` : nothing}
+      ${Object.keys(this.errors).length || Object.keys(this.fieldErrors).length ? html`<p class="error" role="alert">${t("modifiers.problem")}</p>` : nothing}${this.#error("_form") ? html`<p class="error">${this.#error("_form")}</p>` : nothing}
       <div class="fields">
         ${this.#names("name", t("modifiers.name"), this.name, (name) => {
           this.name = name;

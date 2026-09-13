@@ -166,6 +166,31 @@ it("passes structured server validation fields into the reusable form", async ()
   );
   await vi.waitFor(() => expect(form.fieldErrors["choices.0.priceDelta"]).toBeTruthy());
 });
+it("shows a field-less server rejection's own message in the form", async () => {
+  const client = api({
+    updateModifier: vi.fn().mockRejectedValue({
+      code: "modifier.in_use",
+      params: { dependency: "choice", modifierId: "m" },
+    }),
+  });
+  const el = await mount(client);
+  const table = el.shadowRoot!.querySelector("wt-data-table")!;
+  await table.updateComplete;
+  table.shadowRoot!.querySelector<HTMLElement>('[data-test="edit-m"]')!.click();
+  await el.updateComplete;
+  const form = el.shadowRoot!.querySelector<ModifierForm>("dashboard-modifier-form")!;
+  form.dispatchEvent(
+    new CustomEvent("wt-submit", {
+      detail: { value: { type: "text", name: { es: "Nota" }, available: true } },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await vi.waitFor(() =>
+    expect(form.shadowRoot!.textContent).toContain(t("modifiers.in_use.choice")),
+  );
+  expect(form.open).toBe(true);
+});
 it("identifies a retained-order dependency and offers deactivation", async () => {
   const { t } = await import("../i18n/t.js");
   const client = api({
