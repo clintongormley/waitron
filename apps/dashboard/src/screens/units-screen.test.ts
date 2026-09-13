@@ -1,6 +1,8 @@
 import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DashboardApi, ProductUsingUnit, Unit } from "../api/client.js";
+import { codeMessage } from "../i18n/codes.js";
+import { t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import type { UnitsScreen } from "./units-screen.js";
 import "./units-screen.js";
@@ -320,6 +322,34 @@ describe("units-screen", () => {
     await flush(el);
     expect(reassignProductsUnit).toHaveBeenCalledWith("u1", ["p1"], "u2");
     expect((productTable.rows as ProductUsingUnit[]).map((product) => product.id)).toEqual(["p2"]);
+  });
+
+  // Nothing failed to LOAD here, so the banner has to carry the refusal's own sentence — the
+  // generic load message would be a lie about what went wrong.
+  it("shows the refusal's own message when a bulk reassignment fails", async () => {
+    const el = await mount(
+      stubApi({
+        deleteUnit: vi
+          .fn()
+          .mockRejectedValue({ code: "unit.in_use", params: { products: inUseProducts } }),
+        reassignProductsUnit: vi.fn().mockRejectedValue({ code: "unit.not_found" }),
+      }),
+    );
+    const dialog = await openInUseModal(el);
+    dialog
+      .querySelector("wt-data-table")!
+      .shadowRoot!.querySelector<HTMLInputElement>("[data-test=select-p1]")!
+      .click();
+    await el.updateComplete;
+    const select = dialog.querySelector<HTMLSelectElement>("[data-test=reassign-unit]")!;
+    select.value = "u2";
+    select.dispatchEvent(new Event("change"));
+    await el.updateComplete;
+    dialog.querySelector<HTMLElement>("[data-test=change-unit]")!.click();
+    await flush(el);
+    const alert = el.shadowRoot!.querySelector("[role=alert]")!;
+    expect(alert.textContent).toContain(codeMessage("unit.not_found"));
+    expect(alert.textContent).not.toContain(t("units.load_error"));
   });
 
   it("closes the in-use modal without deleting when Cancel is clicked", async () => {

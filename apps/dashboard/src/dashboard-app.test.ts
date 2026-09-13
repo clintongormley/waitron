@@ -1503,6 +1503,33 @@ describe("dashboard-app", () => {
     expect(location.pathname).toContain("/manage/catalogue/product/p1");
   });
 
+  // The jump is an ordinary screen change, so it clears the previous screen's `view` segment the
+  // way every nav click does — otherwise a units URL reached by deep link carries its `view` into
+  // the catalogue URL, where it means something else entirely.
+  it("clears a stale view segment when opening a product's editor from the units modal", async () => {
+    history.replaceState(null, "", "/manage/units/view/detail");
+    const api = stubApi({
+      listStaff: vi.fn().mockResolvedValue([]),
+      listUnits: vi.fn().mockResolvedValue([{ id: "u1", name: { es: "kg" }, precision: 0 }]),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    expect(units(el)).toBeTruthy();
+    // Without this the test passes even if the units URL never carries a `view` segment at all,
+    // which is the very thing the navigation is supposed to clear.
+    expect(location.pathname).toBe("/manage/units/view/detail");
+
+    units(el)!.dispatchEvent(
+      new CustomEvent("wt-edit-product", {
+        detail: { productId: "p1" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await flush(el);
+    expect(location.pathname).toBe("/manage/catalogue/product/p1");
+  });
+
   it("navigates between the staff and catalogue screens", async () => {
     const api = stubApi({ listStaff: vi.fn().mockResolvedValue([]) });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });

@@ -376,9 +376,9 @@ export class UnitsScreen extends LitElement {
         this.error
           ? html`<div class="error" role="alert">
               ${
-                this.editorOpen && this.error.code
-                  ? codeMessage(this.error.code)
-                  : t("units.load_error")
+                // A failure carrying a domain code states itself; only a codeless failure (a
+                // network drop during the initial load) falls back to the load message.
+                this.error.code ? codeMessage(this.error.code) : t("units.load_error")
               }
             </div>`
           : nothing
@@ -427,6 +427,7 @@ export class UnitsScreen extends LitElement {
                   <div class="reassign">
                     <select
                       data-test="reassign-unit"
+                      name="reassign-unit"
                       aria-label=${t("units.change_unit")}
                       .value=${this.reassignTarget}
                       @change=${(event: Event) => {

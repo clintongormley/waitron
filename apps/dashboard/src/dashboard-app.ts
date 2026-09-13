@@ -1145,9 +1145,11 @@ export class DashboardApp extends LitElement {
     event.stopPropagation();
     const screen = this.#permittedScreen("catalogue");
     if (screen !== "catalogue") return;
-    this.screen = screen;
-    this.#url.write({ dashboard: "catalogue", product: event.detail.productId });
-    this.drawerOpen = false;
+    // An ordinary screen change (so the previous screen's `view` segment is cleared), then the
+    // product on top of it — `write` merges into what the URL already holds. The second write
+    // REPLACES, so the jump is a single Back-button stop rather than two.
+    this.#selectScreen(screen);
+    this.#url.write({ product: event.detail.productId }, true);
   }
 
   /** A URL selects a destination only within the authenticated person's visible navigation — the core
