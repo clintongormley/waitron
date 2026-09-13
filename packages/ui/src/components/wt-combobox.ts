@@ -68,18 +68,69 @@ export class WtCombobox extends LitElement {
         color: var(--wt-color-text);
         box-shadow: var(--wt-shadow-2);
       }
+
+      .search {
+        width: 100%;
+        min-height: var(--wt-tap-min);
+        margin-bottom: var(--wt-space-2);
+        padding: var(--wt-space-2) var(--wt-space-3);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-full);
+        background: var(--wt-color-bg);
+        color: var(--wt-color-text);
+        font: inherit;
+      }
+
+      .list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        max-height: min(60vh, calc(var(--wt-tap-min) * 6));
+        overflow-y: auto;
+      }
+
+      .option {
+        display: flex;
+        align-items: center;
+        gap: var(--wt-space-2);
+        min-height: var(--wt-tap-min);
+        padding: var(--wt-space-2) var(--wt-space-3);
+        border-radius: var(--wt-radius-md);
+        cursor: pointer;
+      }
+
+      .empty {
+        padding: var(--wt-space-2) var(--wt-space-3);
+        color: var(--wt-color-text-muted);
+      }
     `,
   ];
 
   @property() label = "";
   @property({ type: Boolean, reflect: true }) disabled = false;
+  @property({ attribute: false }) options: ComboboxOption[] = [];
+  @property() noResultsLabel = "No results";
+  @property() searchPlaceholder = "Search";
 
   @state() private expanded = false;
+  @state() private search = "";
 
   @query(".trigger") private trigger!: HTMLButtonElement;
   @query("[popover]") private popup!: HTMLElement;
+  @query(".search") private searchInput!: HTMLInputElement;
 
   private readonly labelId = uniqueId("wt-combobox-label");
+  private readonly listboxId = uniqueId("wt-combobox-listbox");
+
+  private get filteredOptions(): ComboboxOption[] {
+    const query = this.search.trim().toLowerCase();
+    if (!query) return this.options;
+    return this.options.filter((option) => option.label.toLowerCase().includes(query));
+  }
+
+  private onSearchInput(event: Event): void {
+    this.search = (event.target as HTMLInputElement).value;
+  }
 
   private onTriggerClick(event: MouseEvent): void {
     event.preventDefault();
@@ -87,9 +138,11 @@ export class WtCombobox extends LitElement {
     if (this.popup.matches(":popover-open")) {
       this.popup.hidePopover();
     } else {
+      this.search = "";
       // Opening synchronously makes its dimensions available before the first paint.
       this.popup.showPopover();
       this.positionPopup();
+      this.searchInput.focus();
     }
   }
 
@@ -139,7 +192,27 @@ export class WtCombobox extends LitElement {
         <span class="value"></span>
         <wt-icon class="chevron" name="chevron-down"></wt-icon>
       </button>
-      <div id="panel" popover @toggle=${this.onToggle} @keydown=${this.onKeydown}></div>
+      <div id="panel" popover @toggle=${this.onToggle} @keydown=${this.onKeydown}>
+        <input
+          class="search"
+          type="text"
+          placeholder=${this.searchPlaceholder}
+          aria-label=${this.label || this.searchPlaceholder}
+          aria-controls=${this.listboxId}
+          .value=${this.search}
+          @input=${this.onSearchInput}
+        />
+        <ul id=${this.listboxId} class="list" role="listbox">
+          ${this.filteredOptions.map(
+            (option) => html`<li role="option" aria-selected="false">${option.label}</li>`,
+          )}
+          ${
+            this.filteredOptions.length === 0
+              ? html`<li class="empty" role="presentation">${this.noResultsLabel}</li>`
+              : nothing
+          }
+        </ul>
+      </div>
     `;
   }
 }

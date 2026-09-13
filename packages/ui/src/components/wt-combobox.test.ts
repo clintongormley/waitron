@@ -67,3 +67,76 @@ test("meets the tap target and paints from the theme tokens", async () => {
   expect(trigger.getBoundingClientRect().height).toBeGreaterThanOrEqual(52);
   expect(getComputedStyle(trigger).borderColor).toBe("rgb(1, 2, 3)");
 });
+
+const TAGS = [
+  { value: "gluten-free", label: "Gluten-free" },
+  { value: "vegan", label: "Vegan" },
+  { value: "vegetarian", label: "Vegetarian" },
+];
+
+async function mountWithOptions() {
+  const mounted = await mountCombobox();
+  mounted.el.options = TAGS;
+  await mounted.el.updateComplete;
+  return mounted;
+}
+
+test("lists every option when the panel opens", async () => {
+  const { el, trigger } = await mountWithOptions();
+  await userEvent.click(trigger);
+  const rows = el.shadowRoot!.querySelectorAll('[role="option"]');
+  expect([...rows].map((row) => row.textContent?.trim())).toEqual([
+    "Gluten-free",
+    "Vegan",
+    "Vegetarian",
+  ]);
+});
+
+test("filters the option list as the search box is typed into", async () => {
+  const { el, trigger } = await mountWithOptions();
+  await userEvent.click(trigger);
+  const search = el.shadowRoot!.querySelector<HTMLInputElement>(".search")!;
+  await userEvent.type(search, "veg");
+  const rows = el.shadowRoot!.querySelectorAll('[role="option"]');
+  expect([...rows].map((row) => row.textContent?.trim())).toEqual(["Vegan", "Vegetarian"]);
+});
+
+test("filtering is case-insensitive", async () => {
+  const { el, trigger } = await mountWithOptions();
+  await userEvent.click(trigger);
+  const search = el.shadowRoot!.querySelector<HTMLInputElement>(".search")!;
+  await userEvent.type(search, "VEG");
+  expect(el.shadowRoot!.querySelectorAll('[role="option"]')).toHaveLength(2);
+});
+
+test("shows noResultsLabel when nothing matches and allowAdd is off", async () => {
+  const { el, trigger } = await mountWithOptions();
+  el.noResultsLabel = "Nothing found";
+  await el.updateComplete;
+  await userEvent.click(trigger);
+  const search = el.shadowRoot!.querySelector<HTMLInputElement>(".search")!;
+  await userEvent.type(search, "zzz");
+  expect(el.shadowRoot!.querySelector(".empty")?.textContent).toBe("Nothing found");
+  expect(el.shadowRoot!.querySelectorAll('[role="option"]')).toHaveLength(0);
+});
+
+test("focuses the search box on open, and Escape returns focus to the trigger from there", async () => {
+  const { el, trigger } = await mountWithOptions();
+  await userEvent.click(trigger);
+  const search = el.shadowRoot!.querySelector<HTMLInputElement>(".search")!;
+  expect(el.shadowRoot!.activeElement).toBe(search);
+  await userEvent.type(search, "veg");
+  await userEvent.keyboard("{Escape}");
+  expect(el.shadowRoot!.activeElement).toBe(trigger);
+});
+
+test("resets the search box each time the panel is reopened", async () => {
+  const { el, trigger } = await mountWithOptions();
+  await userEvent.click(trigger);
+  const search = el.shadowRoot!.querySelector<HTMLInputElement>(".search")!;
+  await userEvent.type(search, "veg");
+  await userEvent.keyboard("{Escape}");
+  await userEvent.click(trigger);
+  expect(el.shadowRoot!.querySelector<HTMLInputElement>(".search")!.value).toBe("");
+  expect(el.shadowRoot!.querySelectorAll('[role="option"]')).toHaveLength(3);
+});
