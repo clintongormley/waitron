@@ -151,7 +151,8 @@ Still to do, roughly in the order a venue meets them. As each one lands, add the
    Products overhaul is specified as four parallel builds: Units, Modifiers, Categories and Products.
    Categories has landed (#340, see below), with [integration notes](developers/product-categories.md),
    and Modifiers has landed (#341, see below), with its
-   [integration contract](developers/modifiers.md). Units is implemented; Products still has its
+   [integration contract](developers/modifiers.md). Units has landed too (#342, see below). Products
+   is the only one left, and still has just its
    [spec and plan](superpowers/specs/2026-09-12-product-editor-design.md). See the
    [shared design](superpowers/specs/2026-09-12-products-overhaul-design.md) for the branch contracts.
    Products still owns integrating the three supporting sections into the replacement product editor;
@@ -286,6 +287,49 @@ What it left open:
   comparing saved answers by value rather than by their order in the payload. The browser, receipt and
   kitchen-rendering evidence comes from the build's own focused tests plus CI's package suites, not
   from a second pair of eyes. Worth knowing before anyone treats those paths as double-checked.
+
+**Product selling units — LANDED #342 (2026-09-13).** You now say what you actually sell a product
+by — each, grams, kilograms, millilitres, litres, or a unit you invent yourself — and how many decimal
+places its quantity may have (0 to 3, where 0 means whole numbers only). A price is always a price per
+that unit: choosing grams after pricing per kilo does not convert anything, it just means the number
+now reads as a price per gram. Units get their own dashboard page, and a new venue is seeded with the
+six above; editing or deleting a seeded unit survives provisioning running again, because a durable
+per-tenant marker records that seeding already happened. Deleting a unit is refused while any product
+uses it, including products that are switched off, and the refusal names the products. Renaming a unit
+or changing its precision is allowed while it is in use: new quantities follow the new rule and
+quantities already recorded keep the unit name and precision they were sold under, frozen onto the
+order line and carried through park and resume, the kitchen screen, the receipt and any reprint.
+[Design](superpowers/specs/2026-09-12-product-units-design.md),
+[plan](superpowers/plans/2026-09-12-product-units.md).
+
+What it left open:
+
+- **This is the only one of the three supporting sections that wrote no integration guide, and its
+  plan carries no receipts.** Categories and Modifiers each left a `docs/developers/` document telling
+  the Products build which API shapes and reusable widgets to compose against, and each recorded the
+  commands it ran in its plan. `docs/superpowers/plans/2026-09-12-product-units.md` was last edited by
+  the Categories merge, so it is still the plan as written and not the plan as carried out — the
+  units build committed no developer doc and no receipts at all. **Next action:** whoever starts
+  Products writes the equivalent of `developers/units.md` from the code first (the shapes are in
+  `packages/catalogue/src/units.ts` and `unit-validation.ts`, the widget is
+  `apps/dashboard/src/widgets/unit-form.ts`), because Products has to integrate against it either way
+  and reconstructing it later from a merged diff is the expensive version of this task.
+- **The old `pricing_unit` column survives on products as a compatibility field, and it is derived,
+  not chosen.** Nothing in production code branches on it any more — the till now decides whether to
+  ask for a quantity from the unit's own precision and scale mapping — but the column and its
+  `each`/`weight` wire field are still written, and are filled in from whether the unit has a scale
+  mapping. That derivation is lossy: litres and millilitres have no scale mapping, so a product sold
+  by the litre records `each` in the legacy column even though its quantities are fractional. Anything
+  that later reads that column as "can this be a fraction?" would be wrong. **Next action:** its
+  removal is already listed under the #297 departments-and-menus row in A9; whoever does that should
+  also clean up the demo scripts and tests that still use `pricingUnit` to pick a product out of a
+  list.
+- **Only kilograms, grams and milligrams can ever come from a scale.** The unit table's scale mapping
+  is a fixed list of those three enforced by a database check, deliberately kept separate from the
+  editable translated name so that renaming "kg" to something else cannot change how hardware is read.
+  The consequence is that a unit you invent yourself, and the volume units, can never be filled in by
+  weighing — the quantity is typed. That is the intended design, not an oversight, but it is the kind
+  of boundary somebody will otherwise rediscover by trying it.
 
 ### A1. Checking a fiscal record before it is written — LANDED #331 (2026-09-12)
 
