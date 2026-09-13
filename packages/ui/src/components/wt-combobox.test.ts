@@ -281,7 +281,7 @@ test("the listbox is aria-multiselectable only in multiple mode", async () => {
   ).toBe("true");
 });
 
-test("multi-select renders a checkbox per option reflecting its selected state", async () => {
+test("multi-select renders a selection indicator per option reflecting its selected state", async () => {
   const { el, trigger } = await mountCombobox(
     '<wt-combobox label="Dietary tags" multiple></wt-combobox>',
   );
@@ -289,8 +289,27 @@ test("multi-select renders a checkbox per option reflecting its selected state",
   el.values = ["vegan"];
   await el.updateComplete;
   await userEvent.click(trigger);
-  const boxes = el.shadowRoot!.querySelectorAll<HTMLInputElement>('.option input[type="checkbox"]');
-  expect([...boxes].map((box) => box.checked)).toEqual([false, true, false]);
+  const marks = el.shadowRoot!.querySelectorAll<HTMLElement>(".option .check");
+  expect([...marks].map((mark) => mark.classList.contains("checked"))).toEqual([
+    false,
+    true,
+    false,
+  ]);
+});
+
+test("the multi-select indicator is decorative, not a nested interactive control", async () => {
+  const { el, trigger } = await mountCombobox(
+    '<wt-combobox label="Dietary tags" multiple></wt-combobox>',
+  );
+  el.options = TAGS;
+  await el.updateComplete;
+  await userEvent.click(trigger);
+  expect(el.shadowRoot!.querySelectorAll('.option input, .option [role="checkbox"]')).toHaveLength(
+    0,
+  );
+  const mark = el.shadowRoot!.querySelector<HTMLElement>(".option .check")!;
+  expect(mark.getAttribute("aria-hidden")).toBe("true");
+  expect(mark.hasAttribute("tabindex")).toBe(false);
 });
 
 test("multi-select shows the single label for one selection and countLabel for more than one", async () => {

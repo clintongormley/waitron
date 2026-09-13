@@ -116,10 +116,31 @@ export class WtCombobox extends LitElement {
         outline-offset: calc(-1 * var(--wt-focus-offset));
       }
 
-      /* The row owns the click; the checkbox is a picture of the row's selected state. */
-      .option input[type="checkbox"] {
-        pointer-events: none;
-        accent-color: var(--wt-color-primary);
+      /* A picture of the row's own aria-selected, never a control: an interactive checkbox inside
+         role="option" is an axe nested-interactive violation, which aria-hidden does not neutralise. */
+      .check {
+        flex: none;
+        width: var(--wt-font-size-md);
+        height: var(--wt-font-size-md);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-sm);
+        background: var(--wt-color-surface);
+      }
+
+      .check.checked {
+        border-color: var(--wt-color-primary);
+        background: var(--wt-color-primary);
+      }
+
+      .check.checked::after {
+        content: "";
+        display: block;
+        width: 30%;
+        height: 55%;
+        margin: 8% auto;
+        border-inline-end: 1px solid var(--wt-color-on-primary);
+        border-block-end: 1px solid var(--wt-color-on-primary);
+        transform: rotate(45deg);
       }
 
       .empty {
@@ -398,12 +419,10 @@ export class WtCombobox extends LitElement {
               >
                 ${
                   this.multiple
-                    ? html`<input
-                        type="checkbox"
-                        tabindex="-1"
+                    ? html`<span
+                        class=${this.isSelected(option.value) ? "check checked" : "check"}
                         aria-hidden="true"
-                        .checked=${this.isSelected(option.value)}
-                      />`
+                      ></span>`
                     : nothing
                 }
                 <span>${option.label}</span>
