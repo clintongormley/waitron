@@ -30,8 +30,7 @@ export class SetupConfigurationPreviewScreen extends LitElement {
   @property({ attribute: false }) preview?: ConfigurationPreview;
 
   override render(): TemplateResult {
-    if (this.preview === undefined)
-      return html`<wt-card><h1>Review prepared configuration</h1></wt-card>`;
+    if (this.preview === undefined) return html`<h1>Review prepared configuration</h1>`;
     return html`<wt-card raised>
       <h1>Review prepared configuration</h1>
       <p>

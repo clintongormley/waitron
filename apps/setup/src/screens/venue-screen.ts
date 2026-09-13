@@ -11,7 +11,6 @@ import {
 } from "@waitron/country";
 import { VENUE_SETUP_COUNTRY_PACKS, getVenueSetupCountryPack } from "@waitron/country-packs";
 import "@waitron/ui/src/components/wt-button.js";
-import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
 import "@waitron/ui/src/components/wt-form-error-summary.js";
@@ -562,152 +561,141 @@ export class SetupVenueScreen extends LitElement {
     const area = this.#area(pack);
     const jurisdiction = this.#jurisdiction(pack, area);
     return html`
-      <wt-card>
-        <h1>Your shop</h1>
-        <p>
-          ${this.#demo ? "Name your demo location and enter its address. Waitron supplies a made-up business identity and invoice settings; you can review them before setup." : "Enter the business that issues your invoices and the address of this location."}
-        </p>
+      <h1>Your shop</h1>
+      <p>
+        ${this.#demo ? "Name your demo location and enter its address. Waitron supplies a made-up business identity and invoice settings; you can review them before setup." : "Enter the business that issues your invoices and the address of this location."}
+      </p>
 
-        ${
-          this.#demo && this.values.operationDescription === ""
-            ? html`<p role="alert" tabindex="-1" data-test="defaults-error">
-                  Demo invoice settings have not loaded yet.
-                </p>
-                <wt-button
-                  data-test="retry-defaults"
-                  @click=${() => this.dispatchEvent(new CustomEvent("setup-defaults-requested", { bubbles: true, composed: true }))}
-                  >Try loading settings again</wt-button
-                >`
-            : nothing
-        }
-        <h2>${this.#demo ? "Location" : "Business"}</h2>
-        <label class="field select">
-          <span>Country * ${this.#help("country")}</span>
-          <select
-            name="country"
-            required
-            data-test="country"
-            ?invalid=${this.invalid.has("country")}
-            aria-invalid=${this.invalid.has("country") ? "true" : "false"}
-            aria-describedby="country-error"
-            @change=${(event: Event) => this.#onCountry(event)}
-          >
-            ${VENUE_SETUP_COUNTRY_PACKS.map(
-              (country) =>
-                html`<option
-                  value=${country.countryCode}
-                  .selected=${country.countryCode === pack?.countryCode}
-                >
-                  ${country.name}
-                </option>`,
-            )}
-          </select>
-          <span class="error" id="country-error">${this.#fieldError("country")}</span>
-        </label>
-        ${this.#demo ? nothing : html`${this.#field(pack?.taxIdentifier?.label ?? "Tax ID", "taxId")}${this.#field("Legal name", "legalName")}`}
-        ${this.#demo ? nothing : html`<h2>Location</h2>`} ${this.#field("Location name", "name")}
-        <p data-test="fiscalTerritory">
-          Fiscal territory: ${jurisdiction?.id ?? "Select province"}
-        </p>
-        ${
-          this.#demo
-            ? nothing
-            : html`<fieldset
-                  class="locales"
-                  tabindex="-1"
-                  ?invalid=${this.invalid.has("invoiceLocales")}
-                  aria-invalid=${this.invalid.has("invoiceLocales") ? "true" : "false"}
-                  aria-describedby=${this.invalid.has("invoiceLocales") ? "invoice-locales-error" : nothing}
-                >
-                  <legend>
-                    Invoice languages (pick one or two) *
-                    <wt-help-tooltip aria-label="Help with invoice languages"
-                      >Choose the languages printed on invoices. The province suggests the first
-                      language; the operation description is kept separately.</wt-help-tooltip
-                    >
-                  </legend>
-                  ${(pack?.invoiceLocales ?? []).map(
-                    (locale) =>
-                      html`<label class="locale-option">
-                        <input
-                          type="checkbox"
-                          name="invoiceLocales"
-                          value=${locale}
-                          data-test=${`locale-${locale}`}
-                          .checked=${this.invoiceLocales.includes(locale)}
-                          @change=${(e: Event) => this.#onLocaleToggle(locale, e)}
-                        />
-                        ${LOCALE_LABELS[locale] ?? locale}
-                      </label>`,
-                  )}
-                  ${this.invalid.has("invoiceLocales") ? html`<p class="error" id="invoice-locales-error">${this.#fieldError("invoiceLocales")}</p>` : nothing}
-                </fieldset>
-                ${this.#field("Invoice operation description", "operationDescription")}`
-        }
-        ${this.#field("Address line 1", "addressLine1")}
-        ${this.#field("Address line 2 (optional)", "addressLine2")}
-        ${this.#field("Postal code", "postalCode")} ${this.#field("City", "city")}
-        ${
-          pack !== undefined && pack.administrativeAreas.length > 0
-            ? html`<label class="field select">
-                <span>Province * ${this.#help("province")}</span>
-                <select
-                  name="province"
-                  required
-                  aria-describedby="province-error"
-                  data-test="province"
-                  ?invalid=${this.invalid.has("province")}
-                  aria-invalid=${this.invalid.has("province") ? "true" : "false"}
-                  @change=${(event: Event) => this.#onProvince(event)}
-                >
-                  <option value="" .selected=${area === undefined}>Select province</option>
-                  ${pack.administrativeAreas.map(
-                    (candidate) =>
-                      html`<option
-                        value=${candidate.code}
-                        .selected=${candidate.code === area?.code}
-                      >
-                        ${candidate.name}
-                      </option>`,
-                  )}
-                </select>
-                <span class="error" id="province-error">${this.#fieldError("province")}</span>
-              </label>`
-            : this.#field("Province / region", "province")
-        }
-        <p data-test="timeZone">Time zone: ${area?.timeZone ?? pack?.defaultTimeZone ?? "—"}</p>
-        ${
-          this.#demo
-            ? nothing
-            : html`${this.#field("Business day cutover", "dayCutover", "time")}
+      ${
+        this.#demo && this.values.operationDescription === ""
+          ? html`<p role="alert" tabindex="-1" data-test="defaults-error">
+                Demo invoice settings have not loaded yet.
+              </p>
+              <wt-button
+                data-test="retry-defaults"
+                @click=${() => this.dispatchEvent(new CustomEvent("setup-defaults-requested", { bubbles: true, composed: true }))}
+                >Try loading settings again</wt-button
+              >`
+          : nothing
+      }
+      <h2>${this.#demo ? "Location" : "Business"}</h2>
+      <label class="field select">
+        <span>Country * ${this.#help("country")}</span>
+        <select
+          name="country"
+          required
+          data-test="country"
+          ?invalid=${this.invalid.has("country")}
+          aria-invalid=${this.invalid.has("country") ? "true" : "false"}
+          aria-describedby="country-error"
+          @change=${(event: Event) => this.#onCountry(event)}
+        >
+          ${VENUE_SETUP_COUNTRY_PACKS.map(
+            (country) =>
+              html`<option
+                value=${country.countryCode}
+                .selected=${country.countryCode === pack?.countryCode}
+              >
+                ${country.name}
+              </option>`,
+          )}
+        </select>
+        <span class="error" id="country-error">${this.#fieldError("country")}</span>
+      </label>
+      ${this.#demo ? nothing : html`${this.#field(pack?.taxIdentifier?.label ?? "Tax ID", "taxId")}${this.#field("Legal name", "legalName")}`}
+      ${this.#demo ? nothing : html`<h2>Location</h2>`} ${this.#field("Location name", "name")}
+      <p data-test="fiscalTerritory">Fiscal territory: ${jurisdiction?.id ?? "Select province"}</p>
+      ${
+        this.#demo
+          ? nothing
+          : html`<fieldset
+                class="locales"
+                tabindex="-1"
+                ?invalid=${this.invalid.has("invoiceLocales")}
+                aria-invalid=${this.invalid.has("invoiceLocales") ? "true" : "false"}
+                aria-describedby=${this.invalid.has("invoiceLocales") ? "invoice-locales-error" : nothing}
+              >
+                <legend>
+                  Invoice languages (pick one or two) *
+                  <wt-help-tooltip aria-label="Help with invoice languages"
+                    >Choose the languages printed on invoices. The province suggests the first
+                    language; the operation description is kept separately.</wt-help-tooltip
+                  >
+                </legend>
+                ${(pack?.invoiceLocales ?? []).map(
+                  (locale) =>
+                    html`<label class="locale-option">
+                      <input
+                        type="checkbox"
+                        name="invoiceLocales"
+                        value=${locale}
+                        data-test=${`locale-${locale}`}
+                        .checked=${this.invoiceLocales.includes(locale)}
+                        @change=${(e: Event) => this.#onLocaleToggle(locale, e)}
+                      />
+                      ${LOCALE_LABELS[locale] ?? locale}
+                    </label>`,
+                )}
+                ${this.invalid.has("invoiceLocales") ? html`<p class="error" id="invoice-locales-error">${this.#fieldError("invoiceLocales")}</p>` : nothing}
+              </fieldset>
+              ${this.#field("Invoice operation description", "operationDescription")}`
+      }
+      ${this.#field("Address line 1", "addressLine1")}
+      ${this.#field("Address line 2 (optional)", "addressLine2")}
+      ${this.#field("Postal code", "postalCode")} ${this.#field("City", "city")}
+      ${
+        pack !== undefined && pack.administrativeAreas.length > 0
+          ? html`<label class="field select">
+              <span>Province * ${this.#help("province")}</span>
+              <select
+                name="province"
+                required
+                aria-describedby="province-error"
+                data-test="province"
+                ?invalid=${this.invalid.has("province")}
+                aria-invalid=${this.invalid.has("province") ? "true" : "false"}
+                @change=${(event: Event) => this.#onProvince(event)}
+              >
+                <option value="" .selected=${area === undefined}>Select province</option>
+                ${pack.administrativeAreas.map(
+                  (candidate) =>
+                    html`<option value=${candidate.code} .selected=${candidate.code === area?.code}>
+                      ${candidate.name}
+                    </option>`,
+                )}
+              </select>
+              <span class="error" id="province-error">${this.#fieldError("province")}</span>
+            </label>`
+          : this.#field("Province / region", "province")
+      }
+      <p data-test="timeZone">Time zone: ${area?.timeZone ?? pack?.defaultTimeZone ?? "—"}</p>
+      ${
+        this.#demo
+          ? nothing
+          : html`${this.#field("Business day cutover", "dayCutover", "time")}
 
-                <h2>Invoicing</h2>
-                ${this.#field("Till name", "tillName")}
-                ${this.#field("Invoice series code", "seriesCode")}
-                ${this.#field("Rectificative series code", "rectificativeSeriesCode")}`
-        }
-        ${
-          this.showError
-            ? html`<wt-form-error-summary
-                data-test="error"
-                heading="There is a problem with this form"
-                .errors=${[...this.invalid].map((key) => this.#fieldError(key))}
-              ></wt-form-error-summary>`
-            : this.errorMessage === undefined
-              ? nothing
-              : html`<p class="error" role="alert" data-test="server-error">
-                  ${this.errorMessage}
-                </p>`
-        }
-        <wt-form-actions>
-          <wt-button variant="ghost" slot="cancel" data-test="back" @click=${() => this.#back()}
-            >Back</wt-button
-          >
-          <wt-button variant="primary" data-test="next" @click=${() => this.#next()}
-            >Next</wt-button
-          >
-        </wt-form-actions>
-      </wt-card>
+              <h2>Invoicing</h2>
+              ${this.#field("Till name", "tillName")}
+              ${this.#field("Invoice series code", "seriesCode")}
+              ${this.#field("Rectificative series code", "rectificativeSeriesCode")}`
+      }
+      ${
+        this.showError
+          ? html`<wt-form-error-summary
+              data-test="error"
+              heading="There is a problem with this form"
+              .errors=${[...this.invalid].map((key) => this.#fieldError(key))}
+            ></wt-form-error-summary>`
+          : this.errorMessage === undefined
+            ? nothing
+            : html`<p class="error" role="alert" data-test="server-error">${this.errorMessage}</p>`
+      }
+      <wt-form-actions>
+        <wt-button variant="ghost" slot="cancel" data-test="back" @click=${() => this.#back()}
+          >Back</wt-button
+        >
+        <wt-button variant="primary" data-test="next" @click=${() => this.#next()}>Next</wt-button>
+      </wt-form-actions>
     `;
   }
 }

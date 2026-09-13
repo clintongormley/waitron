@@ -2,7 +2,6 @@ import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { submitOnEnter, baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
-import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
 import "@waitron/ui/src/components/wt-form-error-summary.js";
@@ -156,29 +155,25 @@ export class SetupAdminScreen extends LitElement {
 
   override render(): TemplateResult {
     return html`
-      <wt-card>
-        <h1>The first operator</h1>
-        <p>Create the account that manages this server. You can add more people later.</p>
-        ${this.#field("Display name", "displayName")} ${this.#field("Email", "email", "email")}
-        ${this.#field("Password", "password", "password")} ${this.#field("PIN", "pin", "password")}
-        ${
-          this.showError
-            ? html`<wt-form-error-summary
-                data-test="error"
-                heading="There is a problem with this form"
-                .errors=${[...this.invalid].map((key) => `Enter your ${{ displayName: "display name", email: "email", password: "password", pin: "PIN" }[key]}.`)}
-              ></wt-form-error-summary>`
-            : nothing
-        }
-        <wt-form-actions>
-          <wt-button variant="ghost" slot="cancel" data-test="back" @click=${() => this.#back()}
-            >Back</wt-button
-          >
-          <wt-button variant="primary" data-test="next" @click=${() => this.#next()}
-            >Next</wt-button
-          >
-        </wt-form-actions>
-      </wt-card>
+      <h1>The first operator</h1>
+      <p>Create the account that manages this server. You can add more people later.</p>
+      ${this.#field("Display name", "displayName")} ${this.#field("Email", "email", "email")}
+      ${this.#field("Password", "password", "password")} ${this.#field("PIN", "pin", "password")}
+      ${
+        this.showError
+          ? html`<wt-form-error-summary
+              data-test="error"
+              heading="There is a problem with this form"
+              .errors=${[...this.invalid].map((key) => `Enter your ${{ displayName: "display name", email: "email", password: "password", pin: "PIN" }[key]}.`)}
+            ></wt-form-error-summary>`
+          : nothing
+      }
+      <wt-form-actions>
+        <wt-button variant="ghost" slot="cancel" data-test="back" @click=${() => this.#back()}
+          >Back</wt-button
+        >
+        <wt-button variant="primary" data-test="next" @click=${() => this.#next()}>Next</wt-button>
+      </wt-form-actions>
     `;
   }
 }

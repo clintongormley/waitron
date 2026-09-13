@@ -2,7 +2,6 @@ import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
-import "@waitron/ui/src/components/wt-card.js";
 import { helpLinkStyles, actionsStyles, errorStyles, statusStyles } from "../form-styles.js";
 import { dispatchProvisionRequested } from "../events.js";
 
@@ -62,44 +61,38 @@ export class SetupProvisioningScreen extends LitElement {
   override render(): TemplateResult {
     if (this.message !== undefined) {
       return html`
-        <wt-card>
-          <h1>Provisioning</h1>
-          <p class="error" role="alert" data-test="error">${this.message}</p>
-          <p>
-            If the browser shows a certificate warning, or this page will not connect,
-            <a href="/setup/trust" target="_blank" rel="noopener" data-test="trust-help"
-              >open certificate and connection help</a
-            >
-            in a new tab. Your entries stay in this tab until you close or reload it.
-          </p>
-          ${
-            this.canRetry
-              ? html`<div class="actions">
-                  <wt-button variant="primary" data-test="retry" @click=${() => this.#retry()}
-                    >Try again</wt-button
+        <h1>Provisioning</h1>
+        <p class="error" role="alert" data-test="error">${this.message}</p>
+        <p>
+          If the browser shows a certificate warning, or this page will not connect,
+          <a href="/setup/trust" target="_blank" rel="noopener" data-test="trust-help"
+            >open certificate and connection help</a
+          >
+          in a new tab. Your entries stay in this tab until you close or reload it.
+        </p>
+        ${
+          this.canRetry
+            ? html`<div class="actions">
+                <wt-button variant="primary" data-test="retry" @click=${() => this.#retry()}
+                  >Try again</wt-button
+                >
+              </div>`
+            : this.reloadLabel === undefined
+              ? nothing
+              : html`<div class="actions">
+                  <wt-button variant="primary" data-test="reload" @click=${() => this.reload()}
+                    >${this.reloadLabel}</wt-button
                   >
                 </div>`
-              : this.reloadLabel === undefined
-                ? nothing
-                : html`<div class="actions">
-                    <wt-button variant="primary" data-test="reload" @click=${() => this.reload()}
-                      >${this.reloadLabel}</wt-button
-                    >
-                  </div>`
-          }
-        </wt-card>
+        }
       `;
     }
     return html`
-      <wt-card>
-        <h1>Provisioning this server</h1>
-        <p class="status" data-test="status">
-          Provisioning… this can take a moment. Keep this page open.
-        </p>
-        <wt-button variant="primary" data-test="provision" ?disabled=${true}
-          >Provisioning…</wt-button
-        >
-      </wt-card>
+      <h1>Provisioning this server</h1>
+      <p class="status" data-test="status">
+        Provisioning… this can take a moment. Keep this page open.
+      </p>
+      <wt-button variant="primary" data-test="provision" ?disabled=${true}>Provisioning…</wt-button>
     `;
   }
 }

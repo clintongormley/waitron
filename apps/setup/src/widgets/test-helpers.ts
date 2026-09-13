@@ -22,9 +22,11 @@ export interface Mounted<T extends HTMLElement> {
 
 /**
  * Mounts a custom element `tag` with `props` assigned before connection, inside a fresh themed
- * host, and waits for its first render. Pass `theme` to pin `data-theme` (and paint the host's
- * `--wt-color-bg`, as a real deployment does) so a color-contrast a11y check means what it means in
- * the app; omit it to render in whatever theme the environment resolves to.
+ * host, and waits for its first render. The host is always painted `--wt-color-surface-raised`,
+ * matching the `<wt-modal>` every wizard screen now renders inside (`setup-app.ts:703`) rather than
+ * the page background behind it, so a color-contrast a11y check means what it means in the app. Pass
+ * `theme` to additionally pin `data-theme`; omit it to render in whatever theme the environment
+ * resolves to.
  */
 export async function mountWidget<T extends HTMLElement>(
   tag: string,
@@ -35,7 +37,7 @@ export async function mountWidget<T extends HTMLElement>(
   document.body.appendChild(host);
   applyTokens(host);
   if (theme) host.setAttribute("data-theme", theme);
-  host.style.background = "var(--wt-color-bg)";
+  host.style.background = "var(--wt-color-surface-raised)";
   paintCanvas(host);
   mounted.push(host);
 
@@ -47,16 +49,14 @@ export async function mountWidget<T extends HTMLElement>(
 }
 
 /**
- * Paints the page CANVAS (`<body>` and `<html>`) with `host`'s resolved theme background, mirroring
- * what a real deployment does: `index.html` sets `body { background: var(--wt-color-bg) }` under
- * `applyTokens(document.documentElement)`, so in the app every element ultimately sits on the theme's
- * background. The harness themes only the nested `host` `<div>`, which leaves the page's default WHITE
- * canvas behind it — and axe-core composites the background of any element it cannot trace back to
- * `host` (e.g. one pushed off-viewport by a wide header, where `elementsFromPoint` returns nothing)
- * against that canvas. On white that reads as a false color-contrast failure for the dark theme's
- * light text (`#eceef2` on `#ffffff` → 1.16:1) even though the element renders correctly on the dark
- * canvas in the app. `<body>`/`<html>` are not themselves theme roots, so read the concrete colour off
- * `host` rather than passing the `var()`. Reset in {@link cleanupWidgets}.
+ * Paints the page CANVAS (`<body>` and `<html>`) with `host`'s resolved theme background. The harness
+ * themes only the nested `host` `<div>`, which leaves the page's default WHITE canvas behind it — and
+ * axe-core composites the background of any element it cannot trace back to `host` (e.g. one pushed
+ * off-viewport by a wide header, where `elementsFromPoint` returns nothing) against that canvas. On
+ * white that reads as a false color-contrast failure for the dark theme's light text (`#eceef2` on
+ * `#ffffff` → 1.16:1) even though the element renders correctly on the dark canvas in the app.
+ * `<body>`/`<html>` are not themselves theme roots, so read the concrete colour off `host` rather than
+ * passing the `var()`. Reset in {@link cleanupWidgets}.
  */
 function paintCanvas(host: HTMLElement): void {
   const bg = getComputedStyle(host).backgroundColor;

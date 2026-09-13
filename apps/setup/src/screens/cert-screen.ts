@@ -2,7 +2,6 @@ import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { submitOnEnter, baseStyles, selectStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
-import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
 import "@waitron/ui/src/components/wt-form-error-summary.js";
@@ -218,121 +217,117 @@ export class SetupCertScreen extends LitElement {
 
   override render(): TemplateResult {
     return html`
-      <wt-card>
-        <h1>AEAT certificate</h1>
-        <p>
-          A live Spanish venue files invoices to AEAT with a certificate. Upload the certificate
-          file and enter its passphrase.
-        </p>
-        ${certificateExportHelp(navigator.userAgent)}
-        <label class="field file" ?invalid=${this.invalid.has("pfx")}>
-          <span
-            >Certificate file (.pfx or .p12) *
-            <wt-help-tooltip aria-label="Help with certificate file"
-              >Choose the exported signing certificate, including its private key, so this server
-              can sign fiscal records.</wt-help-tooltip
-            ></span
-          >
-          <input
-            name="certificate-file"
-            type="file"
-            accept=".pfx,.p12"
-            required
-            aria-invalid=${this.invalid.has("pfx") ? "true" : "false"}
-            aria-describedby=${this.invalid.has("pfx") ? "certificate-file-error" : nothing}
-            data-test="pfx"
-            @change=${(e: Event) => void this.#onFileChange(e)}
-          />
-        </label>
-        ${
-          this.invalid.has("pfx")
-            ? html`<p id="certificate-file-error" class="error" data-test="pfx-field-error">
-                Choose the certificate file.
-              </p>`
-            : nothing
-        }
-        ${
-          this.pfxBase64 !== ""
-            ? html`<p class="file-status" data-test="file-status">
-                Certificate loaded${this.fileName === "" ? nothing : html` — ${this.fileName}`}.
-              </p>`
-            : nothing
-        }
-        <wt-input
-          @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=next]"))}
-          class="field"
-          label="Certificate passphrase"
-          name="certificate-passphrase"
-          autocomplete="off"
-          type=${this.passphraseVisible ? "text" : "password"}
-          required
-          data-test="passphrase"
-          error=${this.invalid.has("passphrase") ? "Enter the certificate passphrase." : ""}
-          ?invalid=${this.invalid.has("passphrase")}
-          .value=${this.passphrase}
-          @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onPassphrase(e)}
+      <h1>AEAT certificate</h1>
+      <p>
+        A live Spanish venue files invoices to AEAT with a certificate. Upload the certificate file
+        and enter its passphrase.
+      </p>
+      ${certificateExportHelp(navigator.userAgent)}
+      <label class="field file" ?invalid=${this.invalid.has("pfx")}>
+        <span
+          >Certificate file (.pfx or .p12) *
+          <wt-help-tooltip aria-label="Help with certificate file"
+            >Choose the exported signing certificate, including its private key, so this server can
+            sign fiscal records.</wt-help-tooltip
+          ></span
         >
-          <wt-help-tooltip slot="help" aria-label="Help with certificate passphrase"
-            >Enter the password you chose when exporting this certificate file.</wt-help-tooltip
-          >
-          <wt-button
-            slot="end"
-            variant="ghost"
-            data-test="toggle-passphrase"
-            aria-label=${
-              this.passphraseVisible ? "Hide certificate passphrase" : "Show certificate passphrase"
-            }
-            @click=${() => (this.passphraseVisible = !this.passphraseVisible)}
-            >${passwordIcon(this.passphraseVisible)}</wt-button
-          >
-        </wt-input>
-        ${
-          this.invalid.has("passphrase")
-            ? html`<p class="error" data-test="passphrase-field-error">
-                Enter the certificate passphrase.
-              </p>`
-            : nothing
-        }
-        <label class="field select">
-          <span
-            >Certificate type *
-            <wt-help-tooltip aria-label="Help with certificate type"
-              >Select whether this is a company seal or representative certificate, matching the
-              certificate you exported.</wt-help-tooltip
-            ></span
-          >
-          <select
-            name="certificate-kind"
-            required
-            data-test="certKind"
-            @change=${(e: Event) => this.#onCertKind(e)}
-          >
-            ${CERT_KINDS.map(
-              (kind) =>
-                html`<option value=${kind.value} .selected=${kind.value === this.certKind}>
-                  ${kind.label}
-                </option>`,
-            )}
-          </select>
-        </label>
-        ${
-          this.showError || this.fileReadFailed
-            ? html`<wt-form-error-summary
-                data-test="error"
-                heading="There is a problem with this form"
-                .errors=${this.fileReadFailed ? ["We couldn't read that file. Please choose the certificate file again."] : [...this.invalid].map((field) => (field === "pfx" ? "Choose the certificate file." : "Enter the certificate passphrase."))}
-              ></wt-form-error-summary>`
-            : nothing
-        }
-        <wt-form-actions>
-          <wt-button variant="ghost" slot="cancel" data-test="back" @click=${() => this.#back()}
-            >Back</wt-button
-          >
-          <wt-button variant="primary" data-test="next" @click=${() => this.#next()}
-            >Next</wt-button
-          >
-        </wt-form-actions>
-      </wt-card>
+        <input
+          name="certificate-file"
+          type="file"
+          accept=".pfx,.p12"
+          required
+          aria-invalid=${this.invalid.has("pfx") ? "true" : "false"}
+          aria-describedby=${this.invalid.has("pfx") ? "certificate-file-error" : nothing}
+          data-test="pfx"
+          @change=${(e: Event) => void this.#onFileChange(e)}
+        />
+      </label>
+      ${
+        this.invalid.has("pfx")
+          ? html`<p id="certificate-file-error" class="error" data-test="pfx-field-error">
+              Choose the certificate file.
+            </p>`
+          : nothing
+      }
+      ${
+        this.pfxBase64 !== ""
+          ? html`<p class="file-status" data-test="file-status">
+              Certificate loaded${this.fileName === "" ? nothing : html` — ${this.fileName}`}.
+            </p>`
+          : nothing
+      }
+      <wt-input
+        @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=next]"))}
+        class="field"
+        label="Certificate passphrase"
+        name="certificate-passphrase"
+        autocomplete="off"
+        type=${this.passphraseVisible ? "text" : "password"}
+        required
+        data-test="passphrase"
+        error=${this.invalid.has("passphrase") ? "Enter the certificate passphrase." : ""}
+        ?invalid=${this.invalid.has("passphrase")}
+        .value=${this.passphrase}
+        @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onPassphrase(e)}
+      >
+        <wt-help-tooltip slot="help" aria-label="Help with certificate passphrase"
+          >Enter the password you chose when exporting this certificate file.</wt-help-tooltip
+        >
+        <wt-button
+          slot="end"
+          variant="ghost"
+          data-test="toggle-passphrase"
+          aria-label=${
+            this.passphraseVisible ? "Hide certificate passphrase" : "Show certificate passphrase"
+          }
+          @click=${() => (this.passphraseVisible = !this.passphraseVisible)}
+          >${passwordIcon(this.passphraseVisible)}</wt-button
+        >
+      </wt-input>
+      ${
+        this.invalid.has("passphrase")
+          ? html`<p class="error" data-test="passphrase-field-error">
+              Enter the certificate passphrase.
+            </p>`
+          : nothing
+      }
+      <label class="field select">
+        <span
+          >Certificate type *
+          <wt-help-tooltip aria-label="Help with certificate type"
+            >Select whether this is a company seal or representative certificate, matching the
+            certificate you exported.</wt-help-tooltip
+          ></span
+        >
+        <select
+          name="certificate-kind"
+          required
+          data-test="certKind"
+          @change=${(e: Event) => this.#onCertKind(e)}
+        >
+          ${CERT_KINDS.map(
+            (kind) =>
+              html`<option value=${kind.value} .selected=${kind.value === this.certKind}>
+                ${kind.label}
+              </option>`,
+          )}
+        </select>
+      </label>
+      ${
+        this.showError || this.fileReadFailed
+          ? html`<wt-form-error-summary
+              data-test="error"
+              heading="There is a problem with this form"
+              .errors=${this.fileReadFailed ? ["We couldn't read that file. Please choose the certificate file again."] : [...this.invalid].map((field) => (field === "pfx" ? "Choose the certificate file." : "Enter the certificate passphrase."))}
+            ></wt-form-error-summary>`
+          : nothing
+      }
+      <wt-form-actions>
+        <wt-button variant="ghost" slot="cancel" data-test="back" @click=${() => this.#back()}
+          >Back</wt-button
+        >
+        <wt-button variant="primary" data-test="next" @click=${() => this.#next()}>Next</wt-button>
+      </wt-form-actions>
     `;
   }
 }
