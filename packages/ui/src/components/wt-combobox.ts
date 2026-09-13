@@ -451,12 +451,14 @@ export class WtCombobox extends LitElement {
                 `
               : nothing
           }
-          ${
-            this.filteredOptions.length === 0 && !this.showAddRow
-              ? html`<li class="empty" role="presentation">${this.noResultsLabel}</li>`
-              : nothing
-          }
         </ul>
+        ${
+          // Outside the listbox, not a row inside it: a role="presentation" child is not one of the
+          // children role="listbox" requires, which axe reports as aria-required-children.
+          this.filteredOptions.length === 0 && !this.showAddRow
+            ? html`<div class="empty">${this.noResultsLabel}</div>`
+            : nothing
+        }
       </div>
       ${
         this.error !== ""
