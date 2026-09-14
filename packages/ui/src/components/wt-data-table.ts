@@ -239,7 +239,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
   // columns may be assigned after connectedCallback, so the restore re-runs once they arrive.
   #restoreView(): void {
     if (!this.viewKey) return;
-    let raw: string | null = null;
+    let raw: string | null;
     try {
       raw = sessionStorage.getItem(this.viewKey);
     } catch {
