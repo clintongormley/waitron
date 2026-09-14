@@ -160,7 +160,7 @@ this floor — removing the `min-width` regresses that guard.
 | `wt-help-tooltip` | `aria-label`; default slot | — |
 | `wt-tabs` | `items` (`{ key, label }[]`), `value`, `label`; named slots matching item keys | `wt-change` — `detail: { value: string }` |
 | `wt-row-actions` | `label`, `align` (`start`\|`end`, default `start` — which trigger edge the popup lines up with); default slot of action buttons | native events from actions |
-| `wt-data-table` | `rows`, `columns`, `rowKey`, `rowParent` (opts into tree mode), `collapseLabel`, `expandLabel`, `loading`, `loadingMessage`, `emptyMessage`, `errorMessage`, `aria-label`, `selectable`, `selected`, `selectionLabel` (`(row) => string`), `selectAllLabel` | `wt-selection-change` — `detail: { selected: string[] }`; native events from consumer-provided cells |
+| `wt-data-table` | `rows`, `columns` (each may carry `searchValue` and a `filter` — `{ label, allLabel, value, options }`), `rowKey`, `rowParent` (opts into tree mode), `collapseLabel`, `expandLabel`, `loading`, `loadingMessage`, `emptyMessage`, `errorMessage`, `aria-label`, `selectable`, `selected`, `selectionLabel` (`(row) => string`), `selectAllLabel`, `sortKey`, `sortDirection`, `searchable`, `searchLabel`, `searchPlaceholder`, `noMatchesMessage`, `viewKey` | `wt-selection-change` — `detail: { selected: string[] }`; `wt-sort-change` — `detail: { sortKey, sortDirection }`; native events from consumer-provided cells |
 | `wt-combobox` | `options` (`{value,label}[]`), `multiple`, `value`, `values`, `allowAdd`, `label`, `name`, `placeholder`, `required`, `disabled`, `invalid`, `error`, `countLabel`, `noResultsLabel`, `searchPlaceholder`, `addLabel` | `wt-change` — `detail: { value: string }` or `detail: { values: string[] }`; `wt-combobox-add` — `detail: { text: string }` |
 
 `wt-button shape="round"` renders a circular button of exactly `--wt-tap-min` diameter, meant for
@@ -205,6 +205,19 @@ component, not the caller. The table renders `role="treegrid"` with `aria-level`
 each row, and a sortable column sorts each level of siblings independently rather than flattening the
 whole tree into one sort. Leave `rowParent` unset for the ordinary flat table — the two modes share
 every other property.
+
+### Remembered, searchable, filterable tables
+
+`wt-data-table` renders its own toolbar when `searchable` is set: a search box that fills the row,
+with any column-declared filter dropdowns grouped at the right; the row wraps to stacked at phone
+width. A column exposes text to the search with `searchValue` (falling back to `sortValue`), and
+offers a dropdown with a `filter` descriptor. A row must pass every active filter and the search to
+show. Pass `sortKey`/`sortDirection` to choose the starting sort — the table then owns it and emits
+`wt-sort-change`. Give the table a `viewKey` and it remembers its sort and filter choices in the
+tab's session storage (never the search text), ignoring a stored value that no longer fits the
+columns. In tree mode the table keeps a match's ancestor rows and tells each cell, via its second
+argument's `ancestorOnly`, whether the row is present only to hold a descendant's place — mute those
+with a `part` on the cell.
 
 Use `wt-modal` for an add or edit form. Its portrait panel fills the viewport height with 24px
 top and bottom margins. The body scrolls independently, so your footer actions stay visible.
