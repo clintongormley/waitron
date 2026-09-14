@@ -19,14 +19,14 @@ const each = (
   category: string | null = null,
 ): PriceableProduct => ({
   descriptions: { en: "item" },
-  unit: { name: { en: "each" }, precision: 0 },
+  unit: { name: { en: "each" }, precision: 0, abbreviation: { en: "ea" } },
   unitPrice,
   vatClass,
   category,
 });
 const weight = (unitPrice: string, vatClass: PriceableProduct["vatClass"]): PriceableProduct => ({
   descriptions: { en: "sliced ham" },
-  unit: { name: { en: "kg" }, precision: 3 },
+  unit: { name: { en: "kg" }, precision: 3, abbreviation: { en: "kg" } },
   unitPrice,
   vatClass,
   category: "Food",
@@ -78,7 +78,7 @@ describe("priceBasket — difference method", () => {
       {
         product: {
           descriptions: { en: "tea service" },
-          unit: { name: { en: "tray" }, precision: 2 },
+          unit: { name: { en: "tray" }, precision: 2, abbreviation: { en: "tr" } },
           unitPrice: "8.00",
           vatClass: "general",
           category: null,
@@ -89,9 +89,25 @@ describe("priceBasket — difference method", () => {
     expect(r.total).toBe(decimal("2.00"));
     expect(r.lines[0]).toMatchObject({
       quantity: "0.25",
-      unitName: { en: "tray" },
+      unitName: { en: "tr" }, // the frozen printed label is the unit's abbreviation, not "tray"
       unitPrecision: 2,
     });
+  });
+
+  it("freezes the unit's abbreviation as the printed label, not its full name", () => {
+    const priced = priceBasket([
+      {
+        product: {
+          descriptions: { en: "Olives" },
+          unit: { name: { en: "Kilogram" }, precision: 3, abbreviation: { en: "kg" } },
+          unitPrice: "10.00",
+          vatClass: "general",
+          category: null,
+        },
+        quantity: "1.500",
+      },
+    ]);
+    expect(priced.lines[0]!.unitName).toEqual({ en: "kg" });
   });
 
   it("reverses a weighed gross line to base + tax that re-sum to the gross exactly", () => {
@@ -189,7 +205,7 @@ describe("priceBasketWithOptions — parent + child priced lines", () => {
       {
         product: {
           descriptions: { es: "Café" },
-          unit: { name: { en: "each" }, precision: 0 },
+          unit: { name: { en: "each" }, precision: 0, abbreviation: { en: "ea" } },
           unitPrice: "2.50",
           vatClass: "reduced",
           category: "Drinks",
@@ -396,7 +412,7 @@ describe("priceLockedLines — files a locked line to the walk-up VAT breakdown"
         vatRate: "21.00",
         descriptions: { en: "item" },
         category: null,
-        unitName: { en: "each" },
+        unitName: { en: "ea" },
         unitPrecision: 0,
       },
       {
@@ -414,7 +430,7 @@ describe("priceLockedLines — files a locked line to the walk-up VAT breakdown"
         vatRate: "4.00",
         descriptions: { en: "item" },
         category: null,
-        unitName: { en: "each" },
+        unitName: { en: "ea" },
         unitPrecision: 0,
       },
     ];
@@ -458,7 +474,7 @@ describe("structured modifier snapshots", () => {
         descriptions: { en: "item" },
         category: null,
         modifierSnapshots,
-        unitName: { en: "each" },
+        unitName: { en: "ea" },
         unitPrecision: 0,
       },
     ]);

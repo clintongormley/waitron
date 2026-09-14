@@ -20,6 +20,7 @@ export type VatClass = (typeof VAT_CLASSES)[number];
 export interface UnitSnapshot {
   name: Record<string, string>;
   precision: number;
+  abbreviation: Record<string, string>;
 }
 
 export interface PriceableProduct {
@@ -216,7 +217,8 @@ export function priceBasket(items: readonly BasketItem[]): PricedLines {
         rate: resolveVatRate(item.product.vatClass),
         descriptions: item.product.descriptions,
         category: item.product.category,
-        unitName: item.product.unit.name,
+        // The printed label is the unit's abbreviation, frozen here onto working_order_lines.unit_name.
+        unitName: item.product.unit.abbreviation,
         unitPrecision: item.product.unit.precision,
         variantId: item.product.variantId ?? null,
         variantName: item.product.variantName ?? null,
@@ -307,7 +309,8 @@ export function priceBasketWithOptions(items: readonly BasketItemWithOptions[]):
       rate: resolveVatRate(item.product.vatClass),
       descriptions: item.product.descriptions,
       category: item.product.category,
-      unitName: item.product.unit.name,
+      // The printed label is the unit's abbreviation, frozen here onto working_order_lines.unit_name.
+      unitName: item.product.unit.abbreviation,
       unitPrecision: item.product.unit.precision,
       parentLineNo: null,
       modifierSnapshots: item.modifierSnapshots ?? [],

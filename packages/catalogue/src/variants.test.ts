@@ -253,7 +253,7 @@ it("prices the required published variant instead of the base or product variant
     {
       product: {
         descriptions: { en: "Coffee · Small" },
-        unit: { name: { en: "each" }, precision: 0 },
+        unit: { name: { en: "each" }, precision: 0, abbreviation: { en: "ea" } },
         unitPrice: selected.unitPrice,
         vatClass: "reduced",
         category: null,
