@@ -15,6 +15,8 @@
  *   centered) — the Modifiers list's round "new modifier" button, and Categories' round "create
  *   category" button.
  * - grip: the drag handle that reorders a modifier's choices (two columns of dots).
+ * - bell: the banner's alerts trigger.
+ * - close: wt-toast's dismiss button (wt-toast requires its consuming app to register this).
  *
  * Attribution: some of these are adapted from Google's Material Symbols icon set, Copyright
  * Google, licensed under the Apache License, Version 2.0
@@ -31,4 +33,7 @@ export const DASHBOARD_ICONS: Record<string, string> = {
   plus: "M7.25 2.5H8.75V7.25H13.5V8.75H8.75V13.5H7.25V8.75H2.5V7.25H7.25Z",
   // grip: the drag handle that reorders a modifier's choices (two columns of dots).
   grip: "M6 3.5a1.1 1.1 0 1 1-2.2 0a1.1 1.1 0 0 1 2.2 0M12.2 3.5a1.1 1.1 0 1 1-2.2 0a1.1 1.1 0 0 1 2.2 0M6 8a1.1 1.1 0 1 1-2.2 0a1.1 1.1 0 0 1 2.2 0M12.2 8a1.1 1.1 0 1 1-2.2 0a1.1 1.1 0 0 1 2.2 0M6 12.5a1.1 1.1 0 1 1-2.2 0a1.1 1.1 0 0 1 2.2 0M12.2 12.5a1.1 1.1 0 1 1-2.2 0a1.1 1.1 0 0 1 2.2 0",
+  bell: "M8 14.5a1.5 1.5 0 0 0 1.5-1.5h-3A1.5 1.5 0 0 0 8 14.5ZM12.5 10.5V7.25c0-2.2-1.2-4-3.25-4.5V2.25a1.25 1.25 0 0 0-2.5 0v.5C4.7 3.25 3.5 5.05 3.5 7.25v3.25L2 12v.5h12V12Z",
+  close:
+    "M3.7 2.6 8 6.9l4.3-4.3 1.1 1.1L9.1 8l4.3 4.3-1.1 1.1L8 9.1l-4.3 4.3-1.1-1.1L6.9 8 2.6 3.7Z",
 };

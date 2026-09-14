@@ -106,6 +106,8 @@ export const QUERY_DEPENDENCIES = {
   getGoogleConfig: ["google_config"],
   getEmailInbox: ["email_inbox"],
   getBackupStatus: ["backup_status"],
+  listAlerts: ["incidents"],
+  listHandledAlerts: ["incidents"],
 } as const;
 
 export type DashboardQueryName = keyof typeof QUERY_DEPENDENCIES;
