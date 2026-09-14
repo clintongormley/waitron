@@ -239,9 +239,11 @@ export class CategoriesScreen extends LitElement {
           ? "parent"
           : code === "category.image_not_found"
             ? "image"
-            : code === "content.translation_required" && language
-              ? `name-${language}`
-              : "save";
+            : code === "category.color_invalid"
+              ? "color"
+              : code === "content.translation_required" && language
+                ? `name-${language}`
+                : "save";
       this.fieldErrors = { [field]: this.saveError };
       return;
     } finally {

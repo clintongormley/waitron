@@ -264,6 +264,9 @@ export class CategoryForm extends LitElement {
             >${t("categories.color_custom")}
             <input
               type="color"
+              name="category-color"
+              aria-invalid=${errors.color ? "true" : "false"}
+              aria-describedby="category-color-error"
               .value=${this.color ?? "#000000"}
               .disabled=${this.busy}
               @input=${(event: Event) => {
@@ -271,6 +274,7 @@ export class CategoryForm extends LitElement {
                 this.color = (event.target as HTMLInputElement).value;
               }}
           /></label>
+          <span class="field-error" id="category-color-error">${errors.color ?? nothing}</span>
         </fieldset>
         <dashboard-image-upload
           aria-describedby="category-image-error"

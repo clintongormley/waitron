@@ -505,6 +505,7 @@ it("does not search disabled translations that are absent from the displayed cat
 it.each([
   ["category.parent_cycle", "parent", "select[name=category-parent]"],
   ["category.image_not_found", "image", "dashboard-image-upload"],
+  ["category.color_invalid", "color", "input[type=color]"],
 ])(
   "explains %s beside the rejected field and in the form summary",
   async (code, field, selector) => {
