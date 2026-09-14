@@ -56,9 +56,12 @@ export function sumupClient(opts: SumUpClientOptions): SumUpClient {
   ): Promise<{ status: number; json: unknown }> => {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
-    let res: Response;
+    // The deadline must cover the BODY read, not just the headers. `res.text()` streams the body and
+    // can wedge on its own after the headers arrive; clearing the timer the moment `doFetch` resolved
+    // (the headers) left that read unbounded. Keeping the timer alive until the whole call has read
+    // its body — abort included — is what bounds it (CLAUDE.md §5: nothing external may freeze a sale).
     try {
-      res = await doFetch(`${base}${path}`, {
+      const res = await doFetch(`${base}${path}`, {
         method,
         headers: {
           authorization: `Bearer ${opts.apiKey}`,
@@ -68,12 +71,12 @@ export function sumupClient(opts: SumUpClientOptions): SumUpClient {
         signal: controller.signal,
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       });
+      if (res.status >= 500) throw new Error(`sumup ${method} ${path}: HTTP ${res.status}`);
+      const text = await res.text();
+      return { status: res.status, json: text === "" ? null : (JSON.parse(text) as unknown) };
     } finally {
       clearTimeout(timer);
     }
-    if (res.status >= 500) throw new Error(`sumup ${method} ${path}: HTTP ${res.status}`);
-    const text = await res.text();
-    return { status: res.status, json: text === "" ? null : (JSON.parse(text) as unknown) };
   };
   const problemTitle = (json: unknown): string =>
     typeof json === "object" &&
