@@ -288,9 +288,11 @@ describe("alert routes", () => {
       "payment.offline_forward_declined",
     ]);
     expect(
-      ((await (await get(app, "/management-api/alerts/handled", v.manager)).json()) as {
-        alerts: unknown[];
-      }).alerts,
+      (
+        (await (await get(app, "/management-api/alerts/handled", v.manager)).json()) as {
+          alerts: unknown[];
+        }
+      ).alerts,
     ).toHaveLength(5);
   });
 
