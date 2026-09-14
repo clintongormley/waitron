@@ -1,12 +1,20 @@
 import { LitElement, css, html, nothing } from "lit";
+import type { PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles } from "../base-styles.js";
+import { baseStyles, selectStyles } from "../base-styles.js";
 
 export interface DataTableColumn<Row> {
   key: string;
   label: string;
-  cell: (row: Row) => unknown;
+  cell: (row: Row, context: { ancestorOnly: boolean }) => unknown;
   sortValue?: (row: Row) => string | number | null | undefined;
+  searchValue?: (row: Row) => string;
+  filter?: {
+    label: string;
+    allLabel: string;
+    value: (row: Row) => string;
+    options: { value: string; label: string }[];
+  };
   align?: "start" | "end";
 }
 
@@ -16,6 +24,7 @@ type SortDirection = "ascending" | "descending";
 export class WtDataTable<Row = unknown> extends LitElement {
   static override styles = [
     baseStyles,
+    selectStyles,
     css`
       :host {
         display: block;
@@ -113,6 +122,43 @@ export class WtDataTable<Row = unknown> extends LitElement {
         color: var(--wt-color-danger);
       }
 
+      .table-toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--wt-space-3);
+        margin-bottom: var(--wt-space-3);
+      }
+
+      /* The basis is the narrowest the search box may be while sharing its line with the filters;
+         any narrower and the filters wrap below it and the search box fills its own line. A media
+         or container query cannot read a token, so the wrap is sized by the controls, not by a
+         breakpoint. */
+      .table-search {
+        flex: 1 1 calc(var(--wt-tap-min) * 8);
+        min-width: 0;
+        min-height: var(--wt-tap-min);
+        padding: var(--wt-space-2) var(--wt-space-3);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-full);
+        background: var(--wt-color-bg);
+        color: var(--wt-color-text);
+        font: inherit;
+      }
+
+      .table-filters {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--wt-space-2);
+        max-width: 100%;
+      }
+
+      .table-filter {
+        width: auto;
+        max-width: 100%;
+        min-height: var(--wt-tap-min);
+      }
+
       .tree-toggle {
         width: var(--wt-tap-min);
         height: var(--wt-tap-min);
@@ -163,9 +209,114 @@ export class WtDataTable<Row = unknown> extends LitElement {
   @property({ attribute: false }) selectionLabel: (row: Row) => string = () => "Select row";
   @property() selectAllLabel = "Select all";
 
-  @state() private sortKey: string | null = null;
-  @state() private sortDirection: SortDirection = "ascending";
+  @property() sortKey: string | null = null;
+  @property() sortDirection: SortDirection = "ascending";
+  /** When set, a search box is drawn above the table and only rows whose text contains the typed
+   * term are shown. Which text a row exposes is each column's searchValue, or its sortValue. A
+   * column's filter dropdown is drawn whether or not this is set. */
+  @property({ type: Boolean }) searchable = false;
+  @property() searchLabel = "Search";
+  /** Placeholder text for the search box; empty means it repeats `searchLabel`. */
+  @property() searchPlaceholder = "";
+  @property() noMatchesMessage = "No matches";
+  /** When set, the tab's session storage remembers this table's sort and filter choices under this
+   * key and restores them on the next visit. Search text is never persisted. */
+  @property() viewKey?: string;
+  @state() private searchText = "";
+  /** Every filter choice, chosen or restored, keyed by column key; an absent key means "all". A
+   * choice filters rows only while its column offers it (see #activeFilter), and #judgeFilters
+   * removes one its column's options no longer include. */
+  @state() private filterSelections: Record<string, string> = {};
   @state() private collapsed = new Set<string>();
+  #restored = false;
+
+  protected override willUpdate(changed: PropertyValues<this>): void {
+    if (changed.has("viewKey")) this.#restored = false;
+    if (!changed.has("viewKey") && !changed.has("columns")) return;
+    this.#restoreView();
+    if (this.#judgeFilters()) this.#persistView();
+  }
+
+  /** Reads the stored view once there are columns to check it against. A stored sort is adopted
+   * only if a current column can sort by it, and its direction only together with that column.
+   * Stored filter strings join filterSelections, to be judged like any other choice. */
+  #restoreView(): void {
+    if (!this.viewKey || this.columns.length === 0) return;
+    if (!this.#restored) {
+      this.#restored = true;
+      let raw: string | null;
+      try {
+        raw = sessionStorage.getItem(this.viewKey);
+      } catch {
+        return; // storage blocked; defaults stand
+      }
+      if (!raw) return;
+      try {
+        const parsed = JSON.parse(raw) as {
+          sortKey?: unknown;
+          sortDirection?: unknown;
+          filters?: unknown;
+        };
+        if (
+          typeof parsed.sortKey === "string" &&
+          this.columns.some((c) => c.key === parsed.sortKey && c.sortValue !== undefined)
+        ) {
+          this.sortKey = parsed.sortKey;
+          if (parsed.sortDirection === "ascending" || parsed.sortDirection === "descending")
+            this.sortDirection = parsed.sortDirection;
+        }
+        if (parsed.filters && typeof parsed.filters === "object") {
+          const stored = Object.entries(parsed.filters as Record<string, unknown>).filter(
+            (entry): entry is [string, string] => typeof entry[1] === "string" && entry[1] !== "",
+          );
+          this.filterSelections = { ...this.filterSelections, ...Object.fromEntries(stored) };
+        }
+      } catch {
+        // A malformed store is ignored, exactly like a first visit.
+      }
+    }
+  }
+
+  /** The options a column's filter currently offers, or undefined while it offers none: the column
+   * is absent, has no filter, or has an empty list (a consumer still loading the data behind it). */
+  #offered(key: string): { value: string }[] | undefined {
+    const options = this.columns.find((column) => column.key === key)?.filter?.options;
+    return options && options.length > 0 ? options : undefined;
+  }
+
+  /** Removes every choice whose column offers options that do not include it, and reports whether it
+   * removed any. A choice whose column offers none waits, kept and stored but not applied, until the
+   * column offers a non-empty list to judge it by. */
+  #judgeFilters(): boolean {
+    const kept = Object.entries(this.filterSelections).filter(([key, value]) => {
+      const options = this.#offered(key);
+      return !options || options.some((option) => option.value === value);
+    });
+    if (kept.length === Object.keys(this.filterSelections).length) return false;
+    this.filterSelections = Object.fromEntries(kept);
+    return true;
+  }
+
+  /** The choice that narrows rows for this column, or "" when there is none or it is waiting. */
+  #activeFilter(column: DataTableColumn<Row>): string {
+    return this.#offered(column.key) ? (this.filterSelections[column.key] ?? "") : "";
+  }
+
+  #persistView(): void {
+    if (!this.viewKey) return;
+    try {
+      sessionStorage.setItem(
+        this.viewKey,
+        JSON.stringify({
+          sortKey: this.sortKey,
+          sortDirection: this.sortDirection,
+          filters: this.filterSelections,
+        }),
+      );
+    } catch {
+      // The remembered view is a convenience; the table works without it.
+    }
+  }
 
   #emitSelection(next: string[]): void {
     this.dispatchEvent(
@@ -199,10 +350,18 @@ export class WtDataTable<Row = unknown> extends LitElement {
     if (column.sortValue === undefined) return;
     if (this.sortKey === column.key) {
       this.sortDirection = this.sortDirection === "ascending" ? "descending" : "ascending";
-      return;
+    } else {
+      this.sortKey = column.key;
+      this.sortDirection = "ascending";
     }
-    this.sortKey = column.key;
-    this.sortDirection = "ascending";
+    this.dispatchEvent(
+      new CustomEvent("wt-sort-change", {
+        detail: { sortKey: this.sortKey, sortDirection: this.sortDirection },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    this.#persistView();
   }
 
   /**
@@ -236,24 +395,91 @@ export class WtDataTable<Row = unknown> extends LitElement {
       .map(({ row }) => row);
   }
 
-  #sortedRows(): Row[] {
+  /** The text a row exposes to the search box: every column's searchValue, or its sortValue as a
+   * fallback, joined so a term can match any column. */
+  #searchHaystack(row: Row): string {
+    return this.columns
+      .map((column) =>
+        column.searchValue
+          ? column.searchValue(row)
+          : column.sortValue
+            ? String(column.sortValue(row) ?? "")
+            : "",
+      )
+      .join(" ")
+      .toLocaleLowerCase();
+  }
+
+  #passesSearch(row: Row): boolean {
+    const term = this.searchable ? this.searchText.trim().toLocaleLowerCase() : "";
+    return term === "" || this.#searchHaystack(row).includes(term);
+  }
+
+  /** The rows left after the toolbar: every active filter (AND), then the search term. The single
+   * choke point every render path funnels through, so flat and tree mode narrow identically. */
+  #visibleRows(): readonly Row[] {
+    const active = this.columns.flatMap((column) => {
+      const selected = this.#activeFilter(column);
+      return selected === "" ? [] : [{ value: column.filter!.value, selected }];
+    });
+    return this.rows.filter(
+      (row) =>
+        active.every(({ value, selected }) => value(row) === selected) && this.#passesSearch(row),
+    );
+  }
+
+  #sortedRows(rows: readonly Row[]): Row[] {
     const column = this.columns.find(
       (candidate) => candidate.key === this.sortKey && candidate.sortValue !== undefined,
     );
     const indexOf = new Map<Row, number>();
-    this.rows.forEach((row, index) => indexOf.set(row, index));
-    return this.#sortByColumn(this.rows, column, indexOf);
+    rows.forEach((row, index) => indexOf.set(row, index));
+    return this.#sortByColumn(rows, column, indexOf);
   }
 
-  #treeRows(): { row: Row; key: string; depth: number; hasChildren: boolean }[] {
+  /** In tree mode a matching row's ancestors must stay so it is not shown as a false top-level row.
+   * Takes the rows that passed the toolbar and returns the rows to render plus the set of keys
+   * present only as an ancestor of a match. */
+  #treeVisible(visible: readonly Row[]): {
+    rows: readonly Row[];
+    ancestorOnly: ReadonlySet<string>;
+  } {
+    const parentOf = this.rowParent!;
+    const keys = this.rows.map((row, index) => this.rowKey(row, index));
+    const keyByRow = new Map<Row, string>();
+    const rowByKey = new Map<string, Row>();
+    this.rows.forEach((row, index) => {
+      keyByRow.set(row, keys[index]!);
+      if (!rowByKey.has(keys[index]!)) rowByKey.set(keys[index]!, row);
+    });
+    const matched = new Set(visible.map((row) => keyByRow.get(row)!));
+    const included = new Set(matched);
+    this.rows.forEach((row, index) => {
+      if (!matched.has(keys[index]!)) return;
+      const visited = new Set<string>();
+      let parentKey = parentOf(row);
+      while (parentKey && !visited.has(parentKey)) {
+        visited.add(parentKey);
+        included.add(parentKey);
+        const parent = rowByKey.get(parentKey);
+        parentKey = parent ? parentOf(parent) : null;
+      }
+    });
+    const ancestorOnly = new Set([...included].filter((key) => !matched.has(key)));
+    return { rows: this.rows.filter((_row, index) => included.has(keys[index]!)), ancestorOnly };
+  }
+
+  #treeRows(
+    rows: readonly Row[],
+  ): { row: Row; key: string; depth: number; hasChildren: boolean }[] {
     const keyOf = (row: Row, i: number) => this.rowKey(row, i);
     const parentOf = this.rowParent!;
     const indexOf = new Map<Row, number>();
-    this.rows.forEach((r, i) => indexOf.set(r, i));
-    const present = new Set(this.rows.map((r) => keyOf(r, indexOf.get(r)!)));
+    rows.forEach((r, i) => indexOf.set(r, i));
+    const present = new Set(rows.map((r) => keyOf(r, indexOf.get(r)!)));
     // group children by parent key ("" = top level, including orphans whose parent is absent)
     const childrenByParent = new Map<string, Row[]>();
-    for (const row of this.rows) {
+    for (const row of rows) {
       const p = parentOf(row);
       const bucket = p !== null && present.has(p) ? p : "";
       (childrenByParent.get(bucket) ?? childrenByParent.set(bucket, []).get(bucket)!).push(row);
@@ -335,7 +561,10 @@ export class WtDataTable<Row = unknown> extends LitElement {
                     : html`<button
                         class="sort"
                         data-sort=${column.key}
-                        @click=${() => this.#sort(column)}
+                        @click=${(event: Event) => {
+                          event.stopPropagation();
+                          this.#sort(column);
+                        }}
                       >
                         ${column.label}<span class="indicator" aria-hidden="true"
                           >${
@@ -374,20 +603,86 @@ export class WtDataTable<Row = unknown> extends LitElement {
     </td>`;
   }
 
+  #renderToolbar() {
+    const hasFilters = this.columns.some((column) => column.filter);
+    if (!this.searchable && !hasFilters) return nothing;
+    return html`<div class="table-toolbar">
+      ${
+        this.searchable
+          ? html`<input
+              class="table-search"
+              type="search"
+              name="search"
+              autocomplete="off"
+              aria-label=${this.searchLabel}
+              placeholder=${this.searchPlaceholder || this.searchLabel}
+              .value=${this.searchText}
+              @input=${(event: Event) => {
+                this.searchText = (event.target as HTMLInputElement).value;
+              }}
+            />`
+          : nothing
+      }
+      ${
+        hasFilters
+          ? html`<div class="table-filters">
+              ${this.columns.map((column) => {
+                const active = this.#activeFilter(column);
+                return column.filter
+                  ? html`<select
+                      class="table-filter"
+                      name=${`${column.key}-filter`}
+                      data-filter=${column.key}
+                      aria-label=${column.filter.label}
+                      @change=${(event: Event) => {
+                        const next = { ...this.filterSelections };
+                        const value = (event.target as HTMLSelectElement).value;
+                        if (value === "") delete next[column.key];
+                        else next[column.key] = value;
+                        this.filterSelections = next;
+                        this.#persistView();
+                      }}
+                    >
+                      <option value="" .selected=${active === ""}>${column.filter.allLabel}</option>
+                      ${column.filter.options.map(
+                        (option) =>
+                          html`<option value=${option.value} .selected=${active === option.value}>
+                            ${option.label}
+                          </option>`,
+                      )}
+                    </select>`
+                  : nothing;
+              })}
+            </div>`
+          : nothing
+      }
+    </div>`;
+  }
+
   override render() {
     if (this.loading) return html`<p class="message" role="status">${this.loadingMessage}</p>`;
     if (this.errorMessage !== "")
       return html`<p class="message error" role="alert">${this.errorMessage}</p>`;
+    const visible = this.#visibleRows();
     if (this.rows.length === 0)
-      return html`<p class="message" role="status">${this.emptyMessage}</p>`;
+      return html`${this.#renderToolbar()}
+        <p class="message" role="status">${this.emptyMessage}</p>`;
 
     const label = this.ariaLabel || undefined;
     const isTree = this.rowParent !== undefined;
+    // In tree mode kept ancestors keep a deep match on screen, so "no matches" counts the rows the
+    // tree actually renders, not just the ones that matched.
+    const treeVisible = isTree ? this.#treeVisible(visible) : undefined;
+    const renderedCount = isTree ? treeVisible!.rows.length : visible.length;
+    if (renderedCount === 0)
+      return html`${this.#renderToolbar()}
+        <p class="message" role="status">${this.noMatchesMessage}</p>`;
 
     if (!isTree) {
-      const sorted = this.#sortedRows();
+      const sorted = this.#sortedRows(visible);
       const visibleKeys = sorted.map((row, index) => this.rowKey(row, index));
       return html`
+        ${this.#renderToolbar()}
         <div class="scroll" tabindex="0" role="region" aria-label=${label ?? nothing}>
           <table>
             ${this.#renderHead(visibleKeys)}
@@ -399,7 +694,9 @@ export class WtDataTable<Row = unknown> extends LitElement {
                     ${this.#renderSelectCell(key, row, false)}
                     ${this.columns.map(
                       (column) => html`
-                        <td data-align=${column.align ?? "start"}>${column.cell(row)}</td>
+                        <td data-align=${column.align ?? "start"}>
+                          ${column.cell(row, { ancestorOnly: false })}
+                        </td>
                       `,
                     )}
                   </tr>
@@ -411,15 +708,18 @@ export class WtDataTable<Row = unknown> extends LitElement {
       `;
     }
 
-    const entries = this.#treeRows();
+    const { rows: treeRows, ancestorOnly } = treeVisible!;
+    const entries = this.#treeRows(treeRows);
     const visibleKeys = entries.map((e) => e.key);
     return html`
+      ${this.#renderToolbar()}
       <div class="scroll" tabindex="0" role="region" aria-label=${label ?? nothing}>
         <table role="treegrid">
           ${this.#renderHead(visibleKeys)}
           <tbody role="rowgroup">
             ${entries.map(({ row, key, depth, hasChildren }) => {
               const expanded = !this.collapsed.has(key);
+              const cellContext = { ancestorOnly: ancestorOnly.has(key) };
               return html`<tr
                 data-row-key=${key}
                 role="row"
@@ -447,9 +747,9 @@ export class WtDataTable<Row = unknown> extends LitElement {
                                     </button>`
                                   : html`<span class="tree-spacer"></span>`
                               }
-                              ${column.cell(row)}
+                              ${column.cell(row, cellContext)}
                             </span>`
-                          : column.cell(row)
+                          : column.cell(row, cellContext)
                       }
                     </td>`,
                 )}

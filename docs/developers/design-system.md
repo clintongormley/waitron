@@ -160,7 +160,7 @@ this floor — removing the `min-width` regresses that guard.
 | `wt-help-tooltip` | `aria-label`; default slot | — |
 | `wt-tabs` | `items` (`{ key, label }[]`), `value`, `label`; named slots matching item keys | `wt-change` — `detail: { value: string }` |
 | `wt-row-actions` | `label`, `align` (`start`\|`end`, default `start` — which trigger edge the popup lines up with); default slot of action buttons | native events from actions |
-| `wt-data-table` | `rows`, `columns`, `rowKey`, `rowParent` (opts into tree mode), `collapseLabel`, `expandLabel`, `loading`, `loadingMessage`, `emptyMessage`, `errorMessage`, `aria-label`, `selectable`, `selected`, `selectionLabel` (`(row) => string`), `selectAllLabel` | `wt-selection-change` — `detail: { selected: string[] }`; native events from consumer-provided cells |
+| `wt-data-table` | `rows`, `columns` (each has `cell` — `(row, { ancestorOnly }) => content` — and may carry `sortValue`, `searchValue` and a `filter` — `{ label, allLabel, value, options }`, which draws a dropdown whether or not the table is `searchable`), `rowKey`, `rowParent` (opts into tree mode), `collapseLabel`, `expandLabel`, `loading`, `loadingMessage`, `emptyMessage`, `errorMessage`, `aria-label`, `selectable`, `selected`, `selectionLabel` (`(row) => string`), `selectAllLabel`, `sortKey`, `sortDirection`, `searchable`, `searchLabel`, `searchPlaceholder` (defaults to `searchLabel`), `noMatchesMessage`, `viewKey` | `wt-selection-change` — `detail: { selected: string[] }`; `wt-sort-change` — `detail: { sortKey, sortDirection }`; native events from consumer-provided cells |
 | `wt-combobox` | `options` (`{value,label}[]`), `multiple`, `value`, `values`, `allowAdd`, `label`, `name`, `placeholder`, `required`, `disabled`, `invalid`, `error`, `countLabel`, `noResultsLabel`, `searchPlaceholder`, `addLabel` | `wt-change` — `detail: { value: string }` or `detail: { values: string[] }`; `wt-combobox-add` — `detail: { text: string }` |
 
 `wt-button shape="round"` renders a circular button of exactly `--wt-tap-min` diameter, meant for
@@ -205,6 +205,38 @@ component, not the caller. The table renders `role="treegrid"` with `aria-level`
 each row, and a sortable column sorts each level of siblings independently rather than flattening the
 whole tree into one sort. Leave `rowParent` unset for the ordinary flat table — the two modes share
 every other property.
+
+### Remembered, searchable, filterable tables
+
+`wt-data-table` renders its own toolbar when `searchable` is set or any column carries a `filter`.
+The search box appears only when `searchable` is set; each column with a `filter` gets one native
+dropdown whether or not it is, and a row must pass every active filter and the search to show. The
+search box is named `search` and each dropdown `<column key>-filter`. The search box grows to fill
+the line and the dropdowns sit after it at their natural width; when the two cannot share a line
+with the search box at least eight tap targets wide, the dropdowns wrap onto the line below and the
+search box takes its line alone (the table's tests measure a stacked toolbar at 360px and a single
+line at 1000px). The wrap is sized by the controls rather than a breakpoint because a media or
+container query cannot read a `--wt-*` token. A column exposes text to the search with
+`searchValue` (falling back to `sortValue`), and offers a dropdown with a `filter` descriptor. Pass
+`sortKey`/`sortDirection` to choose the starting sort — the table then owns it and emits
+`wt-sort-change`.
+
+Give the table a `viewKey` and it remembers its sort and filter choices in the tab's session storage
+— never the search text. It restores them once it has columns: a stored sort only if a current
+column can still sort by it — its direction is restored with that column or not at all, so the
+starting sort stands whole — and every stored filter value that is a non-empty string. A filter
+choice, restored or picked, narrows rows only while its column offers it, and its dropdown then
+shows it. Each time the columns change, every choice is checked against its column's current option
+values. One the options no longer include is cleared — the dropdown returns to its "all" option and
+the stored view is rewritten without it — rather than hiding every row behind a dropdown that reads
+"all". A choice whose column is not rendered, has no `filter`, or has an empty option list (a screen
+still loading the data it builds them from) waits instead: it hides no rows, stays in storage when
+the view is saved for another change, and is checked when the column next has a non-empty list. So
+one `viewKey` can serve two layouts that show different columns.
+
+In tree mode the table keeps a match's ancestor rows and tells each cell, via its second argument's
+`ancestorOnly`, whether the row is present only to hold a descendant's place — mute those with a
+`part` on the cell.
 
 Use `wt-modal` for an add or edit form. Its portrait panel fills the viewport height with 24px
 top and bottom margins. The body scrolls independently, so your footer actions stay visible.

@@ -197,6 +197,10 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   nothing and the element renders unstyled while every attribute assertion still passes. Cost: the
   categories screen's colour swatches, thumbnails and ancestor-row muting never rendered at all,
   through review and a green suite. See [design-system.md](docs/developers/design-system.md).
+- **A Lit `<select>` whose `<option>`s come from a `${…}` expression marks the chosen option with
+  `.selected`; a `.value` binding alone runs before those options exist and the dropdown shows its
+  first option.** Nothing guards it. Cost: a restored `wt-data-table` filter hid rows while its
+  dropdown read "all". See [conventions-ui.md](docs/developers/conventions-ui.md).
 - **Every colour, spacing, radius and font reads a `--wt-*` token.** No hex, no named colours, no
   `rem`/`em`. Guard: `packages/ui/src/no-hardcoded-chrome.test.ts`, which scans `packages/ui`
   components; [design-system.md](docs/developers/design-system.md) states the rule for any component

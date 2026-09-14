@@ -6,14 +6,15 @@ lines, and its existing preparation route remains the category route used by the
 below for what a product with no primary records instead. Other memberships and parent categories
 do not add destinations or inherit routes. Product and service-zone route precedence still applies.
 
-You manage categories at `/manage/categories`. Open a category to see its directly assigned
-products. A child's products do not count towards its parent. Create and edit forms let you translate
-the name, choose an image from the shared library, and choose or clear a parent. You cannot choose
-the category itself or any of its descendants.
+You manage categories at `/manage/categories`. The page lists categories as a tree or as a flat
+list with a Parent column and a Parent filter; the browser remembers the choice. Open a category to
+see its directly assigned products. A child's products do not count towards its parent. Create and
+edit forms let you translate the name, pick a colour, choose an image from the shared library, and
+choose or clear a parent. You cannot choose the category itself or any of its descendants.
 
 A primary category is optional in the data model and on the write path every current UI flow uses:
 a product may hold memberships with no reporting category at all.
-`dashboard-category-membership-picker`'s reporting-category select offers an explicit "None" option,
+`dashboard-category-membership-picker`'s reporting-category dropdown offers an explicit "None" option,
 and the product editor's category picker can be left on its default "Choose…" placeholder; both
 submit with `primaryCategoryId: null` through `replaceProductCategories`, whose only remaining check
 is that a primary, if set, must be one of the currently selected categories. Removing the last
@@ -25,21 +26,35 @@ One older write path is the exception, and the API is not uniform because of it.
 clears every membership along with the reporting category. That is the coupling the picker no longer
 has. It stays because nothing first-party sends `categoryId` in a product patch any more.
 
-Deleting a category is confirmed and then goes ahead. It is no longer refused when something refers
-to it. The delete removes the product memberships, clears the reporting category from any product
+Deleting a category is confirmed and then goes ahead; it is not refused when something refers to
+it. The delete removes the product memberships, clears the reporting category from any product
 using it, moves direct children up to the deleted category's own parent, drops its preparation
 routes, and then removes the category. Because it cascades instead of refusing, a delete can take
-more with it than the category itself, so the confirmation dialog fetches the dependants preview
-(`GET .../dependants`) and lists what will go — each affected product, child category and kitchen
-route as a link to it, with the ones clearing a reporting category called out separately — before
-Delete is enabled. Previously recorded labels on past orders stay readable and are untouched.
+more with it than the category itself, so the confirmation dialog ("Delete <name>?") fetches the
+dependants preview (`GET .../dependants`) and keeps Delete disabled until it arrives. The preview
+shows the affected products in a searchable table, marking each one whose reporting category will be
+cleared, and lists the child categories that will move, each as a link to that category. It does not
+list the preparation routes, although the delete still drops them. If the preview cannot be fetched,
+the dialog says so and Delete stays disabled. Previously recorded labels on past orders stay readable
+and are untouched.
 
-Opening a category's name shows its directly assigned products in a modal: a filterable table with
-each product's reporting category and other memberships as coloured lozenges, an Edit action that
-reopens the full membership picker, and a Remove action that pre-fills the picker with this category
-taken out (so clearing a reporting category is still a confirmed choice, not an immediate write). Its
-"Add products" view is a separate checkbox table over products not yet in the category, backed by the
-bulk-add route in one write.
+Opening a category's name shows its directly assigned products in a modal: a searchable table with a
+Reporting category filter, showing each product's reporting category and other memberships as
+coloured lozenges. Each row's actions are "Edit product categories", which opens the full membership
+picker, and "Remove from this category", which opens the picker with this category already taken out
+(so clearing a reporting category is still a confirmed choice, not an immediate write). A Close
+button dismisses the modal, and is disabled while a save is running. Its "Add products" view uses the
+same columns over products not yet in the category, with a checkbox per row and a header checkbox
+that selects every row the search and filter leave visible. A product stays picked when a later
+search hides it, and "Add N products" sends the whole selection to the bulk-add route in one write.
+Every table on the page remembers its sort and filter choices for the browser tab; none remembers
+typed search text. The category list keeps one remembered view for both modes, so a Parent filter
+chosen in the flat list hides nothing in the tree, which has no Parent column, and applies again in
+the flat list — also after leaving the page and coming back in the same tab. When a filter stops
+offering the chosen category but still offers others (a parent whose only child was deleted, say),
+the choice is forgotten and the filter goes back to "All parents" or "All reporting categories". If
+it offers no categories at all, the filter also reads "All" and hides nothing, but the choice is kept
+and applies again if that category is offered later.
 
 ## API and Products integration
 
@@ -107,20 +122,25 @@ empty set. The complete replacement runs in the caller's single transaction thro
 `replaceProductCategories`.
 
 Products can compose `dashboard-category-form` from `apps/dashboard/src/widgets/category-form.ts`.
-Pass `open`, `busy`, `locales` (default first), `value` (category or null), `fieldErrors`, `categories`
-(for parent choices), and `api` (the image library request). The form emits `wt-submit` with
+Pass `open`, `busy`, `languages` (a `ContentLanguages`; the form draws a name field for each listed
+language and requires the first, so list the default first), `value` (category or null),
+`fieldErrors`, `categories` (for parent choices, labelled by path in the reader's language), and
+`api` (the image library request). The form emits `wt-submit` with
 `{ value: CategoryInput }` and `wt-cancel` with `{}`. The host owns the API write, closes on success,
 and selects the returned identity in its product draft. Field-error keys are `name-<language>`,
-`parent`, `image`, or `save` for an error that does not belong to one field. Creating a category is a durable independent
+`parent`, `image`, `color`, or `save` for an error that does not belong to one field. Creating a category is a durable independent
 write; cancelling the product afterwards leaves that category available.
 
-`dashboard-category-membership-picker` receives `categories`, `locales`, `busy` and
-`value: { categoryIds, primaryCategoryId }`. It emits the same submit/cancel contract. It renders
-membership checkboxes and an explicit primary selector. Products integrates this real picker; the
-Categories screen already uses it for category-side assignment and removal. The old combined
-catalogue page remains until Products integration. Its single selector can add/select a primary;
-it refuses to clear a product with multiple memberships, because it writes through the legacy
-`updateProduct` path described above rather than through `replaceProductCategories`.
+`dashboard-category-membership-picker` receives `categories`, `languages` (a `ContentLanguages`),
+`busy` and `value: { categoryIds, primaryCategoryId }`. It emits the same submit/cancel contract. It
+renders a multi-select dropdown of categories (field name `category-membership`), labelled by path
+in the reader's language; the chosen categories as coloured lozenges; and a reporting-category
+dropdown (field name `primary-category`) offering "None" and the chosen categories, disabled until a
+category is chosen. The first category chosen into an empty set becomes the reporting category, and
+removing the reporting category from the set clears it. The Categories screen uses it for
+category-side assignment and removal. The product editor (`apps/dashboard/src/widgets/product-editor.ts`)
+does not: it has its own membership controls and reporting-category select, and saves through the
+product editor route, which calls `replaceProductCategories`.
 
 ## Storage and migration
 

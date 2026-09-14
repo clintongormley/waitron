@@ -85,6 +85,10 @@ const panel = (theme: "light" | "dark") => `
         </div>
         <wt-data-table class="demo-table" aria-label="Team"></wt-data-table>
       </section>
+      <section slot="catalogue">
+        <h3>Catalogue</h3>
+        <wt-data-table class="demo-search-table" aria-label="Catalogue" searchable></wt-data-table>
+      </section>
     </wt-tabs>
     <div class="row" style="margin-top:16px">
       <wt-button class="open-dialog">Abrir diálogo</wt-button>
@@ -126,6 +130,7 @@ for (const el of app.querySelectorAll<HTMLElement>(".panel")) {
   tabs.items = [
     { key: "status", label: "Status" },
     { key: "team", label: "Team" },
+    { key: "catalogue", label: "Catalogue" },
   ];
   tabs.value = "team";
   const table = el.querySelector<WtDataTable<{ name: string; role: string }>>("wt-data-table")!;
@@ -181,6 +186,57 @@ for (const el of app.querySelectorAll<HTMLElement>(".panel")) {
           >
         </wt-row-actions>
       `,
+    },
+  ];
+
+  // A second, independent wt-data-table exercising the toolbar: search, a column filter, a
+  // chosen starting sort, and a remembered view. viewKey is per-theme so the light and dark
+  // panels (both mounted on this page) don't share one session-storage entry.
+  const searchTable =
+    el.querySelector<WtDataTable<{ name: string; category: string; price: number }>>(
+      ".demo-search-table",
+    )!;
+  searchTable.searchLabel = "Search catalogue";
+  searchTable.viewKey = `demo-catalogue-view-${el.dataset.theme}`;
+  searchTable.sortKey = "name";
+  searchTable.sortDirection = "ascending";
+  searchTable.rows = [
+    { name: "Espresso", category: "Drinks", price: 1.8 },
+    { name: "Cortado", category: "Drinks", price: 2.0 },
+    { name: "Croissant", category: "Bakery", price: 2.2 },
+    { name: "Ensaimada", category: "Bakery", price: 2.6 },
+    { name: "Tortilla", category: "Food", price: 4.5 },
+  ];
+  searchTable.columns = [
+    {
+      key: "name",
+      label: "Name",
+      cell: (row) => row.name,
+      sortValue: (row) => row.name,
+      searchValue: (row) => row.name,
+    },
+    {
+      key: "category",
+      label: "Category",
+      cell: (row) => row.category,
+      sortValue: (row) => row.category,
+      filter: {
+        label: "Category",
+        allLabel: "All categories",
+        value: (row) => row.category,
+        options: [
+          { value: "Drinks", label: "Drinks" },
+          { value: "Bakery", label: "Bakery" },
+          { value: "Food", label: "Food" },
+        ],
+      },
+    },
+    {
+      key: "price",
+      label: "Price",
+      align: "end",
+      cell: (row) => `€${row.price.toFixed(2)}`,
+      sortValue: (row) => row.price,
     },
   ];
 

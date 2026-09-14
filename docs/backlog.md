@@ -267,9 +267,10 @@ own dashboard page at `/manage/categories`, where you can translate a category's
 picture from the shared library, put it under a parent (not itself and not one of its own
 descendants), and see the products assigned directly to it — a child's products do not count towards
 its parent. Deleting a category is confirmed and then goes ahead rather than refused: the confirmation
-first lists what will change — the products losing that membership (and any that lose their
-reporting category with it), the child categories moving up to the deleted category's own parent,
-and the kitchen preparation routes being dropped. Labels already written onto past orders stay
+first shows what will change — the products losing that membership (and any that lose their
+reporting category with it) and the child categories moving up to the deleted category's own parent.
+The delete also drops the category's kitchen preparation routes; since #362
+(2026-09-14) the confirmation no longer lists those. Labels already written onto past orders stay
 readable and never block a deletion. Under the hood the single stored category name became translated
 JSON in the existing core row, and the new hierarchy, picture and membership tables belong to the
 catalogue module. [Design](superpowers/specs/2026-09-12-product-categories-design.md),
@@ -321,6 +322,13 @@ What it left open:
 - **No "category dependants" seat exists on the module contract.** The delete-preview route
   (`GET .../:id/dependants`) is core-catalogue-specific; a module that wants its own kind of
   dependant (beyond products, child categories and preparation routes) has nowhere to plug in one.
+- **The delete confirmation and the add-products button use a plural even for one.** The counts are
+  dropped into fixed plural sentences (`categories.delete_products`,
+  `categories.delete_children_under`, `categories.delete_children_top`, `categories.add_selected` in
+  `apps/dashboard/src/i18n/strings.ts`), so one product or child reads "Quitarlo de 1 productos",
+  "Mover 1 categorías hijas …" or "Añadir 1 productos", and the English is just as wrong. The same
+  strings are on `origin/main`, so this predates #362. **Next action:** give
+  each a one-item form, or use a plural-aware formatter if the dashboard adopts one.
 - **A shadow-root styling bug affects `wt-data-table` cells throughout the dashboard.** During QA, a
   real rendering issue was found and fixed in `apps/dashboard/src/screens/categories-screen.ts`: custom
   markup (a colour swatch, a thumbnail, a muted-row style) inside a `cell:` callback was styled by CSS
@@ -826,23 +834,37 @@ ongoing overhaul listed at the top of Track A.
   the schema.
 - **`wt-select` in `packages/ui`** (owner decision 2026-09-12): every screen writes its own raw
   `<select>`, so a rule alone could not be guarded. Sorts by the label the person reads with
-  `Intl.Collator`; lists in a lifecycle order say so; then migrate the screens. Fix `wt-data-table`'s
-  locale-less `localeCompare` at the same time.
-- **`wt-combobox` landed with nothing using it** (#351, 2026-09-13). It is a searchable dropdown in
-  `packages/ui`: pick one option or several (`multiple`), and optionally offer to add what was typed
-  when nothing matches. So far it appears only in the UI kit's demo page and has an icon registered in
-  `apps/dashboard/src/icons.ts`. No dashboard screen uses it yet. Left out on purpose, per its
+  `Intl.Collator`; lists in a lifecycle order say so; then migrate the screens, including the filter
+  dropdowns `wt-data-table` draws in its toolbar, which are raw `<select>`s too. Fix
+  `wt-data-table`'s locale-less `localeCompare` at the same time.
+- **Two till dropdowns may show the wrong choice when they first appear** (found 2026-09-14; read,
+  not run). `apps/till/src/screens/till-counter-screen.ts:321` (service zone) and
+  `apps/till/src/widgets/line-extras-editor.ts:95` (doneness) bind only `.value` on a `<select>`
+  whose options come from a `${…}` list, and mark no option selected. The CLAUDE.md §3 `<select>`
+  rule says such a dropdown shows its first option when its first value is another one: a chosen
+  service zone that is not the first zone, or a doneness already set when the picker first renders.
+  **Next action:** reproduce each in a browser test, then mark the chosen option with `.selected`.
+- **`wt-combobox`** (#351, 2026-09-13). It is a searchable dropdown in `packages/ui`: pick one option
+  or several (`multiple`), and optionally offer to add what was typed when nothing matches. It landed
+  with nothing using it; #362 (2026-09-14) is the first adopter, for the
+  category form's parent picker (`apps/dashboard/src/widgets/category-form.ts`) and the
+  product-categories editor's category and reporting-category dropdowns
+  (`apps/dashboard/src/widgets/category-membership-picker.ts`). Left out on purpose, per its
   [design](superpowers/specs/2026-09-13-wt-combobox-design.md): searching on the server, disabling
   single options, taking part in a native `<form>`, and showing chosen options as chips (it shows a
   count instead). **Undecided:** how it relates to the `wt-select` row above. The combobox does not
   sort its options, and neither its design nor that row mentions the other, so decide whether
   `wt-select` becomes a non-searchable mode of the combobox or stays a separate element before
-  building either. **Next action:** the first screen with a long or growing list to choose from adopts
-  it; whoever does that fixes the answer to the `wt-select` question in the same change.
+  building either. #362 adopted the combobox for the pickers above without
+  answering the `wt-select` question, which is still open for the owner. **Next action:** the owner
+  answers the `wt-select` question.
 - **Shared database-backed table paging, search and sorting** (owner decision 2026-09-12; users
   first). 50 per page with a server-enforced maximum; search and sort over the whole dataset; debounce,
   reset on filter change, ignore superseded responses, keep passive live refreshes. Deliberately kept
-  out of #328.
+  out of #328. `wt-data-table`'s toolbar search box and filter dropdowns (#362)
+  filter the rows already in the browser and emit no `wt-*` event of their own when the search text
+  or a filter changes (only sorting and row selection do), so server-backed paging cannot reuse them
+  as they stand.
 - **Tell people by email when their account's security changes** (owner, 2026-09-12): password changed,
   passkey or authenticator added or removed, recovery codes regenerated, email changed, Google login
   connected or disconnected. No link, one line on what to do if it was not them. Open: notify the OLD

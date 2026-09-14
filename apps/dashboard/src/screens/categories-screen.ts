@@ -1,6 +1,7 @@
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { keyed } from "lit/directives/keyed.js";
 import {
   baseStyles,
   isHexColor,
@@ -25,7 +26,6 @@ import "../widgets/category-membership-picker.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-spinner.js";
-import "@waitron/ui/src/components/wt-icon.js";
 import "@waitron/ui/src/components/wt-lozenge.js";
 
 const MODE_KEY = "waitron.categories.mode";
@@ -47,6 +47,7 @@ export class CategoriesScreen extends LitElement {
       }
       .heading {
         display: flex;
+        flex-wrap: wrap;
         align-items: center;
         justify-content: space-between;
         gap: var(--wt-space-3);
@@ -55,19 +56,17 @@ export class CategoriesScreen extends LitElement {
       h2 {
         margin: var(--wt-space-4) 0;
       }
-      .filters {
+      .header-actions {
         display: flex;
         flex-wrap: wrap;
-        align-items: flex-end;
         gap: var(--wt-space-3);
-        margin-block: var(--wt-space-3);
+        align-items: center;
       }
       .mode-toggle {
         display: flex;
         gap: var(--wt-space-2);
       }
-      .error,
-      .danger {
+      .error {
         color: var(--wt-color-danger);
       }
       a {
@@ -110,19 +109,19 @@ export class CategoriesScreen extends LitElement {
       wt-data-table::part(muted) {
         color: var(--wt-color-text-muted);
       }
-      /* Marks a tree-mode ancestor kept only to show a matching descendant's path — see the
-         filtering block in render(). The colour has to reach the <button> inside wt-button's OWN
+      /* The delete preview flags a product that will lose its reporting category. That flag is cell
+         markup living in the table's shadow root, so it carries a part=, not a class. */
+      wt-data-table::part(danger) {
+        color: var(--wt-color-danger);
+      }
+      /* Marks a tree-mode ancestor kept only to show a matching descendant's path — the table
+         reports it through the cell's ancestorOnly context. The colour has to reach the <button> inside wt-button's OWN
          shadow root, which is one boundary further than ::part() can select. Re-pointing the token
          that wt-button's ghost variant reads for its colour (--wt-color-text) on the host does it,
          because a custom property set on an element is inherited by its shadow tree. Scoped to this
          one button instance, so no other element's text colour moves. */
       wt-data-table::part(name-muted) {
         --wt-color-text: var(--wt-color-text-muted);
-      }
-      label {
-        display: grid;
-        gap: var(--wt-space-2);
-        margin-block: var(--wt-space-3);
       }
     `,
   ];
@@ -134,8 +133,6 @@ export class CategoriesScreen extends LitElement {
   @state() private loadError = false;
   @state() private saveError = "";
   @state() private fieldErrors: Record<string, string> = {};
-  @state() private search = "";
-  @state() private productSearch = "";
   @state() private mode: ViewMode = this.#readMode();
   @state() private selected: string | null = null;
   @state() private addingProducts = false;
@@ -303,26 +300,10 @@ export class CategoriesScreen extends LitElement {
   #openAdding(): void {
     this.addingProducts = true;
     this.picked = new Set();
-    this.productSearch = "";
     this.saveError = "";
   }
   #closeAdding(): void {
     this.addingProducts = false;
-    this.productSearch = "";
-  }
-  #togglePick(id: string, checked: boolean): void {
-    const next = new Set(this.picked);
-    if (checked) next.add(id);
-    else next.delete(id);
-    this.picked = next;
-  }
-  #toggleAllPicked(visible: readonly Product[], checked: boolean): void {
-    const next = new Set(this.picked);
-    for (const product of visible) {
-      if (checked) next.add(product.id);
-      else next.delete(product.id);
-    }
-    this.picked = next;
   }
   async #addPicked(): Promise<void> {
     if (!this.selected || this.busy || this.picked.size === 0) return;
@@ -378,10 +359,11 @@ export class CategoriesScreen extends LitElement {
       ? html`<span part="swatch" style=${`background:${color}`} aria-hidden="true"></span>`
       : html`<span part="swatch swatch-none" aria-hidden="true"></span>`;
   }
-  #nameCell(category: CategorySummary, matchIds: ReadonlySet<string>) {
+  #nameCell(category: CategorySummary, ancestorOnly: boolean) {
     // In tree mode a row can be present only to keep a matching descendant's ancestor chain
-    // visible (see the filtering block in render()); mute those so the match itself stands out.
-    const muted = this.mode === "tree" && !matchIds.has(category.id);
+    // visible; the table reports that through the cell's `ancestorOnly` context. Mute those so
+    // the match itself stands out.
+    const muted = this.mode === "tree" && ancestorOnly;
     return html`<span part="name-cell">
       ${
         category.image
@@ -400,7 +382,6 @@ export class CategoriesScreen extends LitElement {
         ?data-muted=${muted}
         @click=${() => {
           this.selected = category.id;
-          this.productSearch = "";
           this.addingProducts = false;
           this.picked = new Set();
           this.saveError = "";
@@ -420,22 +401,35 @@ export class CategoriesScreen extends LitElement {
     const parent = this.categories.find((item) => item.id === category.parentId);
     return parent ? categoryPath(parent, this.categories, currentLocale(), this.languages) : null;
   }
-  #columns(matchIds: ReadonlySet<string>): DataTableColumn<CategorySummary>[] {
+  #columns(): DataTableColumn<CategorySummary>[] {
     return [
       {
         key: "name",
         label: t("categories.name"),
-        cell: (category) => this.#nameCell(category, matchIds),
+        searchValue: (category) => this.#text(category.name),
+        sortValue: (category) => this.#text(category.name),
+        cell: (category, context) => this.#nameCell(category, context.ancestorOnly),
       },
       {
         key: "parent",
         label: t("categories.parent"),
         sortValue: (category) => this.#parentPath(category) ?? "",
         cell: (category) => this.#parentPath(category) ?? t("categories.no_parent"),
+        filter: {
+          label: t("categories.parent"),
+          allLabel: t("categories.filter_parent_all"),
+          value: (category) => category.parentId ?? "",
+          options: this.#categoryOptions(
+            this.categories.map((category) => category.parentId),
+            (category) => categoryPath(category, this.categories, currentLocale(), this.languages),
+          ),
+        },
       },
       {
         key: "products",
         label: t("categories.products"),
+        sortValue: (category) =>
+          this.products.filter((product) => product.categoryIds.includes(category.id)).length,
         cell: (category) =>
           this.products.filter((product) => product.categoryIds.includes(category.id)).length,
       },
@@ -455,17 +449,34 @@ export class CategoriesScreen extends LitElement {
   }
   /** Tree mode nests by `parentId` and shows the hierarchy itself, so a separate Parent column
    * would repeat what the indentation already shows. */
-  #treeColumns(matchIds: ReadonlySet<string>): DataTableColumn<CategorySummary>[] {
-    return this.#columns(matchIds).filter((column) => column.key !== "parent");
+  #treeColumns(): DataTableColumn<CategorySummary>[] {
+    return this.#columns().filter((column) => column.key !== "parent");
+  }
+  /** Filter options for the categories whose ids appear in `ids` (some category's parent, or some
+   * product's reporting category): a category nothing refers to would match no row. */
+  #categoryOptions(
+    ids: readonly (string | null)[],
+    label: (category: CategorySummary) => string,
+  ): { value: string; label: string }[] {
+    const referenced = new Set(ids);
+    return this.categories
+      .filter((category) => referenced.has(category.id))
+      .map((category) => ({ value: category.id, label: label(category) }));
   }
   /** A product's reporting category, or undefined when it has none (which is allowed) or when the
    * id no longer resolves. The sort value and the rendered cell share this one lookup. */
   #reportingCategory(product: Product): CategorySummary | undefined {
     return this.categories.find((item) => item.id === product.primaryCategoryId);
   }
-  #reportingCell(product: Product) {
+  /** The reporting-category cell. In the delete preview (`flagCleared`) a product whose reporting
+   * category is the one being deleted gets a danger flag, since deleting it clears that category.
+   * The flag is a `part=` span, not a class: the cell markup lands in the table's shadow root. */
+  #reportingCell(product: Product, flagCleared = false) {
     const category = this.#reportingCategory(product);
-    return category ? this.#lozenge(category) : t("categories.none");
+    const cell = category ? this.#lozenge(category) : t("categories.none");
+    return flagCleared && product.primaryCategoryId === this.deleting?.id
+      ? html`${cell}<span part="danger"> ${t("categories.delete_reporting")}</span>`
+      : cell;
   }
   #otherCategoriesCell(product: Product) {
     const others = product.categoryIds
@@ -483,91 +494,67 @@ export class CategoriesScreen extends LitElement {
     const category = this.#reportingCategory(product);
     return category ? this.#text(category.name) : "";
   }
-  /** The products modal's member list — Edit reopens the full membership picker; Remove
-   * pre-fills it with this category taken out, so a cleared reporting category is a deliberate
-   * (still-confirmed) choice rather than an immediate write. */
+  /** The shared column set behind every product table in this screen (members, add-products, and
+   * the delete preview). Name searches and sorts on the translated description; Reporting
+   * category sorts and offers a dropdown filter over the reporting categories actually in use; a
+   * caller passes its own trailing column (row actions, say) or none. `flagCleared` (delete preview
+   * only) makes the reporting cell flag a product that would lose its reporting category. */
+  #productColumns(
+    trailing?: DataTableColumn<Product>,
+    flagCleared = false,
+  ): DataTableColumn<Product>[] {
+    const base: DataTableColumn<Product>[] = [
+      {
+        key: "name",
+        label: t("categories.name"),
+        cell: (product) => this.#text(product.descriptions),
+        searchValue: (product) => this.#text(product.descriptions),
+        sortValue: (product) => this.#nameSortValue(product),
+      },
+      {
+        key: "primary",
+        label: t("editor.reporting_category"),
+        cell: (product) => this.#reportingCell(product, flagCleared),
+        sortValue: (product) => this.#reportingSortValue(product),
+        filter: {
+          label: t("editor.reporting_category"),
+          allLabel: t("categories.filter_reporting_all"),
+          value: (product) => product.primaryCategoryId ?? "",
+          options: this.#categoryOptions(
+            this.products.map((product) => product.primaryCategoryId),
+            (category) => this.#text(category.name),
+          ),
+        },
+      },
+      {
+        key: "other",
+        label: t("categories.other_categories"),
+        cell: (product) => this.#otherCategoriesCell(product),
+      },
+    ];
+    return trailing ? [...base, trailing] : base;
+  }
+  /** The products modal's member list — the shared columns plus a row-actions column. Edit reopens
+   * the full membership picker; Remove pre-fills it with this category taken out, so a cleared
+   * reporting category is a deliberate (still-confirmed) choice rather than an immediate write. */
   #memberColumns(): DataTableColumn<Product>[] {
-    return [
-      {
-        key: "name",
-        label: t("categories.name"),
-        cell: (product) => this.#text(product.descriptions),
-        sortValue: (product) => this.#nameSortValue(product),
-      },
-      {
-        key: "primary",
-        label: t("editor.reporting_category"),
-        cell: (product) => this.#reportingCell(product),
-        sortValue: (product) => this.#reportingSortValue(product),
-      },
-      {
-        key: "other",
-        label: t("categories.other_categories"),
-        cell: (product) => this.#otherCategoriesCell(product),
-      },
-      {
-        key: "actions",
-        label: t("categories.actions"),
-        cell: (product) =>
-          html`<wt-row-actions
-            label=${`${t("categories.actions")}: ${this.#text(product.descriptions)}`}
-            ><wt-button align="start" variant="ghost" @click=${() => this.#assign(product)}
-              >${t("action.edit")}</wt-button
-            ><wt-button
-              align="start"
-              data-test="remove-membership"
-              variant="ghost"
-              @click=${() => this.#assign(product, true)}
-              >${t("categories.remove_from")}</wt-button
-            ></wt-row-actions
-          >`,
-      },
-    ];
-  }
-  /** The add-products view lists products NOT already in the category, with a leading checkbox
-   * column instead of row actions — one bulk `addProductsToCategory` call replaces adding products
-   * one at a time through the membership picker. */
-  #addColumns(): DataTableColumn<Product>[] {
-    return [
-      {
-        key: "pick",
-        label: "",
-        cell: (product) =>
-          html`<input
-            type="checkbox"
-            aria-label=${`${t("categories.add_products")}: ${this.#text(product.descriptions)}`}
-            data-test=${`pick-${product.id}`}
-            .checked=${this.picked.has(product.id)}
-            @change=${(event: Event) =>
-              this.#togglePick(product.id, (event.target as HTMLInputElement).checked)}
-          />`,
-      },
-      {
-        key: "name",
-        label: t("categories.name"),
-        cell: (product) => this.#text(product.descriptions),
-        sortValue: (product) => this.#nameSortValue(product),
-      },
-      {
-        key: "primary",
-        label: t("editor.reporting_category"),
-        cell: (product) => this.#reportingCell(product),
-        sortValue: (product) => this.#reportingSortValue(product),
-      },
-      {
-        key: "other",
-        label: t("categories.other_categories"),
-        cell: (product) => this.#otherCategoriesCell(product),
-      },
-    ];
-  }
-  /** Categories whose own (translated) name matches the filter — the tree-mode ancestor walk
-   * below extends this into the full set of rows the table receives. */
-  #matches(): CategorySummary[] {
-    const term = this.search.toLocaleLowerCase();
-    return this.categories.filter((category) =>
-      this.#text(category.name).toLocaleLowerCase().includes(term),
-    );
+    return this.#productColumns({
+      key: "actions",
+      label: t("categories.actions"),
+      cell: (product) =>
+        html`<wt-row-actions
+          label=${`${t("categories.actions")}: ${this.#text(product.descriptions)}`}
+          ><wt-button align="start" variant="ghost" @click=${() => this.#assign(product)}
+            >${t("categories.edit_membership")}</wt-button
+          ><wt-button
+            align="start"
+            data-test="remove-membership"
+            variant="ghost"
+            @click=${() => this.#assign(product, true)}
+            >${t("categories.remove_from")}</wt-button
+          ></wt-row-actions
+        >`,
+    });
   }
   /** The delete confirmation's preview: a spinner until `#loadDependants` resolves, then the
    * consequence list the brief calls for — sections with nothing in them are omitted entirely,
@@ -582,24 +569,28 @@ export class CategoriesScreen extends LitElement {
     if (!dependants) return html`<wt-spinner></wt-spinner>`;
     const sections: TemplateResult[] = [];
     if (dependants.products.length > 0) {
+      // Resolve each dependant id to its full library product so the shared product table can show
+      // it; an id that no longer resolves is skipped rather than shown blank. The table's reporting
+      // cell (via flagCleared) marks a product whose reporting category is the one being deleted.
+      const affected = dependants.products
+        .map((entry) => this.products.find((product) => product.id === entry.id))
+        .filter((product): product is Product => product !== undefined);
       sections.push(
         html`<p>
             ${t("categories.delete_products").replace("{count}", String(dependants.products.length))}
           </p>
-          <ul>
-            ${dependants.products.map(
-              (product) =>
-                html`<li>
-                  <a href=${`/manage/catalogue/product/${encodeURIComponent(product.id)}`}
-                    >${this.#text(product.name)}</a
-                  >${
-                    product.reporting
-                      ? html` <span class="danger">${t("categories.delete_reporting")}</span>`
-                      : nothing
-                  }
-                </li>`,
-            )}
-          </ul>`,
+          <wt-data-table
+            data-test="category-delete-products"
+            aria-label=${t("categories.products_modal")}
+            searchable
+            searchLabel=${t("categories.search_products")}
+            noMatchesMessage=${t("categories.products_no_matches")}
+            viewKey="waitron.categories.delete.table"
+            .rows=${affected}
+            .columns=${this.#productColumns(undefined, true)}
+            .rowKey=${(product: Product) => product.id}
+            .emptyMessage=${t("categories.no_products")}
+          ></wt-data-table>`,
       );
     }
     if (dependants.children.length > 0) {
@@ -626,24 +617,6 @@ export class CategoriesScreen extends LitElement {
           </ul>`,
       );
     }
-    if (dependants.routes.length > 0) {
-      sections.push(
-        html`<p>
-            ${t("categories.delete_routes").replace("{count}", String(dependants.routes.length))}
-          </p>
-          <ul>
-            ${dependants.routes.map(
-              (route) =>
-                html`<li>
-                  <a href="/manage/venue-operations/view/routing"
-                    >${route.station ?? t("categories.no_preparation")} ·
-                    ${route.zone ?? t("categories.route_all_zones")}</a
-                  >
-                </li>`,
-            )}
-          </ul>`,
-      );
-    }
     return sections.length === 0
       ? nothing
       : html`<p>${t("categories.delete_intro")}</p>
@@ -651,49 +624,36 @@ export class CategoriesScreen extends LitElement {
   }
   override render() {
     const selected = this.categories.find((category) => category.id === this.selected);
-    const matches = this.#matches();
-    const matchIds = new Set(matches.map((category) => category.id));
-    let rows: CategorySummary[];
-    if (this.mode === "flat") {
-      rows = matches;
-    } else {
-      // Tree mode must keep every matching row's ancestor chain too, or wt-data-table (which only
-      // nests within the rows it is given) would render a match as a false top-level row.
-      const included = new Set(matchIds);
-      for (const category of matches) {
-        const visited = new Set<string>();
-        let current: CategorySummary | undefined = category;
-        while (current?.parentId && !visited.has(current.parentId)) {
-          visited.add(current.parentId);
-          included.add(current.parentId);
-          current = this.categories.find((item) => item.id === current!.parentId);
-        }
-      }
-      rows = this.categories.filter((category) => included.has(category.id));
-    }
-    const filter = this.productSearch.toLocaleLowerCase();
-    const members = this.products.filter(
-      (product) =>
-        product.categoryIds.includes(this.selected ?? "") &&
-        this.#text(product.descriptions).toLocaleLowerCase().includes(filter),
+    // Each table searches and filters its own rows, so these are the full member and add lists.
+    const members = this.products.filter((product) =>
+      product.categoryIds.includes(this.selected ?? ""),
     );
     const addRows = this.products.filter(
-      (product) =>
-        !product.categoryIds.includes(this.selected ?? "") &&
-        this.#text(product.descriptions).toLocaleLowerCase().includes(filter),
+      (product) => !product.categoryIds.includes(this.selected ?? ""),
     );
-    const allVisiblePicked =
-      addRows.length > 0 && addRows.every((product) => this.picked.has(product.id));
     return html`<div class="heading">
         <h1>${t("nav.categories")}</h1>
-        <wt-button
-          shape="round"
-          variant="primary"
-          data-test="create-category"
-          aria-label=${t("categories.create")}
-          @click=${() => this.#edit(null)}
-          ><wt-icon name="plus"></wt-icon
-        ></wt-button>
+        <div class="header-actions">
+          <div class="mode-toggle">
+            <wt-button
+              data-test="mode-tree"
+              variant=${this.mode === "tree" ? "primary" : "secondary"}
+              aria-pressed=${this.mode === "tree" ? "true" : "false"}
+              @click=${() => this.#setMode("tree")}
+              >${t("categories.mode_tree")}</wt-button
+            >
+            <wt-button
+              data-test="mode-flat"
+              variant=${this.mode === "flat" ? "primary" : "secondary"}
+              aria-pressed=${this.mode === "flat" ? "true" : "false"}
+              @click=${() => this.#setMode("flat")}
+              >${t("categories.mode_flat")}</wt-button
+            >
+          </div>
+          <wt-button data-test="create-category" variant="primary" @click=${() => this.#edit(null)}
+            >${t("categories.add")}</wt-button
+          >
+        </div>
       </div>
       ${this.loading ? html`<wt-spinner></wt-spinner>` : nothing}
       ${
@@ -706,37 +666,16 @@ export class CategoriesScreen extends LitElement {
               >`
           : nothing
       }
-      <div class="filters">
-        <wt-input
-          name="category-search"
-          label=${t("categories.search")}
-          .value=${this.search}
-          @wt-change=${(event: CustomEvent<{ value: string }>) => {
-            event.stopPropagation();
-            this.search = event.detail.value;
-          }}
-        ></wt-input>
-        <div class="mode-toggle">
-          <wt-button
-            data-test="mode-tree"
-            variant=${this.mode === "tree" ? "primary" : "secondary"}
-            aria-pressed=${this.mode === "tree" ? "true" : "false"}
-            @click=${() => this.#setMode("tree")}
-            >${t("categories.mode_tree")}</wt-button
-          >
-          <wt-button
-            data-test="mode-flat"
-            variant=${this.mode === "flat" ? "primary" : "secondary"}
-            aria-pressed=${this.mode === "flat" ? "true" : "false"}
-            @click=${() => this.#setMode("flat")}
-            >${t("categories.mode_flat")}</wt-button
-          >
-        </div>
-      </div>
       <wt-data-table
         aria-label=${t("nav.categories")}
-        .rows=${rows}
-        .columns=${this.mode === "tree" ? this.#treeColumns(matchIds) : this.#columns(matchIds)}
+        searchable
+        searchLabel=${t("categories.search")}
+        noMatchesMessage=${t("categories.no_matches")}
+        viewKey="waitron.categories.table"
+        sortKey="name"
+        sortDirection="ascending"
+        .rows=${this.categories}
+        .columns=${this.mode === "tree" ? this.#treeColumns() : this.#columns()}
         .rowKey=${(category: CategorySummary) => category.id}
         .rowParent=${this.mode === "tree" ? this.#rowParent : undefined}
         collapseLabel=${t("categories.collapse")}
@@ -744,6 +683,7 @@ export class CategoriesScreen extends LitElement {
         .emptyMessage=${t("categories.empty")}
       ></wt-data-table>
       <wt-modal
+        data-test="products-modal"
         .open=${this.selected !== null}
         heading=${selected ? `${this.#text(selected.name)} · ${t("categories.products_modal")}` : ""}
         @keydown=${(event: KeyboardEvent) => {
@@ -760,31 +700,24 @@ export class CategoriesScreen extends LitElement {
         ${this.saveError ? html`<p role="alert">${this.saveError}</p>` : nothing}
         ${
           this.addingProducts
-            ? html`<div class="filters">
-                  <wt-input
-                    name="add-category-product-search"
-                    label=${t("categories.search_products")}
-                    .value=${this.productSearch}
-                    @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                      event.stopPropagation();
-                      this.productSearch = event.detail.value;
-                    }}
-                  ></wt-input>
-                  <label
-                    ><input
-                      type="checkbox"
-                      data-test="select-all-visible"
-                      .checked=${allVisiblePicked}
-                      @change=${(event: Event) =>
-                        this.#toggleAllPicked(addRows, (event.target as HTMLInputElement).checked)}
-                    />${t("categories.select_all_visible")}</label
-                  >
-                </div>
-                <wt-data-table
+            ? html`<wt-data-table
                   data-test="category-add-products"
                   aria-label=${t("categories.add_products")}
+                  searchable
+                  searchLabel=${t("categories.search_products")}
+                  noMatchesMessage=${t("categories.products_no_matches")}
+                  viewKey="waitron.categories.add.table"
+                  selectable
+                  .selected=${[...this.picked]}
+                  .selectionLabel=${(product: Product) =>
+                    `${t("categories.add_products")}: ${this.#text(product.descriptions)}`}
+                  selectAllLabel=${t("categories.select_all_products")}
+                  @wt-selection-change=${(event: CustomEvent<{ selected: string[] }>) => {
+                    event.stopPropagation();
+                    this.picked = new Set(event.detail.selected);
+                  }}
                   .rows=${addRows}
-                  .columns=${this.#addColumns()}
+                  .columns=${this.#productColumns()}
                   .rowKey=${(product: Product) => product.id}
                   .emptyMessage=${t("categories.no_products")}
                 ></wt-data-table>
@@ -815,29 +748,43 @@ export class CategoriesScreen extends LitElement {
                     >${t("categories.add_products")}</wt-button
                   >
                 </div>
-                <wt-input
-                  name="category-product-search"
-                  label=${t("categories.search_products")}
-                  .value=${this.productSearch}
-                  @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                    event.stopPropagation();
-                    this.productSearch = event.detail.value;
-                  }}
-                ></wt-input>
-                <wt-data-table
-                  data-test="category-products"
-                  aria-label=${t("categories.products_modal")}
-                  .rows=${members}
-                  .columns=${this.#memberColumns()}
-                  .rowKey=${(product: Product) => product.id}
-                  .emptyMessage=${t("categories.no_products")}
-                ></wt-data-table>`
+                <!-- Keyed on the opened category: each open gets a fresh table, so a search typed
+                     for one category never hides another's products. -->
+                ${keyed(
+                  this.selected,
+                  html`<wt-data-table
+                    data-test="category-products"
+                    aria-label=${t("categories.products_modal")}
+                    searchable
+                    searchLabel=${t("categories.search_products")}
+                    noMatchesMessage=${t("categories.products_no_matches")}
+                    viewKey="waitron.categories.members.table"
+                    .rows=${members}
+                    .columns=${this.#memberColumns()}
+                    .rowKey=${(product: Product) => product.id}
+                    .emptyMessage=${t("categories.no_products")}
+                  ></wt-data-table>`,
+                )}
+                <wt-form-actions slot="footer"
+                  ><wt-button
+                    slot="cancel"
+                    data-test="close-products"
+                    variant="secondary"
+                    .disabled=${this.busy}
+                    @click=${() => {
+                      this.selected = null;
+                      this.addingProducts = false;
+                      this.picked = new Set();
+                    }}
+                    >${t("action.close")}</wt-button
+                  ></wt-form-actions
+                >`
         }
       </wt-modal>
       <dashboard-category-form
         .open=${this.editorOpen}
         .busy=${this.busy}
-        .locales=${this.languages.languages}
+        .languages=${this.languages}
         .value=${this.edited}
         .categories=${this.categories}
         .api=${this.api}
@@ -849,8 +796,12 @@ export class CategoriesScreen extends LitElement {
         }}
       ></dashboard-category-form>
       <wt-modal
+        data-test="delete-dialog"
         .open=${this.deleting !== null}
-        heading=${t("categories.delete_confirm")}
+        heading=${t("categories.delete_named").replace(
+          "{name}",
+          this.deleting ? this.#text(this.deleting.name) : "",
+        )}
         @keydown=${(event: KeyboardEvent) => {
           if (this.busy && event.key === "Escape") event.preventDefault();
         }}
@@ -859,7 +810,6 @@ export class CategoriesScreen extends LitElement {
           if (!this.busy) this.#closeDelete();
         }}
       >
-        <p>${this.deleting ? this.#text(this.deleting.name) : ""}</p>
         ${this.deleting ? this.#renderDependants() : nothing}
         ${this.saveError ? html`<p role="alert">${this.saveError}</p>` : nothing}
         <wt-form-actions slot="footer"
@@ -894,7 +844,7 @@ export class CategoriesScreen extends LitElement {
             ? html`<p>${this.#text(this.memberProduct.descriptions)}</p>
                 <dashboard-category-membership-picker
                   .categories=${this.categories}
-                  .locales=${this.languages.languages}
+                  .languages=${this.languages}
                   .value=${this.membership}
                   .busy=${this.busy}
                   @wt-submit=${(event: CustomEvent<{ value: ProductCategories }>) => void this.#saveMembership(event)}

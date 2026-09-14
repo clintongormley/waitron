@@ -163,6 +163,30 @@ re-emitting, the native or internal event that triggered them must be stopped wi
 `input`/`change`) independently crosses the same boundary and the consumer observes the change
 twice.
 
+## A `<select>` over rendered options marks the chosen option, not only the select's `.value`
+
+In a Lit template, a `.value=${…}` binding on a `<select>` whose `<option>`s come from a `${…}`
+expression does not show the chosen value on the first render. A throwaway probe run on 2026-09-14
+in `packages/ui`'s real-Chromium Vitest rendered `<select .value=${"b"}>` holding a static
+`<option value="">` followed by two options from `${options.map(…)}`. An element directive on the
+same `<select>` recorded 1 option when the select's own bindings ran and 3 once the render finished,
+and `select.value` was `""`. Rendering the same template again with the same value left it `""`,
+because Lit does not set a property binding again when its value is unchanged. Two controls went the
+other way: the same `.value` binding over three static options gave `"b"` (3 options when the
+bindings ran), and `.selected=${…}` on each mapped option, with no `.value`, gave `"b"`.
+
+Cost: `wt-data-table` restored a remembered filter and narrowed the rows while its dropdown read the
+"all" option. The fix, commit `4ca816b2`, moved the choice onto each option's `.selected` and added
+the test `a restored filter's dropdown shows the restored choice` in
+`packages/ui/src/components/wt-data-table.test.ts`. Putting the lone `.value` binding back on the
+2026-09-14 tree fails that test with `expected '' to be 'off'`.
+
+The siblings that already avoid it: `apps/dashboard/src/screens/device-profiles-screen.ts`
+`#renderCanvasOptions` and its form-factor dropdown put `?selected` on each option (an attribute
+binding, which the probe above did not test), and every mapped `<select>` in
+`apps/dashboard/src/widgets/product-editor.ts` binds both `.value` and `.selected`. Nothing guards
+the rule; two dropdowns that bind `.value` alone are listed in `docs/backlog.md`.
+
 **Printing and hardware**
 
 ## A retained hardware registration must remain re-addable after deactivation
