@@ -69,6 +69,17 @@ async function mount() {
   );
   return { ...fx, ...mounted };
 }
+// Search now lives in the shared table's own toolbar, so a search test types into the input inside
+// the wt-data-table shadow root rather than the screen's old `category-search` field.
+async function typeTableSearch(el: CategoriesScreen, value: string): Promise<void> {
+  const table = el.shadowRoot!.querySelector("wt-data-table")!;
+  await table.updateComplete;
+  const search = table.shadowRoot!.querySelector<HTMLInputElement>(".table-search")!;
+  search.value = value;
+  search.dispatchEvent(new Event("input"));
+  await el.updateComplete;
+  await table.updateComplete;
+}
 it("counts direct memberships and opens category products", async () => {
   const { el } = await mount();
   const table = el.shadowRoot!.querySelector("wt-data-table")!;
@@ -172,11 +183,12 @@ it("searches the translated name displayed in the table", async () => {
   await vi.waitFor(() =>
     expect(el.shadowRoot!.querySelector("wt-data-table")!.rows.length).toBe(1),
   );
-  el.shadowRoot!.querySelector('[name="category-search"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "Comida" }, bubbles: true, composed: true }),
-  );
-  await el.updateComplete;
-  expect(el.shadowRoot!.querySelector("wt-data-table")!.rows.length).toBe(1);
+  await typeTableSearch(el, "Comida");
+  // The table keeps every row in `.rows` and narrows what it renders, so count the rendered rows.
+  expect(
+    el.shadowRoot!.querySelector("wt-data-table")!.shadowRoot!.querySelectorAll("tr[data-row-key]")
+      .length,
+  ).toBe(1);
 });
 
 // A rejected delete leaves the confirmation open with the reason on it, so the manager can retry
@@ -186,7 +198,8 @@ it("keeps the confirmation open and explains a rejected delete, then closes on s
   api.deleteCategory.mockRejectedValueOnce(new Error("network"));
   const table = el.shadowRoot!.querySelector("wt-data-table")!;
   await table.updateComplete;
-  const actions = table.shadowRoot!.querySelector("wt-row-actions")!;
+  // The table now defaults to a name sort, so target Food's row directly rather than the first row.
+  const actions = table.shadowRoot!.querySelector('tr[data-row-key="food"] wt-row-actions')!;
   actions.querySelectorAll("wt-button")[1]!.click();
   await el.updateComplete;
   const modal = [...el.shadowRoot!.querySelectorAll("wt-modal")].find((modal) => modal.open)!;
@@ -431,7 +444,7 @@ it("ignores a stale preview response from an earlier open of the same category",
     const actions = table.shadowRoot!.querySelectorAll("wt-row-actions")[0]!;
     actions.querySelectorAll("wt-button")[1]!.click();
   };
-  openDelete(); // first open of "food" — its fetch never resolves yet
+  openDelete(); // first open of the first row — its fetch never resolves yet
   await el.updateComplete;
   openDelete(); // open the SAME category again, without closing — a second, fresh fetch starts
   await el.updateComplete;
@@ -494,11 +507,12 @@ it("does not search disabled translations that are absent from the displayed cat
   await vi.waitFor(() =>
     expect(el.shadowRoot!.querySelector("wt-data-table")!.rows.length).toBe(1),
   );
-  el.shadowRoot!.querySelector('[name="category-search"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "Comida" }, bubbles: true, composed: true }),
-  );
-  await el.updateComplete;
-  expect(el.shadowRoot!.querySelector("wt-data-table")!.rows).toEqual([]);
+  await typeTableSearch(el, "Comida");
+  // "Comida" is a disabled translation, so the displayed name never exposes it and nothing matches.
+  expect(
+    el.shadowRoot!.querySelector("wt-data-table")!.shadowRoot!.querySelectorAll("tr[data-row-key]")
+      .length,
+  ).toBe(0);
 });
 
 it.each([
@@ -597,6 +611,31 @@ it("switches to flat mode and shows a Parent column", async () => {
   expect(headers.some((header) => header?.includes(t("categories.parent")))).toBe(true);
 });
 
+it("filters by parent in flat mode and hides the filter in tree mode", async () => {
+  const { el } = await mount();
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="mode-flat"]')!.click();
+  await el.updateComplete;
+  expect(
+    el
+      .shadowRoot!.querySelector("wt-data-table")!
+      .shadowRoot!.querySelector('select[data-filter="parent"]'),
+  ).not.toBeNull();
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="mode-tree"]')!.click();
+  await el.updateComplete;
+  expect(
+    el
+      .shadowRoot!.querySelector("wt-data-table")!
+      .shadowRoot!.querySelector('select[data-filter="parent"]'),
+  ).toBeNull();
+});
+
+it("defaults the categories table to sorting by name", async () => {
+  const { el } = await mount();
+  const table = el.shadowRoot!.querySelector("wt-data-table")!;
+  expect(table.sortKey).toBe("name");
+  expect(table.sortDirection).toBe("ascending");
+});
+
 it("filters by name keeping ancestors in tree mode", async () => {
   const fx = apiFixture();
   const breakfast: CategorySummary = {
@@ -619,11 +658,12 @@ it("filters by name keeping ancestors in tree mode", async () => {
   });
   const table = el.shadowRoot!.querySelector("wt-data-table")!;
   await vi.waitFor(() => expect(table.rows.length).toBe(4));
-  el.shadowRoot!.querySelector('[name="category-search"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "egg" }, bubbles: true, composed: true }),
-  );
-  await el.updateComplete;
-  const ids = table.rows.map((row) => (row as CategorySummary).id).sort();
+  await typeTableSearch(el, "egg");
+  // The table renders the match plus its kept ancestors; read the rendered keys, not `.rows`
+  // (which still holds every category).
+  const ids = [...table.shadowRoot!.querySelectorAll("tr[data-row-key]")]
+    .map((row) => row.getAttribute("data-row-key"))
+    .sort();
   expect(ids).toEqual(["breakfast", "eggs", "food"]);
   // Food and Breakfast are kept only to show Eggs's ancestor path, not because they matched "egg"
   // themselves — they should render muted while the actual match does not.
@@ -724,11 +764,7 @@ it("paints a tree-mode ancestor row's name in the muted colour", async () => {
   });
   const table = el.shadowRoot!.querySelector("wt-data-table")!;
   await vi.waitFor(() => expect(table.rows.length).toBe(2));
-  el.shadowRoot!.querySelector('[name="category-search"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "breakfast" }, bubbles: true, composed: true }),
-  );
-  await el.updateComplete;
-  await table.updateComplete;
+  await typeTableSearch(el, "breakfast");
 
   // The colour lands on the <button> inside wt-button's OWN shadow root, one boundary further in
   // than the cell markup — so read it there rather than off the host.

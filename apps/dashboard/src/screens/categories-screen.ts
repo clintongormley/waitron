@@ -114,8 +114,8 @@ export class CategoriesScreen extends LitElement {
       wt-data-table::part(muted) {
         color: var(--wt-color-text-muted);
       }
-      /* Marks a tree-mode ancestor kept only to show a matching descendant's path — see the
-         filtering block in render(). The colour has to reach the <button> inside wt-button's OWN
+      /* Marks a tree-mode ancestor kept only to show a matching descendant's path — the table
+         reports it through the cell's ancestorOnly context. The colour has to reach the <button> inside wt-button's OWN
          shadow root, which is one boundary further than ::part() can select. Re-pointing the token
          that wt-button's ghost variant reads for its colour (--wt-color-text) on the host does it,
          because a custom property set on an element is inherited by its shadow tree. Scoped to this
@@ -138,7 +138,6 @@ export class CategoriesScreen extends LitElement {
   @state() private loadError = false;
   @state() private saveError = "";
   @state() private fieldErrors: Record<string, string> = {};
-  @state() private search = "";
   @state() private productSearch = "";
   @state() private mode: ViewMode = this.#readMode();
   @state() private selected: string | null = null;
@@ -382,10 +381,11 @@ export class CategoriesScreen extends LitElement {
       ? html`<span part="swatch" style=${`background:${color}`} aria-hidden="true"></span>`
       : html`<span part="swatch swatch-none" aria-hidden="true"></span>`;
   }
-  #nameCell(category: CategorySummary, matchIds: ReadonlySet<string>) {
+  #nameCell(category: CategorySummary, ancestorOnly: boolean) {
     // In tree mode a row can be present only to keep a matching descendant's ancestor chain
-    // visible (see the filtering block in render()); mute those so the match itself stands out.
-    const muted = this.mode === "tree" && !matchIds.has(category.id);
+    // visible; the table reports that through the cell's `ancestorOnly` context. Mute those so
+    // the match itself stands out.
+    const muted = this.mode === "tree" && ancestorOnly;
     return html`<span part="name-cell">
       ${
         category.image
@@ -424,22 +424,32 @@ export class CategoriesScreen extends LitElement {
     const parent = this.categories.find((item) => item.id === category.parentId);
     return parent ? categoryPath(parent, this.categories, currentLocale(), this.languages) : null;
   }
-  #columns(matchIds: ReadonlySet<string>): DataTableColumn<CategorySummary>[] {
+  #columns(): DataTableColumn<CategorySummary>[] {
     return [
       {
         key: "name",
         label: t("categories.name"),
-        cell: (category) => this.#nameCell(category, matchIds),
+        searchValue: (category) => this.#text(category.name),
+        sortValue: (category) => this.#text(category.name),
+        cell: (category, context) => this.#nameCell(category, context?.ancestorOnly ?? false),
       },
       {
         key: "parent",
         label: t("categories.parent"),
         sortValue: (category) => this.#parentPath(category) ?? "",
         cell: (category) => this.#parentPath(category) ?? t("categories.no_parent"),
+        filter: {
+          label: t("categories.parent"),
+          allLabel: t("categories.filter_parent_all"),
+          value: (category) => category.parentId ?? "",
+          options: this.#parentFilterOptions(),
+        },
       },
       {
         key: "products",
         label: t("categories.products"),
+        sortValue: (category) =>
+          this.products.filter((product) => product.categoryIds.includes(category.id)).length,
         cell: (category) =>
           this.products.filter((product) => product.categoryIds.includes(category.id)).length,
       },
@@ -459,8 +469,21 @@ export class CategoriesScreen extends LitElement {
   }
   /** Tree mode nests by `parentId` and shows the hierarchy itself, so a separate Parent column
    * would repeat what the indentation already shows. */
-  #treeColumns(matchIds: ReadonlySet<string>): DataTableColumn<CategorySummary>[] {
-    return this.#columns(matchIds).filter((column) => column.key !== "parent");
+  #treeColumns(): DataTableColumn<CategorySummary>[] {
+    return this.#columns().filter((column) => column.key !== "parent");
+  }
+  /** The categories that are some other category's parent, labelled by their full path. Only these
+   * can usefully narrow the Parent filter; a leaf parent value would match nothing. */
+  #parentFilterOptions(): { value: string; label: string }[] {
+    const parentIds = new Set(
+      this.categories.map((c) => c.parentId).filter((id): id is string => id !== null),
+    );
+    return this.categories
+      .filter((c) => parentIds.has(c.id))
+      .map((c) => ({
+        value: c.id,
+        label: categoryPath(c, this.categories, currentLocale(), this.languages),
+      }));
   }
   /** A product's reporting category, or undefined when it has none (which is allowed) or when the
    * id no longer resolves. The sort value and the rendered cell share this one lookup. */
@@ -565,14 +588,6 @@ export class CategoriesScreen extends LitElement {
       },
     ];
   }
-  /** Categories whose own (translated) name matches the filter — the tree-mode ancestor walk
-   * below extends this into the full set of rows the table receives. */
-  #matches(): CategorySummary[] {
-    const term = this.search.toLocaleLowerCase();
-    return this.categories.filter((category) =>
-      this.#text(category.name).toLocaleLowerCase().includes(term),
-    );
-  }
   /** The delete confirmation's preview: a spinner until `#loadDependants` resolves, then the
    * consequence list the brief calls for — sections with nothing in them are omitted entirely,
    * and the "this cannot be undone" intro only appears when there is something to lose. A failed
@@ -655,26 +670,6 @@ export class CategoriesScreen extends LitElement {
   }
   override render() {
     const selected = this.categories.find((category) => category.id === this.selected);
-    const matches = this.#matches();
-    const matchIds = new Set(matches.map((category) => category.id));
-    let rows: CategorySummary[];
-    if (this.mode === "flat") {
-      rows = matches;
-    } else {
-      // Tree mode must keep every matching row's ancestor chain too, or wt-data-table (which only
-      // nests within the rows it is given) would render a match as a false top-level row.
-      const included = new Set(matchIds);
-      for (const category of matches) {
-        const visited = new Set<string>();
-        let current: CategorySummary | undefined = category;
-        while (current?.parentId && !visited.has(current.parentId)) {
-          visited.add(current.parentId);
-          included.add(current.parentId);
-          current = this.categories.find((item) => item.id === current!.parentId);
-        }
-      }
-      rows = this.categories.filter((category) => included.has(category.id));
-    }
     const filter = this.productSearch.toLocaleLowerCase();
     const members = this.products.filter(
       (product) =>
@@ -707,10 +702,7 @@ export class CategoriesScreen extends LitElement {
               >${t("categories.mode_flat")}</wt-button
             >
           </div>
-          <wt-button
-            data-test="create-category"
-            variant="primary"
-            @click=${() => this.#edit(null)}
+          <wt-button data-test="create-category" variant="primary" @click=${() => this.#edit(null)}
             >${t("categories.create")}</wt-button
           >
         </div>
@@ -726,21 +718,16 @@ export class CategoriesScreen extends LitElement {
               >`
           : nothing
       }
-      <div class="filters">
-        <wt-input
-          name="category-search"
-          label=${t("categories.search")}
-          .value=${this.search}
-          @wt-change=${(event: CustomEvent<{ value: string }>) => {
-            event.stopPropagation();
-            this.search = event.detail.value;
-          }}
-        ></wt-input>
-      </div>
       <wt-data-table
         aria-label=${t("nav.categories")}
-        .rows=${rows}
-        .columns=${this.mode === "tree" ? this.#treeColumns(matchIds) : this.#columns(matchIds)}
+        searchable
+        searchLabel=${t("categories.search")}
+        noMatchesMessage=${t("categories.no_matches")}
+        viewKey="waitron.categories.table"
+        sortKey="name"
+        sortDirection="ascending"
+        .rows=${this.categories}
+        .columns=${this.mode === "tree" ? this.#treeColumns() : this.#columns()}
         .rowKey=${(category: CategorySummary) => category.id}
         .rowParent=${this.mode === "tree" ? this.#rowParent : undefined}
         collapseLabel=${t("categories.collapse")}
