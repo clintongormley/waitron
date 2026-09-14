@@ -1,6 +1,11 @@
-// Reads source TEXT. A code built at runtime (a template literal, or a string spliced from parts)
-// escapes the scan, and so does a new code added to a file that is not in INCIDENT_CODE_SOURCES
-// unless that file also calls recordIncident/recordIncidentOnce or an incidents sink directly.
+// Reads source TEXT, which makes it weaker than its name in three ways:
+// - A code built at runtime (a template literal, or a string spliced from parts) escapes the scan.
+// - A code counts as recorded because its text appears in a listed file, not because anything in
+//   production raises it. The `clock.` and `fiscal.reconcile_` codes are counted although no
+//   production path raises them today.
+// - The writers check recognises only `recordIncident(`, `recordIncidentOnce(` and `incidents(tx`.
+//   A new file that records incidents through a sink under another name, or passes a transaction
+//   variable not named `tx`, is not caught, and neither are the codes that file names.
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { describe, expect, it } from "vitest";

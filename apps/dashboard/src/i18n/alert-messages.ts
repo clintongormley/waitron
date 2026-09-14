@@ -1,9 +1,18 @@
 // English and Spanish sentences for every alert code. `{name}` slots are filled from the alert's
 // params. Kept free of imports so the root guard (`scripts/alert-codes.test.ts`) can load it.
-const RETURNS_EN =
-  " If the next check still finds it after you mark it handled, it will appear again.";
-const RETURNS_ES =
-  " Si la próxima comprobación lo sigue encontrando después de marcarlo como resuelto, volverá a aparecer.";
+//
+// No sentence promises a later check: the daily payments check looks at each day once, and the
+// fiscal reconciliation sweep has no production caller.
+
+// An open payment incident swallows later detections for the same till and code, so its figures
+// are from when it was raised.
+const MORE_EN = " Later checks do not add to this alert while it is open, so there may be more.";
+const MORE_ES =
+  " Mientras esta alerta esté abierta, las comprobaciones posteriores no la amplían, así que puede haber más.";
+const NOT_RECHECKED_EN =
+  " Marking it handled does not fix it, and Waitron may not check these payments again.";
+const NOT_RECHECKED_ES =
+  " Marcarla como resuelta no lo soluciona, y es posible que Waitron no vuelva a comprobar estos pagos.";
 
 export const ALERT_MESSAGES: Readonly<
   Record<string, { readonly en: string; readonly es: string }>
@@ -17,12 +26,12 @@ export const ALERT_MESSAGES: Readonly<
     es: "La cadena de registros de facturación no ha superado su comprobación de integridad en una venta. Contacta con soporte.",
   },
   "clock.degraded": {
-    en: "The till's clock has not been checked against a trusted time source for {anchorAgeSeconds} seconds. Sales continue; check the box's internet connection.",
-    es: "La hora de la caja no se ha comprobado con una fuente fiable desde hace {anchorAgeSeconds} segundos. Las ventas continúan; revisa la conexión a internet del equipo.",
+    en: "This device's clock has not been checked against a trusted time source for {anchorAgeSeconds} seconds. Sales continue.",
+    es: "La hora de este equipo no se ha comprobado con una fuente de hora fiable desde hace {anchorAgeSeconds} segundos. Las ventas continúan.",
   },
   "clock.jump_detected": {
-    en: "The till's clock jumped by {wallClockDeltaSeconds} seconds. Check the date and time on the box.",
-    es: "La hora de la caja ha saltado {wallClockDeltaSeconds} segundos. Revisa la fecha y la hora del equipo.",
+    en: "This device's clock went backwards (by {wallClockDeltaSeconds} seconds). Check its date and time.",
+    es: "La hora de este equipo ha retrocedido ({wallClockDeltaSeconds} segundos). Revisa su fecha y hora.",
   },
   "fiscal.registro_rechazado": {
     en: "The tax agency (AEAT) rejected an invoice record: {mensaje} (code {codigo}). Later records on the same chain are on hold. Contact support.",
@@ -53,47 +62,47 @@ export const ALERT_MESSAGES: Readonly<
     es: "Los totales de una factura no coinciden con sus líneas de impuestos. La AEAT la acepta, pero revisa los precios de esa venta.",
   },
   "fiscal.reconcile_no_trace": {
-    en: `Invoice {numSerieFactura} was sent, but the tax agency (AEAT) has no record of it. Contact support.${RETURNS_EN}`,
-    es: `La factura {numSerieFactura} se envió, pero la AEAT no tiene constancia de ella. Contacta con soporte.${RETURNS_ES}`,
+    en: "Invoice {numSerieFactura} was sent, but the tax agency (AEAT) has no record of it. Contact support.",
+    es: "La factura {numSerieFactura} se envió, pero la AEAT no tiene constancia de ella. Contacta con soporte.",
   },
   "fiscal.reconcile_drift_errores": {
     en: "The tax agency (AEAT) now lists invoice {numSerieFactura} as accepted with errors, though it was recorded here as accepted. Waitron has updated its own record to match.",
     es: "La AEAT indica ahora que la factura {numSerieFactura} se aceptó con errores, aunque aquí constaba como aceptada. Waitron ha actualizado su registro para que coincida.",
   },
   "fiscal.reconcile_drift_anulada": {
-    en: `The tax agency (AEAT) lists invoice {numSerieFactura} as cancelled, but it was not voided here. Contact support.${RETURNS_EN}`,
-    es: `La AEAT indica que la factura {numSerieFactura} está anulada, pero aquí no se anuló. Contacta con soporte.${RETURNS_ES}`,
+    en: "The tax agency (AEAT) lists invoice {numSerieFactura} as cancelled, but it was not voided here. Contact support.",
+    es: "La AEAT indica que la factura {numSerieFactura} está anulada, pero aquí no se anuló. Contacta con soporte.",
   },
   "payment.offline_forward_declined": {
     en: "A card payment of {amount} taken while offline was declined when it was sent on (reference {paymentRef}). Collect the money another way.",
     es: "Un pago con tarjeta de {amount} cobrado sin conexión se rechazó al enviarlo (referencia {paymentRef}). Cobra el importe de otra forma.",
   },
   "payment.pending_outcome_unactionable": {
-    en: "The card provider did not confirm whether payment {paymentRef} went through (status {status}). Check it in the provider's own dashboard.",
-    es: "El proveedor de pagos no ha confirmado si el pago {paymentRef} se completó (estado {status}). Compruébalo en el panel del proveedor.",
+    en: "Waitron could not tell what happened to card payment {paymentRef}: the card provider reported {status}, and money may have moved without reaching a sale. Waitron has marked the payment as failed. Check it in the provider's own dashboard.",
+    es: "Waitron no ha podido saber qué pasó con el pago con tarjeta {paymentRef}: el proveedor de pagos indicó {status}, y puede que se haya movido dinero sin llegar a una venta. Waitron ha marcado el pago como fallido. Compruébalo en el panel del proveedor.",
   },
   "payment.reconcile_unsettled": {
-    en: `{count} card payments have not been paid out by the card provider yet.${RETURNS_EN}`,
-    es: `El proveedor de pagos aún no ha liquidado {count} pagos con tarjeta.${RETURNS_ES}`,
+    en: `A check found {count} card payments that the card provider had not paid out.${MORE_EN}${NOT_RECHECKED_EN}`,
+    es: `Una comprobación encontró {count} pagos con tarjeta que el proveedor de pagos no había liquidado.${MORE_ES}${NOT_RECHECKED_ES}`,
   },
   "payment.reconcile_lost_settlement": {
-    en: `The card provider says {count} payments were paid, but they never finished here. Check those orders.${RETURNS_EN}`,
-    es: `El proveedor de pagos indica que {count} pagos se cobraron, pero aquí no se completaron. Revisa esos pedidos.${RETURNS_ES}`,
+    en: `A check found {count} payments the card provider says were paid, but that never finished here. Check those orders.${MORE_EN}${NOT_RECHECKED_EN}`,
+    es: `Una comprobación encontró {count} pagos que el proveedor de pagos indica como cobrados, pero que aquí no se completaron. Revisa esos pedidos.${MORE_ES}${NOT_RECHECKED_ES}`,
   },
   "payment.reconcile_orphan": {
-    en: `{count} card payments were taken for orders that were already closed or abandoned. Waitron refunds some of these by itself; check the rest.${RETURNS_EN}`,
-    es: `Se cobraron {count} pagos con tarjeta de pedidos ya cerrados o abandonados. Waitron devuelve algunos por sí mismo; revisa el resto.${RETURNS_ES}`,
+    en: `A check found {count} card payments taken for orders that were already closed or abandoned. Waitron tries to refund some of these itself; check the rest.${MORE_EN}${NOT_RECHECKED_EN}`,
+    es: `Una comprobación encontró {count} pagos con tarjeta de pedidos ya cerrados o abandonados. Waitron intenta devolver algunos por sí mismo; revisa el resto.${MORE_ES}${NOT_RECHECKED_ES}`,
   },
   "payment.reconcile_missing_local": {
-    en: `The card provider reports {count} payments that are not recorded here.${RETURNS_EN}`,
-    es: `El proveedor de pagos indica {count} pagos que no están registrados aquí.${RETURNS_ES}`,
+    en: `A check found {count} payments reported by the card provider that are not recorded here.${MORE_EN}${NOT_RECHECKED_EN}`,
+    es: `Una comprobación encontró {count} pagos indicados por el proveedor de pagos que no están registrados aquí.${MORE_ES}${NOT_RECHECKED_ES}`,
   },
   "payment.reconcile_drift": {
-    en: `{count} card payments were paid out for a different amount than was charged.${RETURNS_EN}`,
-    es: `Se liquidaron {count} pagos con tarjeta por un importe distinto del cobrado.${RETURNS_ES}`,
+    en: `A check found {count} card payments paid out for a different amount than was charged.${MORE_EN}${NOT_RECHECKED_EN}`,
+    es: `Una comprobación encontró {count} pagos con tarjeta liquidados por un importe distinto del cobrado.${MORE_ES}${NOT_RECHECKED_ES}`,
   },
   "payment.reconcile_remediation_failed": {
-    en: "Automatic refunds failed for {count} card payments. Refund them in the card provider's own dashboard.",
-    es: "Las devoluciones automáticas han fallado en {count} pagos con tarjeta. Devuélvelos desde el panel del proveedor.",
+    en: `Automatic refunds failed for {count} card payments. Waitron will not try them again; refund them in the card provider's own dashboard.${MORE_EN}`,
+    es: `Las devoluciones automáticas han fallado en {count} pagos con tarjeta. Waitron no las volverá a intentar; devuélvelos desde el panel del proveedor.${MORE_ES}`,
   },
 };
