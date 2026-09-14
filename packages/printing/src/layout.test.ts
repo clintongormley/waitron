@@ -118,9 +118,9 @@ describe("labelAmountLines", () => {
   });
 
   it("wraps an amount wider than the paper onto right-aligned lines of its own", () => {
-    expect(labelAmountLines("Factura", "SERIE-MUY-LARGA-2026/000123", 20)).toEqual([
-      "Factura",
-      "SERIE-MUY-LARGA-2026",
+    expect(labelAmountLines("Invoice", "ORDER-REFERENCE-2026/000123", 20)).toEqual([
+      "Invoice",
+      "ORDER-REFERENCE-2026",
       "             /000123",
     ]);
     expect(labelAmountLines("TOTAL", "-123.456.789.012,34 EUR", 20)).toEqual([
