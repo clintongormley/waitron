@@ -83,8 +83,8 @@ it("names a destination with no navigation label by its screen name", () => {
 
 it("formats a time, and nothing for no time", () => {
   expect(formatAlertTime(null)).toBe("");
-  // Noon on 14 September in the host's own time zone, so the expected text holds in every zone.
-  const iso = new Date(2026, 8, 14, 12, 0).toISOString();
+  // The browser project pins Chromium to UTC (vitest.config.ts), so a UTC instant reads as written.
+  const iso = "2026-09-14T12:00:00.000Z";
   setLocale("en-GB");
   expect(formatAlertTime(iso)).toBe("14/09/2026, 12:00");
   setLocale("es-ES");
