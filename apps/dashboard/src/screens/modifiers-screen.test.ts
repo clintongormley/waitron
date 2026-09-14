@@ -303,6 +303,84 @@ it("clears a failed delete preview when the dialog is reopened", async () => {
   });
   expect(dialog.querySelector('[data-test="dependants-error"]')).toBeNull();
 });
+// The reopen test above lets the first fetch fully settle before reopening, so it never has two
+// requests in flight at once — it cannot catch a stale response clobbering a fresh one. These two
+// exercise the actual race the generation guard exists for: two fetches for the SAME modifier in
+// flight at once, where the older one settles LATE and must be discarded. Following the categories
+// suite, they open the same row TWICE WITHOUT closing (`#openDelete` has no guard against being
+// called while already open), so the only thing under test is the generation guard — not wt-modal's
+// `.open`/native-`wt-close` timing, which crosses a macrotask boundary a fixed wait cannot pin. A
+// resolved/rejected promise's continuation and the Lit update it triggers are both microtask work,
+// so `updateComplete` (awaited twice: once for the fetch's own continuation, once for the paint)
+// genuinely settles the outcome. Remove EITHER `if (generation === this.#deleteGeneration)` check in
+// #loadDependants and one of these goes red (proven by deletion).
+it("ignores a stale preview success from an earlier open of the same modifier", async () => {
+  let resolveFirst!: (value: ModifierDependants) => void;
+  let rejectSecond!: (error: Error) => void;
+  const client = api({
+    getModifierDependants: vi
+      .fn()
+      .mockImplementationOnce(
+        () => new Promise<ModifierDependants>((resolve) => (resolveFirst = resolve)),
+      )
+      .mockImplementationOnce(
+        () => new Promise<ModifierDependants>((_resolve, reject) => (rejectSecond = reject)),
+      ),
+  });
+  const el = await mount(client);
+  const table = el.shadowRoot!.querySelector("wt-data-table")!;
+  await table.updateComplete;
+  const clickDelete = () =>
+    table.shadowRoot!.querySelector<HTMLElement>('[data-test="delete-m"]')!.click();
+  clickDelete(); // first open — its fetch never resolves yet
+  await el.updateComplete;
+  clickDelete(); // reopen the SAME modifier without closing — a second, fresh fetch starts
+  await el.updateComplete;
+  const dialog = deleteDialog(el);
+  rejectSecond(new Error("offline")); // the current (second) request fails
+  await vi.waitFor(() =>
+    expect(dialog.querySelector('[data-test="dependants-error"]')).not.toBeNull(),
+  );
+  // The stale first request lands LATE with a DIFFERENT, successful (empty) outcome.
+  resolveFirst({ products: [], menus: [], orders: 0 });
+  await el.updateComplete;
+  await el.updateComplete;
+  // The stale success must not clear the error or enable Delete.
+  expect(dialog.querySelector('[data-test="dependants-error"]')).not.toBeNull();
+  expect(confirmDelete(el).disabled).toBe(true);
+});
+it("ignores a stale preview failure from an earlier open of the same modifier", async () => {
+  let rejectFirst!: (error: Error) => void;
+  let resolveSecond!: (value: ModifierDependants) => void;
+  const client = api({
+    getModifierDependants: vi
+      .fn()
+      .mockImplementationOnce(
+        () => new Promise<ModifierDependants>((_resolve, reject) => (rejectFirst = reject)),
+      )
+      .mockImplementationOnce(
+        () => new Promise<ModifierDependants>((resolve) => (resolveSecond = resolve)),
+      ),
+  });
+  const el = await mount(client);
+  const table = el.shadowRoot!.querySelector("wt-data-table")!;
+  await table.updateComplete;
+  const clickDelete = () =>
+    table.shadowRoot!.querySelector<HTMLElement>('[data-test="delete-m"]')!.click();
+  clickDelete(); // first open — its fetch never resolves yet
+  await el.updateComplete;
+  clickDelete(); // reopen the SAME modifier without closing — a second, fresh fetch starts
+  await el.updateComplete;
+  const dialog = deleteDialog(el);
+  resolveSecond({ products: [], menus: [], orders: 0 }); // the current (second) request succeeds
+  await vi.waitFor(() => expect(confirmDelete(el).disabled).toBe(false));
+  rejectFirst(new Error("offline")); // the stale first request fails LATE
+  await el.updateComplete;
+  await el.updateComplete;
+  // The stale failure must not surface the error block or disable Delete.
+  expect(dialog.querySelector('[data-test="dependants-error"]')).toBeNull();
+  expect(confirmDelete(el).disabled).toBe(false);
+});
 it("displays only enabled content translations", async () => {
   const { setLocale } = await import("../i18n/t.js");
   setLocale("en");
