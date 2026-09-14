@@ -144,7 +144,6 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "shared.invalid_id": 400,
   "catalogue.not_found": 404,
   "category.not_found": 404,
-  "category.in_use": 409,
   // A colour that is not `#rrggbb`, refused by `createCategory`/`updateCategory` before the write.
   "category.color_invalid": 400,
   "menu_item.not_found": 404,

@@ -28,8 +28,6 @@ export const en = {
   "categories.empty": "You have no categories yet.",
   "categories.load_error": "The categories could not be loaded.",
   "categories.delete_confirm": "Delete this category?",
-  "categories.in_use":
-    "This category is used by {children} child categories, {products} products and {routes} preparation routes. Remove those references first.",
   "categories.primary_required":
     "Choose a replacement Reporting Category before removing this membership.",
   "categories.membership": "Product categories",
@@ -1212,8 +1210,6 @@ export const es: Record<StringKey, string> = {
   "categories.empty": "Todavía no tienes categorías.",
   "categories.load_error": "No se pudieron cargar las categorías.",
   "categories.delete_confirm": "¿Eliminar esta categoría?",
-  "categories.in_use":
-    "Esta categoría tiene {children} categorías hijas, {products} productos y {routes} rutas de preparación. Elimina primero esas referencias.",
   "categories.primary_required":
     "Elige una Categoría de informes de reemplazo antes de quitar esta asignación.",
   "categories.membership": "Categorías del producto",

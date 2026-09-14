@@ -107,6 +107,12 @@ without it.
 `category.in_use` stays registered and stops being thrown. The 409 mapping in
 `apps/server/src/catalogue-api.ts` can stay.
 
+> **Corrected 2026-09-14 (final review).** The 409 mapping did NOT stay. Once nothing throws the
+> code, a status mapping for it is a route that cannot be reached, and it read as evidence that the
+> server still refuses a delete — which is what the dashboard's own comment then claimed. The
+> mapping is removed; the registry entry in `packages/catalogue/src/errors.ts` stays, as this
+> paragraph says, because a shipped code is never removed.
+
 ### Delete preview
 
 New read: `GET /management-api/categories/:id/dependants` →

@@ -179,25 +179,29 @@ it("searches the translated name displayed in the table", async () => {
   expect(el.shadowRoot!.querySelector("wt-data-table")!.rows.length).toBe(1);
 });
 
-it("shows deletion dependencies and keeps the confirmation open", async () => {
+// A rejected delete leaves the confirmation open with the reason on it, so the manager can retry
+// or cancel rather than losing the dialog and wondering whether the delete happened.
+it("keeps the confirmation open and explains a rejected delete, then closes on success", async () => {
   const { el, api } = await mount();
-  api.deleteCategory.mockRejectedValue({
-    code: "category.in_use",
-    params: { children: 2, products: 3, routes: 4 },
-  });
+  api.deleteCategory.mockRejectedValueOnce(new Error("network"));
   const table = el.shadowRoot!.querySelector("wt-data-table")!;
   await table.updateComplete;
   const actions = table.shadowRoot!.querySelector("wt-row-actions")!;
   actions.querySelectorAll("wt-button")[1]!.click();
   await el.updateComplete;
   const modal = [...el.shadowRoot!.querySelectorAll("wt-modal")].find((modal) => modal.open)!;
-  modal
-    .querySelector('wt-button[variant="danger"]')!
-    .dispatchEvent(new MouseEvent("click", { bubbles: true }));
-  await vi.waitFor(() => expect(modal.textContent).toContain("2"));
-  expect(modal.textContent).toContain("3");
-  expect(modal.textContent).toContain("4");
+  const deleteButton = modal.querySelector<HTMLElementTagNameMap["wt-button"]>(
+    'wt-button[variant="danger"]',
+  )!;
+  await vi.waitFor(() => expect(deleteButton.disabled).toBe(false));
+  deleteButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  await vi.waitFor(() => expect(modal.querySelector('p[role="alert"]')).not.toBeNull());
+  expect(modal.querySelector('p[role="alert"]')!.textContent!.trim()).not.toBe("");
   expect(modal.open).toBe(true);
+  // Retrying the same delete succeeds, and the dialog closes itself.
+  deleteButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  await vi.waitFor(() => expect(modal.open).toBe(false));
+  expect(api.deleteCategory).toHaveBeenCalledWith("food");
 });
 
 it("opens the products modal from the name and lists members with lozenges", async () => {

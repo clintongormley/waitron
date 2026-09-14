@@ -205,14 +205,7 @@ export class CategoriesScreen extends LitElement {
     return resolveEnabledContentText(name, currentLocale(), this.languages);
   }
   #error(error: unknown): string {
-    const code = codeOf(error);
-    if (code === "category.in_use") {
-      const params = (error as { params?: Record<string, unknown> }).params ?? {};
-      return t("categories.in_use").replace(/\{(children|products|routes)\}/g, (_, key: string) =>
-        String(params[key] ?? "?"),
-      );
-    }
-    return codeMessage(code);
+    return codeMessage(codeOf(error));
   }
   #edit(value: CategorySummary | null): void {
     this.edited = value;
