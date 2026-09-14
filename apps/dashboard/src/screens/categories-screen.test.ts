@@ -73,8 +73,7 @@ async function mount() {
   );
   return { ...fx, ...mounted };
 }
-// Search now lives in the shared table's own toolbar, so a search test types into the input inside
-// the wt-data-table shadow root rather than the screen's old `category-search` field.
+// The search box belongs to the table's toolbar, so it is typed into inside wt-data-table's shadow root.
 async function typeTableSearch(el: CategoriesScreen, value: string): Promise<void> {
   const table = el.shadowRoot!.querySelector("wt-data-table")!;
   await table.updateComplete;
@@ -208,7 +207,7 @@ it("keeps the confirmation open and explains a rejected delete, then closes on s
   api.deleteCategory.mockRejectedValueOnce(new Error("network"));
   const table = el.shadowRoot!.querySelector("wt-data-table")!;
   await table.updateComplete;
-  // The table now defaults to a name sort, so target Food's row directly rather than the first row.
+  // The table sorts by name, so Food is targeted by its key rather than by position.
   const actions = table.shadowRoot!.querySelector('tr[data-row-key="food"] wt-row-actions')!;
   actions.querySelectorAll("wt-button")[1]!.click();
   await el.updateComplete;
@@ -272,9 +271,8 @@ it("opens the products modal from the name and lists members with lozenges", asy
   expect(getComputedStyle(plain).color).not.toBe(hexToRgb(mutedToken));
 });
 
-// The add-products list now uses the shared table's own selection (per-row checkboxes inside the
-// table's shadow root) rather than a hand-rolled `pick-*` column. Selecting two rows and pressing
-// Add sends both ids in one call.
+// The add-products list picks rows with the table's own per-row checkboxes, inside the table's
+// shadow root. Selecting two rows and pressing Add sends both ids in one call.
 it("adds products via the table's own per-row selection in one call", async () => {
   const fx = apiFixture();
   const q: Product = { ...product, id: "q", descriptions: { en: "Juice" }, categoryIds: [] };
@@ -351,8 +349,7 @@ it("adds products using the table's own select-all", async () => {
   );
 });
 
-// The products dialog has a footer Close button that dismisses it — the member view had no way to
-// close beyond the modal's own dismiss affordance before this.
+// The member view's footer Close button dismisses the products dialog.
 it("closes the products dialog from a footer Close button", async () => {
   const { el } = await mount();
   const table = el.shadowRoot!.querySelector("wt-data-table")!;
@@ -369,9 +366,9 @@ it("closes the products dialog from a footer Close button", async () => {
 });
 
 // The delete confirmation names the category in its heading, lists the affected products in the
-// shared product table (not as links), flags the ones that lose their reporting category, and no
-// longer lists printing routes — those are removed without confirmation now. The table's rows are
-// cell markup in the table's OWN shadow root, so row text is read from `table.shadowRoot`, not the
+// shared product table (not as links), flags the ones that lose their reporting category, and does
+// not list printing routes, although the delete still removes them. The table's rows are cell
+// markup in the table's OWN shadow root, so row text is read from `table.shadowRoot`, not the
 // dialog, which does not cross into a nested custom element's shadow.
 it("titles the delete dialog with the category name, shows affected products, and lists no routes", async () => {
   setLocale("en-GB");
@@ -402,8 +399,8 @@ it("titles the delete dialog with the category name, shows affected products, an
     'wt-data-table[data-test="category-delete-products"]',
   )!;
   await table.updateComplete;
-  // D1: the dependant resolved to a full product row inside the table's shadow root, and — since its
-  // reporting category is the one being deleted — the cleared-reporting flag shows.
+  // The dependant resolves to a full product row inside the table's shadow root, and, since its
+  // reporting category is the one being deleted, the cleared-reporting flag shows.
   expect(table.shadowRoot!.textContent).toContain("Toast");
   expect(table.shadowRoot!.textContent).toContain(t("categories.delete_reporting"));
 });
@@ -441,7 +438,7 @@ it("shows the delete preview with the affected products and child links, disabli
   await vi.waitFor(() => expect(deleteButton.disabled).toBe(false));
   const links = [...modal.querySelectorAll("a")];
   expect(links.some((link) => link.textContent?.includes("Breakfast"))).toBe(true);
-  // Routes are removed without confirmation now, so the preview never lists them.
+  // The preview does not list printing routes, even when the category has some.
   expect(links.some((link) => link.textContent?.includes("Grill"))).toBe(false);
   expect(modal.textContent).not.toContain("route");
   // The affected product shows inside the shared table's shadow root, not as a link.
@@ -655,7 +652,7 @@ it("shows an Add category button and two labelled view-mode buttons in the heade
 it("opens the editor from the labelled create button by the heading", async () => {
   const { el } = await mount();
   const add = el.shadowRoot!.querySelector<HTMLElement>('[data-test="create-category"]')!;
-  // The create control is now a labelled text button, not the icon-only round one it replaced.
+  // The create control is a labelled text button, not an icon-only round one.
   expect(add.getAttribute("shape")).not.toBe("round");
   expect(add.textContent).toContain(t("categories.add"));
   add.click();

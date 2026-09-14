@@ -500,7 +500,7 @@ export class CategoriesScreen extends LitElement {
     return category ? this.#text(category.name) : "";
   }
   /** The shared column set behind every product table in this screen (members, add-products, and
-   * Task 13's delete preview). Name searches and sorts on the translated description; Reporting
+   * the delete preview). Name searches and sorts on the translated description; Reporting
    * category sorts and offers a dropdown filter over the reporting categories actually in use; a
    * caller passes its own trailing column (row actions, say) or none. `flagCleared` (delete preview
    * only) makes the reporting cell flag a product that would lose its reporting category. */
@@ -636,8 +636,7 @@ export class CategoriesScreen extends LitElement {
   }
   override render() {
     const selected = this.categories.find((category) => category.id === this.selected);
-    // The tables own their own search now, so pass the full member/add lists and let each table
-    // filter what it shows.
+    // Each table searches and filters its own rows, so these are the full member and add lists.
     const members = this.products.filter((product) =>
       product.categoryIds.includes(this.selected ?? ""),
     );
