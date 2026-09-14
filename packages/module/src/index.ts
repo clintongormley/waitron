@@ -19,6 +19,15 @@ export type {
   VenueServiceContribution,
 } from "./module.js";
 export { orderedMigrationSets, packageDirOf } from "./module.js";
+export type {
+  Alert,
+  AlertEventClaim,
+  AlertReadContext,
+  AlertSeverity,
+  AlertSource,
+  ModuleAlerts,
+  OngoingAlert,
+} from "./alerts.js";
 export type { VocabularyOwner } from "./vocabulary.js";
 export { forbiddenVocabulary, vocabularyOwners } from "./vocabulary.js";
 export type { ModuleConfig } from "./config.js";

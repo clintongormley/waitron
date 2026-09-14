@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
+import type { AlertSource, WaitronModule } from "@waitron/module";
 import {
+  ALL_ALERT_CLAIMS,
   ALL_CLASSIFICATIONS,
   ALL_MODULES,
   LEDGER_PUBLICATION_TABLES,
   STATE_PUBLICATION_TABLES,
   VENUE_SERVICE,
+  enabledAlertSources,
 } from "./modules.js";
 
 describe("venue-service assembly", () => {
@@ -34,5 +37,24 @@ describe("classification assembly", () => {
       expect(LEDGER_PUBLICATION_TABLES).not.toContain(local);
       expect(STATE_PUBLICATION_TABLES).not.toContain(local);
     }
+  });
+});
+
+describe("alert assembly", () => {
+  it("collects every module's event-code claims", () => {
+    expect(ALL_ALERT_CLAIMS.map((c) => c.prefix)).toEqual(
+      expect.arrayContaining(["chain.", "clock.", "payment.", "fiscal."]),
+    );
+  });
+
+  it("collects sources from the modules it is given only", () => {
+    const source: AlertSource = {
+      area: "test",
+      permission: "diagnostics.view",
+      read: () => Promise.resolve([]),
+    };
+    const withSource = { ...ALL_MODULES[0]!, alerts: { sources: [source] } } as WaitronModule;
+    expect(enabledAlertSources([withSource])).toEqual([source]);
+    expect(enabledAlertSources([ALL_MODULES[0]!])).toEqual([]);
   });
 });

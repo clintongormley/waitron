@@ -59,6 +59,7 @@ export type {
 export { MANUAL_PROVIDER, recordManualCardPayment, recordManualRefund } from "./manual.js";
 export { SimulatorPaymentProvider } from "./simulator.js";
 export type { ManualCardPaymentParams, ManualCardPaymentResult } from "./manual.js";
+export { PAYMENTS_ALERTS } from "./alerts.js";
 export { PAYMENTS_MIGRATIONS } from "./migrations.js";
 export { getPaymentPolicy, resolveOfflineDecision } from "./policy.js";
 export type { PaymentPolicyRow } from "./policy.js";

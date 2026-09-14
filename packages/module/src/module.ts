@@ -10,6 +10,7 @@ import type { ClassifiedTable } from "@waitron/sync-enrolment";
 import type { FiscalContribution } from "@waitron/fiscal";
 import type { ModuleProvisioning } from "./provisioning.js";
 import type { RestoreHook } from "./restore.js";
+import type { ModuleAlerts } from "./alerts.js";
 import "./errors.js";
 
 /**
@@ -360,6 +361,10 @@ export interface WaitronModule {
    * badge, so its timezone/grace/query concern leaves core (spec §4.3). */
   readonly floorAnnotations?: FloorAnnotator;
   readonly venueService?: VenueServiceContribution;
+  /** Incident codes this module claims for the dashboard alerts, and its ongoing checks. Claims are
+   * read from every module; sources only from enabled modules, since a disabled module's tables are
+   * not migrated. */
+  readonly alerts?: ModuleAlerts;
   readonly backup?: ModuleBackupContribution; // The module's non-DB backup sources and restore hook.
   readonly configurationTransfer?: ModuleConfigurationTransfer;
   /** Required localized fields contributed to a content-default change check. */

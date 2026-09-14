@@ -2,6 +2,8 @@ import { ALL_MODULES } from "@waitron/composition";
 import { tablesForPublication, type ClassifiedTable } from "@waitron/sync";
 import { selectVenueService } from "@waitron/module";
 import type {
+  AlertEventClaim,
+  AlertSource,
   FloorAnnotator,
   ModulePermission,
   VenueServiceContribution,
@@ -47,3 +49,15 @@ export const STATE_PUBLICATION_TABLES: readonly string[] = tablesForPublication(
   ALL_CLASSIFICATIONS,
   "state",
 );
+
+/** Every module's incident-code claims. Read from ALL_MODULES: an incident recorded while a module
+ * was enabled keeps its area after the module is switched off. */
+export const ALL_ALERT_CLAIMS: readonly AlertEventClaim[] = ALL_MODULES.flatMap(
+  (m) => m.alerts?.events ?? [],
+);
+
+/** The ongoing checks of the modules given — boot passes the enabled set, because a disabled
+ * module's tables are not migrated. */
+export function enabledAlertSources(modules: readonly WaitronModule[]): readonly AlertSource[] {
+  return modules.flatMap((m) => m.alerts?.sources ?? []);
+}

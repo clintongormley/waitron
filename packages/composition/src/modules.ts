@@ -9,6 +9,7 @@ import {
 import { CORE_CLASSIFICATION, CORE_CONFIGURATION_TRANSFER, CORE_CHANGE_SOURCES } from "@waitron/db";
 import { FISCAL_NONE_SLOT } from "@waitron/fiscal-none";
 import {
+  FISCAL_ALERTS,
   FISCAL_CLASSIFICATION,
   FISCAL_PROVISIONING,
   FISCAL_RESTORE,
@@ -29,6 +30,7 @@ import {
 } from "@waitron/identity";
 import type { WaitronModule } from "@waitron/module";
 import {
+  PAYMENTS_ALERTS,
   PAYMENTS_CLASSIFICATION,
   PAYMENTS_CONFIGURATION_TRANSFER,
   PAYMENTS_CHANGE_SOURCES,
@@ -81,6 +83,13 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     version: "0.0.0",
     tier: "mandatory",
     migrations: { name: "core", table: "__drizzle_migrations_db", from: "../db/drizzle" },
+    // Core's own incident codes: chain integrity and clock trust, shown with the tax-filing alerts.
+    alerts: {
+      events: [
+        { prefix: "chain.", area: "fiscal", permission: "fiscal.view" },
+        { prefix: "clock.", area: "fiscal", permission: "fiscal.view" },
+      ],
+    },
     classification: CORE_CLASSIFICATION,
     changes: CORE_CHANGE_SOURCES,
     configurationTransfer: CORE_CONFIGURATION_TRANSFER,
@@ -174,6 +183,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     classification: PAYMENTS_CLASSIFICATION,
     changes: PAYMENTS_CHANGE_SOURCES,
     configurationTransfer: PAYMENTS_CONFIGURATION_TRANSFER,
+    alerts: PAYMENTS_ALERTS,
   },
   {
     name: "scheduler",
@@ -216,6 +226,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     provisioning: FISCAL_PROVISIONING,
     fiscal: FISCAL_SLOT,
     backup: { restore: FISCAL_RESTORE },
+    alerts: FISCAL_ALERTS,
     configurationTransfer: { kind: "none" },
   },
   {

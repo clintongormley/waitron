@@ -10,12 +10,13 @@ import {
   FISCAL_SLOT,
   FISCAL_MIGRATIONS,
   FISCAL_VOCABULARY,
+  FISCAL_ALERTS,
 } from "@waitron/fiscal-verifactu";
 import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { MEDIA_MIGRATIONS } from "@waitron/media";
 import { manifestSets } from "@waitron/migrations";
 import { orderedMigrationSets } from "@waitron/module";
-import { PAYMENTS_MIGRATIONS } from "@waitron/payments";
+import { PAYMENTS_ALERTS, PAYMENTS_MIGRATIONS } from "@waitron/payments";
 import { SCHEDULER_MIGRATIONS } from "@waitron/scheduler";
 import { WORKFORCE_MIGRATIONS } from "@waitron/workforce";
 import { WORKFORCE_ES_MIGRATIONS, WORKFORCE_ES_VOCABULARY } from "@waitron/workforce-es";
@@ -173,5 +174,20 @@ describe("ALL_MODULES fiscal-none member", () => {
     expect(none?.provisioning).toBeUndefined();
     expect(none?.vocabulary).toBeUndefined();
     expect(none?.backup).toBeUndefined();
+  });
+});
+
+describe("ALL_MODULES alerts seat", () => {
+  it("payments and fiscal-verifactu carry their event-code claims, by reference", () => {
+    expect(ALL_MODULES.find((m) => m.name === "payments")?.alerts).toBe(PAYMENTS_ALERTS);
+    expect(ALL_MODULES.find((m) => m.name === "fiscal-verifactu")?.alerts).toBe(FISCAL_ALERTS);
+  });
+  it("core claims chain. and clock. incidents for the fiscal area under fiscal.view", () => {
+    expect(ALL_MODULES.find((m) => m.name === "core")?.alerts).toEqual({
+      events: [
+        { prefix: "chain.", area: "fiscal", permission: "fiscal.view" },
+        { prefix: "clock.", area: "fiscal", permission: "fiscal.view" },
+      ],
+    });
   });
 });
