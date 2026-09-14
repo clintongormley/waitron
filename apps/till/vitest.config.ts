@@ -1,5 +1,6 @@
 import { configDefaults, coverageConfigDefaults, defineConfig } from "vitest/config";
 import type { BrowserCommand } from "vitest/node";
+import { parkPointerCommands } from "@waitron/ui/src/vitest-park-pointer.js";
 
 type ColorScheme = "light" | "dark" | null;
 
@@ -52,6 +53,7 @@ export default defineConfig({
       instances: [{ browser: "chromium" }],
       commands: {
         emulateColorScheme,
+        ...parkPointerCommands,
       },
     },
     coverage: {

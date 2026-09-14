@@ -65,43 +65,20 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       reporter: ["text", "json-summary"],
-      // `include` REPLACES the default rather than merging with it, so a directory that is not
-      // named here is not measured at all — and a coverage gate cannot fail on a file it never
-      // opened. Read the per-file table, not the exit code.
+      // `include` REPLACES vitest's default rather than merging with it, so a path not named here is
+      // measured NOWHERE — and a coverage gate cannot fail on a file it never opened. Read the
+      // per-file table, not the exit code (CLAUDE.md §4).
       //
-      // There is deliberately no `exclude`. The obvious one — the two `*.test.mjs` suites — would
-      // be dead config: re-measured on 2026-08-01 in three spellings, no `exclude` key at all,
-      // `exclude: []`, and `exclude: ["**/*.test.mjs"]`, `pnpm vitest run --coverage` printed the
-      // identical table every time — exactly the three files `include` names below,
-      // `english-only.ts`, `changed-packages.mjs` and `changed-scope.mjs`, all at 100/100/100/100,
-      // and no `*.test.mjs` row. Three spellings all pointing one way, NOT a measurement in both
-      // directions; a control would need an `exclude` that does change the table. (The first
-      // version of this comment asserted the opposite — that deleting the line would add two rows —
-      // and was written before it was run. The version after that described a TWO-row table: true
-      // of the `include` it was written against in 6d30ed2, and stale the moment
-      // `packages/db/src/english-only.ts` joined that `include` one commit later. CLAUDE.md §1,
-      // twice over.)
+      // What belongs here: code whose only test suite lives in THIS root project and is covered
+      // nowhere else. That is the two classifiers under `scripts/` (their suites are the root
+      // `*.test.mjs`) and `packages/db/src/english-only.ts`, the vocabulary guard's module —
+      // `@waitron/db`'s typecheck covers it, `packages/db` excludes it from its own coverage, and its
+      // suite is `scripts/english-only.test.ts`, so this `include` is the ONE place that measures it.
       //
-      // Until 2026-08-01 this config DID need an `exclude`: it spread `coverageConfigDefaults`
-      // back in with `**/[.]**` filtered out, because the sources lived under `.github/scripts/`
-      // and that one default pattern excludes every dot-prefixed path segment — silently, at zero
-      // coverage and exit 0. Moving both classifiers to `scripts/` is what retired it; the lesson
-      // it left is in CLAUDE.md §4.
-      //
-      // What `include` MEANS here, now that the guards have moved in: the code whose only tests
-      // are in THIS project. That is the two classifiers, and one file that is not under
-      // `scripts/` at all — `packages/db/src/english-only.ts`, the vocabulary guard's module,
-      // whose suite is `scripts/english-only.test.ts`. The module lives under `packages/db/src` so
-      // that package's `typecheck` covers it (the root project typechecks nothing); nothing in
-      // `packages/db` imports it, its own config excludes it from its coverage, and this `include`
-      // is what measures it — in exactly one place rather than in two or in none, the failure
-      // mode being the last of those, which no threshold anywhere would report.
-      //
-      // Not `scripts/**/*.ts`: the only `.ts` files under `scripts/` are the guard SUITES, and
-      // Vitest leaves a suite out of its own coverage table whatever this says (measured on
-      // 2026-08-01: with `include: ["scripts/**/*.mjs", "scripts/**/*.ts"]` the table held the two
-      // classifiers and nothing else). It would be a pattern matching nothing, which is what the
-      // paragraph above deleted an `exclude` for.
+      // Not `scripts/**/*.ts`: the only `.ts` files under `scripts/` are the guard SUITES, and vitest
+      // leaves a suite out of its own coverage table whatever this says, so that glob would match
+      // nothing. There is deliberately no `exclude` (a suite is never measured, so naming one changes
+      // nothing).
       include: ["scripts/**/*.mjs", "packages/db/src/english-only.ts"],
       thresholds: { statements: 98, lines: 98, functions: 98, branches: 95 },
     },

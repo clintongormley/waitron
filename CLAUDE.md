@@ -229,8 +229,7 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   reserved for facts about the process itself. Every file that throws a code imports its registry.
 - **Spanish domain terms are deliberate, and a module declares its own.** One declaring home per word;
   a fiscal term never goes in the base list. Guard: `scripts/english-only.test.ts`. `apps/*` is out of
-  scope by a recorded decision, so Spanish identifiers in app UI code are caught only by review;
-  `packages/replication-tests` is unscanned too.
+  scope by a recorded decision, so Spanish identifiers in app UI code are caught only by review.
 - **The composition list lives in `@waitron/composition`, and it is the only place that names every
   module.** Generic code reaches the regime through the descriptor's `provisioning` and `fiscal`
   seats. The boundary is the swappable SLOT, not "any module". Guard: `scripts/module-seams.test.ts`
@@ -298,9 +297,10 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   plain admin** — `CREATE PUBLICATION … FOR TABLE` is owner-only, so every table must be
   migrator-owned. Any new provisioning path that creates schema carries `withRole`.
 - **A module/migration dependency graph has TWO kinds of cross-set edge**: an FK `REFERENCES`, and a
-  trigger executing a function owned by a different migration set. No module creates the second kind
-  today. Guard: `scripts/module-graph-honesty.test.ts`, which derives the trigger edge by reading
-  text and says so.
+  trigger executing a function owned by a different migration set. Both exist today — `workforce` and
+  `fiscal-verifactu` run append-only `reject_mutation()` triggers, and that function is owned by
+  `core` (harmless: both declare `requires.core`). Guard: `scripts/module-graph-honesty.test.ts`,
+  which reads text (and says so) for any cross-module `EXECUTE FUNCTION`, not one named function.
 - **No new table enters the core migration set without a stated reason in the commit.** A
   `tenant_id`-bearing domain table belongs to its module's own set, where its grants travel with it.
 - **A drizzle migration-number collision on rebase is fixed by regeneration, never by hand-editing the

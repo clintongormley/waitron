@@ -1068,8 +1068,6 @@ image constraints under *Detail → Box image*.
 
 ### B8. Module framework follow-ons
 
-- **The graph-honesty guard's SPI-edge detector** matches `EXECUTE FUNCTION sync_capture`, which no
-  longer exists — generalise to every cross-module `EXECUTE FUNCTION` edge or delete the branch.
 - **Country-pack follow-ons:** the authenticated address relay and its first provider adapter; phone
   normalisation in bookings; a supplier country/identifier scheme before validating purchasing tax
   IDs; the pack's module preset; the refused foral, Canary, Ceuta and Melilla jurisdictions; a
@@ -1148,22 +1146,14 @@ image constraints under *Detail → Box image*.
   together with N at or below the file count; `mutation-verifactu` is the next critical-path
   candidate; rebalance `LIGHT_A/B_PACKAGES` when one light shard dominates.
 - **Dependency loop removed — LANDED #348 (2026-09-13).** `pnpm install` no longer warns about
-  cyclic workspace dependencies; `scripts/workspace-cycles.test.ts` fails if a loop returns. Four
-  things the review raised and the PR did not take:
-  - The English-only vocabulary guard does not scan `packages/replication-tests`, so the three suites
-    it used to scan in `sync` are unscanned. Its only exemption skips a package's test files, which
-    here is every file. Next action: a per-file exemption for `replication-fidelity.pg.test.ts` (the
-    only file that trips it, on Spanish fiscal table names), then add the package to
-    `GENERIC_PACKAGES` in `packages/db/src/english-only.ts`, and delete the stated gap from
-    `CLAUDE.md` §3 and `docs/developers/conventions-data.md`.
+  cyclic workspace dependencies; `scripts/workspace-cycles.test.ts` fails if a loop returns. Of the
+  four things the review raised and that PR did not take, two are now done on
+  `chore/test-guards-tidy` (the English-only guard scans `packages/replication-tests`, and the root
+  coverage-`include` comment now describes the rule instead of listing files); these two remain:
   - `packages/replication-tests` carries a coverage bar that cannot fail: it holds only test files, so
     coverage measures nothing and reads 0% while exiting 0. The literal exists because
     `scripts/coverage-thresholds.test.ts` requires one of every tested package. Fix if a second
     test-only package appears: teach that guard (and CI's `runnable` check) about test-only packages.
-  - The root `vitest.config.ts` comment on coverage `include` names "the two classifiers" plus
-    `english-only.ts`; the `scripts/**/*.mjs` glob also measures `run-with-deadline.mjs`,
-    `reap-testcontainers.mjs`, `mutation-shard.mjs` (all predate #348) and `workspace-members.mjs`.
-    Describe the rule rather than list files.
   - The loop guard reports the whole group of packages in a loop, not a path through it, so a failure
     does not say which link to cut. Optional: print one cycle path alongside the group.
 - **A hung real-PG suite leaks its cluster containers** and `pnpm reap` only removes labelled ones

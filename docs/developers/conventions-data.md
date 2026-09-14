@@ -64,11 +64,11 @@ it passes, fails again when `@waitron/provisioning` is added back to `sync`'s `d
 The guard reads each member's `package.json` rather than asking pnpm for its graph, and counts every
 dependency whose name is another workspace member.
 
-The English-only vocabulary guard (`scripts/english-only.test.ts`) does not scan
-`packages/replication-tests`, although it scanned the three suites while they lived in `sync`. The
-fidelity suite chains real Spanish fiscal records, and the guard's only exemption skips a package's
-test files — which in this package is every file, so exempting it scans nothing and fails the guard's
-own "discovers source files" check.
+The English-only vocabulary guard (`scripts/english-only.test.ts`) scans `packages/replication-tests`
+like any other generic package. Its fidelity suite chains real Spanish fiscal records, so that one
+file is exempted by exact name (`FISCAL_FIDELITY_FIXTURES` in `packages/db/src/english-only.ts`) — a
+narrower exemption than provisioning's whole-package test skip; the package's three other suites carry
+no Spanish and are scanned normally.
 
 ## A command name is declared under `waitron.commands`, never `bin`
 
@@ -196,12 +196,18 @@ ownership would otherwise confer. Receipt: `feat/outbox-swap-s4-s5`, probe A.
 ## A module/migration dependency graph has TWO kinds of cross-set edge
 
 FK `REFERENCES` and a `CREATE [CONSTRAINT] TRIGGER … EXECUTE FUNCTION <f>` where `<f>` is owned by a
-DIFFERENT migration set. Today NO module creates such a cross-set trigger — the outbox's capture
-triggers, which enrolled other modules' tables, were deleted with the application outbox (swap S5) —
-so every surviving migration cross-set edge is an ordinary FK. The generic live-update trigger is
-installed at boot and sits outside this migration-text guard; its behavior is exercised by
-`packages/db/src/change-feed-replication.pg.test.ts`. `scripts/module-graph-honesty.test.ts` still
-derives the trigger edge (reads text and says so), so a future one is caught.
+DIFFERENT migration set. Both exist in the tree today. The second kind is `reject_mutation`: the
+`workforce` and `fiscal-verifactu` append-only tables install `reject_mutation()` triggers, and that
+function is owned by `core` (`packages/db/drizzle`) — a cross-set trigger-function edge. It is
+harmless because both modules already declare `requires.core`, which the "the function must exist
+first" ordering needs anyway; the guard's job is to catch the case where such an edge is NOT declared.
+The outbox's capture triggers, which enrolled OTHER modules' tables, were deleted with the application
+outbox (swap S5). The generic live-update trigger is installed at boot and sits outside this
+migration-text guard; its behavior is exercised by
+`packages/db/src/change-feed-replication.pg.test.ts`. `scripts/module-graph-honesty.test.ts` derives
+both edge kinds from the SQL text (reading text, and saying so): it now scans every
+`EXECUTE (FUNCTION|PROCEDURE)` call, resolves the function's owner, and flags a cross-module one — so
+the `reject_mutation` edges surface and any future undeclared edge is caught.
 
 ## An object-privilege `GRANT` PostgreSQL accepted is not a `GRANT` that did anything
 
