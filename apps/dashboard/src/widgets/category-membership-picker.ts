@@ -85,6 +85,7 @@ export class CategoryMembershipPicker extends LitElement {
       this.draft.categoryIds.includes(category.id),
     );
     return html`<wt-combobox
+        name="category-membership"
         data-test="member-categories"
         multiple
         label=${t("categories.categories_label")}
@@ -111,6 +112,7 @@ export class CategoryMembershipPicker extends LitElement {
         )}
       </div>
       <wt-combobox
+        name="primary-category"
         data-test="reporting-category"
         label=${t("editor.reporting_category")}
         placeholder=${t("categories.none")}

@@ -203,3 +203,24 @@ it("labels both comboboxes' search, empty and count text in the reader's languag
     t("categories.combobox_selected").replace("{count}", "2"),
   );
 });
+
+it("gives both comboboxes a semantic field name", async () => {
+  const { el } = await mountWidget<CategoryMembershipPicker>(
+    "dashboard-category-membership-picker",
+    {
+      categories: [food, drink],
+      languages: { defaultLanguage: "en", languages: ["en"] },
+      value: { categoryIds: ["food"], primaryCategoryId: "food" },
+    },
+  );
+  expect(
+    el
+      .shadowRoot!.querySelector('wt-combobox[data-test="member-categories"]')!
+      .getAttribute("name"),
+  ).toBe("category-membership");
+  expect(
+    el
+      .shadowRoot!.querySelector('wt-combobox[data-test="reporting-category"]')!
+      .getAttribute("name"),
+  ).toBe("primary-category");
+});
