@@ -81,8 +81,8 @@ brainstorm → spec → plan → PR; fiscal-adjacent ones take owner sign-off at
 1. **The till does not load its menu until a manual refresh** (A4). Seen on the blank-box-to-selling
    run; the box and sale path worked.
 
-2. **Somewhere for things that went wrong to show up** (A5) — designed 2026-09-14, first step is the
-   `till.configure` split. The `incidents` table has several
+2. **Somewhere for things that went wrong to show up** (A5) — designed 2026-09-14; the `till.configure`
+   split it depended on has LANDED (#363), so the next step is the alerts framework itself. The `incidents` table has several
    producers and no reader, and the dashboard has no notification surface. A rejected filing, a payment drift, a
    stalled print agent and a failed or stale backup are all invisible; several other items end "…waits
    for the notification surface".
@@ -780,8 +780,10 @@ targets for 30 seconds and each agent works out the remaining time against its o
 **Designed 2026-09-14:** [dashboard alerts](superpowers/specs/2026-09-14-dashboard-alerts-design.md) —
 one bell, panel and Alerts screen for recorded incidents and live checks (backups, fiscal submission,
 printing, reader battery). Build order: (0) split `till.configure` into permissions named for what
-they guard, its own branch, no access change; (1) the alerts framework and recorded incidents; (2) the
-live checks. The questions below are answered there; the notes stay as the origin of the item.
+they guard — **LANDED #363** (2026-09-14), adds `layout.configure` / `venue.configure` /
+`system.manage` with no access change, and the alerts work uses `system.manage` for backup alerts; (1)
+the alerts framework and recorded incidents — NEXT; (2) the live checks. The questions below are
+answered there; the notes stay as the origin of the item.
 
 Two halves, one branch each (owner decision 2026-09-12).
 
