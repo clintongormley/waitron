@@ -1174,19 +1174,18 @@ turns out to need a design moves to its track.
    trigger with no `sale.*` code. Give the trigger a SQLSTATE and translate it when reachable.
 2. **Location-scope the by-id verb family together** (`getHeldOrder`/`updateHeldOrder`/
    `abandonHeldOrder`, `updateTable`/`deactivateTable`/`openTab`) when multi-location lands.
-3. **`fireLines` fans preparation-route lookups out across one shared transaction** (pre-existing,
-   predates this branch). `fireLines` in `apps/server/src/working-order.ts` runs a `Promise.all` over
-   the order's lines, each line calling `resolvePreparationRoute(tx, …)` on the SAME transaction at the
-   same time — the very shared-connection pattern this branch made sequential in `report-api.ts`. It
-   works today only because node-postgres quietly serialises queries on one connection; it is fragile
-   and breaks outright under a driver that rejects concurrent queries on one connection. Sequentialise
-   the loop (or resolve the routes up front), and consider a guard so the pattern cannot creep back.
-4. **`setup-api.ts` still reads its body with the bare `c.req.json().catch(() => null)` pattern**
-   (pre-existing, predates this branch). Two provisioning routes in `apps/server/src/setup-api.ts`
-   catch every parse error to `null` — the same malformed-body handling this branch replaced with the
-   shared `readJsonBody`/`readRawJsonBody` helpers in `till-api.ts`, in a file this branch did not
-   touch. Its `catch(() => null)` is actually broader than the helpers: it swallows a non-`SyntaxError`
-   fault (a real server bug) to `null` too, rather than rethrowing it. Move these to the shared helper.
+3. **`resolvePreparationRoute` re-reads the zone context once per distinct product, not once per
+   order** (pre-existing; surfaced while fixing `fireLines`'s shared-transaction fan-out, 2026-09-14).
+   `resolvePreparationRoute` (`packages/venue-service/src/operations.ts`) calls
+   `resolveZoneContext(tx, cfg, zoneId)` on every invocation, but `zoneId` is invariant across an
+   order. `fireLines` now resolves routes once per distinct product (down from once per line), so the
+   zone-context query runs once per distinct product rather than once per order. Closing "resolve
+   once" fully means changing `resolvePreparationRoute`'s public contract
+   (`packages/module/src/module.ts`, called from other places too), a larger change than a bugfix
+   branch should carry — do it as its own change. Note: no automated guard was added for the
+   concurrent-queries-on-one-connection anti-pattern (deferred deliberately); it is pinned by the §3
+   convention prose in `conventions-data.md` and the per-site resolve-once tests (`fireLines`,
+   `report-api`), not by a general guard.
 
 **The development stack:**
 
