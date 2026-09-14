@@ -1,6 +1,6 @@
 import { html } from "lit";
 import { afterEach, expect, test, vi } from "vitest";
-import { cleanup, mount } from "../test-helpers.js";
+import { cleanup, host, mount } from "../test-helpers.js";
 import type { DataTableColumn, WtDataTable } from "./wt-data-table.js";
 import "./wt-data-table.js";
 
@@ -524,6 +524,26 @@ test("typed search text stops narrowing once the search box is turned off", asyn
   el.searchable = false;
   await el.updateComplete;
   expect(rowKeysS(el)).toEqual(["1", "2"]);
+});
+
+test("the search box and each filter dropdown carry a semantic name", async () => {
+  const el = await tableS({ searchable: true, columns: withStatus });
+  expect(el.shadowRoot!.querySelector<HTMLInputElement>(".table-search")!.name).toBe("search");
+  expect(
+    el.shadowRoot!.querySelector<HTMLSelectElement>('select[data-filter="status"]')!.name,
+  ).toBe("status-filter");
+});
+
+test("the search box and filter dropdowns draw the focus ring when focused", async () => {
+  const el = await tableS({ searchable: true, columns: withStatus });
+  host.style.setProperty("--wt-focus-ring", "3px solid rgb(4, 5, 6)");
+  for (const selector of [".table-search", 'select[data-filter="status"]']) {
+    const control = el.shadowRoot!.querySelector<HTMLElement>(selector)!;
+    control.focus();
+    expect(control.matches(":focus-visible"), selector).toBe(true);
+    expect(getComputedStyle(control).outlineColor, selector).toBe("rgb(4, 5, 6)");
+    expect(getComputedStyle(control).outlineStyle, selector).toBe("solid");
+  }
 });
 
 test("search and filter combine with AND", async () => {

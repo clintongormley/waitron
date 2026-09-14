@@ -599,6 +599,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
           ? html`<input
               class="table-search"
               type="search"
+              name="search"
               autocomplete="off"
               aria-label=${this.searchLabel}
               placeholder=${this.searchPlaceholder || this.searchLabel}
@@ -616,6 +617,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
                 column.filter
                   ? html`<select
                       class="table-filter"
+                      name=${`${column.key}-filter`}
                       data-filter=${column.key}
                       aria-label=${column.filter.label}
                       @change=${(event: Event) => {
