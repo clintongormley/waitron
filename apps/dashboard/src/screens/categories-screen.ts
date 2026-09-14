@@ -66,8 +66,7 @@ export class CategoriesScreen extends LitElement {
         display: flex;
         gap: var(--wt-space-2);
       }
-      .error,
-      .danger {
+      .error {
         color: var(--wt-color-danger);
       }
       a {
@@ -123,11 +122,6 @@ export class CategoriesScreen extends LitElement {
          one button instance, so no other element's text colour moves. */
       wt-data-table::part(name-muted) {
         --wt-color-text: var(--wt-color-text-muted);
-      }
-      label {
-        display: grid;
-        gap: var(--wt-space-2);
-        margin-block: var(--wt-space-3);
       }
     `,
   ];
