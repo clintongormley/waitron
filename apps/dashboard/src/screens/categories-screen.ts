@@ -107,6 +107,11 @@ export class CategoriesScreen extends LitElement {
       wt-data-table::part(muted) {
         color: var(--wt-color-text-muted);
       }
+      /* The delete preview flags a product that will lose its reporting category. That flag is cell
+         markup living in the table's shadow root, so it carries a part=, not a class. */
+      wt-data-table::part(danger) {
+        color: var(--wt-color-danger);
+      }
       /* Marks a tree-mode ancestor kept only to show a matching descendant's path — the table
          reports it through the cell's ancestorOnly context. The colour has to reach the <button> inside wt-button's OWN
          shadow root, which is one boundary further than ::part() can select. Re-pointing the token
@@ -465,9 +470,15 @@ export class CategoriesScreen extends LitElement {
   #reportingCategory(product: Product): CategorySummary | undefined {
     return this.categories.find((item) => item.id === product.primaryCategoryId);
   }
-  #reportingCell(product: Product) {
+  /** The reporting-category cell. In the delete preview (`flagCleared`) a product whose reporting
+   * category is the one being deleted gets a danger flag, since deleting it clears that category.
+   * The flag is a `part=` span, not a class: the cell markup lands in the table's shadow root. */
+  #reportingCell(product: Product, flagCleared = false) {
     const category = this.#reportingCategory(product);
-    return category ? this.#lozenge(category) : t("categories.none");
+    const cell = category ? this.#lozenge(category) : t("categories.none");
+    return flagCleared && product.primaryCategoryId === this.deleting?.id
+      ? html`${cell}<span part="danger"> ${t("categories.delete_reporting")}</span>`
+      : cell;
   }
   #otherCategoriesCell(product: Product) {
     const others = product.categoryIds
@@ -488,8 +499,12 @@ export class CategoriesScreen extends LitElement {
   /** The shared column set behind every product table in this screen (members, add-products, and
    * Task 13's delete preview). Name searches and sorts on the translated description; Reporting
    * category sorts and offers a dropdown filter over the reporting categories actually in use; a
-   * caller passes its own trailing column (row actions, say) or none. */
-  #productColumns(trailing?: DataTableColumn<Product>): DataTableColumn<Product>[] {
+   * caller passes its own trailing column (row actions, say) or none. `flagCleared` (delete preview
+   * only) makes the reporting cell flag a product that would lose its reporting category. */
+  #productColumns(
+    trailing?: DataTableColumn<Product>,
+    flagCleared = false,
+  ): DataTableColumn<Product>[] {
     const base: DataTableColumn<Product>[] = [
       {
         key: "name",
@@ -501,7 +516,7 @@ export class CategoriesScreen extends LitElement {
       {
         key: "primary",
         label: t("editor.reporting_category"),
-        cell: (product) => this.#reportingCell(product),
+        cell: (product) => this.#reportingCell(product, flagCleared),
         sortValue: (product) => this.#reportingSortValue(product),
         filter: {
           label: t("editor.reporting_category"),
@@ -563,24 +578,28 @@ export class CategoriesScreen extends LitElement {
     if (!dependants) return html`<wt-spinner></wt-spinner>`;
     const sections: TemplateResult[] = [];
     if (dependants.products.length > 0) {
+      // Resolve each dependant id to its full library product so the shared product table can show
+      // it; an id that no longer resolves is skipped rather than shown blank. The table's reporting
+      // cell (via flagCleared) marks a product whose reporting category is the one being deleted.
+      const affected = dependants.products
+        .map((entry) => this.products.find((product) => product.id === entry.id))
+        .filter((product): product is Product => product !== undefined);
       sections.push(
         html`<p>
             ${t("categories.delete_products").replace("{count}", String(dependants.products.length))}
           </p>
-          <ul>
-            ${dependants.products.map(
-              (product) =>
-                html`<li>
-                  <a href=${`/manage/catalogue/product/${encodeURIComponent(product.id)}`}
-                    >${this.#text(product.name)}</a
-                  >${
-                    product.reporting
-                      ? html` <span class="danger">${t("categories.delete_reporting")}</span>`
-                      : nothing
-                  }
-                </li>`,
-            )}
-          </ul>`,
+          <wt-data-table
+            data-test="category-delete-products"
+            aria-label=${t("categories.products_modal")}
+            searchable
+            searchLabel=${t("categories.search_products")}
+            noMatchesMessage=${t("categories.products_no_matches")}
+            viewKey="waitron.categories.delete.table"
+            .rows=${affected}
+            .columns=${this.#productColumns(undefined, true)}
+            .rowKey=${(product: Product) => product.id}
+            .emptyMessage=${t("categories.no_products")}
+          ></wt-data-table>`,
       );
     }
     if (dependants.children.length > 0) {
@@ -601,24 +620,6 @@ export class CategoriesScreen extends LitElement {
                 html`<li>
                   <a href=${`/manage/categories?category=${encodeURIComponent(child.id)}`}
                     >${this.#text(child.name)}</a
-                  >
-                </li>`,
-            )}
-          </ul>`,
-      );
-    }
-    if (dependants.routes.length > 0) {
-      sections.push(
-        html`<p>
-            ${t("categories.delete_routes").replace("{count}", String(dependants.routes.length))}
-          </p>
-          <ul>
-            ${dependants.routes.map(
-              (route) =>
-                html`<li>
-                  <a href="/manage/venue-operations/view/routing"
-                    >${route.station ?? t("categories.no_preparation")} ·
-                    ${route.zone ?? t("categories.route_all_zones")}</a
                   >
                 </li>`,
             )}
@@ -798,8 +799,12 @@ export class CategoriesScreen extends LitElement {
         }}
       ></dashboard-category-form>
       <wt-modal
+        data-test="delete-dialog"
         .open=${this.deleting !== null}
-        heading=${t("categories.delete_confirm")}
+        heading=${t("categories.delete_named").replace(
+          "{name}",
+          this.deleting ? this.#text(this.deleting.name) : "",
+        )}
         @keydown=${(event: KeyboardEvent) => {
           if (this.busy && event.key === "Escape") event.preventDefault();
         }}
@@ -808,7 +813,6 @@ export class CategoriesScreen extends LitElement {
           if (!this.busy) this.#closeDelete();
         }}
       >
-        <p>${this.deleting ? this.#text(this.deleting.name) : ""}</p>
         ${this.deleting ? this.#renderDependants() : nothing}
         ${this.saveError ? html`<p role="alert">${this.saveError}</p>` : nothing}
         <wt-form-actions slot="footer"

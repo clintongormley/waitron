@@ -4,6 +4,9 @@ import { CategoriesScreen } from "./categories-screen.js";
 import type { CategoryDependants, DashboardApi, CategorySummary, Product } from "../api/client.js";
 import { setLocale, t } from "../i18n/t.js";
 afterEach(cleanupWidgets);
+// Some tests pin the reader locale (en-GB) so a translated string can be asserted against its exact
+// English wording; restore the file's default (es-ES) afterwards so later tests are unaffected.
+afterEach(() => setLocale("es-ES"));
 // The tree/flat toggle persists to localStorage; a leftover value from an earlier test would make
 // the "defaults to tree mode" assumption order-dependent.
 beforeEach(() => {
@@ -364,7 +367,47 @@ it("closes the products dialog from a footer Close button", async () => {
   expect(modal.open).toBe(false);
 });
 
-it("shows the delete preview with product, child and route links, disabling Delete until it resolves", async () => {
+// The delete confirmation names the category in its heading, lists the affected products in the
+// shared product table (not as links), flags the ones that lose their reporting category, and no
+// longer lists printing routes — those are removed without confirmation now. The table's rows are
+// cell markup in the table's OWN shadow root, so row text is read from `table.shadowRoot`, not the
+// dialog, which does not cross into a nested custom element's shadow.
+it("titles the delete dialog with the category name, shows affected products, and lists no routes", async () => {
+  setLocale("en-GB");
+  const { el, api } = await mount();
+  api.getCategoryDependants.mockResolvedValue({
+    products: [{ id: "p", name: { en: "Toast" }, reporting: true }],
+    children: [],
+    parentId: null,
+    routes: [{ id: "r", station: "Pass", zone: null }],
+  });
+  // Open the delete dialog for "Food" via its row action, the same path #openDelete uses.
+  const list = el.shadowRoot!.querySelector("wt-data-table")!;
+  await list.updateComplete;
+  list
+    .shadowRoot!.querySelector('tr[data-row-key="food"] wt-row-actions')!
+    .querySelectorAll("wt-button")[1]!
+    .click();
+  await el.updateComplete;
+  const dialog = el.shadowRoot!.querySelector('[data-test="delete-dialog"]')!;
+  expect(dialog.getAttribute("heading")).toContain("Food");
+  await vi.waitFor(() =>
+    expect(
+      dialog.querySelector('wt-data-table[data-test="category-delete-products"]'),
+    ).not.toBeNull(),
+  );
+  expect(dialog.textContent).not.toContain("route");
+  const table = dialog.querySelector<HTMLElementTagNameMap["wt-data-table"]>(
+    'wt-data-table[data-test="category-delete-products"]',
+  )!;
+  await table.updateComplete;
+  // D1: the dependant resolved to a full product row inside the table's shadow root, and — since its
+  // reporting category is the one being deleted — the cleared-reporting flag shows.
+  expect(table.shadowRoot!.textContent).toContain("Toast");
+  expect(table.shadowRoot!.textContent).toContain(t("categories.delete_reporting"));
+});
+
+it("shows the delete preview with the affected products and child links, disabling Delete until it resolves and listing no routes", async () => {
   const fx = apiFixture();
   let resolveDependants!: (value: CategoryDependants) => void;
   fx.api.getCategoryDependants.mockReturnValue(
@@ -396,9 +439,16 @@ it("shows the delete preview with product, child and route links, disabling Dele
   });
   await vi.waitFor(() => expect(deleteButton.disabled).toBe(false));
   const links = [...modal.querySelectorAll("a")];
-  expect(links.some((link) => link.textContent?.includes("Toast"))).toBe(true);
   expect(links.some((link) => link.textContent?.includes("Breakfast"))).toBe(true);
-  expect(links.some((link) => link.textContent?.includes("Grill"))).toBe(true);
+  // Routes are removed without confirmation now, so the preview never lists them.
+  expect(links.some((link) => link.textContent?.includes("Grill"))).toBe(false);
+  expect(modal.textContent).not.toContain("route");
+  // The affected product shows inside the shared table's shadow root, not as a link.
+  const products = modal.querySelector<HTMLElementTagNameMap["wt-data-table"]>(
+    'wt-data-table[data-test="category-delete-products"]',
+  )!;
+  await products.updateComplete;
+  expect(products.shadowRoot!.textContent).toContain("Toast");
 });
 
 // Since the delete cascades rather than being refused, this preview is the ONLY warning a manager
@@ -526,34 +576,6 @@ it("ignores a stale preview response from an earlier open of the same category",
     'wt-button[variant="danger"]',
   )!;
   expect(deleteButton.disabled).toBe(true);
-});
-
-it("a delete-modal product link points at the product editor", async () => {
-  const fx = apiFixture();
-  fx.api.getCategoryDependants.mockResolvedValue({
-    products: [{ id: "p", name: { en: "Toast" }, reporting: false }],
-    children: [],
-    parentId: null,
-    routes: [],
-  });
-  const { el } = await mountWidget<CategoriesScreen>("dashboard-categories-screen", {
-    api: fx.client,
-  });
-  await vi.waitFor(() =>
-    expect(el.shadowRoot!.querySelector("wt-data-table")!.rows.length).toBe(2),
-  );
-  const table = el.shadowRoot!.querySelector("wt-data-table")!;
-  await table.updateComplete;
-  const actions = table.shadowRoot!.querySelector("wt-row-actions")!;
-  actions.querySelectorAll("wt-button")[1]!.click();
-  await el.updateComplete;
-  const modal = [...el.shadowRoot!.querySelectorAll("wt-modal")].find((modal) => modal.open)!;
-  await vi.waitFor(() => expect(modal.querySelector("a")).not.toBeNull());
-  // The app has no client-side navigate() for this — image-library.ts's identical "what uses
-  // this" links (packages/media/src/dashboard/image-library.ts) are plain <a href> too, so a real
-  // browser navigation is the established mechanism; the pretty-path shape comes from
-  // apps/dashboard/src/navigation.ts's dashboardPath (children.catalogue.product = "product").
-  expect(modal.querySelector("a")!.getAttribute("href")).toBe("/manage/catalogue/product/p");
 });
 
 it("does not search disabled translations that are absent from the displayed category name", async () => {

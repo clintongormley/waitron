@@ -50,7 +50,6 @@ export const en = {
   "categories.none": "None",
   "categories.add_products": "Add products",
   "categories.add_selected": "Add {count} products",
-  "categories.select_all_visible": "Select all visible",
   "categories.select_all_products": "Select all products",
   "categories.remove_from": "Remove from this category",
   "categories.delete_intro": "This cannot be undone. Deleting it will:",
@@ -59,11 +58,8 @@ export const en = {
   "categories.filter_reporting_all": "Any reporting category",
   "categories.delete_children_under": "Move {count} child categories under {parent}",
   "categories.delete_children_top": "Move {count} child categories to the top level",
-  "categories.delete_routes": "Remove {count} kitchen routes",
   "categories.delete_preview_error":
     "Could not load what deleting this will affect. Close this and try again.",
-  "categories.route_all_zones": "all zones",
-  "categories.no_preparation": "no preparation",
   "categories.collapse": "Collapse",
   "categories.expand": "Expand",
 
@@ -1242,7 +1238,6 @@ export const es: Record<StringKey, string> = {
   "categories.none": "Ninguna",
   "categories.add_products": "Añadir productos",
   "categories.add_selected": "Añadir {count} productos",
-  "categories.select_all_visible": "Seleccionar todos los visibles",
   "categories.select_all_products": "Seleccionar todos los productos",
   "categories.remove_from": "Quitar de esta categoría",
   "categories.delete_intro": "No se puede deshacer. Eliminarlo hará que:",
@@ -1251,11 +1246,8 @@ export const es: Record<StringKey, string> = {
   "categories.filter_reporting_all": "Cualquier categoría de informes",
   "categories.delete_children_under": "Mover {count} categorías hijas bajo {parent}",
   "categories.delete_children_top": "Mover {count} categorías hijas al nivel superior",
-  "categories.delete_routes": "Quitar {count} rutas de cocina",
   "categories.delete_preview_error":
     "No se pudo cargar lo que se verá afectado al eliminar esta categoría. Cierra esta ventana e inténtalo de nuevo.",
-  "categories.route_all_zones": "todas las zonas",
-  "categories.no_preparation": "sin preparación",
   "categories.collapse": "Contraer",
   "categories.expand": "Expandir",
 
