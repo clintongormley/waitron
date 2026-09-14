@@ -10,7 +10,10 @@ import {
   drawerOpenPolicy,
   locations,
   printAgents,
+  printCharacterSet,
   printJobs,
+  printPaperWidth,
+  printResolution,
   printers,
   printTicketScope,
   printTransport,
@@ -710,6 +713,19 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       if (localKey !== undefined) input.localKey = localKey;
       const pollId = optionalString(body.pollId, "pollId");
       if (pollId !== undefined) input.pollId = pollId;
+      if (body.paperWidth !== undefined) {
+        input.paperWidth = requireEnum(body.paperWidth, "paperWidth", printPaperWidth.enumValues);
+      }
+      if (body.resolution !== undefined) {
+        input.resolution = requireEnum(body.resolution, "resolution", printResolution.enumValues);
+      }
+      if (body.characterSet !== undefined) {
+        input.characterSet = requireEnum(
+          body.characterSet,
+          "characterSet",
+          printCharacterSet.enumValues,
+        );
+      }
       const created = await gated(sessionId, (tx) => createPrinter(tx, deps.cfg, input));
       return c.json(created, 201);
     }),
@@ -777,6 +793,19 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           body.ticketScope,
           "ticketScope",
           printTicketScope.enumValues,
+        );
+      }
+      if (body.paperWidth !== undefined) {
+        patch.paperWidth = requireEnum(body.paperWidth, "paperWidth", printPaperWidth.enumValues);
+      }
+      if (body.resolution !== undefined) {
+        patch.resolution = requireEnum(body.resolution, "resolution", printResolution.enumValues);
+      }
+      if (body.characterSet !== undefined) {
+        patch.characterSet = requireEnum(
+          body.characterSet,
+          "characterSet",
+          printCharacterSet.enumValues,
         );
       }
       const active = optionalBool(body.active, "active");

@@ -1237,6 +1237,57 @@ describe("mountPrintApi — management: printers CRUD", () => {
     ).json()) as { id: string; localKey: string }[];
     expect(rows.find((r) => r.id === printerId)).toMatchObject({ localKey: secondSerial });
   });
+
+  it("stores, lists and patches the three layout settings, and rejects an unknown value", async () => {
+    const app = mountApp();
+    const created = await send(app, "POST", "/management-api/printers", {
+      cookie: managerCookie,
+      body: {
+        name: "Estrecha",
+        transport: "network_tcp",
+        host: "10.0.0.31",
+        paperWidth: "58mm",
+        characterSet: "pc858",
+      },
+    });
+    expect(created.status).toBe(201);
+    const { id } = (await created.json()) as { id: string };
+    const defaulted = await createNetworkPrinter(app, "10.0.0.32", 9100, "Por defecto");
+    const patched = await send(app, "PATCH", `/management-api/printers/${id}`, {
+      cookie: managerCookie,
+      body: { resolution: "203dpi" },
+    });
+    expect(patched.status).toBe(204);
+    const listed = (await (
+      await send(app, "GET", "/management-api/printers", { cookie: managerCookie })
+    ).json()) as { id: string; paperWidth: string; resolution: string; characterSet: string }[];
+    expect(listed.find((p) => p.id === id)).toMatchObject({
+      paperWidth: "58mm",
+      resolution: "203dpi",
+      characterSet: "pc858",
+    });
+    expect(listed.find((p) => p.id === defaulted)).toMatchObject({
+      paperWidth: "80mm",
+      resolution: "180dpi",
+      characterSet: "wpc1252",
+    });
+    for (const [method, path, body, field] of [
+      [
+        "POST",
+        "/management-api/printers",
+        { name: "Mala", transport: "network_tcp", host: "10.0.0.33", paperWidth: "70mm" },
+        "paperWidth",
+      ],
+      ["PATCH", `/management-api/printers/${id}`, { resolution: "300dpi" }, "resolution"],
+      ["PATCH", `/management-api/printers/${id}`, { characterSet: "cp437" }, "characterSet"],
+    ] as const) {
+      const res = await send(app, method, path, { cookie: managerCookie, body });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field } },
+      });
+    }
+  });
 });
 
 describe("mountPrintApi — management: test-print", () => {
