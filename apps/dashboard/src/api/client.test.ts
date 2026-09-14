@@ -54,6 +54,34 @@ describe("DashboardApi", () => {
     });
   });
 
+  it("rejects a failed configuration export with the envelope's code and the HTTP status", async () => {
+    // The export has its own fetch path (binary success), so its error handling must match the shared
+    // request helper: the domain code from `{ error: { code } }`, and the answered HTTP status alongside.
+    const response = new Response(
+      JSON.stringify({ error: { code: "backup.managed_by_environment" } }),
+      { status: 409, headers: { "content-type": "application/json" } },
+    );
+    const api = new DashboardApi("", vi.fn().mockResolvedValue(response));
+    await expect(api.exportConfiguration("a strong passphrase")).rejects.toMatchObject({
+      code: "backup.managed_by_environment",
+      status: 409,
+    });
+  });
+
+  it("falls back to server.internal (with the status) when the export error body is not JSON", async () => {
+    // A vanished route answers text/plain, on which `response.json()` throws; the guarded parse turns
+    // that into the same `{ code, status }` shape rather than a fake network failure.
+    const response = new Response("Bad Gateway", {
+      status: 502,
+      headers: { "content-type": "text/plain" },
+    });
+    const api = new DashboardApi("", vi.fn().mockResolvedValue(response));
+    await expect(api.exportConfiguration("a strong passphrase")).rejects.toMatchObject({
+      code: "server.internal",
+      status: 502,
+    });
+  });
+
   it("uses session-scoped profile endpoints without a person id", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     const api = new DashboardApi("", fetchImpl);
@@ -2251,7 +2279,10 @@ describe("DashboardApi — canvas editor CRUD (SP-B3.2)", () => {
       .fn()
       .mockResolvedValue(jsonResponse({ error: { code: "canvas.name_taken" } }, false, 409));
     const api = new DashboardApi("", fetchImpl);
-    await expect(api.createCanvas("Dup", {})).rejects.toEqual({ code: "canvas.name_taken" });
+    await expect(api.createCanvas("Dup", {})).rejects.toEqual({
+      code: "canvas.name_taken",
+      status: 409,
+    });
   });
 });
 
@@ -2891,6 +2922,7 @@ describe("DashboardApi — option groups + product attach (Task 11/12)", () => {
     const api = new DashboardApi("", fetchImpl);
     await expect(api.createOptionGroup({ name: {}, minSelect: 2, maxSelect: 1 })).rejects.toEqual({
       code: "options.group_invalid",
+      status: 400,
     });
   });
 

@@ -58,6 +58,54 @@ const parkPointer: BrowserCommand<[]> = async (context) => {
   await page.mouse.move(-1, -1);
 };
 
+// Two projects, because two test kinds need two environments. Most of the suite renders real
+// components and MUST run in a browser; a handful of pure helpers (date-utils) are plain functions
+// whose behaviour depends on the process timezone, which only a Node worker can pin.
+//
+// The browser context is pinned to UTC. Every screen test that shows a timestamp asserts the exact
+// wall-clock string, and `formatIsoMinute` renders in the browser's LOCAL zone — so without a pin
+// those assertions would read one value on a UTC CI runner and another on a developer's machine in
+// Madrid. Pinning the browser to UTC makes them read the same everywhere; it does NOT prove the
+// local-time behaviour, which is exactly why the timezone-sensitive helper is tested in Node below.
+const browserProject = {
+  extends: true,
+  test: {
+    name: "browser",
+    globals: true,
+    // A crashed Stryker run leaves .stryker-tmp holding mutated copies of the
+    // source. Without this exclude Vitest discovers them as real test files, so
+    // one interrupted mutation run makes every later test run fail confusingly.
+    // `date-utils.test.ts` is owned by the Node project below.
+    exclude: [...configDefaults.exclude, "**/.stryker-tmp/**", "src/date-utils.test.ts"],
+    browser: {
+      enabled: true,
+      provider: "playwright",
+      headless: true,
+      instances: [{ browser: "chromium", context: { timezoneId: "UTC" } }],
+      commands: {
+        emulateColorScheme,
+        setViewportSize,
+        parkPointer,
+      },
+    },
+  },
+} as const;
+
+// `date-utils.ts` is pure timezone-dependent logic with no DOM. It runs in Node so `env.TZ` actually
+// pins the zone (in the browser project it would not — Playwright's context timezone, not the OS TZ
+// the worker inherits, governs Chromium's clock). A non-UTC zone is deliberate: it makes the
+// local-vs-UTC difference visible on a UTC CI runner, so the test cannot pass vacuously.
+const nodeTimezoneProject = {
+  extends: true,
+  test: {
+    name: "node-tz",
+    globals: true,
+    environment: "node",
+    include: ["src/date-utils.test.ts"],
+    env: { TZ: "America/New_York" },
+  },
+} as const;
+
 export default defineConfig({
   // axe-core is imported only by the a11y suites (via src/widgets/test-helpers.ts), so Vite
   // discovers it mid-run and re-optimises — which reloads the in-flight test file and prints a
@@ -67,22 +115,7 @@ export default defineConfig({
   // Unlike apps/till, the dashboard has no qrcode-generator/unsafe-html surface to pre-bundle yet.
   optimizeDeps: { include: ["axe-core"] },
   test: {
-    globals: true,
-    // A crashed Stryker run leaves .stryker-tmp holding mutated copies of the
-    // source. Without this exclude Vitest discovers them as real test files, so
-    // one interrupted mutation run makes every later test run fail confusingly.
-    exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],
-    browser: {
-      enabled: true,
-      provider: "playwright",
-      headless: true,
-      instances: [{ browser: "chromium" }],
-      commands: {
-        emulateColorScheme,
-        setViewportSize,
-        parkPointer,
-      },
-    },
+    projects: [browserProject, nodeTimezoneProject],
     coverage: {
       provider: "v8",
       reporter: ["text", "html", "json-summary"],

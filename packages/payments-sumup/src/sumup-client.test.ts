@@ -28,6 +28,37 @@ describe("sumupClient request deadline", () => {
     expect(Date.now() - started).toBeLessThan(5_000);
     expect(abortSignal?.aborted).toBe(true);
   });
+
+  it("aborts and rejects when the HEADERS arrive but the response BODY hangs past the timeout", async () => {
+    // The real outage this guards is a stalled body stream: SumUp answers the headers, then the
+    // connection wedges before the body finishes. `res.text()` is then what blocks. The mock
+    // mirrors real fetch — the body promise settles ONLY when the request's signal aborts (rejecting
+    // it) — so a fix that stops abort reaching the body read would leave this hanging and the it()
+    // deadline below would fail it, which is the point: the mock cannot pass this vacuously.
+    let bodySignal: AbortSignal | undefined;
+    const hangingBody: typeof fetch = (_url, init) => {
+      bodySignal = (init as RequestInit | undefined)?.signal ?? undefined;
+      const res = {
+        status: 200,
+        text: (): Promise<string> =>
+          new Promise<string>((_resolve, reject) => {
+            bodySignal?.addEventListener("abort", () => reject(new Error("body aborted")));
+          }),
+      } as unknown as Response;
+      return Promise.resolve(res);
+    };
+    const client = sumupClient({
+      apiKey: "k",
+      merchantCode: "MC",
+      fetch: hangingBody,
+      timeoutMs: 50,
+    });
+    const started = Date.now();
+    await expect(client.findTransaction({ id: "txn_1" })).rejects.toThrow();
+    // The 50 ms deadline fired, not this it()'s 2 s bound; a hang would trip the bound instead.
+    expect(Date.now() - started).toBeLessThan(2_000);
+    expect(bodySignal?.aborted).toBe(true);
+  }, 2_000);
 });
 
 // The refund `amount` goes to SumUp's `/v1.0/.../refunds` endpoint, whose `amount` is in MINOR

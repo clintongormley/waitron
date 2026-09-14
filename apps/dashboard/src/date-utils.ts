@@ -21,9 +21,15 @@ export function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-/** An ISO-8601 instant sliced to the minute as `YYYY-MM-DD HH:MM` (UTC — no per-venue timezone yet).
+/** An ISO-8601 instant rendered to the minute as `YYYY-MM-DD HH:MM` in the BROWSER's local timezone.
  * The last-seen / job-timestamp formatter the devices and printers screens share; each caller supplies
- * its OWN "never" placeholder for a null timestamp, so this formats only a present value. */
+ * its OWN "never" placeholder for a null timestamp, so this formats only a present value.
+ *
+ * Local, not UTC: an operator reads a last-seen time against the clock on the wall, so a slice of the
+ * ISO string (which is UTC) would show the wrong hour anywhere but Greenwich. Rendered from the
+ * `Date`'s local getters — proven against a pinned non-UTC zone in `date-utils.test.ts`. */
 export function formatIsoMinute(iso: string): string {
-  return `${iso.slice(0, 10)} ${iso.slice(11, 16)}`;
+  const at = new Date(iso);
+  const pad = (n: number): string => String(n).padStart(2, "0");
+  return `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())} ${pad(at.getHours())}:${pad(at.getMinutes())}`;
 }

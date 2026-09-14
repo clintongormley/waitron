@@ -2008,7 +2008,8 @@ it("hides a scan result that is already registered and shows when it was seen ag
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
   await flush(el);
   // The registered list carries the status from the very first load, not only after a Scan — the
-  // instant formatted to the minute (UTC) like every other last-seen on this screen.
+  // instant formatted to the minute (in the browser's local timezone) like every other last-seen on
+  // this screen.
   expect(text(el, "[data-test=printer-last-seen-p1]")).toBe(
     t("printers.seen_at").replace("{agent}", "Cocina agent").replace("{time}", "2023-11-14 22:13"),
   );

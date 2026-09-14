@@ -31,6 +31,11 @@ import type { StationThresholds, TimingBand } from "@waitron/shared";
 /** The subset of `fetch` this client uses; the global satisfies it, and a test injects a stub. */
 export type FetchLike = typeof fetch;
 
+/** A plain (non-array, non-null) object — the only parsed body shape an error envelope can be read from. */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 /**
  * Whether a rejected request got NO answer (till-reroute §4.3): `fetch` rejects with a TypeError when
  * the connection fails and with an AbortError on a timeout — either way the outcome is UNKNOWN, because
@@ -2161,9 +2166,10 @@ export class TillApi {
   /**
    * The one request path every method funnels through. `credentials: "include"` on every call (the
    * session cookie). A `body` is JSON-encoded and its `content-type` header set only when one is
-   * present, so a GET/DELETE carries neither. A non-2xx becomes a rejected `{ code }` read from the
-   * server's `{ error: { code } }` envelope — falling back to `server.internal` when the body names
-   * none — so callers branch on a stable domain code, never on an HTTP status or a raw message.
+   * present, so a GET/DELETE carries neither. A non-2xx becomes a rejected `{ code, ...params, status }`
+   * read from the server's `{ error: { code } }` envelope — falling back to `server.internal` when the
+   * body is missing, non-JSON or names no code — so callers branch on a stable domain code, never on a
+   * raw message; `status` is the answered response's HTTP status, carried for the rare caller that needs it.
    *
    * `fetchImpl` is read into a local before the call so it is invoked as a free function, not as a
    * method of `this` (which would rebind a native `fetch`).
@@ -2186,12 +2192,23 @@ export class TillApi {
           };
     const res = await fetchImpl(this.#baseUrl + path, init);
     if (!res.ok) {
-      const envelope = (await res.json()) as {
-        error?: { code?: string; params?: Record<string, unknown> };
-      };
-      // Spread the error's `params` alongside its `code` so a caller can act on structured detail — the
-      // lock screen's `pin.throttled` countdown reads `retryAfterSeconds` off the thrown object.
-      throw { code: envelope.error?.code ?? "server.internal", ...envelope.error?.params };
+      // The body is untrusted: a gateway or a vanished route can answer a non-2xx as `text/plain`, on
+      // which `res.json()` throws, and the literal `null` is valid JSON, so a bare try/catch is not
+      // enough — the parsed value is checked for being an object before `.error` is read off it, and
+      // `code` is used only when it is a string. Any of these falls back to `server.internal` rather
+      // than surfacing a parse error to the caller as a fake network failure.
+      const parsed: unknown = await res.json().catch(() => undefined);
+      const envelope = isRecord(parsed) && isRecord(parsed.error) ? parsed.error : undefined;
+      const rawCode = envelope?.code;
+      const code = typeof rawCode === "string" ? rawCode : "server.internal";
+      const rawParams = envelope?.params;
+      const params = isRecord(rawParams) ? rawParams : undefined;
+      // Spread the error's `params` FIRST so a caller can act on structured detail — the lock screen's
+      // `pin.throttled` countdown reads `retryAfterSeconds` off the thrown object — but let the
+      // validated `code` and the answered HTTP `status` overwrite anything of the same name inside
+      // `params`. The thrown `code` is guaranteed a validated string and `status` the real status, so a
+      // server (buggy or hostile) putting a `code`/`status` key in `params` cannot break the caller.
+      throw { ...params, code, status: res.status };
     }
     const text = await res.text();
     return (text === "" ? undefined : JSON.parse(text)) as T;

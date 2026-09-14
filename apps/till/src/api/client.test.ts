@@ -146,11 +146,63 @@ describe("TillApi", () => {
     });
   });
 
+  it("keeps the validated code and status even when the body's params carry their own", async () => {
+    // The thrown object promises `code` is always a validated string and `status` the real HTTP status.
+    // A server (buggy or hostile) that puts `code`/`status` keys inside `params` must NOT override
+    // either — the lock screen branches on `code`, so a `code: null` slipping through would break its
+    // pin.throttled path. The validated `code` and the answered `status` win over the spread.
+    const fetchStub = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          error: {
+            code: "pin.throttled",
+            params: { code: null, status: 999, retryAfterSeconds: 5 },
+          },
+        }),
+        { status: 429 },
+      ),
+    );
+
+    await expect(new TillApi("", fetchStub).login("p", "0000")).rejects.toMatchObject({
+      code: "pin.throttled",
+      status: 429,
+      retryAfterSeconds: 5,
+    });
+  });
+
   it("falls back to server.internal when the error body carries no code", async () => {
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse({}, 500));
 
     await expect(new TillApi("", fetchStub).getTill()).rejects.toMatchObject({
       code: "server.internal",
+    });
+  });
+
+  it("falls back to server.internal (not a parse error) when the error body is not JSON", async () => {
+    // A gateway or a vanished route can answer a non-2xx with a `text/plain` body, which `res.json()`
+    // throws on. Left unguarded that SyntaxError reaches the caller as a fake network failure. The
+    // guarded parse turns it into the same `{ code }` shape every caller already branches on, and the
+    // HTTP `status` rides along additively.
+    const fetchStub = vi
+      .fn()
+      .mockResolvedValue(
+        new Response("Bad Gateway", { status: 502, headers: { "content-type": "text/plain" } }),
+      );
+
+    await expect(new TillApi("", fetchStub).getTill()).rejects.toMatchObject({
+      code: "server.internal",
+      status: 502,
+    });
+  });
+
+  it("falls back to server.internal when the error body is the literal JSON null", async () => {
+    // `null` parses cleanly, so a bare try/catch never runs and reading `.error` off it would throw a
+    // TypeError — the second half of the same bug.
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(null, 500));
+
+    await expect(new TillApi("", fetchStub).getTill()).rejects.toMatchObject({
+      code: "server.internal",
+      status: 500,
     });
   });
 

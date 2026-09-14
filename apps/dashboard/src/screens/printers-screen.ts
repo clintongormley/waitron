@@ -815,7 +815,7 @@ export class PrintersScreen extends LitElement {
     return this.printers.find((p) => p.id === printerId)?.name ?? printerId;
   }
 
-  /** Format an ISO instant to the minute (UTC — no per-venue timezone yet, matching the devices screen);
+  /** Format an ISO instant to the minute (in the browser's local timezone, matching the devices screen);
    * a null instant (never seen / not yet delivered) shows the "Never" placeholder. */
   #timestamp(iso: string | null): string {
     if (iso === null) return t("printers.last_seen_never");
