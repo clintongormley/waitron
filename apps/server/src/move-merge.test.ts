@@ -59,9 +59,9 @@ interface Seeded {
 async function setupVenue(): Promise<Seeded> {
   const tenantId = await seedTenant(db);
   await db.execute(sql`
-    insert into units (tenant_id, seed_key, name, precision, hardware_unit) values
-      (${tenantId}, 'each', '{"en":"each"}'::jsonb, 0, null),
-      (${tenantId}, 'kg', '{"en":"kg"}'::jsonb, 3, 'kg')`);
+    insert into units (tenant_id, seed_key, name, abbreviation, precision, hardware_unit) values
+      (${tenantId}, 'each', '{"en":"each"}'::jsonb, '{"en":"ea"}'::jsonb, 0, null),
+      (${tenantId}, 'kg', '{"en":"kg"}'::jsonb, '{"en":"kg"}'::jsonb, 3, 'kg')`);
   const loc = await db.execute<{ id: string }>(sql`
     insert into locations (tenant_id, name, invoice_locales, operation_description)
     values (${tenantId}, 'Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
