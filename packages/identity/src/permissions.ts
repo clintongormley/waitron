@@ -12,23 +12,18 @@ export const PERMISSIONS = [
   "person.manage",
   // Assigning or removing the admin role changes who can control every permission. Admin only.
   "person.admin",
-  // Authoring the till layout + receipt trim (dashboard config, @waitron/layouts). A domain-named
-  // CONFIG permission, distinct from staff admin (person.manage); granted to manager + admin, the
-  // same roles as person.manage (design D9).
-  "till.configure",
-  // Authoring what appears on a screen or receipt (till layout + receipt trim). One of the three
-  // domain-named permissions that replace till.configure (spec 2026-09-14); granted to manager + admin.
+  // Authoring what appears on a screen or receipt (till layout + receipt trim); granted to manager +
+  // admin.
   "layout.configure",
-  // Configuring the physical venue, including the floor plan. One of the three domain-named permissions
-  // that replace till.configure (spec 2026-09-14); granted to manager + admin.
+  // Configuring the physical venue, including the floor plan; granted to manager + admin.
   "venue.configure",
-  // Box lifecycle: backups, recovery bundle, config export, retire, box status. One of the three
-  // domain-named permissions that replace till.configure (spec 2026-09-14); granted to manager + admin.
+  // Box lifecycle: backups, recovery bundle, config export, retire, box status; granted to manager +
+  // admin.
   "system.manage",
   // Authoring the weekly roster (draft → warn → publish) from the management dashboard
   // (@waitron/workforce). A domain-named SCHEDULING permission, distinct from staff admin
-  // (person.manage) and till config (till.configure); granted to manager + admin. Later slices add
-  // swap.approve / absence.decide beside it (shift-planning slice 1, 2026-08-15).
+  // (person.manage); granted to manager + admin. Later slices add swap.approve / absence.decide
+  // beside it (shift-planning slice 1, 2026-08-15).
   "schedule.manage",
   // Manager approve/reject of an ACCEPTED shift swap (@waitron/workforce decideSwap), from the
   // management dashboard's approvals screen. A domain-named APPROVAL permission beside schedule.manage;
@@ -120,7 +115,6 @@ const SUPERVISOR: ReadonlySet<Permission> = new Set([
 const MANAGER: ReadonlySet<Permission> = new Set([
   ...SUPERVISOR,
   "person.manage",
-  "till.configure",
   "layout.configure",
   "venue.configure",
   "system.manage",
