@@ -69,8 +69,10 @@ server until the modifier itself is saved.
 Products can compose the modifier form directly and select the saved definition. The optional choice
 fields `addAllergens`, `removeAllergens`, `addOrigins`, `removeOrigins`, `dietaryEffect`, and extras
 `vatClass` keep existing effects and tax inheritance. The choice form renders the allergen and
-dietary effects, using selected items without source fields; Products can replace its private
-effect-rendering methods with the shared pickers during integration.
+dietary effects through the shared `dashboard-allergen-dietary-picker` widget
+(`apps/dashboard/src/widgets/allergen-dietary-picker.ts`): added allergens are recorded as
+`contains`, and there is no presence or source field in the modifier choice UI. Products can adopt
+the same widget during integration.
 
 ## Ordering and stored facts
 
