@@ -404,6 +404,59 @@ it("clears a failed delete preview when the dialog is reopened", async () => {
   expect(modal.querySelector('[data-test="dependants-error"]')).toBeNull();
 });
 
+// Reopening the SAME category's delete dialog while its first preview fetch is still in flight
+// must not let that stale fetch's outcome apply once it finally settles — comparing the category
+// id alone cannot tell a superseded request from the current one, since both share the same id.
+it("ignores a stale preview response from the same category's earlier open", async () => {
+  const fx = apiFixture();
+  let resolveFirst!: (value: CategoryDependants) => void;
+  let rejectSecond!: (error: Error) => void;
+  fx.api.getCategoryDependants
+    .mockImplementationOnce(() => new Promise((resolve) => (resolveFirst = resolve)))
+    .mockImplementationOnce(() => new Promise((_resolve, reject) => (rejectSecond = reject)));
+  const { el } = await mountWidget<CategoriesScreen>("dashboard-categories-screen", {
+    api: fx.client,
+  });
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("wt-data-table")!.rows.length).toBe(2),
+  );
+  const table = el.shadowRoot!.querySelector("wt-data-table")!;
+  await table.updateComplete;
+  const openDelete = () => {
+    const actions = table.shadowRoot!.querySelectorAll("wt-row-actions")[0]!;
+    actions.querySelectorAll("wt-button")[1]!.click();
+  };
+  openDelete(); // first open of "food" — its fetch never resolves yet
+  await el.updateComplete;
+  const modal = [...el.shadowRoot!.querySelectorAll("wt-modal")].find((modal) => modal.open)!;
+  modal.querySelector<HTMLElementTagNameMap["wt-button"]>('wt-button[slot="cancel"]')!.click();
+  // The cancel click closes the dialog directly, which also flips wt-modal's `.open` property,
+  // triggering the native <dialog>'s own "close" event, which bubbles back as `wt-close` and calls
+  // the same close handler again — a second, cascaded update whose native event can land on a
+  // later task than `updateComplete` flushes. Give it a real macrotask to land before reopening,
+  // or the second open below can race a still-in-flight close and have it wipe the new state.
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await el.updateComplete;
+  openDelete(); // reopen the SAME category — a fresh fetch starts
+  await el.updateComplete;
+  rejectSecond(new Error("offline")); // the fresh (current) request fails
+  await vi.waitFor(async () => {
+    await el.updateComplete;
+    expect(modal.querySelector('[data-test="dependants-error"]')).not.toBeNull();
+  });
+  resolveFirst({ products: [], children: [], parentId: null, routes: [] }); // the stale one lands late
+  // The stale success races the error paint on its own microtask; give it a real macrotask so a
+  // wrongly-applied resolution has landed before asserting it was ignored, not just "not yet seen".
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await el.updateComplete;
+  // The stale success must not clear the warning or enable Delete.
+  expect(modal.querySelector('[data-test="dependants-error"]')).not.toBeNull();
+  const deleteButton = modal.querySelector<HTMLElementTagNameMap["wt-button"]>(
+    'wt-button[variant="danger"]',
+  )!;
+  expect(deleteButton.disabled).toBe(true);
+});
+
 it("a delete-modal product link points at the product editor", async () => {
   const fx = apiFixture();
   fx.api.getCategoryDependants.mockResolvedValue({
@@ -481,9 +534,16 @@ it.each([
 
 it("shows a round create button by the heading", async () => {
   const { el } = await mount();
-  const add = el.shadowRoot!.querySelector('wt-button[round][data-test="create-category"]');
+  const add = el.shadowRoot!.querySelector('wt-button[shape="round"][data-test="create-category"]');
   expect(add).not.toBeNull();
   expect(add!.getAttribute("aria-label")).toBeTruthy();
+  // A stale bare `round` attribute is inert since wt-button only reads `shape`, but the DOM would
+  // still carry it harmlessly, so assert actual rendering — the button's own inner element must be
+  // circular, not the plain rectangular default.
+  await (add as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+  const inner = add!.shadowRoot!.querySelector("button")!;
+  const rect = inner.getBoundingClientRect();
+  expect(rect.width).toBeCloseTo(rect.height, 0);
 });
 
 it("defaults to tree mode and nests children", async () => {

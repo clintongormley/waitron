@@ -249,29 +249,37 @@ export class CategoriesScreen extends LitElement {
     }
     await this.#load();
   }
+  #deleteGeneration = 0;
   #openDelete(category: CategorySummary): void {
     this.saveError = "";
     this.dependants = null;
     this.dependantsError = false;
     this.deleting = category;
-    void this.#loadDependants(category.id);
+    const generation = ++this.#deleteGeneration;
+    void this.#loadDependants(category.id, generation);
   }
   #closeDelete(): void {
     this.deleting = null;
     this.dependants = null;
     this.dependantsError = false;
+    this.#deleteGeneration++;
   }
   /** Feeds the delete confirmation's preview, which is the only warning there is: the delete
    * cascades and cannot be undone, and nothing refuses it server-side. So a failed fetch gets its
    * own state rather than an empty stand-in — an empty preview is indistinguishable from "nothing
    * depends on this", which would have a manager confirm the cascade blind. `dependants` stays
-   * null, which keeps Delete disabled; `dependantsError` is what tells the dialog to say why. */
-  async #loadDependants(id: string): Promise<void> {
+   * null, which keeps Delete disabled; `dependantsError` is what tells the dialog to say why.
+   * `generation` guards a reopened dialog against a stale request: comparing `this.deleting?.id`
+   * alone cannot tell a superseded fetch from the current one when the SAME category is reopened,
+   * so an old rejection could clear a new, still-loading state, or an old resolution could enable
+   * Delete after a fresh request already failed. Every open (and close) mints a new generation;
+   * only a response that still matches it is applied. */
+  async #loadDependants(id: string, generation: number): Promise<void> {
     try {
       const dependants = await this.api.getCategoryDependants(id);
-      if (this.deleting?.id === id) this.dependants = dependants;
+      if (generation === this.#deleteGeneration) this.dependants = dependants;
     } catch {
-      if (this.deleting?.id === id) this.dependantsError = true;
+      if (generation === this.#deleteGeneration) this.dependantsError = true;
     }
   }
   async #delete(): Promise<void> {
@@ -676,7 +684,7 @@ export class CategoriesScreen extends LitElement {
     return html`<div class="heading">
         <h1>${t("nav.categories")}</h1>
         <wt-button
-          round
+          shape="round"
           variant="primary"
           data-test="create-category"
           aria-label=${t("categories.create")}
