@@ -431,7 +431,9 @@ export class WtDataTable<Row = unknown> extends LitElement {
     return { rows: this.rows.filter((row) => included.has(keyOf(row))), ancestorOnly };
   }
 
-  #treeRows(rows: readonly Row[]): { row: Row; key: string; depth: number; hasChildren: boolean }[] {
+  #treeRows(
+    rows: readonly Row[],
+  ): { row: Row; key: string; depth: number; hasChildren: boolean }[] {
     const keyOf = (row: Row, i: number) => this.rowKey(row, i);
     const parentOf = this.rowParent!;
     const indexOf = new Map<Row, number>();
@@ -611,7 +613,8 @@ export class WtDataTable<Row = unknown> extends LitElement {
       return html`<p class="message error" role="alert">${this.errorMessage}</p>`;
     const visible = this.#visibleRows();
     if (this.rows.length === 0)
-      return html`${this.#renderToolbar()}<p class="message" role="status">${this.emptyMessage}</p>`;
+      return html`${this.#renderToolbar()}
+        <p class="message" role="status">${this.emptyMessage}</p>`;
 
     const label = this.ariaLabel || undefined;
     const isTree = this.rowParent !== undefined;
@@ -620,7 +623,8 @@ export class WtDataTable<Row = unknown> extends LitElement {
     const treeVisible = isTree ? this.#treeVisible() : undefined;
     const renderedCount = isTree ? treeVisible!.rows.length : visible.length;
     if (renderedCount === 0)
-      return html`${this.#renderToolbar()}<p class="message" role="status">${this.noMatchesMessage}</p>`;
+      return html`${this.#renderToolbar()}
+        <p class="message" role="status">${this.noMatchesMessage}</p>`;
 
     if (!isTree) {
       const sorted = this.#sortedRows(visible);

@@ -88,9 +88,7 @@ test("applies the sortKey and sortDirection defaults on first render", async () 
 test("emits wt-sort-change when a header is clicked", async () => {
   const el = await table();
   const events: { sortKey: string | null; sortDirection: string }[] = [];
-  el.addEventListener("wt-sort-change", (e) =>
-    events.push((e as CustomEvent).detail),
-  );
+  el.addEventListener("wt-sort-change", (e) => events.push((e as CustomEvent).detail));
   el.shadowRoot!.querySelector<HTMLButtonElement>('button[data-sort="name"]')!.click();
   await el.updateComplete;
   expect(events).toEqual([{ sortKey: "name", sortDirection: "ascending" }]);
@@ -331,7 +329,9 @@ test("a filtered tree keeps a match's ancestor chain and marks it ancestor-only"
     { id: "eggs", parent: "break", name: "Eggs" },
   ];
   const seen: Record<string, boolean> = {};
-  const el = (await mount('<wt-data-table aria-label="Cats"></wt-data-table>')) as WtDataTable<TreeRow>;
+  const el = (await mount(
+    '<wt-data-table aria-label="Cats"></wt-data-table>',
+  )) as WtDataTable<TreeRow>;
   Object.assign(el, {
     rows: treeRows,
     rowKey: (r: TreeRow) => r.id,
