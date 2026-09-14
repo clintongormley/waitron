@@ -213,7 +213,8 @@ export class WtDataTable<Row = unknown> extends LitElement {
    * term are shown. Which text a row exposes is each column's searchValue, or its sortValue. */
   @property({ type: Boolean }) searchable = false;
   @property() searchLabel = "Search";
-  @property() searchPlaceholder = "Search";
+  /** Placeholder text for the search box; empty means it repeats `searchLabel`. */
+  @property() searchPlaceholder = "";
   @property() noMatchesMessage = "No matches";
   /** When set, the tab's session storage remembers this table's sort and filter choices under this
    * key and restores them on the next visit. Search text is never persisted. */
@@ -570,7 +571,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
         type="search"
         autocomplete="off"
         aria-label=${this.searchLabel}
-        placeholder=${this.searchPlaceholder}
+        placeholder=${this.searchPlaceholder || this.searchLabel}
         .value=${this.searchText}
         @input=${(event: Event) => {
           this.searchText = (event.target as HTMLInputElement).value;

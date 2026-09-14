@@ -384,6 +384,15 @@ test("searchable renders a search box that narrows rows", async () => {
   expect(rowText(el)).toEqual(["Ada10"]);
 });
 
+test("the search box shows its label as the placeholder unless a placeholder is given", async () => {
+  const el = await table({ searchable: true, searchLabel: "Buscar productos" });
+  const input = el.shadowRoot!.querySelector<HTMLInputElement>(".table-search")!;
+  expect(input.placeholder).toBe("Buscar productos");
+  el.searchPlaceholder = "Nombre o código";
+  await el.updateComplete;
+  expect(input.placeholder).toBe("Nombre o código");
+});
+
 test("no toolbar is rendered when searchable is off", async () => {
   const el = await table();
   expect(el.shadowRoot!.querySelector(".table-toolbar")).toBeNull();
