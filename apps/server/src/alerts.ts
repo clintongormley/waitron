@@ -31,6 +31,12 @@ export function createAlertRegistry(parts: {
     if (seen.has(claim.prefix)) throw new Error(`two alert claims on the prefix "${claim.prefix}"`);
     seen.add(claim.prefix);
   }
+  // A failing source's alert is keyed by its area, and the dashboard tells alerts apart by key.
+  const areas = new Set<string>();
+  for (const source of parts.sources) {
+    if (areas.has(source.area)) throw new Error(`two alert sources in the area "${source.area}"`);
+    areas.add(source.area);
+  }
   return { claims: [...parts.claims], sources: [...parts.sources] };
 }
 
@@ -78,10 +84,12 @@ const SEVERITY_RANK = { error: 0, warning: 1 } as const;
 function compareOpen(a: Alert, b: Alert): number {
   const bySeverity = SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity];
   if (bySeverity !== 0) return bySeverity;
-  if (a.since !== b.since) {
-    if (a.since === null) return 1;
-    if (b.since === null) return -1;
-    return a.since < b.since ? 1 : -1;
+  if (a.since === null || b.since === null) {
+    if (a.since !== b.since) return a.since === null ? 1 : -1;
+  } else {
+    // Compared as instants: a source may write `since` with an offset rather than as UTC.
+    const byTime = Date.parse(b.since) - Date.parse(a.since);
+    if (byTime !== 0) return byTime;
   }
   return a.key < b.key ? -1 : a.key > b.key ? 1 : 0;
 }

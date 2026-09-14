@@ -101,6 +101,25 @@ describe("claims", () => {
     ).toThrow(/payment\./);
   });
 
+  it("refuses two sources in the same area", () => {
+    const source = (): AlertSource => ({
+      area: "printing",
+      permission: "diagnostics.view",
+      read: async () => [],
+    });
+    expect(() => createAlertRegistry({ claims: [], sources: [source(), source()] })).toThrow(
+      /printing/,
+    );
+  });
+
+  it("is visible to a session holding only a source's permission", () => {
+    const r = createAlertRegistry({
+      claims: [],
+      sources: [{ area: "backup", permission: "system.manage", read: async () => [] }],
+    });
+    expect(alertsVisible(r, new Set(["system.manage"]))).toBe(true);
+  });
+
   it("is visible to a session holding any claim or source permission, including diagnostics", () => {
     expect(alertsVisible(registry, new Set(["payments.manage"]))).toBe(true);
     expect(alertsVisible(registry, new Set(["diagnostics.view"]))).toBe(true);
@@ -160,6 +179,64 @@ describe("readOpenAlerts", () => {
       "fiscal.registro_rechazado",
       "payment.offline_forward_declined",
     ]);
+  });
+
+  it("puts alerts without a since last and breaks ties by key", async () => {
+    const v = await seedVenue();
+    const at = "2026-09-14T11:00:00.000Z";
+    const source: AlertSource = {
+      area: "printing",
+      permission: "diagnostics.view",
+      read: async () => [
+        // Its key sorts first, so only the null-last rule can put it last.
+        { key: "a:0", code: "printing.x", params: {}, severity: "warning", since: null },
+        { key: "b:1", code: "printing.x", params: {}, severity: "warning", since: at },
+        { key: "a:1", code: "printing.x", params: {}, severity: "warning", since: at },
+      ],
+    };
+    const r = createAlertRegistry({ claims: [], sources: [source] });
+    const alerts = await asApp(v.tenantId, (tx) =>
+      readOpenAlerts(
+        tx,
+        { registry: r, tenantId: v.tenantId, now: NOW, log: noopLog },
+        new Set(["diagnostics.view"]),
+      ),
+    );
+    expect(alerts.map((a) => a.key)).toEqual(["a:1", "b:1", "a:0"]);
+  });
+
+  it("orders since by instant, not by text", async () => {
+    const v = await seedVenue();
+    const source: AlertSource = {
+      area: "printing",
+      permission: "diagnostics.view",
+      read: async () => [
+        // 11:00Z written with an offset: as text it sorts after 11:30Z, as an instant before it.
+        {
+          key: "offset",
+          code: "printing.x",
+          params: {},
+          severity: "warning",
+          since: "2026-09-14T13:00:00+02:00",
+        },
+        {
+          key: "utc",
+          code: "printing.x",
+          params: {},
+          severity: "warning",
+          since: "2026-09-14T11:30:00.000Z",
+        },
+      ],
+    };
+    const r = createAlertRegistry({ claims: [], sources: [source] });
+    const alerts = await asApp(v.tenantId, (tx) =>
+      readOpenAlerts(
+        tx,
+        { registry: r, tenantId: v.tenantId, now: NOW, log: noopLog },
+        new Set(["diagnostics.view"]),
+      ),
+    );
+    expect(alerts.map((a) => a.key)).toEqual(["utc", "offset"]);
   });
 
   it("asks only the sources whose permission the session holds, and stamps kind and area", async () => {
@@ -309,5 +386,32 @@ describe("readHandledAlerts", () => {
       ),
     );
     expect(paymentsOnly.map((a) => a.code)).toEqual(["payment.offline_forward_declined"]);
+  });
+
+  it("does not name a handler from another tenant", async () => {
+    const v = await seedVenue();
+    const other = await seedVenue();
+    const outsider = await asApp(other.tenantId, async (tx) => {
+      const p = await tx.execute<{ id: string }>(sql`
+        insert into persons (tenant_id, display_name, pin_hash, role)
+        values (${other.tenantId}, 'Outsider', ${hashPin("1234")}, 'manager') returning id`);
+      return p.rows[0]!.id;
+    });
+    await raise(v, "payment.offline_forward_declined", "error", NOW);
+    const [incident] = await asApp(v.tenantId, (tx) => listOpenIncidents(tx, v.tenantId));
+    await asApp(v.tenantId, (tx) =>
+      markIncidentHandled(tx, {
+        tenantId: v.tenantId,
+        id: incident!.id,
+        personId: outsider,
+        handledAt: NOW,
+      }),
+    );
+    const handled = await asApp(v.tenantId, (tx) =>
+      readHandledAlerts(tx, { registry, tenantId: v.tenantId, now: NOW, log: noopLog }, EVERYTHING),
+    );
+    expect(handled.map((a) => [a.code, a.handledBy])).toEqual([
+      ["payment.offline_forward_declined", null],
+    ]);
   });
 });
