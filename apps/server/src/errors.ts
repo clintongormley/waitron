@@ -1703,6 +1703,12 @@ declare module "@waitron/shared" {
     // A diagnostics verbosity request named a level outside {debug,info} or a ttl outside its bounds.
     // `reason` is a fixed enum string (never a raw input value) — the redaction discipline holds.
     "diagnostics.invalid_verbosity": { reason: "level" | "ttl" };
+    /** No incident with this id exists in this venue. Also answered for a malformed id and for
+     * another tenant's incident, so the answer never reveals which. */
+    "alert.not_found": { id: string };
+    /** An alert source failed while being read. Its alerts are replaced by this one, under the
+     * source's own area and permission. Built as data, never thrown. */
+    "alert.source_unavailable": { area: string };
     /**
      * BR-3's restore compatibility gate (`restore-gate.ts`) refused: the backup manifest's
      * `environment` differs from the restoring binary's own target environment. Refusing this here,
