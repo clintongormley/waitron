@@ -6,7 +6,12 @@ import {
   CATALOGUE_CONFIGURATION_TRANSFER,
   CATALOGUE_PROVISIONING,
 } from "@waitron/catalogue";
-import { CORE_CLASSIFICATION, CORE_CONFIGURATION_TRANSFER, CORE_CHANGE_SOURCES } from "@waitron/db";
+import {
+  CORE_ALERTS,
+  CORE_CLASSIFICATION,
+  CORE_CONFIGURATION_TRANSFER,
+  CORE_CHANGE_SOURCES,
+} from "@waitron/db";
 import { FISCAL_NONE_SLOT } from "@waitron/fiscal-none";
 import {
   FISCAL_ALERTS,
@@ -72,7 +77,8 @@ import {
  * `CREATE TRIGGER … ON <table>` — which the root `module-graph-honesty` guard cross-checks against the
  * migrations. Populated seats today: `vocabulary` on the Spanish-by-design modules (SP-3b),
  * `classification` on every table-owning module (swap S1 — `fiscal-none` owns no tables and has none),
- * `provisioning`, `fiscal` and `backup.restore` on `fiscal-verifactu`.
+ * `provisioning`, `fiscal` and `backup.restore` on `fiscal-verifactu`, `alerts` on `core`, `payments` and
+ * `fiscal-verifactu`.
  * Two modules fill the `fiscal` slot — `fiscal-verifactu` and the no-regime `fiscal-none` — so exactly
  * one is enabled per deployment (`fiscalSlot`); provisioning selects it from the venue's territory. The
  * remaining seats stay declared on the contract and empty until their slices land.
@@ -83,13 +89,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     version: "0.0.0",
     tier: "mandatory",
     migrations: { name: "core", table: "__drizzle_migrations_db", from: "../db/drizzle" },
-    // Core's own incident codes: chain integrity and clock trust, shown with the tax-filing alerts.
-    alerts: {
-      events: [
-        { prefix: "chain.", area: "fiscal", permission: "fiscal.view" },
-        { prefix: "clock.", area: "fiscal", permission: "fiscal.view" },
-      ],
-    },
+    alerts: CORE_ALERTS,
     classification: CORE_CLASSIFICATION,
     changes: CORE_CHANGE_SOURCES,
     configurationTransfer: CORE_CONFIGURATION_TRANSFER,
