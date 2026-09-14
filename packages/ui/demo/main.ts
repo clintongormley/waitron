@@ -15,6 +15,7 @@ import "../src/components/wt-tabs.js";
 import "../src/components/wt-row-actions.js";
 import "../src/components/wt-combobox.js";
 import "../src/components/wt-count-badge.js";
+import "../src/components/wt-toast.js";
 
 registerIcons({
   check: "M2 8 L6 12 L14 4",
@@ -27,6 +28,8 @@ registerIcons({
   kebab:
     "M6.7 3a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0M6.7 8a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0M6.7 13a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0",
   "chevron-down": "M3 6 L8 11 L13 6",
+  close:
+    "M3.7 2.6 8 6.9l4.3-4.3 1.1 1.1L9.1 8l4.3 4.3-1.1 1.1L8 9.1l-4.3 4.3-1.1-1.1L6.9 8 2.6 3.7Z",
 });
 
 const panel = (theme: "light" | "dark") => `
@@ -57,6 +60,8 @@ const panel = (theme: "light" | "dark") => `
       <wt-count-badge count="12" tone="warning"></wt-count-badge>
       <wt-count-badge count="120" tone="error"></wt-count-badge>
     </div>
+    <wt-toast open message="2 new alerts" close-label="Close" duration="0"></wt-toast>
+    <wt-toast open tone="error" message="The tax agency rejected an invoice record" close-label="Close" duration="0"></wt-toast>
     <wt-card raised>
       <span slot="header">Ticket</span>
       <wt-input label="Peso (kg)" value="1.25"></wt-input>

@@ -155,6 +155,7 @@ this floor — removing the `min-width` regresses that guard.
 | `wt-card` | `raised`; default slot (body), `header` slot | — |
 | `wt-lozenge` | `color` (a hex string; empty or invalid renders the neutral chip); default slot (label) | — |
 | `wt-count-badge` | `count` (renders nothing at zero; shows `99+` above 99), `tone` (`neutral`\|`warning`\|`error`, reflected). It has no accessible name: the control it decorates must say the count | — |
+| `wt-toast` | `open`, `tone` (`info`\|`error`, reflected; info is announced politely through `role="status"`, error assertively through `role="alert"`), `message`, `close-label` (the close button's accessible name), `duration` (milliseconds, default `8000`; `0` keeps it open). Hovering or focusing it pauses the timer and leaving restarts the full duration. Positioning belongs to the consumer, which must also register the `close` icon | `wt-activate` — `detail: {}` (the message was pressed; the toast then closes); `wt-close` — `detail: {}` (closed by the timer, the close button, or after activation) |
 | `wt-input` | `value`, `label`, `name`, `type`, `autocomplete`, `placeholder`, `required`, `disabled`, `invalid`, `error`; `help` and `end` slots | `wt-change` — `detail: { value: string }` |
 | `wt-switch` | `checked`, `disabled`, `label`, `name` | `wt-change` — `detail: { checked: boolean }` |
 | `wt-dialog` | `open`, `heading`, `aria-label` (fallback name when there is no `heading`), `dismissible` (default true; set the property `.dismissible=${false}` so Escape cannot close it); default slot (body), `footer` slot | `wt-close` |
@@ -872,7 +873,9 @@ results, open with the add row, open with no matches, multi-select with a select
 error message, disabled and required — verified 2026-09-13 by running
 `packages/ui/src/components/wt-combobox.a11y.test.ts`, which covers those states in both themes;
 `wt-count-badge` in its neutral, warning and error tones — verified 2026-09-14 by running
-`packages/ui/src/components/wt-count-badge.a11y.test.ts`). No
+`packages/ui/src/components/wt-count-badge.a11y.test.ts`; `wt-toast` open in its info and error
+tones, and closed — verified 2026-09-14 by running
+`packages/ui/src/components/wt-toast.a11y.test.ts`). No
 token values needed changing. (axe does flag unrelated `incomplete` — not
 violation — results: a `color-contrast` "background partially obscured" reading on `wt-dialog`'s
 `.body` slot, an [axe/shadow-DOM slot-content limitation](https://github.com/dequelabs/axe-core), and
