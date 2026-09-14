@@ -154,6 +154,10 @@ git commit -s -m "Add a translatable abbreviation to a unit"
 
 ## Task 2: Freeze the abbreviation onto a sold line
 
+> **Sibling fixtures:** this task makes `UnitSnapshot.abbreviation` required. Fix every test
+> fixture in `packages/catalogue` that builds a `UnitSnapshot`/`PriceableProduct.unit` literal so
+> the catalogue suite stays green (the excess/missing-property errors will point you at them).
+
 **Files:**
 - Modify: `packages/catalogue/src/pricing.ts` (`UnitSnapshot`, `priceBasket`, `priceBasketWithOptions`)
 - Modify: `packages/catalogue/src/operations.ts` (`sellableUnit`, `PRODUCT_UNIT` select cols, `RawProduct`)
@@ -254,6 +258,10 @@ git commit -s -m "Prove the frozen unit label is not part of the fiscal hash"
 
 ## Task 4: The units API accepts and validates the abbreviation
 
+> **Sibling fixtures:** update `apps/server/src/units-api.test.ts`'s POST/PATCH bodies and its
+> `toEqual({...})` assertions to include `abbreviation`. After this task `apps/server` should
+> typecheck and its suite pass (Task 1b already fixed the demo-seed/recipe-api server fixtures).
+
 **Files:**
 - Modify: `apps/server/src/units-api.ts` (POST + PATCH bodies)
 - Test: `apps/server/src/units-api.test.ts`
@@ -301,6 +309,11 @@ git commit -s -m "Accept and validate a unit's abbreviation at the units API"
 ---
 
 ## Task 5: End-to-end proof of the frozen label, and the column comment
+
+> **Sibling fixtures:** if `apps/server/src/working-order.test.ts` builds a unit fixture that feeds
+> the pricing freeze (a `UnitSnapshot`/`PriceableProduct.unit`), add `abbreviation` to it. A fixture
+> that only builds the working-order DISPLAY literal (`{id,name,precision,hardwareUnit}`, the shape
+> at working-order.ts:2851) does NOT need it — that literal is unchanged (see the scope note above).
 
 **Files:**
 - Modify: `packages/db/src/schema/orders.ts`, `packages/db/src/schema/sales.ts` (comment on `unit_name`)
@@ -358,6 +371,11 @@ git commit -s -m "Prove a filed line freezes the unit abbreviation, and note it 
 
 ## Task 6: The till shows the abbreviation
 
+> **Sibling fixtures:** this task makes `TillProduct["unit"].abbreviation` required. Add
+> `abbreviation` to the till test fixtures that build a `TillProduct.unit` literal — at least
+> `apps/till/src/state/order-line.test.ts` and `apps/till/src/widgets/tender-pay.test.ts` — so the
+> till suite stays green.
+
 **Files:**
 - Modify: `apps/till/src/api/client.ts` (`TillProduct["unit"]` type)
 - Modify: `apps/till/src/widgets/product-name.ts`
@@ -410,6 +428,11 @@ git commit -s -m "Show a unit's abbreviation on the till"
 ---
 
 ## Task 7: Dashboard types + the product editor's unit label
+
+> **Sibling fixtures:** this task makes the dashboard `UnitInput`/`Unit` carry `abbreviation`. Fix
+> the dashboard fixtures that build those without it — at least `apps/dashboard/src/api/client.test.ts`
+> (the `api.createUnit({...})` call and its `toEqual` assertion) — plus any others the dashboard
+> suite flags.
 
 **Files:**
 - Modify: `apps/dashboard/src/api/client.ts` (`Unit`, `UnitInput`, `UnitPatch`)
