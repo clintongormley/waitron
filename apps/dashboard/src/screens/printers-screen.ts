@@ -33,8 +33,11 @@ import type {
   JoinRequestRow,
   PairingModeState,
   PrintAgentRow,
+  PrintCharacterSet,
   PrintJobRow,
   PrintJobPreview,
+  PrintPaperWidth,
+  PrintResolution,
   PrintTransport,
   Printer,
   PrinterPatch,
@@ -50,6 +53,15 @@ interface EditablePrinter {
   port: string;
   localKey: string;
   pollId: string;
+  paperWidth: PrintPaperWidth;
+  resolution: PrintResolution;
+  characterSet: PrintCharacterSet;
+  /** The settings as saved, so a save sends only the ones that changed. */
+  saved: {
+    paperWidth: PrintPaperWidth;
+    resolution: PrintResolution;
+    characterSet: PrintCharacterSet;
+  };
   active: boolean;
 }
 
@@ -124,6 +136,10 @@ export class PrintersScreen extends LitElement {
       .form-fields {
         display: grid;
         gap: var(--wt-space-4);
+      }
+      .setting-field {
+        display: grid;
+        gap: var(--wt-space-1);
       }
       .section-action {
         margin-top: var(--wt-space-3);
@@ -803,6 +819,9 @@ export class PrintersScreen extends LitElement {
       // cloud_poll — the only remaining transport.
       patch.pollId = row.pollId.trim();
     }
+    if (row.paperWidth !== row.saved.paperWidth) patch.paperWidth = row.paperWidth;
+    if (row.resolution !== row.saved.resolution) patch.resolution = row.resolution;
+    if (row.characterSet !== row.saved.characterSet) patch.characterSet = row.characterSet;
     await this.#submit(async () => {
       await this.api.updatePrinter(id, patch);
       await this.#closeModal("edit-printer-modal");
@@ -1144,6 +1163,10 @@ export class PrintersScreen extends LitElement {
       port: p.port === null ? "" : String(p.port),
       localKey: p.localKey ?? "",
       pollId: p.pollId ?? "",
+      paperWidth: p.paperWidth,
+      resolution: p.resolution,
+      characterSet: p.characterSet,
+      saved: { paperWidth: p.paperWidth, resolution: p.resolution, characterSet: p.characterSet },
     };
   }
 
@@ -1485,6 +1508,49 @@ export class PrintersScreen extends LitElement {
           .checked=${p.active}
           @wt-change=${(e: CustomEvent<{ checked: boolean }>) => this.#editPrinter(p.id, { active: e.detail.checked })}
         ></wt-switch>
+        <label class="setting-field"
+          >${t("printers.paper_width")}
+          <select
+            name="printer-paper-width"
+            .value=${p.paperWidth}
+            @change=${(e: Event) =>
+              this.#editPrinter(p.id, {
+                paperWidth: (e.target as HTMLSelectElement).value as PrintPaperWidth,
+              })}
+          >
+            <option value="80mm">${t("printers.paper_width_80")}</option>
+            <option value="58mm">${t("printers.paper_width_58")}</option>
+          </select>
+        </label>
+        <label class="setting-field"
+          >${t("printers.resolution")}
+          <select
+            name="printer-resolution"
+            .value=${p.resolution}
+            @change=${(e: Event) =>
+              this.#editPrinter(p.id, {
+                resolution: (e.target as HTMLSelectElement).value as PrintResolution,
+              })}
+          >
+            <option value="180dpi">${t("printers.resolution_180")}</option>
+            <option value="203dpi">${t("printers.resolution_203")}</option>
+          </select>
+        </label>
+        <label class="setting-field"
+          >${t("printers.character_set")}
+          <select
+            name="printer-character-set"
+            .value=${p.characterSet}
+            @change=${(e: Event) =>
+              this.#editPrinter(p.id, {
+                characterSet: (e.target as HTMLSelectElement).value as PrintCharacterSet,
+              })}
+          >
+            <option value="wpc1252">${t("printers.character_set_wpc1252")}</option>
+            <option value="pc858">${t("printers.character_set_pc858")}</option>
+            <option value="plain">${t("printers.character_set_plain")}</option>
+          </select>
+        </label>
       </div>
       <wt-form-actions slot="footer">
         <wt-button

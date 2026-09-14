@@ -119,6 +119,9 @@ const printers: Printer[] = [
     localKey: null,
     pollId: null,
     ticketScope: "station",
+    paperWidth: "80mm",
+    resolution: "180dpi",
+    characterSet: "wpc1252",
     active: true,
   },
 ];
