@@ -334,6 +334,9 @@ describe("configuration transfer database path", () => {
     for (const person of transferred.tables.persons ?? []) {
       expect(person).not.toHaveProperty("pin_hash");
       expect(person).not.toHaveProperty("password_hash");
+      // The "a passkey was already offered" mark is per-device local state, not transferable config —
+      // passkey credentials themselves never transfer, so the offered mark must not either.
+      expect(person).not.toHaveProperty("passkey_offered_at");
     }
     expect(transferred.tables).not.toHaveProperty("sales");
     expect(transferred.tables.print_agents).toHaveLength(1);
