@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { CategoriesScreen } from "./categories-screen.js";
 import type { CategoryDependants, DashboardApi, CategorySummary, Product } from "../api/client.js";
-import { t } from "../i18n/t.js";
+import { setLocale, t } from "../i18n/t.js";
 afterEach(cleanupWidgets);
 // The tree/flat toggle persists to localStorage; a leftover value from an earlier test would make
 // the "defaults to tree mode" assumption order-dependent.
@@ -532,18 +532,34 @@ it.each([
   },
 );
 
-it("shows a round create button by the heading", async () => {
+it("shows an Add category button and two labelled view-mode buttons in the header", async () => {
+  // The default test locale is Spanish (es-ES); pin English so the mode labels can be asserted
+  // against their exact English wording. Restored below so the file's other tests keep their default.
+  setLocale("en");
+  try {
+    const { el } = await mount();
+    const add = el.shadowRoot!.querySelector('[data-test="create-category"]')!;
+    expect(add.textContent).toContain(t("categories.create"));
+    expect(el.shadowRoot!.querySelector('[data-test="mode-tree"]')!.textContent).toContain(
+      "Tree view",
+    );
+    expect(el.shadowRoot!.querySelector('[data-test="mode-flat"]')!.textContent).toContain(
+      "Flat view",
+    );
+  } finally {
+    setLocale("es-ES");
+  }
+});
+
+it("opens the editor from the labelled create button by the heading", async () => {
   const { el } = await mount();
-  const add = el.shadowRoot!.querySelector('wt-button[shape="round"][data-test="create-category"]');
-  expect(add).not.toBeNull();
-  expect(add!.getAttribute("aria-label")).toBeTruthy();
-  // A stale bare `round` attribute is inert since wt-button only reads `shape`, but the DOM would
-  // still carry it harmlessly, so assert actual rendering — the button's own inner element must be
-  // circular, not the plain rectangular default.
-  await (add as unknown as { updateComplete: Promise<unknown> }).updateComplete;
-  const inner = add!.shadowRoot!.querySelector("button")!;
-  const rect = inner.getBoundingClientRect();
-  expect(rect.width).toBeCloseTo(rect.height, 0);
+  const add = el.shadowRoot!.querySelector<HTMLElement>('[data-test="create-category"]')!;
+  // The create control is now a labelled text button, not the icon-only round one it replaced.
+  expect(add.getAttribute("shape")).not.toBe("round");
+  expect(add.textContent).toContain(t("categories.create"));
+  add.click();
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("dashboard-category-form")!.open).toBe(true);
 });
 
 it("defaults to tree mode and nests children", async () => {

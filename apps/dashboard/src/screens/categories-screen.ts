@@ -25,7 +25,6 @@ import "../widgets/category-membership-picker.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-spinner.js";
-import "@waitron/ui/src/components/wt-icon.js";
 import "@waitron/ui/src/components/wt-lozenge.js";
 
 const MODE_KEY = "waitron.categories.mode";
@@ -61,6 +60,11 @@ export class CategoriesScreen extends LitElement {
         align-items: flex-end;
         gap: var(--wt-space-3);
         margin-block: var(--wt-space-3);
+      }
+      .header-actions {
+        display: flex;
+        gap: var(--wt-space-3);
+        align-items: center;
       }
       .mode-toggle {
         display: flex;
@@ -686,14 +690,30 @@ export class CategoriesScreen extends LitElement {
       addRows.length > 0 && addRows.every((product) => this.picked.has(product.id));
     return html`<div class="heading">
         <h1>${t("nav.categories")}</h1>
-        <wt-button
-          shape="round"
-          variant="primary"
-          data-test="create-category"
-          aria-label=${t("categories.create")}
-          @click=${() => this.#edit(null)}
-          ><wt-icon name="plus"></wt-icon
-        ></wt-button>
+        <div class="header-actions">
+          <div class="mode-toggle">
+            <wt-button
+              data-test="mode-tree"
+              variant=${this.mode === "tree" ? "primary" : "secondary"}
+              aria-pressed=${this.mode === "tree" ? "true" : "false"}
+              @click=${() => this.#setMode("tree")}
+              >${t("categories.mode_tree")}</wt-button
+            >
+            <wt-button
+              data-test="mode-flat"
+              variant=${this.mode === "flat" ? "primary" : "secondary"}
+              aria-pressed=${this.mode === "flat" ? "true" : "false"}
+              @click=${() => this.#setMode("flat")}
+              >${t("categories.mode_flat")}</wt-button
+            >
+          </div>
+          <wt-button
+            data-test="create-category"
+            variant="primary"
+            @click=${() => this.#edit(null)}
+            >${t("categories.create")}</wt-button
+          >
+        </div>
       </div>
       ${this.loading ? html`<wt-spinner></wt-spinner>` : nothing}
       ${
@@ -716,22 +736,6 @@ export class CategoriesScreen extends LitElement {
             this.search = event.detail.value;
           }}
         ></wt-input>
-        <div class="mode-toggle">
-          <wt-button
-            data-test="mode-tree"
-            variant=${this.mode === "tree" ? "primary" : "secondary"}
-            aria-pressed=${this.mode === "tree" ? "true" : "false"}
-            @click=${() => this.#setMode("tree")}
-            >${t("categories.mode_tree")}</wt-button
-          >
-          <wt-button
-            data-test="mode-flat"
-            variant=${this.mode === "flat" ? "primary" : "secondary"}
-            aria-pressed=${this.mode === "flat" ? "true" : "false"}
-            @click=${() => this.#setMode("flat")}
-            >${t("categories.mode_flat")}</wt-button
-          >
-        </div>
       </div>
       <wt-data-table
         aria-label=${t("nav.categories")}
