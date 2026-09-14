@@ -28,8 +28,8 @@ beforeEach(async () => {
  * (a crash, a walked-out customer), so a captured payment sits with a null `sale_id`. Nothing in
  * the capture path can fix that: the money moved before the invoice number existed, and T1/T2
  * forbids making the two atomic. `reconcile` is the designed backstop, and this proves the whole
- * chain end to end — provider → orphan → sweep → reversal → an incident the till can actually see
- * through the same `openIncidents` query the UI uses.
+ * chain end to end — provider → orphan → sweep → reversal → an open incident, read back through
+ * `openIncidents`.
  */
 describe("the orphan backstop, end to end", () => {
   it("collects, loses the sale, and lets the sweep reverse it and warn the till", async () => {

@@ -465,8 +465,9 @@ things — three visible in the body above without needing the logs, one that ne
   `WAITRON_SKIP_RETRY_MS` interval, folded as a minimum against an earlier gate — see the env-var
   table above) or a `failed` one (which retries on its own backoff and does NOT flip this field —
   see `src/pass.ts`'s own comment on why). `fiscal.drain` has no equivalent terminal outcome at
-  all — a halted fiscal record is a different, already-persisted signal (the `incidents` table, and
-  `recordsHalted`/`incidentsRaised` in `drain.complete`), deliberately not fed into `/health`; see
+  all — a halted fiscal record is a different, already-persisted signal (the `incidents` table, the
+  dashboard's alerts bell and Alerts screen, and `recordsHalted`/`incidentsRaised` in `drain.complete`),
+  deliberately not fed into `/health`; see
   the opening section above. Find a park via the error-level `reconcile.run_parked` log line, which
   carries the tenant, duty, period and `errorCode`.
 

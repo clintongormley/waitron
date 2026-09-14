@@ -90,11 +90,8 @@ export async function recordIncidentOnce(
 }
 
 /**
- * The query the till UI will read for its persistent incident banner.
- *
- * Unacknowledged only, newest first, scoped to one till. Defined here rather than in the UI so
- * that the module boundary holds: the till never reads module-owned tables, and an incident
- * raised by plan 3's drainer surfaces through this same query with no UI change.
+ * Unacknowledged incidents for one till, newest first. Only tests call it: the till shows no
+ * incidents, and the dashboard alerts read a whole tenant's through `listOpenIncidents`.
  */
 export async function openIncidents(tx: Transaction, tillId: TillId): Promise<Incident[]> {
   const rows = await tx

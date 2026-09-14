@@ -15,7 +15,8 @@ export type IncidentSeverity = "warning" | "error";
  * mutation.
  *
  * `code` and `params` come from a structured code+params pair rather than from a message
- * string, so the till can render this bilingually. A prose column here would reach a screen
+ * string, so the dashboard can word each alert in English or Spanish
+ * (`apps/dashboard/src/i18n/alert-messages.ts`). A prose column here would reach a screen
  * untranslatable, which is the constraint spec §9 places on this layer specifically.
  */
 export const incidents = pgTable(
@@ -43,7 +44,8 @@ export const incidents = pgTable(
     acknowledgedBy: uuid("acknowledged_by"),
   },
   (t) => [
-    // The till UI's query is "what is open on this till, newest first".
+    // `openIncidents` (packages/core): what is open on one till, newest first. Only tests call it;
+    // the till shows no incidents.
     index("incidents_till_open_idx").on(t.tillId, t.detectedAt),
     // The dashboard's Handled tab: incidents handled since a date, most recent first.
     index("incidents_handled_idx").on(t.acknowledgedAt),
