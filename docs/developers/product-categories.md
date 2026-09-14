@@ -32,10 +32,12 @@ using it, moves direct children up to the deleted category's own parent, drops i
 routes, and then removes the category. Because it cascades instead of refusing, a delete can take
 more with it than the category itself, so the confirmation dialog ("Delete <name>?") fetches the
 dependants preview (`GET .../dependants`) and keeps Delete disabled until it arrives. The preview
-shows the affected products in a searchable table, marking each one whose reporting category will be
-cleared, and lists the child categories that will move, each as a link to that category. It does not
-list the preparation routes, although the delete still drops them. If the preview cannot be fetched,
-the dialog says so and Delete stays disabled. Previously recorded labels on past orders stay readable
+opens with a single red warning at the top that names every consequence in one sentence — that the
+delete cannot be undone, how many products lose the category, and where the child categories move —
+and below it shows the affected products in a searchable table and lists the child categories that
+will move, each as a link to that category. It does not list the preparation routes, although the
+delete still drops them. If the preview cannot be fetched, the dialog says so and Delete stays
+disabled. Previously recorded labels on past orders stay readable
 and are untouched.
 
 Opening a category's name shows its directly assigned products in a modal: a searchable table with a

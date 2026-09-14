@@ -109,11 +109,6 @@ export class CategoriesScreen extends LitElement {
       wt-data-table::part(muted) {
         color: var(--wt-color-text-muted);
       }
-      /* The delete preview flags a product that will lose its reporting category. That flag is cell
-         markup living in the table's shadow root, so it carries a part=, not a class. */
-      wt-data-table::part(danger) {
-        color: var(--wt-color-danger);
-      }
       /* Marks a tree-mode ancestor kept only to show a matching descendant's path — the table
          reports it through the cell's ancestorOnly context. The colour has to reach the <button> inside wt-button's OWN
          shadow root, which is one boundary further than ::part() can select. Re-pointing the token
@@ -468,21 +463,21 @@ export class CategoriesScreen extends LitElement {
   #reportingCategory(product: Product): CategorySummary | undefined {
     return this.categories.find((item) => item.id === product.primaryCategoryId);
   }
-  /** The reporting-category cell. In the delete preview (`flagCleared`) a product whose reporting
-   * category is the one being deleted gets a danger flag, since deleting it clears that category.
-   * The flag is a `part=` span, not a class: the cell markup lands in the table's shadow root. */
-  #reportingCell(product: Product, flagCleared = false) {
+  /** The reporting-category cell: the product's reporting category as a lozenge, or "none". */
+  #reportingCell(product: Product) {
     const category = this.#reportingCategory(product);
-    const cell = category ? this.#lozenge(category) : t("categories.none");
-    return flagCleared && product.primaryCategoryId === this.deleting?.id
-      ? html`${cell}<span part="danger"> ${t("categories.delete_reporting")}</span>`
-      : cell;
+    return category ? this.#lozenge(category) : t("categories.none");
   }
-  #otherCategoriesCell(product: Product) {
-    const others = product.categoryIds
+  /** The product's categories other than its reporting one, resolved to full summaries. Shared by
+   * the "other" column's cell and its search value, so typing any of those category names finds it. */
+  #otherCategories(product: Product): CategorySummary[] {
+    return product.categoryIds
       .filter((id) => id !== product.primaryCategoryId)
       .map((id) => this.categories.find((category) => category.id === id))
       .filter((category): category is CategorySummary => category !== undefined);
+  }
+  #otherCategoriesCell(product: Product) {
+    const others = this.#otherCategories(product);
     return others.length
       ? others.map((category) => this.#lozenge(category))
       : html`<span part="muted" aria-hidden="true">—</span>`;
@@ -496,13 +491,10 @@ export class CategoriesScreen extends LitElement {
   }
   /** The shared column set behind every product table in this screen (members, add-products, and
    * the delete preview). Name searches and sorts on the translated description; Reporting
-   * category sorts and offers a dropdown filter over the reporting categories actually in use; a
-   * caller passes its own trailing column (row actions, say) or none. `flagCleared` (delete preview
-   * only) makes the reporting cell flag a product that would lose its reporting category. */
-  #productColumns(
-    trailing?: DataTableColumn<Product>,
-    flagCleared = false,
-  ): DataTableColumn<Product>[] {
+   * category sorts and offers a dropdown filter over the reporting categories actually in use; the
+   * Other-categories column searches on those category names so a product is found by any category
+   * it belongs to. A caller passes its own trailing column (row actions, say) or none. */
+  #productColumns(trailing?: DataTableColumn<Product>): DataTableColumn<Product>[] {
     const base: DataTableColumn<Product>[] = [
       {
         key: "name",
@@ -514,7 +506,7 @@ export class CategoriesScreen extends LitElement {
       {
         key: "primary",
         label: t("editor.reporting_category"),
-        cell: (product) => this.#reportingCell(product, flagCleared),
+        cell: (product) => this.#reportingCell(product),
         sortValue: (product) => this.#reportingSortValue(product),
         filter: {
           label: t("editor.reporting_category"),
@@ -530,6 +522,10 @@ export class CategoriesScreen extends LitElement {
         key: "other",
         label: t("categories.other_categories"),
         cell: (product) => this.#otherCategoriesCell(product),
+        searchValue: (product) =>
+          this.#otherCategories(product)
+            .map((category) => this.#text(category.name))
+            .join(" "),
       },
     ];
     return trailing ? [...base, trailing] : base;
@@ -556,10 +552,38 @@ export class CategoriesScreen extends LitElement {
         >`,
     });
   }
-  /** The delete confirmation's preview: a spinner until `#loadDependants` resolves, then the
-   * consequence list the brief calls for — sections with nothing in them are omitted entirely,
-   * and the "this cannot be undone" intro only appears when there is something to lose. A failed
-   * fetch says so instead, because silence here would read as "nothing to lose". */
+  /** The single red warning at the top of the delete confirmation: one paragraph naming every
+   * consequence of the irreversible delete, space-joined from the sentences that apply. Only called
+   * when there IS something to lose, so the "cannot be undone" opener always leads it. */
+  #deleteWarning(dependants: CategoryDependants): string {
+    const parts = [t("categories.delete_warning_intro")];
+    if (dependants.products.length > 0)
+      parts.push(
+        t("categories.delete_warning_products").replace(
+          "{count}",
+          String(dependants.products.length),
+        ),
+      );
+    if (dependants.children.length > 0) {
+      const parent = this.categories.find((category) => category.id === dependants.parentId);
+      parts.push(
+        dependants.parentId
+          ? t("categories.delete_warning_children_under")
+              .replace("{count}", String(dependants.children.length))
+              .replace("{parent}", parent ? this.#text(parent.name) : "")
+          : t("categories.delete_warning_children_top").replace(
+              "{count}",
+              String(dependants.children.length),
+            ),
+      );
+    }
+    return parts.join(" ");
+  }
+  /** The delete confirmation's preview: a spinner until `#loadDependants` resolves, then a single
+   * red warning at the top naming every consequence, above the affected-products table and the
+   * child-category links (each shown only when there is something in it). With nothing depending on
+   * the category there is no warning — just the buttons. A failed fetch says so instead, because
+   * silence here would read as "nothing to lose". */
   #renderDependants() {
     if (this.dependantsError)
       return html`<p class="error" data-test="dependants-error" role="alert">
@@ -570,56 +594,44 @@ export class CategoriesScreen extends LitElement {
     const sections: TemplateResult[] = [];
     if (dependants.products.length > 0) {
       // Resolve each dependant id to its full library product so the shared product table can show
-      // it; an id that no longer resolves is skipped rather than shown blank. The table's reporting
-      // cell (via flagCleared) marks a product whose reporting category is the one being deleted.
+      // it; an id that no longer resolves is skipped rather than shown blank.
       const affected = dependants.products
         .map((entry) => this.products.find((product) => product.id === entry.id))
         .filter((product): product is Product => product !== undefined);
       sections.push(
-        html`<p>
-            ${t("categories.delete_products").replace("{count}", String(dependants.products.length))}
-          </p>
-          <wt-data-table
-            data-test="category-delete-products"
-            aria-label=${t("categories.products_modal")}
-            searchable
-            searchLabel=${t("categories.search_products")}
-            noMatchesMessage=${t("categories.products_no_matches")}
-            viewKey="waitron.categories.delete.table"
-            .rows=${affected}
-            .columns=${this.#productColumns(undefined, true)}
-            .rowKey=${(product: Product) => product.id}
-            .emptyMessage=${t("categories.no_products")}
-          ></wt-data-table>`,
+        html`<wt-data-table
+          data-test="category-delete-products"
+          aria-label=${t("categories.products_modal")}
+          searchable
+          searchLabel=${t("categories.search_products")}
+          noMatchesMessage=${t("categories.products_no_matches")}
+          viewKey="waitron.categories.delete.table"
+          .rows=${affected}
+          .columns=${this.#productColumns()}
+          .rowKey=${(product: Product) => product.id}
+          .emptyMessage=${t("categories.no_products")}
+        ></wt-data-table>`,
       );
     }
     if (dependants.children.length > 0) {
-      const parent = this.categories.find((category) => category.id === dependants.parentId);
-      const heading = (
-        dependants.parentId
-          ? t("categories.delete_children_under").replace(
-              "{parent}",
-              parent ? this.#text(parent.name) : "",
-            )
-          : t("categories.delete_children_top")
-      ).replace("{count}", String(dependants.children.length));
       sections.push(
-        html`<p>${heading}</p>
-          <ul>
-            ${dependants.children.map(
-              (child) =>
-                html`<li>
-                  <a href=${`/manage/categories?category=${encodeURIComponent(child.id)}`}
-                    >${this.#text(child.name)}</a
-                  >
-                </li>`,
-            )}
-          </ul>`,
+        html`<ul>
+          ${dependants.children.map(
+            (child) =>
+              html`<li>
+                <a href=${`/manage/categories?category=${encodeURIComponent(child.id)}`}
+                  >${this.#text(child.name)}</a
+                >
+              </li>`,
+          )}
+        </ul>`,
       );
     }
     return sections.length === 0
       ? nothing
-      : html`<p>${t("categories.delete_intro")}</p>
+      : html`<p class="error" data-test="delete-warning" role="alert">
+            ${this.#deleteWarning(dependants)}
+          </p>
           ${sections}`;
   }
   override render() {

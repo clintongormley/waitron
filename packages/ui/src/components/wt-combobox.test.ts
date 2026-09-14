@@ -115,6 +115,19 @@ async function mountWithOptions() {
   return mounted;
 }
 
+test("an option row paints the page-background token on hover", async () => {
+  const { el, trigger } = await mountWithOptions();
+  // --wt-color-bg is the light-grey the search box already sits on, visible in both themes;
+  // --wt-color-surface-raised equals the panel's own white in the light theme, so it would be
+  // invisible there.
+  host.style.setProperty("--wt-color-bg", "rgb(4, 5, 6)");
+  await userEvent.click(trigger);
+  const option = el.shadowRoot!.querySelector<HTMLElement>(".option")!;
+  expect(getComputedStyle(option).backgroundColor).not.toBe("rgb(4, 5, 6)");
+  await userEvent.hover(option);
+  expect(getComputedStyle(option).backgroundColor).toBe("rgb(4, 5, 6)");
+});
+
 test("lists every option when the panel opens", async () => {
   const { el, trigger } = await mountWithOptions();
   await userEvent.click(trigger);

@@ -56,6 +56,63 @@ it("shows parent names in the reader's language, not the default content languag
   expect(labels).toContain("Drinks");
   expect(labels).not.toContain("Bebidas");
 });
+it("lists parent options alphabetically by their displayed label, with No parent pinned first", async () => {
+  setLocale("en-GB");
+  const zebra: CategorySummary = {
+    id: "zebra",
+    name: { en: "Zebra" },
+    parentId: null,
+    image: null,
+    color: null,
+  };
+  const apple: CategorySummary = {
+    id: "apple",
+    name: { en: "Apple" },
+    parentId: null,
+    image: null,
+    color: null,
+  };
+  const mango: CategorySummary = {
+    id: "mango",
+    name: { en: "Mango" },
+    parentId: null,
+    image: null,
+    color: null,
+  };
+  // Two numeric names to pin the same collation the tables on this screen use: "Salsa 2" sorts
+  // before "Salsa 10", not after it as a plain string compare would put it.
+  const salsa10: CategorySummary = {
+    id: "salsa10",
+    name: { en: "Salsa 10" },
+    parentId: null,
+    image: null,
+    color: null,
+  };
+  const salsa2: CategorySummary = {
+    id: "salsa2",
+    name: { en: "Salsa 2" },
+    parentId: null,
+    image: null,
+    color: null,
+  };
+  const { el } = await mountWidget<CategoryForm>("dashboard-category-form", {
+    open: true,
+    languages: { defaultLanguage: "en", languages: ["en"] },
+    categories: [zebra, apple, mango, salsa10, salsa2],
+    value: null,
+  });
+  const combo = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+    'wt-combobox[name="category-parent"]',
+  )!;
+  expect(combo.options[0]!.value).toBe("");
+  expect(combo.options.slice(1).map((o) => o.label)).toEqual([
+    "Apple",
+    "Mango",
+    "Salsa 2",
+    "Salsa 10",
+    "Zebra",
+  ]);
+});
 it("retains the draft during lookup refreshes, validates and emits the reusable submit contract once", async () => {
   const { el, host } = await mountWidget<CategoryForm>("dashboard-category-form", {
     open: true,

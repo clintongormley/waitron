@@ -111,6 +111,14 @@ export class WtCombobox extends LitElement {
         cursor: pointer;
       }
 
+      /* --wt-color-bg, not --wt-color-surface-raised: raised equals the panel's own surface in the
+         light theme, so it would be invisible. --wt-color-bg is the tone the search box already
+         sits on, distinct in both themes. Hover adds background; .active adds an outline — the two
+         compose. */
+      .option:hover {
+        background: var(--wt-color-bg);
+      }
+
       .option.active {
         outline: var(--wt-focus-ring);
         outline-offset: calc(-1 * var(--wt-focus-offset));
