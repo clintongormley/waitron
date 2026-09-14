@@ -28,8 +28,10 @@ import {
   claimPrintJobs,
   canResendPrintJob,
   resendPrintJob,
+  columnsFor,
   createPrinter,
   deactivatePrinter,
+  dpiValue,
   enqueuePrintJob,
   listPrinters,
   MAX_DELIVERY_ATTEMPTS,
@@ -916,12 +918,26 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       const id = requireUuidParam(c.req.param("id"), "PrintJobId");
       const [job] = await gated(sessionId, (tx) =>
         tx
-          .select({ payload: printJobs.payload })
+          .select({
+            payload: printJobs.payload,
+            paperWidth: printers.paperWidth,
+            resolution: printers.resolution,
+          })
           .from(printJobs)
+          .innerJoin(
+            printers,
+            and(eq(printers.tenantId, printJobs.tenantId), eq(printers.id, printJobs.printerId)),
+          )
           .where(and(eq(printJobs.tenantId, deps.cfg.tenantId), eq(printJobs.id, id))),
       );
       if (job === undefined) throw new AppError("print_job.not_found", { id });
-      return c.json(previewPrintJob(job.payload));
+      // The printer's CURRENT settings: a job built for 42 columns previews as it would print now.
+      return c.json(
+        previewPrintJob(job.payload, {
+          columns: columnsFor(job.paperWidth),
+          dpi: dpiValue(job.resolution),
+        }),
+      );
     }),
   );
 
