@@ -82,12 +82,11 @@ brainstorm → spec → plan → PR; fiscal-adjacent ones take owner sign-off at
    run; the box and sale path worked.
 
 2. **Somewhere for things that went wrong to show up** (A5) — designed 2026-09-14; the `till.configure`
-   split it depended on has LANDED (#363). Branch 1, the alerts framework and recorded incidents, is
-   built on `feat/dashboard-alerts-events` and not yet landed; branch 2, the ongoing checks, is next.
-   Until branch 1 lands, the `incidents` table has several producers and no reader, and the dashboard
-   has no notification surface. A rejected filing, a payment drift, a
-   stalled print agent and a failed or stale backup are all invisible; several other items end "…waits
-   for the notification surface".
+   split it depended on has LANDED (#363). Branch 1, the alerts framework and recorded incidents,
+   LANDED in the PR for `feat/dashboard-alerts-events`: recorded incidents such as a rejected filing
+   or a payment drift now show in the dashboard's bell and Alerts screen. Branch 2, the ongoing checks,
+   is next; until it lands a stalled print agent and a failed or stale backup are still invisible, and
+   several other items end "…waits for the notification surface".
 
 3. **Backups that leave the box** (B2) — S3 first, then Drive. With the mirror deferred, a bucket is a
    standalone primary's only off-box copy. Only `LocalFsBackend` exists.
@@ -904,8 +903,8 @@ one bell, panel and Alerts screen for recorded incidents and live checks (backup
 printing, reader battery). Build order: (0) split `till.configure` into permissions named for what
 they guard — **LANDED #363** (2026-09-14), adds `layout.configure` / `venue.configure` /
 `system.manage` with no access change, and the alerts work uses `system.manage` for backup alerts; (1)
-the alerts framework and recorded incidents — **BUILT** on `feat/dashboard-alerts-events`
-(2026-09-14, not yet landed): the bell, its panel, the Alerts screen with Open and Handled tabs, the
+the alerts framework and recorded incidents — **LANDED** in the PR for `feat/dashboard-alerts-events`
+(2026-09-14): the bell, its panel, the Alerts screen with Open and Handled tabs, the
 pop-up for new alerts, and wording for every recorded incident code; (2) the ongoing checks — NEXT.
 The questions below are answered there; the notes stay as the origin of the item.
 
@@ -929,8 +928,9 @@ What branch 1 surfaced, each checked by a whole-repo grep on 2026-09-14:
 
 Two halves, one branch each (owner decision 2026-09-12).
 
-- **A reader for `incidents`.** (Branch 1 adds one: `listOpenIncidents` and `listHandledIncidents`,
-  read by `apps/server/src/alerts.ts`. What follows describes `main` before it lands.)
+- **A reader for `incidents`.** (Branch 1 added one when it landed: `listOpenIncidents` and
+  `listHandledIncidents`, read by `apps/server/src/alerts.ts`. What follows describes `main` before
+  it landed.)
   `openIncidents` is the only read and nothing calls it, while the
   fiscal drain (AEAT rejections), the payments reconciler (drift), the Stripe device provider and the
   card provider pool all write. Design questions: its own screen or part of diagnostics; who may see
@@ -939,7 +939,9 @@ Two halves, one branch each (owner decision 2026-09-12).
   tried to join in the last 10 minutes" when pairing mode is shut. Then: a stalled fiscal outbox, a
   print agent that stopped pulling, a stuck job past its lease, a failed or stale backup, a low reader
   battery, later a standby that has fallen behind. Decide scope first: toast versus a persisted
-  per-person inbox, `state` versus `local`, push versus poll.
+  per-person inbox, `state` versus `local`, push versus poll. (Branch 1 settled these: a pop-up
+  toast, handled state shared by the whole venue in the `incidents` table, and polling. The pairing
+  and ongoing-check consumers are not built.)
 
 ### A6. Payments
 
@@ -1455,6 +1457,10 @@ turns out to need a design moves to its track.
 
 **Dashboard, till and setup:**
 
+- **The Waitron wordmark is nearly invisible on the dashboard banner in the dark theme** (seen
+  2026-09-14 on the dashboard alerts branch). The banner shows `packages/ui/brand/waitron-lockup.svg`
+  as an image, which last changed in #284; I believe this predates that branch, but it was not
+  checked on `main`.
 - **An imported configuration no longer carries "already offered a passkey"** (fixed 2026-09-14).
   A configuration transfer no longer lets `passkey_offered_at` travel: it is stripped on export and
   the import refuses a bundle that still carries it, alongside the other person columns the transfer
@@ -1833,8 +1839,8 @@ and a classification entry — never an enum, CLAUDE.md §2); names (built-ins a
 
 ### Incidents are written by several things and displayed by nothing (A5)
 
-_2026-09-14: branch 1 of the dashboard alerts (`feat/dashboard-alerts-events`) adds the reader this
-paragraph asks for; the paragraph describes `main` before that branch lands._
+_2026-09-14: branch 1 of the dashboard alerts landed in the PR for `feat/dashboard-alerts-events` and
+added the reader this paragraph asks for; the paragraph describes `main` before that branch landed._
 
 `openIncidents` (`packages/core/src/incidents.ts`) is the only function that reads the `incidents`
 table, and nothing calls it — a whole-repo search outside tests finds only its definition and the

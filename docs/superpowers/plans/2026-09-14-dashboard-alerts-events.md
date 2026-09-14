@@ -1743,7 +1743,16 @@ The incident codes recorded in production source today (found by a whole-repo se
 `fiscal.aceptado_con_errores`, `fiscal.duplicado_anulado`, `fiscal.environment_mismatch`, `fiscal.environment_unknown`, `fiscal.huella_divergente`, `fiscal.reconcile_drift_anulada`, `fiscal.reconcile_drift_errores`, `fiscal.reconcile_no_trace`, `fiscal.record_totals_disagree`, `fiscal.registro_rechazado`,
 `payment.offline_forward_declined`, `payment.pending_outcome_unactionable`, `payment.reconcile_drift`, `payment.reconcile_lost_settlement`, `payment.reconcile_missing_local`, `payment.reconcile_orphan`, `payment.reconcile_remediation_failed`, `payment.reconcile_unsettled`.
 
+> **Dated note, 2026-09-14.** Named in production source is not the same as raised in production:
+> `createTrustedClock` has no production caller, so no production path raises the `clock.` codes,
+> and the fiscal reconciliation sweep that raises `fiscal.reconcile_*` has none either. The opening
+> comment of `scripts/alert-codes.test.ts` records this.
+
 Params each can use come from the registries: `packages/core/src/errors.ts`, `packages/fiscal/src/errors.ts`, `packages/fiscal-verifactu/src/errors.ts`, `packages/payments/src/errors.ts`. The reconcilers raise again after an incident is handled when a later check still finds the problem, so their sentences say so; `payment.reconcile_remediation_failed` is the exception (those payments are never retried).
+
+> **Dated note, 2026-09-14.** Retracted in review: the reconcilers mostly do not look again, so no
+> alert's wording promises that it comes back. See the spec's "Marking handled" section
+> (`docs/superpowers/specs/2026-09-14-dashboard-alerts-design.md`) and commit 0770603c.
 
 - [ ] **Step 1: Write the failing guard** — `scripts/alert-codes.test.ts`:
 
@@ -1867,7 +1876,7 @@ Expected: FAIL on the missing `apps/dashboard/src/i18n/alert-messages.js` import
 - [ ] **Step 3: Write the table** — `apps/dashboard/src/i18n/alert-messages.ts`:
 
 > **Dated note, 2026-09-14.** The shipped wording changed in review. The "it will appear again"
-> sentences below were dropped, and the clock, payment and fiscal reconciliation sentences were
+> sentences below were dropped (the spec's "Marking handled" section says why), and the clock, payment and fiscal reconciliation sentences were
 > rewritten, so this table is not what the dashboard shows. `apps/dashboard/src/i18n/alert-messages.ts`
 > is the truth.
 
@@ -1970,6 +1979,9 @@ export const ALERT_MESSAGES: Readonly<Record<string, { readonly en: string; read
 ```
 
 `payment.reconcile_remediation_failed` carries no "comes back" sentence: those payments are marked as tried and are never retried (`packages/payments/src/errors.ts`).
+
+> **Dated note, 2026-09-14.** No alert carries a "comes back" sentence now; see the spec's "Marking
+> handled" section.
 
 - [ ] **Step 4: Register it** — `apps/dashboard/src/i18n/alerts.ts`:
 

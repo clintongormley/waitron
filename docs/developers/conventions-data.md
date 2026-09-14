@@ -14,6 +14,29 @@ Codes are **never renamed once shipped**; deprecate and add a sibling. `server.*
 facts about the process itself (`apps/server/src/errors.ts`). Every file that throws a code imports
 its registry (`import "./errors.js"`); reachability is guarded once, in the root project (§4).
 
+## A recorded incident code needs an area claim and English and Spanish alert wording
+
+An incident whose code no module claims (`alerts.events` on its module descriptor, matched by the
+longest prefix) is shown under diagnostics, to `diagnostics.view` only
+(`UNCLAIMED` in `apps/server/src/alerts.ts`). A code with no entry in
+`apps/dashboard/src/i18n/alert-messages.ts` is shown as a generic sentence with the raw code beneath
+it. The guard, `scripts/alert-codes.test.ts` (root project), collects every dotted string literal
+from the files in its `INCIDENT_CODE_SOURCES` list, minus `NOT_RECORDED`, and checks each has a claim
+and both wordings. It reads text, which makes it weaker than its name:
+
+- A code built at runtime (a template literal, or a string spliced from parts) escapes the scan.
+- A listed code counts as recorded because its text appears in a listed file, not because anything
+  in production raises it. The guard's opening comment names the codes counted that way.
+- A file that only names a code and hands it to a writer elsewhere (as `packages/fiscal/src/clock.ts`
+  builds the clock warnings that `packages/core/src/record-sale.ts` records) is scanned only if it is
+  listed.
+- It spots a new writer only by the call shapes `recordIncident(`, `recordIncidentOnce(` and
+  `incidents(tx`. A file recording through a sink under another name, or through a transaction
+  variable not named `tx`, is not caught, and neither are the codes that file names.
+
+The guard also requires wording for `alert.source_unavailable`, the alert the server builds in place
+of an ongoing check that failed.
+
 ## Spanish domain terms are deliberate, and a module declares its own
 
 The guard (`packages/db/src/english-only.ts`; suite `scripts/english-only.test.ts`, root project)
