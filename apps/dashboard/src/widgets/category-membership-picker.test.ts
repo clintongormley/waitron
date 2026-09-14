@@ -224,3 +224,32 @@ it("gives both comboboxes a semantic field name", async () => {
       .getAttribute("name"),
   ).toBe("primary-category");
 });
+
+it("shows category names in the reader's language, not the default content language", async () => {
+  setLocale("en-GB"); // reader English; venue default is Spanish
+  const drinks: CategorySummary = {
+    id: "d",
+    name: { es: "Bebidas", en: "Drinks" },
+    image: null,
+    color: null,
+    parentId: null,
+  };
+  const { el } = await mountWidget<CategoryMembershipPicker>(
+    "dashboard-category-membership-picker",
+    {
+      categories: [drinks],
+      languages: { defaultLanguage: "es", languages: ["es", "en"] },
+      value: { categoryIds: ["d"], primaryCategoryId: "d" },
+    },
+  );
+  for (const test of ["member-categories", "reporting-category"]) {
+    const labels = el
+      .shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+        `wt-combobox[data-test="${test}"]`,
+      )!
+      .options.map((option) => option.label);
+    expect(labels).toContain("Drinks");
+    expect(labels).not.toContain("Bebidas");
+  }
+  expect(el.shadowRoot!.querySelector("wt-lozenge")!.textContent!.trim()).toBe("Drinks");
+});

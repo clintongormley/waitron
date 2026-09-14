@@ -7,10 +7,11 @@ afterEach(cleanupWidgets);
 // Some tests pin the reader locale (en-GB) so a translated string can be asserted against its exact
 // English wording; restore the file's default (es-ES) afterwards so later tests are unaffected.
 afterEach(() => setLocale("es-ES"));
-// The tree/flat toggle persists to localStorage; a leftover value from an earlier test would make
-// the "defaults to tree mode" assumption order-dependent.
+// The tree/flat toggle persists to localStorage and each table's sort and filters to sessionStorage;
+// a leftover value from an earlier test would make the default-view assertions order-dependent.
 beforeEach(() => {
   localStorage.clear();
+  sessionStorage.clear();
 });
 const food: CategorySummary = {
   id: "food",
@@ -1066,4 +1067,72 @@ it("words each filter's catch-all option as All …, like the other screens' fil
   expect(
     members.shadowRoot!.querySelector('select[data-filter="primary"] option')!.textContent!.trim(),
   ).toBe("All reporting categories");
+});
+
+it("restores the categories table's sort after the screen is reopened, but not its search", async () => {
+  const first = await mount();
+  const table = first.el.shadowRoot!.querySelector("wt-data-table")!;
+  await table.updateComplete;
+  table.shadowRoot!.querySelector<HTMLElement>('button[data-sort="name"]')!.click();
+  await table.updateComplete;
+  expect(table.sortDirection).toBe("descending");
+  await typeTableSearch(first.el, "Food");
+  cleanupWidgets();
+
+  const { el } = await mount();
+  const reopened = el.shadowRoot!.querySelector("wt-data-table")!;
+  await reopened.updateComplete;
+  expect(reopened.sortKey).toBe("name");
+  expect(reopened.sortDirection).toBe("descending");
+  expect(reopened.shadowRoot!.querySelector<HTMLInputElement>(".table-search")!.value).toBe("");
+  expect(
+    [...reopened.shadowRoot!.querySelectorAll("tr[data-row-key]")].map((row) =>
+      row.getAttribute("data-row-key"),
+    ),
+  ).toEqual(["food", "drink"]);
+});
+
+it("keeps a picked product picked after a search hides it, and adds it with the rest", async () => {
+  const fx = apiFixture();
+  const q: Product = { ...product, id: "q", descriptions: { en: "Juice" }, categoryIds: [] };
+  const r: Product = { ...product, id: "r", descriptions: { en: "Napkin" }, categoryIds: [] };
+  fx.api.listLibraryProducts.mockResolvedValue([q, r]);
+  const { el } = await mountWidget<CategoriesScreen>("dashboard-categories-screen", {
+    api: fx.client,
+  });
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("wt-data-table")!.rows.length).toBe(2),
+  );
+  await openProducts(el, "food");
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="add-products"]')!.click();
+  await tableSearch(el, "category-add-products");
+  const addTable = () =>
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>(
+      'wt-data-table[data-test="category-add-products"]',
+    )!;
+  addTable().shadowRoot!.querySelector<HTMLInputElement>('[data-test="select-q"]')!.click();
+  await typeInto(el, "category-add-products", "Napkin");
+  expect(renderedKeys(el, "category-add-products")).toEqual(["r"]);
+  addTable().shadowRoot!.querySelector<HTMLInputElement>('[data-test="select-r"]')!.click();
+  await el.updateComplete;
+  const add = el.shadowRoot!.querySelector<HTMLElement>('[data-test="add-selected"]')!;
+  expect(add.textContent!.trim()).toBe(t("categories.add_selected").replace("{count}", "2"));
+  add.click();
+  await vi.waitFor(() => expect(fx.api.addProductsToCategory).toHaveBeenCalledTimes(1));
+  expect([...(fx.api.addProductsToCategory.mock.calls[0]![1] as string[])].sort()).toEqual([
+    "q",
+    "r",
+  ]);
+});
+
+it("labels each member row's edit action Edit product categories", async () => {
+  setLocale("en-GB");
+  const { el } = await mount();
+  await openProducts(el, "food");
+  const members = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>(
+    'wt-data-table[data-test="category-products"]',
+  )!;
+  await members.updateComplete;
+  const actions = members.shadowRoot!.querySelector('tr[data-row-key="p"] wt-row-actions')!;
+  expect(actions.querySelector("wt-button")!.textContent!.trim()).toBe("Edit product categories");
 });
