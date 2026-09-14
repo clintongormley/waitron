@@ -157,16 +157,19 @@ export async function runPass(deps: PassDeps, now: Date): Promise<PassReport> {
       //      invoice" with "this process is stuck" — the false-alarm noise `skipped` above is
       //      already careful not to produce for an ordinary per-tenant retry.
       //
-      // A tenant provisioned with the WRONG `certKind` (present, naming the other kind — this
-      // review's own example) is still visible, just not through `/health`: every batch keeps
+      // A tenant provisioned with the WRONG `certKind` (present, naming the other kind) is, I
+      // believe, still visible, just not through `/health` — unverified: the wrong kind only picks
+      // the other AEAT endpoint, and if AEAT refuses the whole request the submit is retried and
+      // records no incident. If AEAT answers per record instead, every batch keeps
       // landing in `recordsHalted`/`incidentsRaised` on this line, pass after pass, with no
       // corresponding drop in what `envios.pendingCount` reports — an operator grepping
       // `drain.complete` (or the `incidents` table directly) for a duty that never stops halting
       // records sees exactly that shape. `apps/server/README.md`'s opening claim about what `200`
       // covers is written to match this, not to claim more than it does.
       //
-      // Separately, a record AEAT rejects individually is recorded as a `fiscal.registro_rechazado`
-      // incident, which the dashboard bell and Alerts screen show to anyone holding `fiscal.view`.
+      // Separately, a record AEAT rejects individually is recorded as a `fiscal.` incident (a plain
+      // rejection as `fiscal.registro_rechazado`), which the dashboard bell and Alerts screen show to
+      // anyone holding `fiscal.view`.
       return { nextDueAt: result.nextDueAt, skipped: result.skipped.length, parked: 0 };
     }),
   );

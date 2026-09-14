@@ -1,4 +1,4 @@
-// Reads source TEXT, which makes it weaker than its name in four ways:
+// Reads source TEXT, which makes it weaker than its name in these ways:
 // - It matches only double-quoted literals with one dot and nothing but lowercase letters and
 //   underscores (`/"([a-z_]+\.[a-z_]+)"/`). A single-quoted or backtick code, a code with a digit or a
 //   second dot, and a code built at runtime all escape the scan.
@@ -10,6 +10,8 @@
 // - The writers check recognises only `recordIncident(`, `recordIncidentOnce(` and `incidents(tx`.
 //   A new file that records incidents through a sink under another name, or passes a transaction
 //   variable not named `tx`, is not caught, and neither are the codes that file names.
+// - The writers check reads only `.ts` files under `packages/*/src` and `apps/*/src`, skipping any
+//   `testing` directory, so a writer elsewhere (such as `apps/server/scripts/`) is not seen.
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { describe, expect, it } from "vitest";

@@ -32,7 +32,7 @@ beforeEach(async () => {
  * `openIncidents`.
  */
 describe("the orphan backstop, end to end", () => {
-  it("collects, loses the sale, and lets the sweep reverse it and warn the till", async () => {
+  it("collects, loses the sale, and lets the sweep reverse it and record an open incident", async () => {
     const seeded = await seedWorkingOrder(pg.db, freshNif());
     const provider = new FakePaymentProvider(pg.db, seeded.tenantId);
 

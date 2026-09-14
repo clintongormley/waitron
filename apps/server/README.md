@@ -16,11 +16,10 @@ whoever reads its source.
 duty under Spain's Veri\*Factu regulation (art. 16.4). A `/health` that reports `200` is a claim that
 no tenant was wholesale abandoned this pass and no Stripe settlement-audit period has been
 permanently parked — it is **not** a claim that every individual fiscal record has actually been
-accepted by AEAT. A tenant whose records reach AEAT but are individually rejected (a `certKind`
-provisioned as the wrong kind, say) reads `200` with `lastOkAt` refreshing every pass; that is
-visible only via `recordsHalted`/`incidentsRaised` in the `drain.complete` log line, the
-`incidents` table, and the dashboard's alerts bell and Alerts screen (as `fiscal.registro_rechazado`
-alerts, to anyone holding `fiscal.view`), deliberately, not through this endpoint — see
+accepted by AEAT. A tenant whose records reach AEAT but are individually rejected reads `200` with
+`lastOkAt` refreshing every pass; that is visible only via `recordsHalted`/`incidentsRaised` in the
+`drain.complete` log line, the `incidents` table, and the dashboard's alerts bell and Alerts screen
+(as `fiscal.` alerts, to anyone holding `fiscal.view`), deliberately, not through this endpoint — see
 ["What `/health` means"](#what-health-means) below for the exact boundary, and why, before treating
 a `503` as noise or its absence as "nothing is wrong."
 

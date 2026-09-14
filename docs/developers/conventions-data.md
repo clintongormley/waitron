@@ -22,8 +22,8 @@ longest prefix) is shown under diagnostics, to `diagnostics.view` only
 `apps/dashboard/src/i18n/alert-messages.ts` is shown as a generic sentence with the raw code beneath
 it. The guard, `scripts/alert-codes.test.ts` (root project), collects code-shaped string literals
 from the files in its `INCIDENT_CODE_SOURCES` list, minus `NOT_RECORDED`, and checks each has a claim
-and both wordings. It reads text, which makes it weaker than its name in four ways, the same four its
-opening comment lists:
+and both wordings. It reads text, which makes it weaker than its name in the same ways its opening
+comment lists:
 
 - It matches only double-quoted literals with one dot and nothing but lowercase letters and
   underscores (`/"([a-z_]+\.[a-z_]+)"/`). A single-quoted or backtick code, a code with a digit or a
@@ -36,6 +36,8 @@ opening comment lists:
 - It spots a new writer only by the call shapes `recordIncident(`, `recordIncidentOnce(` and
   `incidents(tx`. A file recording through a sink under another name, or through a transaction
   variable not named `tx`, is not caught, and neither are the codes that file names.
+- It looks for writers only in `.ts` files under `packages/*/src` and `apps/*/src`, skipping any
+  `testing` directory, so a writer elsewhere (such as `apps/server/scripts/`) is not seen.
 
 The guard also requires wording for `alert.source_unavailable`, the alert the server builds in place
 of an ongoing check that failed.
