@@ -36,7 +36,7 @@
 - `packages/catalogue/test/fixtures.ts`, `apps/server/src/testing/seed-units.ts` — test seeds gain `abbreviation`.
 - `packages/catalogue/drizzle/*` — regenerated (generated, never written).
 - `apps/server/src/units-api.ts` — accept + validate `abbreviation` on POST/PATCH.
-- `apps/server/src/working-order.ts` — unit context object carries `abbreviation`; comment on `unit_name`.
+- `packages/db/src/schema/{orders,sales}.ts` — comment on the `unit_name` column (no `working-order.ts` source change; see Task 5).
 - `apps/till/src/api/client.ts` — `TillProduct["unit"]` gains `abbreviation`.
 - `apps/till/src/widgets/product-name.ts` — `unitName()` returns the abbreviation; fallback gains one.
 - `apps/dashboard/src/api/client.ts` — `Unit`/`UnitInput`/`UnitPatch` gain `abbreviation`.
@@ -136,6 +136,13 @@ Extend the `insert into units (...) values` list to include the `abbreviation` c
 Run: `pnpm --filter @waitron/catalogue test -- units.operations` and `pnpm --filter @waitron/catalogue test:coverage` (investigate any coverage gap on the new lines).
 Expected: PASS.
 
+> **Typecheck note (do not run `typecheck` between Task 1 and Task 2):** making `abbreviation`
+> a required field on `Unit` leaves the `sellableUnit(...)` object literal in `operations.ts`
+> (`{ id, name, precision, hardwareUnit }`) missing a property, so `pnpm --filter @waitron/catalogue
+> typecheck` is RED until Task 2 adds it. Vitest transpiles without a typecheck, so the tests above
+> still pass. Tasks 1 and 2 form one typecheck unit; run the catalogue typecheck only at the end of
+> Task 2.
+
 - [ ] **Step 7: Commit**
 
 ```bash
@@ -184,11 +191,31 @@ export interface UnitSnapshot { name: Record<string, string>; precision: number;
 
 - [ ] **Step 4: Freeze the abbreviation.** In `priceBasket` and `priceBasketWithOptions`, change the parent row's `unitName: item.product.unit.name` to `unitName: item.product.unit.abbreviation`. (The child-option rows keep `unitName: null`.) Add a one-line comment: `// The printed label is the unit's abbreviation, frozen here onto working_order_lines.unit_name.`
 
-- [ ] **Step 5: Carry `abbreviation` through the product read.** In `operations.ts`: add `abbreviation` to `SellableUnit` construction in `sellableUnit(...)` (new param `abbreviation: Record<string,string> | null`, set on the returned object), add `unitAbbreviation: units.abbreviation` to the product-join select columns, add `unitAbbreviation` to `RawProduct`, and pass it into the `sellableUnit(...)` call in `toProduct`. Any other `sellableUnit(...)`/`getSellableUnit`/`getSeededUnit` caller compiles because the field flows from `SELLABLE_UNIT_COLUMNS` (Task 1).
+- [ ] **Step 5: Carry `abbreviation` through the product read — ALL THREE paths.** `operations.ts`
+  has **three** unit-column select blocks feeding **three** `sellableUnit(...)` calls, and the two
+  inline ones are what the add-time freeze reads from (the menu read and the live-offer read), so
+  all three must carry the abbreviation or the freeze captures `undefined` and receipts/till show a
+  blank unit. Do all of:
+  1. Extend `sellableUnit`'s signature with a trailing param `abbreviation: Record<string, string> | null`
+     and set `abbreviation: abbreviation ?? {}` on the returned object (the only object `sellableUnit`
+     builds).
+  2. Add `unitAbbreviation: units.abbreviation` to **each** of the three select blocks:
+     - the `PRODUCT_*` select at ~line 342 (feeds `RawProduct` → `toProduct`, call site ~390)
+     - the menu-items select at ~line 819 (direct call site ~1007)
+     - the available-products select at ~line 1620 (direct call site ~1754)
+  3. Add `unitAbbreviation: Record<string, string>` to `RawProduct` (destructure it in `toProduct`).
+  4. Add the trailing `abbreviation` argument to **all three** call sites:
+     - `toProduct` (~390): `sellableUnit(row.unitId, unitName, unitPrecision, row.pricingUnit, hardwareUnit, unitAbbreviation)`
+     - the menu-items caller (~1007): append `, row.unitAbbreviation`
+     - the available-products caller (~1754): append `, row.unitAbbreviation`
+
+  (There is no "compiles automatically" path — the two inline callers pass positional args from their
+  own selects, not `SELLABLE_UNIT_COLUMNS`.)
 
 - [ ] **Step 6: Update fixtures that assert a frozen name.** Existing pricing/receipt tests that assert `unitName` equals the full name now assert the abbreviation — update the fixture's `abbreviation` and the expected value together, preserving the assertion's intent (the frozen label is the unit's printed short form), never deleting the assertion (`CLAUDE.md`, preserve behavioural assertions).
 
-Run: `pnpm --filter @waitron/catalogue test:coverage`
+Run: `pnpm --filter @waitron/catalogue test:coverage` **and** `pnpm --filter @waitron/catalogue typecheck`
+(this is the first typecheck since Task 1 — see Task 1's typecheck note; it must be green now).
 Expected: PASS.
 
 - [ ] **Step 7: Commit**
@@ -253,7 +280,13 @@ it("accepts and returns the abbreviation", async () => {
 Run: `pnpm --filter @waitron/server test -- units-api`
 Expected: FAIL — abbreviation ignored.
 
-- [ ] **Step 3: Validate + pass through.** Add a sibling of `screenName` for the abbreviation (or reuse `screenName` naming it for the field), assert `body.abbreviation` is a plain object in POST and, when present, in PATCH; pass `abbreviation` into `createUnit`'s input and set `patch.abbreviation` in PATCH. Widen the `readJsonBody<...>` generic to include `abbreviation?: unknown`.
+- [ ] **Step 3: Validate + pass through.** Add a **sibling** validator, not a reuse of `screenName`
+  — `screenName` throws `management.request_invalid` with `field: "name"` hard-coded, so a bad
+  abbreviation would report the wrong field. Add `screenAbbreviation(value): asserts value is
+  Record<string,string>` throwing `{ field: "abbreviation" }`. Assert `body.abbreviation` is a plain
+  object in POST and, when present, in PATCH; pass `abbreviation` into `createUnit`'s input and set
+  `patch.abbreviation` in PATCH. Widen the `readJsonBody<...>` generic to include
+  `abbreviation?: unknown`.
 
 Run: `pnpm --filter @waitron/server test -- units-api`
 Expected: PASS.
@@ -267,16 +300,34 @@ git commit -s -m "Accept and validate a unit's abbreviation at the units API"
 
 ---
 
-## Task 5: The working-order unit context carries the abbreviation
+## Task 5: End-to-end proof of the frozen label, and the column comment
 
 **Files:**
-- Modify: `apps/server/src/working-order.ts` (the in-flight `unit` context object type + its construction near the file-from-lock path; the `unit_name` column comment)
+- Modify: `packages/db/src/schema/orders.ts`, `packages/db/src/schema/sales.ts` (comment on `unit_name`)
 - Test: `apps/server/src/working-order.test.ts` (or the relevant server order test)
 
 **Interfaces:**
-- Consumes: `SellableUnit.abbreviation` (Task 2). The context `unit` object type gains `abbreviation: Record<string,string>`.
+- Consumes: the add-time freeze from Task 2 (via the three `operations.ts` paths).
 
-- [ ] **Step 1: Write the failing test** — a line added then filed prints its unit's abbreviation as the frozen `unitName`.
+**Scope note (why no `working-order.ts` source change).** The inline `unit: {...}` context literal in
+`working-order.ts` (~line 2851) is a **bespoke display shape** — it does NOT extend `UnitSnapshot`
+or `SellableUnit`, so Task 2's type change does not force it to gain `abbreviation`, and it compiles
+unchanged. The freeze that decides what receipts/till print happens at **add-time** in `pricing.ts`
+(Task 2), sourced from the live offer's `unit.abbreviation` (via `operations.ts` ~1754/~1007, fixed in
+Task 2). A **retrieved** parked order re-prices from `productId` through that same live-offer path
+(client.ts documents `HeldOrder.lines` as "productId + quantity only, for a basket rebuild that
+RE-prices"), and a **locked** re-file preserves the already-frozen `working_order_lines.unit_name`
+via `priceLockedLines`. So the abbreviation reaches every filed line without touching
+`working-order.ts` or the `working_line_contexts` table.
+
+**Deliberately out of scope:** threading `abbreviation` through the held-order *display* context
+(`packages/venue-service/src/{operations.ts,schema/service.ts}`, `packages/module/src/module.ts`'s
+`listLineContexts` contract, and a venue-service migration). That table feeds only the on-screen view
+of a parked order whose live offer is gone; the feature does not need it. If a future change wants
+the abbreviation shown there, it names those files explicitly and regenerates the venue-service
+migration.
+
+- [ ] **Step 1: Write the failing test** — a line added then filed carries its unit's abbreviation as the frozen `unitName`.
 
 ```ts
 it("files a line with the unit's abbreviation as the frozen label", async () => {
@@ -285,12 +336,13 @@ it("files a line with the unit's abbreviation as the frozen label", async () => 
 });
 ```
 
-- [ ] **Step 2: Run it, expect red**
+- [ ] **Step 2: Run it, expect red until Task 2 is in place; green after**
 
 Run: `pnpm --filter @waitron/server test -- working-order`
-Expected: FAIL — context `unit` has no `abbreviation`, or the frozen value is the name.
+Expected: with Task 2 landed, PASS (this test guards the end-to-end outcome of the Task 2 freeze). If it fails, the freeze or one of the three `operations.ts` paths is wrong — fix there, not here.
 
-- [ ] **Step 3: Thread `abbreviation` through the context.** Add `abbreviation: Record<string, string>` to the inline `unit: {...}` context type, source it from the resolved sellable unit, and include it where the context builds the `unit` object for filing. Add the comment on the `unit_name` column (schema `orders.ts`/`sales.ts`) and the carrier: `// Holds the printed unit label (the unit's abbreviation), frozen at add-time — presentation only, not part of the fiscal hash.`
+- [ ] **Step 3: Add the column comment** on `unit_name` in `orders.ts` and `sales.ts`:
+`// Holds the printed unit label (the unit's abbreviation), frozen at add-time — presentation only, not part of the fiscal hash.`
 
 Run: `pnpm --filter @waitron/server test:coverage` (investigate any gap).
 Expected: PASS.
@@ -298,8 +350,8 @@ Expected: PASS.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add apps/server/src/working-order.ts packages/db/src/schema/orders.ts packages/db/src/schema/sales.ts apps/server/src/working-order.test.ts
-git commit -s -m "Carry a unit's abbreviation through the working-order filing path"
+git add packages/db/src/schema/orders.ts packages/db/src/schema/sales.ts apps/server/src/working-order.test.ts
+git commit -s -m "Prove a filed line freezes the unit abbreviation, and note it on the column"
 ```
 
 ---
@@ -329,7 +381,10 @@ it("labels a product with its unit's abbreviation", () => {
 Run: `pnpm --filter @waitron/till test -- product-name`
 Expected: FAIL — `unitName` resolves `unit.name` ("Kilogram").
 
-- [ ] **Step 3: Add `abbreviation` to the till unit type** in `client.ts` (both `TillProduct["unit"]` object literals in the type and its `unit?: TillProduct["unit"]` reuse), then in `product-name.ts` change `unitName` to resolve `unit.abbreviation`:
+- [ ] **Step 3: Add `abbreviation` to the till unit type** in `client.ts` — there is one
+  `TillProduct["unit"]` object literal (~line 398); the `unit?: TillProduct["unit"]` reuse (~line 493)
+  inherits it, so only the literal is edited. Then in `product-name.ts` change `unitName` to resolve
+  `unit.abbreviation`:
 
 ```ts
 export function unitName(product: TillProduct, locale: string = currentLocale()): string {
@@ -338,7 +393,9 @@ export function unitName(product: TillProduct, locale: string = currentLocale())
 }
 ```
 
-and give the two `productUnit` fallbacks an `abbreviation` (`{ en: "kg" }` for the weight fallback, `{ en: "ea" }` for the each fallback) matching their synthesised `name`.
+and give the two `productUnit` fallbacks an `abbreviation`: `{ en: "kg" }` for the weight fallback
+(matching its synthesised `name`), and `{ en: "ea" }` for the each fallback (the short form of its
+synthesised name `{ en: "each" }`).
 
 Run: `pnpm --filter @waitron/till test:coverage`
 Expected: PASS.
