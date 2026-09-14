@@ -1,6 +1,6 @@
 # Printer paper width, resolution and character set
 
-Owner decisions, 2026-09-14. Brainstormed and written on Opus 5.
+Owner decisions, 2026-09-14. Brainstormed and drafted on Opus 5; reviewed on Opus 4.8.
 
 ## Why this exists
 
