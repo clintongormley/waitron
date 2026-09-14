@@ -51,13 +51,11 @@ function unitId(c: Context): string {
   return id;
 }
 
-function screenName(value: unknown): asserts value is Record<string, string> {
-  if (!isPlainObject(value)) throw new AppError("management.request_invalid", { field: "name" });
-}
-
-function screenAbbreviation(value: unknown): asserts value is Record<string, string> {
-  if (!isPlainObject(value))
-    throw new AppError("management.request_invalid", { field: "abbreviation" });
+function screenTranslatable(
+  value: unknown,
+  field: string,
+): asserts value is Record<string, string> {
+  if (!isPlainObject(value)) throw new AppError("management.request_invalid", { field });
 }
 
 export function mountUnitsApi(app: Hono, deps: UnitsApiDeps, log: Logger): void {
@@ -123,8 +121,8 @@ export function mountUnitsApi(app: Hono, deps: UnitsApiDeps, log: Logger): void 
         precision?: unknown;
         abbreviation?: unknown;
       }>(c);
-      screenName(body.name);
-      screenAbbreviation(body.abbreviation);
+      screenTranslatable(body.name, "name");
+      screenTranslatable(body.abbreviation, "abbreviation");
       if (typeof body.precision !== "number") {
         throw new AppError("management.request_invalid", { field: "precision" });
       }
@@ -155,11 +153,11 @@ export function mountUnitsApi(app: Hono, deps: UnitsApiDeps, log: Logger): void 
       }>(c);
       const patch: UpdateUnitInput = {};
       if (body.name !== undefined) {
-        screenName(body.name);
+        screenTranslatable(body.name, "name");
         patch.name = body.name as Record<string, string>;
       }
       if (body.abbreviation !== undefined) {
-        screenAbbreviation(body.abbreviation);
+        screenTranslatable(body.abbreviation, "abbreviation");
         patch.abbreviation = body.abbreviation as Record<string, string>;
       }
       if (body.precision !== undefined) {

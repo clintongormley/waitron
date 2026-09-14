@@ -18,6 +18,18 @@ import "@waitron/ui/src/components/wt-row-actions.js";
 
 type UnitError = { code?: string; params?: { products?: ProductUsingUnit[] } };
 
+const decimalMarkers = new Map<string, string>();
+function decimalMarker(locale: string): string {
+  let marker = decimalMarkers.get(locale);
+  if (marker === undefined) {
+    marker =
+      new Intl.NumberFormat(locale).formatToParts(1.1).find((p) => p.type === "decimal")?.value ??
+      ".";
+    decimalMarkers.set(locale, marker);
+  }
+  return marker;
+}
+
 @customElement("dashboard-units-screen")
 export class UnitsScreen extends LitElement {
   static override styles = [
@@ -305,11 +317,7 @@ export class UnitsScreen extends LitElement {
    * (en); precision 0 → "0". Shown in the column cell, the filter's options, so a manager reads a
    * unit's precision the way a price of that precision would print, not as a bare digit. */
   #precisionLabel(precision: number): string {
-    if (precision === 0) return "0";
-    const marker =
-      new Intl.NumberFormat(currentLocale()).formatToParts(1.1).find((p) => p.type === "decimal")
-        ?.value ?? ".";
-    return marker + "0".repeat(precision);
+    return precision === 0 ? "0" : decimalMarker(currentLocale()) + "0".repeat(precision);
   }
 
   /** One filter option per distinct precision the units in the list actually use, ascending, each
