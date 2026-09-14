@@ -96,7 +96,10 @@ it("rejects with { code } read from the server's { error: { code } } envelope on
     .mockResolvedValue(jsonResponse({ error: { code: "password.invalid" } }, 401));
   const request = createRequest({ fetchImpl });
 
-  await expect(request("/session", "POST", {})).rejects.toEqual({ code: "password.invalid" });
+  await expect(request("/session", "POST", {})).rejects.toEqual({
+    code: "password.invalid",
+    status: 401,
+  });
 });
 
 it("reports a rejected session before rejecting the request", async () => {
@@ -108,6 +111,7 @@ it("reports a rejected session before rejecting the request", async () => {
 
   await expect(request("/management-api/staff", "GET")).rejects.toEqual({
     code: "management_session.expired",
+    status: 401,
   });
   expect(onError).toHaveBeenCalledWith("management_session.expired");
 });
@@ -129,14 +133,43 @@ it("carries the envelope's error params through on the rejection", async () => {
 
   await expect(
     request("/management-api/payments/providers/sumup/connect", "POST", {}),
-  ).rejects.toEqual({ code: "payment.provider_merchant_ambiguous", params: { merchants } });
+  ).rejects.toEqual({
+    code: "payment.provider_merchant_ambiguous",
+    params: { merchants },
+    status: 409,
+  });
 });
 
 it("rejects with server.internal when a non-2xx envelope names no code", async () => {
   const fetchImpl = vi.fn<FetchLike>().mockResolvedValue(jsonResponse({}, 500));
   const request = createRequest({ fetchImpl });
 
-  await expect(request("/thing", "GET")).rejects.toEqual({ code: "server.internal" });
+  await expect(request("/thing", "GET")).rejects.toEqual({ code: "server.internal", status: 500 });
+});
+
+it("rejects with server.internal (not a parse error) when the error body is not JSON", async () => {
+  // A route that is gone answers Hono's own `404 Not Found` as `text/plain`, which `res.json()`
+  // throws on. An unguarded parse turns that into a SyntaxError that surfaces to the caller as a
+  // network outage. The status still rides along, so a caller can tell an answered box from a dead one.
+  const onError = vi.fn();
+  const fetchImpl = vi
+    .fn<FetchLike>()
+    .mockResolvedValue(
+      new Response("Not Found", { status: 404, headers: { "content-type": "text/plain" } }),
+    );
+  const request = createRequest({ fetchImpl, onError });
+
+  await expect(request("/gone", "GET")).rejects.toEqual({ code: "server.internal", status: 404 });
+  expect(onError).toHaveBeenCalledWith("server.internal");
+});
+
+it("rejects with server.internal when the body is the literal JSON null", async () => {
+  // `null` is valid JSON, so the parse SUCCEEDS and reading `.error` off it would throw a TypeError
+  // — the case a bare try/catch around the parse still misses.
+  const fetchImpl = vi.fn<FetchLike>().mockResolvedValue(jsonResponse(null, 500));
+  const request = createRequest({ fetchImpl });
+
+  await expect(request("/thing", "GET")).rejects.toEqual({ code: "server.internal", status: 500 });
 });
 
 it("defaults baseUrl to '' and fetchImpl to the global fetch", async () => {

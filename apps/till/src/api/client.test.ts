@@ -154,6 +154,34 @@ describe("TillApi", () => {
     });
   });
 
+  it("falls back to server.internal (not a parse error) when the error body is not JSON", async () => {
+    // A gateway or a vanished route can answer a non-2xx with a `text/plain` body, which `res.json()`
+    // throws on. Left unguarded that SyntaxError reaches the caller as a fake network failure. The
+    // guarded parse turns it into the same `{ code }` shape every caller already branches on, and the
+    // HTTP `status` rides along additively.
+    const fetchStub = vi
+      .fn()
+      .mockResolvedValue(
+        new Response("Bad Gateway", { status: 502, headers: { "content-type": "text/plain" } }),
+      );
+
+    await expect(new TillApi("", fetchStub).getTill()).rejects.toMatchObject({
+      code: "server.internal",
+      status: 502,
+    });
+  });
+
+  it("falls back to server.internal when the error body is the literal JSON null", async () => {
+    // `null` parses cleanly, so a bare try/catch never runs and reading `.error` off it would throw a
+    // TypeError — the second half of the same bug.
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(null, 500));
+
+    await expect(new TillApi("", fetchStub).getTill()).rejects.toMatchObject({
+      code: "server.internal",
+      status: 500,
+    });
+  });
+
   it("login POSTs the credentials and returns the person id + the till.configure capability", async () => {
     const fetchStub = vi
       .fn()

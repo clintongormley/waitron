@@ -2251,7 +2251,10 @@ describe("DashboardApi — canvas editor CRUD (SP-B3.2)", () => {
       .fn()
       .mockResolvedValue(jsonResponse({ error: { code: "canvas.name_taken" } }, false, 409));
     const api = new DashboardApi("", fetchImpl);
-    await expect(api.createCanvas("Dup", {})).rejects.toEqual({ code: "canvas.name_taken" });
+    await expect(api.createCanvas("Dup", {})).rejects.toEqual({
+      code: "canvas.name_taken",
+      status: 409,
+    });
   });
 });
 
