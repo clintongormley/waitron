@@ -75,13 +75,10 @@ import {
  * `packages/migrations/migrations.manifest.json`; `composition.test.ts` pins the two byte-for-byte
  * while both exist. `requires` names every cross-set edge the SQL creates — FK `REFERENCES` and
  * `CREATE TRIGGER … ON <table>` — which the root `module-graph-honesty` guard cross-checks against the
- * migrations. Populated seats today: `vocabulary` on the Spanish-by-design modules (SP-3b),
- * `classification` on every table-owning module (swap S1 — `fiscal-none` owns no tables and has none),
- * `provisioning`, `fiscal` and `backup.restore` on `fiscal-verifactu`, `alerts` on `core`, `payments` and
- * `fiscal-verifactu`.
+ * migrations. The seats a module may fill are the fields of `WaitronModule`
+ * (`packages/module/src/module.ts`); the entries below show which each module fills.
  * Two modules fill the `fiscal` slot — `fiscal-verifactu` and the no-regime `fiscal-none` — so exactly
- * one is enabled per deployment (`fiscalSlot`); provisioning selects it from the venue's territory. The
- * remaining seats stay declared on the contract and empty until their slices land.
+ * one is enabled per deployment (`fiscalSlot`); provisioning selects it from the venue's territory.
  */
 export const ALL_MODULES: readonly WaitronModule[] = [
   {
