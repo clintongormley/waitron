@@ -6,7 +6,7 @@ import { resolveVatRate, priceLockedLines } from "@waitron/catalogue/src/pricing
 import { t } from "../i18n/t.js";
 
 afterEach(cleanupWidgets);
-const unit = { id: "unit-each", name: { en: "Each" } };
+const unit = { id: "unit-each", name: { en: "Each" }, abbreviation: { en: "ea" } };
 const product: ProductEditorDraft = {
   name: { en: "Coffee", es: "Café" },
   description: { en: "Freshly roasted" },
@@ -39,6 +39,30 @@ async function input(el: ProductEditor, name: string, value: string) {
 function save(el: ProductEditor) {
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
 }
+
+it("labels a unit option as its name then abbreviation", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    locales: ["en"],
+    units: [{ id: "u", name: { en: "Kilogram" }, abbreviation: { en: "kg" } }],
+  });
+  const option = el.shadowRoot!.querySelector<HTMLOptionElement>(
+    'select[name="unit"] option[value="u"]',
+  )!;
+  expect(option.textContent!.trim()).toBe("Kilogram (kg)");
+});
+
+it("labels a unit option as its name alone when it has no abbreviation", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    locales: ["en"],
+    units: [{ id: "u", name: { en: "Portion" }, abbreviation: {} }],
+  });
+  const option = el.shadowRoot!.querySelector<HTMLOptionElement>(
+    'select[name="unit"] option[value="u"]',
+  )!;
+  expect(option.textContent!.trim()).toBe("Portion");
+});
 
 it("keeps names, descriptions, kitchen name and variant prices independent", async () => {
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
@@ -89,7 +113,7 @@ it("retains a dirty draft through child open, lookup refresh and cancellation", 
     .shadowRoot!.querySelector("input")!
     .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }));
   expect(submit).not.toHaveBeenCalled();
-  el.units = [...el.units, { id: "custom", name: { en: "Custom" } }];
+  el.units = [...el.units, { id: "custom", name: { en: "Custom" }, abbreviation: {} }];
   el.childOpen = false;
   await el.updateComplete;
   save(el);

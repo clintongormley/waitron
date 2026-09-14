@@ -583,7 +583,7 @@ describe("DashboardApi", () => {
   });
 
   it("uses the canonical unit collection and item routes", async () => {
-    const unit = { id: "u1", name: { en: "portion" }, precision: 2 };
+    const unit = { id: "u1", name: { en: "portion" }, abbreviation: { en: "pt" }, precision: 2 };
     const fetchImpl = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse([unit]))
@@ -592,7 +592,9 @@ describe("DashboardApi", () => {
       .mockResolvedValueOnce(emptyResponse());
     const api = new DashboardApi("", fetchImpl);
     await expect(api.listUnits()).resolves.toEqual([unit]);
-    await expect(api.createUnit({ name: { en: "portion" }, precision: 2 })).resolves.toEqual(unit);
+    await expect(
+      api.createUnit({ name: { en: "portion" }, abbreviation: { en: "pt" }, precision: 2 }),
+    ).resolves.toEqual(unit);
     await expect(api.updateUnit("u1", { precision: 1 })).resolves.toEqual({
       ...unit,
       precision: 1,
@@ -600,7 +602,11 @@ describe("DashboardApi", () => {
     await expect(api.deleteUnit("u1")).resolves.toBeUndefined();
     expect(fetchImpl.mock.calls.map(([url, init]) => [url, init.method, init.body])).toEqual([
       ["/management-api/units", "GET", undefined],
-      ["/management-api/units", "POST", JSON.stringify({ name: { en: "portion" }, precision: 2 })],
+      [
+        "/management-api/units",
+        "POST",
+        JSON.stringify({ name: { en: "portion" }, abbreviation: { en: "pt" }, precision: 2 }),
+      ],
       ["/management-api/units/u1", "PATCH", JSON.stringify({ precision: 1 })],
       ["/management-api/units/u1", "DELETE", undefined],
     ]);

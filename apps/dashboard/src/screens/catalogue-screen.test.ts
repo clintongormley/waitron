@@ -21,7 +21,9 @@ const catalogues: CatalogueSummary[] = [
 const categories: CategorySummary[] = [
   { id: "c1", name: { es: "Entrantes" }, image: null, color: null, parentId: null },
 ];
-const units: Unit[] = [{ id: "u1", name: { es: "unidad" }, precision: 0 }];
+const units: Unit[] = [
+  { id: "u1", name: { es: "unidad" }, abbreviation: { es: "u" }, precision: 0 },
+];
 const modifiers: Modifier[] = [{ id: "m1", type: "text", name: { es: "Nota" }, available: true }];
 const products: Product[] = [
   {
@@ -78,7 +80,12 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     getProductEditor: vi.fn().mockResolvedValue(value),
     createProductEditor: vi.fn().mockResolvedValue({ ...value, id: "new" }),
     updateProductEditor: vi.fn().mockResolvedValue(value),
-    createUnit: vi.fn().mockResolvedValue({ id: "u2", name: { es: "ración" }, precision: 2 }),
+    createUnit: vi.fn().mockResolvedValue({
+      id: "u2",
+      name: { es: "ración" },
+      abbreviation: { es: "ra" },
+      precision: 2,
+    }),
     createCategory: vi.fn().mockResolvedValue({
       id: "c2",
       name: { es: "Postres" },

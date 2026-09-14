@@ -20,6 +20,7 @@ import "./image-upload.js";
 import type { DashboardApi } from "../api/client.js";
 import type {
   EditorChoice,
+  UnitChoice,
   ProductEditorDraft,
   DietaryLabel,
   ProductRoutingChoice,
@@ -117,7 +118,7 @@ export class ProductEditor extends LitElement {
   @property({ type: Boolean }) childOpen = false;
   @property({ attribute: false }) locales: string[] = [];
   @property({ attribute: false }) value: ProductEditorDraft | null = null;
-  @property({ attribute: false }) units: EditorChoice[] = [];
+  @property({ attribute: false }) units: UnitChoice[] = [];
   @property({ attribute: false }) categories: EditorChoice[] = [];
   @property({ attribute: false }) modifiers: EditorChoice[] = [];
   @property({ attribute: false }) stations: ProductRoutingChoice[] = [];
@@ -182,6 +183,15 @@ export class ProductEditor extends LitElement {
   }
   private label(choice: EditorChoice) {
     return resolveContentText(choice.name, this.locales[0] ?? "en", this.locales[0] ?? "en");
+  }
+  private unitLabel(unit: UnitChoice) {
+    const name = resolveContentText(unit.name, this.locales[0] ?? "en", this.locales[0] ?? "en");
+    const abbr = resolveContentText(
+      unit.abbreviation,
+      this.locales[0] ?? "en",
+      this.locales[0] ?? "en",
+    );
+    return abbr ? `${name} (${abbr})` : name;
   }
   private change<K extends keyof ProductEditorDraft>(key: K, value: ProductEditorDraft[K]) {
     this.draft = { ...this.draft, [key]: value };
@@ -573,7 +583,7 @@ export class ProductEditor extends LitElement {
                 }}
               >
                 <option value="">${t("editor.choose")}</option>
-                ${this.units.map((unit) => html`<option value=${unit.id} .selected=${unit.id === this.draft.unitId}>${this.label(unit)}</option>`)}
+                ${this.units.map((unit) => html`<option value=${unit.id} .selected=${unit.id === this.draft.unitId}>${this.unitLabel(unit)}</option>`)}
               </select></label
             ><span class="error" id="unit-error">${this.error("unit")}</span>
             <wt-button
