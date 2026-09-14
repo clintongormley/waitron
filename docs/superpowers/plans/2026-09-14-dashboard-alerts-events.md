@@ -1866,6 +1866,11 @@ Expected: FAIL on the missing `apps/dashboard/src/i18n/alert-messages.js` import
 
 - [ ] **Step 3: Write the table** — `apps/dashboard/src/i18n/alert-messages.ts`:
 
+> **Dated note, 2026-09-14.** The shipped wording changed in review. The "it will appear again"
+> sentences below were dropped, and the clock, payment and fiscal reconciliation sentences were
+> rewritten, so this table is not what the dashboard shows. `apps/dashboard/src/i18n/alert-messages.ts`
+> is the truth.
+
 ```ts
 // English and Spanish sentences for every alert code. `{name}` slots are filled from the alert's
 // params. Kept free of imports so the root guard (`scripts/alert-codes.test.ts`) can load it.

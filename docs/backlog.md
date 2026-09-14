@@ -1461,6 +1461,17 @@ turns out to need a design moves to its track.
   already leaves behind. Before the fix a person offered a passkey on the source box arrived on the new one holding no
   passkey but already stamped, so `shouldOfferPasskey` never offered again after they were reactivated
   and first signed in.
+- **The login screen's automatic passkey attempt can show "Something went wrong, try again" on load**
+  (seen 2026-09-14 while taking screenshots for the dashboard alerts branch; the same happens on
+  `main`, so it is not that branch's bug). Playwright's headless Chromium 149 refuses the attempt
+  with a `NotSupportedError`; installed Chrome 153 left it pending with no error. Whether a real
+  person's browser ever hits it is untested. Mechanism: the attempt's `catch`
+  (`apps/dashboard/src/screens/login-screen.ts:709-716`, from #305) stays quiet only for
+  `NotAllowedError` and `AbortError`, and `codeOf` (`packages/dashboard-kit/src/codes.ts:38-40`)
+  returns any `code` it finds, so a browser error's old numeric `code` (9 for `NotSupportedError`)
+  wins over the fallback and, matching no registered message, shows the generic sentence. The
+  passkey button's `catch` (`:672-674`) has the same flaw. **Fix direction:** the automatic attempt stays silent on every browser-side failure, and
+  `codeOf` accepts only a string code (check its other callers first).
 - **Timestamps across the printers and devices screens show UTC** — `formatIsoMinute`
   (`apps/dashboard/src/date-utils.ts:27`) slices the ISO string. One shared formatter, not a per-call-site patch.
 - The till renders `person.suspended` as "Account suspended" — align with the dashboard's Disabled

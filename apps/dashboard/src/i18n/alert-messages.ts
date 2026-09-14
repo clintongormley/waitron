@@ -30,8 +30,8 @@ export const ALERT_MESSAGES: Readonly<
     es: "La hora de este equipo no se ha comprobado con una fuente de hora fiable desde hace {anchorAgeSeconds} segundos. Las ventas continúan.",
   },
   "clock.jump_detected": {
-    en: "This device's clock went backwards (by {wallClockDeltaSeconds} seconds). Check its date and time.",
-    es: "La hora de este equipo ha retrocedido ({wallClockDeltaSeconds} segundos). Revisa su fecha y hora.",
+    en: "This device's clock went backwards: it changed by {wallClockDeltaSeconds} seconds. Check its date and time.",
+    es: "La hora de este equipo ha retrocedido: ha cambiado {wallClockDeltaSeconds} segundos. Revisa su fecha y hora.",
   },
   "fiscal.registro_rechazado": {
     en: "The tax agency (AEAT) rejected an invoice record: {mensaje} (code {codigo}). Later records on the same chain are on hold. Contact support.",
