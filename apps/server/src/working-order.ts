@@ -3365,7 +3365,7 @@ export async function placeOrder(
     const [locked] = await tx
       .select({ status: workingOrders.status })
       .from(workingOrders)
-      .where(eq(workingOrders.id, id))
+      .where(and(eq(workingOrders.tenantId, cfg.tenantId), eq(workingOrders.id, id)))
       .for("update");
     if (locked === undefined || locked.status !== "open") {
       throw new AppError("working_order.not_open", { workingOrderId: id });
@@ -3476,7 +3476,9 @@ export async function placeOrder(
         doneness: workingOrderLines.doneness,
       })
       .from(workingOrderLines)
-      .where(eq(workingOrderLines.workingOrderId, id))
+      .where(
+        and(eq(workingOrderLines.tenantId, cfg.tenantId), eq(workingOrderLines.workingOrderId, id)),
+      )
       .orderBy(workingOrderLines.lineNo);
     await fireLines(tx, cfg, id, firedLines);
 
@@ -3553,7 +3555,7 @@ export async function sendToPrep(
     const [order] = await tx
       .select({ status: workingOrders.status })
       .from(workingOrders)
-      .where(eq(workingOrders.id, id));
+      .where(and(eq(workingOrders.tenantId, cfg.tenantId), eq(workingOrders.id, id)));
     if (order === undefined || order.status !== "settled") {
       throw new AppError("working_order.not_settled", { workingOrderId: id });
     }
@@ -3571,7 +3573,9 @@ export async function sendToPrep(
         doneness: workingOrderLines.doneness,
       })
       .from(workingOrderLines)
-      .where(eq(workingOrderLines.workingOrderId, id))
+      .where(
+        and(eq(workingOrderLines.tenantId, cfg.tenantId), eq(workingOrderLines.workingOrderId, id)),
+      )
       .orderBy(workingOrderLines.lineNo);
     await fireLines(tx, cfg, id, firedLines);
   });

@@ -1950,6 +1950,59 @@ describe("placeOrder / sendToPrep fire ticket items", () => {
     expect(items[0]!.state).toBe("queued");
   });
 
+  it("placeOrder refuses another tenant's order id as not open, and leaves that order alone", async () => {
+    const owner = await setupVenue("ticket_then_pay");
+    const intruder = await setupVenue("ticket_then_pay");
+    await withTenant(db, owner.cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await createStation(tx, owner.cfg, { name: "Cocina", isDefault: true });
+    });
+    await withTenant(db, intruder.cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await createStation(tx, intruder.cfg, { name: "Intruder kitchen", isDefault: true });
+    });
+    const id = randomUUID();
+    await parkOrder({ db }, owner.cfg, { id, lines: [{ productId: owner.cafeId, quantity: "1" }] });
+
+    await expect(
+      placeOrder(
+        { db, backend: stubBackend, clock: stubClock },
+        intruder.cfg,
+        id,
+        OPERATOR,
+        intruder.cfg.tillId,
+      ),
+    ).rejects.toMatchObject({ code: "working_order.not_open", params: { workingOrderId: id } });
+
+    const order = await db.execute<{ status: string; items: number }>(sql`
+      select status, (select count(*)::int from ticket_items where working_order_id = ${id}) as items
+      from working_orders where id = ${id}`);
+    expect(order.rows).toEqual([{ status: "open", items: 0 }]);
+  });
+
+  it("sendToPrep refuses another tenant's order id as not settled, and fires nothing", async () => {
+    const owner = await setupVenue();
+    const intruder = await setupVenue();
+    await withTenant(db, intruder.cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await createStation(tx, intruder.cfg, { name: "Intruder kitchen", isDefault: true });
+    });
+    const id = randomUUID();
+    await parkOrder({ db }, owner.cfg, { id, lines: [{ productId: owner.cafeId, quantity: "1" }] });
+    await db.execute(
+      sql`update working_orders set status = 'settled', settled_at = now() where id = ${id}`,
+    );
+
+    await expect(sendToPrep({ db }, intruder.cfg, id)).rejects.toMatchObject({
+      code: "working_order.not_settled",
+      params: { workingOrderId: id },
+    });
+
+    const items = await db.execute<{ items: number }>(sql`
+      select count(*)::int as items from ticket_items where working_order_id = ${id}`);
+    expect(items.rows).toEqual([{ items: 0 }]);
+  });
+
   it("sendToPrep refuses an order that is not settled (working_order.not_settled)", async () => {
     const { cfg, cafeId } = await setupVenue();
     const id = randomUUID();
