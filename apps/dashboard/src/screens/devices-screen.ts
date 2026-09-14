@@ -621,8 +621,8 @@ export class DevicesScreen extends LitElement {
     return this.stations.find((s) => s.id === stationId)?.name ?? t("devices.no_station");
   }
 
-  /** A device's last-seen ISO timestamp to the minute (`formatIsoMinute`, UTC); a null last-seen (never
-   * authenticated) shows the "Never" placeholder. */
+  /** A device's last-seen ISO timestamp to the minute (`formatIsoMinute`, in the browser's local
+   * timezone); a null last-seen (never authenticated) shows the "Never" placeholder. */
   #lastSeen(iso: string | null): string {
     if (iso === null) return t("devices.last_seen_never");
     return formatIsoMinute(iso);
