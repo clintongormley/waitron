@@ -2704,4 +2704,34 @@ describe("printer layout settings", () => {
       characterSet: "pc858",
     });
   });
+
+  it("prints the test page and turns the two answers into settings", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    await openPrinter(el, "p1");
+    expect(q(el, "[data-test=test-page-hint-p1]")?.textContent?.trim()).toBe(
+      t("printers.test_page_hint"),
+    );
+    q(el, "[data-test=print-test-page-p1]")!.click();
+    await flush(el);
+    expect(api.testPrint).toHaveBeenCalledWith("p1");
+    const value = (name: string) => (q(el, `select[name="${name}"]`) as HTMLSelectElement).value;
+    expect(value("printer-test-line-fits")).toBe("");
+    await chooseOption(el, "printer-test-line-fits", "B");
+    expect([value("printer-paper-width"), value("printer-resolution")]).toEqual(["58mm", "203dpi"]);
+    await chooseOption(el, "printer-test-line-reads", "3");
+    expect(value("printer-character-set")).toBe("plain");
+    await chooseOption(el, "printer-test-line-fits", "D");
+    q(el, "[data-test=save-printer-p1]")!.click();
+    await flush(el);
+    expect(api.updatePrinter).toHaveBeenCalledWith("p1", {
+      name: "Cocina",
+      host: "10.0.0.9",
+      port: 9100,
+      active: true,
+      resolution: "203dpi",
+      characterSet: "plain",
+    });
+  });
 });

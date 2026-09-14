@@ -69,6 +69,22 @@ interface EditablePrinter {
 export const SCAN_LISTEN_MS = 10_000;
 export const SCAN_POLL_MS = 2_000;
 
+/** "Which is the longest line that fits?" — each answer names a paper width and resolution (spec table). */
+const LINE_FITS: Readonly<
+  Record<string, { paperWidth: PrintPaperWidth; resolution: PrintResolution }>
+> = {
+  A: { paperWidth: "58mm", resolution: "180dpi" },
+  B: { paperWidth: "58mm", resolution: "203dpi" },
+  C: { paperWidth: "80mm", resolution: "180dpi" },
+  D: { paperWidth: "80mm", resolution: "203dpi" },
+};
+/** "Which is the first line that reads correctly?" — line 1 is table 16, line 2 table 19, line 3 plain. */
+const LINE_READS: Readonly<Record<string, PrintCharacterSet>> = {
+  "1": "wpc1252",
+  "2": "pc858",
+  "3": "plain",
+};
+
 /** Hardware registration and print-job history; routing policy lives on Printing rules.
  * The server enforces printer.manage for configuration and print.resend for document resends. */
 @customElement("dashboard-printers-screen")
@@ -1549,6 +1565,36 @@ export class PrintersScreen extends LitElement {
             <option value="wpc1252">${t("printers.character_set_wpc1252")}</option>
             <option value="pc858">${t("printers.character_set_pc858")}</option>
             <option value="plain">${t("printers.character_set_plain")}</option>
+          </select>
+        </label>
+        <p class="hint" data-test=${`test-page-hint-${p.id}`}>${t("printers.test_page_hint")}</p>
+        <wt-button data-test=${`print-test-page-${p.id}`} @click=${() => void this.#testPrint(p.id)}
+          >${t("printers.test_page")}</wt-button
+        >
+        <label class="setting-field"
+          >${t("printers.test_line_fits")}
+          <select
+            name="printer-test-line-fits"
+            @change=${(e: Event) => {
+              const answer = LINE_FITS[(e.target as HTMLSelectElement).value];
+              if (answer !== undefined) this.#editPrinter(p.id, answer);
+            }}
+          >
+            <option value="">${t("printers.test_answer_choose")}</option>
+            ${["A", "B", "C", "D"].map((letter) => html`<option value=${letter}>${letter}</option>`)}
+          </select>
+        </label>
+        <label class="setting-field"
+          >${t("printers.test_line_reads")}
+          <select
+            name="printer-test-line-reads"
+            @change=${(e: Event) => {
+              const answer = LINE_READS[(e.target as HTMLSelectElement).value];
+              if (answer !== undefined) this.#editPrinter(p.id, { characterSet: answer });
+            }}
+          >
+            <option value="">${t("printers.test_answer_choose")}</option>
+            ${["1", "2", "3"].map((line) => html`<option value=${line}>${line}</option>`)}
           </select>
         </label>
       </div>
