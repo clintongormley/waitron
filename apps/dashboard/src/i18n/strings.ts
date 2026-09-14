@@ -70,7 +70,7 @@ export const en = {
   "modifiers.in_use.menu":
     "A published menu uses this modifier. Remove it from the menu before changing its type.",
   "modifiers.in_use.order":
-    "A saved order uses this modifier. The saved order keeps its details; finish or void it before changing the type.",
+    "A saved order uses this modifier. The saved order keeps its details; finish or void it first.",
   "modifiers.in_use.choice":
     "A menu or saved order uses a choice you removed. Keep the choice and make it unavailable instead.",
 
@@ -101,7 +101,7 @@ export const en = {
   "modifiers.name_required": "Enter a name in the default content language.",
   "modifiers.price_invalid": "Enter a nonnegative price with up to two decimal places.",
   "modifiers.quantity_invalid": "Enter a whole number within the allowed limit.",
-  "modifiers.choices_required": "Add an available choice or make this modifier unavailable.",
+  "modifiers.choices_required": "Add or enable a choice to meet the requirement.",
   "modifiers.choice_problem": "There is a problem with this choice:",
   "modifiers.too_many_preselected": "Preselect fewer choices, or raise the total maximum.",
   "modifiers.search": "Search modifiers",
@@ -1290,7 +1290,7 @@ export const es: Record<StringKey, string> = {
   "modifiers.in_use.menu":
     "Un menú publicado usa este modificador. Retíralo del menú antes de cambiar su tipo.",
   "modifiers.in_use.order":
-    "Un pedido guardado usa este modificador. El pedido guardado conserva sus datos; termínalo o anúlalo antes de cambiar el tipo.",
+    "Un pedido guardado usa este modificador. El pedido guardado conserva sus datos; termínalo o anúlalo primero.",
   "modifiers.in_use.choice":
     "Un menú o pedido guardado usa una opción que has eliminado. Conserva la opción y márcala como no disponible.",
 
@@ -1321,8 +1321,7 @@ export const es: Record<StringKey, string> = {
   "modifiers.name_required": "Introduce un nombre en el idioma predeterminado del contenido.",
   "modifiers.price_invalid": "Introduce un precio no negativo con un máximo de dos decimales.",
   "modifiers.quantity_invalid": "Introduce un número entero dentro del límite permitido.",
-  "modifiers.choices_required":
-    "Añade una opción disponible o marca este modificador como no disponible.",
+  "modifiers.choices_required": "Añade o habilita una opción para cumplir el requisito.",
   "modifiers.choice_problem": "Hay un problema con esta opción:",
   "modifiers.too_many_preselected": "Preselecciona menos opciones o aumenta el máximo total.",
   "modifiers.search": "Buscar modificadores",
