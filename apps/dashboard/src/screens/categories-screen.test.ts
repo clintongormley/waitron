@@ -268,7 +268,10 @@ it("opens the products modal from the name and lists members with lozenges", asy
   expect(getComputedStyle(plain).color).not.toBe(hexToRgb(mutedToken));
 });
 
-it("adds products via the checkbox table in one call", async () => {
+// The add-products list now uses the shared table's own selection (per-row checkboxes inside the
+// table's shadow root) rather than a hand-rolled `pick-*` column. Selecting two rows and pressing
+// Add sends both ids in one call.
+it("adds products via the table's own per-row selection in one call", async () => {
   const fx = apiFixture();
   const q: Product = { ...product, id: "q", descriptions: { en: "Juice" }, categoryIds: [] };
   const r: Product = { ...product, id: "r", descriptions: { en: "Napkin" }, categoryIds: [] };
@@ -289,12 +292,10 @@ it("adds products via the checkbox table in one call", async () => {
     'wt-data-table[data-test="category-add-products"]',
   )!;
   await addTable.updateComplete;
-  const pickQ = addTable.shadowRoot!.querySelector<HTMLInputElement>('[data-test="pick-q"]')!;
-  pickQ.checked = true;
-  pickQ.dispatchEvent(new Event("change", { bubbles: true }));
-  const pickR = addTable.shadowRoot!.querySelector<HTMLInputElement>('[data-test="pick-r"]')!;
-  pickR.checked = true;
-  pickR.dispatchEvent(new Event("change", { bubbles: true }));
+  addTable.shadowRoot!.querySelector<HTMLInputElement>('[data-test="select-q"]')!.click();
+  await el.updateComplete;
+  await addTable.updateComplete;
+  addTable.shadowRoot!.querySelector<HTMLInputElement>('[data-test="select-r"]')!.click();
   await el.updateComplete;
   const addButton = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
     '[data-test="add-selected"]',
@@ -309,6 +310,58 @@ it("adds products via the checkbox table in one call", async () => {
   );
   expect(fx.api.addProductsToCategory).toHaveBeenCalledTimes(1);
   expect((fx.api.addProductsToCategory.mock.calls[0]![1] as string[]).length).toBe(2);
+});
+
+// The add table's select-all header box selects every visible (searched/filtered) row, and Add
+// then sends the whole picked set — proving the dialog uses the primitive's own select-all rather
+// than a screen-side "select all visible" checkbox.
+it("adds products using the table's own select-all", async () => {
+  const fx = apiFixture();
+  const q: Product = { ...product, id: "q", descriptions: { en: "Juice" }, categoryIds: [] };
+  const r: Product = { ...product, id: "r", descriptions: { en: "Napkin" }, categoryIds: [] };
+  fx.api.listLibraryProducts.mockResolvedValue([q, r]);
+  const { el } = await mountWidget<CategoriesScreen>("dashboard-categories-screen", {
+    api: fx.client,
+  });
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("wt-data-table")!.rows.length).toBe(2),
+  );
+  const table = el.shadowRoot!.querySelector("wt-data-table")!;
+  await table.updateComplete;
+  table.shadowRoot!.querySelector<HTMLElement>('[data-category="food"]')!.click();
+  await el.updateComplete;
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="add-products"]')!.click();
+  await el.updateComplete;
+  const addTable = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>(
+    'wt-data-table[data-test="category-add-products"]',
+  )!;
+  await addTable.updateComplete;
+  addTable.shadowRoot!.querySelector<HTMLInputElement>('[data-test="select-all"]')!.click();
+  await el.updateComplete;
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="add-selected"]')!.click();
+  await vi.waitFor(() =>
+    expect(fx.api.addProductsToCategory).toHaveBeenCalledWith(
+      "food",
+      expect.arrayContaining(["q", "r"]),
+    ),
+  );
+});
+
+// The products dialog has a footer Close button that dismisses it — the member view had no way to
+// close beyond the modal's own dismiss affordance before this.
+it("closes the products dialog from a footer Close button", async () => {
+  const { el } = await mount();
+  const table = el.shadowRoot!.querySelector("wt-data-table")!;
+  await table.updateComplete;
+  table.shadowRoot!.querySelector<HTMLElement>('[data-category="food"]')!.click();
+  await el.updateComplete;
+  const modal = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-modal"]>(
+    'wt-modal[data-test="products-modal"]',
+  )!;
+  expect(modal.open).toBe(true);
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="close-products"]')!.click();
+  await el.updateComplete;
+  expect(modal.open).toBe(false);
 });
 
 it("shows the delete preview with product, child and route links, disabling Delete until it resolves", async () => {

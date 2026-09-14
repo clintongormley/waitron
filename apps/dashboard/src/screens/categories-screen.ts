@@ -54,13 +54,6 @@ export class CategoriesScreen extends LitElement {
       h2 {
         margin: var(--wt-space-4) 0;
       }
-      .filters {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: flex-end;
-        gap: var(--wt-space-3);
-        margin-block: var(--wt-space-3);
-      }
       .header-actions {
         display: flex;
         gap: var(--wt-space-3);
@@ -138,7 +131,6 @@ export class CategoriesScreen extends LitElement {
   @state() private loadError = false;
   @state() private saveError = "";
   @state() private fieldErrors: Record<string, string> = {};
-  @state() private productSearch = "";
   @state() private mode: ViewMode = this.#readMode();
   @state() private selected: string | null = null;
   @state() private addingProducts = false;
@@ -306,26 +298,10 @@ export class CategoriesScreen extends LitElement {
   #openAdding(): void {
     this.addingProducts = true;
     this.picked = new Set();
-    this.productSearch = "";
     this.saveError = "";
   }
   #closeAdding(): void {
     this.addingProducts = false;
-    this.productSearch = "";
-  }
-  #togglePick(id: string, checked: boolean): void {
-    const next = new Set(this.picked);
-    if (checked) next.add(id);
-    else next.delete(id);
-    this.picked = next;
-  }
-  #toggleAllPicked(visible: readonly Product[], checked: boolean): void {
-    const next = new Set(this.picked);
-    for (const product of visible) {
-      if (checked) next.add(product.id);
-      else next.delete(product.id);
-    }
-    this.picked = next;
   }
   async #addPicked(): Promise<void> {
     if (!this.selected || this.busy || this.picked.size === 0) return;
@@ -404,7 +380,6 @@ export class CategoriesScreen extends LitElement {
         ?data-muted=${muted}
         @click=${() => {
           this.selected = category.id;
-          this.productSearch = "";
           this.addingProducts = false;
           this.picked = new Set();
           this.saveError = "";
@@ -510,15 +485,17 @@ export class CategoriesScreen extends LitElement {
     const category = this.#reportingCategory(product);
     return category ? this.#text(category.name) : "";
   }
-  /** The products modal's member list — Edit reopens the full membership picker; Remove
-   * pre-fills it with this category taken out, so a cleared reporting category is a deliberate
-   * (still-confirmed) choice rather than an immediate write. */
-  #memberColumns(): DataTableColumn<Product>[] {
-    return [
+  /** The shared column set behind every product table in this screen (members, add-products, and
+   * Task 13's delete preview). Name searches and sorts on the translated description; Reporting
+   * category sorts and offers a dropdown filter over the reporting categories actually in use; a
+   * caller passes its own trailing column (row actions, say) or none. */
+  #productColumns(trailing?: DataTableColumn<Product>): DataTableColumn<Product>[] {
+    const base: DataTableColumn<Product>[] = [
       {
         key: "name",
         label: t("categories.name"),
         cell: (product) => this.#text(product.descriptions),
+        searchValue: (product) => this.#text(product.descriptions),
         sortValue: (product) => this.#nameSortValue(product),
       },
       {
@@ -526,67 +503,52 @@ export class CategoriesScreen extends LitElement {
         label: t("editor.reporting_category"),
         cell: (product) => this.#reportingCell(product),
         sortValue: (product) => this.#reportingSortValue(product),
+        filter: {
+          label: t("editor.reporting_category"),
+          allLabel: t("categories.filter_reporting_all"),
+          value: (product) => product.primaryCategoryId ?? "",
+          options: this.#reportingFilterOptions(),
+        },
       },
       {
         key: "other",
         label: t("categories.other_categories"),
         cell: (product) => this.#otherCategoriesCell(product),
       },
-      {
-        key: "actions",
-        label: t("categories.actions"),
-        cell: (product) =>
-          html`<wt-row-actions
-            label=${`${t("categories.actions")}: ${this.#text(product.descriptions)}`}
-            ><wt-button align="start" variant="ghost" @click=${() => this.#assign(product)}
-              >${t("action.edit")}</wt-button
-            ><wt-button
-              align="start"
-              data-test="remove-membership"
-              variant="ghost"
-              @click=${() => this.#assign(product, true)}
-              >${t("categories.remove_from")}</wt-button
-            ></wt-row-actions
-          >`,
-      },
     ];
+    return trailing ? [...base, trailing] : base;
   }
-  /** The add-products view lists products NOT already in the category, with a leading checkbox
-   * column instead of row actions — one bulk `addProductsToCategory` call replaces adding products
-   * one at a time through the membership picker. */
-  #addColumns(): DataTableColumn<Product>[] {
-    return [
-      {
-        key: "pick",
-        label: "",
-        cell: (product) =>
-          html`<input
-            type="checkbox"
-            aria-label=${`${t("categories.add_products")}: ${this.#text(product.descriptions)}`}
-            data-test=${`pick-${product.id}`}
-            .checked=${this.picked.has(product.id)}
-            @change=${(event: Event) =>
-              this.#togglePick(product.id, (event.target as HTMLInputElement).checked)}
-          />`,
-      },
-      {
-        key: "name",
-        label: t("categories.name"),
-        cell: (product) => this.#text(product.descriptions),
-        sortValue: (product) => this.#nameSortValue(product),
-      },
-      {
-        key: "primary",
-        label: t("editor.reporting_category"),
-        cell: (product) => this.#reportingCell(product),
-        sortValue: (product) => this.#reportingSortValue(product),
-      },
-      {
-        key: "other",
-        label: t("categories.other_categories"),
-        cell: (product) => this.#otherCategoriesCell(product),
-      },
-    ];
+  /** The reporting categories at least one product actually uses, labelled by name — the only
+   * values that can usefully narrow the Reporting-category filter. */
+  #reportingFilterOptions(): { value: string; label: string }[] {
+    const ids = new Set(
+      this.products.map((product) => product.primaryCategoryId).filter((id): id is string => !!id),
+    );
+    return this.categories
+      .filter((category) => ids.has(category.id))
+      .map((category) => ({ value: category.id, label: this.#text(category.name) }));
+  }
+  /** The products modal's member list — the shared columns plus a row-actions column. Edit reopens
+   * the full membership picker; Remove pre-fills it with this category taken out, so a cleared
+   * reporting category is a deliberate (still-confirmed) choice rather than an immediate write. */
+  #memberColumns(): DataTableColumn<Product>[] {
+    return this.#productColumns({
+      key: "actions",
+      label: t("categories.actions"),
+      cell: (product) =>
+        html`<wt-row-actions
+          label=${`${t("categories.actions")}: ${this.#text(product.descriptions)}`}
+          ><wt-button align="start" variant="ghost" @click=${() => this.#assign(product)}
+            >${t("categories.edit_membership")}</wt-button
+          ><wt-button
+            align="start"
+            data-test="remove-membership"
+            variant="ghost"
+            @click=${() => this.#assign(product, true)}
+            >${t("categories.remove_from")}</wt-button
+          ></wt-row-actions
+        >`,
+    });
   }
   /** The delete confirmation's preview: a spinner until `#loadDependants` resolves, then the
    * consequence list the brief calls for — sections with nothing in them are omitted entirely,
@@ -670,19 +632,14 @@ export class CategoriesScreen extends LitElement {
   }
   override render() {
     const selected = this.categories.find((category) => category.id === this.selected);
-    const filter = this.productSearch.toLocaleLowerCase();
-    const members = this.products.filter(
-      (product) =>
-        product.categoryIds.includes(this.selected ?? "") &&
-        this.#text(product.descriptions).toLocaleLowerCase().includes(filter),
+    // The tables own their own search now, so pass the full member/add lists and let each table
+    // filter what it shows.
+    const members = this.products.filter((product) =>
+      product.categoryIds.includes(this.selected ?? ""),
     );
     const addRows = this.products.filter(
-      (product) =>
-        !product.categoryIds.includes(this.selected ?? "") &&
-        this.#text(product.descriptions).toLocaleLowerCase().includes(filter),
+      (product) => !product.categoryIds.includes(this.selected ?? ""),
     );
-    const allVisiblePicked =
-      addRows.length > 0 && addRows.every((product) => this.picked.has(product.id));
     return html`<div class="heading">
         <h1>${t("nav.categories")}</h1>
         <div class="header-actions">
@@ -735,6 +692,7 @@ export class CategoriesScreen extends LitElement {
         .emptyMessage=${t("categories.empty")}
       ></wt-data-table>
       <wt-modal
+        data-test="products-modal"
         .open=${this.selected !== null}
         heading=${selected ? `${this.#text(selected.name)} · ${t("categories.products_modal")}` : ""}
         @keydown=${(event: KeyboardEvent) => {
@@ -751,31 +709,24 @@ export class CategoriesScreen extends LitElement {
         ${this.saveError ? html`<p role="alert">${this.saveError}</p>` : nothing}
         ${
           this.addingProducts
-            ? html`<div class="filters">
-                  <wt-input
-                    name="add-category-product-search"
-                    label=${t("categories.search_products")}
-                    .value=${this.productSearch}
-                    @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                      event.stopPropagation();
-                      this.productSearch = event.detail.value;
-                    }}
-                  ></wt-input>
-                  <label
-                    ><input
-                      type="checkbox"
-                      data-test="select-all-visible"
-                      .checked=${allVisiblePicked}
-                      @change=${(event: Event) =>
-                        this.#toggleAllPicked(addRows, (event.target as HTMLInputElement).checked)}
-                    />${t("categories.select_all_visible")}</label
-                  >
-                </div>
-                <wt-data-table
+            ? html`<wt-data-table
                   data-test="category-add-products"
                   aria-label=${t("categories.add_products")}
+                  searchable
+                  searchLabel=${t("categories.search_products")}
+                  noMatchesMessage=${t("categories.products_no_matches")}
+                  viewKey="waitron.categories.add.table"
+                  selectable
+                  .selected=${[...this.picked]}
+                  .selectionLabel=${(product: Product) =>
+                    `${t("categories.add_products")}: ${this.#text(product.descriptions)}`}
+                  selectAllLabel=${t("categories.select_all_products")}
+                  @wt-selection-change=${(event: CustomEvent<{ selected: string[] }>) => {
+                    event.stopPropagation();
+                    this.picked = new Set(event.detail.selected);
+                  }}
                   .rows=${addRows}
-                  .columns=${this.#addColumns()}
+                  .columns=${this.#productColumns()}
                   .rowKey=${(product: Product) => product.id}
                   .emptyMessage=${t("categories.no_products")}
                 ></wt-data-table>
@@ -806,23 +757,30 @@ export class CategoriesScreen extends LitElement {
                     >${t("categories.add_products")}</wt-button
                   >
                 </div>
-                <wt-input
-                  name="category-product-search"
-                  label=${t("categories.search_products")}
-                  .value=${this.productSearch}
-                  @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                    event.stopPropagation();
-                    this.productSearch = event.detail.value;
-                  }}
-                ></wt-input>
                 <wt-data-table
                   data-test="category-products"
                   aria-label=${t("categories.products_modal")}
+                  searchable
+                  searchLabel=${t("categories.search_products")}
+                  noMatchesMessage=${t("categories.products_no_matches")}
+                  viewKey="waitron.categories.members.table"
                   .rows=${members}
                   .columns=${this.#memberColumns()}
                   .rowKey=${(product: Product) => product.id}
                   .emptyMessage=${t("categories.no_products")}
-                ></wt-data-table>`
+                ></wt-data-table>
+                <wt-form-actions slot="footer"
+                  ><wt-button
+                    data-test="close-products"
+                    variant="secondary"
+                    @click=${() => {
+                      this.selected = null;
+                      this.addingProducts = false;
+                      this.picked = new Set();
+                    }}
+                    >${t("action.close")}</wt-button
+                  ></wt-form-actions
+                >`
         }
       </wt-modal>
       <dashboard-category-form
