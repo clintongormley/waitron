@@ -26,3 +26,25 @@ export async function readJsonBody<T>(c: Context): Promise<T> {
   });
   return (parsed ?? {}) as T;
 }
+
+/**
+ * Read a JSON request body while KEEPING the null/empty/malformed cases distinct from a well-formed
+ * body — the same `SyntaxError`-to-degenerate mapping as {@link readJsonBody}, but WITHOUT its
+ * `?? {}` coercion.
+ *
+ * A route uses this instead of {@link readJsonBody} when it must tell an object body apart from an
+ * absent, empty, malformed, or literal-`null` one — e.g. to refuse the latter as a body-shape fault
+ * naming the field "body" rather than falling through to a field-specific error. A parse failure (the
+ * `SyntaxError`) and a literal JSON `null` body both surface as `null` here (readJsonBody would turn
+ * both into `{}`); a well-formed object, primitive, or array is returned UNCHANGED. As in
+ * `readJsonBody`, a NON-`SyntaxError` throw (e.g. a "Body already used" double-read) is a real server
+ * fault and is rethrown, so the error boundary still surfaces it as a 500 rather than a client 4xx.
+ * `T` is the caller's assertion about the fields it will read; the caller's own guards remain
+ * responsible for screening the returned value's shape and rejecting a missing or wrong-typed field.
+ */
+export async function readRawJsonBody<T>(c: Context): Promise<T | null> {
+  return c.req.json<T>().catch((cause: unknown): null => {
+    if (cause instanceof SyntaxError) return null;
+    throw cause;
+  });
+}

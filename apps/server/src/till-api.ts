@@ -32,7 +32,7 @@ import { cardProviderById, cardReaders, deviceCardReaders } from "@waitron/payme
 import { tenantCredentials } from "@waitron/credentials";
 import { routableServers } from "@waitron/membership";
 import { createErrorBoundary } from "@waitron/server-kit";
-import { readJsonBody } from "@waitron/server-kit";
+import { readJsonBody, readRawJsonBody } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 import type { OnboardingIntent } from "./trading-config.js";
 import { VENUE_SERVICE } from "./modules.js";
@@ -2337,16 +2337,11 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const fromTabId = requireTabParam(c.req.param("id"));
       // Read the RAW parse — NOT `readJsonBody` (which would coalesce a null body to `{}`). This route
       // must tell a null/empty/malformed body apart from a well-formed object so it can refuse the
-      // former as a body-shape fault (field "body") below. A literal JSON `null` parses to `null`; an
-      // empty or malformed body throws a SyntaxError, which is mapped to `null` here so it lands in the
-      // SAME refusal rather than escaping as an opaque `server.internal` 500. A non-SyntaxError (e.g. a
-      // double-read) is a real server fault — rethrow it.
-      const body = await c.req
-        .json<{ transfers: { lineNo: number; quantity?: string }[] }>()
-        .catch((cause: unknown): null => {
-          if (cause instanceof SyntaxError) return null;
-          throw cause;
-        });
+      // former as a body-shape fault (field "body") below. `readRawJsonBody` returns the parsed body,
+      // or `null` for a literal JSON `null`, an empty or malformed body (the SyntaxError), so all three
+      // land in the SAME refusal rather than escaping as an opaque `server.internal` 500; a
+      // non-SyntaxError (e.g. a double-read) is a real server fault and is rethrown.
+      const body = await readRawJsonBody<{ transfers: { lineNo: number; quantity?: string }[] }>(c);
       // Screen the body shape BEFORE any field access: a null (literal, or the coerced empty/malformed
       // body) and a non-object primitive/array all fail here as `management.request_invalid` naming
       // "body" — the same guard the `/api/tables/:id/placement` sibling uses — before `body.transfers`
@@ -2386,15 +2381,14 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       await requireSession(deps, c);
       const tabId = requireTabParam(c.req.param("id"));
       // Read the RAW parse — same reasoning as `/split` above: this route must distinguish a
-      // null/empty/malformed body (refused as field "body") from a well-formed object, so it does NOT
-      // use `readJsonBody`. A literal null parses to `null`; a SyntaxError from an empty/malformed body
-      // is mapped to `null` to land in the same refusal rather than an opaque 500; other throws rethrow.
-      const body = await c.req
-        .json<{ tableId: string; transfers?: { lineNo: number; quantity?: string }[] }>()
-        .catch((cause: unknown): null => {
-          if (cause instanceof SyntaxError) return null;
-          throw cause;
-        });
+      // null/empty/malformed body (refused as field "body") from a well-formed object, so it uses
+      // `readRawJsonBody`, not `readJsonBody`. A literal null, and a SyntaxError from an empty/malformed
+      // body, both surface as `null` to land in the same refusal rather than an opaque 500; other
+      // throws rethrow.
+      const body = await readRawJsonBody<{
+        tableId: string;
+        transfers?: { lineNo: number; quantity?: string }[];
+      }>(c);
       // Screen the body shape BEFORE any field access: a null (literal, or the coerced empty/malformed
       // body) and a non-object primitive/array fail here as `management.request_invalid` naming "body",
       // before `body.tableId` reaches `isUuid`. This keeps a bad body out of the domain-specific
