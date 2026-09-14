@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { LiveData } from "@waitron/dashboard-kit";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { ModifiersScreen } from "./modifiers-screen.js";
-import type { DashboardApi, Modifier } from "../api/client.js";
+import type { DashboardApi, Modifier, ModifierDependants } from "../api/client.js";
 import type { ModifierForm } from "../widgets/modifier-form.js";
 import { t } from "../i18n/t.js";
 import { allergenName } from "../i18n/domain.js";
@@ -18,6 +18,7 @@ function api(overrides: Partial<DashboardApi> = {}) {
     createModifier: vi.fn().mockResolvedValue(modifier),
     updateModifier: vi.fn().mockResolvedValue(modifier),
     deleteModifier: vi.fn().mockResolvedValue(undefined),
+    getModifierDependants: vi.fn().mockResolvedValue({ products: [], menus: [], orders: 0 }),
     ...overrides,
   } as unknown as DashboardApi;
 }
@@ -146,25 +147,161 @@ it("shows failed initial loads and retries", async () => {
   el.shadowRoot!.querySelector<HTMLElement>('[data-test="retry"]')!.click();
   await vi.waitFor(() => expect(el.shadowRoot!.querySelector("wt-data-table")).not.toBeNull());
 });
-it("keeps deletion failures in confirmation and deletes only after confirmation", async () => {
-  const client = api({
-    deleteModifier: vi
-      .fn()
-      .mockRejectedValueOnce({ code: "options.group_invalid" })
-      .mockResolvedValue(undefined),
-  });
-  const el = await mount(client);
+// The delete confirmation carries a dependants preview: it lists the products and menu items that
+// would lose the modifier, blocks while an open order still uses it, and shows its own error when
+// the preview cannot load. These mirror the categories screen's delete tests.
+async function openDelete(el: ModifiersScreen) {
   const table = el.shadowRoot!.querySelector("wt-data-table")!;
   await table.updateComplete;
   table.shadowRoot!.querySelector<HTMLElement>('[data-test="delete-m"]')!.click();
   await el.updateComplete;
+}
+function deleteDialog(el: ModifiersScreen) {
+  return el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-modal"]>(
+    'wt-modal[data-test="delete-dialog"]',
+  )!;
+}
+function confirmDelete(el: ModifiersScreen) {
+  return el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+    '[data-test="confirm-delete"]',
+  )!;
+}
+it("shows a spinner in the delete dialog and keeps delete disabled until the preview resolves", async () => {
+  let resolve!: (value: ModifierDependants) => void;
+  const client = api({
+    getModifierDependants: vi
+      .fn()
+      .mockReturnValue(new Promise<ModifierDependants>((r) => (resolve = r))),
+  });
+  const el = await mount(client);
+  await openDelete(el);
+  const dialog = deleteDialog(el);
+  expect(dialog.querySelector("wt-spinner")).not.toBeNull();
+  expect(confirmDelete(el).disabled).toBe(true);
+  resolve({ products: [], menus: [], orders: 0 });
+  await vi.waitFor(() => expect(confirmDelete(el).disabled).toBe(false));
+  expect(dialog.querySelector("wt-spinner")).toBeNull();
+});
+it("lists the affected products and menu items and enables delete", async () => {
+  const client = api({
+    getModifierDependants: vi.fn().mockResolvedValue({
+      products: [{ id: "p1", name: { es: "Café" } }],
+      menus: [{ id: "mn1", name: { es: "Desayuno" } }],
+      orders: 0,
+    }),
+  });
+  const el = await mount(client);
+  await openDelete(el);
+  const dialog = deleteDialog(el);
+  await vi.waitFor(() =>
+    expect(dialog.querySelector('[data-test="delete-warning"]')).not.toBeNull(),
+  );
+  const warning = dialog.querySelector('[data-test="delete-warning"]')!;
+  expect(warning.getAttribute("role")).toBe("alert");
+  expect(warning.textContent).toContain(t("modifiers.delete_warning_intro"));
+  expect(warning.textContent).toContain(
+    t("modifiers.delete_warning_products").replace("{count}", "1"),
+  );
+  expect(warning.textContent).toContain(
+    t("modifiers.delete_warning_menus").replace("{count}", "1"),
+  );
+  expect(dialog.querySelector('[data-test="modifier-delete-products"]')!.textContent).toContain(
+    "Café",
+  );
+  expect(dialog.querySelector('[data-test="modifier-delete-menus"]')!.textContent).toContain(
+    "Desayuno",
+  );
+  expect(dialog.querySelector('[data-test="orders-block"]')).toBeNull();
+  expect(confirmDelete(el).disabled).toBe(false);
+});
+it("blocks deletion while an open order uses the modifier", async () => {
+  const client = api({
+    getModifierDependants: vi.fn().mockResolvedValue({ products: [], menus: [], orders: 2 }),
+  });
+  const el = await mount(client);
+  await openDelete(el);
+  const dialog = deleteDialog(el);
+  await vi.waitFor(() => expect(dialog.querySelector('[data-test="orders-block"]')).not.toBeNull());
+  expect(dialog.querySelector('[data-test="orders-block"]')!.textContent).toContain(
+    t("modifiers.delete_orders_block"),
+  );
+  expect(confirmDelete(el).disabled).toBe(true);
+});
+it("shows no warning and enables delete when nothing depends on the modifier", async () => {
+  const el = await mount();
+  await openDelete(el);
+  const dialog = deleteDialog(el);
+  await vi.waitFor(() => expect(confirmDelete(el).disabled).toBe(false));
+  expect(dialog.querySelector('[data-test="delete-warning"]')).toBeNull();
+  expect(dialog.querySelector('[data-test="modifier-delete-products"]')).toBeNull();
+  expect(dialog.querySelector('[data-test="modifier-delete-menus"]')).toBeNull();
+  expect(dialog.querySelector('[data-test="orders-block"]')).toBeNull();
+  expect(dialog.querySelector("wt-spinner")).toBeNull();
+});
+it("says the delete preview failed and keeps delete disabled", async () => {
+  const client = api({
+    getModifierDependants: vi.fn().mockRejectedValue(new Error("offline")),
+  });
+  const el = await mount(client);
+  await openDelete(el);
+  const dialog = deleteDialog(el);
+  await vi.waitFor(() =>
+    expect(dialog.querySelector('[data-test="dependants-error"]')).not.toBeNull(),
+  );
+  const err = dialog.querySelector('[data-test="dependants-error"]')!;
+  expect(err.textContent).toContain(t("modifiers.delete_preview_error"));
+  expect(err.getAttribute("role")).toBe("alert");
+  expect(dialog.querySelector("wt-spinner")).toBeNull();
+  expect(confirmDelete(el).disabled).toBe(true);
+});
+it("keeps a rejected delete in the dialog with its reason, then closes and reloads on success", async () => {
+  const client = api({
+    deleteModifier: vi
+      .fn()
+      .mockRejectedValueOnce({
+        code: "modifier.in_use",
+        params: { dependency: "order", modifierId: "m" },
+      })
+      .mockResolvedValue(undefined),
+  });
+  const el = await mount(client);
+  await openDelete(el);
+  const dialog = deleteDialog(el);
+  await vi.waitFor(() => expect(confirmDelete(el).disabled).toBe(false));
   expect(client.deleteModifier).not.toHaveBeenCalled();
-  el.shadowRoot!.querySelector<HTMLElement>('[data-test="confirm-delete"]')!.click();
+  confirmDelete(el).click();
   await vi.waitFor(() => expect(client.deleteModifier).toHaveBeenCalledTimes(1));
-  await vi.waitFor(() => expect(el.shadowRoot!.querySelector("wt-dialog")!.open).toBe(true));
-  el.shadowRoot!.querySelector<HTMLElement>('[data-test="confirm-delete"]')!.click();
-  await vi.waitFor(() => expect(el.shadowRoot!.querySelector("wt-dialog")!.open).toBe(false));
+  await vi.waitFor(() => expect(dialog.textContent).toContain(t("modifiers.in_use.order")));
+  expect(dialog.open).toBe(true);
+  // Retrying the same delete succeeds: the dialog closes and the list reloads.
+  confirmDelete(el).click();
+  await vi.waitFor(() => expect(dialog.open).toBe(false));
   expect(client.deleteModifier).toHaveBeenLastCalledWith("m");
+  expect(client.listModifiers).toHaveBeenCalledTimes(2);
+});
+// A failed preview on one modifier must not poison the next dialog: reopening mints a fresh
+// generation, so the stale rejection is discarded.
+it("clears a failed delete preview when the dialog is reopened", async () => {
+  const client = api({
+    getModifierDependants: vi
+      .fn()
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValue({ products: [], menus: [], orders: 0 }),
+  });
+  const el = await mount(client);
+  await openDelete(el);
+  const dialog = deleteDialog(el);
+  await vi.waitFor(() =>
+    expect(dialog.querySelector('[data-test="dependants-error"]')).not.toBeNull(),
+  );
+  dialog.querySelector<HTMLElement>('wt-button[slot="cancel"]')!.click();
+  await el.updateComplete;
+  await openDelete(el);
+  await vi.waitFor(async () => {
+    await el.updateComplete;
+    expect(confirmDelete(el).disabled).toBe(false);
+  });
+  expect(dialog.querySelector('[data-test="dependants-error"]')).toBeNull();
 });
 it("displays only enabled content translations", async () => {
   const { setLocale } = await import("../i18n/t.js");
@@ -238,26 +375,6 @@ it("lists a field's server error once in the summary and shows it beside that fi
   expect(
     (form.shadowRoot!.querySelector('[name="name-es"]') as unknown as { error: string }).error,
   ).toBe(message);
-});
-it("identifies a retained-order dependency and offers deactivation", async () => {
-  const { t } = await import("../i18n/t.js");
-  const client = api({
-    deleteModifier: vi.fn().mockRejectedValue({
-      code: "modifier.in_use",
-      params: { dependency: "order", modifierId: "m" },
-    }),
-  });
-  const el = await mount(client);
-  const table = el.shadowRoot!.querySelector("wt-data-table")!;
-  await table.updateComplete;
-  table.shadowRoot!.querySelector<HTMLElement>('[data-test="delete-m"]')!.click();
-  await el.updateComplete;
-  el.shadowRoot!.querySelector<HTMLElement>('[data-test="confirm-delete"]')!.click();
-  await vi.waitFor(() =>
-    expect(el.shadowRoot!.querySelector("wt-dialog")!.textContent).toContain(
-      t("modifiers.in_use.order"),
-    ),
-  );
 });
 const extrasModifier: Modifier = {
   id: "x",

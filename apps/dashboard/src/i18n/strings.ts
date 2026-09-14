@@ -112,8 +112,6 @@ export const en = {
   "modifiers.loading": "Loading modifiers…",
   "modifiers.empty": "No modifiers to show.",
   "modifiers.load_error": "Modifiers could not be loaded. Try again.",
-  "modifiers.delete_confirm":
-    "Delete this modifier? Attached or recorded modifiers cannot be deleted; make them unavailable instead.",
   "modifiers.effects": "Allergens and dietary effects",
   "modifiers.add_allergen": "Add allergen",
   "modifiers.remove_allergen": "Remove allergen from dish",
@@ -136,6 +134,15 @@ export const en = {
   "modifiers.unlimited": "No limit",
   "modifiers.yes": "Yes",
   "modifiers.no": "No",
+  "modifiers.delete_named": "Delete {name}",
+  "modifiers.delete_warning_intro": "This cannot be undone.",
+  "modifiers.delete_warning_products": "{count} product(s) will lose this modifier.",
+  "modifiers.delete_warning_menus": "{count} menu item(s) will lose this modifier.",
+  "modifiers.delete_orders_block":
+    "An open order uses this modifier. Make its choices unavailable instead, or finish the order first.",
+  "modifiers.delete_preview_error": "The delete preview could not be loaded. Try again.",
+  "modifiers.affected_products": "Affected products",
+  "modifiers.affected_menus": "Affected menu items",
 
   "nav.location_settings": "Location invoices",
   "location_settings.title": "Location invoices",
@@ -1330,8 +1337,6 @@ export const es: Record<StringKey, string> = {
   "modifiers.loading": "Cargando modificadores…",
   "modifiers.empty": "No hay modificadores que mostrar.",
   "modifiers.load_error": "No se pudieron cargar los modificadores. Inténtalo de nuevo.",
-  "modifiers.delete_confirm":
-    "¿Eliminar este modificador? Los modificadores asociados o registrados no se pueden eliminar; márcalos como no disponibles.",
   "modifiers.effects": "Alérgenos y efectos dietéticos",
   "modifiers.add_allergen": "Añadir alérgeno",
   "modifiers.remove_allergen": "Eliminar alérgeno del plato",
@@ -1354,6 +1359,16 @@ export const es: Record<StringKey, string> = {
   "modifiers.unlimited": "Sin límite",
   "modifiers.yes": "Sí",
   "modifiers.no": "No",
+  "modifiers.delete_named": "Eliminar {name}",
+  "modifiers.delete_warning_intro": "Esta acción no se puede deshacer.",
+  "modifiers.delete_warning_products": "{count} producto(s) perderán este modificador.",
+  "modifiers.delete_warning_menus": "{count} elemento(s) de menú perderán este modificador.",
+  "modifiers.delete_orders_block":
+    "Un pedido abierto usa este modificador. Marca sus opciones como no disponibles o finaliza el pedido primero.",
+  "modifiers.delete_preview_error":
+    "No se pudo cargar la vista previa de eliminación. Inténtalo de nuevo.",
+  "modifiers.affected_products": "Productos afectados",
+  "modifiers.affected_menus": "Elementos de menú afectados",
 
   "nav.location_settings": "Facturación del local",
   "location_settings.title": "Facturación del local",

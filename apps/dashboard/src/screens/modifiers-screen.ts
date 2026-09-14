@@ -9,12 +9,18 @@ import {
 import { resolveEnabledContentText, type ContentLanguages } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
-import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
+import "@waitron/ui/src/components/wt-spinner.js";
 import "../widgets/modifier-form.js";
-import type { DashboardApi, Modifier, ModifierChoice, ModifierInput } from "../api/client.js";
+import type {
+  DashboardApi,
+  Modifier,
+  ModifierChoice,
+  ModifierDependants,
+  ModifierInput,
+} from "../api/client.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { allergenName, vatClassName } from "../i18n/domain.js";
@@ -55,6 +61,10 @@ export class ModifiersScreen extends LitElement {
   @state() private busy = false;
   @state() private fieldErrors: Record<string, string> = {};
   @state() private deleting: Modifier | null = null;
+  @state() private dependants: ModifierDependants | null = null;
+  /** The preview fetch failed. Distinct from `dependants === null` (still loading) and from a
+   * loaded object whose lists are empty and orders is 0 (genuinely nothing depends on this). */
+  @state() private dependantsError = false;
   // The modifier whose read-only details modal is open, or null when it is closed.
   @state() private detailing: Modifier | null = null;
   readonly #queries = new DashboardQueries(
@@ -94,11 +104,36 @@ export class ModifiersScreen extends LitElement {
   #openDetails(modifier: Modifier): void {
     this.detailing = modifier;
   }
-  // Stub for Task 11 — the delete dialog gains a dependants preview there. For now it just arms the
-  // existing confirmation, exactly as the old row delete button did.
+  #deleteGeneration = 0;
   #openDelete(modifier: Modifier): void {
-    this.deleting = modifier;
     this.error = null;
+    this.dependants = null;
+    this.dependantsError = false;
+    this.deleting = modifier;
+    const generation = ++this.#deleteGeneration;
+    void this.#loadDependants(modifier.id, generation);
+  }
+  #closeDelete(): void {
+    this.deleting = null;
+    this.dependants = null;
+    this.dependantsError = false;
+    this.error = null;
+    this.#deleteGeneration++;
+  }
+  /** Feeds the delete confirmation's preview. The server refuses a delete only on an open order, so
+   * every other consequence — the products and menu items that lose the modifier — cascades and
+   * cannot be undone; a failed fetch therefore gets its own state rather than an empty stand-in,
+   * which would read as "nothing depends on this" and have a manager confirm the cascade blind.
+   * `generation` guards a reopened dialog against a stale response: comparing `this.deleting?.id`
+   * alone cannot tell a superseded fetch from the current one when the SAME modifier is reopened,
+   * so only a response whose generation still matches is applied. */
+  async #loadDependants(id: string, generation: number): Promise<void> {
+    try {
+      const dependants = await this.api.getModifierDependants(id);
+      if (generation === this.#deleteGeneration) this.dependants = dependants;
+    } catch {
+      if (generation === this.#deleteGeneration) this.dependantsError = true;
+    }
   }
   #message(error: unknown): string {
     const code = codeOf(error);
@@ -160,7 +195,7 @@ export class ModifiersScreen extends LitElement {
       this.busy = false;
       return;
     }
-    this.deleting = null;
+    this.#closeDelete();
     this.busy = false;
     await this.#load();
   }
@@ -169,6 +204,70 @@ export class ModifiersScreen extends LitElement {
   }
   #choiceName(choice: ModifierChoice): string {
     return resolveEnabledContentText(choice.name, currentLocale(), currentContentLanguages());
+  }
+  #depName(entry: { name: Record<string, string> }): string {
+    return resolveEnabledContentText(entry.name, currentLocale(), currentContentLanguages());
+  }
+  /** The single red warning at the top of the delete confirmation: one paragraph naming every
+   * cascade consequence, space-joined from the sentences that apply. Only called when there IS
+   * something to lose, so the "cannot be undone" opener always leads it. The open-order case is not
+   * in here — it blocks the delete rather than warning about it, so it gets its own line. */
+  #deleteWarning(dependants: ModifierDependants): string {
+    const parts = [t("modifiers.delete_warning_intro")];
+    if (dependants.products.length > 0)
+      parts.push(
+        t("modifiers.delete_warning_products").replace(
+          "{count}",
+          String(dependants.products.length),
+        ),
+      );
+    if (dependants.menus.length > 0)
+      parts.push(
+        t("modifiers.delete_warning_menus").replace("{count}", String(dependants.menus.length)),
+      );
+    return parts.join(" ");
+  }
+  /** The delete confirmation's preview: a spinner until `#loadDependants` resolves, then the red
+   * warning naming every cascade consequence above the affected-products and affected-menus lists
+   * (each shown only when non-empty), and — when an open order still uses the modifier — a block
+   * saying why the delete is refused. With nothing depending on the modifier there is no warning,
+   * just the buttons. A failed fetch says so instead, because silence here would read as "nothing
+   * to lose". */
+  #renderDependants() {
+    if (this.dependantsError)
+      return html`<p class="error" data-test="dependants-error" role="alert">
+        ${t("modifiers.delete_preview_error")}
+      </p>`;
+    const dependants = this.dependants;
+    if (!dependants) return html`<wt-spinner></wt-spinner>`;
+    const hasCascade = dependants.products.length > 0 || dependants.menus.length > 0;
+    return html`${
+      hasCascade
+        ? html`<p class="error" data-test="delete-warning" role="alert">
+            ${this.#deleteWarning(dependants)}
+          </p>`
+        : nothing
+    }${
+      dependants.products.length > 0
+        ? html`<p id="affected-products-label">${t("modifiers.affected_products")}</p>
+            <ul data-test="modifier-delete-products" aria-labelledby="affected-products-label">
+              ${dependants.products.map((entry) => html`<li>${this.#depName(entry)}</li>`)}
+            </ul>`
+        : nothing
+    }${
+      dependants.menus.length > 0
+        ? html`<p id="affected-menus-label">${t("modifiers.affected_menus")}</p>
+            <ul data-test="modifier-delete-menus" aria-labelledby="affected-menus-label">
+              ${dependants.menus.map((entry) => html`<li>${this.#depName(entry)}</li>`)}
+            </ul>`
+        : nothing
+    }${
+      dependants.orders > 0
+        ? html`<p class="error" data-test="orders-block" role="alert">
+            ${t("modifiers.delete_orders_block")}
+          </p>`
+        : nothing
+    }`;
   }
   // The allergen and dietary effect lines for one choice, each shown only when the choice sets it —
   // the owner wants this information present only when a choice actually carries it.
@@ -414,34 +513,38 @@ export class ModifiersScreen extends LitElement {
           if (!this.busy) this.open = false;
         }}
       ></dashboard-modifier-form>
-      <wt-dialog
+      <wt-modal
+        data-test="delete-dialog"
         .open=${this.deleting !== null}
-        heading=${t("action.delete")}
-        @wt-close=${() => {
-          if (!this.busy) this.deleting = null;
-        }}
+        heading=${t("modifiers.delete_named").replace(
+          "{name}",
+          this.deleting ? this.#name(this.deleting) : "",
+        )}
         @keydown=${(event: KeyboardEvent) => {
           if (this.busy && event.key === "Escape") event.preventDefault();
         }}
-        ><p>${t("modifiers.delete_confirm")}</p>
-        ${this.error ? html`<p class="error" role="alert">${this.error}</p>` : nothing}<wt-form-actions
-          slot="footer"
+        @wt-close=${(event: Event) => {
+          event.stopPropagation();
+          if (!this.busy) this.#closeDelete();
+        }}
+      >
+        ${this.deleting ? this.#renderDependants() : nothing}
+        ${this.error ? html`<p class="error" role="alert">${this.error}</p>` : nothing}
+        <wt-form-actions slot="footer"
           ><wt-button
             slot="cancel"
             variant="secondary"
             .disabled=${this.busy}
-            @click=${() => {
-              this.deleting = null;
-            }}
+            @click=${() => this.#closeDelete()}
             >${t("action.cancel")}</wt-button
           ><wt-button
             data-test="confirm-delete"
             variant="danger"
-            .disabled=${this.busy}
+            .disabled=${this.busy || !this.dependants || this.dependants.orders > 0}
             @click=${() => void this.#delete()}
             >${t("action.delete")}</wt-button
           ></wt-form-actions
-        ></wt-dialog
+        ></wt-modal
       >
       <wt-modal
         data-test="details-modal"
