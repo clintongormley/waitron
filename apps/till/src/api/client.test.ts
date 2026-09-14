@@ -146,6 +146,30 @@ describe("TillApi", () => {
     });
   });
 
+  it("keeps the validated code and status even when the body's params carry their own", async () => {
+    // The thrown object promises `code` is always a validated string and `status` the real HTTP status.
+    // A server (buggy or hostile) that puts `code`/`status` keys inside `params` must NOT override
+    // either — the lock screen branches on `code`, so a `code: null` slipping through would break its
+    // pin.throttled path. The validated `code` and the answered `status` win over the spread.
+    const fetchStub = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          error: {
+            code: "pin.throttled",
+            params: { code: null, status: 999, retryAfterSeconds: 5 },
+          },
+        }),
+        { status: 429 },
+      ),
+    );
+
+    await expect(new TillApi("", fetchStub).login("p", "0000")).rejects.toMatchObject({
+      code: "pin.throttled",
+      status: 429,
+      retryAfterSeconds: 5,
+    });
+  });
+
   it("falls back to server.internal when the error body carries no code", async () => {
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse({}, 500));
 

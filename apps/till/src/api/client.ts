@@ -2203,10 +2203,12 @@ export class TillApi {
       const code = typeof rawCode === "string" ? rawCode : "server.internal";
       const rawParams = envelope?.params;
       const params = isRecord(rawParams) ? rawParams : undefined;
-      // Spread the error's `params` alongside its `code` so a caller can act on structured detail — the
-      // lock screen's `pin.throttled` countdown reads `retryAfterSeconds` off the thrown object. `status`
-      // (the answered response's HTTP status) rides along additively, after the spread so it always wins.
-      throw { code, ...params, status: res.status };
+      // Spread the error's `params` FIRST so a caller can act on structured detail — the lock screen's
+      // `pin.throttled` countdown reads `retryAfterSeconds` off the thrown object — but let the
+      // validated `code` and the answered HTTP `status` overwrite anything of the same name inside
+      // `params`. The thrown `code` is guaranteed a validated string and `status` the real status, so a
+      // server (buggy or hostile) putting a `code`/`status` key in `params` cannot break the caller.
+      throw { ...params, code, status: res.status };
     }
     const text = await res.text();
     return (text === "" ? undefined : JSON.parse(text)) as T;
