@@ -698,7 +698,7 @@ The original walkthrough is retained under *Detail → Setup wizard*.
 
 ### A3. Printers from the dashboard
 
-**Printer paper width, resolution and character set — this design and plan (2026-09-14).**
+**Printer paper width, resolution and character set — LANDED #367 (2026-09-14).**
 The Edit-printer dialog now asks for a printer's paper width (58mm or 80mm), print resolution
 (180dpi or 203dpi) and character set (WPC1252, PC858 or plain ASCII), each stored as a column on
 `printers` and defaulted to match the owner's TM-T88III. The receipt, payment slip, kitchen ticket
@@ -721,6 +721,13 @@ printer. [Design](superpowers/specs/2026-09-14-printer-paper-resolution-and-char
 - **Deferred (ruling H): the receipt logs no warning when no legal QR dot size exists.** No logger is
   reachable from `receipt-print.ts`, and in practice the fallback is unreachable today for any link
   `validate.ts` accepts (`apps/server/src/qr-link-range.test.ts`).
+- **Building the QR raster now runs inside the sale-recording transaction** (via `formatReceipt` in
+  `enqueueSaleReceipt`), where the old native-QR path only concatenated bytes. The JavaScript QR encoder
+  can throw on an oversized link, which would roll the sale back — but every link `validate.ts` accepts
+  is within QR capacity (`qr-link-range.test.ts` proves it), so this is unreachable for a real sale. The
+  Codex run-it review at #367 flagged it. If we ever want belt-and-braces against §5, wrap the raster in
+  a `try/catch` that falls back to the printer's built-in QR command — at the cost of a QR whose size we
+  no longer control. Left as an owner decision, not applied.
 - **The Edit-printer dialog follows the dashboard's own language, not the venue's** (ruling I) — a
   recorded departure from the spec, which asked for the venue language.
 - The kitchen ticket's per-layout formatting dedup (`kitchen-print.ts`) is byte-invisible, so no test
@@ -741,6 +748,11 @@ printer. [Design](superpowers/specs/2026-09-14-printer-paper-resolution-and-char
 - `PC858_HIGH` (the character set's upper half) is pinned at 18 of its 128 positions in the committed
   tests; a reviewer verified the full table against Python's `cp858` codec, but that check itself was
   never committed.
+- Cleanup follow-up (simplify review at #367): a "wrap this text and push each line to the builder"
+  closure is hand-written six times across `receipt-ticket.ts`, `payment-slip.ts`, `kitchen-ticket.ts`
+  and `test-page.ts`, plus a label/amount-row variant twice. Factoring one helper into
+  `@waitron/printing` would let all four drop their local closures. Not done at land time to avoid a
+  cross-cutting refactor of fiscal receipt code.
 
 **Office printers greyed out in the scan — LANDED #359 (2026-09-14).**
 Office laser printers also accept raw print jobs on port 9100, so the scan and the address check
