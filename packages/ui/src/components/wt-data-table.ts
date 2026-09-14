@@ -5,9 +5,18 @@ import { baseStyles } from "../base-styles.js";
 export interface DataTableColumn<Row> {
   key: string;
   label: string;
-  cell: (row: Row) => unknown;
+  // Second parameter is OPTIONAL so the primitive's own 1-arg call sites still compile before the
+  // ancestor-walk task threads the context in, and every existing 1-arg column definition stays
+  // assignable. The primitive is the only site that INVOKES cell; external code only defines it.
+  cell: (row: Row, context?: { ancestorOnly: boolean }) => unknown;
   sortValue?: (row: Row) => string | number | null | undefined;
   searchValue?: (row: Row) => string;
+  filter?: {
+    label: string;
+    allLabel: string;
+    value: (row: Row) => string;
+    options: { value: string; label: string }[];
+  };
   align?: "start" | "end";
 }
 
@@ -133,6 +142,22 @@ export class WtDataTable<Row = unknown> extends LitElement {
         font: inherit;
       }
 
+      .table-filters {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--wt-space-2);
+      }
+
+      .table-filter {
+        min-height: var(--wt-tap-min);
+        padding: var(--wt-space-2) var(--wt-space-3);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-md);
+        background: var(--wt-color-surface);
+        color: var(--wt-color-text);
+        font: inherit;
+      }
+
       .tree-toggle {
         width: var(--wt-tap-min);
         height: var(--wt-tap-min);
@@ -192,6 +217,8 @@ export class WtDataTable<Row = unknown> extends LitElement {
   @property() searchPlaceholder = "Search";
   @property() noMatchesMessage = "No matches";
   @state() private searchText = "";
+  /** The chosen value for each filterable column, keyed by column key; "" (or absent) means "all". */
+  @state() private filterSelections: Record<string, string> = {};
   @state() private collapsed = new Set<string>();
 
   #emitSelection(next: string[]): void {
@@ -290,11 +317,21 @@ export class WtDataTable<Row = unknown> extends LitElement {
     return term === "" || this.#searchHaystack(row).includes(term);
   }
 
-  /** The rows left after the toolbar (search now; filters in Task 3). The single choke point every
-   * render path funnels through, so flat and tree mode narrow identically. */
+  /** A row passes the filters only if every active dropdown (a non-"all" selection) matches it. */
+  #passesFilters(row: Row): boolean {
+    for (const column of this.columns) {
+      if (!column.filter) continue;
+      const selected = this.filterSelections[column.key] ?? "";
+      if (selected !== "" && column.filter.value(row) !== selected) return false;
+    }
+    return true;
+  }
+
+  /** The rows left after the toolbar: every active filter (AND), then the search term. The single
+   * choke point every render path funnels through, so flat and tree mode narrow identically. */
   #visibleRows(): readonly Row[] {
     if (!this.searchable) return this.rows;
-    return this.rows.filter((row) => this.#passesSearch(row));
+    return this.rows.filter((row) => this.#passesFilters(row) && this.#passesSearch(row));
   }
 
   #sortedRows(rows: readonly Row[]): Row[] {
@@ -449,6 +486,33 @@ export class WtDataTable<Row = unknown> extends LitElement {
           this.searchText = (event.target as HTMLInputElement).value;
         }}
       />
+      ${
+        this.columns.some((column) => column.filter)
+          ? html`<div class="table-filters">
+              ${this.columns.map((column) =>
+                column.filter
+                  ? html`<select
+                      class="table-filter"
+                      data-filter=${column.key}
+                      aria-label=${column.filter.label}
+                      .value=${this.filterSelections[column.key] ?? ""}
+                      @change=${(event: Event) => {
+                        this.filterSelections = {
+                          ...this.filterSelections,
+                          [column.key]: (event.target as HTMLSelectElement).value,
+                        };
+                      }}
+                    >
+                      <option value="">${column.filter.allLabel}</option>
+                      ${column.filter.options.map(
+                        (option) => html`<option value=${option.value}>${option.label}</option>`,
+                      )}
+                    </select>`
+                  : nothing,
+              )}
+            </div>`
+          : nothing
+      }
     </div>`;
   }
 

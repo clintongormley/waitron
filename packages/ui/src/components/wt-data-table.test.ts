@@ -365,4 +365,92 @@ test("noMatchesMessage shows when a search excludes every row", async () => {
   input.dispatchEvent(new Event("input"));
   await el.updateComplete;
   expect(el.shadowRoot!.querySelector(".message")!.textContent).toContain("Nothing matches");
+  // The toolbar must survive the no-match branch, or the search box vanishes the moment a term
+  // clears every row and the person cannot edit or clear it.
+  expect(el.shadowRoot!.querySelector(".table-toolbar")).not.toBeNull();
+});
+
+test("search matches a column that exposes only a sortValue", async () => {
+  // The name column has neither searchValue nor sortValue, so it contributes nothing; count has a
+  // sortValue but no searchValue, exercising the String(sortValue(row) ?? "") fallback branch.
+  const el = await table({
+    searchable: true,
+    columns: [
+      { key: "name", label: "Name", cell: (r: Row) => r.name },
+      { key: "count", label: "Count", cell: (r: Row) => r.count, sortValue: (r: Row) => r.count },
+    ],
+  });
+  const input = el.shadowRoot!.querySelector<HTMLInputElement>(".table-search")!;
+  input.value = "10";
+  input.dispatchEvent(new Event("input"));
+  await el.updateComplete;
+  expect(rowText(el)).toEqual(["Ada10"]);
+});
+
+type RowS = { id: string; name: string; status: string };
+// Active rows carry "Active" in their name so a narrowed set can be asserted on visible text while
+// the filter still matches the lowercase status value the dropdown option carries.
+const rowsS: RowS[] = [
+  { id: "1", name: "Ada Active", status: "active" },
+  { id: "2", name: "Bea Inactive", status: "off" },
+];
+const withStatus: DataTableColumn<RowS>[] = [
+  { key: "name", label: "Name", cell: (r: RowS) => r.name, searchValue: (r: RowS) => r.name },
+  {
+    key: "status",
+    label: "Status",
+    cell: (r: RowS) => r.status,
+    filter: {
+      label: "Filter by status",
+      allLabel: "Any status",
+      value: (r: RowS) => r.status,
+      options: [
+        { value: "active", label: "Active" },
+        { value: "off", label: "Inactive" },
+      ],
+    },
+  },
+];
+function rowTextS(el: WtDataTable<RowS>): string[] {
+  return [...el.shadowRoot!.querySelectorAll("tbody tr")].map((r) => r.textContent!.trim());
+}
+async function tableS(props: Partial<WtDataTable<RowS>> = {}): Promise<WtDataTable<RowS>> {
+  const el = (await mount(
+    '<wt-data-table aria-label="Users"></wt-data-table>',
+  )) as WtDataTable<RowS>;
+  Object.assign(el, { rows: rowsS, rowKey: (r: RowS) => r.id, ...props });
+  await el.updateComplete;
+  return el;
+}
+
+test("renders one dropdown per filtered column and narrows on selection", async () => {
+  const el = await tableS({ searchable: true, columns: withStatus });
+  const select = el.shadowRoot!.querySelector<HTMLSelectElement>('select[data-filter="status"]')!;
+  expect([...select.options].map((o) => o.textContent!.trim())).toEqual([
+    "Any status",
+    "Active",
+    "Inactive",
+  ]);
+  select.value = "active";
+  select.dispatchEvent(new Event("change"));
+  await el.updateComplete;
+  expect(rowTextS(el).every((t) => t.includes("Active"))).toBe(true);
+});
+
+test("search and filter combine with AND", async () => {
+  const el = await tableS({ searchable: true, columns: withStatus });
+  const input = el.shadowRoot!.querySelector<HTMLInputElement>(".table-search")!;
+  const select = el.shadowRoot!.querySelector<HTMLSelectElement>('select[data-filter="status"]')!;
+  input.value = "ada";
+  input.dispatchEvent(new Event("input"));
+  select.value = "off";
+  select.dispatchEvent(new Event("change"));
+  await el.updateComplete;
+  // Ada is Active, so name=ada AND status=off yields nothing.
+  expect(el.shadowRoot!.querySelector(".message")).not.toBeNull();
+});
+
+test("a column with no filter contributes no dropdown", async () => {
+  const el = await tableS({ searchable: true, columns: withStatus });
+  expect(el.shadowRoot!.querySelectorAll("select[data-filter]").length).toBe(1);
 });

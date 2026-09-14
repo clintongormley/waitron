@@ -76,4 +76,31 @@ describe.each(["light", "dark"] as const)("wt-data-table a11y (%s theme)", (them
     await el.updateComplete;
     await expectNoA11yViolations(host);
   });
+
+  test("toolbar with a search box and a filter dropdown", async () => {
+    const el = (await mountThemed(
+      '<wt-data-table aria-label="Users"></wt-data-table>',
+      theme,
+    )) as WtDataTable<{ id: string; name: string; status: string }>;
+    el.columns = [
+      { key: "name", label: "Name", cell: (r) => r.name, searchValue: (r) => r.name },
+      {
+        key: "status",
+        label: "Status",
+        cell: (r) => r.status,
+        filter: {
+          label: "Filter by status",
+          allLabel: "Any status",
+          value: (r) => r.status,
+          options: [{ value: "a", label: "Active" }],
+        },
+      },
+    ];
+    el.rows = [{ id: "1", name: "Ada", status: "Active" }];
+    el.rowKey = (row) => row.id;
+    el.searchable = true;
+    el.searchLabel = "Search users";
+    await el.updateComplete;
+    await expectNoA11yViolations(host);
+  });
 });
