@@ -321,13 +321,6 @@ export function findSpanish(source: string, words: ReadonlySet<string>): Violati
 }
 
 /**
- * Every `.ts` file under a package's `src`, discovered rather than listed.
- *
- * Returns `[]` for a package that does not exist yet — `core`, `fiscal` and
- * `shared` arrive in later tasks, and this guard must be in place before them
- * rather than retrofitted after the first Spanish name has already landed.
- */
-/**
  * Whether a directory entry is dropped by the fiscal-fidelity exemption: only within
  * `replication-tests`, and only when the entry's exact BASENAME is a fidelity fixture — a
  * differently-prefixed file that merely ends in the same string (`other-replication-fidelity.pg.test.ts`)
@@ -341,6 +334,13 @@ export function isFidelityExempt(packageName: string, entry: string): boolean {
   return FISCAL_FIDELITY_FIXTURES.some((name) => basename(entry) === name);
 }
 
+/**
+ * Every `.ts` file under a package's `src`, discovered rather than listed.
+ *
+ * Returns `[]` for a package that does not exist yet — `core`, `fiscal` and
+ * `shared` arrive in later tasks, and this guard must be in place before them
+ * rather than retrofitted after the first Spanish name has already landed.
+ */
 export function sourceFilesIn(packageName: string): string[] {
   const root = join(PACKAGES_ROOT, packageName, "src");
   if (!existsSync(root)) return [];
