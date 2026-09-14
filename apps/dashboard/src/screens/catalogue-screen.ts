@@ -374,15 +374,21 @@ export class CatalogueScreen extends LitElement {
         @wt-submit=${this.#submitUnit}
         @wt-cancel=${() => this.#child.cancel()}
       ></dashboard-unit-form>
-      <dashboard-category-form
-        .open=${this.#child.kind === "category"}
-        .busy=${this.#child.busy}
-        .languages=${this.contentLanguages ?? { defaultLanguage: "en", languages: ["en"] }}
-        .categories=${this.categories}
-        .api=${this.api}
-        @wt-submit=${this.#submitCategory}
-        @wt-cancel=${() => this.#child.cancel()}
-      ></dashboard-category-form>
+      ${
+        // The form's name fields follow the content languages, so it waits for them rather than
+        // offering a field in a guessed language.
+        this.contentLanguages
+          ? html`<dashboard-category-form
+              .open=${this.#child.kind === "category"}
+              .busy=${this.#child.busy}
+              .languages=${this.contentLanguages}
+              .categories=${this.categories}
+              .api=${this.api}
+              @wt-submit=${this.#submitCategory}
+              @wt-cancel=${() => this.#child.cancel()}
+            ></dashboard-category-form>`
+          : nothing
+      }
       <dashboard-modifier-form
         .open=${this.#child.kind === "modifier"}
         .busy=${this.#child.busy}

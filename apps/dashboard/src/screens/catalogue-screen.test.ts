@@ -227,6 +227,29 @@ describe("catalogue-screen", () => {
     expect(editor(el).currentValue.unitId).toBe("u2");
   });
 
+  it("waits for the content languages before offering the new-category form", async () => {
+    let languagesLoaded!: (value: { defaultLanguage: string; languages: string[] }) => void;
+    const api = stubApi({
+      getContentLanguages: vi.fn().mockReturnValue(new Promise((done) => (languagesLoaded = done))),
+    });
+    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    await flush(el);
+    emit(editor(el), "wt-create-related", { kind: "category" });
+    await el.updateComplete;
+    // No name field in a guessed language: nothing could be submitted under a language the venue
+    // may not use.
+    expect(el.shadowRoot!.querySelector("dashboard-category-form")).toBeNull();
+    languagesLoaded({ defaultLanguage: "es", languages: ["es"] });
+    await flush(el);
+    const form = el.shadowRoot!.querySelector("dashboard-category-form")!;
+    expect(form.open).toBe(true);
+    await form.updateComplete;
+    const names = [...form.shadowRoot!.querySelectorAll("wt-input")].map((input) =>
+      input.getAttribute("name"),
+    );
+    expect(names).toEqual(["category-name-es"]);
+  });
+
   it("ignores a late product response after the editor is cancelled", async () => {
     let resolve!: (value: ProductEditorValue) => void;
     const api = stubApi({
