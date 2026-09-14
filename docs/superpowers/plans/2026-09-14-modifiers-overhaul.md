@@ -38,7 +38,7 @@
 - Modify `packages/catalogue/src/schema/menu.ts` — `menu_item_option_groups.group_fk` (and, if the real-PG test requires, `menu_item_options.option_fk`) → `onDelete("cascade")`.
 - Create `packages/catalogue/drizzle/NNNN_*.sql` — generated migration for the FK change.
 - Modify `packages/catalogue/src/modifiers.ts` — order-only refusal, `modifierDependants`.
-- Modify `packages/catalogue/src/index.ts` (or the package's public barrel) — export `modifierDependants` and the `ModifierDependants` type if not already surfaced via `modifiers.ts`.
+- (No barrel edit expected: `packages/catalogue/src/index.ts` re-exports `modifiers.ts` with `export *`, so `modifierDependants`/`ModifierDependants` surface automatically. Confirm that line holds.)
 - Modify `apps/server/src/catalogue-api.ts` — `GET /management-api/modifiers/:id/dependants`.
 - Modify `apps/dashboard/src/api/client.ts` — `getModifierDependants` + `ModifierDependants` interface.
 
@@ -183,6 +183,8 @@ In `effects()`, normalise the dietary effect so a choice never carries `null`:
 
 In `validateModifierSelections`, replace the two `definition.available` gate reads (the `!definition.available` at the per-selection check, and the trailing required-selection loop) with `!isModifierOffered(definition)` and `isModifierOffered(definition)` respectively — behaviour identical, one seam.
 
+The till widgets' four bare `modifier.available` reads (`apps/till/src/widgets/product-grid.ts`, `modifier-picker.ts` ×2, `tender-pay.ts`) are left as-is on purpose: they read already-projected modifiers where `available` is `true` for every non-yes/no type, so they agree with `isModifierOffered`. Under pre-production drop/recreate there is no legacy `active=false` non-yes/no row to make them diverge. Not a change; noted so a reviewer does not read it as a missed seam.
+
 - [ ] **Step 5: Use the helper in `modifier-projection.ts`**
 
 In both `readProductModifiers` and `readMenuModifiers`, change the definition filter from `.filter((modifier) => modifier.available)` to `.filter(isModifierOffered)` and add the import:
@@ -230,22 +232,22 @@ availability reads."
 
 - [ ] **Step 1: Write the failing test**
 
-Add a test asserting that a selected modifier choice with an empty dietary effect leaves the dish's declared labels intact (previously a `null` effect withheld all of them). Mirror the fixture the existing `asServedDietaryDeclarations` tests build; the new assertion:
+Add a test asserting that a selected modifier choice with a **null** dietary effect leaves the dish's declared labels intact. The branch that changes is the `null`/`undefined` one: `applyDietaryEffects` (`packages/catalogue/src/dietary-declarations.ts:42`) withholds (`return []`) only when an effect is `null`, and the current `asServedDietaryDeclarations` maps a selected choice's `null` effect to `null`. A choice whose `dietaryEffect` is already `{ invalidates: [] }` keeps the claims *today* — a test using that fixture would pass before the change and prove nothing (the "both answers look alike" trap, CLAUDE.md §1). The fixture MUST use `null`.
 
 ```ts
-it("keeps the dish's dietary claims when a selected modifier choice has no dietary effect", () => {
-  // A dish declared vegan, a selected choice whose dietaryEffect is { invalidates: [] }.
-  const line = lineWithSelectedChoice({ dietaryEffect: { invalidates: [] } }, ["vegan"]);
+it("keeps the dish's dietary claims when a selected modifier choice has a null dietary effect", () => {
+  // A dish declared vegan, a selected choice whose dietaryEffect is null (legacy / unreviewed).
+  const line = lineWithSelectedChoice({ dietaryEffect: null }, ["vegan"]);
   expect(asServedDietaryDeclarations(line)).toContain("vegan");
 });
 ```
 
-(Build `lineWithSelectedChoice` / reuse the file's existing line helper so a choice is selected and its `dietaryEffect` is `{ invalidates: [] }`. If the file has no such helper, follow the shape the existing tests already construct for `selectedItems(line)`.)
+(Build `lineWithSelectedChoice` / reuse the file's existing line helper so a choice is selected and its `dietaryEffect` is `null`. If the file has no such helper, follow the shape the existing tests already construct for `selectedItems(line)`.)
 
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run: `pnpm --filter @waitron/till test as-served`
-Expected: FAIL — the current mapping treats the choice's effect as present-but-empty correctly, but a stored/legacy `null` (and the old semantics) withheld the claims; confirm the failing reason is the null branch returning `null` and `applyDietaryEffects` returning `[]`.
+Expected: FAIL — the selected choice's `null` effect makes the map produce a withholding `null`, `applyDietaryEffects` returns `[]`, and "vegan" is absent. Confirm that is the failing reason before implementing.
 
 - [ ] **Step 3: Change the null mapping to "no effect"**
 
@@ -289,7 +291,7 @@ an empty effect now means the choice changes nothing."
 **Interfaces:**
 - Produces: after this task, deleting an `option_groups` row that a menu item publishes succeeds at the database level.
 
-- [ ] **Step 1: Write the failing real-PG test, with a negative control**
+- [ ] **Step 1: Write the failing real-PG test (the red run is the control)**
 
 Create `packages/catalogue/src/modifier-delete-cascade.pg.test.ts`. Use the package's real-Postgres helper (`useRealPostgres` — follow an existing `*.pg.test.ts` in the package for the exact import and container setup). The test:
 
@@ -301,7 +303,7 @@ Create `packages/catalogue/src/modifier-delete-cascade.pg.test.ts`. Use the pack
 // 3. Assert it succeeds, and that the menu_item_option_groups and menu_item_options rows are gone.
 ```
 
-Add a **control** in the same file that documents the pre-flip behaviour: against a fixture whose FK is still `RESTRICT` (i.e. run this assertion BEFORE applying the schema change / on a group that a menu still references with the un-flipped FK), the delete throws a foreign-key violation (SQLSTATE `23503`). The control exists so a green "delete succeeds" is not mistaken for a delete that never hit the constraint. Assert the control path raises `23503`.
+**The control is the TDD red step, not a committed assertion.** Once the migration is applied there is no un-flipped FK left to write a permanent control against — the migrated schema only has the cascade. So the "a green delete is not a delete that never hit the constraint" guarantee comes from *watching Step 2 fail* against the pre-migration schema with SQLSTATE `23503` (a foreign-key violation), and only then applying the flip in Step 3. Keep the committed test as the single positive assertion (delete succeeds, link rows gone); do not try to commit a RESTRICT control that the schema can no longer produce.
 
 - [ ] **Step 2: Run the test to verify it fails**
 
@@ -322,8 +324,8 @@ In `packages/catalogue/src/schema/menu.ts`, change the `menu_item_option_groups_
 
 Generate the migration (never hand-write the SQL):
 
-Run: `pnpm --filter @waitron/catalogue drizzle-kit generate` (use the package's actual generate script — check `package.json`; it may be `pnpm --filter @waitron/catalogue generate`).
-Then verify the generated SQL drops and recreates the constraint with `ON DELETE CASCADE`, and that its journal entry is monotonic (`scripts/journal-monotonic.test.ts` guards this).
+Run: `pnpm --filter @waitron/catalogue db:generate` (the package's generate script — confirm in `packages/catalogue/package.json`).
+The latest catalogue migration is `0011_category_colour.sql`, so the new file is `0012_*`. Verify the generated SQL drops and recreates the constraint with `ON DELETE CASCADE`, and that its journal entry is monotonic (`scripts/journal-monotonic.test.ts` guards this).
 
 - [ ] **Step 4: Run the test; if it still fails on `menu_item_options_option_fk`, flip that too**
 
@@ -511,7 +513,7 @@ export async function modifierDependants(
 }
 ```
 
-Export `modifierDependants` and `ModifierDependants` from the same barrel that already exports `deleteModifier` (grep for `deleteModifier` in the catalogue package's `index.ts`/entry to find it).
+The catalogue barrel `packages/catalogue/src/index.ts` already does `export * from "./modifiers.js"`, so adding `modifierDependants` and `ModifierDependants` to `modifiers.ts` surfaces them automatically — no barrel edit is needed (confirm the `export *` line before assuming it).
 
 - [ ] **Step 5: Run the tests to verify they pass**
 
@@ -521,7 +523,7 @@ Expected: PASS. Then `pnpm --filter @waitron/catalogue test:coverage` if chasing
 - [ ] **Step 6: Commit**
 
 ```bash
-git add packages/catalogue/src/modifiers.ts packages/catalogue/src/*.pg.test.ts packages/catalogue/src/index.ts
+git add packages/catalogue/src/modifiers.ts packages/catalogue/src/*.pg.test.ts
 git commit -s -m "Modifiers: delete detaches products and menus, refuses only on open orders
 
 Deleting a modifier now removes it from the products and menus that use
@@ -1075,7 +1077,7 @@ Table (replaces the `wt-input` + `wt-data-table` block; keep the loading/loadErr
             .rows=${this.modifiers}
             .columns=${columns}
             .rowKey=${(m: Modifier) => m.id}
-            emptyText=${t("modifiers.empty")}
+            .emptyMessage=${t("modifiers.empty")}
           ></wt-data-table>`
         : nothing}
 ```
