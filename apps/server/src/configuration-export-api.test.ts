@@ -47,6 +47,7 @@ const request: VenueRequest = {
 };
 
 const suite = usePgliteDb({
+  resetPerTest: false,
   migrations: migrationOptionsFor(manifestSets(), null),
   setup: async (db) => {
     venue = await applyVenue(planVenue(request, ALL_MODULES), { db, modules: ALL_MODULES });

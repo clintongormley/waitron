@@ -25,6 +25,7 @@ vi.mock("./verify-password.js", async (importOriginal) => {
 // or trigger assertion would be a false pass here (CLAUDE.md §4); nothing below makes one.
 let tenantId: string;
 const suite = usePgliteDb({
+  resetPerTest: false,
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
   setup: async (db) => {
     tenantId = await seedTenant(db);

@@ -9,7 +9,7 @@ const TENANT_A = "11111111-1111-4111-8111-111111111111";
 const CANVAS_A = "11111111-0000-4000-8000-0000000000a2";
 
 describe("device_profiles composite canvas FK (tenant_id, canvas_id) → canvases", () => {
-  const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS] });
+  const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
   let admin: Database;
 
   beforeAll(async () => {

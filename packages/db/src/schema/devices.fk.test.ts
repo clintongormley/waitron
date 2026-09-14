@@ -19,7 +19,7 @@ const TOKEN_HASH = "scrypt$00$00";
 // ONLY constraint each case leaves violated is the FK under test. `devices` is the only table that
 // carries a device binding FK, so it is the only one with cases here.
 describe("devices composite FKs (till / receipt_printer / device_profile)", () => {
-  const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS] });
+  const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
   let admin: Database;
 
   beforeAll(async () => {

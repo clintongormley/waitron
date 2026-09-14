@@ -49,7 +49,7 @@ async function openOrder(admin: Database, orderNumber: number): Promise<string> 
 }
 
 describe("park & retrieve schema", () => {
-  const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS] });
+  const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
 
   beforeAll(async () => {
     const admin = suite.db;

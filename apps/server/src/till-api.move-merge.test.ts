@@ -35,6 +35,7 @@ let cfg: TillConfig;
 let ana: { id: string };
 
 const suite = usePgliteDb({
+  resetPerTest: false,
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
   setup: async (db) => {

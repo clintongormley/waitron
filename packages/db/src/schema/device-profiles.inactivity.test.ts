@@ -11,7 +11,7 @@ import { usePgliteDb } from "../testing/lifecycle.js";
 const TENANT = "11111111-1111-4111-8111-111111111111";
 
 describe("device_profiles.inactivity_timeout_seconds", () => {
-  const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS] });
+  const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
   let admin: Database;
 
   beforeAll(async () => {

@@ -11,6 +11,7 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
 const pg = usePgliteDb({
   migrations: TEST_MIGRATIONS,
   setup: seedTenantTillSif,
+  resetPerTest: false,
 });
 
 /** Runs `fn` inside a tenant transaction, as the non-owner application role. */

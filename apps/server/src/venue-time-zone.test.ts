@@ -10,6 +10,7 @@ import { readVenueTimeZone } from "./venue-time-zone.js";
 let tenantId: string;
 let locationId: string;
 const suite = usePgliteDb({
+  resetPerTest: false,
   migrations: [CORE_MIGRATIONS],
   setup: async (db) => {
     tenantId = await seedTenant(db);

@@ -46,6 +46,7 @@ let ana: { id: string };
 let cafeId: string;
 
 const suite = usePgliteDb({
+  resetPerTest: false,
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
   setup: async (db) => {

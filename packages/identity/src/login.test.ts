@@ -15,6 +15,7 @@ import { codeOf, seedPerson, seedTill } from "../test/fixtures.js";
 let tenantId: string;
 
 const suite = usePgliteDb({
+  resetPerTest: false,
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
   setup: async (db) => {
     tenantId = await seedTenant(db);

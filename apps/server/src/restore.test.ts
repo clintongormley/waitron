@@ -30,6 +30,7 @@ import {
 
 // PGlite exercises transaction rollback here; these tests make no privilege or concurrency claim.
 const suite = usePgliteDb({
+  resetPerTest: false,
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 120_000,
 });

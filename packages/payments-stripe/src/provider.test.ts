@@ -187,8 +187,6 @@ describe("StripeTerminalProvider.collect", () => {
   });
 });
 
-describe("StripeTerminalProvider tenant mis-wiring", () => {});
-
 describe("StripeTerminalProvider reversals", () => {
   it("refund: full refund via Stripe -> state refunded", async () => {
     const fake = new FakeStripe();

@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { afterAll, beforeAll, inject } from "vitest";
+import { afterAll, afterEach, beforeAll, inject } from "vitest";
 import { createPgliteDb, createPostgresDb, type Database } from "../client.js";
 import { runMigrations, type MigrationOptions } from "../migrate.js";
 import { assertSafeIdentifier, probeRoleStatement, type ProbeRole } from "./identifiers.js";
@@ -28,6 +28,17 @@ export interface PgliteSuiteOptions {
   setup?: (db: Database) => Promise<void>;
   /** Override when a suite's own setup is slower than the default. */
   timeoutMs?: number;
+  /**
+   * Empty every data table after each test so the suite is order-independent WITHOUT scoping reads
+   * by tenant (the isolation the drop-tenant-id branch removes). Default `true`.
+   *
+   * Set `false` for a suite that seeds shared rows ONCE — in `setup` or its own `beforeAll` — and
+   * reads them across several `it`s; a per-test reset would wipe that fixture out from under the
+   * second test. Schema (including tables `setup` creates, e.g. a fake backend's) always survives;
+   * only DATA is cleared. The reset leaves the append-only tables' `ENABLE ALWAYS` triggers exactly
+   * as it found them (see {@link buildResetPlan}).
+   */
+  resetPerTest?: boolean;
 }
 
 export interface PgliteSuite {
@@ -35,9 +46,84 @@ export interface PgliteSuite {
   readonly db: Database;
 }
 
-/** Registers `beforeAll`/`afterAll` for one PGlite database shared by the calling suite. */
+/**
+ * Empties every data table between tests. TRUNCATE fires only TRUNCATE-level triggers, not the
+ * row-level `reject_mutation` immutability triggers — but the append-only tables ALSO carry a
+ * `BEFORE TRUNCATE` trigger that is `ENABLE ALWAYS` (`0001_db_baseline_sql.sql`), which fires even
+ * under `session_replication_role = replica` and blocks the TRUNCATE. So each such trigger is
+ * disabled around the TRUNCATE and restored to its EXACT prior `tgenabled` — an ALWAYS trigger
+ * downgraded to a plain ENABLE would silently weaken the append-only guarantee (CLAUDE.md §5).
+ *
+ * Captured once (schema is stable after migration) so each reset is three cheap statements.
+ * Table and trigger names come from the catalog and are quoted by Postgres's own `format('%I')` /
+ * `quote_ident`, the escape a utility statement needs since it cannot bind an identifier
+ * (CLAUDE.md §3). The `__drizzle_migrations*` journal tables are left alone — the migration state
+ * must outlive the data.
+ */
+interface ResetPlan {
+  truncate: string | undefined;
+  disable: string[];
+  restore: string[];
+}
+
+async function buildResetPlan(db: Database): Promise<ResetPlan> {
+  const tables = await db.execute<{ ident: string }>(sql`
+    select format('%I.%I', schemaname, tablename) as ident
+    from pg_tables
+    where schemaname not in ('pg_catalog', 'information_schema')
+      and tablename not like '\\_\\_drizzle\\_migrations%'`);
+  const idents = tables.rows.map((row) => row.ident);
+  const truncate =
+    idents.length === 0 ? undefined : `truncate ${idents.join(", ")} restart identity cascade`;
+
+  // `tgtype & 32` is TRIGGER_TYPE_TRUNCATE; `tgisinternal` excludes FK constraint triggers.
+  const triggers = await db.execute<{ tbl: string; name: string; tgenabled: string }>(sql`
+    select format('%I.%I', n.nspname, c.relname) as tbl,
+           quote_ident(t.tgname) as name,
+           t.tgenabled::text as tgenabled
+    from pg_trigger t
+    join pg_class c on c.oid = t.tgrelid
+    join pg_namespace n on n.oid = c.relnamespace
+    where not t.tgisinternal and (t.tgtype & 32) = 32`);
+  // No `?? "enable"` fallback: an unrecognised tgenabled must throw, never silently restore an
+  // append-only trigger as a plain ENABLE (CLAUDE.md §5). 'O','D','R','A' are the only values
+  // Postgres records; a future one is a bug to surface, not to paper over.
+  const enableForm: Record<string, string> = {
+    A: "enable always",
+    R: "enable replica",
+    D: "disable",
+    O: "enable",
+  };
+  const disable: string[] = [];
+  const restore: string[] = [];
+  for (const { tbl, name, tgenabled } of triggers.rows) {
+    const form = enableForm[tgenabled];
+    if (form === undefined) throw new Error(`unexpected tgenabled: ${tgenabled} on ${tbl}.${name}`);
+    disable.push(`alter table ${tbl} disable trigger ${name}`);
+    restore.push(`alter table ${tbl} ${form} trigger ${name}`);
+  }
+  return { truncate, disable, restore };
+}
+
+async function applyReset(db: Database, plan: ResetPlan): Promise<void> {
+  if (plan.truncate === undefined) return;
+  try {
+    // The disable loop is INSIDE the try so a throw partway through it still reaches the finally
+    // that restores every trigger — a trigger left disabled would let the next test mutate an
+    // append-only table.
+    for (const statement of plan.disable) await db.execute(sql.raw(statement));
+    await db.execute(sql.raw(plan.truncate));
+  } finally {
+    for (const statement of plan.restore) await db.execute(sql.raw(statement));
+  }
+}
+
+/** Registers `beforeAll`/`afterAll` (and, unless opted out, a per-test data reset) for one PGlite
+ * database shared by the calling suite. */
 export function usePgliteDb(options: PgliteSuiteOptions): PgliteSuite {
   let db: Database | undefined;
+  let resetPlan: ResetPlan | undefined;
+  const resetPerTest = options.resetPerTest ?? true;
 
   // Assigned the instant it exists, BEFORE migrations or setup can throw. Assigning at the end of
   // the hook instead leaves `db` undefined when a later step fails, so `afterAll` closes nothing and
@@ -48,7 +134,15 @@ export function usePgliteDb(options: PgliteSuiteOptions): PgliteSuite {
     db = await createPgliteDb();
     for (const migrations of options.migrations) await runMigrations(db, migrations);
     if (options.setup !== undefined) await options.setup(db);
+    // After setup so a fake backend's tables are in the truncate set; the plan records only names
+    // and trigger state, so setup's own seeded rows (present now) do not affect it.
+    if (resetPerTest) resetPlan = await buildResetPlan(db);
   }, options.timeoutMs ?? DEFAULT_SETUP_TIMEOUT_MS);
+
+  afterEach(async () => {
+    if (resetPerTest && db !== undefined && resetPlan !== undefined)
+      await applyReset(db, resetPlan);
+  });
 
   afterAll(async () => {
     const started = db;

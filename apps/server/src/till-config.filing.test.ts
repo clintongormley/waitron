@@ -9,7 +9,10 @@ import { readFilingModule } from "./till-config.js";
 
 // PGlite (superuser) is enough: this proves the column read and the null case, not the role path
 // — `readOrderFlow`, its sibling, is proven under the app role by the boot suites.
-const suite = usePgliteDb({ migrations: migrationOptionsFor(manifestSets(), null) });
+const suite = usePgliteDb({
+  resetPerTest: false,
+  migrations: migrationOptionsFor(manifestSets(), null),
+});
 
 let tenantId: TenantId;
 let stamped: NodeId;

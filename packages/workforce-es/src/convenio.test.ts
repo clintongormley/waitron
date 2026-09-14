@@ -12,6 +12,7 @@ import { seedConvenioConfig, seedLocation } from "../test/fixtures.js";
 let tenantId: string;
 
 const suite = usePgliteDb({
+  resetPerTest: false,
   migrations: [CORE_MIGRATIONS, WORKFORCE_ES_MIGRATIONS],
   setup: async (db) => {
     tenantId = await seedTenant(db);

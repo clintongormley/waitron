@@ -19,6 +19,7 @@ const RING: KeyRing = loadKeyRing({
 
 describe("node identity establishment", () => {
   const suite = usePgliteDb({
+    resetPerTest: false,
     migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS],
     timeoutMs: 60_000,
   });

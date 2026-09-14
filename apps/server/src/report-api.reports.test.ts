@@ -108,6 +108,7 @@ async function seedDay(db: Database, invoiceNumber: number, d: DaySeed): Promise
 }
 
 const suite = usePgliteDb({
+  resetPerTest: false,
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
   timeoutMs: 60_000,
   setup: async (db) => {

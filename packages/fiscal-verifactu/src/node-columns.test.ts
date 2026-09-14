@@ -22,6 +22,7 @@ import { TENANT_A, seedTenantTillSif } from "../test/fixtures.js";
 const pg = usePgliteDb({
   migrations: TEST_MIGRATIONS,
   setup: seedTenantTillSif,
+  resetPerTest: false,
 });
 
 // One shared PGlite database backs the whole file, so every registros_facturacion insert must claim

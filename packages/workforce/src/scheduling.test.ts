@@ -33,6 +33,7 @@ let locationId: string;
 let personId: string;
 
 const suite = usePgliteDb({
+  resetPerTest: false,
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS],
   setup: async (db) => {
     tenantId = await seedTenant(db);

@@ -14,6 +14,7 @@ const backend = new WorkforceBackend();
 let tenantId: string;
 
 const suite = usePgliteDb({
+  resetPerTest: false,
   // Core first (tenants/locations FKs), then identity (persons), then workforce
   // (employments/time_entries, which FK persons) and workforce-es (convenio_config): the end-to-end
   // path reads all four.

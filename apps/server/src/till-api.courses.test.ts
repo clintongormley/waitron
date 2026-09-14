@@ -63,6 +63,7 @@ const FILETE = "Filete"; // Principales (later) → held
 const PAN = "Pan"; // no course → fires immediately
 
 const suite = usePgliteDb({
+  resetPerTest: false,
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
   setup: async (db) => {

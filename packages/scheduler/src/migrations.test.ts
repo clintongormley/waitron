@@ -10,6 +10,7 @@ import { SCHEDULER_MIGRATIONS } from "./migrations.js";
 let tenantId: string;
 
 const suite = usePgliteDb({
+  resetPerTest: false,
   // Core first — the tenants foreign key. Ordering across packages is the runtime's job and
   // nothing enforces it, so it is explicit here.
   migrations: [CORE_MIGRATIONS, SCHEDULER_MIGRATIONS],

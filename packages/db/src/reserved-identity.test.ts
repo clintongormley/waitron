@@ -48,7 +48,11 @@ async function seedLocation(
 }
 
 describe("reserved-identity accessors", () => {
-  const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
+  const suite = usePgliteDb({
+    migrations: [CORE_MIGRATIONS],
+    timeoutMs: 60_000,
+    resetPerTest: false,
+  });
 
   let tenantId: TenantId;
   let locationId: LocationId;

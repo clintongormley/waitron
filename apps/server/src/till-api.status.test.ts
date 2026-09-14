@@ -38,6 +38,7 @@ let STATUS_ID: string;
 let INACTIVE_STATUS_ID: string;
 
 const suite = usePgliteDb({
+  resetPerTest: false,
   // The whole manifest: the tables here span modules that FK into core, so the shared ordered set is
   // the fixture.
   migrations: migrationOptionsFor(manifestSets(), null),

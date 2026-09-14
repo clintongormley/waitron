@@ -10,6 +10,7 @@ let tenantId: string;
 let locationId: string;
 
 const suite = usePgliteDb({
+  resetPerTest: false,
   // Core first — the tenants/locations foreign keys. Ordering across packages is the runtime's job
   // and nothing enforces it, so it is explicit here; this proves convenio_config applies core-first.
   migrations: [CORE_MIGRATIONS, WORKFORCE_ES_MIGRATIONS],

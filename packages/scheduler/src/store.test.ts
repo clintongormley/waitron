@@ -22,6 +22,7 @@ const PERIOD = dayPeriod(new Date("2026-07-24T00:00:00Z"));
 let tenantId: TenantId;
 
 const suite = usePgliteDb({
+  resetPerTest: false,
   migrations: [CORE_MIGRATIONS, SCHEDULER_MIGRATIONS],
   setup: async (db) => {
     tenantId = await seedTenant(db);

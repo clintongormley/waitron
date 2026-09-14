@@ -20,6 +20,7 @@ import {
 let tenantId: string;
 
 const suite = usePgliteDb({
+  resetPerTest: false,
   // Core first (the tenants FK), then identity (persons — employments/time_entries FK it), then
   // workforce. Ordering across packages is the runtime's job and nothing enforces it, so it is
   // explicit here.

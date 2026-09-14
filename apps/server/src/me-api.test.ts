@@ -41,6 +41,7 @@ let localed: string;
 let locationId: string;
 
 const suite = usePgliteDb({
+  resetPerTest: false,
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS],
   timeoutMs: 60_000,
   setup: async (db) => {

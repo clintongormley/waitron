@@ -125,6 +125,7 @@ async function seedPurchase(db: Database): Promise<void> {
 }
 
 const suite = usePgliteDb({
+  resetPerTest: false,
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
   timeoutMs: 60_000,
   setup: async (db) => {
