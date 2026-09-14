@@ -18,6 +18,7 @@ const cafe: TillProduct = {
   unit: {
     id: "unit-each",
     name: { en: "unit", es: "unidad" },
+    abbreviation: { en: "ea", es: "ud" },
     precision: 0,
     hardwareUnit: null,
   },
@@ -31,7 +32,13 @@ const cafe: TillProduct = {
 const jamon: TillProduct = {
   id: "jamon",
   descriptions: { es: "Jamón" },
-  unit: { id: "unit-kg", name: { en: "kg", es: "kg" }, precision: 3, hardwareUnit: "kg" },
+  unit: {
+    id: "unit-kg",
+    name: { en: "kg", es: "kg" },
+    abbreviation: { en: "kg", es: "kg" },
+    precision: 3,
+    hardwareUnit: "kg",
+  },
   unitPrice: "10.00",
   vatClass: "reduced",
   category: "charcutería",
@@ -112,7 +119,7 @@ describe("order-line pricing", () => {
   describe("quantityLabel", () => {
     it("labels every line with its selected unit", () => {
       expect(quantityLabel({ product: jamon, quantity: "0.320" })).toBe("0.320 kg");
-      expect(quantityLabel({ product: cafe, quantity: "2" })).toBe("2 unit");
+      expect(quantityLabel({ product: cafe, quantity: "2" })).toBe("2 ea");
     });
   });
 

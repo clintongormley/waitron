@@ -1,6 +1,6 @@
 import { beforeEach, afterEach, describe, expect, it } from "vitest";
 import { setLocale } from "../i18n/t.js";
-import { productName } from "./product-name.js";
+import { productName, unitName } from "./product-name.js";
 import type { TillProduct } from "../api/client.js";
 import { setContentLanguages } from "@waitron/ui";
 
@@ -57,5 +57,36 @@ describe("productName", () => {
     // are data keyed by locale, so passing one overrides the module-level current locale.
     setLocale("es-ES");
     expect(productName(product({ "es-ES": "Café", en: "Coffee" }), "en")).toBe("Coffee");
+  });
+});
+
+describe("unitName", () => {
+  beforeEach(() => {
+    setLocale("en-GB");
+    setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
+  });
+
+  it("labels a product with its unit's abbreviation, not the full name", () => {
+    const p: TillProduct = {
+      ...product({}),
+      unit: {
+        id: "u",
+        name: { en: "Kilogram" },
+        abbreviation: { en: "kg" },
+        precision: 3,
+        hardwareUnit: "kg",
+      },
+    };
+    expect(unitName(p)).toBe("kg");
+  });
+
+  it("falls back to a synthesised weight abbreviation when the product carries no unit", () => {
+    const p = { ...product({}), pricingUnit: "weight" as const };
+    expect(unitName(p)).toBe("kg");
+  });
+
+  it("falls back to the each abbreviation for a non-weight product with no unit", () => {
+    // product() defaults pricingUnit to "each".
+    expect(unitName(product({}))).toBe("ea");
   });
 });

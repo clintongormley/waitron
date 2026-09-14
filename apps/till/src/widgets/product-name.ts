@@ -7,10 +7,10 @@ export function productName(product: TillProduct, locale: string = currentLocale
   return descriptionFor(product.descriptions, product.id, locale);
 }
 
-/** Resolve the selected unit through the same content-language fallback as product text. */
+/** Resolve the selected unit's short label through the same content-language fallback as product text. */
 export function unitName(product: TillProduct, locale: string = currentLocale()): string {
   const unit = productUnit(product);
-  return descriptionFor(unit.name, unit.id, locale);
+  return descriptionFor(unit.abbreviation, unit.id, locale);
 }
 
 export function productUnit(product: TillProduct): NonNullable<TillProduct["unit"]> {
@@ -20,12 +20,14 @@ export function productUnit(product: TillProduct): NonNullable<TillProduct["unit
       ? {
           id: "00000000-0000-0000-0000-000000000002",
           name: { en: "kg" },
+          abbreviation: { en: "kg" },
           precision: 3,
           hardwareUnit: "kg" as const,
         }
       : {
           id: "00000000-0000-0000-0000-000000000001",
           name: { en: "each" },
+          abbreviation: { en: "ea" },
           precision: 0,
           hardwareUnit: null,
         })

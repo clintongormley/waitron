@@ -162,7 +162,13 @@ describe("till-basket", () => {
     const portion: TillProduct = {
       ...cafe,
       id: "portion",
-      unit: { id: "unit-portion", name: { en: "tray" }, precision: 2, hardwareUnit: null },
+      unit: {
+        id: "unit-portion",
+        name: { en: "tray" },
+        abbreviation: { en: "tray" },
+        precision: 2,
+        hardwareUnit: null,
+      },
     };
     const store = new WorkingOrderStore();
     store.addProduct(portion, "0.25");
