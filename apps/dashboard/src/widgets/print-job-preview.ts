@@ -1,6 +1,6 @@
 import { LitElement, css, html, nothing } from "lit";
-import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, selectStyles } from "@waitron/ui";
+import { customElement, property } from "lit/decorators.js";
+import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -11,7 +11,6 @@ import { t } from "../i18n/t.js";
 export class PrintJobPreviewDialog extends LitElement {
   static override styles = [
     baseStyles,
-    selectStyles,
     css`
       :host {
         display: block;
@@ -25,16 +24,12 @@ export class PrintJobPreviewDialog extends LitElement {
         outline-offset: var(--wt-focus-offset);
       }
       .paper {
-        box-sizing: border-box;
-        width: 80mm;
+        box-sizing: content-box;
         padding: 4mm;
         /* Paper and ink keep their physical colours in both application themes. */
         color: #000;
         background: #fff;
         font: 2.5mm / 3.75mm monospace;
-      }
-      .paper[data-width="58"] {
-        width: 58mm;
       }
       pre {
         margin: 0;
@@ -53,17 +48,12 @@ export class PrintJobPreviewDialog extends LitElement {
         border-top: 1px dashed #000;
         margin: 0 -4mm;
       }
-      .paper-field {
-        display: grid;
-        gap: var(--wt-space-1);
-      }
       .qr-data {
         overflow-wrap: anywhere;
       }
     `,
   ];
 
-  @state() private paperWidth = "80";
   #images = new WeakMap<object, string>();
 
   #bitmapUrl(block: Extract<PrintPreviewBlock, { kind: "image" }>): string {
@@ -106,7 +96,7 @@ export class PrintJobPreviewDialog extends LitElement {
         return html`<img
           data-kind="image"
           src=${this.#bitmapUrl(block)}
-          style=${`width:${block.width / 8}mm`}
+          style=${`width:${block.width / 12}ch`}
           alt=${block.qrData === undefined ? t("printers.preview_image") : `${t("printers.preview_qr_data")}: ${block.qrData}`}
         />`;
     }
@@ -131,19 +121,6 @@ export class PrintJobPreviewDialog extends LitElement {
             ? html`
                 ${preview.omittedGraphics ? html`<p>${t("printers.preview_graphics_omitted")}</p>` : nothing}
                 ${preview.truncated || preview.unsupported ? html`<p>${t("printers.preview_incomplete")}</p>` : nothing}
-                <label class="paper-field"
-                  >${t("printers.preview_paper_width")}
-                  <select
-                    name="preview-paper-width"
-                    .value=${this.paperWidth}
-                    @change=${(event: Event) => {
-                      this.paperWidth = (event.target as HTMLSelectElement).value;
-                    }}
-                  >
-                    <option value="80">80 mm</option>
-                    <option value="58">58 mm</option>
-                  </select>
-                </label>
                 ${
                   preview.blocks.length
                     ? html`<div
@@ -152,7 +129,7 @@ export class PrintJobPreviewDialog extends LitElement {
                         role="region"
                         aria-label=${t("printers.preview_paper")}
                       >
-                        <div class="paper" data-width=${this.paperWidth}>
+                        <div class="paper" style=${`width:${preview.columns}ch`}>
                           ${preview.blocks.map((block) => this.#renderBlock(block))}
                         </div>
                       </div>`

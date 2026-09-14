@@ -207,7 +207,6 @@ export const en = {
   "printers.poll_required": "Enter the cloud polling ID",
   "printers.poll_hint": "Identifies a cloud-connected printer that fetches its own jobs.",
   "printers.preview_title": "Print job preview",
-  "printers.preview_paper_width": "Preview paper width",
   "printers.preview_paper": "Receipt paper",
   "printers.preview_cut": "Paper cut",
   "printers.preview_image": "Printed graphic",
@@ -1401,7 +1400,6 @@ export const es: Record<StringKey, string> = {
   "printers.poll_hint":
     "Identifica una impresora conectada a la nube que recoge sus propios trabajos.",
   "printers.preview_title": "Vista previa de impresión",
-  "printers.preview_paper_width": "Ancho de papel de la vista previa",
   "printers.preview_paper": "Papel del recibo",
   "printers.preview_cut": "Corte de papel",
   "printers.preview_image": "Gráfico impreso",

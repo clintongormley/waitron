@@ -7,6 +7,8 @@ import type { PrintJobPreview } from "../api/client.js";
 import { PrintJobPreviewDialog } from "./print-job-preview.js";
 
 const preview: PrintJobPreview = {
+  columns: 42,
+  dpi: 180,
   text: "Café <img src=x onerror=alert(1)>\nTotal 12.50\n",
   qrData: ["javascript:alert(1)"],
   blocks: [
@@ -151,18 +153,35 @@ it.each(["light", "dark"] as const)(
   },
 );
 
-it("changes the paper approximation without changing stored job content", async () => {
+it("sizes the paper's text area to the printer's columns and images in the same character units", async () => {
   const { el } = await mountWidget<PrintJobPreviewDialog>("dashboard-print-job-preview", {
     open: true,
-    preview,
+    preview: {
+      ...preview,
+      columns: 30,
+      qrData: [],
+      blocks: [
+        { kind: "text", text: "x".repeat(30) },
+        { kind: "text", text: "y".repeat(31) },
+        // 180 dots = 15 printed columns at 12 dots per column: half the paper.
+        { kind: "image", width: 180, height: 2, data: btoa("\0".repeat(23 * 2)) },
+      ],
+    },
   });
+  await el.shadowRoot!.querySelector<WtModal>("wt-modal")!.updateComplete;
   const paper = el.shadowRoot!.querySelector<HTMLElement>(".paper")!;
-  const before = paper.getBoundingClientRect().width;
-  const select = el.shadowRoot!.querySelector<HTMLSelectElement>('[name="preview-paper-width"]')!;
-  select.value = "58";
-  select.dispatchEvent(new Event("change"));
-  await el.updateComplete;
-  expect(paper.getBoundingClientRect().width).toBeLessThan(before);
-  expect(el.preview).toBe(preview);
-  expect(paper.querySelector("pre")!.textContent).toBe(preview.text);
+  const [fits, spills] = [...paper.querySelectorAll("pre")];
+  const lineHeight = parseFloat(getComputedStyle(fits!).lineHeight);
+  expect(fits!.getBoundingClientRect().height).toBeLessThan(lineHeight * 1.5);
+  expect(spills!.getBoundingClientRect().height).toBeGreaterThan(lineHeight * 1.5);
+  const probe = document.createElement("span");
+  probe.style.whiteSpace = "pre";
+  probe.textContent = "0".repeat(30);
+  paper.append(probe);
+  const contentWidth = parseFloat(getComputedStyle(paper).width);
+  expect(Math.abs(contentWidth - probe.getBoundingClientRect().width)).toBeLessThanOrEqual(1);
+  probe.remove();
+  const img = paper.querySelector("img")!;
+  expect(Math.abs(img.getBoundingClientRect().width - contentWidth / 2)).toBeLessThanOrEqual(1);
+  expect(el.shadowRoot!.querySelector("select")).toBeNull();
 });

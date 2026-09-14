@@ -1251,6 +1251,9 @@ export type PrintPreviewBlock =
 
 /** A bounded preview of the recorded printer commands. */
 export interface PrintJobPreview {
+  /** The printer's current column count and resolution. */
+  columns: number;
+  dpi: number;
   text: string;
   blocks: PrintPreviewBlock[];
   qrData: string[];

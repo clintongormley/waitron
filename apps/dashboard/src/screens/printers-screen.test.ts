@@ -196,6 +196,8 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     resendPrintJob: vi.fn().mockResolvedValue({ jobId: "resent" }),
     updateAgent: vi.fn().mockResolvedValue(undefined),
     getPrintJobPreview: vi.fn().mockResolvedValue({
+      columns: 42,
+      dpi: 180,
       text: "Receipt",
       qrData: [],
       blocks: [{ kind: "text", text: "Receipt" }],
