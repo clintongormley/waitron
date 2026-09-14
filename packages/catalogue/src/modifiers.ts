@@ -53,7 +53,7 @@ export async function listModifiers(tx: Transaction, tenantId: string): Promise<
         ...(item.removeAllergens === null ? {} : { removeAllergens: item.removeAllergens }),
         ...(item.addOrigins === null ? {} : { addOrigins: item.addOrigins }),
         ...(item.removeOrigins === null ? {} : { removeOrigins: item.removeOrigins }),
-        dietaryEffect: item.dietaryEffect,
+        dietaryEffect: item.dietaryEffect ?? { invalidates: [] },
         ...(group.type === "extras"
           ? {
               priceDelta: item.priceDelta,

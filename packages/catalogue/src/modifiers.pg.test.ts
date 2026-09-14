@@ -98,7 +98,7 @@ it("rolls back the whole save when a choice belongs to another modifier", async 
   expect(await app(tenant, (tx) => listModifiers(tx, tenant))).toEqual([original]);
 });
 
-it("blocks type changes and deletion for attached definitions, but permits deactivation", async () => {
+it("blocks type changes and deletion for attached definitions, but permits other edits", async () => {
   const tenant = await seedTenant(suite.admin);
   await seedLegacySellingUnits(suite.admin, tenant);
   const definition = await app(tenant, (tx) => createModifier(tx, tenant, text, "en"));
@@ -120,11 +120,13 @@ it("blocks type changes and deletion for attached definitions, but permits deact
   await expect(
     app(tenant, (tx) => updateModifier(tx, tenant, definition.id, { type: "yes-no", name }, "en")),
   ).rejects.toMatchObject({ code: "modifier.in_use" });
+  // A non-yes-no modifier cannot be turned off as a whole, so a sent available:false is ignored
+  // (forced true) rather than rejected — the edit is still permitted while attached.
   expect(
     await app(tenant, (tx) =>
       updateModifier(tx, tenant, definition.id, { ...text, available: false }, "en"),
     ),
-  ).toMatchObject({ available: false });
+  ).toMatchObject({ available: true });
 });
 
 it("serializes deletion behind an attachment write and reports its committed dependency", async () => {
@@ -216,7 +218,10 @@ it("blocks a default-language change while a yes/no modifier name is untranslate
 it("preserves unavailable attachments when editing a product, but refuses a new attachment", async () => {
   const tenant = await seedTenant(suite.admin);
   await seedLegacySellingUnits(suite.admin, tenant);
-  const definition = await app(tenant, (tx) => createModifier(tx, tenant, text, "en"));
+  // Only a yes-no modifier can be turned off as a whole, so it is the type that can become an
+  // inactive group — the state this test needs to exercise the attachment guard.
+  const yesNo = { type: "yes-no" as const, name };
+  const definition = await app(tenant, (tx) => createModifier(tx, tenant, yesNo, "en"));
   const products = await app(tenant, async (tx) => {
     const catalogue = await createCatalogue(tx, brandTenantId(tenant), { name: "Menu" });
     const products = [];
@@ -235,7 +240,7 @@ it("preserves unavailable attachments when editing a product, but refuses a new 
     return products;
   });
   await app(tenant, (tx) =>
-    updateModifier(tx, tenant, definition.id, { ...text, available: false }, "en"),
+    updateModifier(tx, tenant, definition.id, { ...yesNo, available: false }, "en"),
   );
   await app(tenant, (tx) =>
     setProductOptionGroups(tx, brandTenantId(tenant), products[0]!.id, [definition.id]),

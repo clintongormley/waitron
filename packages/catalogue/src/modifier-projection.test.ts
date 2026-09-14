@@ -198,6 +198,26 @@ it("projects only published available choices, clears excluded defaults, and kee
       .where(eq(optionGroupItems.id, chosenId));
     await tx.update(optionGroups).set({ active: false }).where(eq(optionGroups.id, extras.id));
     projected = (await listMenuOffers(tx, tenantId, [menu.id]))[0]!.modifiers;
-    expect(projected).toEqual([{ ...options, choices: [], defaultChoiceId: null }]);
+    // Deactivating the options choice empties that group's choices; deactivating the whole extras
+    // group no longer hides it, because a non-yes-no modifier cannot be turned off as a whole.
+    expect(projected).toEqual([
+      { ...options, choices: [], defaultChoiceId: null },
+      {
+        ...extras,
+        available: false,
+        choices: [
+          {
+            id: extraId,
+            name: { en: "Shot" },
+            available: true,
+            dietaryEffect: { invalidates: [] },
+            priceDelta: "0.75",
+            maxQuantity: 3,
+            preselected: true,
+            vatClass: "general",
+          },
+        ],
+      },
+    ]);
   });
 });

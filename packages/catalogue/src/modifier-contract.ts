@@ -1,4 +1,5 @@
-import { AppError, isUuid } from "@waitron/shared";
+import { AppError, isUuid, isModifierOffered } from "@waitron/shared";
+export { isModifierOffered } from "@waitron/shared";
 import {
   assertAllergenOverlayDisjoint,
   validateAllergens,
@@ -69,37 +70,36 @@ function effects(row: Record<string, unknown>): ModifierEffects {
     out.removeAllergens =
       row.removeAllergens === null ? null : validateRemoveAllergens(row.removeAllergens);
   assertAllergenOverlayDisjoint(out.addAllergens ?? null, out.removeAllergens ?? null);
-  if (row.dietaryEffect !== undefined) {
-    if (row.dietaryEffect === null) out.dietaryEffect = null;
-    else {
-      const effect = record(row.dietaryEffect, "dietaryEffect");
-      keys(effect, ["invalidates"], "dietaryEffect");
-      out.dietaryEffect = { invalidates: validateDietaryDeclarations(effect.invalidates) };
-    }
+  if (row.dietaryEffect === undefined || row.dietaryEffect === null) {
+    out.dietaryEffect = { invalidates: [] };
+  } else {
+    const effect = record(row.dietaryEffect, "dietaryEffect");
+    keys(effect, ["invalidates"], "dietaryEffect");
+    out.dietaryEffect = { invalidates: validateDietaryDeclarations(effect.invalidates) };
   }
   return out;
 }
 
 export function parseModifierInput(value: unknown): ModifierInput {
   const row = record(value, "modifier");
-  const common = {
-    name: label(row.name, "name"),
-    available: bool(row.available === undefined ? true : row.available, "available"),
-  };
+  const name = label(row.name, "name");
+  // `available` stays allowed so no stray-key error; it is read only for yes-no.
   const baseKeys = ["type", "name", "available"];
   if (row.type === "text") {
     keys(row, baseKeys, "modifier");
-    return { ...common, type: "text" };
+    return { name, available: true, type: "text" };
   }
   if (row.type === "yes-no") {
     keys(row, [...baseKeys, "defaultValue"], "modifier");
     return {
-      ...common,
+      name,
+      available: bool(row.available === undefined ? true : row.available, "available"),
       type: "yes-no",
       defaultValue: bool(row.defaultValue === undefined ? false : row.defaultValue, "defaultValue"),
     };
   }
   if (row.type !== "extras" && row.type !== "options") invalid("type");
+  const common = { name, available: true };
   const extras = row.type === "extras";
   keys(
     row,
@@ -206,7 +206,8 @@ export function validateModifierSelections(
     if (typeof row.modifierId !== "string" || seen.has(row.modifierId)) invalid("modifierId");
     seen.add(row.modifierId);
     const definition = byId.get(row.modifierId);
-    if (!definition || !definition.available || row.type !== definition.type) invalid("modifierId");
+    if (!definition || !isModifierOffered(definition) || row.type !== definition.type)
+      invalid("modifierId");
     const base = { modifierId: definition.id };
     switch (definition.type) {
       case "text": {
@@ -254,7 +255,7 @@ export function validateModifierSelections(
     }
   }
   for (const definition of definitions) {
-    if (!definition.available) continue;
+    if (!isModifierOffered(definition)) continue;
     if (
       (definition.type === "options" ||
         definition.type === "yes-no" ||
