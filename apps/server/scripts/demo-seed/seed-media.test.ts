@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import { ALL_MODULES } from "../../src/modules.js";
@@ -75,7 +75,7 @@ describe("seedMedia", () => {
   it("stores committed tiles in the library and attaches content-addressed product references", async () => {
     const { tenantId, locationId } = await provisionVenue();
 
-    const { productsByImage, images } = await withTenant(suite.admin, tenantId, async (tx) => {
+    const { productsByImage, images } = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       const { productsByImage } = await seedCatalogues(tx, brandTenantId(tenantId), {
         locationId,
@@ -104,7 +104,7 @@ describe("seedMedia", () => {
       const expectedName = `${createHash("sha256").update(srcBytes).digest("hex")}.png`;
       expect(stored).toBe(expectedName);
 
-      const storedImage = await withTenant(suite.admin, tenantId, async (tx) => {
+      const storedImage = await withTransaction(suite.admin, async (tx) => {
         await asAppUser(tx);
         return readImageBytes(tx, tenantId, stored!);
       });
@@ -132,7 +132,7 @@ describe("seedMedia", () => {
 
   it("reuses existing image bytes when the media step runs twice", async () => {
     const { tenantId, locationId } = await provisionVenue();
-    await withTenant(suite.admin, tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       const { productsByImage } = await seedCatalogues(tx, brandTenantId(tenantId), {
         locationId,

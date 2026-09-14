@@ -1,7 +1,7 @@
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { sql } from "drizzle-orm";
-import { asAppUser, withTenant, type Database } from "@waitron/db";
+import { asAppUser, withTransaction, type Database } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
 import type { WaitronModule } from "@waitron/module";
 import { AppError } from "@waitron/shared";
@@ -41,7 +41,7 @@ export function mountConfigurationExportApi(
       if (typeof passphrase !== "string" || passphrase.length < 12) {
         throw new AppError("management.request_invalid", { field: "passphrase" });
       }
-      const bundle = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const bundle = await withTransaction(deps.db, async (tx) => {
         await tx.execute(sql`set transaction isolation level repeatable read`);
         await asAppUser(tx);
         const authorization = await authorizeManager(tx, {

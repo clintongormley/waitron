@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { CREDENTIALS_MIGRATIONS, loadKeyRing, putCredential } from "@waitron/credentials";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -26,7 +26,7 @@ describe("resolveEmailDelivery", () => {
 
   it("prefers the tenant's SMTP gateway over Mailpit", async () => {
     const tenantId = await seedTenant(suite.db);
-    await withTenant(suite.db, tenantId, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       putCredential(tx, ring, {
         tenantId,
         purpose: "email.smtp",

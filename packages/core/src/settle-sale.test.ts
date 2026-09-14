@@ -8,7 +8,7 @@ import {
   saleSettlements,
   saleVoids,
   tenders,
-  withTenant,
+  withTransaction,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
@@ -62,7 +62,8 @@ async function seedSale(
  * Runs `settleSale` inside one transaction as the non-superuser app role.
  */
 function settle(db: Database, tenantId: TenantId, input: SettleSaleInput): Promise<void> {
-  return withTenant(db, tenantId, async (tx) => {
+  void tenantId;
+  return withTransaction(db, async (tx) => {
     await asAppUser(tx);
     await settleSale(tx, input);
   });
@@ -363,7 +364,7 @@ describe("settleSale — the concurrent settlement race (real Postgres only)", (
 
       // Holder: settles fully (tenders + sale_settlements), signals it holds the uncommitted UNIQUE
       // key, and pauses before commit — keeping its transaction, and the key, open.
-      holderRun = withTenant(holder, seed.tenantId, async (tx) => {
+      holderRun = withTransaction(holder, async (tx) => {
         await asAppUser(tx);
         await settleSale(tx, input);
         acquire();
@@ -552,7 +553,7 @@ async function settleDirect(
   saleId: SaleId,
   amount: string,
 ): Promise<void> {
-  await withTenant(db, tenantId, async (tx) => {
+  await withTransaction(db, async (tx) => {
     await asAppUser(tx);
     await tx.insert(tenders).values({
       tenantId,

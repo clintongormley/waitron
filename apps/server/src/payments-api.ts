@@ -10,7 +10,7 @@ import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { and, eq, sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
-import { asAppUser, devices, withTenant, type Database, type Transaction } from "@waitron/db";
+import { asAppUser, devices, withTransaction, type Database, type Transaction } from "@waitron/db";
 import {
   cardProviderById,
   cardReaders,
@@ -119,7 +119,7 @@ function screenStringMap(body: Record<string, unknown>): Record<string, string> 
  * Every route is `requireManagementSession`-gated then funnels its DB work through the local `gated`
  * helper, which opens a tenant-scoped app-role transaction and `authorizeManager`s `payments.manage`
  * before the op runs, in exactly one place. Provider `connect`/reader calls reach the network, so they
- * run OUTSIDE any transaction (a `withTenant` is never held across a provider round-trip); the gate
+ * run OUTSIDE any transaction (a `withTransaction` is never held across a provider round-trip); the gate
  * runs first, in its own `gated` call, so an unauthorised caller never reaches the provider.
  */
 export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger): void {
@@ -128,7 +128,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
   // applied identically and in exactly one place (print-api.ts's seam). Proven by deletion: removing
   // the `authorizeManager(...)` call makes a staff session succeed on every gated route.
   const gated = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> =>
-    withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+    withTransaction(deps.db, async (tx) => {
       await asAppUser(tx);
       await authorizeManager(tx, {
         managementSessionId: sessionId,

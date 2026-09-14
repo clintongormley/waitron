@@ -1,4 +1,4 @@
-import { asAppUser, captureError, pgErrorCode, pgErrorMessage, withTenant } from "@waitron/db";
+import { asAppUser, captureError, pgErrorCode, pgErrorMessage, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { sql } from "drizzle-orm";
@@ -180,7 +180,7 @@ describe("the rectificativa columns are jsonb and round-trip", () => {
 
 describe("the new columns inherit the table's immutability", () => {
   async function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
-    return withTenant(pg.db, TENANT_A.id, async (tx) => {
+    return withTransaction(pg.db, async (tx) => {
       await asAppUser(tx);
       return fn(tx);
     });
@@ -193,7 +193,7 @@ describe("the new columns inherit the table's immutability", () => {
     // new column with NO new DDL. Revocation fires first for the app role, so — exactly as
     // inmutabilidad.test.ts does for `huella` — grant UPDATE inside a rolled-back transaction and
     // watch the SECOND layer (the trigger) catch it. WT001 is the trigger's SQLSTATE.
-    await withTenant(pg.db, TENANT_A.id, async (tx) => {
+    await withTransaction(pg.db, async (tx) => {
       await tx.execute(sql`grant update on registros_facturacion to app_user`);
       await tx.execute(sql`set local role app_user`);
       await insertRegistro(tx, { tipoFactura: "R5", tipoRectificativa: "I" });

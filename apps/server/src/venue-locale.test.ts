@@ -9,7 +9,7 @@ import { readVenueLocale } from "./venue-locale.js";
 
 // PGlite, not real Postgres: `readVenueLocale` is a plain two-row read (tenant country + location
 // province) feeding the installed country-pack locale chain, the same LOGIC shape the till/me route
-// mechanics prove on PGlite. It reads under `withTenant` + `asAppUser` exactly as production
+// mechanics prove on PGlite. It reads under `withTransaction` + `asAppUser` exactly as production
 // does; the app_user privilege matrix in @waitron/fiscal-verifactu checks the table grants on
 // real PostgreSQL (`app_user` already holds SELECT on both — `GET /api/till` reads them the same
 // way). CORE_MIGRATIONS alone: both `tenants.country` and `locations.province` live in core, so

@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { AppError, decimal, tenantId as brandTenantId } from "@waitron/shared";
 import { recordIncidentOnce } from "@waitron/core";
@@ -53,7 +53,7 @@ function deps(report: FakeSettlementReport, reverse = recordingReverse().fn): Re
 }
 
 async function capture(seeded: Seeded, paymentRef: string, externalRef: string, amount = "10.00") {
-  await withTenant(pg.db, seeded.tenantId, (tx) =>
+  await withTransaction(pg.db, (tx) =>
     insertCapturedPayment(tx, {
       tenantId: seeded.tenantId,
       workingOrderId: seeded.workingOrderId,
@@ -70,7 +70,7 @@ async function capture(seeded: Seeded, paymentRef: string, externalRef: string, 
  * tender that a later `forward()` pass cleared. `settled` is auditable (so it reaches the orphan
  * class) but has no reversal path, which is exactly what the claim gate has to respect. */
 async function forwardedOffline(seeded: Seeded, paymentRef: string, externalRef: string) {
-  await withTenant(pg.db, seeded.tenantId, async (tx) => {
+  await withTransaction(pg.db, async (tx) => {
     await insertAcceptedOffline(tx, {
       tenantId: seeded.tenantId,
       workingOrderId: seeded.workingOrderId,
@@ -253,7 +253,7 @@ describe("reconcilePayments", () => {
 
   it("classifies an initiated row the report settled as lostSettlement", async () => {
     const seeded = await seedWorkingOrder(pg.db, freshNif());
-    await withTenant(pg.db, seeded.tenantId, (tx) =>
+    await withTransaction(pg.db, (tx) =>
       insertInitiated(tx, {
         tenantId: seeded.tenantId,
         workingOrderId: seeded.workingOrderId,
@@ -354,7 +354,7 @@ describe("reconcilePayments", () => {
     const seeded = await seedWorkingOrder(pg.db, freshNif());
     // ext-2 has a local row, but settled OUTSIDE the swept PERIOD — existingReferences still finds
     // it (unbounded by period, same as the single-record test below), so it must not be reported.
-    await withTenant(pg.db, seeded.tenantId, (tx) =>
+    await withTransaction(pg.db, (tx) =>
       insertCapturedPayment(tx, {
         tenantId: seeded.tenantId,
         workingOrderId: seeded.workingOrderId,

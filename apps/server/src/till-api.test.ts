@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { asAppUser, withTenant, writeNodeMembership } from "@waitron/db";
+import { asAppUser, withTransaction, writeNodeMembership } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -46,7 +46,7 @@ import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 import "./errors.js";
 
 // PGlite, not real Postgres: the session routes are LOGIC (login → cookie → logout), and the login
-// path runs through `withTenant` + `asAppUser` exactly as production does. Sessions/persons live in
+// path runs through `withTransaction` + `asAppUser` exactly as production does. Sessions/persons live in
 // identity; the schema is the whole manifest (the tables here span modules that FK into core, so the
 // shared ordered set is the fixture). What `app_user` may do to those
 // tables is pinned by packages/fiscal-verifactu's privileges.expected.ts, not here.
@@ -136,12 +136,11 @@ const suite = usePgliteDb({
     // One product in the location's DEFAULT catalogue (`assignCatalogueToLocation`), plus a second
     // product in a SECOND catalogue attached as a non-default accessible menu
     // (`addCatalogueToLocation`) — so `GET /api/products` returns a non-empty, multi-menu list. Seeded
-    // on the APP role via the catalogue helpers — the same `withTenant` + `asAppUser` path the route
+    // on the APP role via the catalogue helpers — the same `withTransaction` + `asAppUser` path the route
     // reads them back through — so the active/assignment filters are real, not bypassed by a
     // superuser insert. (Catalogue tables live in CORE_MIGRATIONS, already applied.)
-    const { agua, cerveza, zoneId, offerId, hiddenOfferId } = await withTenant(
+    const { agua, cerveza, zoneId, offerId, hiddenOfferId } = await withTransaction(
       db,
-      tenantId,
       async (tx) => {
         await asAppUser(tx);
         const cat = await createCatalogue(tx, tenantId, { name: "Carta" });
@@ -321,11 +320,11 @@ function deps(db: Database): TillApiDeps {
   };
 }
 
-/** Opens a real shift session for Ana on the app role — the same `withTenant` + `asAppUser` +
+/** Opens a real shift session for Ana on the app role — the same `withTransaction` + `asAppUser` +
  * `loginWithPin` path the login route runs — and returns its id, so a test can hand `requireSession`
  * or the logout route a cookie that names a genuine row. */
 async function openSession(db: Database): Promise<string> {
-  const session = await withTenant(db, cfg.tenantId, async (tx) => {
+  const session = await withTransaction(db, async (tx) => {
     await asAppUser(tx);
     return loginWithPin(tx, {
       tenantId: cfg.tenantId,
@@ -339,7 +338,7 @@ async function openSession(db: Database): Promise<string> {
 
 /** Ends a session out of band on the app role, so a cookie can be made to name a CLOSED row. */
 async function closeSession(db: Database, id: string): Promise<void> {
-  await withTenant(db, cfg.tenantId, async (tx) => {
+  await withTransaction(db, async (tx) => {
     await asAppUser(tx);
     await endSession(tx, id);
   });
@@ -382,7 +381,7 @@ async function seedDeviceProfile(
   canvasId: string | null,
   inactivityTimeoutSeconds: number | null = null,
 ): Promise<string> {
-  const { rows } = await withTenant(db, cfg.tenantId, async (tx) => {
+  const { rows } = await withTransaction(db, async (tx) => {
     await asAppUser(tx);
     return tx.execute<{ id: string }>(sql`
       insert into device_profiles (tenant_id, name, form_factor, canvas_id, capabilities, inactivity_timeout_seconds)
@@ -891,7 +890,7 @@ describe("PUT /api/session/locale (set your OWN UI locale)", () => {
       insert into persons (tenant_id, display_name, pin_hash, role)
       values (${cfg.tenantId}, 'Locale User', ${hashPin(pin)}, 'staff') returning id`);
     const personId = row.rows[0]!.id;
-    const session = await withTenant(suite.db, cfg.tenantId, async (tx) => {
+    const session = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       return loginWithPin(tx, { tenantId: cfg.tenantId, tillId: cfg.tillId, personId, pin });
     });
@@ -2769,7 +2768,7 @@ describe("PUT + DELETE /api/tables/:id/placement — the on-till authorize(venue
       insert into persons (tenant_id, display_name, pin_hash, role)
       values (${cfg.tenantId}, 'Manolo (manager)', ${hashPin("9999")}, 'manager') returning id`);
     managerPersonId = managerRow.rows[0]!.id;
-    const managerSession = await withTenant(suite.db, cfg.tenantId, async (tx) => {
+    const managerSession = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       return loginWithPin(tx, {
         tenantId: cfg.tenantId,
@@ -3034,7 +3033,7 @@ async function modifierOfferFixture() {
   const choiceId = randomUUID(),
     otherChoiceId = randomUUID(),
     extraId = randomUUID();
-  const data = await withTenant(suite.db, cfg.tenantId, async (tx) => {
+  const data = await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     const product = await createProduct(tx, cfg.tenantId, {
       catalogueId: aguaProduct.catalogueId,
@@ -3192,7 +3191,7 @@ describe("canonical modifier HTTP serialization", () => {
     expect(body.lines[0]!.modifierSnapshots).toEqual(f.snapshots);
     const listed = await f.app.request("/api/working-orders", { headers: f.headers });
     expect(await listed.json()).toContainEqual(expect.objectContaining({ id, total: "4.90" }));
-    await withTenant(suite.db, cfg.tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       await updateModifier(
         tx,
@@ -3247,7 +3246,7 @@ describe("canonical modifier HTTP serialization", () => {
       let choiceId = kind === "unpublished" ? f.otherChoiceId : randomUUID();
       if (kind === "foreign") {
         const foreignTenant = await seedTenant(suite.db);
-        await withTenant(suite.db, foreignTenant, async (tx) => {
+        await withTransaction(suite.db, async (tx) => {
           await asAppUser(tx);
           await createModifier(
             tx,
@@ -3265,7 +3264,7 @@ describe("canonical modifier HTTP serialization", () => {
       }
       if (kind === "unavailable") {
         choiceId = f.choiceId;
-        await withTenant(suite.db, cfg.tenantId, async (tx) => {
+        await withTransaction(suite.db, async (tx) => {
           await asAppUser(tx);
           if (f.option.type !== "options") throw new Error("options fixture");
           const { id, ...input } = f.option;

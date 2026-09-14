@@ -1,5 +1,5 @@
 import Stripe from "stripe";
-import { withTenant } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { getCredential } from "@waitron/credentials";
 import type { KeyRing } from "@waitron/credentials";
@@ -99,7 +99,7 @@ async function secretKeyForTenant(deps: {
   tenantId: TenantId;
   environment?: DeploymentEnvironment;
 }): Promise<string> {
-  const payload = await withTenant(deps.db, deps.tenantId, (tx) =>
+  const payload = await withTransaction(deps.db, (tx) =>
     getCredential(tx, deps.ring, { tenantId: deps.tenantId, purpose: CREDENTIAL_PURPOSE }),
   );
   return secretKeyFromSealed(payload, deps.tenantId, deps.environment);

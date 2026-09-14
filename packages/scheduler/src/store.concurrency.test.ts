@@ -1,7 +1,7 @@
 // Real PostgreSQL: exercises competing PostgreSQL backends and their locking or commit visibility.
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { withTenant, type Database } from "@waitron/db";
+import { withTransaction, type Database } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import type { TenantId } from "@waitron/shared";
 import { dayPeriod } from "./derive.js";
@@ -75,8 +75,8 @@ describe("two runners racing one gap", () => {
   it("produces exactly one claim", async () => {
     const period = dayPeriod(new Date("2026-07-24T00:00:00Z"));
     const [first, second] = await Promise.all([
-      withTenant(a, tenantId, (tx) => claimGap(tx, { tenantId, duty: DUTY, period, now: NOW })),
-      withTenant(b, tenantId, (tx) => claimGap(tx, { tenantId, duty: DUTY, period, now: NOW })),
+      withTransaction(a, (tx) => claimGap(tx, { tenantId, duty: DUTY, period, now: NOW })),
+      withTransaction(b, (tx) => claimGap(tx, { tenantId, duty: DUTY, period, now: NOW })),
     ]);
     expect([first, second].filter((r) => r !== null)).toHaveLength(1);
   });
@@ -85,10 +85,10 @@ describe("two runners racing one gap", () => {
 describe("two runners racing one failed row", () => {
   it("produces exactly one claim", async () => {
     const period = dayPeriod(new Date("2026-07-23T00:00:00Z"));
-    const claimed = await withTenant(a, tenantId, (tx) =>
+    const claimed = await withTransaction(a, (tx) =>
       claimGap(tx, { tenantId, duty: DUTY, period, now: NOW }),
     );
-    await withTenant(a, tenantId, (tx) =>
+    await withTransaction(a, (tx) =>
       completeRun(tx, {
         id: claimed!.id,
         startedAt: claimed!.startedAt,
@@ -101,14 +101,14 @@ describe("two runners racing one failed row", () => {
     );
     const later = new Date(NOW.getTime() + 60_000);
     const [first, second] = await Promise.all([
-      withTenant(a, tenantId, (tx) => claimRow(tx, { id: claimed!.id, now: later })),
-      withTenant(b, tenantId, (tx) => claimRow(tx, { id: claimed!.id, now: later })),
+      withTransaction(a, (tx) => claimRow(tx, { id: claimed!.id, now: later })),
+      withTransaction(b, (tx) => claimRow(tx, { id: claimed!.id, now: later })),
     ]);
     expect([first, second].filter((r) => r !== null)).toHaveLength(1);
 
     // The loser must not have inflated the attempt count — a conditional UPDATE that matched
     // nothing changes nothing, which is what bounds retries.
-    const snapshot = await withTenant(a, tenantId, (tx) =>
+    const snapshot = await withTransaction(a, (tx) =>
       readSnapshot(tx, { tenantId, duty: DUTY, horizonStart: new Date("2026-07-01T00:00:00Z") }),
     );
     expect(snapshot.rows.find((r) => r.id === claimed!.id)?.attempts).toBe(2);
@@ -118,10 +118,10 @@ describe("two runners racing one failed row", () => {
 describe("two runners racing one successor enqueue", () => {
   it("inserts exactly one, and the loser reads the violation as already-enqueued", async () => {
     const period = dayPeriod(new Date("2026-07-22T00:00:00Z"));
-    const claimed = await withTenant(a, tenantId, (tx) =>
+    const claimed = await withTransaction(a, (tx) =>
       claimGap(tx, { tenantId, duty: DUTY, period, now: NOW }),
     );
-    await withTenant(a, tenantId, (tx) =>
+    await withTransaction(a, (tx) =>
       completeRun(tx, {
         id: claimed!.id,
         startedAt: claimed!.startedAt,
@@ -149,7 +149,7 @@ describe("two runners racing one successor enqueue", () => {
     const held = gate();
     const aHasInserted = gate();
 
-    const first = withTenant(a, tenantId, async (tx) => {
+    const first = withTransaction(a, async (tx) => {
       const inserted = await enqueueSuccessor(tx, { tenantId, duty: DUTY, period, dueAt });
       aHasInserted.open();
       await held.passed;
@@ -157,7 +157,7 @@ describe("two runners racing one successor enqueue", () => {
     });
 
     await aHasInserted.passed;
-    const second = withTenant(b, tenantId, (tx) =>
+    const second = withTransaction(b, (tx) =>
       enqueueSuccessor(tx, { tenantId, duty: DUTY, period, dueAt }),
     );
     await waitForABlockedBackend();
@@ -169,7 +169,7 @@ describe("two runners racing one successor enqueue", () => {
     expect(await first).toBe(true);
     expect(await second).toBe(false);
 
-    const rows = await withTenant(a, tenantId, (tx) =>
+    const rows = await withTransaction(a, (tx) =>
       readSnapshot(tx, { tenantId, duty: DUTY, horizonStart: new Date("2026-07-01T00:00:00Z") }),
     );
     expect(

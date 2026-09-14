@@ -8,7 +8,7 @@ import {
   joinRequests,
   printAgents,
   printJobs,
-  withTenant,
+  withTransaction,
 } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -93,7 +93,7 @@ const suite = usePgliteDb({
       tipsEnabled: false,
       orderFlow: "ticket_then_pay",
     };
-    const { managerSid, staffSid } = await withTenant(db, tenantId, async (tx) => {
+    const { managerSid, staffSid } = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       const mgr = await tx.execute<{ id: string }>(sql`
         insert into persons (tenant_id, display_name, pin_hash, role)
@@ -172,7 +172,7 @@ async function joinAndAccept(
   label = "Cocina agent",
 ): Promise<{ agentId: string; token: string }> {
   const { token, verificationNumber, joinId } = await knock(app, label);
-  await withTenant(suite.db, tenantId, async (tx) => {
+  await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     const result = await acceptPrintAgentJoinRequest(tx, cfg, joinId, {
       choice: verificationNumber,
@@ -266,7 +266,7 @@ async function pull(
 /** Enqueue one job on `printerId` (directly via the outbox verb — there is no enqueue ROUTE in this
  * slice; a fire/sale enqueues in-process). Returns the job id. */
 async function enqueue(printerId: string, payload: Uint8Array): Promise<string> {
-  return withTenant(suite.db, tenantId, async (tx) => {
+  return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     const { jobId } = await enqueuePrintJob(tx, { tenantId, locationId }, printerId, payload);
     return jobId;
@@ -298,7 +298,7 @@ describe("POST /print-api/agent/join (the knock)", () => {
       error: { code: "device.pairing_closed" },
     });
     // Nothing was written — the window guard runs before any DB work.
-    const rows = await withTenant(suite.db, tenantId, async (tx) => {
+    const rows = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       return tx.select().from(joinRequests).where(eq(joinRequests.label, name));
     });
@@ -315,7 +315,7 @@ describe("POST /print-api/agent/join (the knock)", () => {
     // `${joinId}.${secret}` — a uuid selector, a dot, then the base64url secret.
     expect(body.token).toMatch(/^[0-9a-f-]{36}\.[A-Za-z0-9_-]+$/);
     const joinId = body.token.slice(0, body.token.indexOf("."));
-    const [pending] = await withTenant(suite.db, tenantId, async (tx) => {
+    const [pending] = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       return tx
         .select({ kind: joinRequests.kind })
@@ -324,7 +324,7 @@ describe("POST /print-api/agent/join (the knock)", () => {
     });
     expect(pending).toMatchObject({ kind: "print_agent" });
     // The knock alone never creates the real row — that is the admin's accept.
-    const agents = await withTenant(suite.db, tenantId, async (tx) => {
+    const agents = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       return tx.select().from(printAgents).where(eq(printAgents.name, name));
     });
@@ -370,7 +370,7 @@ describe("GET /print-api/agent/join/status", () => {
     expect((await pending.json()) as { status: string }).toEqual({ status: "pending" });
 
     // Accept in-process (the route is proven in join-api.pg.test.ts).
-    await withTenant(suite.db, tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       const r = await acceptPrintAgentJoinRequest(tx, cfg, joinId, { choice: verificationNumber });
       expect(r.ok).toBe(true);

@@ -1,4 +1,4 @@
-import { CORE_MIGRATIONS, captureError, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, captureError, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -50,7 +50,7 @@ function event(personId: string, at: string): ClockEventInput {
 
 /** Runs a backend call inside a tenant transaction, the shape a till caller uses. */
 function run<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  return withTenant(suite.db, tenantId, fn);
+  return withTransaction(suite.db, fn);
 }
 
 async function codeOfRejection(fn: () => Promise<unknown>): Promise<string | undefined> {

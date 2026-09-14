@@ -22,7 +22,7 @@ import {
   isUniqueViolation,
   sales,
   tenders,
-  withTenant,
+  withTransaction,
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
@@ -350,7 +350,7 @@ export type IntegratedPayDeps = TillSaleDeps & {
 /**
  * Pay and settle a working order idempotently — the CRUX of park & retrieve (spec §3). It stops a
  * lost-response pay retry from filing a SECOND chained fiscal record (an unrepairable defect: invoice
- * numbers are never reused, `CLAUDE.md` §5). All in ONE `withTenant`/`asAppUser` transaction, so the
+ * numbers are never reused, `CLAUDE.md` §5). All in ONE `withTransaction`/`asAppUser` transaction, so the
  * working order's settle, the sale, its tender/settlement and its chained fiscal record commit as one
  * unit — or roll back together.
  *
@@ -382,7 +382,7 @@ export async function payWorkingOrder(
   operatorId?: string,
 ): Promise<TillSaleResult> {
   try {
-    return await withTenant(deps.db, cfg.tenantId, async (tx) => {
+    return await withTransaction(deps.db, async (tx) => {
       await asAppUser(tx);
 
       // The deployment holds one tenant per database. Step
@@ -494,10 +494,10 @@ export async function payWorkingOrder(
       throw error;
     }
     // A 23505 means a concurrent pay for this same id won the race and this transaction aborted. Roll
-    // back (already done by the failed `withTenant`) and REPLAY in a fresh transaction: the winner
+    // back (already done by the failed `withTransaction`) and REPLAY in a fresh transaction: the winner
     // has committed (a unique violation fires only against a COMMITTED conflicting row), so its
     // settled sale is now readable.
-    return withTenant(deps.db, cfg.tenantId, async (tx) => {
+    return withTransaction(deps.db, async (tx) => {
       await asAppUser(tx);
       const [row] = await tx
         .select({ status: workingOrders.status })
@@ -595,7 +595,7 @@ export async function printSaleReceipt(
   workingOrderId: string,
   duplicate: boolean,
 ): Promise<void> {
-  await withTenant(deps.db, cfg.tenantId, async (tx) => {
+  await withTransaction(deps.db, async (tx) => {
     await asAppUser(tx);
     // Is there a filed sale for this working-order id? An unknown/open/foreign id names none → nothing
     // to reprint. This existence check keeps `readSettledTicket`'s bare-Error "no sale" path unreachable
@@ -833,7 +833,7 @@ export async function payWorkingOrderIntegrated(
   operatorId?: string,
 ): Promise<IntegratedPayOutcome> {
   // ---- P1 (tx A): resolve / replay / price; commit a walk-up order OPEN before the network call. ----
-  const prepared = await withTenant(deps.db, cfg.tenantId, async (tx) => {
+  const prepared = await withTransaction(deps.db, async (tx) => {
     await asAppUser(tx);
 
     const [locked] = await tx
@@ -1031,7 +1031,7 @@ async function finalizeCapture(
   }
   /* v8 ignore stop */
   try {
-    return await withTenant(deps.db, cfg.tenantId, async (tx) => {
+    return await withTransaction(deps.db, async (tx) => {
       await asAppUser(tx);
 
       const { saleId, fiscal } = await recordSale(tx, deps.backend, {
@@ -1128,7 +1128,7 @@ async function finalizeCapture(
     // its sale first, aborting this one. Replay the winner's settled ticket in a fresh transaction
     // (the unique violation fires only against a COMMITTED conflicting row, so it is readable now),
     // filing nothing.
-    return withTenant(deps.db, cfg.tenantId, async (tx) => {
+    return withTransaction(deps.db, async (tx) => {
       await asAppUser(tx);
       return readSettledTicket(deps.backend, tx, cfg, req.id);
     });
@@ -1142,7 +1142,7 @@ async function finalizeCapture(
  * files the sale from the order's STORED locked lines — the SAME lines P1 would have priced, so
  * `priced.total` equals what `collect` charged when no tip was added (line-add snapshot, 7c) — and
  * associates THIS existing captured row, never a second `collect` (design Decision 2). All in ONE
- * `withTenant`/`asAppUser` transaction so the sale, its tender/settlement, its chained fiscal record,
+ * `withTransaction`/`asAppUser` transaction so the sale, its tender/settlement, its chained fiscal record,
  * the association and the `open`/`placed` → `settled` transition commit as one unit (or roll back
  * together).
  *
@@ -1170,7 +1170,7 @@ async function finalizeRecovery(
   captured: CapturedPaymentForOrder,
   operatorId?: string,
 ): Promise<IntegratedPayOutcome> {
-  return withTenant(deps.db, cfg.tenantId, async (tx) => {
+  return withTransaction(deps.db, async (tx) => {
     await asAppUser(tx);
 
     // Re-lock FOR UPDATE (the order always exists here): serialises a concurrent recovery — the loser
@@ -1369,7 +1369,7 @@ async function finalizeSettle(
   }
   /* v8 ignore stop */
   try {
-    return await withTenant(deps.db, cfg.tenantId, async (tx) => {
+    return await withTransaction(deps.db, async (tx) => {
       await asAppUser(tx);
 
       // Settle the EXISTING issued invoice — files no fiscal record. The tender records the whole card
@@ -1427,7 +1427,7 @@ async function finalizeSettle(
     if (!(error instanceof AppError) || error.code !== "sale.already_settled") {
       throw error;
     }
-    return withTenant(deps.db, cfg.tenantId, async (tx) => {
+    return withTransaction(deps.db, async (tx) => {
       await asAppUser(tx);
       return readSettledTicket(deps.backend, tx, cfg, req.id);
     });
@@ -1466,7 +1466,7 @@ async function finalizeSettleRecovery(
   captured: CapturedPaymentForOrder,
   outstanding: { saleId: SaleId; amountDue: Decimal },
 ): Promise<IntegratedPayOutcome> {
-  return withTenant(deps.db, cfg.tenantId, async (tx) => {
+  return withTransaction(deps.db, async (tx) => {
     await asAppUser(tx);
 
     // Re-lock FOR UPDATE (the order always exists here): serialises a concurrent recovery — the loser
@@ -1577,7 +1577,7 @@ export function toPayOutcome(
 /**
  * Collect and finalise a PLACED order (prepare & collect, sub-project 7c) — the COLLECT half of the
  * mode dispatch, dispatching on the location's `order_flow` (design §3's state-machine table). All in
- * one `withTenant`/`asAppUser` transaction:
+ * one `withTransaction`/`asAppUser` transaction:
  *  - `invoice_first` (Mode I): the invoice was ALREADY issued (deferred) at placing, so collect
  *    SETTLES the existing sale (`settleSale`) and moves `placed → settled`. It files NO second fiscal
  *    record — a double-file would be an unrepairable defect (§5). A `card` tender ALSO writes the
@@ -1606,7 +1606,7 @@ export async function collectOrder(
   req: PayWorkingOrderRequest,
   operatorId?: string,
 ): Promise<TillSaleResult> {
-  return withTenant(deps.db, cfg.tenantId, async (tx) => {
+  return withTransaction(deps.db, async (tx) => {
     await asAppUser(tx);
 
     // Lock the order for the life of the tx and read its status off the locked copy. A concurrent

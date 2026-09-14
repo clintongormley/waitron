@@ -7,7 +7,7 @@
 import "./errors.js";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { AppError } from "@waitron/shared";
-import { asAppUser, withTenant, type Transaction } from "@waitron/db";
+import { asAppUser, withTransaction, type Transaction } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
 import type { ModuleRouteContext, ModuleRoutes } from "@waitron/module";
 import type { Logger } from "@waitron/server-kit";
@@ -150,7 +150,7 @@ function screenPatch(v: Record<string, unknown>): UpdateBookingPatch {
  * The bookings module's `routes` seat. The deployment holds one tenant per database. Mounts the
  * dashboard's gated booking write group on the shared Hono app boot passes — every route wraps its
  * handler in `run`, calls `requireManagementSession(c)` (→ 401 before any DB work) and then, inside
- * `withTenant` + `asAppUser`, `authorizeManager(...)` (→ 403) before the `./bookings.js` verb, in
+ * `withTransaction` + `asAppUser`, `authorizeManager(...)` (→ 403) before the `./bookings.js` verb, in
  * this database. The `booking.manage` gate runs on every route through one constant. No fiscal path
  * is touched: `seatBooking` opens a pre-fiscal working order only, via `ctx.core.openTab` (boot
  * bound the venue's `TillConfig` into `core`). The seven route paths are byte-identical to the
@@ -169,7 +169,7 @@ export const BOOKINGS_ROUTES: ModuleRoutes = {
       sessionId: string,
       fn: (tx: Transaction, auth: { authorizedBy: string }) => Promise<T>,
     ): Promise<T> =>
-      withTenant(db, cfg.tenantId, async (tx) => {
+      withTransaction(db, async (tx) => {
         await asAppUser(tx);
         const auth = await authorizeManager(tx, {
           managementSessionId: sessionId,

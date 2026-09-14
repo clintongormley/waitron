@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { CREDENTIALS_MIGRATIONS, loadKeyRing, putCredential } from "@waitron/credentials";
@@ -77,7 +77,7 @@ async function seedInitiated(
     values (${tenantId}, ${loc.rows[0]!.id}, 'Till 1') returning id`);
   const wo = await db.execute<{ id: string }>(sql`
     insert into working_orders (tenant_id, till_id, order_number) values (${tenantId}, ${till.rows[0]!.id}, 1) returning id`);
-  await withTenant(db, tenantId, (tx) =>
+  await withTransaction(db, (tx) =>
     insertInitiated(tx, {
       tenantId,
       workingOrderId: wo.rows[0]!.id,
@@ -87,7 +87,7 @@ async function seedInitiated(
       amount: decimal(opts.amount ?? "12.10"),
     }),
   );
-  await withTenant(db, tenantId, (tx) =>
+  await withTransaction(db, (tx) =>
     putCredential(tx, ring, {
       tenantId,
       purpose: "payments.stripe",

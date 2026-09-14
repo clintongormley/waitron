@@ -9,7 +9,7 @@ import "./errors.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { AppError } from "@waitron/shared";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { authorizeManager, withPassiveManagementRead, type Permission } from "@waitron/identity";
 import {
@@ -139,7 +139,7 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
     permission: Permission,
     fn: (tx: Transaction) => Promise<T>,
   ): Promise<T> =>
-    withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+    withTransaction(deps.db, async (tx) => {
       await asAppUser(tx);
       await authorizeManager(tx, { managementSessionId: sessionId, permission });
       return fn(tx);
@@ -149,7 +149,7 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
    * The shared by-id routes need the permission the ROW's kind demands, which is not known until the
    * row is read — so `gated` cannot take it up front. The shape, exactly:
    *
-   *   1. inside `withTenant` + `asAppUser`, read the row's kind (tenant-scoped);
+   *   1. inside `withTransaction` + `asAppUser`, read the row's kind (tenant-scoped);
    *   2. `authorizeManager` for `PERMISSION_FOR[kind]`;
    *   3. act.
    *
@@ -167,7 +167,7 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
     id: string,
     fn: (tx: Transaction) => Promise<T>,
   ): Promise<T> =>
-    withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+    withTransaction(deps.db, async (tx) => {
       await asAppUser(tx);
       const kind = isUuid(id) ? await joinRequestKind(tx, deps.cfg, id) : undefined;
       await authorizeManager(tx, {
@@ -285,7 +285,7 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
       const sessionId = requireManagementSession(c);
       const id = c.req.param("id");
       // PARSED out here, SCREENED inside the gate. Parsing awaits the request stream, so doing it
-      // under `withTenant` would hold a pool connection across a network read; screening is pure and
+      // under `withTransaction` would hold a pool connection across a network read; screening is pure and
       // belongs after `authorizeManager`, so this route refuses an unauthorised caller 403 before it
       // says anything about their id or body — the ordering `gatedByRowKind` documents, applied here
       // too so the file's two by-id paths do not disagree. Throwing from inside the transaction is
@@ -315,7 +315,7 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
           registerId,
         });
       });
-      // THE MISMATCH IS THROWN AFTER THE TRANSACTION, NEVER INSIDE IT. `withTenant` IS the transaction
+      // THE MISMATCH IS THROWN AFTER THE TRANSACTION, NEVER INSIDE IT. `withTransaction` IS the transaction
       // (`packages/db/src/tenancy.ts:15`), so an AppError raised inside it rolls the consuming delete
       // back into existence and a wrong tap becomes an unlimited retry — the exact opposite of the
       // property that makes one-in-three an acceptable guess rate. The verb returns the mismatch as a
@@ -351,7 +351,7 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
         return acceptPrintAgentJoinRequest(tx, deps.cfg, id, { choice });
       });
       // THE MISMATCH IS THROWN AFTER THE TRANSACTION, NEVER INSIDE IT — an AppError raised inside
-      // `withTenant` (which IS the transaction) would roll the consuming delete back into existence and
+      // `withTransaction` (which IS the transaction) would roll the consuming delete back into existence and
       // turn a wrong tap into an unlimited retry. The verb returns the mismatch as a RESULT for exactly
       // this reason; the route commits it, then answers (see `acceptPrintAgentJoinRequest`'s header).
       if (!result.ok) throw new AppError("device.join_mismatch", {});

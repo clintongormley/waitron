@@ -6,7 +6,7 @@ import { tenantId as brandTenantId } from "@waitron/shared";
 // PGlite's superuser connection cannot check the grants used by these writes (CLAUDE.md §4).
 
 import { describe, expect, it } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import { ALL_MODULES } from "../../src/modules.js";
@@ -72,7 +72,7 @@ describe("seedOptions", () => {
   it("seeds legacy groups and the three canonical modifier types with product and menu behavior", async () => {
     const { tenantId, locationId } = await provisionVenue();
 
-    const { products, modifiers } = await withTenant(suite.admin, tenantId, async (tx) => {
+    const { products, modifiers } = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       const { productsByImage, menuItemsByProduct } = await seedCatalogues(
         tx,

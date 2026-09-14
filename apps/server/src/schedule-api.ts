@@ -1,6 +1,6 @@
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { asAppUser, withTenant, type Database, type Transaction } from "@waitron/db";
+import { asAppUser, withTransaction, type Database, type Transaction } from "@waitron/db";
 import {
   acceptSwap,
   createAbsence,
@@ -64,14 +64,14 @@ const run = createErrorBoundary(STATUS, "schedule.failed");
  * the manager approval half. Every route resolves the requester via `requireSession(deps, c)`
  * FIRST and passes THAT `personId` into the verb; the request body is NEVER trusted for identity
  * (the crux of this surface — a staff member acts only as themselves). The verb then runs on the
- * app role under the till's tenant (`withTenant` + `asAppUser`), in the database holding this
+ * app role under the till's tenant (`withTransaction` + `asAppUser`), in the database holding this
  * tenant. The explicit `person_id` predicate scopes the operation to the requester.
  */
 export function mountScheduleApi(app: Hono, deps: ScheduleApiDeps, log: Logger): void {
-  /** Run `fn` on the app role under the till's tenant — the one place the withTenant/asAppUser pair
+  /** Run `fn` on the app role under the till's tenant — the one place the withTransaction/asAppUser pair
    * is expressed, so no route re-implements it. */
   const asStaff = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> =>
-    withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+    withTransaction(deps.db, async (tx) => {
       await asAppUser(tx);
       return fn(tx);
     });

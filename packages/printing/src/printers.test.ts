@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, isPgError, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, isPgError, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -29,7 +29,8 @@ async function setup(): Promise<PrintConfig> {
 }
 
 function asTx<T>(cfg: PrintConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  return withTenant(suite.db, cfg.tenantId, fn);
+  void cfg;
+  return withTransaction(suite.db, fn);
 }
 
 async function printerRow(printerId: string): Promise<{ transport: string; port: number | null }> {

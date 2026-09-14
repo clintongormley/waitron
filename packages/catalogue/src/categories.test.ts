@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { withTenant, type Transaction } from "@waitron/db";
+import { withTransaction, type Transaction } from "@waitron/db";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { seedLegacySellingUnits, useCatalogueDb } from "../test/fixtures.js";
 import { createCatalogue, createProduct, listProducts } from "./operations.js";
@@ -20,7 +20,7 @@ const fx = useCatalogueDb();
 async function fixture() {
   const tenantId = await seedTenant(fx.db);
   await seedLegacySellingUnits(fx.db, tenantId);
-  const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTenant(fx.db, tenantId, fn);
+  const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
   await app((tx) =>
     writeContentLanguages(tx, tenantId, { defaultLanguage: "en", languages: ["en", "fr"] }),
   );

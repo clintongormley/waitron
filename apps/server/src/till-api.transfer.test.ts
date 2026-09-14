@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -66,8 +66,8 @@ const suite = usePgliteDb({
     ana = { id: person.rows[0]!.id };
     cfg = makeCfg(tenantId, till.rows[0]!.id, loc.rows[0]!.id, nodeId);
     // One product in a catalogue assigned to the counter location, seeded on the APP role via the
-    // catalogue helpers — the same `withTenant` + `asAppUser` path `openTab` prices it through.
-    const product = await withTenant(db, tenantId, async (tx) => {
+    // catalogue helpers — the same `withTransaction` + `asAppUser` path `openTab` prices it through.
+    const product = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       const cat = await createCatalogue(tx, tenantId, { name: "Carta" });
       const bebidas = await createCategory(tx, tenantId, { name: { en: "Bebidas" } });
@@ -149,10 +149,10 @@ function deps(db: Database): TillApiDeps {
   };
 }
 
-/** Opens a real shift session for Ana on the app role — the same `withTenant` + `asAppUser` +
+/** Opens a real shift session for Ana on the app role — the same `withTransaction` + `asAppUser` +
  * `loginWithPin` path the login route runs — and returns its id. */
 async function openSession(db: Database): Promise<string> {
-  const session = await withTenant(db, cfg.tenantId, async (tx) => {
+  const session = await withTransaction(db, async (tx) => {
     await asAppUser(tx);
     return loginWithPin(tx, {
       tenantId: cfg.tenantId,
@@ -174,7 +174,7 @@ async function setupTabsApp(
   const d = deps(suite.db);
   mountTillApi(app, d, collect([]));
   const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
-  const { tabA, tabB } = await withTenant(suite.db, d.cfg.tenantId, async (tx) => {
+  const { tabA, tabB } = await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     const a = await createTable(tx, d.cfg, { label: `T-${randomUUID()}` });
     const b = await createTable(tx, d.cfg, { label: `T-${randomUUID()}` });

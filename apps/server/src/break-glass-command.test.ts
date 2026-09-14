@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { afterEach, describe, expect, it } from "vitest";
-import { type Database, withTenant } from "@waitron/db";
+import { type Database, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { hashPassword, hashPin, verifyPassword } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
@@ -77,7 +77,7 @@ async function withAppUserDb<T>(fn: (db: Database) => Promise<T>): Promise<T> {
 
 async function readSoleAdminId(tenantId: string): Promise<string> {
   return withAppUserDb((db) =>
-    withTenant(db, tenantId, async (tx) => {
+    withTransaction(db, async (tx) => {
       const rows = await tx.execute<{ id: string }>(
         sql`select id from persons where tenant_id = ${tenantId} and role = 'admin'`,
       );
@@ -91,8 +91,9 @@ async function readPerson(
   tenantId: string,
   personId: string,
 ): Promise<{ passwordHash: string | null; status: string } | undefined> {
+  void tenantId;
   return withAppUserDb((db) =>
-    withTenant(db, tenantId, async (tx) => {
+    withTransaction(db, async (tx) => {
       const rows = await tx.execute<{ password_hash: string | null; status: string }>(
         sql`select password_hash, status from persons where id = ${personId}`,
       );
@@ -157,7 +158,7 @@ describe("runBreakGlassReset (real postgres, app role)", () => {
 
     // Read the pin_hash directly and confirm it changed to the new PIN's hash-verifiable value.
     const after = await withAppUserDb((db) =>
-      withTenant(db, tenantId, async (tx) => {
+      withTransaction(db, async (tx) => {
         const rows = await tx.execute<{ pin_hash: string }>(
           sql`select pin_hash from persons where id = ${adminId}`,
         );
@@ -174,7 +175,7 @@ describe("runBreakGlassReset (real postgres, app role)", () => {
   it("reactivates a suspended admin (status → active)", async () => {
     const { tenantId, adminId } = await setupTenant();
     // Suspend the admin as the owner (the app role holds UPDATE too, but the owner is simplest here).
-    await withTenant(suite.admin, tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await tx.execute(sql`update persons set status = 'suspended' where id = ${adminId}`);
     });
     expect((await readPerson(tenantId, adminId))!.status).toBe("suspended");
@@ -186,7 +187,7 @@ describe("runBreakGlassReset (real postgres, app role)", () => {
 
   it("clears second factors and linked login methods so the replacement password restores access", async () => {
     const { tenantId, adminId } = await setupTenant();
-    await withTenant(suite.admin, tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await tx.execute(
         sql`update persons set totp_secret = 'sealed', google_subject = 'subject' where id = ${adminId}`,
       );
@@ -278,7 +279,7 @@ describe("runBreakGlassReset (real postgres, app role)", () => {
     const { tenantId, adminId } = await setupTenant();
     // Insert a second admin as the app role (app_user holds INSERT on persons).
     const secondId = await withAppUserDb((db) =>
-      withTenant(db, tenantId, async (tx) => {
+      withTransaction(db, async (tx) => {
         const rows = await tx.execute<{ id: string }>(sql`
           insert into persons (tenant_id, display_name, pin_hash, password_hash, role)
           values (${tenantId}, 'Second Admin', ${hashPin("1234")}, ${hashPassword(OLD_PASSWORD)}, 'admin')

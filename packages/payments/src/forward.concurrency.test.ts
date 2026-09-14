@@ -1,7 +1,7 @@
 // Real PostgreSQL checks SKIP LOCKED claims across independent backends.
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { withTenant } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { decimal } from "@waitron/shared";
 import { claimAcceptedOffline, insertAcceptedOffline } from "./store.js";
@@ -39,7 +39,7 @@ describe("claimAcceptedOffline SKIP LOCKED partitions the queue across concurren
       const acquired = new Promise<void>((resolve) => (acquire = resolve));
       let lockedRef = "";
       // Holder locks exactly ONE accepted_offline row and holds the transaction open.
-      holding = withTenant(holder, seeded.tenantId, async (tx) => {
+      holding = withTransaction(holder, async (tx) => {
         const locked = await tx.execute<{ payment_ref: string }>(sql`
           select payment_ref from payments
           where provider = 'fake' and state = 'accepted_offline'
@@ -52,7 +52,7 @@ describe("claimAcceptedOffline SKIP LOCKED partitions the queue across concurren
 
       // The waiter's real claimAcceptedOffline runs WHILE the holder holds its lock. SKIP LOCKED
       // means it returns immediately (never blocks) with exactly the row the holder did NOT lock.
-      const secondClaim = await withTenant(waiter, seeded.tenantId, (tx) =>
+      const secondClaim = await withTransaction(waiter, (tx) =>
         claimAcceptedOffline(tx, seeded.tenantId, "fake"),
       );
       const secondRefs = secondClaim.map((r) => r.paymentRef);

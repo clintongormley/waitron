@@ -1,4 +1,4 @@
-import { withTenant } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import type { PgliteSuite } from "@waitron/db/testing/lifecycle.js";
 import {
   decimal,
@@ -42,7 +42,7 @@ export async function setup(suite: PgliteSuite, tune?: (f: FakeSumUp) => void) {
     readerRef: "rdr_1",
   };
   const row = async (ref: string) => {
-    const r = await withTenant(suite.db, t.tenantId, (tx) =>
+    const r = await withTransaction(suite.db, (tx) =>
       getPaymentByRef(tx, { tenantId: t.tenantId, provider: "sumup", paymentRef: ref }),
     );
     if (r === undefined) throw new Error(`no payments row for ref ${ref}`);

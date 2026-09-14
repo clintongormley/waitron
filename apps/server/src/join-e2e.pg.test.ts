@@ -10,7 +10,7 @@ import type { Logger } from "./logger.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import "./errors.js";
 
-// Real Postgres, not PGlite (CLAUDE.md §4): every route here runs as `app_user` under `withTenant`, so
+// Real Postgres, not PGlite (CLAUDE.md §4): every route here runs as `app_user` under `withTransaction`, so
 // the join_requests / devices / device_profiles grants are enforced and — since RLS was dropped (#255)
 // — the two-tenant test genuinely exercises each route's own `eq(table.tenantId, cfg.tenantId)`
 // predicate. On PGlite every connection is a superuser holding every privilege AND the tenant predicate

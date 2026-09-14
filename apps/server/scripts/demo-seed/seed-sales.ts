@@ -32,7 +32,7 @@ import { recordSale } from "@waitron/core";
 import type { RecordSaleInput, RecordSaleLine } from "@waitron/core";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { TrustedClock, VatBreakdownLine } from "@waitron/fiscal";
-import { withTenant } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import {
   customerPresentationText,
@@ -389,7 +389,7 @@ export async function seedSales(
         clock: backDating.clock,
       };
 
-      await withTenant(db, tenantId, (tx) => recordSale(tx, backend, input));
+      await withTransaction(db, (tx) => recordSale(tx, backend, input));
       count += 1;
     }
   }

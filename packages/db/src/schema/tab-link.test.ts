@@ -8,7 +8,7 @@ import { captureError, pgErrorCode } from "../testing/errors.js";
 import { useTemplateDb } from "../testing/lifecycle.js";
 import { asAppUser } from "../testing/roles.js";
 import { seedNode } from "../testing/seed.js";
-import { withTenant } from "../tenancy.js";
+import { withTransaction } from "../tenancy.js";
 import { locations, tenants, tills } from "./tenants.js";
 
 const TENANT_A = "11111111-1111-4111-8111-111111111111";
@@ -21,7 +21,8 @@ async function rollBackAfter(
   tenant: string,
   fn: (tx: Transaction) => Promise<void>,
 ): Promise<void> {
-  await withTenant(admin, tenant, async (tx) => {
+  void tenant;
+  await withTransaction(admin, async (tx) => {
     await fn(tx);
     throw new RollbackSignal();
   }).catch((error: unknown) => {
@@ -36,7 +37,7 @@ describe("table↔tab link columns (mutual composite FKs)", () => {
   let orderSeq = 0;
 
   function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
-    return withTenant(suite.admin, TENANT_A, async (tx) => {
+    return withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return fn(tx);
     });

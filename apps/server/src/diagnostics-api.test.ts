@@ -2,7 +2,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { hashPassword, hashPin, startManagementSession } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
@@ -77,28 +77,24 @@ async function setupVenue(): Promise<Venue> {
     { db: suite.admin, modules: ALL_MODULES },
   );
 
-  const { managerSid, staffSid, supervisorSid } = await withTenant(
-    suite.admin,
-    venue.tenantId,
-    async (tx) => {
-      await asAppUser(tx);
-      const seedPerson = async (role: string): Promise<string> => {
-        const p = await tx.execute<{ id: string }>(sql`
+  const { managerSid, staffSid, supervisorSid } = await withTransaction(suite.admin, async (tx) => {
+    await asAppUser(tx);
+    const seedPerson = async (role: string): Promise<string> => {
+      const p = await tx.execute<{ id: string }>(sql`
           insert into persons (tenant_id, display_name, pin_hash, role)
           values (${venue.tenantId}, ${`The ${role}`}, ${hashPin("1234")}, ${role}) returning id`);
-        const session = await startManagementSession(tx, {
-          tenantId: venue.tenantId,
-          personId: p.rows[0]!.id,
-        });
-        return session.id;
-      };
-      return {
-        managerSid: await seedPerson("manager"),
-        staffSid: await seedPerson("staff"),
-        supervisorSid: await seedPerson("supervisor"),
-      };
-    },
-  );
+      const session = await startManagementSession(tx, {
+        tenantId: venue.tenantId,
+        personId: p.rows[0]!.id,
+      });
+      return session.id;
+    };
+    return {
+      managerSid: await seedPerson("manager"),
+      staffSid: await seedPerson("staff"),
+      supervisorSid: await seedPerson("supervisor"),
+    };
+  });
 
   return {
     tenantId: venue.tenantId,

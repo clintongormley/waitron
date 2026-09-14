@@ -2,7 +2,7 @@ import { tenantId as brandTenantId } from "@waitron/shared";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, asAppUser, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, hashPin, startManagementSession } from "@waitron/identity";
@@ -21,13 +21,13 @@ import "./errors.js";
 // boundary, the body + id screens and the `recipe.manage` gate wiring — end to end in-process, the
 // same way `catalogue-api.test.ts` proves the catalogue routes. The ingredients/recipe_lines tables
 // live in CORE_MIGRATIONS and the management session/persons in IDENTITY_MIGRATIONS, and every DB
-// touch runs `withTenant` + `asAppUser` exactly as production does. The gate-by-DELETION proof
+// touch runs `withTransaction` + `asAppUser` exactly as production does. The gate-by-DELETION proof
 // (removing `authorizeManager` turns the staff refusal green→red), run as the non-superuser app role,
 // is the real-Postgres suite (`recipe-api.pg.test.ts`); PGlite connects as a superuser holding every
 // grant (CLAUDE.md §4).
 const noopLog: Logger = () => {};
 
-// This node's origin id — threaded into every recipe write's withTenant (a recipe write UPDATEs the
+// This node's origin id — threaded into every recipe write's withTransaction (a recipe write UPDATEs the
 // sync-enrolled `products` table). This PGlite suite carries no sync triggers (core, catalogue and
 // identity migrations only), so it is never read here; any valid uuid serves, kept for parity with
 // production.
@@ -47,7 +47,7 @@ const suite = usePgliteDb({
     // nothing) as the app role under the tenant, mint a live management session for each, and seed one
     // catalogue + product for the recipe routes to hang lines on. `pin_hash` is NOT NULL, so a value
     // is supplied even though these sessions are minted directly rather than via a PIN/password login.
-    const seeded = await withTenant(db, tenantId, async (tx) => {
+    const seeded = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       const mgr = await tx.execute<{ id: string }>(sql`
         insert into persons (tenant_id, display_name, pin_hash, role)

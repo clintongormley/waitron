@@ -37,7 +37,7 @@ import {
   asAppUser,
   createPostgresDb,
   runMigrations,
-  withTenant,
+  withTransaction,
 } from "@waitron/db";
 import { IDENTITY_MIGRATIONS, hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
@@ -155,7 +155,7 @@ async function main(): Promise<void> {
     // Seed a catalogue as the application role (not the owner): one weight-priced product, one
     // each-priced product, in two categories, then assign it to the venue's location. Spanish names
     // are fine here — apps/* is out of the english-only guard's scope.
-    await withTenant(db, tenantId, async (tx) => {
+    await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       const cat = await createCatalogue(tx, tenantId, { name: "Delicatessen" });
       const comida = await createCategory(tx, tenantId, { name: { es: "Comida" } });
@@ -199,7 +199,7 @@ async function main(): Promise<void> {
 
     // The seam under proof: read the sellable products, price a basket, ring the sale — every fiscal
     // figure originating in the catalogue. Run as the application role, in one transaction.
-    const { saleId, priced } = await withTenant(db, tenantId, async (tx) => {
+    const { saleId, priced } = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       const { products: available } = await listAvailableProducts(tx, venue.locationId);
       // A catalogue row carries the staff `name` and the customer-facing `customerName`; the sale

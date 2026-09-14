@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { stampDeployment, withTenant, type Database, type Transaction } from "@waitron/db";
+import { stampDeployment, withTransaction, type Database, type Transaction } from "@waitron/db";
 import {
   applyVenue,
   assertNoForeignTenant,
@@ -77,7 +77,7 @@ export async function recoverProvisionedVenue(
   req: ProvisionRequest,
 ): Promise<VenueResult> {
   const tenantId = deriveTenantId(req.venue.country, req.venue.taxId);
-  const venue = await withTenant(ownerDb, tenantId, (tx) =>
+  const venue = await withTransaction(ownerDb, (tx) =>
     tx.execute<{ locationId: string; tillId: string; nodeId: string }>(sql`
       select l.id as "locationId", t.id as "tillId", n.id as "nodeId"
       from locations l
@@ -93,7 +93,7 @@ export async function recoverProvisionedVenue(
     throw new AppError("setup.already_provisioned", { tenantId });
   }
   const row = venue.rows[0]!;
-  const series = await withTenant(ownerDb, tenantId, (tx) =>
+  const series = await withTransaction(ownerDb, (tx) =>
     tx.execute<{ id: string; purpose: string; code: string }>(sql`
       select id, purpose, code
       from invoice_series
@@ -174,7 +174,7 @@ export async function provisionVenue(
   if (ensure !== undefined && ensure.kind === "ensure-tenant") {
     assertNoForeignTenant(present, { country: ensure.country, taxId: ensure.taxId }, deps.database);
   }
-  const alreadyProvisioned = await withTenant(deps.ownerDb, tenantId, async (tx) => {
+  const alreadyProvisioned = await withTransaction(deps.ownerDb, async (tx) => {
     const rows = await tx.execute(sql`select 1 from tenants where id = ${tenantId}`);
     return rows.rows.length > 0;
   });

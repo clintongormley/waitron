@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import type { TenantId } from "@waitron/shared";
 import {
   createIngredient,
@@ -18,7 +18,7 @@ describe("ingredient operations", () => {
   });
 
   it("creates an ingredient with allergens and reads it back", async () => {
-    const result = await withTenant(fx.db, tenantId, async (tx) => {
+    const result = await withTransaction(fx.db, async (tx) => {
       await asAppUser(tx);
       const created = await createIngredient(tx, tenantId, {
         name: "alioli",
@@ -37,7 +37,7 @@ describe("ingredient operations", () => {
   });
 
   it("creates an unreviewed (PENDING) ingredient when allergens are omitted", async () => {
-    const created = await withTenant(fx.db, tenantId, async (tx) => {
+    const created = await withTransaction(fx.db, async (tx) => {
       await asAppUser(tx);
       return createIngredient(tx, tenantId, { name: "mystery paste" });
     });
@@ -46,7 +46,7 @@ describe("ingredient operations", () => {
 
   it("rejects an invalid allergen code", async () => {
     await expect(
-      withTenant(fx.db, tenantId, async (tx) => {
+      withTransaction(fx.db, async (tx) => {
         await asAppUser(tx);
         return createIngredient(tx, tenantId, {
           name: "x",
@@ -57,7 +57,7 @@ describe("ingredient operations", () => {
   });
 
   it("updates name and allergens", async () => {
-    const after = await withTenant(fx.db, tenantId, async (tx) => {
+    const after = await withTransaction(fx.db, async (tx) => {
       await asAppUser(tx);
       const c = await createIngredient(tx, tenantId, { name: "alioli" });
       await updateIngredient(tx, c.id, { allergens: { eggs: { presence: "contains" } } });
@@ -67,7 +67,7 @@ describe("ingredient operations", () => {
   });
 
   it("updates name and deactivates without touching allergens", async () => {
-    const after = await withTenant(fx.db, tenantId, async (tx) => {
+    const after = await withTransaction(fx.db, async (tx) => {
       await asAppUser(tx);
       const c = await createIngredient(tx, tenantId, {
         name: "alioli",
@@ -83,7 +83,7 @@ describe("ingredient operations", () => {
   });
 
   it("creates an ingredient with a dietary origin and reads it back", async () => {
-    const result = await withTenant(fx.db, tenantId, async (tx) => {
+    const result = await withTransaction(fx.db, async (tx) => {
       await asAppUser(tx);
       const created = await createIngredient(tx, tenantId, { name: "beef", dietaryOrigin: "meat" });
       return { created, fetched: await getIngredient(tx, created.id) };
@@ -93,7 +93,7 @@ describe("ingredient operations", () => {
   });
 
   it("creates an uncategorised ingredient (dietaryOrigin null) when omitted", async () => {
-    const created = await withTenant(fx.db, tenantId, async (tx) => {
+    const created = await withTransaction(fx.db, async (tx) => {
       await asAppUser(tx);
       return createIngredient(tx, tenantId, { name: "mystery" });
     });
@@ -102,7 +102,7 @@ describe("ingredient operations", () => {
 
   it("rejects an invalid dietary origin on create", async () => {
     await expect(
-      withTenant(fx.db, tenantId, async (tx) => {
+      withTransaction(fx.db, async (tx) => {
         await asAppUser(tx);
         return createIngredient(tx, tenantId, { name: "x", dietaryOrigin: "wombat" as never });
       }),
@@ -110,7 +110,7 @@ describe("ingredient operations", () => {
   });
 
   it("updates the dietary origin", async () => {
-    const after = await withTenant(fx.db, tenantId, async (tx) => {
+    const after = await withTransaction(fx.db, async (tx) => {
       await asAppUser(tx);
       const c = await createIngredient(tx, tenantId, { name: "tofu", dietaryOrigin: "plant" });
       await updateIngredient(tx, c.id, { dietaryOrigin: "meat" });
@@ -120,7 +120,7 @@ describe("ingredient operations", () => {
   });
 
   it("clears the dietary origin (uncategorise) with null", async () => {
-    const after = await withTenant(fx.db, tenantId, async (tx) => {
+    const after = await withTransaction(fx.db, async (tx) => {
       await asAppUser(tx);
       const c = await createIngredient(tx, tenantId, { name: "tofu", dietaryOrigin: "plant" });
       await updateIngredient(tx, c.id, { dietaryOrigin: null });
@@ -131,7 +131,7 @@ describe("ingredient operations", () => {
 
   it("rejects an invalid dietary origin on update", async () => {
     await expect(
-      withTenant(fx.db, tenantId, async (tx) => {
+      withTransaction(fx.db, async (tx) => {
         await asAppUser(tx);
         const c = await createIngredient(tx, tenantId, { name: "x" });
         return updateIngredient(tx, c.id, { dietaryOrigin: "wombat" as never });
@@ -140,7 +140,7 @@ describe("ingredient operations", () => {
   });
 
   it("returns null from getIngredient for an id that does not exist", async () => {
-    const fetched = await withTenant(fx.db, tenantId, async (tx) => {
+    const fetched = await withTransaction(fx.db, async (tx) => {
       await asAppUser(tx);
       return getIngredient(tx, "00000000-0000-0000-0000-000000000000");
     });

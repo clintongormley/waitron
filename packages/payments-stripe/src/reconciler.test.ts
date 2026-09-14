@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { decimal, tenantId as brandTenantId } from "@waitron/shared";
 import { PAYMENTS_MIGRATIONS, insertCapturedPayment, insertInitiated } from "@waitron/payments";
@@ -38,7 +38,7 @@ async function abandonedOrphan(params: {
   paymentRef: string;
   externalRef: string;
 }): Promise<void> {
-  await withTenant(pg.db, params.tenantId, (tx) =>
+  await withTransaction(pg.db, (tx) =>
     insertCapturedPayment(tx, {
       tenantId: params.tenantId,
       workingOrderId: params.workingOrderId,
@@ -62,7 +62,7 @@ describe("StripeReconciler", () => {
   it("matches a terminal row by its payment intent and reports no mismatch", async () => {
     const seeded = await seedWorkingOrder(pg.db, freshNif());
     // No sale, but the working order is still open, so this is not an orphan — the clean case.
-    await withTenant(pg.db, seeded.tenantId, (tx) =>
+    await withTransaction(pg.db, (tx) =>
       insertCapturedPayment(tx, {
         tenantId: seeded.tenantId,
         workingOrderId: seeded.workingOrderId,
@@ -87,7 +87,7 @@ describe("StripeReconciler", () => {
 
   it("matches a HOSTED row by its checkout session id, which the ledger never carries", async () => {
     const seeded = await seedWorkingOrder(pg.db, freshNif());
-    await withTenant(pg.db, seeded.tenantId, (tx) =>
+    await withTransaction(pg.db, (tx) =>
       insertInitiated(tx, {
         tenantId: seeded.tenantId,
         workingOrderId: seeded.workingOrderId,

@@ -15,7 +15,7 @@ import {
   readStandardSeriesId,
   setDeploymentMode,
   stampDeployment,
-  withTenant,
+  withTransaction,
   writeMirrorConfig,
   writeNodeMembership,
   type Database,
@@ -264,7 +264,7 @@ async function seedSaleVenue(admin: Database, nodeId: string): Promise<void> {
     on conflict do nothing`);
 
   const tenant = brandTenantId(MIRROR_TENANT_ID);
-  await withTenant(admin, MIRROR_TENANT_ID, async (tx) => {
+  await withTransaction(admin, async (tx) => {
     await asAppUser(tx);
     const cat = await createCatalogue(tx, tenant, { name: "Delicatessen" });
     const drinks = await createCategory(tx, tenant, { name: { en: "Bebidas" } });

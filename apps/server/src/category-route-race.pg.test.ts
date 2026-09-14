@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { expect, it } from "vitest";
 import { createCategory, deleteCategory } from "@waitron/catalogue";
-import { asAppUser, withTenant, type Database, type Transaction } from "@waitron/db";
+import { asAppUser, withTransaction, type Database, type Transaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import type { LocationId } from "@waitron/shared";
@@ -13,7 +13,8 @@ function app<T>(
   tenantId: string,
   action: (tx: Transaction) => Promise<T>,
 ): Promise<T> {
-  return withTenant(db, tenantId, async (tx) => {
+  void tenantId;
+  return withTransaction(db, async (tx) => {
     await asAppUser(tx);
     return action(tx);
   });

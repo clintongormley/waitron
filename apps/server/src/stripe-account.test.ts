@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type Stripe from "stripe";
-import { CORE_MIGRATIONS, captureError, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, captureError, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { CREDENTIALS_MIGRATIONS, loadKeyRing, putCredential } from "@waitron/credentials";
 import { isAppError } from "@waitron/shared";
@@ -21,7 +21,7 @@ const ring = loadKeyRing(KEY_ENV);
 describe("stripeAccountResolver", () => {
   it("builds the account from the tenant's own secret key", async () => {
     const tenantId = await seedTenant(suite.db);
-    await withTenant(suite.db, tenantId, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       putCredential(tx, ring, {
         tenantId,
         purpose: "payments.stripe",

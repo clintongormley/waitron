@@ -15,7 +15,7 @@ import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import {
   locationId as brandLocationId,
@@ -149,7 +149,7 @@ async function setupVenue(): Promise<SeededVenue> {
   );
 
   const cfg = tillConfigFromVenue(venue);
-  const available = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  const available = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const cat = await createCatalogue(tx, cfg.tenantId, { name: "Delicatessen" });
     const bebidas = await createCategory(tx, cfg.tenantId, { name: { [LOCALE]: "Bebidas" } });
@@ -179,7 +179,7 @@ async function setupVenue(): Promise<SeededVenue> {
 
 /** Seed one active dining table in the venue as the app role; returns its id. */
 async function seedTable(cfg: TillConfig, label: string): Promise<string> {
-  return withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const { id } = await createTable(tx, cfg, { label });
     return id;
@@ -281,7 +281,7 @@ describe("openTab concurrency (one open tab per table; the per-table lock IS the
       expect(new Set(pids).size).toBe(2); // distinct backends — on PGlite these collapse (false pass).
 
       const attempt = (d: Database) =>
-        withTenant(d, cfg.tenantId, async (tx) => {
+        withTransaction(d, async (tx) => {
           await asAppUser(tx);
           return openTab(tx, cfg, { tableId, lines: [{ productId: cafe.id, quantity: "1" }] });
         });
@@ -305,7 +305,7 @@ describe("openTab concurrency (one open tab per table; the per-table lock IS the
 });
 
 describe("openTab tenant scope (a by-id table read must not cross tenants)", () => {
-  // Since RLS was dropped (#255) `withTenant` no longer isolates SELECTs, so a by-id read scopes to the
+  // Since RLS was dropped (#255) `withTransaction` no longer isolates SELECTs, so a by-id read scopes to the
   // tenant itself — the till-reroute S3 shape (CLAUDE.md §3). openTab reads `dining_tables` `FOR UPDATE`
   // by id ALONE; under tenant B's scope that read reaches tenant A's row in a multi-tenant database.
   //
@@ -325,7 +325,7 @@ describe("openTab tenant scope (a by-id table read must not cross tenants)", () 
     await suite.admin.execute(sql`update dining_tables set active = false where id = ${tableA}`);
 
     let outcome: { resolved: boolean; code?: string } = { resolved: false };
-    await withTenant(suite.admin, cfgB.tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       try {
         await openTab(tx, cfgB, {
@@ -356,7 +356,7 @@ describe("cross-tenant isolation — tab/pay by-id reads (§3)", () => {
     label: string,
   ): Promise<string> => {
     const tableId = await seedTable(cfg, label);
-    const { tabId } = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    const { tabId } = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return openTab(tx, cfg, { tableId, lines: [{ productId: product.id, quantity: "1" }] });
     });
@@ -371,7 +371,7 @@ describe("cross-tenant isolation — tab/pay by-id reads (§3)", () => {
     // Before the fix `lockOpenTab` read B's `working_orders`/`dining_tables` rows by id alone and the
     // path ran on to the composite-FK write (a raw 23503); scoped to A the lock misses → tab.not_open.
     await expect(
-      withTenant(suite.admin, cfgA.tenantId, async (tx) => {
+      withTransaction(suite.admin, async (tx) => {
         await asAppUser(tx);
         return addTabRound(tx, cfgA, bTab, [{ productId: cafeA.id, quantity: "1" }]);
       }),
@@ -394,7 +394,7 @@ describe("cross-tenant isolation — tab/pay by-id reads (§3)", () => {
     const targetA = await seedTable(cfgA, "A-target");
 
     await expect(
-      withTenant(suite.admin, cfgA.tenantId, async (tx) => {
+      withTransaction(suite.admin, async (tx) => {
         await asAppUser(tx);
         return moveTab(tx, cfgA, bTab, targetA);
       }),
@@ -448,7 +448,7 @@ describe("cross-tenant isolation — tab/pay by-id reads (§3)", () => {
     // source has no composite-FK backstop (the run-it review reproduced exactly this). Scoped, A's read
     // misses → tab.not_open, before any write.
     await expect(
-      withTenant(suite.admin, cfgA.tenantId, async (tx) => {
+      withTransaction(suite.admin, async (tx) => {
         await asAppUser(tx);
         return mergeTabs(tx, cfgA, bInto, bFrom, { freeSourceTable: true });
       }),
@@ -469,7 +469,7 @@ describe("addTabRound concurrency (distinct line_no under load)", () => {
     const { cfg, cafe } = await setupVenue();
     const tableId = await seedTable(cfg, "Race-2");
     // Open the tab EMPTY (no initial round) so the appended line_nos are exactly 1..N.
-    const { tabId } = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    const { tabId } = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return openTab(tx, cfg, { tableId });
     });
@@ -487,7 +487,7 @@ describe("addTabRound concurrency (distinct line_no under load)", () => {
 
       await Promise.all(
         dbs.map((d) =>
-          withTenant(d, cfg.tenantId, async (tx) => {
+          withTransaction(d, async (tx) => {
             await asAppUser(tx);
             return addTabRound(tx, cfg, tabId, [{ productId: cafe.id, quantity: "1" }]);
           }),
@@ -510,11 +510,11 @@ describe("pay closes the tab (reuses payWorkingOrder → recordSale UNCHANGED)",
     const tableId = await seedTable(cfg, "Pay-1");
     const deps = { db: suite.admin, backend, clock };
 
-    const { tabId } = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    const { tabId } = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return openTab(tx, cfg, { tableId, lines: [{ productId: cafe.id, quantity: "1" }] });
     });
-    await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return addTabRound(tx, cfg, tabId, [{ productId: agua.id, quantity: "1" }]);
     });
@@ -549,7 +549,7 @@ describe("pay closes the tab (reuses payWorkingOrder → recordSale UNCHANGED)",
     // tabs.test.ts "opens a tab with NO initial round"). Closing it before ordering routes
     // payWorkingOrder → priceStoredOrder → readLockedLines on a zero-line order — the exact
     // empty-tab-pay flow that used to throw a RAW Error → opaque `server.internal` 500.
-    const { tabId } = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    const { tabId } = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return openTab(tx, cfg, { tableId });
     });
@@ -632,7 +632,7 @@ async function nifOf(cfg: TillConfig): Promise<string> {
  */
 async function secondVenueSharingNif(nif: string): Promise<SeededVenue> {
   const venue = await setupVenue();
-  await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+  await withTransaction(suite.admin, async (tx) => {
     await registerSif(tx, {
       tenantId: venue.cfg.tenantId,
       nodeId: venue.cfg.nodeId,
@@ -679,7 +679,7 @@ describe("H2: the huella is independent of whether the order was a tab", () => {
     // is the receipt `secondVenueSharingNif` documents.)
     const { cfg: cfgB, cafe: cafeB } = await secondVenueSharingNif(nifA);
     const tableId = await seedTable(cfgB, "H2-tab");
-    const { tabId } = await withTenant(suite.admin, cfgB.tenantId, async (tx) => {
+    const { tabId } = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return openTab(tx, cfgB, { tableId, lines: [{ productId: cafeB.id, quantity: "1" }] });
     });

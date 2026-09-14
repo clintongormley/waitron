@@ -21,7 +21,7 @@ import {
   asAppUser,
   joinRequests,
   printAgents,
-  withTenant,
+  withTransaction,
   type Database,
   type Transaction,
 } from "@waitron/db";
@@ -55,7 +55,8 @@ async function seedProfile(
 // One tenant-scoped transaction run as the real `app_user` role — the shape every verb here is
 // exercised through, so the `join_requests`/`print_agents` grants (not superuser) are what answers.
 function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  return withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  void cfg;
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     return fn(tx);
   });
@@ -75,7 +76,7 @@ async function codeOf(fn: () => Promise<unknown>): Promise<string | undefined> {
 describe("createJoinRequest", () => {
   it("mints a two-digit number, an id and a token, and leaves one pending row", async () => {
     const venue = await setupVenue(suite.admin);
-    const made = await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+    const made = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return createJoinRequest(tx, venue.cfg, {
         kind: "device",
@@ -91,7 +92,7 @@ describe("createJoinRequest", () => {
     const venue = await setupVenue(suite.admin);
     // Force the generator to want 47 every time; the first request takes it, the second must not.
     const always47 = () => 47;
-    const first = await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+    const first = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return createJoinRequest(tx, venue.cfg, {
         kind: "print_agent",
@@ -114,7 +115,7 @@ describe("createJoinRequest", () => {
     for (const r of taken.rows) expect(r.n).toMatch(/^\d{2}$/);
     const spokenFor = new Set(["47", ...taken.rows.map((r) => r.n)]);
     const fallback = ["13", "14", "15", "16"].find((n) => !spokenFor.has(n))!;
-    const second = await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+    const second = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return createJoinRequest(tx, venue.cfg, {
         kind: "device",
@@ -139,7 +140,7 @@ describe("createJoinRequest", () => {
       insert into join_requests (tenant_id, location_id, kind, label, token_hash, verification_number, decoy_numbers)
       values (${venue.cfg.tenantId}, ${venue.cfg.locationId}, 'device'::join_request_kind, 'seeded', 'x', '77', '{13,86}'::text[])
     `);
-    await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       await expect(
         createJoinRequest(tx, venue.cfg, { kind: "device", label: "wants 13", numbers: () => 13 }),
@@ -159,7 +160,7 @@ describe("createJoinRequest", () => {
              'seed ' || n, 'x', lpad(n::text, 2, '0'), '{}'::text[]
       from generate_series(2, 99) as n
     `);
-    await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       // Force the real pick onto "00", the first free value — "01" is then the ONLY value left for
       // the two decoys, which is not enough: the second decoy can never be found.
@@ -171,7 +172,7 @@ describe("createJoinRequest", () => {
 
   it("refuses past the cap, per (tenant, kind)", async () => {
     const venue = await setupVenue(suite.admin);
-    await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       for (let i = 0; i < PENDING_CAP; i++) {
         await createJoinRequest(tx, venue.cfg, {
@@ -197,7 +198,7 @@ describe("createJoinRequest", () => {
 
   it("sweeps lapsed requests, so they do not occupy the cap or a number", async () => {
     const venue = await setupVenue(suite.admin);
-    const stale = await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+    const stale = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return createJoinRequest(tx, venue.cfg, { kind: "device", label: "stale" });
     });
@@ -207,7 +208,7 @@ describe("createJoinRequest", () => {
     await suite.admin.execute(
       sql`update join_requests set created_at = ${lapsed} where id = ${stale.joinId}`,
     );
-    await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       await createJoinRequest(tx, venue.cfg, { kind: "device", label: "fresh" });
       // Scoped to this venue's tenant — the suite shares one database clone across tests, so an
@@ -248,7 +249,7 @@ describe("createJoinRequest — per-tenant serialization of number allocation an
     const bRead = deferred();
     try {
       // Waiter: forced to 50, holds its committed-but-uncommitted row open until `b` has read.
-      const waiter = withTenant(a, venue.cfg.tenantId, async (tx) => {
+      const waiter = withTransaction(a, async (tx) => {
         await asAppUser(tx);
         const made = await createJoinRequest(tx, venue.cfg, {
           kind: "device",
@@ -261,7 +262,7 @@ describe("createJoinRequest — per-tenant serialization of number allocation an
       // Signaller: a walk starting at 50 that fires the read-signal on its first pick attempt (which
       // runs after pendingNumbers). Under the bug it reads an empty reserved-set and takes 50 too;
       // under the fix it reads 50-is-taken and walks on to the first free value.
-      const signaller = withTenant(b, venue.cfg.tenantId, async (tx) => {
+      const signaller = withTransaction(b, async (tx) => {
         await asAppUser(tx);
         let k = 50;
         return createJoinRequest(tx, venue.cfg, {
@@ -313,7 +314,7 @@ describe("createJoinRequest — per-tenant serialization of number allocation an
     const bRead = deferred();
     try {
       // Waiter takes the tenth slot (real 50) and holds open until `b` has counted.
-      const waiter = withTenant(a, venue.cfg.tenantId, async (tx) => {
+      const waiter = withTransaction(a, async (tx) => {
         await asAppUser(tx);
         const made = await createJoinRequest(tx, venue.cfg, {
           kind: "device",
@@ -325,7 +326,7 @@ describe("createJoinRequest — per-tenant serialization of number allocation an
       });
       // Signaller wants the eleventh. Under the bug it counts 9 (< cap), inserts, and the tenant holds
       // 11; under the fix it blocks on the lock, then counts 10 and throws BEFORE reaching numbers().
-      const signaller = withTenant(b, venue.cfg.tenantId, async (tx) => {
+      const signaller = withTransaction(b, async (tx) => {
         await asAppUser(tx);
         return createJoinRequest(tx, venue.cfg, {
           kind: "device",
@@ -361,7 +362,7 @@ describe("createJoinRequest — per-tenant serialization of number allocation an
 describe("readJoinStatus", () => {
   it("is pending for a live request with the right token", async () => {
     const venue = await setupVenue(suite.admin);
-    await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       const made = await createJoinRequest(tx, venue.cfg, { kind: "device", label: "Bar till" });
       const status = await readJoinStatus(tx, venue.cfg, made.joinId, made.token);
@@ -371,7 +372,7 @@ describe("readJoinStatus", () => {
 
   it("is not_approved for a wrong token on a live request", async () => {
     const venue = await setupVenue(suite.admin);
-    await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       const made = await createJoinRequest(tx, venue.cfg, { kind: "device", label: "Bar till" });
       const status = await readJoinStatus(tx, venue.cfg, made.joinId, "wrong-token");
@@ -384,11 +385,11 @@ describe("readJoinStatus", () => {
     // dropped): venue B's session must not resolve venue A's join id, right token and all.
     const venueA = await setupVenue(suite.admin);
     const venueB = await setupVenue(suite.admin);
-    const madeA = await withTenant(suite.admin, venueA.cfg.tenantId, async (tx) => {
+    const madeA = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return createJoinRequest(tx, venueA.cfg, { kind: "device", label: "A's till" });
     });
-    await withTenant(suite.admin, venueB.cfg.tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       const status = await readJoinStatus(tx, venueB.cfg, madeA.joinId, madeA.token);
       expect(status).toBe("not_approved");
@@ -397,7 +398,7 @@ describe("readJoinStatus", () => {
 
   it("is not_approved for an id that never existed", async () => {
     const venue = await setupVenue(suite.admin);
-    await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       const status = await readJoinStatus(
         tx,
@@ -411,7 +412,7 @@ describe("readJoinStatus", () => {
 
   it("is not_approved once the request has lapsed", async () => {
     const venue = await setupVenue(suite.admin);
-    const made = await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+    const made = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return createJoinRequest(tx, venue.cfg, { kind: "device", label: "Bar till" });
     });
@@ -421,7 +422,7 @@ describe("readJoinStatus", () => {
     await suite.admin.execute(
       sql`update join_requests set created_at = ${lapsed} where id = ${made.joinId}`,
     );
-    await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       const status = await readJoinStatus(tx, venue.cfg, made.joinId, made.token);
       expect(status).toBe("not_approved");
@@ -434,7 +435,7 @@ describe("readJoinStatus", () => {
 describe("listPendingJoinRequests", () => {
   it("returns pending rows of the asked-for kind and NEVER the number", async () => {
     const venue = await setupVenue(suite.admin);
-    const rows = await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+    const rows = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       await createJoinRequest(tx, venue.cfg, { kind: "device", label: "Bar till" });
       await createJoinRequest(tx, venue.cfg, { kind: "print_agent", label: "Box" });
@@ -452,7 +453,7 @@ describe("listPendingJoinRequests", () => {
 describe("challengeFor", () => {
   it("returns three choices, one of which is the request's own number", async () => {
     const venue = await setupVenue(suite.admin);
-    const { made, choices } = await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+    const { made, choices } = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       const made = await createJoinRequest(tx, venue.cfg, { kind: "device", label: "d" });
       return { made, choices: (await challengeFor(tx, venue.cfg, made.joinId)).choices };
@@ -465,7 +466,7 @@ describe("challengeFor", () => {
 
   it("returns the SAME three numbers on every call — a second call must teach nothing", async () => {
     const venue = await setupVenue(suite.admin);
-    await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       const made = await createJoinRequest(tx, venue.cfg, { kind: "device", label: "d" });
       const first = await challengeFor(tx, venue.cfg, made.joinId);
@@ -479,7 +480,7 @@ describe("challengeFor", () => {
 
   it("never offers a decoy that is another pending request's real number, in EITHER kind", async () => {
     const venue = await setupVenue(suite.admin);
-    await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       // The agent request's REAL number is spoken for the moment it exists — createJoinRequest's own
       // forbidden set (reals ∪ decoys, both kinds) is what keeps the device request's pick and decoys
@@ -498,7 +499,7 @@ describe("challengeFor", () => {
     // One pending request at a time, denied before the next is made, to stay under PENDING_CAP while
     // sampling enough shuffles that a fixed position (a broken Fisher-Yates) would show up reliably.
     const positions = new Set<number>();
-    await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       for (let i = 0; i < 30; i++) {
         const made = await createJoinRequest(tx, venue.cfg, { kind: "device", label: `d${i}` });
@@ -513,17 +514,17 @@ describe("challengeFor", () => {
   it("throws join_request.not_found for an unknown id, and for another tenant's request", async () => {
     const venueA = await setupVenue(suite.admin);
     const venueB = await setupVenue(suite.admin);
-    const madeA = await withTenant(suite.admin, venueA.cfg.tenantId, async (tx) => {
+    const madeA = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return createJoinRequest(tx, venueA.cfg, { kind: "device", label: "A's till" });
     });
-    await withTenant(suite.admin, venueA.cfg.tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       await expect(
         challengeFor(tx, venueA.cfg, "00000000-0000-4000-8000-000000000000"),
       ).rejects.toMatchObject({ code: "join_request.not_found" });
     });
-    await withTenant(suite.admin, venueB.cfg.tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       await expect(challengeFor(tx, venueB.cfg, madeA.joinId)).rejects.toMatchObject({
         code: "join_request.not_found",
@@ -536,23 +537,19 @@ describe("acceptDeviceJoinRequest", () => {
   it("creates the device with the request's OWN id, so the joiner's cookie survives", async () => {
     const venue = await setupVenue(suite.admin);
     const profileId = await seedProfile(venue.cfg, "till");
-    const { made, accepted, status } = await withTenant(
-      suite.admin,
-      venue.cfg.tenantId,
-      async (tx) => {
-        await asAppUser(tx);
-        const made = await createJoinRequest(tx, venue.cfg, { kind: "device", label: "Bar till" });
-        const accepted = await acceptDeviceJoinRequest(tx, venue.cfg, made.joinId, {
-          choice: made.verificationNumber,
-          profileId,
-        });
-        return {
-          made,
-          accepted,
-          status: await readJoinStatus(tx, venue.cfg, made.joinId, made.token),
-        };
-      },
-    );
+    const { made, accepted, status } = await withTransaction(suite.admin, async (tx) => {
+      await asAppUser(tx);
+      const made = await createJoinRequest(tx, venue.cfg, { kind: "device", label: "Bar till" });
+      const accepted = await acceptDeviceJoinRequest(tx, venue.cfg, made.joinId, {
+        choice: made.verificationNumber,
+        profileId,
+      });
+      return {
+        made,
+        accepted,
+        status: await readJoinStatus(tx, venue.cfg, made.joinId, made.token),
+      };
+    });
     expect(accepted).toMatchObject({ ok: true, deviceId: made.joinId, formFactor: "till" });
     expect(status).toBe("approved");
   });
@@ -561,7 +558,7 @@ describe("acceptDeviceJoinRequest", () => {
     const venue = await setupVenue(suite.admin);
     const profileId = await seedProfile(venue.cfg, "till");
     const label = "Bar till";
-    const accepted = await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+    const accepted = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       const made = await createJoinRequest(tx, venue.cfg, { kind: "device", label });
       return acceptDeviceJoinRequest(tx, venue.cfg, made.joinId, {
@@ -582,7 +579,7 @@ describe("acceptDeviceJoinRequest", () => {
   it("rolls the register back when the device insert fails", async () => {
     const venue = await setupVenue(suite.admin);
     const profileId = await seedProfile(venue.cfg, "till");
-    const made = await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+    const made = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return createJoinRequest(tx, venue.cfg, { kind: "device", label: "Blocked till" });
     });
@@ -596,7 +593,7 @@ describe("acceptDeviceJoinRequest", () => {
       values (${made.joinId}, ${venue.cfg.tenantId}, ${venue.cfg.locationId}, ${venue.cfg.tillId}, ${profileId}, 'blocker', 'x', true)
     `);
     await expect(
-      withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+      withTransaction(suite.admin, async (tx) => {
         await asAppUser(tx);
         return acceptDeviceJoinRequest(tx, venue.cfg, made.joinId, {
           choice: made.verificationNumber,
@@ -614,7 +611,7 @@ describe("acceptDeviceJoinRequest", () => {
     await suite.admin.execute(
       sql`delete from devices where tenant_id = ${venue.cfg.tenantId} and id = ${made.joinId}`,
     );
-    await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       expect(await readJoinStatus(tx, venue.cfg, made.joinId, made.token)).toBe("pending");
     });
@@ -623,21 +620,21 @@ describe("acceptDeviceJoinRequest", () => {
   it("DENIES on a wrong choice, and the deny SURVIVES THE TRANSACTION", async () => {
     const venue = await setupVenue(suite.admin);
     const profileId = await seedProfile(venue.cfg, "till");
-    // Two SEPARATE withTenant blocks on purpose. A single block that catches the rejection inside
+    // Two SEPARATE withTransaction blocks on purpose. A single block that catches the rejection inside
     // itself never commits or rolls anything back, so it would pass against code that throws from
     // inside the transaction and loses the DELETE — the defect this test exists to catch.
-    const made = await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+    const made = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return createJoinRequest(tx, venue.cfg, { kind: "device", label: "d" });
     });
     const wrong = made.verificationNumber === "00" ? "01" : "00";
-    const refused = await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+    const refused = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return acceptDeviceJoinRequest(tx, venue.cfg, made.joinId, { choice: wrong, profileId });
     });
     expect(refused).toEqual({ ok: false, reason: "mismatch" });
     // Gone AFTER the transaction committed — this is what makes one-in-three an acceptable guess rate.
-    await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       await expect(
         acceptDeviceJoinRequest(tx, venue.cfg, made.joinId, {
@@ -652,7 +649,7 @@ describe("acceptDeviceJoinRequest", () => {
   it("refuses a print_agent request — a device accept cannot turn an agent's ask into a device", async () => {
     const venue = await setupVenue(suite.admin);
     const profileId = await seedProfile(venue.cfg, "till");
-    await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       const made = await createJoinRequest(tx, venue.cfg, {
         kind: "print_agent",
@@ -671,11 +668,11 @@ describe("acceptDeviceJoinRequest", () => {
     const venueA = await setupVenue(suite.admin);
     const venueB = await setupVenue(suite.admin);
     const profileIdB = await seedProfile(venueB.cfg, "till");
-    const madeA = await withTenant(suite.admin, venueA.cfg.tenantId, async (tx) => {
+    const madeA = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return createJoinRequest(tx, venueA.cfg, { kind: "device", label: "A's till" });
     });
-    await withTenant(suite.admin, venueB.cfg.tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       await expect(
         acceptDeviceJoinRequest(tx, venueB.cfg, madeA.joinId, {
@@ -695,7 +692,7 @@ describe("acceptDeviceJoinRequest", () => {
     // the request's one label. This isolates the collision to the one write both racers actually
     // contend for: the `devices` INSERT that reuses the request's id.
     const profileId = await seedProfile(venue.cfg, "kds");
-    const made = await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+    const made = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return createJoinRequest(tx, venue.cfg, { kind: "device", label: "Racer" });
     });
@@ -707,7 +704,7 @@ describe("acceptDeviceJoinRequest", () => {
     const b = await suite.pg.connect();
     try {
       const attempt = (db: Database): Promise<AcceptResult> =>
-        withTenant(db, venue.cfg.tenantId, async (tx) => {
+        withTransaction(db, async (tx) => {
           await asAppUser(tx);
           return acceptDeviceJoinRequest(tx, venue.cfg, made.joinId, {
             choice: made.verificationNumber,
@@ -748,7 +745,7 @@ describe("acceptDeviceJoinRequest", () => {
     // clean-looking but WRONG code that masks the real defect) rather than ever reaching the
     // `devices` INSERT. Delete-first must stop the loser before it writes anything at all.
     const profileId = await seedProfile(venue.cfg, "till");
-    const made = await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+    const made = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return createJoinRequest(tx, venue.cfg, { kind: "device", label: "Till racer" });
     });
@@ -757,7 +754,7 @@ describe("acceptDeviceJoinRequest", () => {
     const b = await suite.pg.connect();
     try {
       const attempt = (db: Database): Promise<AcceptResult> =>
-        withTenant(db, venue.cfg.tenantId, async (tx) => {
+        withTransaction(db, async (tx) => {
           await asAppUser(tx);
           return acceptDeviceJoinRequest(tx, venue.cfg, made.joinId, {
             choice: made.verificationNumber,
@@ -799,15 +796,15 @@ describe("acceptDeviceJoinRequest", () => {
 describe("denyJoinRequest", () => {
   it("deletes the request, and the joiner reads not_approved", async () => {
     const venue = await setupVenue(suite.admin);
-    const made = await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+    const made = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return createJoinRequest(tx, venue.cfg, { kind: "device", label: "d" });
     });
-    await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       await denyJoinRequest(tx, venue.cfg, made.joinId);
     });
-    await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       expect(await readJoinStatus(tx, venue.cfg, made.joinId, made.token)).toBe("not_approved");
     });
@@ -816,17 +813,17 @@ describe("denyJoinRequest", () => {
   it("throws join_request.not_found for an unknown id or another tenant's", async () => {
     const venueA = await setupVenue(suite.admin);
     const venueB = await setupVenue(suite.admin);
-    const madeA = await withTenant(suite.admin, venueA.cfg.tenantId, async (tx) => {
+    const madeA = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return createJoinRequest(tx, venueA.cfg, { kind: "device", label: "A's till" });
     });
-    await withTenant(suite.admin, venueA.cfg.tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       await expect(
         denyJoinRequest(tx, venueA.cfg, "00000000-0000-4000-8000-000000000000"),
       ).rejects.toMatchObject({ code: "join_request.not_found" });
     });
-    await withTenant(suite.admin, venueB.cfg.tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       await expect(denyJoinRequest(tx, venueB.cfg, madeA.joinId)).rejects.toMatchObject({
         code: "join_request.not_found",
@@ -836,15 +833,15 @@ describe("denyJoinRequest", () => {
 
   it("returns the kind it deleted, so the shared route can authorize against it", async () => {
     const venue = await setupVenue(suite.admin);
-    const madeDevice = await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+    const madeDevice = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return createJoinRequest(tx, venue.cfg, { kind: "device", label: "d" });
     });
-    const madeAgent = await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+    const madeAgent = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return createJoinRequest(tx, venue.cfg, { kind: "print_agent", label: "a" });
     });
-    await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       expect(await denyJoinRequest(tx, venue.cfg, madeDevice.joinId)).toBe("device");
       expect(await denyJoinRequest(tx, venue.cfg, madeAgent.joinId)).toBe("print_agent");

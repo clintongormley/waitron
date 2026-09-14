@@ -20,7 +20,7 @@ import {
   readMembershipTrustSet,
   readNodeMembership,
   stampDeployment,
-  withTenant,
+  withTransaction,
 } from "@waitron/db";
 import {
   cloneTemplate,
@@ -561,7 +561,7 @@ async function assertPassiveManagementReads(port: number): Promise<void> {
   );
   const personId = person.rows[0]!.id;
   try {
-    const session = await withTenant(suite.admin, tenantId, (tx) =>
+    const session = await withTransaction(suite.admin, (tx) =>
       startManagementSession(tx, { tenantId, personId }),
     );
     const age = async (): Promise<string> =>
@@ -2121,24 +2121,20 @@ describe("startServer, against a real container as the deployment role", () => {
 
     try {
       const imageBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-      const imageName = await withTenant(
-        suite.admin,
-        TILL_ENV.WAITRON_TILL_TENANT_ID,
-        async (tx) => {
-          const result = await uploadImage(
-            tx,
-            TILL_ENV.WAITRON_TILL_TENANT_ID,
-            {
-              bytes: imageBytes,
-              names: { en: "Bread", es: "Pan" },
-              altText: { en: "A loaf", es: "Una hogaza" },
-              labels: [],
-            },
-            { maxUploadBytes: MAX_UPLOAD_BYTES, fallbackLanguage: "es" },
-          );
-          return result.image.filename;
-        },
-      );
+      const imageName = await withTransaction(suite.admin, async (tx) => {
+        const result = await uploadImage(
+          tx,
+          TILL_ENV.WAITRON_TILL_TENANT_ID,
+          {
+            bytes: imageBytes,
+            names: { en: "Bread", es: "Pan" },
+            altText: { en: "A loaf", es: "Una hogaza" },
+            labels: [],
+          },
+          { maxUploadBytes: MAX_UPLOAD_BYTES, fallbackLanguage: "es" },
+        );
+        return result.image.filename;
+      });
       const image = await fetch(`http://127.0.0.1:${port}/media/${imageName}`);
       expect(image.status).toBe(200);
       expect(image.headers.get("content-type")).toBe("image/png");
@@ -2432,7 +2428,7 @@ describe("startServer, against a real container as the deployment role", () => {
     // Same shape as `aeat-transport.test.ts`'s own `provision(certKind)` helper, against the
     // TENANT `seedPendingEnvios` just seeded rather than a fresh one of its own — this test needs
     // ONE tenant carrying both due work and a usable credential, not two separate tenants.
-    await withTenant(suite.admin, seeded.tenantId, (tx) =>
+    await withTransaction(suite.admin, (tx) =>
       putCredential(tx, loadKeyRing(KEY_ENV), {
         tenantId: seeded.tenantId,
         purpose: "fiscal.aeat",

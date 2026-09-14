@@ -1,6 +1,6 @@
 import { generateNodeKeyPair } from "@waitron/membership";
 import { getCredential, putCredential, type KeyRing } from "@waitron/credentials";
-import { setNodePublicKeyTx, withTenant, type Database } from "@waitron/db";
+import { setNodePublicKeyTx, withTransaction, type Database } from "@waitron/db";
 import { tenantId as brandTenantId } from "@waitron/shared";
 import "./errors.js";
 
@@ -17,7 +17,7 @@ export const NODE_KEY_PURPOSE = "membership.node_key";
  *
  * The deployment holds one tenant per database. The seal and the stamp are ONE logical change —
  * the private key and its matching public key must land together or not at all — so they share a
- * single `withTenant` (CLAUDE.md §3: `withTenant` IS that transaction; nothing non-DB sits
+ * single `withTransaction` (CLAUDE.md §3: `withTransaction` IS that transaction; nothing non-DB sits
  * between them to force a split). The shared transaction runs OWNER-role because the `nodes`
  * stamp needs it: app_user holds SELECT only on `nodes` (`0001_db_baseline_sql.sql`), so it
  * cannot UPDATE `public_key`. The seal alone could run as app_user (which DOES hold DML on
@@ -37,7 +37,7 @@ export async function establishNodeIdentity(
 ): Promise<void> {
   const tenant = brandTenantId(tenantId);
   const { publicKey, privateKey } = generateNodeKeyPair();
-  await withTenant(deps.ownerDb, tenant, async (tx) => {
+  await withTransaction(deps.ownerDb, async (tx) => {
     await putCredential(tx, deps.ring, {
       tenantId: tenant,
       purpose: NODE_KEY_PURPOSE,
@@ -48,7 +48,7 @@ export async function establishNodeIdentity(
 }
 
 /**
- * Unseal the node's identity PRIVATE key (base64 PKCS8) as `app_user` under `withTenant`. The
+ * Unseal the node's identity PRIVATE key (base64 PKCS8) as `app_user` under `withTransaction`. The
  * Slice-5 signer's entry point (mint + sign a membership document); exercised now by the establish
  * round-trip. Throws `credentials.decrypt_failed` (a key
  * sealed under a different box key) or `credentials.missing` (never established).
@@ -59,7 +59,7 @@ export function readNodeIdentityKey(
   tenantId: string,
 ): Promise<string> {
   const tenant = brandTenantId(tenantId);
-  return withTenant(appDb, tenant, async (tx) => {
+  return withTransaction(appDb, async (tx) => {
     const c = await getCredential(tx, ring, { tenantId: tenant, purpose: NODE_KEY_PURPOSE });
     return c.privateKey as string;
   });

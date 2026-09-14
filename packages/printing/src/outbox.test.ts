@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import net from "node:net";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, printJobs, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, printJobs, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -63,7 +63,7 @@ function spyOnNoSocketOpened() {
 describe("enqueuePrintJob (never-block outbox)", () => {
   it("enqueues a queued job with no socket I/O", async () => {
     const cfg = await setup();
-    await withTenant(suite.db, cfg.tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       const p = await createPrinter(tx, cfg, {
         name: "Kitchen",
         transport: "network_tcp",
@@ -83,7 +83,7 @@ describe("enqueuePrintJob (never-block outbox)", () => {
   it("throws printer.not_found for an absent printer, still opening no socket", async () => {
     const cfg = await setup();
     const noNet = spyOnNoSocketOpened();
-    const code = await withTenant(suite.db, cfg.tenantId, async (tx) => {
+    const code = await withTransaction(suite.db, async (tx) => {
       try {
         // A well-formed uuid that names no printer: the DB-only pre-check SELECT finds nothing and
         // throws BEFORE any insert, so the caller's transaction is never poisoned.
@@ -104,7 +104,7 @@ describe("enqueuePrintJob (never-block outbox)", () => {
     // pass here means the `active = true` pre-check conjunct (not some unrelated reason) is doing the
     // work. Without that conjunct the deactivated enqueue succeeds and this test goes red.
     const cfg = await setup();
-    const code = await withTenant(suite.db, cfg.tenantId, async (tx) => {
+    const code = await withTransaction(suite.db, async (tx) => {
       const p = await createPrinter(tx, cfg, {
         name: "Kitchen",
         transport: "network_tcp",
@@ -130,7 +130,7 @@ describe("enqueuePrintJob (never-block outbox)", () => {
 describe("resendPrintJob", () => {
   it.each(["done", "failed"] as const)("refuses a terminal %s drawer command", async (status) => {
     const cfg = await setup();
-    await withTenant(suite.db, cfg.tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       const printer = await createPrinter(tx, cfg, {
         name: "Drawer",
         transport: "network_tcp",
@@ -161,7 +161,7 @@ describe("resendPrintJob", () => {
     "copies a terminal %s job byte-for-byte into a new queue entry",
     async (status) => {
       const cfg = await setup();
-      await withTenant(suite.db, cfg.tenantId, async (tx) => {
+      await withTransaction(suite.db, async (tx) => {
         const printer = await createPrinter(tx, cfg, {
           name: "Resend",
           transport: "network_tcp",
@@ -215,7 +215,7 @@ describe("resendPrintJob", () => {
     ["failed", 4],
   ] as const)("refuses a %s job that can still print automatically", async (status, attempts) => {
     const cfg = await setup();
-    await withTenant(suite.db, cfg.tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       const printer = await createPrinter(tx, cfg, {
         name: "Pending",
         transport: "network_tcp",
@@ -235,7 +235,7 @@ describe("resendPrintJob", () => {
   it("refuses unknown and foreign-tenant jobs, and disabled printers", async () => {
     const cfg = await setup();
     const foreign = await setup();
-    await withTenant(suite.db, cfg.tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       const printer = await createPrinter(tx, cfg, {
         name: "Disabled",
         transport: "network_tcp",

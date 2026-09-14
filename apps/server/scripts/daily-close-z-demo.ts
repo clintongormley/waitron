@@ -37,7 +37,13 @@ import { recordDailyClose, verifyDailyCloseChain } from "@waitron/reporting";
 import type { CashCountInput, DailyCloseRecord } from "@waitron/reporting";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import type { TrustedClock } from "@waitron/fiscal";
-import { CORE_MIGRATIONS, asAppUser, createPgliteDb, runMigrations, withTenant } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  asAppUser,
+  createPgliteDb,
+  runMigrations,
+  withTransaction,
+} from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { hasCode, isAppError } from "@waitron/shared";
 import {
@@ -171,7 +177,7 @@ async function ringSale(
       tenders: [{ method: spec.method, amount: spec.total, tipAmount: "0.00", settledAt: spec.at }],
     },
   };
-  await withTenant(db, venue.tenantId, async (tx) => {
+  await withTransaction(db, async (tx) => {
     await asAppUser(tx);
     await recordSale(tx, backend, input);
   });
@@ -184,7 +190,7 @@ function closeDay(
   businessDay: string,
   cashCounts: CashCountInput[],
 ): Promise<DailyCloseRecord> {
-  return withTenant(db, venue.tenantId, async (tx) => {
+  return withTransaction(db, async (tx) => {
     await asAppUser(tx);
     return recordDailyClose(tx, {
       tenantId: venue.tenantId,
@@ -199,7 +205,7 @@ function closeDay(
 }
 
 function verifyChain(db: Database, venue: Venue) {
-  return withTenant(db, venue.tenantId, async (tx) => {
+  return withTransaction(db, async (tx) => {
     await asAppUser(tx);
     return verifyDailyCloseChain(tx, venue.tenantId, venue.nodeId);
   });
@@ -268,7 +274,7 @@ async function main(): Promise<void> {
 
     // Register the node once (a one-time admin action recordSale itself never performs), as app_user
     // in its own committed transaction so the later write transactions see it.
-    await withTenant(db, venue.tenantId, async (tx) => {
+    await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       await backend.registerNode(tx, venue.nodeId, { tenantId: venue.tenantId });
     });

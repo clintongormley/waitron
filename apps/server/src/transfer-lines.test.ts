@@ -6,7 +6,7 @@ import {
   optionGroupItems,
   optionGroups,
   productOptionGroups,
-  withTenant,
+  withTransaction,
   workingOrderLines,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
@@ -84,7 +84,7 @@ async function setupVenue(): Promise<Seeded> {
     tipsEnabled: false,
     orderFlow: "prepay",
   };
-  const seeded = await withTenant(db, tenantId, async (tx) => {
+  const seeded = await withTransaction(db, async (tx) => {
     await asAppUser(tx);
     const cat = await createCatalogue(tx, tenantId, { name: "Carta" });
     const bebidas = await createCategory(tx, tenantId, { name: { en: "Bebidas" } });
@@ -122,7 +122,8 @@ async function setupVenue(): Promise<Seeded> {
 
 /** Run `fn` on a fresh app-scoped transaction (`app_user` role), like production. */
 function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  return withTenant(db, cfg.tenantId, async (tx) => {
+  void cfg;
+  return withTransaction(db, async (tx) => {
     await asAppUser(tx);
     return fn(tx);
   });

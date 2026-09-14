@@ -12,7 +12,7 @@ import { locations, tenants, tills } from "./schema/tenants.js";
 import { describeEachTarget } from "./testing/harness.js";
 import { asAppUser } from "./testing/roles.js";
 import { seedNode } from "./testing/seed.js";
-import { withTenant } from "./tenancy.js";
+import { withTransaction } from "./tenancy.js";
 
 const TENANT_A = "11111111-1111-4111-8111-111111111111";
 const TENANT_B = "22222222-2222-4222-8222-222222222222";
@@ -96,7 +96,7 @@ describeEachTarget("allocateInvoiceNumber", (target) => {
 
   it("returns the starting number on the first allocation", async () => {
     const seriesId = await makeSeries(db, { tenantId: TENANT_A, nodeId: nodeA1, code: "FA" });
-    const n = await withTenant(db, TENANT_A, (tx) => allocateInvoiceNumber(tx, seriesId));
+    const n = await withTransaction(db, (tx) => allocateInvoiceNumber(tx, seriesId));
     expect(n).toBe(1);
   });
 
@@ -110,8 +110,8 @@ describeEachTarget("allocateInvoiceNumber", (target) => {
       code: "FA",
       nextNumber: 5000,
     });
-    const first = await withTenant(db, TENANT_A, (tx) => allocateInvoiceNumber(tx, seriesId));
-    const second = await withTenant(db, TENANT_A, (tx) => allocateInvoiceNumber(tx, seriesId));
+    const first = await withTransaction(db, (tx) => allocateInvoiceNumber(tx, seriesId));
+    const second = await withTransaction(db, (tx) => allocateInvoiceNumber(tx, seriesId));
     expect([first, second]).toEqual([5000, 5001]);
   });
 
@@ -119,7 +119,7 @@ describeEachTarget("allocateInvoiceNumber", (target) => {
     const seriesId = await makeSeries(db, { tenantId: TENANT_A, nodeId: nodeA1, code: "FA" });
     const allocated: number[] = [];
     for (let i = 0; i < 5; i += 1) {
-      allocated.push(await withTenant(db, TENANT_A, (tx) => allocateInvoiceNumber(tx, seriesId)));
+      allocated.push(await withTransaction(db, (tx) => allocateInvoiceNumber(tx, seriesId)));
     }
     expect(allocated).toEqual([1, 2, 3, 4, 5]);
   });
@@ -131,7 +131,7 @@ describeEachTarget("allocateInvoiceNumber", (target) => {
     // compares equal to 1 under == but not under toBe, and would reach the
     // invoice number column as text.
     const seriesId = await makeSeries(db, { tenantId: TENANT_A, nodeId: nodeA1, code: "FA" });
-    const n = await withTenant(db, TENANT_A, (tx) => allocateInvoiceNumber(tx, seriesId));
+    const n = await withTransaction(db, (tx) => allocateInvoiceNumber(tx, seriesId));
     expect(typeof n).toBe("number");
   });
 
@@ -145,7 +145,7 @@ describeEachTarget("allocateInvoiceNumber", (target) => {
     const seriesId = await makeSeries(db, { tenantId: TENANT_A, nodeId: nodeA1, code: "FA" });
     let allocated = 0;
     await expect(
-      withTenant(db, TENANT_A, async (tx) => {
+      withTransaction(db, async (tx) => {
         allocated = await allocateInvoiceNumber(tx, seriesId);
         // Stands in for every abort: a failed write, a crashed process, a
         // declined card after the number was taken.
@@ -154,7 +154,7 @@ describeEachTarget("allocateInvoiceNumber", (target) => {
     ).rejects.toThrow(/deliberate rollback/);
     expect(allocated).toBe(1);
 
-    const next = await withTenant(db, TENANT_A, (tx) => allocateInvoiceNumber(tx, seriesId));
+    const next = await withTransaction(db, (tx) => allocateInvoiceNumber(tx, seriesId));
     expect(next).toBe(1);
   });
 
@@ -170,7 +170,7 @@ describeEachTarget("allocateInvoiceNumber", (target) => {
     const committed: number[] = [];
     for (let i = 0; i < 6; i += 1) {
       const abort = i % 2 === 0;
-      await withTenant(db, TENANT_A, async (tx) => {
+      await withTransaction(db, async (tx) => {
         const n = await allocateInvoiceNumber(tx, seriesId);
         if (abort) throw new Error("abort");
         committed.push(n);
@@ -187,9 +187,9 @@ describeEachTarget("allocateInvoiceNumber", (target) => {
     // neither may be derived from the other.
     const fa = await makeSeries(db, { tenantId: TENANT_A, nodeId: nodeA1, code: "FA" });
     const ra = await makeSeries(db, { tenantId: TENANT_A, nodeId: nodeA1, code: "RA" });
-    const a1 = await withTenant(db, TENANT_A, (tx) => allocateInvoiceNumber(tx, fa));
-    const b1 = await withTenant(db, TENANT_A, (tx) => allocateInvoiceNumber(tx, ra));
-    const a2 = await withTenant(db, TENANT_A, (tx) => allocateInvoiceNumber(tx, fa));
+    const a1 = await withTransaction(db, (tx) => allocateInvoiceNumber(tx, fa));
+    const b1 = await withTransaction(db, (tx) => allocateInvoiceNumber(tx, ra));
+    const a2 = await withTransaction(db, (tx) => allocateInvoiceNumber(tx, fa));
     expect([a1, b1, a2]).toEqual([1, 1, 2]);
   });
 
@@ -199,7 +199,7 @@ describeEachTarget("allocateInvoiceNumber", (target) => {
     // that skips asAppUser and fails only in production — the exact shape of a
     // suite that asserts nothing.
     const seriesId = await makeSeries(db, { tenantId: TENANT_A, nodeId: nodeA1, code: "FA" });
-    const n = await withTenant(db, TENANT_A, async (tx) => {
+    const n = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       return allocateInvoiceNumber(tx, seriesId);
     });
@@ -207,7 +207,7 @@ describeEachTarget("allocateInvoiceNumber", (target) => {
   });
 
   it("throws series.not_found for an unknown series", async () => {
-    const error = await withTenant(db, TENANT_A, (tx) =>
+    const error = await withTransaction(db, (tx) =>
       allocateInvoiceNumber(tx, UNKNOWN_SERIES),
     ).catch((e: unknown) => e);
     expect(error).toBeInstanceOf(AppError);
@@ -225,7 +225,7 @@ describeEachTarget("allocateInvoiceNumber", (target) => {
       const seriesId = await makeSeries(db, { tenantId: TENANT_A, nodeId: nodeA1, code: "FA" });
       const results = await Promise.all(
         Array.from({ length: 20 }, () =>
-          withTenant(db, TENANT_A, (tx) => allocateInvoiceNumber(tx, seriesId)),
+          withTransaction(db, (tx) => allocateInvoiceNumber(tx, seriesId)),
         ),
       );
       expect(new Set(results).size).toBe(20);

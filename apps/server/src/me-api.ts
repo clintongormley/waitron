@@ -2,7 +2,7 @@ import type { Hono } from "hono";
 import { randomBytes } from "node:crypto";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { eq } from "drizzle-orm";
-import { asAppUser, tenants, withTenant, type Database, type Transaction } from "@waitron/db";
+import { asAppUser, tenants, withTransaction, type Database, type Transaction } from "@waitron/db";
 import {
   acceptSwap,
   createAbsence,
@@ -55,12 +55,12 @@ import type { AccountEmailSender } from "./account-email.js";
  * shape `mountScheduleApi` takes: no fiscal backend, clock or card provider, because these routes
  * touch only the identity session (`management_sessions`) and the planning tables
  * (`shifts`/`shift_swaps`/`absences`). `cfg.tenantId` is this venue's tenant, scoping every
- * `withTenant` below.
+ * `withTransaction` below.
  */
 export interface MeApiDeps {
   db: Database;
   /**
-   * `tenantId` scopes every `withTenant` below. `nodeId` is this node's id, carried on the uniform
+   * `tenantId` scopes every `withTransaction` below. `nodeId` is this node's id, carried on the uniform
    * write-path `cfg` shape every mounted API takes; it no longer stamps a capture origin (the
    * application outbox and its capture triggers were removed).
    */
@@ -141,7 +141,7 @@ const run = createErrorBoundary(STATUS, "me.failed");
  * ROLE-BLIND: it calls `resolveManagementSession` (which returns `personId` + `role` but gates
  * only on idle-timeout + suspension), NEVER `authorizeManager` — a `staff`-role person holds an
  * EMPTY permission set, so an `authorizeManager` gate would 403 every staff person, defeating the
- * whole surface. The verb then runs on the app role under this venue's tenant (`withTenant` +
+ * whole surface. The verb then runs on the app role under this venue's tenant (`withTransaction` +
  * `asAppUser`), in the database holding this tenant. The explicit `person_id` predicate scopes
  * the operation to the requester.
  */
@@ -151,10 +151,10 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
   };
   const accountActionCodeKey = deps.accountActionCodeKey ?? randomBytes(32);
   const profileThrottle = createPasswordThrottle();
-  /** Run `fn` on the app role under this venue's tenant — the one place the withTenant/asAppUser pair
+  /** Run `fn` on the app role under this venue's tenant — the one place the withTransaction/asAppUser pair
    * is expressed, so no route re-implements it. */
   const asStaff = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> =>
-    withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+    withTransaction(deps.db, async (tx) => {
       await asAppUser(tx);
       return fn(tx);
     });

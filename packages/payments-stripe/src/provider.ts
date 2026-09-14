@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { AppError } from "@waitron/shared";
 import type { Decimal, TenantId } from "@waitron/shared";
-import { withTenant } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type {
   CollectParams,
@@ -27,7 +27,7 @@ const DEFAULT_POLL = {
 export interface StripeTerminalProviderOptions {
   client: StripeClient;
   /** A plain `Database` handle. This adapter opens its own transactions and scopes each one with
-   * `withTenant(db, tenantId, …)`, so nothing is required of the handle itself.
+   * `withTransaction(db, …)`, so nothing is required of the handle itself.
    *
    * This option once demanded a "TENANT-SCOPED `Database` handle", which cannot be constructed —
    * see `StripeOnDeviceProviderOptions.db` for the mechanism and
@@ -97,7 +97,7 @@ export class StripeTerminalProvider implements PaymentProvider {
   /** Every database phase runs through here, so no transaction this adapter opens can be left
    * unscoped — the failure that made `collect` throw `42501` on every sale under a real role. */
   private inTenant<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
-    return withTenant(this.opts.db, this.opts.tenantId, fn);
+    return withTransaction(this.opts.db, fn);
   }
 
   async collect(params: CollectParams): Promise<PaymentResult> {

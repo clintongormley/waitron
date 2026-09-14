@@ -2,7 +2,7 @@ import type { Context } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { and, eq, isNull } from "drizzle-orm";
 import { AppError, isUuid } from "@waitron/shared";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { sessions } from "@waitron/identity";
 // Side-effect only: keeps this host's `session.required` code (errors.ts) reachable from the file
@@ -96,7 +96,7 @@ export async function requireSession(
   // without a round-trip. Passing a non-UUID into the `uuid` column would raise 22P02 → an opaque 500
   // (see `isUuid`), so the shape check is what keeps a forged cookie a 401 rather than a 500.
   if (id === null || !isUuid(id)) throw new AppError("session.required", {});
-  const personId = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+  const personId = await withTransaction(deps.db, async (tx) => {
     await asAppUser(tx);
     const [row] = await tx
       .select({ personId: sessions.personId })

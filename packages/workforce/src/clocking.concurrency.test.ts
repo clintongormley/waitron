@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { pgErrorCode, withTenant } from "@waitron/db";
+import { pgErrorCode, withTransaction } from "@waitron/db";
 import {
   AppError,
   locationId as brandLocationId,
@@ -75,7 +75,7 @@ function classify(error: unknown): string {
  * serialises. */
 async function attemptClockIn(db: Awaited<ReturnType<typeof suite.pg.connectAs>>, at: string) {
   try {
-    await withTenant(db, tenantId, (tx) => backend.clockIn(tx, event(at)));
+    await withTransaction(db, (tx) => backend.clockIn(tx, event(at)));
     return "ok";
   } catch (error) {
     return classify(error);
@@ -91,7 +91,7 @@ async function attemptCorrection(
   correctsEntryId: string,
 ) {
   try {
-    await withTenant(db, tenantId, (tx) =>
+    await withTransaction(db, (tx) =>
       backend.requestCorrection(tx, {
         tenantId,
         nodeId,

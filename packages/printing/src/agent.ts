@@ -12,7 +12,7 @@ import { verifySecret } from "@waitron/identity";
 // to its `print_agents` row id, or throws `agent.unauthorized`; a revoked (`active = false`) agent
 // fails instantly. Agent enrolment is join-and-accept (the shared join_requests mechanism, in
 // apps/server/src/join-requests.ts) — there is no pairing-code verb here. The Task-6 route layer wraps
-// this call in `withTenant`/`asAppUser`, owns the HTTP status mapping and parses the Bearer header.
+// this call in `withTransaction`/`asAppUser`, owns the HTTP status mapping and parses the Bearer header.
 //
 // The agent token's secret half is LONG-LIVED and salted per row, so it is hashed with scrypt
 // (verifySecret, @waitron/identity) — the same KDF PINs, passwords and device tokens use — and the
@@ -44,7 +44,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  * throws `agent.unauthorized`. The Task-6 Hono wrapper (`requireAgent`) extracts the
  * `Authorization: Bearer <token>` header and calls this; header parsing is that wrapper's trivial
  * concern, so this core takes a plain string and never sees Hono. The `tx` is already tenant-scoped by
- * that wrapper (`withTenant` + `asAppUser`), the machine-to-machine shape.
+ * that wrapper (`withTransaction` + `asAppUser`), the machine-to-machine shape.
  *
  * The token is `${agentId}.${secret}`: the id SELECTS the row (scrypt is per-row-salted, so the id is
  * needed to fetch the salt) and the secret VALIDATES it. Every failure — a malformed token, a

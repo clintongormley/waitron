@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { locationId as brandLocationId } from "@waitron/shared";
-import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, asAppUser, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import {
   seedFiredLine,
@@ -35,7 +35,7 @@ function run(overrides: Partial<OverdueOrdersInput> = {}): Promise<OverdueOrder[
     nodeId: venue.nodeId,
     ...overrides,
   };
-  return withTenant(suite.db, venue.tenantId, async (tx) => {
+  return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     return computeOverdueOrders(tx, input);
   });

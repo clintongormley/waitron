@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
-import { CORE_MIGRATIONS, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import {
   decimal,
@@ -27,7 +27,7 @@ import { freshNif, seedForSale } from "../test/seed.js";
 import type { SeededForSale } from "../test/seed.js";
 
 // The Mode 3 capstone: it composes the REAL neutral pieces the way the (deferred) app-level webhook
-// endpoint will — verify -> resolveTenant -> withTenant{ settleInitiated + recordSale + associate } —
+// endpoint will — verify -> resolveTenant -> withTransaction{ settleInitiated + recordSale + associate } —
 // with no `apps/` layer. It is a second consumer of `@waitron/core` (a dev dependency), exactly like
 // wiring.test.ts. `recordSale` runs INSIDE the same transaction as settle + associate, so the sale
 // chains atomically with the tender settlement.
@@ -97,7 +97,7 @@ async function orchestrate(
   if (event === null) return null;
   const tenantId = await resolvePaymentTenant(pg.db, event.provider, event.externalRef);
   if (tenantId === null) return null;
-  return withTenant(pg.db, tenantId, async (tx) => {
+  return withTransaction(pg.db, async (tx) => {
     if (event.outcome === "expired") {
       await expireInitiated(tx, { provider: event.provider, externalRef: event.externalRef });
       return null;

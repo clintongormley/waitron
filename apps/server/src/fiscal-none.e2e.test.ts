@@ -2,7 +2,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import type { Transaction } from "@waitron/db";
-import { asAppUser, invoiceSeries, withTenant } from "@waitron/db";
+import { asAppUser, invoiceSeries, withTransaction } from "@waitron/db";
 import { applyVenue, planVenue, resolveFiscalModules } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
 import { enabledModules, fiscalSlot, parseModuleConfig } from "@waitron/module";
@@ -154,7 +154,7 @@ async function setupGbVenue(): Promise<GbVenue> {
   const app = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
   let adminSessionId: string;
   try {
-    const session = await withTenant(app, tenantId, async (tx) => {
+    const session = await withTransaction(app, async (tx) => {
       await asAppUser(tx);
       return loginWithPin(tx, {
         tenantId,
@@ -181,9 +181,10 @@ async function setupGbVenue(): Promise<GbVenue> {
 /** Run `fn` as the non-superuser app role, tenant-scoped — the exact subject the trading write path
  *  runs under (bound by `app_user`'s grants, no superuser bypass). Opens and closes its own connection. */
 async function asApp<T>(tenantId: TenantId, fn: (tx: Transaction) => Promise<T>): Promise<T> {
+  void tenantId;
   const app = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
   try {
-    return await withTenant(app, tenantId, async (tx) => {
+    return await withTransaction(app, async (tx) => {
       await asAppUser(tx);
       return fn(tx);
     });

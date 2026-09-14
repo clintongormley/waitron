@@ -6,7 +6,7 @@ import {
   tillId as brandTillId,
 } from "@waitron/shared";
 import type { Decimal, SaleId, TenantId, TillId } from "@waitron/shared";
-import { withTenant } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type { PaymentState } from "./provider.js";
 import type { OrphanRemediation } from "./errors.js";
@@ -280,7 +280,7 @@ export async function reconcilePayments(
   now: Date,
 ): Promise<PaymentReconcileResult> {
   // T1 — our rows for the period. No network call inside it.
-  const rows = await withTenant(deps.db, tenantId, (tx) =>
+  const rows = await withTransaction(deps.db, (tx) =>
     listReconcilable(tx, tenantId, deps.provider, period),
   );
 
@@ -318,7 +318,7 @@ export async function reconcilePayments(
   // T2 — resolve the missingLocal candidates, raise every incident, and claim the orphans this
   // sweep will reverse. One short write transaction.
   const remediable: ReconcilableRow[] = [];
-  await withTenant(deps.db, tenantId, async (tx) => {
+  await withTransaction(deps.db, async (tx) => {
     // One batched existence check for the WHOLE sweep's unmatched settlements, not one per
     // settlement: T2 is a write transaction, so N round trips here would lengthen lock contention
     // with the concurrent sweeps this feature explicitly supports, and a tenant with zero local
@@ -662,7 +662,7 @@ async function raiseRemediationFailures(
   }
 
   let raised = 0;
-  await withTenant(deps.db, tenantId, async (tx) => {
+  await withTransaction(deps.db, async (tx) => {
     for (const [tillId, group] of byTill) {
       const inserted = await deps.incidents(tx, {
         tenantId,

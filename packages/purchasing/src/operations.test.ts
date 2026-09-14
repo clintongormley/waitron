@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import { usePurchasingDb } from "../test/fixtures.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { hasCode, isAppError } from "@waitron/shared";
@@ -42,8 +42,8 @@ describe("purchase-invoice operations", () => {
     tenantId = await seedTenant(fx.db);
   });
 
-  async function asApp<T>(fn: Parameters<typeof withTenant<T>>[2]): Promise<T> {
-    return withTenant(fx.db, tenantId, async (tx) => {
+  async function asApp<T>(fn: Parameters<typeof withTransaction<T>>[1]): Promise<T> {
+    return withTransaction(fx.db, async (tx) => {
       await asAppUser(tx);
       return fn(tx);
     });

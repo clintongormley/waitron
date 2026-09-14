@@ -1,6 +1,12 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, asAppUser, captureError, pgErrorCode, withTenant } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  asAppUser,
+  captureError,
+  pgErrorCode,
+  withTransaction,
+} from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { AppError, hasCode, isAppError } from "@waitron/shared";
@@ -43,14 +49,14 @@ function closeInput(businessDay: string) {
 }
 
 function record(businessDay: string, cashCounts: CashCountInput[]): Promise<DailyCloseRecord> {
-  return withTenant(suite.db, venue.tenantId, async (tx) => {
+  return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     return recordDailyClose(tx, { ...closeInput(businessDay), closedBy: CLOSED_BY, cashCounts });
   });
 }
 
 function runCompute(businessDay: string) {
-  return withTenant(suite.db, venue.tenantId, async (tx: Transaction) => {
+  return withTransaction(suite.db, async (tx: Transaction) => {
     await asAppUser(tx);
     return computeDailyClose(tx, closeInput(businessDay));
   });

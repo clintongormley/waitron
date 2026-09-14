@@ -20,7 +20,7 @@ const pg = usePgliteDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
 const AT = new Date("2026-07-24T10:00:00Z");
 // The provider's sync-origin node id — required option, value irrelevant here (no sync triggers in
-// this core+payments container); threaded into the adapter's withTenant (design §4d(B)).
+// this core+payments container); threaded into the adapter's withTransaction (design §4d(B)).
 const TEST_NODE_ID = "11111111-1111-4111-8111-111111111111";
 
 /** An on-device provider is a per-till, therefore per-tenant, object, so the tenant has to exist

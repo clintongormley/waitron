@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { CORE_MIGRATIONS, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -27,7 +27,7 @@ const suite = usePgliteDb({
 });
 
 function run<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  return withTenant(suite.db, tenantId, fn);
+  return withTransaction(suite.db, fn);
 }
 
 describe("invited person lifecycle", () => {
@@ -268,7 +268,7 @@ describe("invited person lifecycle", () => {
     const isolatedTenant = await seedTenant(suite.db);
     const { personId, sessionId } = await openManagementSession(suite.db, isolatedTenant, "admin");
     const attempt = (role: "staff" | "admin", status: "active" | "suspended") =>
-      withTenant(suite.db, isolatedTenant, (tx) =>
+      withTransaction(suite.db, (tx) =>
         updatePersonDetails(tx, {
           managementSessionId: sessionId,
           personId: personId.toUpperCase(),
@@ -328,7 +328,7 @@ describe("invited person lifecycle", () => {
   it("reset login returns an account to Pending and removes its login credentials", async () => {
     const isolatedTenant = await seedTenant(suite.db);
     const actor = await openManagementSession(suite.db, isolatedTenant, "admin");
-    const target = await withTenant(suite.db, isolatedTenant, (tx) =>
+    const target = await withTransaction(suite.db, (tx) =>
       invitePerson(tx, {
         tenantId: isolatedTenant,
         managementSessionId: actor.sessionId,
@@ -343,7 +343,7 @@ describe("invited person lifecycle", () => {
     await suite.db.execute(sql`update persons
       set status = 'active', pin_hash = 'pin', password_hash = 'password', totp_secret = 'totp'
       where id = ${target.id}`);
-    await withTenant(suite.db, isolatedTenant, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       resetPersonLogin(tx, { managementSessionId: actor.sessionId, personId: target.id }),
     );
     const row = await suite.db.execute<{

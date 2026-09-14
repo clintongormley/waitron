@@ -1,4 +1,4 @@
-import { asAppUser, captureError, withTenant } from "@waitron/db";
+import { asAppUser, captureError, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -19,7 +19,7 @@ import {
 } from "./canvas-store.js";
 
 // Real Postgres, not PGlite: every store call below runs as a non-superuser member of `app_user`
-// (`withTenant` + `asAppUser`), the shape the management routes use. PGlite connects as a superuser
+// (`withTransaction` + `asAppUser`), the shape the management routes use. PGlite connects as a superuser
 // holding every grant, so a missing GRANT on `canvases` — or on the `persons`/`management_sessions`
 // reads `authorizeManager` performs — is invisible there (CLAUDE.md §4). The suite retains these app-role grant checks. Seeds run as the owner (pure setup); the `core_identity` template pairs core + identity
 // migrations so authorizeManager's tables and `canvases` both exist.
@@ -27,9 +27,10 @@ import {
 const suite = useTemplateDb({ template: "core_identity" });
 
 /** Run `fn` as the non-owner app role, scoped to `tenantId` — the shape the management routes wrap
- * every store call in (withTenant + asAppUser). */
+ * every store call in (withTransaction + asAppUser). */
 function asApp<T>(tenantId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  return withTenant(suite.admin, tenantId, async (tx) => {
+  void tenantId;
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     return fn(tx);
   });
@@ -41,7 +42,7 @@ async function seedSession(tenantId: string, role: PersonRoleValue): Promise<str
   const person = await suite.admin.execute<{ id: string }>(sql`
     insert into persons (tenant_id, display_name, pin_hash, role)
     values (${tenantId}, 'Operator', 'seed-pin-hash', ${role}) returning id`);
-  const session = await withTenant(suite.admin, tenantId, (tx) =>
+  const session = await withTransaction(suite.admin, (tx) =>
     startManagementSession(tx, { tenantId, personId: person.rows[0]!.id }),
   );
   return session.id;

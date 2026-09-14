@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, captureError, pgErrorCode, withTenant } from "@waitron/db";
+import { asAppUser, captureError, pgErrorCode, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { freshNif, seedWorkingOrder } from "../../test/seed.js";
@@ -43,7 +43,7 @@ describe("payments.reader_id", () => {
     const db = postgres.admin;
     const { tenantId, workingOrderId, readerId } = await seedOrderWithReader(db);
 
-    await withTenant(db, tenantId, async (tx) => {
+    await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       await tx.insert(payments).values({
         tenantId,
@@ -56,7 +56,7 @@ describe("payments.reader_id", () => {
       });
     });
 
-    const stored = await withTenant(db, tenantId, async (tx) => {
+    const stored = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       return tx
         .select()
@@ -73,7 +73,7 @@ describe("payments.reader_id", () => {
     const foreign = await seedOrderWithReader(db);
 
     const e = await captureError(() =>
-      withTenant(db, own.tenantId, async (tx) => {
+      withTransaction(db, async (tx) => {
         await asAppUser(tx);
         await tx.insert(payments).values({
           tenantId: own.tenantId,

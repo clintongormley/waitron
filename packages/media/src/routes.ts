@@ -1,7 +1,7 @@
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { bodyLimit } from "hono/body-limit";
 import { sql } from "drizzle-orm";
-import { asAppUser, withTenant, type Transaction } from "@waitron/db";
+import { asAppUser, withTransaction, type Transaction } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
 import type { ModuleRoutes } from "@waitron/module";
 import { AppError, FALLBACK_LOCALE } from "@waitron/shared";
@@ -64,7 +64,7 @@ export const MEDIA_ROUTES: ModuleRoutes = {
     const fallbackLanguage = ctx.cfg.contentDefaultLanguage ?? FALLBACK_LOCALE;
     const maxUploadBytes = ctx.maxUploadBytes ?? 5 * 1024 * 1024;
     const gated = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>) =>
-      withTenant(ctx.db, tenantId, async (tx) => {
+      withTransaction(ctx.db, async (tx) => {
         await asAppUser(tx);
         const auth = await authorizeManager(tx, {
           managementSessionId: sessionId,
@@ -174,7 +174,7 @@ export const MEDIA_ROUTES: ModuleRoutes = {
       run(c, log, async () => {
         const filename = c.req.param("filename");
         if (!MEDIA_FILENAME.test(filename)) return c.body(null, 404);
-        const content = await withTenant(ctx.db, tenantId, async (tx) => {
+        const content = await withTransaction(ctx.db, async (tx) => {
           await asAppUser(tx);
           return readImageBytes(tx, tenantId, filename);
         });

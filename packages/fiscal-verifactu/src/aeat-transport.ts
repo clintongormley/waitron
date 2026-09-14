@@ -1,7 +1,7 @@
 import { Agent, fetch as undiciFetch } from "undici";
 import { AppError, isAppError } from "@waitron/shared";
 import type { TenantId } from "@waitron/shared";
-import { withTenant } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import type { Database, DeploymentEnvironment } from "@waitron/db";
 import { getCredential } from "@waitron/credentials";
 import type { KeyRing } from "@waitron/credentials";
@@ -80,7 +80,7 @@ export async function readCertMaterial(
   ring: KeyRing,
   tenantId: TenantId,
 ): Promise<CertMaterial> {
-  const payload = await withTenant(db, tenantId, (tx) =>
+  const payload = await withTransaction(db, (tx) =>
     getCredential(tx, ring, { tenantId, purpose: "fiscal.aeat" }),
   );
   return certMaterialFrom(payload, { tenantId, purpose: "fiscal.aeat" });

@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import { asAppUser, saleLines, sales, withTenant, workingOrderLines } from "@waitron/db";
+import { asAppUser, saleLines, sales, withTransaction, workingOrderLines } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import {
@@ -135,7 +135,7 @@ async function setupVenue(): Promise<Seeded> {
   );
 
   const cfg = tillConfigFromVenue(venue);
-  const seeded = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  const seeded = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const cat = await createCatalogue(tx, cfg.tenantId, { name: "Delicatessen" });
     const comida = await createCategory(tx, cfg.tenantId, { name: { [LOCALE]: "Comida" } });
@@ -167,7 +167,8 @@ async function setupVenue(): Promise<Seeded> {
  * Run fn in one transaction as app_user.
  */
 function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  return withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  void cfg;
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     return fn(tx);
   });

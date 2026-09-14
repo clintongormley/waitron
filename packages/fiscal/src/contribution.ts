@@ -58,7 +58,7 @@ export interface FiscalContribution {
      * field, and writing NOTHING. Run BEFORE `provisionVenue` mints the unrepairable SIF/hash chain
      * (CLAUDE.md §5) so a malformed secret is refused with nothing stamped or minted. */
     validate(raw: unknown): void;
-    /** Seal the (validated) secret into the tenant's vault under `withTenant`. Runs AFTER the tenant
+    /** Seal the (validated) secret into the tenant's vault under `withTransaction`. Runs AFTER the tenant
      * is minted — the vault row FK-restricts to it — and re-validates as defense-in-depth. */
     seal(deps: { db: Database; ring: KeyRing }, tenantId: string, raw: unknown): Promise<void>;
   };

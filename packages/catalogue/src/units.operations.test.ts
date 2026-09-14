@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, withTenant, type Transaction } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction, type Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { CATALOGUE_MIGRATIONS } from "./migrations.js";
@@ -32,7 +32,7 @@ async function product(tx: Transaction, tenantId: string, name: string) {
 describe("unit operations", () => {
   it("requires an abbreviation in the default language", async () => {
     const tenantId = await seedTenant(suite.db);
-    await withTenant(suite.db, tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       await expect(
         createUnit(tx, tenantId, { name: { en: "Litre" }, precision: 3, abbreviation: {} }, "en"),
       ).rejects.toMatchObject({ code: "content.translation_required" });
@@ -41,7 +41,7 @@ describe("unit operations", () => {
 
   it("stores and returns the abbreviation", async () => {
     const tenantId = await seedTenant(suite.db);
-    await withTenant(suite.db, tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       const unit = await createUnit(
         tx,
         tenantId,
@@ -56,7 +56,7 @@ describe("unit operations", () => {
 
   it("updates the abbreviation and revalidates it against the default language", async () => {
     const tenantId = await seedTenant(suite.db);
-    await withTenant(suite.db, tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       const unit = await createUnit(
         tx,
         tenantId,
@@ -73,7 +73,7 @@ describe("unit operations", () => {
 
   it("creates, reads, updates, assigns and deletes within a tenant", async () => {
     const tenantId = await seedTenant(suite.db);
-    await withTenant(suite.db, tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       const unit = await createUnit(
         tx,
         tenantId,
@@ -101,7 +101,7 @@ describe("unit operations", () => {
 
   it("lists the products using a unit, with each product's availability", async () => {
     const tenantId = await seedTenant(suite.db);
-    await withTenant(suite.db, tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       const unit = await createUnit(
         tx,
         tenantId,
@@ -131,10 +131,10 @@ describe("unit operations", () => {
   it("does not read or mutate another tenant's unit or attach it to a product", async () => {
     const owner = await seedTenant(suite.db);
     const other = await seedTenant(suite.db);
-    const unit = await withTenant(suite.db, owner, (tx) =>
+    const unit = await withTransaction(suite.db, (tx) =>
       createUnit(tx, owner, { name: { en: "cup" }, precision: 0, abbreviation: { en: "u" } }, "en"),
     );
-    await withTenant(suite.db, other, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       const productId = await product(tx, other, "Tea");
       await expect(getUnit(tx, other, unit.id)).rejects.toMatchObject({ code: "unit.not_found" });
       await expect(updateUnit(tx, other, unit.id, { precision: 1 }, "en")).rejects.toMatchObject({
@@ -151,7 +151,7 @@ describe("unit operations", () => {
 
   it("reassigns products from one unit to another", async () => {
     const tenantId = await seedTenant(suite.db);
-    await withTenant(suite.db, tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       const from = await createUnit(
         tx,
         tenantId,
@@ -183,7 +183,7 @@ describe("unit operations", () => {
   it("skips an unknown or another tenant's product id instead of failing the reassignment", async () => {
     const owner = await seedTenant(suite.db);
     const other = await seedTenant(suite.db);
-    const [foreignProduct, foreignUnit] = await withTenant(suite.db, other, async (tx) => {
+    const [foreignProduct, foreignUnit] = await withTransaction(suite.db, async (tx) => {
       const unit = await createUnit(
         tx,
         other,
@@ -194,7 +194,7 @@ describe("unit operations", () => {
       await assignProductUnit(tx, other, productId, unit.id);
       return [productId, unit] as const;
     });
-    await withTenant(suite.db, owner, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       const from = await createUnit(
         tx,
         owner,
@@ -224,7 +224,7 @@ describe("unit operations", () => {
       expect(await productsUsingUnit(tx, owner, from.id)).toEqual([]);
       expect((await productsUsingUnit(tx, owner, to.id)).map((p) => p.id)).toEqual([a]);
     });
-    await withTenant(suite.db, other, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       expect((await productsUsingUnit(tx, other, foreignUnit.id)).map((p) => p.id)).toEqual([
         foreignProduct,
       ]);
@@ -233,7 +233,7 @@ describe("unit operations", () => {
 
   it("refuses to reassign to a unit that does not exist", async () => {
     const tenantId = await seedTenant(suite.db);
-    await withTenant(suite.db, tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       const from = await createUnit(
         tx,
         tenantId,

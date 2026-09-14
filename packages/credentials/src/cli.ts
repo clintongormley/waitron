@@ -1,5 +1,5 @@
 import { parseArgs } from "node:util";
-import { withTenant, type Database } from "@waitron/db";
+import { withTransaction, type Database } from "@waitron/db";
 import { AppError, isAppError, tenantId as brandTenantId } from "@waitron/shared";
 import type { TenantId } from "@waitron/shared";
 import type { KeyRing } from "./keyring.js";
@@ -143,7 +143,7 @@ async function set(argv: string[], deps: CliDeps): Promise<number> {
   }
 
   try {
-    await withTenant(deps.db, tenantId, (tx) =>
+    await withTransaction(deps.db, (tx) =>
       putCredential(tx, deps.ring, { tenantId, purpose, value: payload }),
     );
   } catch (error) {
@@ -183,7 +183,8 @@ async function list(argv: string[], deps: CliDeps): Promise<number> {
   }
 
   for (const tenantId of tenants) {
-    const rows = await withTenant(deps.db, tenantId, (tx) => listCredentials(tx));
+    void tenantId;
+    const rows = await withTransaction(deps.db, (tx) => listCredentials(tx));
     for (const row of rows) {
       // Metadata only — purpose, key version, when it was last written. Never a field name, never a
       // value.
@@ -209,7 +210,7 @@ async function remove(argv: string[], deps: CliDeps): Promise<number> {
   }
   const tenantId = resolveTenant(tenant, deps);
   if (typeof tenantId !== "string") return tenantId;
-  const deleted = await withTenant(deps.db, tenantId, (tx) =>
+  const deleted = await withTransaction(deps.db, (tx) =>
     deleteCredential(tx, { tenantId, purpose }),
   );
   if (!deleted) {

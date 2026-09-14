@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { hashPassword, hashPin, startManagementSession } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
@@ -11,7 +11,7 @@ import { mountPurchasingApi } from "./purchasing-api.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 
 // Real Postgres, not PGlite: this suite proves the purchase-invoice write group's `purchase.manage`
-// gate BY DELETION against the real cluster, with every DB touch going through `withTenant` +
+// gate BY DELETION against the real cluster, with every DB touch going through `withTransaction` +
 // `asAppUser` so the routes run as the non-superuser app role and its table grants are enforced —
 // PGlite connects as a superuser holding every privilege (CLAUDE.md §4). The route mechanics (body/id/
 // date screens, STATUS map) are already proven in-process on PGlite (`purchasing-api.test.ts`).
@@ -74,7 +74,7 @@ async function setupVenue(): Promise<Venue> {
     { db: suite.admin, modules: ALL_MODULES },
   );
 
-  const { managerSid, staffSid } = await withTenant(suite.admin, venue.tenantId, async (tx) => {
+  const { managerSid, staffSid } = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const mgr = await tx.execute<{ id: string }>(sql`
       insert into persons (tenant_id, display_name, pin_hash, role)

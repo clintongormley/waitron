@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { sql } from "drizzle-orm";
 import { recordSale } from "@waitron/core";
-import { createPgliteDb, runMigrations, withTenant } from "@waitron/db";
+import { createPgliteDb, runMigrations, withTransaction } from "@waitron/db";
 import type { KeyRing } from "@waitron/credentials";
 import type { FiscalContribution } from "@waitron/fiscal";
 import { migrationOptionsFor } from "@waitron/migrations";
@@ -97,7 +97,7 @@ export async function submitFiscalReadiness(args: {
     `);
     if (existing.rows[0]!.count === 0) {
       const now = (args.now ?? (() => new Date()))();
-      await withTenant(db, venue.tenantId, (tx) =>
+      await withTransaction(db, (tx) =>
         recordSale(
           tx,
           args.contribution.makeBackend({ db, clock: systemClock(), environment: "preproduction" }),

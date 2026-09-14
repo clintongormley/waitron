@@ -1,4 +1,4 @@
-import { withTenant } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import type {
   AsyncPaymentProvider,
@@ -16,7 +16,7 @@ const CURRENCY = "eur";
 export interface StripeHostedProviderOptions {
   client: StripeHostedClient;
   /** A plain `Database` handle. `initiate` opens its own transaction and scopes it with
-   * `withTenant(db, params.tenantId, …)`, so nothing is required of the handle itself. The inbound
+   * `withTransaction(db, …)`, so nothing is required of the handle itself. The inbound
    * webhook path is untenanted and resolves its tenant separately (Slice A's
    * `resolvePaymentTenant`), so it does NOT use this handle — see the wiring test.
    *
@@ -66,7 +66,7 @@ export class StripeHostedProvider implements AsyncPaymentProvider {
     // reversal methods carry none of their own; `initiate` is this provider's ONLY database method
     // and it has the tenant right here, so a constructor option would be surface with no second
     // caller, and would force a host to build one hosted provider per tenant for no reason.
-    await withTenant(this.opts.db, params.tenantId, (tx) =>
+    await withTransaction(this.opts.db, (tx) =>
       insertInitiated(tx, {
         tenantId: params.tenantId,
         workingOrderId: params.workingOrderId,

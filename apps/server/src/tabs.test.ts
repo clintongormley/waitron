@@ -7,7 +7,7 @@ import {
   optionGroups,
   productOptionGroups,
   ticketItems,
-  withTenant,
+  withTransaction,
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
@@ -94,7 +94,7 @@ async function setupVenue(): Promise<Seeded> {
     orderFlow: "prepay",
   };
   const { cafeId, aguaId, cafeMenuItemId, aguaMenuItemId, menuId, categoryId, tableId } =
-    await withTenant(db, tenantId, async (tx) => {
+    await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       const cat = await createCatalogue(tx, tenantId, { name: "Carta" });
       const bebidas = await createCategory(tx, tenantId, { name: { en: "Bebidas" } });
@@ -146,7 +146,8 @@ async function setupVenue(): Promise<Seeded> {
 }
 
 function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  return withTenant(db, cfg.tenantId, async (tx) => {
+  void cfg;
+  return withTransaction(db, async (tx) => {
     await asAppUser(tx);
     return fn(tx);
   });

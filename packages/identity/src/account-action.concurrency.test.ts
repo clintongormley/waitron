@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { captureError, pgErrorCode, withTenant } from "@waitron/db";
+import { captureError, pgErrorCode, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { seedManager } from "../test/fixtures.js";
@@ -38,7 +38,7 @@ describe("account-action issuance under real concurrency", () => {
       const firstIssued = new Promise<void>((resolve) => (firstReady = resolve));
       let c1Done: Promise<unknown> | undefined;
       try {
-        c1Done = withTenant(c1, tenantId, async (tx) => {
+        c1Done = withTransaction(c1, async (tx) => {
           const issued = await requestAccountRecoveryAction(tx, {
             tenantId,
             email: "reset-race@x.com",
@@ -51,7 +51,7 @@ describe("account-action issuance under real concurrency", () => {
         await firstIssued;
 
         const blocked = await captureError(() =>
-          withTenant(c2, tenantId, async (tx) => {
+          withTransaction(c2, async (tx) => {
             await tx.execute(sql`set local lock_timeout = '250ms'`);
             return requestAccountRecoveryAction(tx, { tenantId, email: "reset-race@x.com" });
           }),
@@ -60,7 +60,7 @@ describe("account-action issuance under real concurrency", () => {
 
         releaseFirst();
         await c1Done;
-        await withTenant(c2, tenantId, (tx) =>
+        await withTransaction(c2, (tx) =>
           requestAccountRecoveryAction(tx, { tenantId, email: "reset-race@x.com" }),
         );
         const live = await suite.admin.execute<{ count: string }>(sql`

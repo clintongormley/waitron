@@ -3,7 +3,7 @@
 // that differs from the product definition.
 //
 // The deployment holds one tenant per database. `seedOptions` runs inside the CALLER's
-// transaction, under the app_user role the caller selected with `withTenant`/`asAppUser` — the same posture
+// transaction, under the app_user role the caller selected with `withTransaction`/`asAppUser` — the same posture
 // `seedCatalogues` uses in this database.
 // `createOptionGroup`/`createOptionGroupItem`/`setProductOptionGroups` (`@waitron/catalogue`) are
 // plain catalogue operations, not session-gated the way `createPerson` (`@waitron/identity`) is,

@@ -2,7 +2,7 @@
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, sales, withTenant } from "@waitron/db";
+import { asAppUser, sales, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import {
   assignCatalogueToLocation,
@@ -138,7 +138,7 @@ async function setupVenue(): Promise<{
   );
 
   const cfg = tillConfigFromVenue(venue);
-  const { product, operatorId } = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  const { product, operatorId } = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const cat = await createCatalogue(tx, cfg.tenantId, { name: "Delicatessen" });
     const bebidas = await createCategory(tx, cfg.tenantId, { name: { [LOCALE]: "Bebidas" } });
@@ -298,7 +298,7 @@ interface Registro {
 
 /** Every fiscal record filed for the tenant, oldest first — one per sale, this tenant's alone. */
 async function registrosFor(cfg: TillConfig): Promise<Registro[]> {
-  return withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const rows = await tx
       .select({
@@ -319,7 +319,7 @@ async function registrosFor(cfg: TillConfig): Promise<Registro[]> {
 /** Each sale's stored `sales.till_id`, ordered by the per-series `invoice_number` (1, 2, …) so it
  *  lines up with the registros ordered by `secuencia`. */
 async function saleTillIds(cfg: TillConfig): Promise<string[]> {
-  return withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const rows = await tx
       .select({ tillId: sales.tillId, invoiceNumber: sales.invoiceNumber })

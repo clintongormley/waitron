@@ -1,7 +1,7 @@
 // Real PostgreSQL: exercises the database path through a non-superuser LOGIN and its grants.
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { withTenant } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { credentialTenants, loadKeyRing, putCredential } from "@waitron/credentials";
 import { DEFAULTS, runDue } from "@waitron/scheduler";
@@ -46,7 +46,7 @@ const emptyStripe = {
 describe("one pass as the non-superuser deployment role", () => {
   it("reads credentials, sweeps reconcile and writes the ledger", async () => {
     const tenantId = await seedTenant(suite.admin);
-    await withTenant(suite.admin, tenantId, (tx) =>
+    await withTransaction(suite.admin, (tx) =>
       putCredential(tx, ring, {
         tenantId,
         purpose: "payments.stripe",
@@ -144,7 +144,7 @@ describe("one pass as the non-superuser deployment role", () => {
     // would pass this assertion even if `credential_tenants`'s `WHERE purpose = p_purpose` clause
     // were deleted outright. Giving it a DIFFERENT purpose's credential is what makes the filter,
     // not merely the row's absence, the thing this test depends on.
-    await withTenant(suite.admin, otherPurposeTenant, (tx) =>
+    await withTransaction(suite.admin, (tx) =>
       putCredential(tx, ring, {
         tenantId: otherPurposeTenant,
         purpose: "fiscal.aeat",

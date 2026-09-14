@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { captureError, pgErrorCode, withTenant } from "@waitron/db";
+import { captureError, pgErrorCode, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { codeOf, seedPerson } from "../test/fixtures.js";
@@ -69,11 +69,11 @@ async function seedFixture(): Promise<{ tenant: string; personId: string; handle
 }
 
 const finishAuth = (
-  db: Parameters<typeof withTenant>[0],
+  db: Parameters<typeof withTransaction>[0],
   tenant: string,
   handle: string,
 ): Promise<{ personId: string }> =>
-  withTenant(db, tenant, (tx) =>
+  withTransaction(db, (tx) =>
     finishPasskeyAuthentication(tx, {
       tenantId: tenant,
       challengeHandle: handle,

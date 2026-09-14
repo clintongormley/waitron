@@ -3,7 +3,7 @@
 // Image bytes share the database transaction. Fiscal sales are preproduction.
 
 import { tenantId as brandTenantId } from "@waitron/shared";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { listAvailableProducts } from "@waitron/catalogue";
 import { seedCatalogues } from "./seed-catalogue.js";
@@ -47,7 +47,7 @@ export async function seedDemoRestaurant(
 
   // One tenant/app_user tx for the four in-transaction sub-seeds. `listAvailableProducts` is read at
   // the end, inside the SAME tx, so the sales generator draws from exactly what was just seeded.
-  const products = await withTenant(db, tenantId, async (tx) => {
+  const products = await withTransaction(db, async (tx) => {
     await asAppUser(tx);
     const { productsByImage, menuItemsByProduct, menuIds } = await seedCatalogues(
       tx,
@@ -68,7 +68,7 @@ export async function seedDemoRestaurant(
     return (await listAvailableProducts(tx, locationId)).products;
   });
 
-  // AFTER the tx commits: seedSales opens its own per-sale `withTenant`, so it must see the committed
+  // AFTER the tx commits: seedSales opens its own per-sale `withTransaction`, so it must see the committed
   // catalogue. It maps the available products onto the fields the generator needs (id/name/customerName/
   // gross unitPrice/vatClass/optionGroups); the rest of `AvailableProduct` is unused here.
   // `optionGroups` carries straight through — `listAvailableProducts` already resolved it from the

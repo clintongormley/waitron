@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, asAppUser, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -136,7 +136,7 @@ const suite = usePgliteDb({
     // report.export) and a STAFF person (holds neither) as the app role, each with a live management
     // session. The supervisor is what pins the routes to report.view specifically: a supervisor 200
     // proves they gate on report.view, not report.export (which the supervisor lacks).
-    const sids = await withTenant(db, tenantId, async (tx) => {
+    const sids = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       const mkPerson = async (name: string, role: string): Promise<string> => {
         const p = await tx.execute<{ id: string }>(sql`

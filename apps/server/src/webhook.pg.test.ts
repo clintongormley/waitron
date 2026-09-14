@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { withTenant } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
@@ -20,7 +20,7 @@ import {
 
 // A non-superuser LOGIN role inheriting app_user's grants — being non-superuser is what makes those
 // grants the ceiling. Everything the route does below (read the credential, resolve the tenant across the
-// #26 seam, settle under `withTenant`) is exercised as the deployment role's view of the world.
+// #26 seam, settle under `withTransaction`) is exercised as the deployment role's view of the world.
 // PGlite (webhook.test.ts) runs every connection as a superuser and cannot show any of it.
 const PROBE_ROLE = "server_webhook_probe";
 const PROBE_PASSWORD = "probe";
@@ -61,7 +61,7 @@ async function seedInitiated(admin: Database, webhookSecret: string): Promise<Se
     values (${tenantId}, ${loc.rows[0]!.id}, 'Till 1') returning id`);
   const wo = await admin.execute<{ id: string }>(sql`
     insert into working_orders (tenant_id, till_id, order_number) values (${tenantId}, ${till.rows[0]!.id}, 1) returning id`);
-  await withTenant(admin, tenantId, (tx) =>
+  await withTransaction(admin, (tx) =>
     insertInitiated(tx, {
       tenantId,
       workingOrderId: wo.rows[0]!.id,
@@ -71,7 +71,7 @@ async function seedInitiated(admin: Database, webhookSecret: string): Promise<Se
       amount: decimal("12.10"),
     }),
   );
-  await withTenant(admin, tenantId, (tx) =>
+  await withTransaction(admin, (tx) =>
     putCredential(tx, ring, {
       tenantId,
       purpose: "payments.stripe",
@@ -107,7 +107,7 @@ async function stateOf(
 }
 
 describe("the webhook resolves and settles as the non-superuser deployment role", () => {
-  it("crosses the #26 seam, settles under withTenant, and is idempotent — all as app_user", async () => {
+  it("crosses the #26 seam, settles under withTransaction, and is idempotent — all as app_user", async () => {
     // A SECOND tenant with its own initiated payment, so "resolve crosses exactly one tenant" is a
     // real claim: the seam must return THIS session's owner, not merely some tenant.
     const other = await seedInitiated(suite.admin, "whsec_other");
@@ -131,7 +131,7 @@ describe("the webhook resolves and settles as the non-superuser deployment role"
       const body = completedEvent(seeded.sessionId);
       const sig = signStripeBody(body, "whsec_probe");
 
-      // The settle runs `readCredential` + `settleInitiated` under `withTenant` as app_user: SELECT
+      // The settle runs `readCredential` + `settleInitiated` under `withTransaction` as app_user: SELECT
       // on tenant_credentials and UPDATE on payments both had to succeed as the deployment role.
       const first = await app.request(`/webhooks/stripe/${seeded.tenantId}`, {
         method: "POST",

@@ -59,7 +59,13 @@ import { recordCorrection, recordSale } from "@waitron/core";
 import type { RecordCorrectionInput, RecordSaleInput } from "@waitron/core";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import type { TrustedClock } from "@waitron/fiscal";
-import { CORE_MIGRATIONS, asAppUser, createPgliteDb, runMigrations, withTenant } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  asAppUser,
+  createPgliteDb,
+  runMigrations,
+  withTransaction,
+} from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { IDENTITY_MIGRATIONS, hashPin, loginWithPin } from "@waitron/identity";
 import {
@@ -480,7 +486,7 @@ async function main(): Promise<void> {
     // Register both nodes once (a one-time admin action recordSale itself never performs), as
     // app_user in its own committed transaction so the later write transactions see them.
     for (const node of venue.nodes) {
-      await withTenant(db, venue.tenantId, async (tx) => {
+      await withTransaction(db, async (tx) => {
         await asAppUser(tx);
         await backend.registerNode(tx, node.nodeId, { tenantId: venue.tenantId });
       });
@@ -517,7 +523,7 @@ async function main(): Promise<void> {
         clock: clockAt(instant, offsetMinutes),
         settlement: { kind: "deferred" },
       };
-      const { saleId } = await withTenant(db, venue.tenantId, async (tx) => {
+      const { saleId } = await withTransaction(db, async (tx) => {
         await asAppUser(tx);
         return recordSale(tx, backend, input);
       });
@@ -526,7 +532,7 @@ async function main(): Promise<void> {
 
     // Open the supervisor's shift session — the authorizer the rectificativa's `sale.rectify` gate
     // requires — exactly as a till would at the start of a shift.
-    const authorizerSession = await withTenant(db, venue.tenantId, async (tx) => {
+    const authorizerSession = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       return loginWithPin(tx, {
         tenantId: venue.tenantId,
@@ -560,7 +566,7 @@ async function main(): Promise<void> {
       clock: clockAt(rect.instant, rect.offsetMinutes),
       authz: { sessionId: authorizerSession.id },
     };
-    await withTenant(db, venue.tenantId, async (tx) => {
+    await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       await recordCorrection(tx, backend, correctionInput);
     });
@@ -572,9 +578,8 @@ async function main(): Promise<void> {
     // The reads: as the application role, exactly as a report consumer would call them.
     const monthLabel = `${YEAR}-${String(MONTH).padStart(2, "0")}`;
     const period = { fromBusinessDay: `${monthLabel}-01`, toBusinessDay: `${monthLabel}-31` };
-    const { periodAll, periodNode1, periodNode2, weekOne, vatReturn } = await withTenant(
+    const { periodAll, periodNode1, periodNode2, weekOne, vatReturn } = await withTransaction(
       db,
-      venue.tenantId,
       async (tx) => {
         await asAppUser(tx);
         const base = {
@@ -614,9 +619,8 @@ async function main(): Promise<void> {
     // month; the reconciliation below still exercises the wider civil-date bounds.
     const quarter = qOf(MONTH);
     const [qm1, qm2, qm3] = monthsOfQuarter(quarter);
-    const { monthlyReturns, quarterReturn, annualReturn } = await withTenant(
+    const { monthlyReturns, quarterReturn, annualReturn } = await withTransaction(
       db,
-      venue.tenantId,
       async (tx) => {
         await asAppUser(tx);
         const forPeriod = (period: LiquidationPeriod): Promise<VatReturn> =>

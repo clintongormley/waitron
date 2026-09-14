@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
@@ -9,7 +9,7 @@ import type { Logger } from "./logger.js";
 import { mountManagementApi } from "./management-api.js";
 import { mountMeApi } from "./me-api.js";
 
-// The passkey routes below run their DB work through `withTenant` + `asAppUser`, so the credential
+// The passkey routes below run their DB work through `withTransaction` + `asAppUser`, so the credential
 // write and the session lookup are subject to app_user's grants: a grant the role lacks fails
 // assertion 2. The register route is also GATED on a management-session cookie, which needs a
 // migrated database (persons + management_sessions). The ceremony LOGIC (options issued/stored/consumed,
@@ -132,7 +132,7 @@ async function setupTenant(): Promise<{ tenantId: string; managerId: string }> {
     { db: suite.admin, modules: ALL_MODULES },
   );
 
-  const { managerId } = await withTenant(suite.admin, venue.tenantId, async (tx) => {
+  const { managerId } = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const manager = await tx.execute<{ id: string }>(sql`
       insert into persons (tenant_id, display_name, email, pin_hash, password_hash, role)
@@ -146,7 +146,7 @@ async function setupTenant(): Promise<{ tenantId: string; managerId: string }> {
 function mountApp(tenantId: string): Hono {
   const app = new Hono();
   // `secureCookies: false` so the session cookie rides the non-TLS `app.request`. `deps.db` is the
-  // owner connection; the routes drop to `app_user` themselves via `withTenant` + `asAppUser`.
+  // owner connection; the routes drop to `app_user` themselves via `withTransaction` + `asAppUser`.
   // `rpId`/`origin` are the loopback passkey Relying Party values Task 4 widened `ManagementApiDeps`
   // to require — the same values the mocked `verify*` calls receive.
   mountManagementApi(
@@ -232,7 +232,8 @@ async function login(app: Hono, email: string, password = PASSWORD): Promise<str
 async function readCredentials(
   tenantId: string,
 ): Promise<{ credential_id: string; person_id: string; counter: string; name: string | null }[]> {
-  return withTenant(suite.admin, tenantId, async (tx) => {
+  void tenantId;
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const r = await tx.execute<{
       credential_id: string;

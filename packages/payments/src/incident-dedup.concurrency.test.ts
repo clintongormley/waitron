@@ -1,7 +1,7 @@
 // Real PostgreSQL checks same-key incident writers blocking across independent backends.
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { withTenant } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { AppError, tenantId as brandTenantId, tillId as brandTillId } from "@waitron/shared";
 import { recordIncidentOnce } from "@waitron/core";
@@ -38,7 +38,7 @@ describe("recordIncidentOnce is race-safe: concurrent same-key raises collapse t
       const acquired = new Promise<void>((resolve) => (acquire = resolve));
 
       // Holder inserts the incident, signals it has, and holds the transaction open.
-      holding = withTenant(holder, s.tenantId, async (tx) => {
+      holding = withTransaction(holder, async (tx) => {
         const raised = await recordIncidentOnce(tx, raiseInput);
         expect(raised).toBe(true);
         acquire();
@@ -48,12 +48,12 @@ describe("recordIncidentOnce is race-safe: concurrent same-key raises collapse t
 
       // The waiter's same-key raise blocks on the arbiter index until the holder commits.
       let waiterResolved = false;
-      const waiting = withTenant(waiter, s.tenantId, (tx) =>
-        recordIncidentOnce(tx, raiseInput),
-      ).then((r) => {
-        waiterResolved = true;
-        return r;
-      });
+      const waiting = withTransaction(waiter, (tx) => recordIncidentOnce(tx, raiseInput)).then(
+        (r) => {
+          waiterResolved = true;
+          return r;
+        },
+      );
       // It must NOT resolve while the holder holds the row.
       const settledEarly = await Promise.race([
         waiting.then(() => true),

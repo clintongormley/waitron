@@ -16,7 +16,7 @@ import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
-import { asAppUser, verifyAmendmentChain, withTenant } from "@waitron/db";
+import { asAppUser, verifyAmendmentChain, withTransaction } from "@waitron/db";
 import type { Transaction, VerifiableAmendment } from "@waitron/db";
 import { listOutstandingSales } from "@waitron/core";
 import {
@@ -182,7 +182,7 @@ async function setupVenue(): Promise<SeededVenue> {
   );
 
   const cfg = tillConfigFromVenue(venue);
-  const available = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  const available = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const cat = await createCatalogue(tx, cfg.tenantId, { name: "Delicatessen" });
     const bebidas = await createCategory(tx, cfg.tenantId, { name: { [LOCALE]: "Bebidas" } });
@@ -228,7 +228,7 @@ async function modeVenue(mode: OrderFlow): Promise<SeededVenue> {
 /** This tenant's OUTSTANDING (issued-but-unsettled) sales, read as the app role under the tenant —
  *  the surface an invoice-first order shows on between placing and collect. */
 async function outstandingFor(cfg: TillConfig): Promise<{ saleId: string; amountDue: string }[]> {
-  return withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const rows = await listOutstandingSales(tx, cfg.tenantId);
     return rows.map((r) => ({ saleId: r.saleId, amountDue: r.amountDue }));
@@ -443,11 +443,12 @@ async function ticketItemIdsFor(orderId: string): Promise<string[]> {
 /**
  * Run one of the tx-based KDS verbs (advanceTicketItem/advanceTicket/listStationQueue) under a cfg's
  * tenant + `app_user` scope. Unlike the old deps-based `advancePrep`, these verbs run on a
- * CALLER-supplied transaction, so the suite opens the `withTenant` + `asAppUser` scope for them — as
+ * CALLER-supplied transaction, so the suite opens the `withTransaction` + `asAppUser` scope for them — as
  * `app_user`, the role production runs them under.
  */
 async function asTenant<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  return withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  void cfg;
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     return fn(tx);
   });
@@ -455,14 +456,14 @@ async function asTenant<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>)
 
 /**
  * A SECOND register on the SAME node — a `cfg` that shares `cfg`'s tenant, node, series and
- * location and differs only in `till_id`. The row is inserted as the OWNER under `withTenant`,
+ * location and differs only in `till_id`. The row is inserted as the OWNER under `withTransaction`,
  * exactly as `applyVenue` writes a till (the insert carries an explicit `tenant_id`). Proving
  * cross-till retrieval needs a genuine second till row because both `working_orders.till_id` and
  * `sales.till_id` FK onto `tills` — a fabricated uuid would fail those.
  */
 async function addTill(cfg: TillConfig, name: string): Promise<TillConfig> {
   const id = randomUUID();
-  await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  await withTransaction(suite.admin, async (tx) => {
     await tx.execute(sql`
       insert into tills (id, tenant_id, location_id, name)
       values (${id}, ${cfg.tenantId}, ${cfg.locationId}, ${name})`);
@@ -474,12 +475,12 @@ async function addTill(cfg: TillConfig, name: string): Promise<TillConfig> {
  * The deployment holds one tenant per database. A SECOND node under the SAME tenant + location —
  * a `cfg` differing only in `node_id`. It never sells here; it exists so reads run under it prove
  * they are venue-wide (till-reroute §3.6): a node reaches the venue's open tabs regardless of the
- * `node_id` they carry. Inserted as the owner under `withTenant`, the way `applyVenue`'s create-node
+ * `node_id` they carry. Inserted as the owner under `withTransaction`, the way `applyVenue`'s create-node
  * does; `filing_module`/`tax_module` are nullable and unused for a listing-only node, so left out.
  */
 async function addNode(cfg: TillConfig, name: string): Promise<TillConfig> {
   const id = randomUUID();
-  await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  await withTransaction(suite.admin, async (tx) => {
     await tx.execute(sql`
       insert into nodes (id, tenant_id, location_id, name)
       values (${id}, ${cfg.tenantId}, ${cfg.locationId}, ${name})`);
@@ -683,7 +684,7 @@ describe("payWorkingOrder", () => {
     // Change the catalogue price AFTER the lock — the exact mutation across the park→pay gap that
     // separates the two pricing models (CLAUDE.md §1: a measurement where both answers look alike
     // measures nothing). A re-price at pay would file 9.99; filing from the lock files 1.50.
-    await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       await tx.execute(sql`update products set unit_price = '9.99' where id = ${cafe.id}`);
     });
@@ -849,7 +850,7 @@ describe("payWorkingOrder", () => {
       lines: [{ productId: cafe.id, quantity: "1" }],
     });
     // Abandon it (open → abandoned), then try to pay.
-    await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       await tx.execute(sql`update working_orders set status = 'abandoned' where id = ${id}`);
     });
@@ -1153,7 +1154,7 @@ describe("cross-till end-to-end", () => {
 
     // THE CHAIN: the two sales on this node (A/1 walk-up on till A, A/2 cross-till on till B) verify as
     // one intact huella chain.
-    const report = await withTenant(suite.admin, tillA.tenantId, (tx) =>
+    const report = await withTransaction(suite.admin, (tx) =>
       backend.checkIntegrity(tx, tillA.tenantId, tillA.nodeId),
     );
     expect(report.ok).toBe(true);
@@ -1213,7 +1214,7 @@ describe("cross-till end-to-end", () => {
 });
 
 // Two tenants in ONE database. Production holds one tenant per database, but tenant isolation is
-// enforced at the QUERY, never left to the deployment invariant (#255): `withTenant` stopped isolating
+// enforced at the QUERY, never left to the deployment invariant (#255): `withTransaction` stopped isolating
 // SELECTs when RLS was dropped, so a by-id read's own tenant predicate is its only scope, and the
 // harness + dev DBs really are multi-tenant. Venue-wide (§3.6) means every NODE of one tenant, never
 // across tenants — the six S3 read sites are uniformly `eq(tenantId, cfg.tenantId)`. Real Postgres
@@ -1999,7 +2000,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
 // Postgres: the verbs write `ticket_items` as the non-superuser `app_user`, whose grants PGlite's
 // all-superuser connection would hold regardless (CLAUDE.md §4). `sendToPrep` (Mode P) and
 // `placeOrder` (Modes I/T) are the FIRES that put items on the queue; their settled-only guard is
-// exercised here too. The verbs run through {@link asTenant} (a caller-supplied `withTenant` +
+// exercised here too. The verbs run through {@link asTenant} (a caller-supplied `withTransaction` +
 // `asAppUser` scope), as `app_user`.
 describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surface)", () => {
   it("advanceTicketItem walks a line queued → preparing → ready; a skip, a repeat, a backwards move and to='queued' are all refused", async () => {
@@ -2214,7 +2215,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
 // the per-station `listStationQueue` it takes NO station arg, and since till-reroute §3.6 it is not
 // node-scoped either. PGlite proves the join/grouping/exclusions (working-order.test.ts); this case takes
 // the SAME venue-wide shape the `listStationQueue` test above uses, retargeted at `listExpoQueue`. The
-// reads run through {@link asTenant} (a `withTenant` + `asAppUser` scope), as `app_user`.
+// reads run through {@link asTenant} (a `withTransaction` + `asAppUser` scope), as `app_user`.
 describe("listExpoQueue (KDS-3 cross-station expo/pass read) — venue-wide", () => {
   it("is VENUE-WIDE: each node's expo board shows the venue's orders, regardless of node (till-reroute §3.6)", async () => {
     const { cfg: nodeA, cafe } = await modeVenue("ticket_then_pay");
@@ -2370,11 +2371,11 @@ describe("markCollected (Mode-P kitchen-handover marker)", () => {
 // `setLineCourse`/`sendLines`/`recallLines`. PGlite proved their LOGIC (working-order.test.ts) on a
 // single backend; the cases below prove that a `sendLines` racing a `recallLines` (or a `fireCourse`)
 // on the SAME line serialises via `lockOpenTab`'s FOR UPDATE into one clean serial outcome with no
-// lost update. Every write runs through `withTenant` + `asAppUser`, as `app_user`; the owner reads
+// lost update. Every write runs through `withTransaction` + `asAppUser`, as `app_user`; the owner reads
 // below use `suite.admin` (superuser) deliberately, to witness the committed state from outside.
 
 /** Insert an active dining table under `cfg`'s tenant + location as the owner and return its id — the
- *  `openTab` → `addTabRound` entry point. Written as an owner INSERT under `withTenant` with an
+ *  `openTab` → `addTabRound` entry point. Written as an owner INSERT under `withTransaction` with an
  *  explicit `tenant_id`, the same shape `addTill`/`addNode` above use. */
 async function addTable(tx: Transaction, cfg: TillConfig): Promise<string> {
   const { rows } = await tx.execute<{ id: string }>(sql`
@@ -2448,7 +2449,7 @@ describe("coursing editing verbs — sendLines racing recallLines (Task B1, two-
     // A printer on the venue's default station, so a fire enqueues a kitchen ticket and a recall of a
     // fired line enqueues a RECALLED correction slip — the paper trail the no-lost-update invariant reads.
     const station = await defaultStationId(cfg);
-    await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       const printCfg: PrintConfig = { tenantId: cfg.tenantId, locationId: cfg.locationId };
       const { id: printerId } = await createPrinter(tx, printCfg, {
@@ -2461,7 +2462,7 @@ describe("coursing editing verbs — sendLines racing recallLines (Task B1, two-
 
     // Open a tab whose ONE line is HELD (`hold: true`) — fired_at null, state queued, routed to the
     // default station. Nothing has printed yet.
-    const tabId = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    const tabId = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       const tableId = await addTable(tx, cfg);
       const { tabId } = await openTab(tx, cfg, { tableId });
@@ -2491,11 +2492,11 @@ describe("coursing editing verbs — sendLines racing recallLines (Task B1, two-
       // lock runs to completion and commits first, then the other runs against its committed result. Both
       // verbs are legal on this line in either order, so BOTH succeed.
       const results = await Promise.allSettled([
-        withTenant(connA, cfg.tenantId, async (tx) => {
+        withTransaction(connA, async (tx) => {
           await asAppUser(tx);
           await sendLines(tx, cfg, tabId, [1]);
         }),
-        withTenant(connB, cfg.tenantId, async (tx) => {
+        withTransaction(connB, async (tx) => {
           await asAppUser(tx);
           await recallLines(tx, cfg, tabId, [1]);
         }),
@@ -2532,7 +2533,7 @@ describe("coursing editing verbs — setLineCourse racing fireCourse (Copilot #1
     // paper trail); the invariant below reads the tab snapshot, not paper, but a real fire path is the
     // faithful racer.
     const station = await defaultStationId(cfg);
-    await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       const printCfg: PrintConfig = { tenantId: cfg.tenantId, locationId: cfg.locationId };
       const { id: printerId } = await createPrinter(tx, printCfg, {
@@ -2546,7 +2547,7 @@ describe("coursing editing verbs — setLineCourse racing fireCourse (Copilot #1
     // Two live courses. `café` is routed to `postres`, so its HELD line 1 sits in `postres`; the racer
     // `fireCourse(postres)` fires exactly that line, while `setLineCourse(line 1 → otros)` tries to move
     // it out from under the pass.
-    const { postres, otros, tabId } = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    const { postres, otros, tabId } = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       const postres = await createCourse(tx, cfg, { name: "Postres", displayOrder: 9 });
       const otros = await createCourse(tx, cfg, { name: "Otros", displayOrder: 10 });
@@ -2580,11 +2581,11 @@ describe("coursing editing verbs — setLineCourse racing fireCourse (Copilot #1
       expect(new Set(pids).size).toBe(2);
 
       const [sc, fc] = await Promise.allSettled([
-        withTenant(connA, cfg.tenantId, async (tx) => {
+        withTransaction(connA, async (tx) => {
           await asAppUser(tx);
           await setLineCourse(tx, cfg, tabId, 1, otros.id);
         }),
-        withTenant(connB, cfg.tenantId, async (tx) => {
+        withTransaction(connB, async (tx) => {
           await asAppUser(tx);
           await fireCourse(tx, cfg, tabId, postres.id);
         }),
@@ -2632,7 +2633,7 @@ describe("coursing editing verbs — recallLines racing fireCourse (Copilot #191
     // A printer on the venue's default station, so a fire enqueues a kitchen ticket and a recall of a
     // fired line enqueues a RECALLED correction slip — the paper trail the invariant reads.
     const station = await defaultStationId(cfg);
-    await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       const printCfg: PrintConfig = { tenantId: cfg.tenantId, locationId: cfg.locationId };
       const { id: printerId } = await createPrinter(tx, printCfg, {
@@ -2645,7 +2646,7 @@ describe("coursing editing verbs — recallLines racing fireCourse (Copilot #191
 
     // `café` routed to `postres`, added HELD (line 1) — so `fireCourse(postres)` fires exactly that line
     // and `recallLines([1])` targets it. Nothing printed yet.
-    const { postres, tabId } = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    const { postres, tabId } = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       const postres = await createCourse(tx, cfg, { name: "Postres", displayOrder: 9 });
       await setProductCourse(tx, cfg, cafe.id, postres.id);
@@ -2675,11 +2676,11 @@ describe("coursing editing verbs — recallLines racing fireCourse (Copilot #191
       expect(new Set(pids).size).toBe(2);
 
       const results = await Promise.allSettled([
-        withTenant(connA, cfg.tenantId, async (tx) => {
+        withTransaction(connA, async (tx) => {
           await asAppUser(tx);
           await recallLines(tx, cfg, tabId, [1]);
         }),
-        withTenant(connB, cfg.tenantId, async (tx) => {
+        withTransaction(connB, async (tx) => {
           await asAppUser(tx);
           await fireCourse(tx, cfg, tabId, postres.id);
         }),
@@ -2712,7 +2713,7 @@ describe("coursing editing verbs — recallLines racing fireCourse (Copilot #191
 // Cross-tenant isolation for the ticket-prep verbs (CLAUDE.md §3, conventions-data.md "A by-id read
 // still needs its own eq(table.tenantId, cfg.tenantId)"). These three verbs update `ticket_items`
 // filtered by a working-order/course/station/item id but WITHOUT a tenant predicate today, so a
-// caller under tenant A can advance tenant B's kitchen rows. `withTenant` does not isolate these
+// caller under tenant A can advance tenant B's kitchen rows. `withTransaction` does not isolate these
 // writes (RLS was dropped, #255). Real Postgres as `app_user` (rolsuper=f): on PGlite every
 // connection is a superuser, so the leak would pass silently. Each verb's assertion differs by its
 // not-found behaviour: the two silent no-op verbs (bumpCourseReady/advanceTicket) resolve either way,

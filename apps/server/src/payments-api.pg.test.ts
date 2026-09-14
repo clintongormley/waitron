@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { hashPin, startManagementSession } from "@waitron/identity";
 import { getCredential, loadKeyRing, tryGetCredential, type KeyRing } from "@waitron/credentials";
@@ -72,7 +72,7 @@ async function seedVenue(): Promise<Venue> {
     insert into locations (tenant_id, name, invoice_locales, operation_description)
     values (${tenantId}, 'Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
   const locationId = loc.rows[0]!.id;
-  const { managerSid, staffSid } = await withTenant(suite.admin, tenantId, async (tx) => {
+  const { managerSid, staffSid } = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const mgr = await tx.execute<{ id: string }>(sql`
       insert into persons (tenant_id, display_name, pin_hash, role)
@@ -234,7 +234,7 @@ async function addReader(
 }
 
 async function sealedStripe(venue: Venue): Promise<Record<string, string> | null> {
-  return withTenant(suite.admin, venue.tenantId, async (tx) => {
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     return tryGetCredential(tx, RING, {
       tenantId: brandTenantId(venue.tenantId),
@@ -255,7 +255,7 @@ describe("connect", () => {
     expect(body).toEqual({ merchantName: "Deli Stripe SL" });
     expect(evicted.slice(before)).toEqual(["stripe"]);
     // The sealed payload exists and is exactly the four declared fields.
-    const stored = await withTenant(suite.admin, venue.tenantId, async (tx) => {
+    const stored = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return getCredential(tx, RING, {
         tenantId: brandTenantId(venue.tenantId),
@@ -750,7 +750,7 @@ describe("reader adoption and local management", () => {
   const adoption = { providerId: "stripe", providerRef: vendor.providerRef, name: "Counter" };
 
   it("runs as non-superuser app_user", async () => {
-    await withTenant(suite.admin, randomUUID(), async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       const result = await tx.execute(
         sql`select current_user as role, rolsuper from pg_roles where rolname = current_user`,
@@ -997,7 +997,7 @@ describe("reader adoption and local management", () => {
     const ready = new Promise<void>((resolve) => {
       updated = resolve;
     });
-    const unpairWrite = withTenant(suite.admin, venue.tenantId, async (tx) => {
+    const unpairWrite = withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       await tx.execute(
         sql`update card_readers set active = false, disabled_at = now(), unpaired_at = now() where tenant_id = ${venue.tenantId} and id = ${id}`,

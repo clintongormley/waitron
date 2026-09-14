@@ -97,7 +97,7 @@ function parseTransports(stored: string | null): AuthenticatorTransportFuture[] 
  * `CHALLENGE_TTL_MS` → `passkey.challenge_expired`. A plain read-then-delete let both racers read the
  * live challenge and proceed, which is the single-use hole this closes.
  *
- * Consume-on-SUCCESS is preserved by the enclosing `withTenant` transaction: on a verify failure, a
+ * Consume-on-SUCCESS is preserved by the enclosing `withTransaction` transaction: on a verify failure, a
  * `verified:false` return, or a TTL throw, the WHOLE transaction rolls back and this DELETE is undone,
  * so the challenge survives to lapse by its TTL rather than being eagerly swept — the semantics both
  * finish functions and `passkey.challenge_expired`'s own doc describe.
@@ -182,7 +182,7 @@ export async function beginPasskeyRegistration(
  * concurrent finish on the same handle blocks then finds zero rows, and a challenge produces at most
  * one credential even under contention.
  *
- * A failed or expired ceremony throws, which rolls the caller's transaction (`withTenant`) back —
+ * A failed or expired ceremony throws, which rolls the caller's transaction (`withTransaction`) back —
  * undoing the consume-DELETE with it, so the challenge is NOT lost on those paths. It instead survives
  * until its TTL lapses (a later finish then returns `passkey.challenge_expired`); bounding stale
  * challenges by time rather than sweeping them here is a deliberate consequence of finish running

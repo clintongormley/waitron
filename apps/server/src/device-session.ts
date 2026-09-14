@@ -3,7 +3,7 @@ import type { Context } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { AppError, tillId } from "@waitron/shared";
 import type { TillId } from "@waitron/shared";
-import { asAppUser, deviceProfiles, devices, withTenant } from "@waitron/db";
+import { asAppUser, deviceProfiles, devices, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { kindOfFormFactor } from "@waitron/layouts";
 import type { CapabilityFlag, FormFactor } from "@waitron/layouts";
@@ -196,7 +196,7 @@ function toDeviceBinding(
  * device's existence nor its revocation state to whoever asked (the fail-closed reasoning in `errors.ts`).
  *
  * The deployment holds one tenant per database. The lookup runs as `app_user` inside
- * `withTenant`; it filters by id and active state only. The `active = true` filter makes
+ * `withTransaction`; it filters by id and active state only. The `active = true` filter makes
  * revocation INSTANT: a revoked row is simply not found, with no token lifetime to expire.
  * `verifySecret` (scrypt, `@waitron/identity`) is constant-time — the token is NEVER compared
  * with `===`. On a successful COOKIE read the sighting is recorded (`last_seen_at = now()`, gated
@@ -223,7 +223,7 @@ export async function tryReadDevice(
     const override = c.req.header(DEV_DEVICE_HEADER);
     if (override !== undefined) {
       if (!isUuid(override)) return null;
-      return withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      return withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         const [row] = await tx
           // The form factor AND capabilities come from the device's profile (a device is DEFINED by its
@@ -232,7 +232,7 @@ export async function tryReadDevice(
           .select(deviceBindingColumns)
           .from(devices)
           .innerJoin(deviceProfiles, deviceProfileJoin)
-          // Scope to THIS tenant explicitly: since RLS was dropped (#255) `withTenant` no longer
+          // Scope to THIS tenant explicitly: since RLS was dropped (#255) `withTransaction` no longer
           // isolates SELECTs, so a by-id read must carry its own tenant predicate — one-tenant-per-db
           // is NOT the query's isolation boundary (CLAUDE.md §3; till-reroute-S3). Critical on this
           // dev-override path, which has NO token to verify a foreign device UUID.
@@ -264,7 +264,7 @@ export async function tryReadDevice(
   // stays a clean miss instead.
   if (!isUuid(deviceId)) return null;
 
-  return withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+  return withTransaction(deps.db, async (tx) => {
     await asAppUser(tx);
     const [row] = await tx
       // `tokenHash` (verified below) plus the shared binding projection: the profile's formFactor +
@@ -276,7 +276,7 @@ export async function tryReadDevice(
       .innerJoin(deviceProfiles, deviceProfileJoin)
       // `active = true` is the revocation filter: a revoked device is simply not found. Parameterised
       // by Drizzle — `id` and the boolean both bind as `$n`, never string-concatenated. The tenant
-      // predicate is explicit: since RLS was dropped (#255) `withTenant` no longer isolates SELECTs, so
+      // predicate is explicit: since RLS was dropped (#255) `withTransaction` no longer isolates SELECTs, so
       // a by-id read carries its own `tenant_id` scope — one-tenant-per-db is NOT the query's isolation
       // boundary (CLAUDE.md §3; till-reroute-S3). Defence-in-depth here (the token is still verified).
       .where(
@@ -352,7 +352,7 @@ export async function requireDevice(
  * env value it replaces (`till-config.ts`).
  *
  * `device` is an OPTIONAL pre-resolved binding: a route that also runs a device/capability guard
- * reads the binding ONCE (`tryReadDevice`) and threads it to both, so scrypt + the `withTenant`
+ * reads the binding ONCE (`tryReadDevice`) and threads it to both, so scrypt + the `withTransaction`
  * read run once per request instead of twice. Passing `null` means "resolved, no device"
  * (fail-closed → `unauthorized`); OMITTING it preserves the original behaviour — this reads the
  * binding itself. Undefined (omitted), not null, is the "read it yourself" signal, so the

@@ -14,7 +14,7 @@ import {
   nodes,
   readStandardSeriesIdTx,
   retireNodeSeriesTx,
-  withTenant,
+  withTransaction,
   type Database,
 } from "@waitron/db";
 import { applyMigrations, expectedSchemaVersion, migrationOptionsFor } from "@waitron/migrations";
@@ -390,7 +390,7 @@ export async function runRestoreHooks(args: {
   log: Logger;
 }): Promise<{ seriesId: string; reports: readonly string[] }> {
   const { node } = args;
-  return withTenant(args.db, node.tenantId, async (tx) => {
+  return withTransaction(args.db, async (tx) => {
     const [known] = await tx
       .select({ id: nodes.id })
       .from(nodes)

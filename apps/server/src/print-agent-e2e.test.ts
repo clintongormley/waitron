@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, asAppUser, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, hashPin, startManagementSession } from "@waitron/identity";
@@ -78,7 +78,7 @@ const suite = usePgliteDb({
       tipsEnabled: false,
       orderFlow: "ticket_then_pay",
     };
-    const managerSid = await withTenant(db, tenantId, async (tx) => {
+    const managerSid = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       const mgr = await tx.execute<{ id: string }>(sql`
         insert into persons (tenant_id, display_name, pin_hash, role)
@@ -368,11 +368,11 @@ describe("print-agent end to end", () => {
     //    and reports both `done`.
     const networkPayload = esc().text("Mesa 4").cut().bytes();
     const usbPayload = esc().text("Barra 2").cut().bytes();
-    const { jobId } = await withTenant(suite.db, tenantId, async (tx) => {
+    const { jobId } = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       return enqueuePrintJob(tx, { tenantId, locationId }, printerId, networkPayload);
     });
-    const { jobId: usbJobId } = await withTenant(suite.db, tenantId, async (tx) => {
+    const { jobId: usbJobId } = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       return enqueuePrintJob(tx, { tenantId, locationId }, usbPrinterId, usbPayload);
     });
@@ -402,7 +402,7 @@ describe("print-agent end to end", () => {
     expect(await host.token()).toBeNull();
 
     // A further tick is halted: it claims nothing (no new job appears, the printed one stays done).
-    const enqueuedAfterRevoke = await withTenant(suite.db, tenantId, async (tx) => {
+    const enqueuedAfterRevoke = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       return enqueuePrintJob(
         tx,

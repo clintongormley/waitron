@@ -1,6 +1,6 @@
 // Real-Postgres proof of `seedDemoRestaurant` (Phase 2, Task 11): the orchestrator that wires the
 // Task 6-10 sub-seeds together — catalogues → floor → staff → media (inside ONE
-// `withTenant`/`asAppUser` tx), then the historical sales (its own per-sale tx, OUTSIDE that tx). This
+// `withTransaction`/`asAppUser` tx), then the historical sales (its own per-sale tx, OUTSIDE that tx). This
 // asserts every sub-seed actually ran: both menus present, the full floor, the staff, ≥1 back-dated
 // sale, and a product's `image` rewritten to the content-addressed served name.
 //
@@ -14,7 +14,7 @@
 
 import { describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import { ALL_MODULES } from "../../src/modules.js";
@@ -97,7 +97,7 @@ describe("seedDemoRestaurant", () => {
     // certain to draw the coffee/steak at least once each — see the modifier assertions below.
     await seedDemoRestaurant(suite.admin, { venue, locale: LOCALE, salesDays: 7 });
 
-    const read = await withTenant(suite.admin, venue.tenantId, async (tx) => {
+    const read = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       const menus = await listAccessibleCatalogues(tx, venue.locationId);
       const { products } = await listAvailableProducts(tx, venue.locationId);
@@ -285,7 +285,7 @@ describe("seedDemoRestaurant", () => {
 
     // Media: seedMedia rewrote each product's `image` to the served `<sha256hex>.png` name.
     // listAvailableProducts does not project `image`, so read one product's image directly.
-    const { rows: imageRows } = await withTenant(suite.admin, venue.tenantId, async (tx) => {
+    const { rows: imageRows } = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return tx.execute<{ image: string | null }>(
         sql`select image from products where image is not null limit 1`,

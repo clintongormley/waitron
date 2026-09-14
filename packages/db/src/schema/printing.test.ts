@@ -4,7 +4,7 @@ import type { Transaction } from "../client.js";
 import { captureError, pgErrorCode } from "../testing/errors.js";
 import { useTemplateDb } from "../testing/lifecycle.js";
 import { asAppUser } from "../testing/roles.js";
-import { withTenant } from "../tenancy.js";
+import { withTransaction } from "../tenancy.js";
 import { printAgents } from "./print-agents.js";
 import { printJobs } from "./print-jobs.js";
 import { printers } from "./printers.js";
@@ -42,7 +42,8 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
   });
 
   function asApp<T>(tenant: string, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-    return withTenant(suite.admin, tenant, async (tx) => {
+    void tenant;
+    return withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return fn(tx);
     });

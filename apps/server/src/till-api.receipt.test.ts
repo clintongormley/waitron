@@ -9,7 +9,7 @@ import {
   printJobs,
   sales,
   tills,
-  withTenant,
+  withTransaction,
 } from "@waitron/db";
 import {
   assignCatalogueToLocation,
@@ -154,60 +154,56 @@ async function setupVenue(): Promise<{
   );
 
   const cfg = tillConfigFromVenue(venue);
-  const { each, operatorId, supervisorId } = await withTenant(
-    suite.admin,
-    cfg.tenantId,
-    async (tx) => {
-      await asAppUser(tx);
-      const cat = await createCatalogue(tx, cfg.tenantId, { name: "Delicatessen" });
-      const bebidas = await createCategory(tx, cfg.tenantId, { name: { [LOCALE]: "Bebidas" } });
-      const product = await createProduct(tx, cfg.tenantId, {
-        catalogueId: cat.id,
-        categoryId: bebidas.id,
-        name: "Agua mineral",
-        pricingUnit: "each",
-        unitPrice: "1.50",
-        vatClass: "general",
-      });
-      await assignCatalogueToLocation(tx, venue.locationId, cat.id);
-      const section = await createMenuSection(tx, cfg.tenantId, {
-        menuId: cat.id,
-        name: { [LOCALE]: "Bebidas" },
-      });
-      const menuItem = await createMenuItem(tx, cfg.tenantId, {
-        menuId: cat.id,
-        productId: product.id,
-        sectionId: section.id,
-        grossPrice: "1.50",
-      });
-      await tx.execute(sql`
+  const { each, operatorId, supervisorId } = await withTransaction(suite.admin, async (tx) => {
+    await asAppUser(tx);
+    const cat = await createCatalogue(tx, cfg.tenantId, { name: "Delicatessen" });
+    const bebidas = await createCategory(tx, cfg.tenantId, { name: { [LOCALE]: "Bebidas" } });
+    const product = await createProduct(tx, cfg.tenantId, {
+      catalogueId: cat.id,
+      categoryId: bebidas.id,
+      name: "Agua mineral",
+      pricingUnit: "each",
+      unitPrice: "1.50",
+      vatClass: "general",
+    });
+    await assignCatalogueToLocation(tx, venue.locationId, cat.id);
+    const section = await createMenuSection(tx, cfg.tenantId, {
+      menuId: cat.id,
+      name: { [LOCALE]: "Bebidas" },
+    });
+    const menuItem = await createMenuItem(tx, cfg.tenantId, {
+      menuId: cat.id,
+      productId: product.id,
+      sectionId: section.id,
+      grossPrice: "1.50",
+    });
+    await tx.execute(sql`
         insert into zone_menus (tenant_id, zone_id, menu_id, display_order)
         select ${cfg.tenantId}, zone_id, ${cat.id}, 0
         from zone_service_policies
         where tenant_id = ${cfg.tenantId} and location_id = ${cfg.locationId}
           and is_counter_default`);
-      await tx.execute(sql`
+    await tx.execute(sql`
         update zone_service_policies set default_menu_id = ${cat.id}
         where tenant_id = ${cfg.tenantId} and location_id = ${cfg.locationId}
           and is_counter_default`);
-      await tx.execute(sql`
+    await tx.execute(sql`
         insert into preparation_routes
           (tenant_id, location_id, category_id, station_id, no_preparation)
         values (${cfg.tenantId}, ${cfg.locationId}, ${bebidas.id}, null, true)`);
-      const staff = await tx.execute<{ id: string }>(sql`
+    const staff = await tx.execute<{ id: string }>(sql`
         insert into persons (tenant_id, display_name, pin_hash, role)
         values (${cfg.tenantId}, 'Cajera', ${hashPin("5555")}, 'staff') returning id`);
-      const supervisor = await tx.execute<{ id: string }>(sql`
+    const supervisor = await tx.execute<{ id: string }>(sql`
         insert into persons (tenant_id, display_name, pin_hash, role)
         values (${cfg.tenantId}, 'Responsable', ${hashPin("5555")}, 'supervisor') returning id`);
-      const { products: available } = await listAvailableProducts(tx, cfg.locationId);
-      return {
-        each: { ...available.find((p) => p.pricingUnit === "each")!, menuItemId: menuItem.id },
-        operatorId: staff.rows[0]!.id,
-        supervisorId: supervisor.rows[0]!.id,
-      };
-    },
-  );
+    const { products: available } = await listAvailableProducts(tx, cfg.locationId);
+    return {
+      each: { ...available.find((p) => p.pricingUnit === "each")!, menuItemId: menuItem.id },
+      operatorId: staff.rows[0]!.id,
+      supervisorId: supervisor.rows[0]!.id,
+    };
+  });
   return { cfg, each, operatorId, supervisorId };
 }
 
@@ -225,7 +221,7 @@ function apiDeps(cfg: TillConfig): TillApiDeps {
 /** Create a `cloud_poll` receipt printer (no agent needed — the enqueue is a pure INSERT, so no
  *  transport is ever touched on these routes) and return its id. */
 async function makePrinter(cfg: TillConfig): Promise<string> {
-  return withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const { id } = await createPrinter(tx, printCfg(cfg), {
       name: "Recibos",
@@ -242,7 +238,7 @@ async function configureReceipt(
   cfg: TillConfig,
   opts: { mode?: "auto" | "on_request" | "never"; printerId?: string | null },
 ): Promise<void> {
-  await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     if (opts.mode !== undefined) {
       await tx
@@ -262,7 +258,7 @@ async function configureReceipt(
 async function printJobsFor(
   cfg: TillConfig,
 ): Promise<{ printerId: string; status: string; payload: Buffer }[]> {
-  return withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     return tx
       .select({
@@ -285,7 +281,7 @@ async function drawerOpensFor(cfg: TillConfig): Promise<
     viaOverride: boolean;
   }[]
 > {
-  return withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     return tx
       .select({
@@ -304,7 +300,7 @@ async function drawerOpensFor(cfg: TillConfig): Promise<
 /** Set the location's `drawer_open_policy` ('gated' | 'open') directly (the app role holds UPDATE on
  *  locations). The column defaults to 'gated', so a test wanting the gate need not call this. */
 async function setDrawerPolicy(cfg: TillConfig, policy: "gated" | "open"): Promise<void> {
-  await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     await tx
       .update(locations)
@@ -314,7 +310,7 @@ async function setDrawerPolicy(cfg: TillConfig, policy: "gated" | "open"): Promi
 }
 
 async function registroCount(cfg: TillConfig): Promise<number> {
-  return withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     return (
       await tx
@@ -326,7 +322,7 @@ async function registroCount(cfg: TillConfig): Promise<number> {
 }
 
 async function saleCount(cfg: TillConfig): Promise<number> {
-  return withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     return (await tx.select({ id: sales.id }).from(sales).where(eq(sales.tenantId, cfg.tenantId)))
       .length;

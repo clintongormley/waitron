@@ -14,7 +14,7 @@ import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
@@ -139,7 +139,7 @@ async function setupVenue(): Promise<SeededVenue> {
   );
 
   const cfg = tillConfigFromVenue(venue);
-  const available = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  const available = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const cat = await createCatalogue(tx, cfg.tenantId, { name: "Delicatessen" });
     const bebidas = await createCategory(tx, cfg.tenantId, { name: { [LOCALE]: "Bebidas" } });
@@ -160,7 +160,7 @@ async function setupVenue(): Promise<SeededVenue> {
 
 /** Seed one active dining table in the venue as the app role; returns its id. */
 async function seedTable(cfg: TillConfig, label: string): Promise<string> {
-  return withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     return createTable(tx, cfg, { label }).then((r) => r.id);
   });
@@ -172,7 +172,7 @@ async function openTabOn(
   tableId: string,
   lines: { productId: string; quantity: string }[],
 ): Promise<string> {
-  return withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     return openTab(tx, cfg, { tableId, lines }).then((r) => r.tabId);
   });
@@ -180,7 +180,7 @@ async function openTabOn(
 
 /** Join a second table to an existing tab as the app role. */
 async function joinTableOn(cfg: TillConfig, tabId: string, tableId: string): Promise<void> {
-  await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     await joinTable(tx, cfg, tabId, tableId);
   });
@@ -265,7 +265,7 @@ describe("unjoinTable concurrency (working_orders-first lock order matches the s
 
         // Free tableB (no transfers): the without-items branch, which locks working_orders(X) then
         // dining_tables(tableB) then UPDATEs dining_tables(tableB) — the cleanest two-lock cross.
-        const doUnjoin = withTenant(connUnjoin, cfg.tenantId, async (tx) => {
+        const doUnjoin = withTransaction(connUnjoin, async (tx) => {
           await asAppUser(tx);
           return unjoinTable(tx, cfg, tabId, tableB);
         });

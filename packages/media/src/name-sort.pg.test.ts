@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { listImages, uploadImage } from "./images.js";
@@ -8,7 +8,7 @@ const suite = useTemplateDb({ template: "media" });
 
 it("sorts accented names alphabetically in both directions across pages", async () => {
   const tenantId = await seedTenant(suite.admin);
-  await withTenant(suite.admin, tenantId, async (tx) => {
+  await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     for (const [index, name] of ["Zest", "Éclair", "Apple", "Bread"].entries()) {
       await uploadImage(

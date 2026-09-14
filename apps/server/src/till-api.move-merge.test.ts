@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -125,11 +125,11 @@ function deps(db: Database): TillApiDeps {
   };
 }
 
-/** Opens a real shift session for Ana on the app role — the same `withTenant` + `asAppUser` +
+/** Opens a real shift session for Ana on the app role — the same `withTransaction` + `asAppUser` +
  * `loginWithPin` path the login route runs — and returns its id, so a test can hand a cookie that names
  * a genuine open row. */
 async function openSession(db: Database): Promise<string> {
-  const session = await withTenant(db, cfg.tenantId, async (tx) => {
+  const session = await withTransaction(db, async (tx) => {
     await asAppUser(tx);
     return loginWithPin(tx, {
       tenantId: cfg.tenantId,
@@ -178,7 +178,7 @@ describe("POST /api/tabs/:id/{move,join,merge}", () => {
     mountTillApi(app, d, collect([]));
     const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
     // Seed two tables + a tab in the session's tenant/location (d.cfg).
-    const { src, dst, tabId } = await withTenant(suite.db, d.cfg.tenantId, async (tx) => {
+    const { src, dst, tabId } = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       const s = await createTable(tx, d.cfg, { label: "R-src" });
       const t = await createTable(tx, d.cfg, { label: "R-dst" });
@@ -209,7 +209,7 @@ describe("POST /api/tabs/:id/{move,join,merge}", () => {
     const d = deps(suite.db);
     mountTillApi(app, d, collect([]));
     const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
-    const { dst, tabId } = await withTenant(suite.db, d.cfg.tenantId, async (tx) => {
+    const { dst, tabId } = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       const s = await createTable(tx, d.cfg, { label: "O-src" });
       const t = await createTable(tx, d.cfg, { label: "O-dst" });
@@ -233,7 +233,7 @@ describe("POST /api/tabs/:id/{move,join,merge}", () => {
     const d = deps(suite.db);
     mountTillApi(app, d, collect([]));
     const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
-    const { src, extra, tabId } = await withTenant(suite.db, d.cfg.tenantId, async (tx) => {
+    const { src, extra, tabId } = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       const s = await createTable(tx, d.cfg, { label: "J-src" });
       const e = await createTable(tx, d.cfg, { label: "J-extra" });
@@ -264,18 +264,14 @@ describe("POST /api/tabs/:id/{move,join,merge}", () => {
     const d = deps(suite.db);
     mountTillApi(app, d, collect([]));
     const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
-    const { fromTable, intoTabId, fromTabId } = await withTenant(
-      suite.db,
-      d.cfg.tenantId,
-      async (tx) => {
-        await asAppUser(tx);
-        const into = await createTable(tx, d.cfg, { label: "M-into" });
-        const from = await createTable(tx, d.cfg, { label: "M-from" });
-        const intoTab = await openTab(tx, d.cfg, { tableId: into.id });
-        const fromTab = await openTab(tx, d.cfg, { tableId: from.id });
-        return { fromTable: from.id, intoTabId: intoTab.tabId, fromTabId: fromTab.tabId };
-      },
-    );
+    const { fromTable, intoTabId, fromTabId } = await withTransaction(suite.db, async (tx) => {
+      await asAppUser(tx);
+      const into = await createTable(tx, d.cfg, { label: "M-into" });
+      const from = await createTable(tx, d.cfg, { label: "M-from" });
+      const intoTab = await openTab(tx, d.cfg, { tableId: into.id });
+      const fromTab = await openTab(tx, d.cfg, { tableId: from.id });
+      return { fromTable: from.id, intoTabId: intoTab.tabId, fromTabId: fromTab.tabId };
+    });
 
     const res = await app.request(`/api/tabs/${intoTabId}/merge`, {
       method: "POST",
@@ -301,7 +297,7 @@ describe("POST /api/tabs/:id/{move,join,merge}", () => {
     const d = deps(suite.db);
     mountTillApi(app, d, collect([]));
     const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
-    const { intoTabId, fromTabId } = await withTenant(suite.db, d.cfg.tenantId, async (tx) => {
+    const { intoTabId, fromTabId } = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       const into = await createTable(tx, d.cfg, { label: "MC-into" });
       const from = await createTable(tx, d.cfg, { label: "MC-from" });
@@ -340,7 +336,7 @@ describe("POST /api/tabs/:id/{move,join,merge}", () => {
     const d = deps(suite.db);
     mountTillApi(app, d, collect([]));
     const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
-    const tabId = await withTenant(suite.db, d.cfg.tenantId, async (tx) => {
+    const tabId = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       const s = await createTable(tx, d.cfg, { label: "MS-src" });
       const tab = await openTab(tx, d.cfg, { tableId: s.id });

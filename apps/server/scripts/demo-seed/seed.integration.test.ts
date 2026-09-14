@@ -18,7 +18,7 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import { ALL_MODULES } from "../../src/modules.js";
@@ -135,7 +135,7 @@ describe("demo seed end-to-end", () => {
     await seedDemoRestaurant(suite.admin, { venue, locale: LOCALE, salesDays: 3 });
 
     // --- Read the seeded catalogue set and a business day's close in one tenant/app_user scope. ---
-    const read = await withTenant(suite.admin, brandTenantId(venue.tenantId), async (tx) => {
+    const read = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       const menus = await listAccessibleCatalogues(tx, venue.locationId);
       const { products } = await listAvailableProducts(tx, venue.locationId);
@@ -191,7 +191,7 @@ describe("demo seed end-to-end", () => {
     // filename shape AND resolves to image bytes in the database.
     expect(read.image).not.toBeNull();
     expect(read.image!).toMatch(MEDIA_FILENAME);
-    const storedImage = await withTenant(suite.admin, venue.tenantId, async (tx) => {
+    const storedImage = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return readImageBytes(tx, venue.tenantId, read.image!);
     });

@@ -1,5 +1,5 @@
 import { and, eq, sql } from "drizzle-orm";
-import { withTenant, type Database, type Transaction } from "@waitron/db";
+import { withTransaction, type Database, type Transaction } from "@waitron/db";
 import { AppError, tenantId as brandTenantId } from "@waitron/shared";
 import type { TenantId } from "@waitron/shared";
 import { aadFor, open, seal } from "./cipher.js";
@@ -108,7 +108,7 @@ export async function tryGetCredential(
 /**
  * Seals and upserts. Validation runs BEFORE the write, so a rejected payload leaves no row.
  *
- * Inside `withTenant`'s all-or-nothing transaction, that ordering does not change what an
+ * Inside `withTransaction`'s all-or-nothing transaction, that ordering does not change what an
  * UNCAUGHT rejection leaves behind — Postgres rolls back the whole transaction on any throw,
  * whichever end of this function it came from. What the ordering DOES decide is what a caller who
  * CATCHES the error and commits the surrounding transaction anyway ends up with: validate-first
@@ -221,7 +221,7 @@ export interface RotationResult {
  * Rows already on the current version are counted and skipped, which is what makes a second run a
  * no-op rather than a pointless re-encryption of everything.
  *
- * `tryGetCredential` and `putCredential` share one `withTenant` transaction per row, so the read
+ * `tryGetCredential` and `putCredential` share one `withTransaction` transaction per row, so the read
  * and the re-write share one transaction. It does NOT make the pair atomic against a
  * concurrent `set`: under READ COMMITTED the SELECT takes no row lock, so a `set` committing
  * between the two is overwritten by this rotation's stale value whether the gap spans one
@@ -255,7 +255,7 @@ export async function rotateCredentials(db: Database, ring: KeyRing): Promise<Ro
   const tenants = new Set<TenantId>(perPurpose.flat());
 
   for (const tenantId of tenants) {
-    const rows = await withTenant(db, tenantId, (tx) => listCredentials(tx));
+    const rows = await withTransaction(db, (tx) => listCredentials(tx));
     for (const row of rows) {
       if (!isPurpose(row.purpose)) continue;
       if (row.keyVersion === ring.current.version) {
@@ -263,7 +263,7 @@ export async function rotateCredentials(db: Database, ring: KeyRing): Promise<Ro
         continue;
       }
       const purpose = row.purpose;
-      await withTenant(db, tenantId, async (tx) => {
+      await withTransaction(db, async (tx) => {
         const value = await tryGetCredential(tx, ring, { tenantId, purpose });
         // A row may disappear after listing. Count only credentials actually re-sealed;
         // an absent tenant-purpose lookup leaves the count unchanged.

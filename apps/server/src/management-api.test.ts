@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { createCatalogue, createCategory, createProduct } from "@waitron/catalogue";
@@ -86,7 +86,7 @@ async function setupTenant(): Promise<{ venue: VenueResult; managerId: string; s
     { db: suite.admin, modules: ALL_MODULES },
   );
 
-  const { managerId, staffId } = await withTenant(suite.admin, venue.tenantId, async (tx) => {
+  const { managerId, staffId } = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const manager = await tx.execute<{ id: string }>(sql`
       insert into persons (tenant_id, display_name, email, pin_hash, password_hash, role)
@@ -850,7 +850,7 @@ async function readPlacement(tableId: string): Promise<{
   shape: string | null;
   rotation: number | null;
 }> {
-  return withTenant(suite.admin, venue.tenantId, async (tx) => {
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const { rows } = await tx.execute<{
       pos_x: number | null;
@@ -1362,7 +1362,7 @@ describe("/management-api/stations (KDS-1 config)", () => {
   it("PUT /categories/:id/station and /products/:id/station set + clear the route; bad body/station → 400/404; a malformed target is a no-op", async () => {
     const stationId = await createStation(unique("Route"));
     // Seed a real category + product to route, on the app role under this venue's tenant.
-    const { categoryId, productId } = await withTenant(suite.admin, venue.tenantId, async (tx) => {
+    const { categoryId, productId } = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       const catalogue = await createCatalogue(tx, brandTenantId(venue.tenantId), {
         name: unique("Carta"),
@@ -1628,7 +1628,7 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
   it("PUT /products/:id/course sets + clears the product's default course; bad body → 400; a bad/retired course → 404; a malformed product is a no-op", async () => {
     const courseId = await createCourse(unique("Course"));
     // Seed a real product to route, on the app role under this venue's tenant.
-    const { productId } = await withTenant(suite.admin, venue.tenantId, async (tx) => {
+    const { productId } = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       const catalogue = await createCatalogue(tx, brandTenantId(venue.tenantId), {
         name: unique("Carta"),

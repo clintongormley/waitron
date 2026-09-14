@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { hashPassword, hashPin, startManagementSession } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
@@ -156,7 +156,7 @@ async function setupVenue(): Promise<VenueResult> {
 
 /** Seed a staff person under `tenantId` (on the app role, which holds INSERT on persons). Returns its id. */
 async function seedPerson(tenantId: string, name: string): Promise<string> {
-  return withTenant(suite.admin, tenantId, async (tx) => {
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const r = await tx.execute<{ id: string }>(sql`
       insert into persons (tenant_id, display_name, pin_hash, role)
@@ -168,7 +168,7 @@ async function seedPerson(tenantId: string, name: string): Promise<string> {
 /** Open a real management session (through `startManagementSession` on the app role) and return the
  * cookie header — the credential every me route gates on. */
 async function cookieFor(tenantId: string, personId: string): Promise<string> {
-  const session = await withTenant(suite.admin, tenantId, async (tx) => {
+  const session = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     return startManagementSession(tx, { tenantId, personId });
   });

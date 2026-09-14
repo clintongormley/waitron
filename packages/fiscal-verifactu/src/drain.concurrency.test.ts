@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { afterEach, describe, expect, it } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { createFakeAeat } from "@waitron/verifactu/src/testing/fake-aeat.js";
 import { DEFAULT_SKIP_RETRY_MS, drain } from "./drain.js";
@@ -10,7 +10,7 @@ import { staticResolver } from "../test/write-path-fixtures.js";
 // A non-superuser LOGIN role that inherits app_user's grants (including EXECUTE on
 // envios_tenants_with_work). Being non-superuser is what subjects EVERY query a drain issues on
 // this connection to the app role's real privilege set — crucially including tenantsWithWork's
-// top-level enumeration, which runs OUTSIDE any withTenant transaction and therefore cannot be
+// top-level enumeration, which runs OUTSIDE any withTransaction transaction and therefore cannot be
 // covered by a per-transaction `asAppUser` SET LOCAL ROLE.
 const DRAIN_PROBE_ROLE = "drain_probe";
 const DRAIN_PROBE_PASSWORD = "probe";
@@ -88,7 +88,7 @@ describe("drain — claim concurrency (real Postgres)", () => {
       // Independent, DB-side proof: every row was attempted exactly once. If a row had been
       // claimed by BOTH transactions, its `intentos` (incremented by claimBatch's own UPDATE)
       // would read 2, not 1 — this is untouched by anything AEAT's fake does or does not dedupe.
-      const rows = await withTenant(suite.admin, seeded.tenantId, (tx) =>
+      const rows = await withTransaction(suite.admin, (tx) =>
         tx.execute<{ estado: string; intentos: number; csv: string | null }>(sql`
           select estado, intentos, csv from envios where tenant_id = ${seeded.tenantId}
         `),
@@ -109,7 +109,7 @@ describe("drain — claim concurrency (real Postgres)", () => {
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
 
     const pendingAsApp = () =>
-      withTenant(suite.admin, seeded.tenantId, async (tx) => {
+      withTransaction(suite.admin, async (tx) => {
         await asAppUser(tx);
         const rows = await tx.execute<{ count: string }>(sql`
           select count(*)::text as count
@@ -140,7 +140,7 @@ describe("drain — claim concurrency (real Postgres)", () => {
 /** Exercise enumeration and the subsequent drain on a LOGIN role inheriting app_user. */
 describe("drain — enumeration as app_user (real Postgres)", () => {
   const pendingAsApp = (tenantId: string) =>
-    withTenant(suite.admin, tenantId, async (tx) => {
+    withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       const rows = await tx.execute<{ count: string }>(sql`
         select count(*)::text as count from envios where tenant_id = ${tenantId} and estado = 'pendiente'

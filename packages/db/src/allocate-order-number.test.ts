@@ -9,7 +9,7 @@ import { describeEachTarget } from "./testing/harness.js";
 import { useTemplateDb } from "./testing/lifecycle.js";
 import { asAppUser } from "./testing/roles.js";
 import { seedNode, seedTenant } from "./testing/seed.js";
-import { withTenant } from "./tenancy.js";
+import { withTransaction } from "./tenancy.js";
 
 const TENANT_A = "11111111-1111-4111-8111-111111111111";
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
@@ -61,7 +61,7 @@ describeEachTarget("allocateOrderNumber", (target) => {
     // Run under the non-owner app role so the INSERT and the ON CONFLICT UPDATE
     // both pass the counter's WITH CHECK and its SELECT/INSERT/UPDATE grants —
     // the allocator is the first writer of this table (Task 1's deferred Minor).
-    await withTenant(db, TENANT_A, async (tx) => {
+    await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       expect(await allocateOrderNumber(tx, TENANT_A, nodeA1)).toBe(1);
       expect(await allocateOrderNumber(tx, TENANT_A, nodeA1)).toBe(2);
@@ -69,10 +69,10 @@ describeEachTarget("allocateOrderNumber", (target) => {
   });
 
   it("numbers each (tenant, node) independently", async () => {
-    const a1 = await withTenant(db, TENANT_A, (tx) => allocateOrderNumber(tx, TENANT_A, nodeA1));
-    const a2 = await withTenant(db, TENANT_A, (tx) => allocateOrderNumber(tx, TENANT_A, nodeA1));
+    const a1 = await withTransaction(db, (tx) => allocateOrderNumber(tx, TENANT_A, nodeA1));
+    const a2 = await withTransaction(db, (tx) => allocateOrderNumber(tx, TENANT_A, nodeA1));
     // nodeA2's counter is untouched by nodeA1's two allocations: it starts at 1.
-    const b1 = await withTenant(db, TENANT_A, (tx) => allocateOrderNumber(tx, TENANT_A, nodeA2));
+    const b1 = await withTransaction(db, (tx) => allocateOrderNumber(tx, TENANT_A, nodeA2));
     expect([a1, a2, b1]).toEqual([1, 2, 1]);
   });
 
@@ -81,7 +81,7 @@ describeEachTarget("allocateOrderNumber", (target) => {
     // to bigint, or a RETURNING expression producing numeric, would render as a
     // string that compares == 1 but not toBe(1) and would reach order_number as
     // text — the same trap allocate-number.test.ts guards for invoice numbers.
-    const n = await withTenant(db, TENANT_A, (tx) => allocateOrderNumber(tx, TENANT_A, nodeA1));
+    const n = await withTransaction(db, (tx) => allocateOrderNumber(tx, TENANT_A, nodeA1));
     expect(typeof n).toBe("number");
   });
 });
@@ -136,7 +136,7 @@ describe("allocateOrderNumber under concurrency", () => {
       // app role. A read-then-write allocator would hand the same number out twice here.
       const results = await Promise.all(
         dbs.map((db) =>
-          withTenant(db, tenantId, async (tx) => {
+          withTransaction(db, async (tx) => {
             await asAppUser(tx);
             return allocateOrderNumber(tx, tenantId, nodeId);
           }),

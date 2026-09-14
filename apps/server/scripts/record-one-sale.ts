@@ -38,7 +38,7 @@ import { recordSale } from "@waitron/core";
 import type { RecordSaleInput } from "@waitron/core";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { TrustedClock } from "@waitron/fiscal";
-import { createPostgresDb, withTenant } from "@waitron/db";
+import { createPostgresDb, withTransaction } from "@waitron/db";
 import { deploymentEnvironment } from "../src/config.js";
 import {
   addDecimal,
@@ -200,7 +200,7 @@ async function main(): Promise<void> {
       clock,
     };
 
-    const result = await withTenant(db, tenant, (tx) => recordSale(tx, backend, input));
+    const result = await withTransaction(db, (tx) => recordSale(tx, backend, input));
 
     console.log(`saleId: ${result.saleId}`);
     console.log(`fiscalRecordId: ${result.fiscal.recordId}`);

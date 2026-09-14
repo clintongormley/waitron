@@ -5,7 +5,7 @@ import {
   saleLines,
   sales,
   ticketItems,
-  withTenant,
+  withTransaction,
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
@@ -174,7 +174,7 @@ interface Shop {
  * `emisorNif` (registerSif revokes the old identity, mints a fresh installation number, and
  * resets the chain to empty) is what makes both shops file under one obligado NIF while each
  * starts a first record. The NumeroInstalacion differs between the two shops (a per-NIF counter)
- * but is not hashed. Run as the owner inside withTenant — exactly how applyVenue itself runs
+ * but is not hashed. Run as the owner inside withTransaction — exactly how applyVenue itself runs
  * registerSif (no asAppUser).
  */
 async function seedShop(emisorNif: string): Promise<Shop> {
@@ -183,7 +183,7 @@ async function seedShop(emisorNif: string): Promise<Shop> {
     modules: ALL_MODULES,
   });
   const cfg = tillConfigFromVenue(venue);
-  await withTenant(suite.admin, cfg.tenantId, (tx) =>
+  await withTransaction(suite.admin, (tx) =>
     registerSif(tx, {
       tenantId: cfg.tenantId,
       nodeId: cfg.nodeId,
@@ -191,7 +191,7 @@ async function seedShop(emisorNif: string): Promise<Shop> {
       idSistemaInformatico: "W1",
     }),
   );
-  const seeded = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  const seeded = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const cat = await createCatalogue(tx, cfg.tenantId, { name: "Delicatessen" });
     const bebidas = await createCategory(tx, cfg.tenantId, { name: { [LOCALE]: "Bebidas" } });
@@ -245,7 +245,7 @@ async function seedShop(emisorNif: string): Promise<Shop> {
 /**
  * Open the identical two-line tab, optionally serve EVERY line, then pay it through the real pay path
  * with the FROZEN clock, returning the filed registro's huella. `payWorkingOrder` establishes its own
- * `withTenant`/`asAppUser`, files from the tab's STORED locked lines, and chains registro #1 on this
+ * `withTransaction`/`asAppUser`, files from the tab's STORED locked lines, and chains registro #1 on this
  * shop's node — asserted here to be exactly one row at secuencia 1, so the huella is genuinely that of
  * a first record.
  */
@@ -254,7 +254,7 @@ async function openServeAndPay(
   serveEveryLine: boolean,
 ): Promise<{ tabId: string; huella: string }> {
   const { cfg, aguaId, cafeId, aguaMenuItemId, cafeMenuItemId, tableId } = shop;
-  const { tabId } = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  const { tabId } = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const table = (await listTables(tx, cfg)).find((candidate) => candidate.id === tableId);
     const lines =
@@ -274,7 +274,7 @@ async function openServeAndPay(
   });
 
   if (serveEveryLine) {
-    await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       await markLineServed(tx, cfg, tabId, 1);
       await markLineServed(tx, cfg, tabId, 2);
@@ -287,7 +287,7 @@ async function openServeAndPay(
     tender: { method: "cash", amount: "10.00" },
   });
 
-  const huella = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  const huella = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const rows = await tx
       .select({ huella: registrosFacturacion.huella, secuencia: registrosFacturacion.secuencia })
@@ -302,7 +302,8 @@ async function openServeAndPay(
 
 /** `served_at` per line, in line_no order — the field this test differs between the two tabs. */
 async function servedAtByLine(cfg: TillConfig, tabId: string): Promise<(string | null)[]> {
-  return withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  void cfg;
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const rows = await tx
       .select({ lineNo: workingOrderLines.lineNo, servedAt: workingOrderLines.servedAt })
@@ -363,7 +364,7 @@ describe("served_at is not part of the huella", () => {
  * shape and rotation. The values are concrete and non-trivial so the self-check below can pin them.
  */
 async function placeTable(shop: Shop): Promise<void> {
-  await withTenant(suite.admin, shop.cfg.tenantId, async (tx) => {
+  await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const zone = await createZone(tx, shop.cfg, { name: "Terraza" });
     const department = await tx.execute<{ department_id: string }>(sql`
@@ -409,7 +410,7 @@ interface Placement {
 /** This shop's table's placement, read back through the real `listTables` projection (the Task-7b
  *  read side). */
 async function placementOf(shop: Shop): Promise<Placement> {
-  return withTenant(suite.admin, shop.cfg.tenantId, async (tx) => {
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const table = (await listTables(tx, shop.cfg)).find((t) => t.id === shop.tableId);
     expect(table).toBeDefined();
@@ -488,7 +489,7 @@ describe("table placement is not part of the huella", () => {
  */
 async function openKitchenLifecycleAndPay(shop: Shop): Promise<{ tabId: string; huella: string }> {
   const { cfg, aguaId, cafeId, tableId } = shop;
-  const { tabId } = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  const { tabId } = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     return openTab(tx, cfg, {
       tableId,
@@ -499,7 +500,7 @@ async function openKitchenLifecycleAndPay(shop: Shop): Promise<{ tabId: string; 
     });
   });
 
-  await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     // Fire the tab's two stored lines to the kitchen (each falls to the seeded default station — neither
     // product nor category names a route), then walk each ticket item queued→preparing→ready.
@@ -537,7 +538,7 @@ async function openKitchenLifecycleAndPay(shop: Shop): Promise<{ tabId: string; 
     tender: { method: "cash", amount: "10.00" },
   });
 
-  const huella = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  const huella = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const rows = await tx
       .select({ huella: registrosFacturacion.huella, secuencia: registrosFacturacion.secuencia })
@@ -559,7 +560,8 @@ interface KdsState {
 }
 
 async function kdsStateOf(shop: Shop, tabId: string): Promise<KdsState> {
-  return withTenant(suite.admin, shop.cfg.tenantId, async (tx) => {
+  void shop;
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const items = await tx
       .select({ state: ticketItems.state })
@@ -645,7 +647,7 @@ async function attachOption(
   shop: Shop,
   overlay: { addAllergens: OverlayAllergens | null },
 ): Promise<{ groupId: string; itemId: string }> {
-  return withTenant(suite.admin, shop.cfg.tenantId, async (tx) => {
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const group = await createOptionGroup(tx, shop.cfg.tenantId, {
       name: { [LOCALE]: "Pan" },
@@ -679,11 +681,11 @@ async function openWithOptionAndPay(
   // Open the tab empty, then ADD a round carrying the option — `openTab` takes only plain
   // `{productId, quantity}` lines, while `addTabRound` is the path that accepts `options` and expands
   // the dish into a parent row + one child modifier row (working-order.ts `priceOrderLines`).
-  const { tabId } = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  const { tabId } = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     return openTab(tx, cfg, { tableId });
   });
-  await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     await addTabRound(tx, cfg, tabId, [
       { productId: aguaId, quantity: "1", options: [{ optionGroupItemId: itemId }] },
@@ -697,7 +699,7 @@ async function openWithOptionAndPay(
     tender: { method: "cash", amount: "10.00" },
   });
 
-  const huella = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  const huella = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const rows = await tx
       .select({ huella: registrosFacturacion.huella, secuencia: registrosFacturacion.secuencia })
@@ -714,7 +716,8 @@ async function openWithOptionAndPay(
  *  into — proves the option was genuinely rung into a child `sale_lines` row, not silently dropped. The
  *  sale is found by its `working_order_id` back-pointer (the pay path stamps it, till-sale.ts). */
 async function filedChildLineCount(shop: Shop, tabId: string): Promise<number> {
-  return withTenant(suite.admin, shop.cfg.tenantId, async (tx) => {
+  void shop;
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const rows = await tx
       .select({ id: saleLines.id })
@@ -732,7 +735,8 @@ async function overlayOf(
   groupId: string,
   itemId: string,
 ): Promise<OverlayAllergens | null> {
-  return withTenant(suite.admin, shop.cfg.tenantId, async (tx) => {
+  void shop;
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const items = await listOptionGroupItems(tx, groupId);
     const item = items.find((i) => i.id === itemId);

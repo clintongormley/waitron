@@ -5,7 +5,7 @@ import type { Database } from "@waitron/db";
 import type { PromoteRunResult } from "./promote-api.js";
 
 // A UNIT test: the two authorization paths and the delegation to `run` are doubled, not driven
-// against real Postgres. The admin-login path threads `withTenant` → `asAppUser` → `loginManagerById`
+// against real Postgres. The admin-login path threads `withTransaction` → `asAppUser` → `loginManagerById`
 // → `authorizeManager` → `endManagementSession`; each is mocked (the boot.test.ts `importOriginal`
 // idiom) so a test can wire login/authorize to SUCCEED for an admin, THROW for a bad credential, or
 // THROW `authorization.not_permitted` for a non-admin — without a database. `verifyBreakGlass` is
@@ -19,7 +19,7 @@ const PERSON = "22222222-2222-2222-2222-222222222222";
 const GOOD_SECRET = "correct-break-glass-secret";
 const SESSION_ID = "33333333-3333-3333-3333-333333333333";
 
-// withTenant/asAppUser: run the callback against a dummy tx; no real connection. loginManagerById
+// withTransaction/asAppUser: run the callback against a dummy tx; no real connection. loginManagerById
 // resolves a session for the good PERSON; authorizeManager succeeds (admin has node.promote) by
 // default. Individual tests re-wire these via the hoisted refs. `vi.hoisted` is required: the
 // `vi.mock` factory is hoisted above the file, so the refs it closes over must be too.
@@ -37,7 +37,7 @@ vi.mock("@waitron/db", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@waitron/db")>();
   return {
     ...actual,
-    withTenant: vi.fn(
+    withTransaction: vi.fn(
       async (_db: unknown, _tenantId: string, cb: (tx: unknown) => Promise<unknown>) => cb({}),
     ),
     asAppUser: vi.fn(async () => {}),

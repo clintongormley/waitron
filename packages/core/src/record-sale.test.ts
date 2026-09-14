@@ -31,7 +31,7 @@ import {
   saleSettlements,
   sales,
   tenders,
-  withTenant,
+  withTransaction,
 } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { formatInvoiceNumber, recordSale } from "./record-sale.js";
@@ -159,7 +159,7 @@ function input(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
  * assertion with that error instead of the one under test.
  */
 async function run(backend: FiscalBackend, overrides: Partial<RecordSaleInput> = {}) {
-  return withTenant(suite.db, tenantId, async (tx) => {
+  return withTransaction(suite.db, async (tx) => {
     // Never as the owner. An owner can disable any trigger, so an owner-run
     // write-path test would prove the code runs, not that the application role is permitted to
     // run it.
@@ -673,7 +673,7 @@ describe("recordSale — settlement modes", () => {
     const backend = new FakeFiscalBackend(suite.db);
 
     // Path A — immediate, on the beforeEach tenant.
-    const a = await withTenant(suite.db, tenantId, async (tx) => {
+    const a = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       await backend.registerNode(tx, nodeId, { tenantId });
       return recordSale(
@@ -685,7 +685,7 @@ describe("recordSale — settlement modes", () => {
 
     // Path B — a second, independent tenant: deferred record, then a SEPARATE settleSale.
     const other = await seedTenant(suite.db);
-    const b = await withTenant(suite.db, other.tenantId, async (tx) => {
+    const b = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       await backend.registerNode(tx, other.nodeId, { tenantId: other.tenantId });
       return recordSale(
@@ -700,7 +700,7 @@ describe("recordSale — settlement modes", () => {
         }),
       );
     });
-    await withTenant(suite.db, other.tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       await settleSale(tx, { tenantId: other.tenantId, saleId: b.saleId, tenders: tendersInput });
     });
@@ -809,7 +809,7 @@ describe("recordSale — numbering", () => {
     // task's own governing context.
     await run(new FakeFiscalBackend(suite.db));
     const error = await captureError(() =>
-      withTenant(suite.db, tenantId, async (tx) => {
+      withTransaction(suite.db, async (tx) => {
         await asAppUser(tx);
         await tx.insert(sales).values({
           tenantId,

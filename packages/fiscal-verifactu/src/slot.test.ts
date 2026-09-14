@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, withTenant, type Database } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction, type Database } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { CREDENTIALS_MIGRATIONS, getCredential, loadKeyRing } from "@waitron/credentials";
@@ -62,7 +62,7 @@ describe("FISCAL_SLOT.drain", () => {
 });
 
 // The provision-time secret seat the host reaches instead of importing the regime: `required` gates on
-// environment, `validate` refuses a malformed blob without writing, `seal` writes it under withTenant.
+// environment, `validate` refuses a malformed blob without writing, `seal` writes it under withTransaction.
 // (The validator + seal internals have their own exhaustive suite in provisioning-secret.test.ts; here
 // we pin the SEAT wiring — that FISCAL_SLOT actually exposes and forwards to them.)
 describe("FISCAL_SLOT.provisioningSecret", () => {
@@ -101,7 +101,7 @@ describe("FISCAL_SLOT.provisioningSecret", () => {
   it("seal writes the cert into the tenant's fiscal.aeat vault", async () => {
     const tenant = await seedTenant(pg.db);
     await secret.seal({ db: pg.db, ring }, tenant, goodCert);
-    const readBack = await withTenant(pg.db, tenant, (tx) =>
+    const readBack = await withTransaction(pg.db, (tx) =>
       getCredential(tx, ring, { tenantId: tenant, purpose: "fiscal.aeat" }),
     );
     expect(readBack.certKind).toBe("sello");

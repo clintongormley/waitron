@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { withTenant } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { recordIncident, recordIncidentOnce } from "@waitron/core";
 import type { IncidentSeverity } from "@waitron/core";
@@ -130,7 +130,7 @@ const CORRECTION: Partial<Record<EstadoRegistroConsulta, "aceptado" | "aceptado_
  * apply to them — a persistently-annulled or persistently-missing record re-raises its incident
  * every sweep by design, a separate concern carried to the final review.
  *
- * The consulta network call runs OUTSIDE any transaction, between two short `withTenant`
+ * The consulta network call runs OUTSIDE any transaction, between two short `withTransaction`
  * transactions — never held across the round trip, mirroring the drainer's own T1/T2 split (plan
  * 3a, `drain.ts`). T1 reads our period rows; if there are none there is nothing to reconcile and
  * the sweep returns `checked: 0` WITHOUT contacting AEAT at all — and, because `deps.resolveClient`
@@ -189,7 +189,7 @@ export async function reconcile(
   };
 
   // T1 — read our period rows in a short transaction. No network call inside it.
-  const rows = await withTenant(deps.db, tenantId, (tx) =>
+  const rows = await withTransaction(deps.db, (tx) =>
     rowsForPeriod(tx, tenantId, normalizedPeriod),
   );
   result.checked = rows.length;
@@ -213,7 +213,7 @@ export async function reconcile(
 
   // T2 — classify the already-read rows against the authority map and write incidents.
   const detectedAt = deps.clock.now().instant;
-  await withTenant(deps.db, tenantId, async (tx) => {
+  await withTransaction(deps.db, async (tx) => {
     for (const row of rows) {
       const reported = authority.get(row.id) ?? null;
 

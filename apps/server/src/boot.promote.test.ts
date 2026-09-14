@@ -16,7 +16,7 @@ import {
   setDeploymentMode,
   setSingletonRole,
   stampDeployment,
-  withTenant,
+  withTransaction,
   writeMirrorConfig,
   writeNodeMembership,
   type Database,
@@ -227,7 +227,7 @@ async function seedFiscalWork(): Promise<{ registroIds: string[]; tenantId: stri
     },
   });
   const material = mintMtlsMaterial();
-  await withTenant(suite.admin, seeded.tenantId, (tx) =>
+  await withTransaction(suite.admin, (tx) =>
     putCredential(tx, loadKeyRing(KEY_ENV), {
       tenantId: seeded.tenantId,
       purpose: "fiscal.aeat",

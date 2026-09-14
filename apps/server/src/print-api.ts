@@ -20,7 +20,7 @@ import {
   printTransport,
   receiptPrintMode,
   tills,
-  withTenant,
+  withTransaction,
   type Database,
   type Transaction,
 } from "@waitron/db";
@@ -325,7 +325,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     fn: (tx: Transaction) => Promise<T>,
     permission: Permission = PRINTER_MANAGE_PERMISSION,
   ): Promise<T> =>
-    withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+    withTransaction(deps.db, async (tx) => {
       await asAppUser(tx);
       const authorization = await authorizeManager(tx, {
         managementSessionId: sessionId,
@@ -350,7 +350,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       }
       const body = await readJsonBody<{ name?: unknown }>(c);
       const name = requireString(body.name, "name");
-      const made = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const made = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         return createJoinRequest(tx, deps.cfg, { kind: "print_agent", label: name });
       });
@@ -378,7 +378,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       // A non-uuid selector names nothing — answered `not_approved` HERE, before it reaches a bare-uuid
       // comparison (which would `22P02` → an opaque 500), the device sibling's guard.
       if (!isUuid(joinId)) return c.json({ status: "not_approved" as const });
-      const status = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const status = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         return readAgentJoinStatus(tx, deps.cfg, joinId, secret);
       });
@@ -424,13 +424,13 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
         .map((v) => v.localKey);
 
       // CLAIM-and-COMMIT within the request (Controller Ruling 6): the locking claim runs inside this
-      // `withTenant` transaction, which COMMITS when the handler returns — the HTTP response is the
+      // `withTransaction` transaction, which COMMITS when the handler returns — the HTTP response is the
       // commit boundary. The server then holds NO lock or transaction across the remote agent's socket
       // write; the agent pushes the bytes and REPORTs via `/result`.
       // TODO(multi-location): `deps.cfg.locationId` is THIS server's location, which equals the agent's
       // under one-location-per-DB. A future multi-location tenant reads the agent's own
       // `print_agents.location_id` instead of the server's.
-      const claimed = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const claimed = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         if (host !== undefined) {
           await tx
@@ -495,7 +495,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       // printers, so a cross-agent report changes nothing. The response is a plain 204 whether or not a
       // row matched — an idempotent status sink (a job that is not this agent's, already terminal, or
       // unknown is a no-op), never disclosing which job ids exist. The agent-scope is proven by deletion.
-      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         return reportPrintJob(tx, deps.cfg, { agentId, jobId, outcome });
       });
@@ -507,7 +507,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
   app.get("/management-api/print-agents", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      // Tenant-scoped like every other read (§3): since RLS was dropped (#255) `withTenant` no longer
+      // Tenant-scoped like every other read (§3): since RLS was dropped (#255) `withTransaction` no longer
       // isolates SELECTs, so without the explicit `tenantId` predicate a manager would see every
       // tenant's agents in a multi-tenant DB (mirrors the revoke/allow routes below and device-api.ts).
       // Newest enrolment first. The `token_hash` is NEVER selected — a secret never leaves the row.
@@ -1012,7 +1012,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
   // persisted value across a reload. Lives beside the sibling `PATCH
   // …/tills/:id/receipt-printer`, funnelled through the SAME `gated` helper so `printer.manage`
   // is enforced identically (the by-deletion proof on that helper covers this route too). Runs in
-  // `gated`'s `withTenant` + `asAppUser` transaction, with an explicit `tenant_id` predicate
+  // `gated`'s `withTransaction` + `asAppUser` transaction, with an explicit `tenant_id` predicate
   // matching the sibling till/location writes. Ordered by name for a stable list.
   app.get("/management-api/tills", (c) =>
     run(c, log, async () => {

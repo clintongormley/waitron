@@ -46,7 +46,7 @@ import {
   sales,
   ticketItems,
   ticketState,
-  withTenant,
+  withTransaction,
   workingOrderLines,
   workingOrders,
   workingOrderStatus,
@@ -856,7 +856,7 @@ export interface ParkOrderResult {
  * allocated number, same priced lines, same triggers (`require_open_parent`/`check_locales` fire on
  * the inserted lines because their parent was inserted just above). The empty-basket refusal stays
  * with each caller (it is checked before any database work), as does the surrounding
- * `withTenant`/`asAppUser` scope; this helper owns only the two inserts.
+ * `withTransaction`/`asAppUser` scope; this helper owns only the two inserts.
  */
 export async function createOpenOrder(
   tx: Transaction,
@@ -953,7 +953,7 @@ export async function createOpenOrder(
 /**
  * Park a working order: re-read the catalogue, re-price with `priceBasket`, allocate the next per-node
  * order number, and persist an OPEN `working_orders` row plus its priced `working_order_lines` — all
- * inside ONE `withTenant`/`asAppUser` transaction, so the order and every line commit as a single unit
+ * inside ONE `withTransaction`/`asAppUser` transaction, so the order and every line commit as a single unit
  * (or roll back together, leaving nothing parked). The server never trusts a browser-computed price;
  * `req` carries none. The persisted line keeps `product_id` (a pricing INPUT a later repricing
  * re-resolves) alongside the frozen display snapshot (`descriptions`, `unit_price`, `vat_rate`,
@@ -975,7 +975,7 @@ export async function parkOrder(
   }
 
   try {
-    return await withTenant(deps.db, cfg.tenantId, async (tx) => {
+    return await withTransaction(deps.db, async (tx) => {
       await asAppUser(tx);
       // Park needs only the allocated number; `priced` is `payWorkingOrder`'s walk-up shortcut, unused here.
       const { orderNumber } = await createOpenOrder(tx, cfg, req.id, req.lines, req.label ?? null, {
@@ -995,7 +995,7 @@ export async function parkOrder(
     // concurrent insert of the same key would BLOCK on the index until its writer commits or aborts, not
     // error), which is exactly why `payWorkingOrder`'s 23505 backstop (`till-sale.ts`) replays in a fresh
     // tx too. Replay the committed OPEN order's number, filing and inserting nothing.
-    return withTenant(deps.db, cfg.tenantId, async (tx) => {
+    return withTransaction(deps.db, async (tx) => {
       await asAppUser(tx);
       const [existing] = await tx
         .select({ orderNumber: workingOrders.orderNumber })
@@ -1047,7 +1047,7 @@ export async function openTab(
   const [table] = await tx
     .select({ active: diningTables.active, tabId: diningTables.tabId, zoneId: diningTables.zoneId })
     .from(diningTables)
-    // Scope the by-id read to the tenant: since RLS was dropped (#255) `withTenant` no longer isolates
+    // Scope the by-id read to the tenant: since RLS was dropped (#255) `withTransaction` no longer isolates
     // SELECTs, so a by-id read is not the isolation boundary (CLAUDE.md §3, till-reroute S3). Without
     // `tenant_id` this read reaches another tenant's row in a multi-tenant DB, leaking its state.
     .where(and(eq(diningTables.id, req.tableId), eq(diningTables.tenantId, cfg.tenantId)))
@@ -1568,7 +1568,7 @@ export async function bumpCourseReady(
     .where(
       and(
         // Tenant-scoped: this by-order update must not reach another tenant's `ticket_items` rows
-        // (CLAUDE.md §3) — `withTenant` does not isolate it since RLS was dropped (#255).
+        // (CLAUDE.md §3) — `withTransaction` does not isolate it since RLS was dropped (#255).
         eq(ticketItems.tenantId, cfg.tenantId),
         eq(ticketItems.workingOrderId, orderId),
         eq(ticketItems.courseId, courseId),
@@ -2950,7 +2950,7 @@ export async function listHeldOrders(
   deps: WorkingOrderDeps,
   cfg: TillConfig,
 ): Promise<HeldOrderSummary[]> {
-  return withTenant(deps.db, cfg.tenantId, async (tx) => {
+  return withTransaction(deps.db, async (tx) => {
     await asAppUser(tx);
     return (
       tx
@@ -2975,7 +2975,7 @@ export async function listHeldOrders(
         // Venue-wide, not node-scoped (till-reroute design §3.6): under warm standby one node sells at a time,
         // and a promoted node inherits the venue's open tabs tagged with the dead node's id (swap spec §4.3).
         // `node_id` is still written at create — the writer's id, for replication — and never filtered on here.
-        // Scoped to the tenant (the venue), the way report-api's venue-wide reads are: `withTenant` no longer
+        // Scoped to the tenant (the venue), the way report-api's venue-wide reads are: `withTransaction` no longer
         // isolates SELECTs since RLS was dropped, so the tenant predicate is the read's own scope.
         .where(and(eq(workingOrders.tenantId, cfg.tenantId), eq(workingOrders.status, "open")))
         .groupBy(
@@ -2993,7 +2993,7 @@ export async function listHeldOrders(
  * Read an open parked order anywhere in the venue (venue-wide, till-reroute §3.6 — not node-scoped).
  * Return line snapshots in line-number order so the till can rebuild the agreed basket even when an
  * offer has since been deactivated.
- * Scoped to the tenant, not the id alone: `withTenant` no longer isolates SELECTs since RLS was dropped
+ * Scoped to the tenant, not the id alone: `withTransaction` no longer isolates SELECTs since RLS was dropped
  * (#255), so the tenant predicate is this by-id read's own boundary — a foreign-tenant id reads as absent.
  */
 export async function getHeldOrder(
@@ -3001,7 +3001,7 @@ export async function getHeldOrder(
   cfg: TillConfig,
   id: string,
 ): Promise<HeldOrder> {
-  return withTenant(deps.db, cfg.tenantId, async (tx) => {
+  return withTransaction(deps.db, async (tx) => {
     await asAppUser(tx);
 
     const [order] = await tx
@@ -3170,7 +3170,7 @@ export async function updateHeldOrder(
   id: string,
   req: UpdateHeldOrderRequest,
 ): Promise<void> {
-  return withTenant(deps.db, cfg.tenantId, async (tx) => {
+  return withTransaction(deps.db, async (tx) => {
     await asAppUser(tx);
 
     // Lock the order row for the life of the tx, then read its status off the locked copy. Absent or
@@ -3375,7 +3375,7 @@ export async function updateHeldOrder(
 /**
  * Abandon an open held order anywhere in the venue (venue-wide, till-reroute §3.6). The conditional
  * status update leaves settled_at null because abandonment does not settle an order. Scoped to the
- * tenant, not the id alone: `withTenant` no longer isolates writes' row selection since RLS was dropped
+ * tenant, not the id alone: `withTransaction` no longer isolates writes' row selection since RLS was dropped
  * (#255), so the tenant predicate is this by-id abandon's own boundary — a foreign-tenant id matches
  * nothing and reads as `working_order.not_open` rather than abandoning another tenant's order.
  */
@@ -3384,7 +3384,7 @@ export async function abandonHeldOrder(
   cfg: TillConfig,
   id: string,
 ): Promise<void> {
-  return withTenant(deps.db, cfg.tenantId, async (tx) => {
+  return withTransaction(deps.db, async (tx) => {
     await asAppUser(tx);
 
     const updated = await tx
@@ -3436,7 +3436,7 @@ export async function placeOrder(
   operatorId: string,
   saleTillId: TillId,
 ): Promise<PlaceOrderResult> {
-  return withTenant(deps.db, cfg.tenantId, async (tx) => {
+  return withTransaction(deps.db, async (tx) => {
     await asAppUser(tx);
 
     // Lock the order for the life of the tx and read its status off the locked copy. Absent (nothing
@@ -3586,7 +3586,7 @@ export async function cancelPlacedOrder(
     throw new AppError("working_order.reason_required", { workingOrderId: id });
   }
 
-  return withTenant(deps.db, cfg.tenantId, async (tx) => {
+  return withTransaction(deps.db, async (tx) => {
     await asAppUser(tx);
 
     const [locked] = await tx
@@ -3628,7 +3628,7 @@ export async function sendToPrep(
   cfg: TillConfig,
   id: string,
 ): Promise<void> {
-  return withTenant(deps.db, cfg.tenantId, async (tx) => {
+  return withTransaction(deps.db, async (tx) => {
     await asAppUser(tx);
 
     // Only settled orders are eligible for firing. Settled is a terminal status.
@@ -3671,7 +3671,8 @@ export async function markCollected(
   cfg: TillConfig,
   id: string,
 ): Promise<void> {
-  return withTenant(deps.db, cfg.tenantId, async (tx) => {
+  void cfg;
+  return withTransaction(deps.db, async (tx) => {
     await asAppUser(tx);
 
     // Only settled orders are eligible for collection. Settled is a terminal status.
@@ -3813,7 +3814,7 @@ export async function advanceTicket(
     .where(
       and(
         // Tenant-scoped: this by-order/station update must not reach another tenant's `ticket_items`
-        // rows (CLAUDE.md §3) — `withTenant` does not isolate it since RLS was dropped (#255).
+        // rows (CLAUDE.md §3) — `withTransaction` does not isolate it since RLS was dropped (#255).
         eq(ticketItems.tenantId, cfg.tenantId),
         eq(ticketItems.workingOrderId, orderId),
         eq(ticketItems.stationId, stationId),

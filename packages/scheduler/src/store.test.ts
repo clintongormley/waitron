@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import type { TenantId } from "@waitron/shared";
 import { SCHEDULER_MIGRATIONS } from "./migrations.js";
@@ -30,7 +30,7 @@ const suite = usePgliteDb({
 
 describe("claimGap", () => {
   it("inserts a running row and returns it", async () => {
-    const claimed = await withTenant(suite.db, tenantId, (tx) =>
+    const claimed = await withTransaction(suite.db, (tx) =>
       claimGap(tx, { tenantId, duty: DUTY, period: PERIOD, now: NOW }),
     );
     expect(claimed).toMatchObject({ generation: 0, attempts: 1 });
@@ -42,7 +42,7 @@ describe("claimGap", () => {
 
   // The insert IS the lock — a second claim of the same period conflicts on scheduled_runs_key.
   it("returns null when the row already exists", async () => {
-    const again = await withTenant(suite.db, tenantId, (tx) =>
+    const again = await withTransaction(suite.db, (tx) =>
       claimGap(tx, { tenantId, duty: DUTY, period: PERIOD, now: NOW }),
     );
     expect(again).toBeNull();
@@ -55,7 +55,7 @@ describe("readSnapshot", () => {
   // actually being SQL NULL (no `min()` match), not merely absent — the same "never run" case
   // `derive.test.ts`'s "starts from the most recent complete period, not the horizon" depends on.
   it("returns an empty snapshot for a duty with no rows", async () => {
-    const snapshot = await withTenant(suite.db, tenantId, (tx) =>
+    const snapshot = await withTransaction(suite.db, (tx) =>
       readSnapshot(tx, {
         tenantId,
         duty: "test.duty.never-run",
@@ -69,10 +69,10 @@ describe("readSnapshot", () => {
 describe("completeRun and readSnapshot", () => {
   it("records a success with its summary and leaves nothing claimable", async () => {
     const period = dayPeriod(new Date("2026-07-23T00:00:00Z"));
-    const claimed = await withTenant(suite.db, tenantId, (tx) =>
+    const claimed = await withTransaction(suite.db, (tx) =>
       claimGap(tx, { tenantId, duty: DUTY, period, now: NOW }),
     );
-    await withTenant(suite.db, tenantId, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       completeRun(tx, {
         id: claimed!.id,
         startedAt: claimed!.startedAt,
@@ -83,7 +83,7 @@ describe("completeRun and readSnapshot", () => {
         now: NOW,
       }),
     );
-    const snapshot = await withTenant(suite.db, tenantId, (tx) =>
+    const snapshot = await withTransaction(suite.db, (tx) =>
       readSnapshot(tx, { tenantId, duty: DUTY, horizonStart: new Date("2026-07-01T00:00:00Z") }),
     );
     const row = snapshot.rows.find(
@@ -95,10 +95,10 @@ describe("completeRun and readSnapshot", () => {
 
   it("records a failure with a structured code and a backoff", async () => {
     const period = dayPeriod(new Date("2026-07-22T00:00:00Z"));
-    const claimed = await withTenant(suite.db, tenantId, (tx) =>
+    const claimed = await withTransaction(suite.db, (tx) =>
       claimGap(tx, { tenantId, duty: DUTY, period, now: NOW }),
     );
-    await withTenant(suite.db, tenantId, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       completeRun(tx, {
         id: claimed!.id,
         startedAt: claimed!.startedAt,
@@ -109,7 +109,7 @@ describe("completeRun and readSnapshot", () => {
         now: NOW,
       }),
     );
-    const snapshot = await withTenant(suite.db, tenantId, (tx) =>
+    const snapshot = await withTransaction(suite.db, (tx) =>
       readSnapshot(tx, { tenantId, duty: DUTY, horizonStart: new Date("2026-07-01T00:00:00Z") }),
     );
     const row = snapshot.rows.find(
@@ -122,12 +122,12 @@ describe("completeRun and readSnapshot", () => {
 
 describe("claimRow", () => {
   it("claims a failed row whose backoff has elapsed and increments attempts", async () => {
-    const snapshot = await withTenant(suite.db, tenantId, (tx) =>
+    const snapshot = await withTransaction(suite.db, (tx) =>
       readSnapshot(tx, { tenantId, duty: DUTY, horizonStart: new Date("2026-07-01T00:00:00Z") }),
     );
     const failed = snapshot.rows.find((r) => r.state === "failed")!;
     const later = new Date("2026-07-25T05:00:00Z");
-    const claimed = await withTenant(suite.db, tenantId, (tx) =>
+    const claimed = await withTransaction(suite.db, (tx) =>
       claimRow(tx, { id: failed.id, now: later }),
     );
     expect(claimed).toMatchObject({ attempts: 2 });
@@ -138,11 +138,11 @@ describe("claimRow", () => {
   // tick while `derive` had already reported it as due — the mismatch Resolution 1 warns about.
   it("claims a failed row whose backoff elapses at exactly `now`", async () => {
     const period = dayPeriod(new Date("2026-07-18T00:00:00Z"));
-    const claimed = await withTenant(suite.db, tenantId, (tx) =>
+    const claimed = await withTransaction(suite.db, (tx) =>
       claimGap(tx, { tenantId, duty: DUTY, period, now: NOW }),
     );
     const boundary = new Date("2026-07-25T05:30:00Z");
-    await withTenant(suite.db, tenantId, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       completeRun(tx, {
         id: claimed!.id,
         startedAt: claimed!.startedAt,
@@ -153,7 +153,7 @@ describe("claimRow", () => {
         now: NOW,
       }),
     );
-    const reclaimed = await withTenant(suite.db, tenantId, (tx) =>
+    const reclaimed = await withTransaction(suite.db, (tx) =>
       claimRow(tx, { id: claimed!.id, now: boundary }),
     );
     expect(reclaimed).toMatchObject({ attempts: 2 });
@@ -167,10 +167,10 @@ describe("claimRow", () => {
     // 07-21: every other period in this file is already claimed by a sibling test, and this suite
     // shares one duty, so reusing one makes `claimGap` return null on the unique key.
     const period = dayPeriod(new Date("2026-07-21T00:00:00Z"));
-    const gap = await withTenant(suite.db, tenantId, (tx) =>
+    const gap = await withTransaction(suite.db, (tx) =>
       claimGap(tx, { tenantId, duty: DUTY, period, now: NOW }),
     );
-    await withTenant(suite.db, tenantId, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       completeRun(tx, {
         id: gap!.id,
         startedAt: gap!.startedAt,
@@ -181,11 +181,11 @@ describe("claimRow", () => {
         now: NOW,
       }),
     );
-    await withTenant(suite.db, tenantId, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       claimRow(tx, { id: gap!.id, now: new Date("2026-07-25T04:20:00Z") }),
     );
 
-    const snapshot = await withTenant(suite.db, tenantId, (tx) =>
+    const snapshot = await withTransaction(suite.db, (tx) =>
       readSnapshot(tx, { tenantId, duty: DUTY, horizonStart: new Date("2026-07-01T00:00:00Z") }),
     );
     const claimed = snapshot.rows.find((r) => r.id === gap!.id)!;
@@ -193,11 +193,11 @@ describe("claimRow", () => {
   });
 
   it("returns null for a row that is no longer claimable", async () => {
-    const snapshot = await withTenant(suite.db, tenantId, (tx) =>
+    const snapshot = await withTransaction(suite.db, (tx) =>
       readSnapshot(tx, { tenantId, duty: DUTY, horizonStart: new Date("2026-07-01T00:00:00Z") }),
     );
     const running = snapshot.rows.find((r) => r.state === "running")!;
-    const claimed = await withTenant(suite.db, tenantId, (tx) =>
+    const claimed = await withTransaction(suite.db, (tx) =>
       claimRow(tx, { id: running.id, now: new Date("2026-07-25T06:00:00Z") }),
     );
     expect(claimed).toBeNull();
@@ -209,11 +209,11 @@ describe("claimRow", () => {
   // to prevent.
   it("returns null for a failed row whose backoff has not yet elapsed", async () => {
     const period = dayPeriod(new Date("2026-07-17T00:00:00Z"));
-    const claimed = await withTenant(suite.db, tenantId, (tx) =>
+    const claimed = await withTransaction(suite.db, (tx) =>
       claimGap(tx, { tenantId, duty: DUTY, period, now: NOW }),
     );
     const future = new Date("2026-07-26T00:00:00Z");
-    await withTenant(suite.db, tenantId, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       completeRun(tx, {
         id: claimed!.id,
         startedAt: claimed!.startedAt,
@@ -224,7 +224,7 @@ describe("claimRow", () => {
         now: NOW,
       }),
     );
-    const tooSoon = await withTenant(suite.db, tenantId, (tx) =>
+    const tooSoon = await withTransaction(suite.db, (tx) =>
       claimRow(tx, { id: claimed!.id, now: new Date(future.getTime() - 1) }),
     );
     expect(tooSoon).toBeNull();
@@ -235,7 +235,7 @@ describe("claimRow", () => {
   // Inserted directly because `enqueueSuccessor` (Task 6) does not exist yet — this is the shape a
   // re-sweep row will have once it does: `pending`, no `next_attempt_at` set yet.
   it("returns null for a pending row with no next_attempt_at set", async () => {
-    const [inserted] = await withTenant(suite.db, tenantId, (tx) =>
+    const [inserted] = await withTransaction(suite.db, (tx) =>
       tx
         .insert(scheduledRuns)
         .values({
@@ -249,7 +249,7 @@ describe("claimRow", () => {
         })
         .returning({ id: scheduledRuns.id }),
     );
-    const claimed = await withTenant(suite.db, tenantId, (tx) =>
+    const claimed = await withTransaction(suite.db, (tx) =>
       claimRow(tx, { id: inserted!.id, now: NOW }),
     );
     expect(claimed).toBeNull();
@@ -259,11 +259,11 @@ describe("claimRow", () => {
 describe("reclaimStale", () => {
   it("reclaims a running row stranded past staleAfterMs", async () => {
     const period = dayPeriod(new Date("2026-07-20T00:00:00Z"));
-    const claimed = await withTenant(suite.db, tenantId, (tx) =>
+    const claimed = await withTransaction(suite.db, (tx) =>
       claimGap(tx, { tenantId, duty: DUTY, period, now: NOW }),
     );
     const later = new Date(NOW.getTime() + 2 * 60 * 60 * 1000);
-    const reclaimed = await withTenant(suite.db, tenantId, (tx) =>
+    const reclaimed = await withTransaction(suite.db, (tx) =>
       reclaimStale(tx, { id: claimed!.id, now: later, staleAfterMs: 60 * 60 * 1000 }),
     );
     expect(reclaimed).toMatchObject({ attempts: 2 });
@@ -271,10 +271,10 @@ describe("reclaimStale", () => {
 
   it("refuses a running row inside staleAfterMs", async () => {
     const period = dayPeriod(new Date("2026-07-19T00:00:00Z"));
-    const claimed = await withTenant(suite.db, tenantId, (tx) =>
+    const claimed = await withTransaction(suite.db, (tx) =>
       claimGap(tx, { tenantId, duty: DUTY, period, now: NOW }),
     );
-    const reclaimed = await withTenant(suite.db, tenantId, (tx) =>
+    const reclaimed = await withTransaction(suite.db, (tx) =>
       reclaimStale(tx, { id: claimed!.id, now: NOW, staleAfterMs: 60 * 60 * 1000 }),
     );
     expect(reclaimed).toBeNull();
@@ -285,10 +285,10 @@ describe("reclaimStale", () => {
   // a completed run is not "stranded", and reclaiming it would resurrect a finished attempt.
   it("refuses a row that is no longer running, however stale its started_at", async () => {
     const period = dayPeriod(new Date("2026-06-01T00:00:00Z"));
-    const claimed = await withTenant(suite.db, tenantId, (tx) =>
+    const claimed = await withTransaction(suite.db, (tx) =>
       claimGap(tx, { tenantId, duty: DUTY, period, now: NOW }),
     );
-    await withTenant(suite.db, tenantId, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       completeRun(tx, {
         id: claimed!.id,
         startedAt: claimed!.startedAt,
@@ -299,7 +299,7 @@ describe("reclaimStale", () => {
         now: NOW,
       }),
     );
-    const reclaimed = await withTenant(suite.db, tenantId, (tx) =>
+    const reclaimed = await withTransaction(suite.db, (tx) =>
       reclaimStale(tx, {
         id: claimed!.id,
         now: new Date(NOW.getTime() + 10 * 60 * 60 * 1000),
@@ -317,17 +317,17 @@ describe("completeRun's ownership fence", () => {
   // executing; with it, A's call is rejected and the row is left exactly as B's reclaim set it.
   it("rejects a completion from an attempt a reclaim has since superseded", async () => {
     const period = dayPeriod(new Date("2026-05-01T00:00:00Z"));
-    const original = await withTenant(suite.db, tenantId, (tx) =>
+    const original = await withTransaction(suite.db, (tx) =>
       claimGap(tx, { tenantId, duty: DUTY, period, now: NOW }),
     );
     const reclaimAt = new Date(NOW.getTime() + 2 * 60 * 60 * 1000);
-    const reclaimed = await withTenant(suite.db, tenantId, (tx) =>
+    const reclaimed = await withTransaction(suite.db, (tx) =>
       reclaimStale(tx, { id: original!.id, now: reclaimAt, staleAfterMs: 60 * 60 * 1000 }),
     );
     expect(reclaimed).toMatchObject({ attempts: 2 });
 
     // A wakes up late and completes using ITS OWN claim's startedAt — stale by now.
-    const won = await withTenant(suite.db, tenantId, (tx) =>
+    const won = await withTransaction(suite.db, (tx) =>
       completeRun(tx, {
         id: original!.id,
         startedAt: original!.startedAt,
@@ -342,7 +342,7 @@ describe("completeRun's ownership fence", () => {
 
     // The row must still read exactly as B's reclaim left it: running, at B's attempt count — not
     // overwritten by A's (rejected) outcome.
-    const snapshot = await withTenant(suite.db, tenantId, (tx) =>
+    const snapshot = await withTransaction(suite.db, (tx) =>
       readSnapshot(tx, { tenantId, duty: DUTY, horizonStart: new Date("2026-01-01T00:00:00Z") }),
     );
     const row = snapshot.rows.find((r) => r.id === original!.id);
@@ -356,10 +356,10 @@ describe("completeRun's ownership fence", () => {
   // `running`, so `startedAt` alone would still match here.
   it("rejects a duplicate completion once the row has already reached a terminal state", async () => {
     const period = dayPeriod(new Date("2026-04-01T00:00:00Z"));
-    const claimed = await withTenant(suite.db, tenantId, (tx) =>
+    const claimed = await withTransaction(suite.db, (tx) =>
       claimGap(tx, { tenantId, duty: DUTY, period, now: NOW }),
     );
-    const first = await withTenant(suite.db, tenantId, (tx) =>
+    const first = await withTransaction(suite.db, (tx) =>
       completeRun(tx, {
         id: claimed!.id,
         startedAt: claimed!.startedAt,
@@ -372,7 +372,7 @@ describe("completeRun's ownership fence", () => {
     );
     expect(first).toBe(true);
 
-    const second = await withTenant(suite.db, tenantId, (tx) =>
+    const second = await withTransaction(suite.db, (tx) =>
       completeRun(tx, {
         id: claimed!.id,
         startedAt: claimed!.startedAt,
@@ -386,7 +386,7 @@ describe("completeRun's ownership fence", () => {
     expect(second).toBe(false);
 
     // The row's recorded outcome must still be the FIRST completion's — untouched by the second.
-    const snapshot = await withTenant(suite.db, tenantId, (tx) =>
+    const snapshot = await withTransaction(suite.db, (tx) =>
       readSnapshot(tx, { tenantId, duty: DUTY, horizonStart: new Date("2026-01-01T00:00:00Z") }),
     );
     const row = snapshot.rows.find((r) => r.id === claimed!.id);
@@ -403,10 +403,10 @@ describe("enqueueSuccessor", () => {
   // half of the guard would let this insert through with no unique-key collision to catch it.
   it("refuses when the period already has a non-terminal row, even one merely awaiting retry", async () => {
     const period = dayPeriod(new Date("2026-03-01T00:00:00Z"));
-    const claimed = await withTenant(suite.db, tenantId, (tx) =>
+    const claimed = await withTransaction(suite.db, (tx) =>
       claimGap(tx, { tenantId, duty: DUTY, period, now: NOW }),
     );
-    await withTenant(suite.db, tenantId, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       completeRun(tx, {
         id: claimed!.id,
         startedAt: claimed!.startedAt,
@@ -418,7 +418,7 @@ describe("enqueueSuccessor", () => {
       }),
     );
 
-    const inserted = await withTenant(suite.db, tenantId, (tx) =>
+    const inserted = await withTransaction(suite.db, (tx) =>
       enqueueSuccessor(tx, {
         tenantId,
         duty: DUTY,
@@ -428,7 +428,7 @@ describe("enqueueSuccessor", () => {
     );
     expect(inserted).toBe(false);
 
-    const snapshot = await withTenant(suite.db, tenantId, (tx) =>
+    const snapshot = await withTransaction(suite.db, (tx) =>
       readSnapshot(tx, { tenantId, duty: DUTY, horizonStart: new Date("2026-01-01T00:00:00Z") }),
     );
     expect(
@@ -443,10 +443,10 @@ describe("enqueueSuccessor", () => {
   // not, so between them the two pin the whole list.
   it("treats a parked row as terminal, exactly as derivation does", async () => {
     const period = dayPeriod(new Date("2026-03-03T00:00:00Z"));
-    const claimed = await withTenant(suite.db, tenantId, (tx) =>
+    const claimed = await withTransaction(suite.db, (tx) =>
       claimGap(tx, { tenantId, duty: DUTY, period, now: NOW }),
     );
-    await withTenant(suite.db, tenantId, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       completeRun(tx, {
         id: claimed!.id,
         startedAt: claimed!.startedAt,
@@ -458,7 +458,7 @@ describe("enqueueSuccessor", () => {
       }),
     );
 
-    const inserted = await withTenant(suite.db, tenantId, (tx) =>
+    const inserted = await withTransaction(suite.db, (tx) =>
       enqueueSuccessor(tx, {
         tenantId,
         duty: DUTY,
@@ -477,10 +477,10 @@ describe("enqueueSuccessor", () => {
   // completed generations so a mutant fixed at "1" is distinguishable from the real max+1.
   it("computes the next generation as max(generation) + 1, not a fixed value", async () => {
     const period = dayPeriod(new Date("2026-03-02T00:00:00Z"));
-    const gen0 = await withTenant(suite.db, tenantId, (tx) =>
+    const gen0 = await withTransaction(suite.db, (tx) =>
       claimGap(tx, { tenantId, duty: DUTY, period, now: NOW }),
     );
-    await withTenant(suite.db, tenantId, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       completeRun(tx, {
         id: gen0!.id,
         startedAt: gen0!.startedAt,
@@ -492,20 +492,20 @@ describe("enqueueSuccessor", () => {
       }),
     );
     const dueAt1 = new Date(NOW.getTime() + 60_000);
-    await withTenant(suite.db, tenantId, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       enqueueSuccessor(tx, { tenantId, duty: DUTY, period, dueAt: dueAt1 }),
     );
 
-    const afterFirst = await withTenant(suite.db, tenantId, (tx) =>
+    const afterFirst = await withTransaction(suite.db, (tx) =>
       readSnapshot(tx, { tenantId, duty: DUTY, horizonStart: new Date("2026-01-01T00:00:00Z") }),
     );
     const gen1Row = afterFirst.rows.find(
       (r) => new Date(r.periodFrom).getTime() === period.from.getTime() && r.generation === 1,
     )!;
-    const gen1 = await withTenant(suite.db, tenantId, (tx) =>
+    const gen1 = await withTransaction(suite.db, (tx) =>
       claimRow(tx, { id: gen1Row.id, now: dueAt1 }),
     );
-    await withTenant(suite.db, tenantId, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       completeRun(tx, {
         id: gen1!.id,
         startedAt: gen1!.startedAt,
@@ -518,12 +518,12 @@ describe("enqueueSuccessor", () => {
     );
 
     const dueAt2 = new Date(dueAt1.getTime() + 60_000);
-    const insertedSecond = await withTenant(suite.db, tenantId, (tx) =>
+    const insertedSecond = await withTransaction(suite.db, (tx) =>
       enqueueSuccessor(tx, { tenantId, duty: DUTY, period, dueAt: dueAt2 }),
     );
     expect(insertedSecond).toBe(true);
 
-    const finalSnapshot = await withTenant(suite.db, tenantId, (tx) =>
+    const finalSnapshot = await withTransaction(suite.db, (tx) =>
       readSnapshot(tx, { tenantId, duty: DUTY, horizonStart: new Date("2026-01-01T00:00:00Z") }),
     );
     const gen2Row = finalSnapshot.rows.find(

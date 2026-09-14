@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createPgliteDb, runMigrations, withTenant } from "@waitron/db";
+import { createPgliteDb, runMigrations, withTransaction } from "@waitron/db";
 import { isAppError, locationId as brandLocationId } from "@waitron/shared";
 import type { ProvisionedNode } from "@waitron/module";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
@@ -49,10 +49,8 @@ describe("FISCAL_PROVISIONING.seed", () => {
   });
 
   it("registers the node as a SIF under the tenant's own tax id and the product's software id", async () => {
-    const report = await withTenant(db, TENANT_A.id, (tx) => seed.run(tx, NODE));
-    const sif = await withTenant(db, TENANT_A.id, (tx) =>
-      currentSif(tx, TENANT_A.id, TENANT_A.nodeId),
-    );
+    const report = await withTransaction(db, (tx) => seed.run(tx, NODE));
+    const sif = await withTransaction(db, (tx) => currentSif(tx, TENANT_A.id, TENANT_A.nodeId));
     expect(sif.nif).toBe("89890001K"); // seedTenants' tax_id for TENANT_A, never an argument
     expect(sif.idSistemaInformatico).toBe(WAITRON_ID_SISTEMA);
     expect(sif.numeroInstalacion).toBe(1);
@@ -61,11 +59,9 @@ describe("FISCAL_PROVISIONING.seed", () => {
   });
 
   it("re-seeding an existing node mints a fresh installation number and a new chain", async () => {
-    await withTenant(db, TENANT_A.id, (tx) => seed.run(tx, NODE));
-    await withTenant(db, TENANT_A.id, (tx) => seed.run(tx, NODE));
-    const sif = await withTenant(db, TENANT_A.id, (tx) =>
-      currentSif(tx, TENANT_A.id, TENANT_A.nodeId),
-    );
+    await withTransaction(db, (tx) => seed.run(tx, NODE));
+    await withTransaction(db, (tx) => seed.run(tx, NODE));
+    const sif = await withTransaction(db, (tx) => currentSif(tx, TENANT_A.id, TENANT_A.nodeId));
     expect(sif.numeroInstalacion).toBe(2);
     const head = await db.execute<{ h: string | null }>(
       sql`select ultima_huella as h from cadenas where node_id = ${TENANT_A.nodeId}`,
@@ -77,7 +73,7 @@ describe("FISCAL_PROVISIONING.seed", () => {
 describe("FISCAL_PROVISIONING.standby", () => {
   beforeEach(async () => {
     // The primary must hold a live SIF and its series before it can reserve for a standby.
-    await withTenant(db, TENANT_A.id, (tx) => seed.run(tx, NODE));
+    await withTransaction(db, (tx) => seed.run(tx, NODE));
     await db.execute(sql`
       insert into invoice_series (tenant_id, node_id, code, purpose) values
         (${TENANT_A.id}, ${TENANT_A.nodeId}, 'FA', 'standard'),
@@ -86,7 +82,7 @@ describe("FISCAL_PROVISIONING.standby", () => {
 
   it("reserve derives from the primary's LIVE series bases: a restored primary's `FA-<n>` gives the standby `FA-<m>`, not `FA-<n>-<m>`", async () => {
     await db.execute(sql`delete from invoice_series where node_id = ${TENANT_A.nodeId}`);
-    const primarySif = await withTenant(db, TENANT_A.id, (tx) =>
+    const primarySif = await withTransaction(db, (tx) =>
       registerSif(tx, {
         tenantId: TENANT_A.id,
         nodeId: TENANT_A.nodeId,
@@ -101,7 +97,7 @@ describe("FISCAL_PROVISIONING.standby", () => {
         (${TENANT_A.id}, ${TENANT_A.nodeId}, ${`FA-${primarySif.numeroInstalacion}`}, 'standard', null),
         (${TENANT_A.id}, ${TENANT_A.nodeId}, ${`RE-${primarySif.numeroInstalacion}`}, 'rectificative', null)
     `);
-    const reservation = await withTenant(db, TENANT_A.id, (tx) => standby.reserve(tx, NODE));
+    const reservation = await withTransaction(db, (tx) => standby.reserve(tx, NODE));
     const m = (reservation.state as { numeroInstalacion: number }).numeroInstalacion;
     expect(reservation.series).toEqual([
       { code: `FA-${m}`, purpose: "standard" },
@@ -110,18 +106,16 @@ describe("FISCAL_PROVISIONING.standby", () => {
   });
 
   it("reserves a fresh number and derives disjoint series codes from the primary's", async () => {
-    const r = await withTenant(db, TENANT_A.id, (tx) => standby.reserve(tx, NODE));
+    const r = await withTransaction(db, (tx) => standby.reserve(tx, NODE));
     expect(r.state).toEqual({ nif: "89890001K", idSistemaInformatico: "W1", numeroInstalacion: 2 });
     expect(r.series?.map((s) => s.code).sort()).toEqual(["FA-2", "RF-2"]);
     expect(r.series?.find((s) => s.code === "RF-2")?.purpose).toBe("rectificative");
   });
 
   it("establishes the reserved SIF on the standby's own node with the reserved number", async () => {
-    const r = await withTenant(db, TENANT_A.id, (tx) => standby.reserve(tx, NODE));
-    await withTenant(db, TENANT_A.id, (tx) => standby.establish(tx, NODE_2, r.state));
-    const sif = await withTenant(db, TENANT_A.id, (tx) =>
-      currentSif(tx, TENANT_A.id, TENANT_A.nodeId2),
-    );
+    const r = await withTransaction(db, (tx) => standby.reserve(tx, NODE));
+    await withTransaction(db, (tx) => standby.establish(tx, NODE_2, r.state));
+    const sif = await withTransaction(db, (tx) => currentSif(tx, TENANT_A.id, TENANT_A.nodeId2));
     expect(sif.numeroInstalacion).toBe(2);
     expect(sif.nif).toBe("89890001K");
   });
@@ -148,9 +142,9 @@ describe("FISCAL_PROVISIONING.standby", () => {
       { nif: "89890001K", idSistemaInformatico: "W1", numeroInstalacion: 1.5 },
     ],
   ])("refuses a reservation state that is %s, writing nothing", async (_label, state) => {
-    const err = await withTenant(db, TENANT_A.id, (tx) =>
-      standby.establish(tx, NODE_2, state),
-    ).catch((e: unknown) => e);
+    const err = await withTransaction(db, (tx) => standby.establish(tx, NODE_2, state)).catch(
+      (e: unknown) => e,
+    );
     expect(isAppError(err) && err.code).toBe("sif.reservation_invalid");
     const rows = await db.execute(
       sql`select 1 from registro_sif where node_id = ${TENANT_A.nodeId2}`,

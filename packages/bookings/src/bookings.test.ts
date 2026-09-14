@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type { CoreServices } from "@waitron/module";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
@@ -26,7 +26,7 @@ import "./errors.js";
 // PGlite, not real Postgres: these verbs are plain CRUD + a conditional-UPDATE state machine over one
 // table — no privilege or concurrency behaviour that needs a genuine non-superuser backend (the CAS
 // race is proven against real Postgres in `bookings-cas.test.ts`, the routes in `routes.test.ts`). Every read/write still runs
-// through `withTenant` + `asAppUser`, so the tenant scope and the `party_size > 0` CHECK are exercised
+// through `withTransaction` + `asAppUser`, so the tenant scope and the `party_size > 0` CHECK are exercised
 // exactly as production does, not bypassed. `TESTCONTAINERS_RYUK_DISABLED` is irrelevant here — no
 // container is started. Fixtures apply the whole manifest (BOOKINGS_TEST_MIGRATIONS): bookings FKs
 // into core, so it lands on top of the shared ordered set.
@@ -87,7 +87,8 @@ async function makeTableInOtherLocation(cfg: BookingConfig): Promise<string> {
 
 /** Run `fn` inside the venue's tenant scope as `app_user`, exactly as production routes do. */
 function scoped<T>(cfg: BookingConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  return withTenant(db, cfg.tenantId, async (tx) => {
+  void cfg;
+  return withTransaction(db, async (tx) => {
     await asAppUser(tx);
     return fn(tx);
   });

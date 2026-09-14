@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import type { FormFactor } from "@waitron/layouts";
@@ -52,7 +52,7 @@ async function setupVenue(): Promise<SeededVenue> {
     tipsEnabled: false,
     orderFlow: "prepay",
   };
-  const st = await withTenant(admin, cfg.tenantId, async (tx) => {
+  const st = await withTransaction(admin, async (tx) => {
     await asAppUser(tx);
     return createStation(tx, cfg, { name: "Cocina", isDefault: true });
   });

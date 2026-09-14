@@ -19,7 +19,13 @@ import {
   nodeId as brandNodeId,
   tenantId as brandTenantId,
 } from "@waitron/shared";
-import { nodes, readDeploymentEnvironment, tenants, withTenant, type Database } from "@waitron/db";
+import {
+  nodes,
+  readDeploymentEnvironment,
+  tenants,
+  withTransaction,
+  type Database,
+} from "@waitron/db";
 import { endorseKey, type Endorsement } from "@waitron/membership";
 import type { KeyRing } from "@waitron/credentials";
 import type { AdoptResult } from "@waitron/provisioning";
@@ -125,32 +131,28 @@ export interface AssembleDeps {
  * COPY brings the venue data, and the bundle's `replication` connection is what its subscription dials.
  */
 export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBundle> {
-  const { tenant, primaryNode } = await withTenant(
-    deps.appDb,
-    deps.designated.tenantId,
-    async (tx) => {
-      // `[0]!` is safe: `designated.tenantId`/`nodeId` are the primary till's provisioned ids
-      // (`config.till`), whose tenant + node rows are minted as its FK parents at provision, so both
-      // by-id lookups always return exactly one row.
-      const t = (
-        await tx
-          .select({ country: tenants.country, taxId: tenants.taxId })
-          .from(tenants)
-          .where(eq(tenants.id, deps.designated.tenantId))
-      )[0]!;
-      const n = (
-        await tx
-          .select({
-            name: nodes.name,
-            filingModule: nodes.filingModule,
-            taxModule: nodes.taxModule,
-          })
-          .from(nodes)
-          .where(eq(nodes.id, deps.designated.nodeId))
-      )[0]!;
-      return { tenant: t, primaryNode: n };
-    },
-  );
+  const { tenant, primaryNode } = await withTransaction(deps.appDb, async (tx) => {
+    // `[0]!` is safe: `designated.tenantId`/`nodeId` are the primary till's provisioned ids
+    // (`config.till`), whose tenant + node rows are minted as its FK parents at provision, so both
+    // by-id lookups always return exactly one row.
+    const t = (
+      await tx
+        .select({ country: tenants.country, taxId: tenants.taxId })
+        .from(tenants)
+        .where(eq(tenants.id, deps.designated.tenantId))
+    )[0]!;
+    const n = (
+      await tx
+        .select({
+          name: nodes.name,
+          filingModule: nodes.filingModule,
+          taxModule: nodes.taxModule,
+        })
+        .from(nodes)
+        .where(eq(nodes.id, deps.designated.nodeId))
+    )[0]!;
+    return { tenant: t, primaryNode: n };
+  });
 
   const environment = await readDeploymentEnvironment(deps.appDb);
   if (environment === null) throw new AppError("mirror.not_provisioned", {});
@@ -164,14 +166,14 @@ export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBu
 
   // Reserve the standby's dormant identity through each enabled module's provisioning seat
   // (reserved-standby-identity design §6 R2), unseal the primary's identity key, and read the box CA
-  // IN PARALLEL — the three have no data dependency. The reservation shares ONE `withTenant`
+  // IN PARALLEL — the three have no data dependency. The reservation shares ONE `withTransaction`
   // transaction, so every module's reads and its allocation are consistent with each other. What a
   // module reserves, and what it throws when the primary is not in a state to reserve, is the module's
   // own business; nothing is caught here. The endorsement is MEMBERSHIP's, computed below from the
   // primary's identity PRIVATE key: `endorseKey` signs canonicalize({nodeId, publicKey}) so it chains
   // the standby's key back to the primary's setup-established trust anchor (design §4).
   const [reserved, primaryPrivateKey, boxCaPem] = await Promise.all([
-    withTenant(deps.appDb, deps.designated.tenantId, async (tx) => {
+    withTransaction(deps.appDb, async (tx) => {
       const primary = {
         tenantId: brandTenantId(deps.designated.tenantId),
         locationId: brandLocationId(deps.designated.locationId),

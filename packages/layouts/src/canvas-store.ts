@@ -18,7 +18,7 @@ import { validateCanvas } from "./validate-canvas.js";
  * rows per tenant, keyed by `id`, names unique per tenant.
  *
  * Every function takes the caller's transaction, opened with
- * `withTenant(deps.db, tenantId, …)` + `asAppUser(tx)`. Exercised in
+ * `withTransaction(deps.db, …)` + `asAppUser(tx)`. Exercised in
  * `canvas-store.pg.test.ts` (real Postgres, as a non-superuser `app_user` member — PGlite holds
  * every grant, CLAUDE.md §4). Mirrors the other stores in this package (`theme-store.ts`, `receipt-store.ts`).
  *

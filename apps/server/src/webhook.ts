@@ -1,6 +1,6 @@
 import type { Hono } from "hono";
 import type Stripe from "stripe";
-import { withTenant } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import type { KeyRing } from "@waitron/credentials";
 import { StripeHostedProvider, stripeHostedClient } from "@waitron/payments-stripe";
@@ -79,7 +79,7 @@ export function hostedWebhookSecretFrom(
 /**
  * The receiving half of Mode 3, security path only (design §5 steps 2–6). It selects the PATH
  * tenant's own signing secret, verifies the raw event as the SOLE gate, cross-checks the resolved
- * tenant against the path, and advances the payment state under `withTenant`.
+ * tenant against the path, and advances the payment state under `withTransaction`.
  *
  * The signature is the whole of the authorisation: the path `:tenantId` is attacker-controllable, so
  * nothing acts on it until that tenant's real `webhookSecret` verifies the raw bytes. Naming a tenant
@@ -100,7 +100,7 @@ export async function settleWebhook(
 ): Promise<WebhookOutcome> {
   const tenant = brandTenantId(pathTenantId);
   const ref = { tenantId: pathTenantId, purpose: PURPOSE };
-  // Per-tenant secret selection. `readCredential` is itself tenant-scoped (it opens `withTenant`),
+  // Per-tenant secret selection. `readCredential` is itself tenant-scoped (it opens `withTransaction`),
   // so the secret this request is verified against belongs to the path tenant and no other — the
   // guard the cross-secret test proves by deletion.
   const payload = await readCredential(deps.db, deps.ring, tenant, PURPOSE);
@@ -156,7 +156,7 @@ export async function settleWebhook(
     });
   }
 
-  return withTenant(deps.db, tenant, async (tx) => {
+  return withTransaction(deps.db, async (tx) => {
     if (event.outcome === "expired") {
       await expireInitiated(tx, { provider: event.provider, externalRef: event.externalRef });
       return "expired";

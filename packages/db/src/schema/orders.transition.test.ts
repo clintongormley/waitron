@@ -6,7 +6,7 @@ import { captureError, pgErrorCode, pgErrorMessage } from "../testing/errors.js"
 import { useTemplateDb } from "../testing/lifecycle.js";
 import { asAppUser } from "../testing/roles.js";
 import { seedNode } from "../testing/seed.js";
-import { withTenant } from "../tenancy.js";
+import { withTransaction } from "../tenancy.js";
 import { catalogues, products } from "./catalogue.js";
 import { locations, tenants, tills } from "./tenants.js";
 
@@ -39,7 +39,7 @@ describe("working_orders state machine (enforce_transition)", () => {
   const suite = useTemplateDb({ template: "core" });
 
   function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
-    return withTenant(suite.admin, TENANT_A, async (tx) => {
+    return withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return fn(tx);
     });

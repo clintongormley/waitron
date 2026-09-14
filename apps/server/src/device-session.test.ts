@@ -3,7 +3,7 @@ import { type Context, Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { isAppError } from "@waitron/shared";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -40,7 +40,8 @@ const LOCALE = "es-ES";
 const suite = useTemplateDb({ template: "manifest" });
 
 function asApp<T>(db: Database, cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  return withTenant(db, cfg.tenantId, async (tx) => {
+  void cfg;
+  return withTransaction(db, async (tx) => {
     await asAppUser(tx);
     return fn(tx);
   });
@@ -744,7 +745,7 @@ describe("dev-override header (real Postgres)", () => {
 });
 
 describe("tryReadDevice is tenant-scoped (real Postgres)", () => {
-  // CLAUDE.md §3 / the till-reroute-S3 incident: since RLS was dropped (#255) `withTenant` no longer
+  // CLAUDE.md §3 / the till-reroute-S3 incident: since RLS was dropped (#255) `withTransaction` no longer
   // isolates SELECTs, so a by-id device read must carry its OWN `tenant_id` predicate —
   // one-tenant-per-db is NOT the query's isolation boundary. Seeded DIRECTLY (not through the enrol
   // path, which Tasks 6-7 still owe), so these two cases are self-contained. The dev-override path

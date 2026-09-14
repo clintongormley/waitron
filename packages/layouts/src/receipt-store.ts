@@ -9,7 +9,7 @@ import { validateReceiptConfig } from "./validate.js";
 /**
  * The get/put service over `tenant_receipts` (SP-B4; design §9). ONE row per tenant, keyed on
  * `tenant_id`, which doubles as the `ON CONFLICT` target — the tenant_themes shape. Every function
- * takes the caller's transaction (`withTenant` + `asAppUser`). Exercised in
+ * takes the caller's transaction (`withTransaction` + `asAppUser`). Exercised in
  * receipt-store.test.ts (real Postgres, as a non-superuser `app_user` member — PGlite holds every
  * grant, §4).
  *

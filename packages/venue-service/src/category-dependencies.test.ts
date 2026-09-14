@@ -10,7 +10,7 @@ import {
   deleteCategory,
   readCategory,
 } from "@waitron/catalogue";
-import { asAppUser, CORE_MIGRATIONS, withTenant } from "@waitron/db";
+import { asAppUser, CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import type { LocationId } from "@waitron/shared";
@@ -32,7 +32,7 @@ async function venue() {
 
 it("deleting a category removes its preparation routes and the category", async () => {
   const { tenantId, locationId } = await venue();
-  await withTenant(suite.db, tenantId, async (tx) => {
+  await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     const category = await createCategory(tx, tenantId, { name: { en: "Drinks" } });
     await createPreparationRoute(
@@ -53,7 +53,7 @@ it("deleting a category removes its preparation routes and the category", async 
 
 it("an open order keeps its copied category label after the category is deleted", async () => {
   const { tenantId, locationId } = await venue();
-  await withTenant(suite.db, tenantId, async (tx) => {
+  await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     const till = await tx.execute<{ id: string }>(sql`
       insert into tills (tenant_id, location_id, name)
@@ -99,7 +99,7 @@ it("an open order keeps its copied category label after the category is deleted"
 
 it("dependants lists a category's preparation routes with station and zone names", async () => {
   const { tenantId, locationId } = await venue();
-  await withTenant(suite.db, tenantId, async (tx) => {
+  await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     const category = await createCategory(tx, tenantId, { name: { en: "Grill" } });
     const zone = await tx.execute<{ id: string }>(sql`
@@ -135,7 +135,7 @@ it("dependants lists a category's preparation routes with station and zone names
 
 it("dependants reports a no-preparation route with a null station", async () => {
   const { tenantId, locationId } = await venue();
-  await withTenant(suite.db, tenantId, async (tx) => {
+  await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     const category = await createCategory(tx, tenantId, { name: { en: "Drinks" } });
     const routeId = await createPreparationRoute(

@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import type { Database } from "@waitron/db";
-import { withTenant } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import type { PersonRoleValue } from "./permissions.js";
@@ -42,7 +42,7 @@ describe("listActivePersonsWithPermission", () => {
 
     const probe = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
-      const rows = await withTenant(probe, tenantId, (tx) =>
+      const rows = await withTransaction(probe, (tx) =>
         listActivePersonsWithPermission(tx, "cash.drawer"),
       );
 

@@ -4,7 +4,7 @@ import type { Database } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { decimal, tenantId as brandTenantId } from "@waitron/shared";
 import { recordIncidentOnce } from "@waitron/core";
-import { withTenant } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import { reconcilePayments, DEFAULT_SETTLEMENT_LAG_MS } from "./reconcile.js";
 import type { ReconcileDeps } from "./reconcile.js";
 import { insertCapturedPayment } from "./store.js";
@@ -55,7 +55,7 @@ const PERIOD = { from: new Date("2026-07-01T00:00:00Z"), to: new Date("2026-07-0
 describe("concurrent reconcile sweeps", () => {
   it("reverse an orphan exactly once and raise one incident, however they interleave", async () => {
     const seeded = await seedWorkingOrder(postgres.admin, "B66666666");
-    await withTenant(postgres.admin, seeded.tenantId, (tx) =>
+    await withTransaction(postgres.admin, (tx) =>
       insertCapturedPayment(tx, {
         tenantId: seeded.tenantId,
         workingOrderId: seeded.workingOrderId,

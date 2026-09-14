@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import type { TenantId } from "@waitron/shared";
 import { SCHEDULER_MIGRATIONS } from "./migrations.js";
@@ -28,7 +28,7 @@ function deps(duties: SchedulerDeps["duties"]): SchedulerDeps {
 }
 
 function snapshotOf(): Promise<LedgerSnapshot> {
-  return withTenant(suite.db, tenantId, (tx) =>
+  return withTransaction(suite.db, (tx) =>
     readSnapshot(tx, { tenantId, duty: DUTY, horizonStart: HORIZON_START }),
   );
 }
@@ -71,7 +71,7 @@ describe("resweepAfter", () => {
   it("does not report a re-sweep time for a successor the guard refused", async () => {
     const soon = new Date("2026-07-25T05:00:00Z");
     const duty = new FakeDuty(DUTY, async (call) => {
-      await withTenant(suite.db, tenantId, (tx) =>
+      await withTransaction(suite.db, (tx) =>
         tx.insert(scheduledRuns).values({
           tenantId,
           duty: DUTY,
@@ -147,7 +147,7 @@ describe("resweepAfter", () => {
     // 90 days back, which no gap derivation would ever reach.
     const old = new Date("2026-04-20T00:00:00Z");
     const duty = new FakeDuty(DUTY, () => Promise.resolve({ summary: {} }));
-    await withTenant(suite.db, tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       await tx.insert(scheduledRuns).values({
         tenantId,
         duty: DUTY,
@@ -179,12 +179,12 @@ describe("resweepAfter", () => {
         (r) => new Date(r.periodFrom).getTime() === call.period.from.getTime(),
       )!;
       const reclaimAt = new Date(call.now.getTime() + DEFAULTS.staleAfterMs + 1);
-      const reclaimed = await withTenant(suite.db, tenantId, (tx) =>
+      const reclaimed = await withTransaction(suite.db, (tx) =>
         reclaimStale(tx, { id: row.id, now: reclaimAt, staleAfterMs: DEFAULTS.staleAfterMs }),
       );
       expect(reclaimed).not.toBeNull();
       // The reclaiming runner finishes its own attempt first, leaving the row terminal.
-      const won = await withTenant(suite.db, tenantId, (tx) =>
+      const won = await withTransaction(suite.db, (tx) =>
         completeRun(tx, {
           id: reclaimed!.id,
           startedAt: reclaimed!.startedAt,

@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, asAppUser, withTransaction } from "@waitron/db";
 import { hasCode } from "@waitron/shared";
 import type { TenantId } from "@waitron/shared";
 import { aadFor, seal } from "./cipher.js";
@@ -49,10 +49,10 @@ async function freshTenant(): Promise<TenantId> {
 describe("putCredential and getCredential", () => {
   it("round-trips a payload through the database", async () => {
     const tenantId = await freshTenant();
-    await withTenant(suite.db, tenantId, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       putCredential(tx, RING_V1, { tenantId, purpose: "payments.stripe", value: STRIPE }),
     );
-    const actual = await withTenant(suite.db, tenantId, (tx) =>
+    const actual = await withTransaction(suite.db, (tx) =>
       getCredential(tx, RING_V1, { tenantId, purpose: "payments.stripe" }),
     );
     expect(actual).toEqual(STRIPE);
@@ -60,7 +60,7 @@ describe("putCredential and getCredential", () => {
 
   it("stores no plaintext in the row", async () => {
     const tenantId = await freshTenant();
-    await withTenant(suite.db, tenantId, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       putCredential(tx, RING_V1, { tenantId, purpose: "payments.stripe", value: STRIPE }),
     );
     const rows = await suite.db.execute<{ blob: string }>(sql`
@@ -71,14 +71,14 @@ describe("putCredential and getCredential", () => {
 
   it("overwrites an existing purpose rather than failing on the primary key", async () => {
     const tenantId = await freshTenant();
-    await withTenant(suite.db, tenantId, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       putCredential(tx, RING_V1, { tenantId, purpose: "payments.stripe", value: STRIPE }),
     );
     const updated = { ...STRIPE, secretKey: "sk_test_rotated" };
-    await withTenant(suite.db, tenantId, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       putCredential(tx, RING_V1, { tenantId, purpose: "payments.stripe", value: updated }),
     );
-    const actual = await withTenant(suite.db, tenantId, (tx) =>
+    const actual = await withTransaction(suite.db, (tx) =>
       getCredential(tx, RING_V1, { tenantId, purpose: "payments.stripe" }),
     );
     expect(actual).toEqual(updated);
@@ -86,7 +86,7 @@ describe("putCredential and getCredential", () => {
 
   it("stamps the ring's current key version", async () => {
     const tenantId = await freshTenant();
-    await withTenant(suite.db, tenantId, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       putCredential(tx, RING_V2_ONLY, { tenantId, purpose: "payments.stripe", value: STRIPE }),
     );
     const rows = await suite.db.execute<{ key_version: number }>(sql`
@@ -105,7 +105,7 @@ describe("putCredential and getCredential", () => {
     //
     // `updated_at` is checked by BACKDATING the row to a value no clock can produce, rather than
     // comparing two `now()` reads taken moments apart: PGlite's `now()` has limited sub-second
-    // resolution, and two `withTenant` round trips can land inside the same tick, so a
+    // resolution, and two `withTransaction` round trips can land inside the same tick, so a
     // correctly-behaving implementation can produce byte-identical timestamps — verified flaky
     // (2/15, then 5/20 runs) when this test compared "before" and "after" reads of the real clock
     // instead. Backdating removes the race entirely: `2020-01-01T00:00:00Z` can only ever be the
@@ -113,7 +113,7 @@ describe("putCredential and getCredential", () => {
     // mean the UPDATE branch's `updatedAt` set line actually ran — deterministic regardless of how
     // fast the two puts complete.
     const tenantId = await freshTenant();
-    await withTenant(suite.db, tenantId, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       putCredential(tx, RING_V1, { tenantId, purpose: "payments.stripe", value: STRIPE }),
     );
     const BACKDATED = "2020-01-01T00:00:00Z";
@@ -129,14 +129,14 @@ describe("putCredential and getCredential", () => {
       WAITRON_CREDENTIALS_KEY_PREVIOUS_VERSION: "1",
     });
     const updated = { ...STRIPE, secretKey: "sk_test_rotated" };
-    await withTenant(suite.db, tenantId, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       putCredential(tx, rotated, { tenantId, purpose: "payments.stripe", value: updated }),
     );
     const after = await suite.db.execute<{ key_version: number; updated_at: string }>(sql`
       select key_version, updated_at from tenant_credentials where tenant_id = ${tenantId}`);
     expect(after.rows[0]!.key_version).toBe(2);
     expect(after.rows[0]!.updated_at).not.toBe(before.rows[0]!.updated_at);
-    const actual = await withTenant(suite.db, tenantId, (tx) =>
+    const actual = await withTransaction(suite.db, (tx) =>
       getCredential(tx, rotated, { tenantId, purpose: "payments.stripe" }),
     );
     expect(actual).toEqual(updated);
@@ -145,15 +145,15 @@ describe("putCredential and getCredential", () => {
   it("validates the payload before it ever reaches the database", async () => {
     const tenantId = await freshTenant();
     // The row count is read via `tx.execute`, INSIDE the same still-open transaction
-    // `putCredential` ran in — not via the top-level `db` handle afterward. `withTenant` wraps
+    // `putCredential` ran in — not via the top-level `db` handle afterward. `withTransaction` wraps
     // this whole callback in `suite.db.transaction(...)`, which rolls back the ENTIRE transaction on an
     // uncaught throw regardless of where inside it the throw happened, so a post-hoc external
     // count can never tell "validated before the insert" apart from "validated after it" — both
     // end at 0 rows once the transaction unwinds. `captured` here catches the AppError itself
-    // (rather than letting it escape `withTenant`'s callback), so the transaction commits
+    // (rather than letting it escape `withTransaction`'s callback), so the transaction commits
     // normally; the SELECT below observes whatever `putCredential` actually did before failing,
     // not what a rollback erased on its behalf.
-    const n = await withTenant(suite.db, tenantId, async (tx) => {
+    const n = await withTransaction(suite.db, async (tx) => {
       const error = await captured(() =>
         putCredential(tx, RING_V1, {
           tenantId,
@@ -172,7 +172,7 @@ describe("putCredential and getCredential", () => {
   it("raises credentials.missing for a purpose that was never provisioned", async () => {
     const tenantId = await freshTenant();
     const error = await captured(() =>
-      withTenant(suite.db, tenantId, (tx) =>
+      withTransaction(suite.db, (tx) =>
         getCredential(tx, RING_V1, { tenantId, purpose: "fiscal.aeat" }),
       ),
     );
@@ -181,7 +181,7 @@ describe("putCredential and getCredential", () => {
 
   it("raises credentials.decrypt_failed when the ring's key is wrong", async () => {
     const tenantId = await freshTenant();
-    await withTenant(suite.db, tenantId, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       putCredential(tx, RING_V1, { tenantId, purpose: "payments.stripe", value: STRIPE }),
     );
     // Same VERSION, different key material — the operator replaced the key without rotating.
@@ -190,7 +190,7 @@ describe("putCredential and getCredential", () => {
       WAITRON_CREDENTIALS_KEY_VERSION: "1",
     });
     const error = await captured(() =>
-      withTenant(suite.db, tenantId, (tx) =>
+      withTransaction(suite.db, (tx) =>
         getCredential(tx, wrong, { tenantId, purpose: "payments.stripe" }),
       ),
     );
@@ -199,11 +199,11 @@ describe("putCredential and getCredential", () => {
 
   it("raises credentials.key_version_unknown when the ring lost the row's key", async () => {
     const tenantId = await freshTenant();
-    await withTenant(suite.db, tenantId, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       putCredential(tx, RING_V1, { tenantId, purpose: "payments.stripe", value: STRIPE }),
     );
     const error = await captured(() =>
-      withTenant(suite.db, tenantId, (tx) =>
+      withTransaction(suite.db, (tx) =>
         getCredential(tx, RING_V2_ONLY, { tenantId, purpose: "payments.stripe" }),
       ),
     );
@@ -214,7 +214,7 @@ describe("putCredential and getCredential", () => {
     // The reason key_version is a column and not a constant. A rotate killed half-way leaves rows
     // on both versions, and the vault must keep serving both until it is re-run.
     const tenantId = await freshTenant();
-    await withTenant(suite.db, tenantId, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       putCredential(tx, RING_V1, { tenantId, purpose: "payments.stripe", value: STRIPE }),
     );
     const both = loadKeyRing({
@@ -223,17 +223,17 @@ describe("putCredential and getCredential", () => {
       WAITRON_CREDENTIALS_KEY_PREVIOUS: K1,
       WAITRON_CREDENTIALS_KEY_PREVIOUS_VERSION: "1",
     });
-    await withTenant(suite.db, tenantId, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       putCredential(tx, both, {
         tenantId,
         purpose: "fiscal.aeat",
         value: { pfxBase64: "AAAA", passphrase: "p", certKind: "sello" },
       }),
     );
-    const onV1 = await withTenant(suite.db, tenantId, (tx) =>
+    const onV1 = await withTransaction(suite.db, (tx) =>
       getCredential(tx, both, { tenantId, purpose: "payments.stripe" }),
     );
-    const onV2 = await withTenant(suite.db, tenantId, (tx) =>
+    const onV2 = await withTransaction(suite.db, (tx) =>
       getCredential(tx, both, { tenantId, purpose: "fiscal.aeat" }),
     );
     expect(onV1).toEqual(STRIPE);
@@ -255,7 +255,7 @@ describe("getCredential — a row that decrypts to something that is not a crede
     plaintext: string,
   ): Promise<void> {
     const sealed = seal(RING_V1.current.key, aadFor(tenantId, purpose), plaintext);
-    await withTenant(suite.db, tenantId, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       tx.insert(tenantCredentials).values({
         tenantId,
         purpose,
@@ -273,7 +273,7 @@ describe("getCredential — a row that decrypts to something that is not a crede
     // `SyntaxError` would otherwise quote verbatim into its own message.
     await sealRawRow(tenantId, "payments.stripe", "sk_live_51ABCDEF");
     const error = await captured(() =>
-      withTenant(suite.db, tenantId, (tx) =>
+      withTransaction(suite.db, (tx) =>
         getCredential(tx, RING_V1, { tenantId, purpose: "payments.stripe" }),
       ),
     );
@@ -287,7 +287,7 @@ describe("getCredential — a row that decrypts to something that is not a crede
     const tenantId = await freshTenant();
     await sealRawRow(tenantId, "payments.stripe", "null");
     const error = await captured(() =>
-      withTenant(suite.db, tenantId, (tx) =>
+      withTransaction(suite.db, (tx) =>
         getCredential(tx, RING_V1, { tenantId, purpose: "payments.stripe" }),
       ),
     );
@@ -303,7 +303,7 @@ describe("getCredential — a row that decrypts to something that is not a crede
     const tenantId = await freshTenant();
     await sealRawRow(tenantId, "payments.stripe", JSON.stringify(["sk_live_x"]));
     const error = await captured(() =>
-      withTenant(suite.db, tenantId, (tx) =>
+      withTransaction(suite.db, (tx) =>
         getCredential(tx, RING_V1, { tenantId, purpose: "payments.stripe" }),
       ),
     );
@@ -318,7 +318,7 @@ describe("getCredential — a row that decrypts to something that is not a crede
     const tenantId = await freshTenant();
     await sealRawRow(tenantId, "payments.stripe", JSON.stringify("sk_live_x"));
     const error = await captured(() =>
-      withTenant(suite.db, tenantId, (tx) =>
+      withTransaction(suite.db, (tx) =>
         getCredential(tx, RING_V1, { tenantId, purpose: "payments.stripe" }),
       ),
     );
@@ -329,7 +329,7 @@ describe("getCredential — a row that decrypts to something that is not a crede
 describe("tryGetCredential", () => {
   it("returns null rather than throwing when nothing is provisioned", async () => {
     const tenantId = await freshTenant();
-    const actual = await withTenant(suite.db, tenantId, (tx) =>
+    const actual = await withTransaction(suite.db, (tx) =>
       tryGetCredential(tx, RING_V1, { tenantId, purpose: "fiscal.aeat" }),
     );
     expect(actual).toBeNull();
@@ -339,14 +339,14 @@ describe("tryGetCredential", () => {
 describe("deleteCredential", () => {
   it("removes the row and reports that it did", async () => {
     const tenantId = await freshTenant();
-    await withTenant(suite.db, tenantId, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       putCredential(tx, RING_V1, { tenantId, purpose: "payments.stripe", value: STRIPE }),
     );
-    const deleted = await withTenant(suite.db, tenantId, (tx) =>
+    const deleted = await withTransaction(suite.db, (tx) =>
       deleteCredential(tx, { tenantId, purpose: "payments.stripe" }),
     );
     expect(deleted).toBe(true);
-    const after = await withTenant(suite.db, tenantId, (tx) =>
+    const after = await withTransaction(suite.db, (tx) =>
       tryGetCredential(tx, RING_V1, { tenantId, purpose: "payments.stripe" }),
     );
     expect(after).toBeNull();
@@ -354,7 +354,7 @@ describe("deleteCredential", () => {
 
   it("reports false when there was nothing to delete", async () => {
     const tenantId = await freshTenant();
-    const deleted = await withTenant(suite.db, tenantId, (tx) =>
+    const deleted = await withTransaction(suite.db, (tx) =>
       deleteCredential(tx, { tenantId, purpose: "payments.stripe" }),
     );
     expect(deleted).toBe(false);
@@ -364,11 +364,11 @@ describe("deleteCredential", () => {
 describe("listCredentials", () => {
   it("returns metadata and never a value", async () => {
     const tenantId = await freshTenant();
-    await withTenant(suite.db, tenantId, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       putCredential(tx, RING_V1, { tenantId, purpose: "payments.stripe", value: STRIPE }),
     );
     // Exercise the metadata projection as the app role.
-    const rows = await withTenant(suite.db, tenantId, async (tx) => {
+    const rows = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       return listCredentials(tx);
     });

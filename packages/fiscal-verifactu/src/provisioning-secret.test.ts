@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import {
@@ -14,7 +14,7 @@ import { sealAeatSecret, validateAeatCert, type AeatCert } from "./provisioning-
 
 // PGlite, not real Postgres: this suite exercises the SHAPE validator and the seal ROUND-TRIP (write
 // then read back the three fields), never RLS DENIAL as the deployment role — so the lighter target
-// applies (CLAUDE.md §4). `seedTenant` inserts the FK target row and `withTenant` sets `app.tenant_id`
+// applies (CLAUDE.md §4). `seedTenant` inserts the FK target row and `withTransaction` sets `app.tenant_id`
 // exactly as production does; the same pattern this package's `aeat-transport.test.ts` seals under.
 const suite = usePgliteDb({
   migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS],
@@ -47,7 +47,7 @@ describe("sealAeatSecret", () => {
 
     await sealAeatSecret({ db: suite.db, ring }, tenant, cert);
 
-    const readBack = await withTenant(suite.db, tenant, (tx) =>
+    const readBack = await withTransaction(suite.db, (tx) =>
       getCredential(tx, ring, { tenantId: tenant, purpose: "fiscal.aeat" }),
     );
     expect(readBack).toEqual({
@@ -73,7 +73,7 @@ describe("sealAeatSecret", () => {
     );
 
     // Nothing was written — a read finds no row.
-    const missing = await withTenant(suite.db, tenant, (tx) =>
+    const missing = await withTransaction(suite.db, (tx) =>
       getCredential(tx, ring, { tenantId: tenant, purpose: "fiscal.aeat" }),
     ).catch((e: unknown) => e);
     expect(isAppError(missing) && missing.code).toBe("credentials.missing");
@@ -104,7 +104,7 @@ describe("sealAeatSecret", () => {
       "pfxBase64",
     );
 
-    const missing = await withTenant(suite.db, tenant, (tx) =>
+    const missing = await withTransaction(suite.db, (tx) =>
       getCredential(tx, ring, { tenantId: tenant, purpose: "fiscal.aeat" }),
     ).catch((e: unknown) => e);
     expect(isAppError(missing) && missing.code).toBe("credentials.missing");
@@ -120,7 +120,7 @@ describe("sealAeatSecret", () => {
 
     await sealAeatSecret({ db: suite.db, ring }, tenant, cert);
 
-    const readBack = await withTenant(suite.db, tenant, (tx) =>
+    const readBack = await withTransaction(suite.db, (tx) =>
       getCredential(tx, ring, { tenantId: tenant, purpose: "fiscal.aeat" }),
     );
     expect(readBack.pfxBase64).toBe("aGVsbG8=");
@@ -137,7 +137,7 @@ describe("sealAeatSecret", () => {
       "aeatCert",
     );
 
-    const missing = await withTenant(suite.db, tenant, (tx) =>
+    const missing = await withTransaction(suite.db, (tx) =>
       getCredential(tx, ring, { tenantId: tenant, purpose: "fiscal.aeat" }),
     ).catch((e: unknown) => e);
     expect(isAppError(missing) && missing.code).toBe("credentials.missing");

@@ -10,7 +10,7 @@ import {
   printJobs,
   sales,
   tills,
-  withTenant,
+  withTransaction,
 } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import {
@@ -155,7 +155,7 @@ async function setupVenue(): Promise<{ cfg: TillConfig; each: AvailableProduct }
   );
 
   const cfg = tillConfigFromVenue(venue);
-  const available = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  const available = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const cat = await createCatalogue(tx, cfg.tenantId, { name: "Delicatessen" });
     const bebidas = await createCategory(tx, cfg.tenantId, { name: { [LOCALE]: "Bebidas" } });
@@ -185,7 +185,7 @@ async function makePrinter(
   cfg: TillConfig,
   { active = true, transport = "cloud_poll" as "cloud_poll" | "network_tcp" } = {},
 ): Promise<string> {
-  return withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const { id } = await createPrinter(
       tx,
@@ -205,7 +205,7 @@ async function configureReceipt(
   cfg: TillConfig,
   opts: { mode?: "auto" | "on_request" | "never"; printerId?: string | null },
 ): Promise<void> {
-  await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     if (opts.mode !== undefined) {
       await tx
@@ -225,7 +225,7 @@ async function configureReceipt(
 async function printJobsFor(
   cfg: TillConfig,
 ): Promise<{ printerId: string; status: string; payload: Buffer }[]> {
-  return withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     return tx
       .select({
@@ -241,7 +241,7 @@ async function printJobsFor(
 async function drawerOpensFor(
   cfg: TillConfig,
 ): Promise<{ reason: string; saleId: string | null; personId: string; tillId: string }[]> {
-  return withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     return tx
       .select({
@@ -256,7 +256,7 @@ async function drawerOpensFor(
 }
 
 async function registroCount(cfg: TillConfig): Promise<number> {
-  return withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const rows = await tx
       .select()
@@ -269,7 +269,7 @@ async function registroCount(cfg: TillConfig): Promise<number> {
 /** The id of the tenant's single filed sale — each test provisions its own tenant, so there is exactly
  *  one — for pinning the `drawer_opens.sale_id` back-reference the helper wires. */
 async function onlySaleId(cfg: TillConfig): Promise<string> {
-  return withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const rows = await tx
       .select({ id: sales.id })
@@ -314,7 +314,7 @@ describe("receipt grouping after table changes", () => {
       const cfg: TillConfig = { ...base.cfg, orderFlow };
       const printerId = await makePrinter(cfg);
       await configureReceipt(cfg, { mode: "auto", printerId });
-      const { tableId, tabId } = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+      const { tableId, tabId } = await withTransaction(suite.admin, async (tx) => {
         await asAppUser(tx);
         const table = await createTable(tx, cfg, { label: "Terrace 6" });
         const tab = await openTab(tx, cfg, {
@@ -352,7 +352,7 @@ describe("receipt grouping after table changes", () => {
       expect(decodeTicket(new Uint8Array((await printJobsFor(cfg))[0]!.payload))).toContain(
         "Terrace 6",
       );
-      await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+      await withTransaction(suite.admin, async (tx) => {
         await asAppUser(tx);
         await tx
           .update(diningTables)
@@ -373,7 +373,7 @@ describe("receipt grouping after table changes", () => {
         );
         expect(collected.orderLabel).toBe("Terrace 6");
       }
-      await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+      await withTransaction(suite.admin, async (tx) => {
         await asAppUser(tx);
         await openTab(tx, cfg, { tableId });
       });
@@ -505,7 +505,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
     const { cfg, each } = await setupVenue();
     const printerId = await makePrinter(cfg, { transport: "network_tcp" });
     await configureReceipt(cfg, { mode: "auto", printerId });
-    await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       await tx.execute(sql`
         insert into tenant_receipts (tenant_id, receipt)
@@ -683,7 +683,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
     async (mode) => {
       const base = await setupVenue();
       const cfg: TillConfig = { ...base.cfg, orderFlow: "invoice_first" };
-      const deviceTillId = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+      const deviceTillId = await withTransaction(suite.admin, async (tx) => {
         await asAppUser(tx);
         const [till] = await tx
           .insert(tills)
@@ -715,7 +715,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
     async (mode) => {
       const base = await setupVenue();
       // Placement issues the invoice before any payment; collection retains its separate drawer action.
-      await withTenant(suite.admin, base.cfg.tenantId, async (tx) => {
+      await withTransaction(suite.admin, async (tx) => {
         await asAppUser(tx);
         await tx
           .update(locations)

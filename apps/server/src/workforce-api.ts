@@ -7,7 +7,13 @@ import "./errors.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { AppError } from "@waitron/shared";
-import { asAppUser, withTenant, locations, type Database, type Transaction } from "@waitron/db";
+import {
+  asAppUser,
+  withTransaction,
+  locations,
+  type Database,
+  type Transaction,
+} from "@waitron/db";
 import { authorizeManager, type Permission } from "@waitron/identity";
 import {
   WorkforceBackend,
@@ -109,7 +115,7 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
     permission: Permission,
     fn: (tx: Transaction) => Promise<T>,
   ): Promise<T> =>
-    withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+    withTransaction(deps.db, async (tx) => {
       await asAppUser(tx);
       await authorizeManager(tx, { managementSessionId: sessionId, permission });
       return fn(tx);
@@ -226,7 +232,7 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
       // Composed inline rather than via `gated`, because it needs authorizeManager's returned
       // `authorizedBy` for `publishedByPersonId` — the same reason management-api.ts's GET
       // /management-api/receipt composes authorizeManager inline.
-      const breaches = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const breaches = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         const { authorizedBy } = await authorizeManager(tx, {
           managementSessionId: sessionId,
@@ -270,7 +276,7 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
       const swapId = requireUuidParam(c.req.param("swapId"), "SwapId");
       const body = await readJsonBody<{ decision?: unknown }>(c);
       const decision = requireDecision(body.decision);
-      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         const { authorizedBy } = await authorizeManager(tx, {
           managementSessionId: sessionId,
@@ -304,7 +310,7 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
       const absenceId = requireUuidParam(c.req.param("absenceId"), "AbsenceId");
       const body = await readJsonBody<{ decision?: unknown }>(c);
       const decision = requireDecision(body.decision);
-      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         const { authorizedBy } = await authorizeManager(tx, {
           managementSessionId: sessionId,

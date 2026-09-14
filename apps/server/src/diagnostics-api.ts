@@ -1,6 +1,6 @@
 import type { Context, Hono } from "hono";
 import { AppError } from "@waitron/shared";
-import { asAppUser, withTenant, type Database } from "@waitron/db";
+import { asAppUser, withTransaction, type Database } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
 import { createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody } from "@waitron/server-kit";
@@ -15,7 +15,7 @@ import "./errors.js";
 /**
  * Everything the dashboard's diagnostics HTTP routes need. Like `ManagementApiDeps`, the surface reads
  * and writes only the tenant's own records, so it wires no fiscal backend or clock. `cfg.tenantId` is
- * the dashboard's own tenant (provisioning stamped it), scoping the `withTenant` authorize gate below.
+ * the dashboard's own tenant (provisioning stamped it), scoping the `withTransaction` authorize gate below.
  * `reader` reads back the box's rotating log files; `verbosity` is the in-memory controller `boot.ts`
  * built and the logger reads its `current()` at each call (which also owns its own default level).
  */
@@ -55,7 +55,7 @@ const DEFAULT_LIMIT = 200;
  * Mounts the dashboard's diagnostics routes on an existing Hono app: read the recent log tail,
  * read the current verbosity, and raise verbosity for a bounded window. All three are gated
  * behind `diagnostics.view` — `requireManagementSession` first (401 before any DB work), then
- * `authorizeManager` under `withTenant` + `asAppUser` in the database holding this dashboard's
+ * `authorizeManager` under `withTransaction` + `asAppUser` in the database holding this dashboard's
  * tenant, mirroring `mountManagementApi`'s layout-`GET` shape. Each handler is wrapped in the
  * shared `run` boundary so the whole surface maps errors identically.
  */
@@ -68,7 +68,7 @@ export function mountDiagnosticsApi(app: Hono, deps: DiagnosticsApiDeps, log: Lo
   // in exactly one place — the `withVenueAuth` seam management-api.ts uses.
   const authorize = async (c: Context): Promise<void> => {
     const sessionId = requireManagementSession(c);
-    await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+    await withTransaction(deps.db, async (tx) => {
       await asAppUser(tx);
       await authorizeManager(tx, {
         managementSessionId: sessionId,

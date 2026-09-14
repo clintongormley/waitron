@@ -14,7 +14,7 @@ import { uploadImage, readImageBytes } from "@waitron/media";
 import { describe, expect, it } from "vitest";
 import type { WaitronModule } from "@waitron/module";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { applyVenue, planVenue, type VenueRequest } from "@waitron/provisioning";
 import { hashPassword, hashPin } from "@waitron/identity";
@@ -194,7 +194,7 @@ describe("configuration transfer database path", () => {
       db: suite.db,
       modules: ALL_MODULES,
     });
-    await withTenant(suite.db, source.tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       const uploaded = await uploadImage(
         tx,
         source.tenantId,
@@ -356,7 +356,7 @@ describe("configuration transfer database path", () => {
         );
       },
     });
-    await withTenant(suite.db, target.tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       const [metadata] = transferred.tables.media_images!;
       const bytes = await readImageBytes(tx, target.tenantId, metadata!.filename as string);
       expect(bytes?.bytes).toEqual(new Uint8Array([0xff, 0xd8, 0xff, 1]));
@@ -472,7 +472,7 @@ describe("configuration transfer database path", () => {
     ]);
 
     const fiscal = ALL_MODULES.find((module) => module.fiscal?.id === "verifactu")!.fiscal!;
-    await withTenant(suite.db, target.tenantId, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       recordSale(
         tx,
         fiscal.makeBackend({ db: suite.db, clock: systemClock(), environment: "production" }),
@@ -534,7 +534,7 @@ it("transfers every modifier type, remaps default choice ids and preserves menu 
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const original = await withTenant(suite.db, source.tenantId, async (tx) => {
+  const original = await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     const menu = await createCatalogue(tx, tenantId(source.tenantId), { name: "Modifier menu" });
     const section = await createMenuSection(tx, tenantId(source.tenantId), {
@@ -615,7 +615,7 @@ it("transfers every modifier type, remaps default choice ids and preserves menu 
     beforeCommit: (tx, result) =>
       importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
   });
-  await withTenant(suite.db, target.tenantId, async (tx) => {
+  await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     const definitions = await listModifiers(tx, target.tenantId);
     expect(definitions).toHaveLength(3);

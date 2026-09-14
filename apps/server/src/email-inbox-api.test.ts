@@ -2,7 +2,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { hashPassword, hashPin, startManagementSession } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
@@ -51,7 +51,7 @@ async function setupVenue(): Promise<{ tenantId: string; manager: string; staff:
     ),
     { db: suite.admin, modules: ALL_MODULES },
   );
-  const sessions = await withTenant(suite.admin, venue.tenantId, async (tx) => {
+  const sessions = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const start = async (role: "manager" | "staff") => {
       const inserted = await tx.execute<{ id: string }>(sql`

@@ -7,7 +7,7 @@ import { verifyAmendmentChain, type VerifiableAmendment } from "./order-amendmen
 import { captureError, pgErrorCode } from "./testing/errors.js";
 import { useTemplateDb } from "./testing/lifecycle.js";
 import { seedNode } from "./testing/seed.js";
-import { withTenant } from "./tenancy.js";
+import { withTransaction } from "./tenancy.js";
 import { locations, tenants, tills } from "./schema/tenants.js";
 
 // Real Postgres, not PGlite, and not describeEachTarget: the ONE thing here PGlite cannot show is
@@ -49,7 +49,8 @@ async function rollBackAfter(
   tenant: string,
   fn: (tx: Transaction) => Promise<void>,
 ): Promise<void> {
-  await withTenant(admin, tenant, async (tx) => {
+  void tenant;
+  await withTransaction(admin, async (tx) => {
     await fn(tx);
     throw new RollbackSignal();
   }).catch((error: unknown) => {
@@ -108,7 +109,7 @@ describe("order_amendments append helper", () => {
   }
 
   function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
-    return withTenant(suite.admin, TENANT_A, async (tx) => {
+    return withTransaction(suite.admin, async (tx) => {
       await tx.execute(sql`set local role app_user`);
       return fn(tx);
     });

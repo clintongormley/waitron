@@ -6,7 +6,7 @@ import {
   saleSubstitutions,
   saleVoids,
   tenders,
-  withTenant,
+  withTransaction,
 } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import type { NodeId, SaleId, SeriesId, TenantId, TillId } from "@waitron/shared";
@@ -25,7 +25,7 @@ beforeEach(async () => {
 });
 
 function list() {
-  return withTenant(suite.db, tenantId, async (tx) => {
+  return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     return listOutstandingSales(tx, tenantId);
   });
@@ -35,7 +35,7 @@ function list() {
 // sale_settlements row. Tenders first — tenders_reject_post_settlement (WT002) rejects a tender once
 // the settlement row exists.
 async function settleDirectly(saleId: SaleId): Promise<void> {
-  await withTenant(suite.db, tenantId, async (tx) => {
+  await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     await tx.insert(tenders).values({
       tenantId,
@@ -155,7 +155,7 @@ describe("listOutstandingSales", () => {
     const other = await seedTenant(suite.db);
     const theirsId = await seedBareSale(suite.db, other, { total: "40.00", invoiceNumber: 1 });
 
-    // list() runs under the PRIMARY tenant (withTenant + asAppUser), so it must see only its own.
+    // list() runs under the PRIMARY tenant (withTransaction + asAppUser), so it must see only its own.
     const out = await list();
     const ids = out.map((o) => o.saleId);
     expect(ids).toContain(mineId);

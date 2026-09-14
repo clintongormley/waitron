@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { withTenant } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import type { TenantId } from "@waitron/shared";
@@ -38,7 +38,7 @@ const variant = (name: string, unitPrice: string) => ({
   unitPrice,
   available: true,
 });
-const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTenant(fx.db, tenantId, fn);
+const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 
 beforeEach(async () => {
   tenantId = await seedTenant(fx.db);

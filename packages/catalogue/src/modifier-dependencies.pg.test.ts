@@ -5,7 +5,7 @@ import {
   asAppUser,
   optionGroupItems,
   productOptionGroups,
-  withTenant,
+  withTransaction,
   workingOrderLines,
   workingOrders,
   type Database,
@@ -47,7 +47,8 @@ function app<T>(
   tenantId: TenantId,
   action: (tx: Transaction) => Promise<T>,
 ): Promise<T> {
-  return withTenant(db, tenantId, async (tx) => {
+  void tenantId;
+  return withTransaction(db, async (tx) => {
     await asAppUser(tx);
     return action(tx);
   });

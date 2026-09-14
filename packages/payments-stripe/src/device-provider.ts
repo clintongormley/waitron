@@ -7,7 +7,7 @@ import {
   tillId as brandTillId,
 } from "@waitron/shared";
 import type { Decimal, TenantId } from "@waitron/shared";
-import { withTenant } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { workingOrders } from "@waitron/db";
 import { recordIncidentOnce } from "@waitron/core";
@@ -48,7 +48,7 @@ const FORWARD_RETRY_MS = 5 * 60 * 1000;
 export interface StripeOnDeviceProviderOptions {
   client: StripeDeviceClient;
   /** A plain `Database` handle. `collect`/`forward`/`reverse` open their own transactions and scope
-   * each one with `withTenant(db, tenantId, …)`, so nothing is required of the handle itself. */
+   * each one with `withTransaction(db, …)`, so nothing is required of the handle itself. */
   db: Database;
   /** The tenant this provider serves. An on-device provider is a per-till object and a till belongs
    * to exactly one tenant, so the scope is known at construction — which is what lets `forward` and
@@ -120,7 +120,7 @@ export class StripeOnDeviceProvider implements PaymentProvider {
    * unscoped — the failure that made `collect` charge cards without recording them and `forward` a
    * permanent silent no-op under a real role. */
   private inTenant<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
-    return withTenant(this.opts.db, this.opts.tenantId, fn);
+    return withTransaction(this.opts.db, fn);
   }
 
   async collect(params: CollectParams): Promise<PaymentResult> {

@@ -20,7 +20,7 @@ import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
-import { asAppUser, drawerOpens, printJobs, withTenant } from "@waitron/db";
+import { asAppUser, drawerOpens, printJobs, withTransaction } from "@waitron/db";
 import { createPrinter } from "@waitron/printing";
 import {
   decimal,
@@ -156,7 +156,7 @@ async function setupVenue(): Promise<SeededVenue> {
   );
 
   const cfg = tillConfigFromVenue(venue);
-  const available = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  const available = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const cat = await createCatalogue(tx, cfg.tenantId, { name: "Delicatessen" });
     const bebidas = await createCategory(tx, cfg.tenantId, { name: { [LOCALE]: "Bebidas" } });
@@ -266,7 +266,7 @@ async function preparationTicketCount(workingOrderId: string): Promise<number> {
 /** Create a receipt printer (cloud_poll) and point the till at it. `receipt_print_mode` defaults to
  *  `auto`, so a filed sale auto-enqueues its receipt via the print-on-sale hook. */
 async function makeReceiptPrinter(cfg: TillConfig): Promise<string> {
-  return withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const { id } = await createPrinter(
       tx,
@@ -280,7 +280,8 @@ async function makeReceiptPrinter(cfg: TillConfig): Promise<string> {
 
 /** The receipt payloads enqueued to `printerId` (bytea → Buffer via the customType). */
 async function printJobPayloads(cfg: TillConfig, printerId: string): Promise<Buffer[]> {
-  return withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  void cfg;
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const rows = await tx
       .select({ payload: printJobs.payload })
@@ -292,7 +293,8 @@ async function printJobPayloads(cfg: TillConfig, printerId: string): Promise<Buf
 
 /** The count of `drawer_opens` rows for this tenant — an integrated card sale records NONE. */
 async function drawerOpenCount(cfg: TillConfig): Promise<number> {
-  return withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  void cfg;
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const rows = await tx.select().from(drawerOpens);
     return rows.length;
@@ -329,7 +331,7 @@ async function defaultStationId(cfg: TillConfig): Promise<string> {
 /** The order ids on a station's queue (`listStationQueue`), read under the tenant + `app_user` scope the
  *  till runs it in. A COLLECTED order (`collected_at IS NOT NULL`) drops out — the read Task 6 wires. */
 async function stationQueueOrderIds(cfg: TillConfig, stationId: string): Promise<string[]> {
-  return withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const groups = await listStationQueue(tx, cfg, stationId);
     return groups.map((g) => g.orderId);
@@ -405,7 +407,7 @@ async function saleIdFor(workingOrderId: string): Promise<string> {
 async function outstandingSalesFor(
   cfg: TillConfig,
 ): Promise<{ saleId: string; amountDue: string }[]> {
-  return withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const rows = await listOutstandingSales(tx, cfg.tenantId);
     return rows.map((r) => ({ saleId: String(r.saleId), amountDue: String(r.amountDue) }));
@@ -855,7 +857,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     const { cfg, cafe } = await setupVenue();
     await FakeFiscalBackend.install(suite.admin);
     const fake = new FakeFiscalBackend(suite.admin);
-    await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       await fake.registerNode(tx, cfg.nodeId, { tenantId: cfg.tenantId });
     });
@@ -913,7 +915,7 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
     // per provider, and the shared container accumulates every test's rows, so both refs are made
     // unique per seed (mirrors `nextNif`'s reason for per-venue NIFs).
     const externalRef = `pi_lost_${randomUUID()}`;
-    await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       await createOpenOrder(tx, cfg, id, [{ productId: cafe.id, quantity }], null);
       await insertCapturedPayment(tx, {
@@ -980,7 +982,7 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
         lines: [{ productId: cafe.id, quantity: "1" }],
       });
       await placeOrder({ db: suite.admin, backend, clock }, cfg, id, OPERATOR, cfg.tillId);
-      await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+      await withTransaction(suite.admin, async (tx) => {
         await asAppUser(tx);
         await insertCapturedPayment(tx, {
           tenantId: cfg.tenantId,
@@ -1343,7 +1345,7 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
       capturedAmount: string,
     ): Promise<string> {
       const externalRef = `pi_lost_${randomUUID()}`;
-      await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+      await withTransaction(suite.admin, async (tx) => {
         await asAppUser(tx);
         await insertCapturedPayment(tx, {
           tenantId: cfg.tenantId,

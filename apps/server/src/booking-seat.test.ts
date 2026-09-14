@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
@@ -71,7 +71,7 @@ async function setupVenue(): Promise<Venue> {
     tipsEnabled: false,
     orderFlow: "prepay",
   };
-  const managerSid = await withTenant(db, tenantId, async (tx) => {
+  const managerSid = await withTransaction(db, async (tx) => {
     await asAppUser(tx);
     const mgr = await tx.execute<{ id: string }>(sql`
       insert into persons (tenant_id, display_name, pin_hash, role)
@@ -110,7 +110,7 @@ describe("bookings seat route → real openTab", () => {
     const app = mountApp(v.ctx);
 
     // A table to reserve, and a `booked` reservation on it (the seat reuses the booking's own table).
-    const tableId = await withTenant(db, v.tillCfg.tenantId, async (tx: Transaction) => {
+    const tableId = await withTransaction(db, async (tx: Transaction) => {
       await asAppUser(tx);
       const { id } = await createTable(tx, v.tillCfg, { label: "7" });
       return id;
@@ -132,7 +132,7 @@ describe("bookings seat route → real openTab", () => {
 
     // The booking is seated with the REAL tab id, and that id names a real OPEN working_orders row —
     // proving the real openTab (not a fake) ran through the seat.
-    await withTenant(db, v.tillCfg.tenantId, async (tx) => {
+    await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       const booking = await tx.execute<{ status: string; tab_id: string | null }>(
         sql`select status, tab_id from bookings where id = ${bookingId}`,

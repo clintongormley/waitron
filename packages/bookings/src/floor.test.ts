@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { asAppUser, DEFAULT_TIME_ZONE, withTenant } from "@waitron/db";
+import { asAppUser, DEFAULT_TIME_ZONE, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -64,7 +64,7 @@ async function insertBooking(
 ): Promise<void> {
   const tenant = fields.tenantId ?? v.tenantId;
   const location = fields.locationId ?? v.locationId;
-  await withTenant(db, tenant, async (tx) => {
+  await withTransaction(db, async (tx) => {
     await asAppUser(tx);
     await tx.execute(sql`
       insert into bookings
@@ -81,7 +81,7 @@ function annotate(
   now: Date,
   tableIds: string[],
 ): Promise<Map<string, { reservedTime: string | null }>> {
-  return withTenant(db, v.tenantId, async (tx: Transaction) => {
+  return withTransaction(db, async (tx: Transaction) => {
     await asAppUser(tx);
     return BOOKINGS_FLOOR_ANNOTATIONS.annotate(tx, v, now, tableIds);
   });
@@ -243,7 +243,7 @@ describe("BOOKINGS_FLOOR_ANNOTATIONS.annotate", () => {
   });
 
   it("scopes to cfg.tenantId — another tenant's booking on its own table is not surfaced (CLAUDE.md §3)", async () => {
-    // RLS was dropped (#255), so `withTenant` no longer isolates SELECTs — the annotator MUST filter
+    // RLS was dropped (#255), so `withTransaction` no longer isolates SELECTs — the annotator MUST filter
     // `tenantId` itself. Scoped as tenant `v` but asked for BOTH tenants' table ids: `v`'s surfaces its
     // booking; the OTHER tenant's table (its own `booked` row today) stays null. Deletion-provable —
     // dropping the `tenantId` filter would leak the other tenant's booking through the shared DB.

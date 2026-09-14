@@ -1,7 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, diningTables, withTenant, workingOrderLines, workingOrders } from "@waitron/db";
+import {
+  asAppUser,
+  diningTables,
+  withTransaction,
+  workingOrderLines,
+  workingOrders,
+} from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -79,7 +85,7 @@ async function setupVenue(): Promise<Seeded> {
     tipsEnabled: false,
     orderFlow: "prepay",
   };
-  const seeded = await withTenant(db, tenantId, async (tx) => {
+  const seeded = await withTransaction(db, async (tx) => {
     await asAppUser(tx);
     const cat = await createCatalogue(tx, tenantId, { name: "Carta" });
     const bebidas = await createCategory(tx, tenantId, { name: { en: "Bebidas" } });
@@ -120,7 +126,8 @@ async function setupVenue(): Promise<Seeded> {
  * Run fn in one transaction as app_user.
  */
 function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  return withTenant(db, cfg.tenantId, async (tx) => {
+  void cfg;
+  return withTransaction(db, async (tx) => {
     await asAppUser(tx);
     return fn(tx);
   });

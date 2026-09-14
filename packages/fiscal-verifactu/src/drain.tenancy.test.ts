@@ -5,7 +5,7 @@ import { AppError } from "@waitron/shared";
 import type { TenantId } from "@waitron/shared";
 import type { VerifactuClient } from "@waitron/verifactu";
 import { createFakeAeat } from "@waitron/verifactu/src/testing/fake-aeat.js";
-import { createPgliteDb, runMigrations, withTenant } from "@waitron/db";
+import { createPgliteDb, runMigrations, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { DEFAULT_SKIP_RETRY_MS, drain } from "./drain.js";
 import { seedPendingEnvios } from "../test/drain-fixtures.js";
@@ -114,7 +114,7 @@ describe("drain resolves one client per tenant", () => {
     // `drainTenant` ever runs for it — before trusting what the number proves. Querying the
     // WORKING tenant's own envío row directly instead proves, with no such detour, that THIS
     // tenant's due work reached AEAT and was accepted — the whole point of the containment.
-    const workingRows = await withTenant(pg.db, working, (tx) =>
+    const workingRows = await withTransaction(pg.db, (tx) =>
       tx.execute<{ estado: string }>(sql`select estado from envios where tenant_id = ${working}`),
     );
     expect(workingRows.rows.map((r) => r.estado)).toEqual(["aceptado"]);
@@ -198,7 +198,7 @@ describe("drain resolves one client per tenant", () => {
     // on that catch), so it can never reach this outer one either way, wrapped narrowly or not.
     //
     // What DOES escape `drainTenant` is its very FIRST statement, `recoverStaleClaims` (via
-    // `withTenant` -> `db.transaction`), which runs before that inner containment exists at all.
+    // `withTransaction` -> `db.transaction`), which runs before that inner containment exists at all.
     // Closing the database from inside a SUCCEEDING `resolveClient` — after `tenantsWithWork`'s
     // own enumeration has already completed and captured this tenant — makes that first statement
     // throw for real, with nothing inside `drainTenant` positioned to catch it.

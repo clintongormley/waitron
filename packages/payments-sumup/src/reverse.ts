@@ -1,6 +1,6 @@
 import { AppError, decimal } from "@waitron/shared";
 import type { Decimal, TenantId } from "@waitron/shared";
-import { withTenant } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type { PaymentResult } from "@waitron/payments";
 import {
@@ -16,7 +16,7 @@ import { SUMUP_PROVIDER } from "./client.js";
 /**
  * void / refund / partialRefund via SumUp's refund endpoint (there is no separate void: spec §5,
  * confirmed against SumUp's OpenAPI file 2026-09-10). T1: find + read-only reversibility pre-check
- * inside `withTenant`, refusing a payment of another tenant with the same `payment.not_found` as an
+ * inside `withTransaction`, refusing a payment of another tenant with the same `payment.not_found` as an
  * absent one; network: the refund, OUTSIDE every transaction; T2: `recordVoid`/`recordRefund`, or
  * `recordFailedRefund` when SumUp refused (the row's state is untouched). The same T1/T2 shape as
  * `reverseViaStripe`; not shared with it because one vendor's package must not import another's —
@@ -31,7 +31,7 @@ export async function reverseViaSumUp(
   { tenantId }: { tenantId: TenantId; nodeId: string },
 ): Promise<PaymentResult> {
   const inTransaction = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> =>
-    withTenant(db, tenantId, fn);
+    withTransaction(db, fn);
   const found = await inTransaction(async (tx) => {
     const f = await findPaymentByRef(tx, SUMUP_PROVIDER, ref);
     if (

@@ -13,7 +13,7 @@ import {
   type NodeId,
   type TenantId,
 } from "@waitron/shared";
-import { asAppUser, tenants, withTenant, type Database, type Transaction } from "@waitron/db";
+import { asAppUser, tenants, withTransaction, type Database, type Transaction } from "@waitron/db";
 import {
   computeDailyClose,
   computeOverdueOrders,
@@ -164,7 +164,7 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
     permission: Permission,
     fn: (tx: Transaction) => Promise<T>,
   ): Promise<T> =>
-    withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+    withTransaction(deps.db, async (tx) => {
       await asAppUser(tx);
       await authorizeManager(tx, { managementSessionId: sessionId, permission });
       return fn(tx);
@@ -209,7 +209,7 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
         /* v8 ignore stop */
         // `VatReturnInput.tenantId` is the branded `TenantId`, but `cfg.tenantId` is a plain string
         // (the deps shape the siblings share). Brand it here — the demo's `brandTenantId(...)` idiom —
-        // so the read is typed; `withTenant` above still takes the plain string, as purchasing-api does.
+        // so the read is typed; `withTransaction` above still takes the plain string, as purchasing-api does.
         const vatReturn = await computeVatReturn(tx, {
           tenantId: brandTenantId(deps.cfg.tenantId),
           year,

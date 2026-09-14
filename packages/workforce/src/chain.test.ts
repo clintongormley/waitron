@@ -24,7 +24,7 @@ import { seedLocation, seedPerson } from "../test/fixtures.js";
 // backend, so it cannot test contention, see chain.pglite-cannot-test-contention.test.ts. What the
 // app role may do on `workforce_chains` is the privilege matrix's
 // (`packages/fiscal-verifactu/src/privileges.expected.ts`, `workforce_chains: "SIU"`), not this
-// suite's. PGlite connects as a superuser holding every grant, so no withTenant/asAppUser wrapper is
+// suite's. PGlite connects as a superuser holding every grant, so no withTransaction/asAppUser wrapper is
 // needed here.
 const pg = usePgliteDb({
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS],

@@ -1,6 +1,6 @@
 import type { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
-import { asAppUser, withTenant, type Database } from "@waitron/db";
+import { asAppUser, withTransaction, type Database } from "@waitron/db";
 import { AppError, type ResourceChange, type ResourceIdentity } from "@waitron/shared";
 import { resolveManagementSession } from "@waitron/identity";
 import { createErrorBoundary, requireManagementSession, codeOf } from "@waitron/server-kit";
@@ -83,7 +83,7 @@ export function mountLiveApi(
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const authenticate = async (): Promise<void> => {
-        await withTenant(deps.db, deps.tenantId, async (tx) => {
+        await withTransaction(deps.db, async (tx) => {
           await asAppUser(tx);
           const session = await resolveManagementSession(tx, sessionId, { touch: false });
           if (session.tenantId !== deps.tenantId)

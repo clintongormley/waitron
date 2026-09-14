@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { hashPassword, hashPin, startManagementSession } from "@waitron/identity";
 import { assignCatalogueToLocation, listAvailableProducts } from "@waitron/catalogue";
@@ -81,7 +81,7 @@ async function setupVenue(): Promise<Venue> {
     { db: suite.admin, modules: ALL_MODULES },
   );
 
-  const { managerSid, staffSid } = await withTenant(suite.admin, venue.tenantId, async (tx) => {
+  const { managerSid, staffSid } = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const mgr = await tx.execute<{ id: string }>(sql`
       insert into persons (tenant_id, display_name, pin_hash, role)
@@ -336,7 +336,7 @@ describe("Catalogue API over real Postgres (option groups, gates, tenant-consist
     // attach it to a product, then the OPERATOR till read (`listAvailableProducts`, location-scoped)
     // surfaces the same group + active items — the authoring surface and the sale surface agree. Runs
     // on real Postgres because `listAvailableProducts` reads the location's accessible catalogue, which
-    // provisioning set up here; the assign is via `assignCatalogueToLocation` under withTenant+asAppUser.
+    // provisioning set up here; the assign is via `assignCatalogueToLocation` under withTransaction+asAppUser.
     const v = await setupVenue();
     const app = mountApp(v.tenantId);
 
@@ -390,7 +390,7 @@ describe("Catalogue API over real Postgres (option groups, gates, tenant-consist
     expect((await attached.json()) as string[]).toEqual([groupId]);
 
     // Make the catalogue sellable at the location, then the OPERATOR till read reflects the group.
-    const tillView = await withTenant(suite.admin, v.tenantId, async (tx) => {
+    const tillView = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       await assignCatalogueToLocation(tx, v.locationId, catId);
       return listAvailableProducts(tx, v.locationId);

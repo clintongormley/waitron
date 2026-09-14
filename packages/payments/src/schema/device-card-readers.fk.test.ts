@@ -1,6 +1,6 @@
 import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, captureError, pgErrorCode, withTenant } from "@waitron/db";
+import { asAppUser, captureError, pgErrorCode, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { freshNif } from "../../test/seed.js";
@@ -55,12 +55,12 @@ describe("device_card_readers", () => {
     const db = postgres.admin;
     const { tenantId, deviceId, readerId } = await seedDeviceAndReader(db);
 
-    await withTenant(db, tenantId, async (tx) => {
+    await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       await tx.insert(deviceCardReaders).values({ tenantId, deviceId, readerId });
     });
 
-    const stored = await withTenant(db, tenantId, async (tx) => {
+    const stored = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       return tx
         .select()
@@ -74,7 +74,7 @@ describe("device_card_readers", () => {
     expect(stored[0]!.tenantId).toBe(tenantId);
 
     // The mapping is mutable — DELETE clears the device's default (unlike an append-only ledger).
-    await withTenant(db, tenantId, async (tx) => {
+    await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       await tx
         .delete(deviceCardReaders)
@@ -82,7 +82,7 @@ describe("device_card_readers", () => {
           and(eq(deviceCardReaders.tenantId, tenantId), eq(deviceCardReaders.deviceId, deviceId)),
         );
     });
-    const afterDelete = await withTenant(db, tenantId, async (tx) => {
+    const afterDelete = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       return tx
         .select()
@@ -107,13 +107,13 @@ describe("device_card_readers", () => {
       })
       .returning({ id: cardReaders.id });
 
-    await withTenant(db, tenantId, async (tx) => {
+    await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       await tx.insert(deviceCardReaders).values({ tenantId, deviceId, readerId });
     });
 
     const dup = await captureError(() =>
-      withTenant(db, tenantId, async (tx) => {
+      withTransaction(db, async (tx) => {
         await asAppUser(tx);
         await tx.insert(deviceCardReaders).values({ tenantId, deviceId, readerId: reader2[0]!.id });
       }),
@@ -127,7 +127,7 @@ describe("device_card_readers", () => {
     const b = await seedDeviceAndReader(db);
 
     const e = await captureError(() =>
-      withTenant(db, a.tenantId, async (tx) => {
+      withTransaction(db, async (tx) => {
         await asAppUser(tx);
         await tx
           .insert(deviceCardReaders)
@@ -143,7 +143,7 @@ describe("device_card_readers", () => {
     const b = await seedDeviceAndReader(db);
 
     const e = await captureError(() =>
-      withTenant(db, a.tenantId, async (tx) => {
+      withTransaction(db, async (tx) => {
         await asAppUser(tx);
         await tx
           .insert(deviceCardReaders)

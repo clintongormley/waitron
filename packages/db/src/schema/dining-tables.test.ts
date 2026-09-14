@@ -3,7 +3,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import type { Transaction } from "../client.js";
 import { useTemplateDb } from "../testing/lifecycle.js";
 import { asAppUser } from "../testing/roles.js";
-import { withTenant } from "../tenancy.js";
+import { withTransaction } from "../tenancy.js";
 import { diningTables } from "./dining-tables.js";
 import { locations, tenants } from "./tenants.js";
 
@@ -35,7 +35,8 @@ describe("dining_tables placement columns", () => {
   });
 
   function asApp<T>(tenant: string, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-    return withTenant(suite.admin, tenant, async (tx) => {
+    void tenant;
+    return withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return fn(tx);
     });

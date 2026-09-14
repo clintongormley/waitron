@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { withTenant } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import {
   decimal,
@@ -87,7 +87,7 @@ describe("the sumup cloud adapter against a real database", () => {
     const b = await seedWorkingOrder(suite.admin, freshNif());
     const fake = new FakeSumUp();
     for (const t of [a, b]) {
-      await withTenant(suite.admin, t.tenantId, (tx) =>
+      await withTransaction(suite.admin, (tx) =>
         insertAttempting(tx, {
           tenantId: t.tenantId,
           workingOrderId: t.workingOrderId,
@@ -116,7 +116,7 @@ describe("the sumup cloud adapter against a real database", () => {
       await probe.close();
     }
     const stateOf = async (t: typeof a) => {
-      const r = await withTenant(suite.admin, t.tenantId, (tx) =>
+      const r = await withTransaction(suite.admin, (tx) =>
         getPaymentByRef(tx, {
           tenantId: t.tenantId,
           provider: "sumup",

@@ -6,7 +6,7 @@ import {
   optionGroups,
   optionGroupItems,
   productOptionGroups,
-  withTenant,
+  withTransaction,
   workingOrders,
   workingOrderLines,
   type Transaction,
@@ -35,7 +35,8 @@ import { seedLegacySellingUnits, seedVenue } from "../test/fixtures.js";
 // Grants and attachment races need independent, non-superuser PostgreSQL connections.
 const suite = useTemplateDb({ template: "core" });
 async function app<T>(tenantId: string, action: (tx: Transaction) => Promise<T>) {
-  return withTenant(suite.admin, tenantId, async (tx) => {
+  void tenantId;
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     return action(tx);
   });
@@ -195,7 +196,7 @@ it("serializes deletion behind an attachment write, then cascades the committed 
   });
   const pid = (await deleter.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`)).rows[0]!
     .pid;
-  const writing = withTenant(writer, tenant, async (tx) => {
+  const writing = withTransaction(writer, async (tx) => {
     await asAppUser(tx);
     await setProductOptionGroups(tx, brandTenantId(tenant), product.id, [definition.id]);
     ready();
@@ -203,7 +204,7 @@ it("serializes deletion behind an attachment write, then cascades the committed 
   });
   try {
     await attached;
-    const deleting = withTenant(deleter, tenant, async (tx) => {
+    const deleting = withTransaction(deleter, async (tx) => {
       await asAppUser(tx);
       await deleteModifier(tx, tenant, definition.id);
     }).catch((error: unknown) => error);

@@ -14,7 +14,7 @@ import {
   readStandardSeriesIdTx,
   retireNodeSeriesTx,
   insertNodeSeriesTx,
-  withTenant,
+  withTransaction,
 } from "./index.js";
 import { invoiceSeries } from "./schema/series.js";
 import { captureError } from "./testing/errors.js";
@@ -60,7 +60,7 @@ describe("reserved-identity accessors", () => {
   });
 
   it("insertReservedNodeTx persists a dormant node with its public key + endorsement", async () => {
-    await withTenant(suite.db, tenantId, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       insertReservedNodeTx(tx, {
         id: CLOUD_NODE,
         tenantId,
@@ -84,13 +84,13 @@ describe("reserved-identity accessors", () => {
   });
 
   it("insertReservedSeriesTx inserts the reserved series at next_number 1", async () => {
-    await withTenant(suite.db, tenantId, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       insertReservedSeriesTx(tx, [
         { tenantId, nodeId: CLOUD_NODE, code: "FA-3", purpose: "standard" },
         { tenantId, nodeId: CLOUD_NODE, code: "RF-3", purpose: "rectificative" },
       ]),
     );
-    const rows = await withTenant(suite.db, tenantId, (tx) =>
+    const rows = await withTransaction(suite.db, (tx) =>
       tx.execute<{ code: string; next_number: number }>(
         sql`select code, next_number from invoice_series where node_id = ${CLOUD_NODE} order by code`,
       ),
@@ -105,7 +105,7 @@ describe("reserved-identity accessors", () => {
     // A node with both purposes reserved (R2's real shape): the standard series is the one R3b's
     // promote points config.till.seriesId at, never the rectificative sitting beside it.
     const node = await seedNode(suite.db, tenantId, locationId);
-    await withTenant(suite.db, tenantId, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       insertReservedSeriesTx(tx, [
         { tenantId, nodeId: node, code: "F-42", purpose: "standard" },
         { tenantId, nodeId: node, code: "R-42", purpose: "rectificative" },
@@ -113,7 +113,7 @@ describe("reserved-identity accessors", () => {
     );
     const id = await readStandardSeriesId(suite.db, tenantId, node);
     // it is a real series row, of purpose 'standard'
-    const [row] = await withTenant(suite.db, tenantId, (tx) =>
+    const [row] = await withTransaction(suite.db, (tx) =>
       tx
         .select({ code: invoiceSeries.code, purpose: invoiceSeries.purpose })
         .from(invoiceSeries)
@@ -127,17 +127,17 @@ describe("reserved-identity accessors", () => {
     // mismatched pair itself.
     const node = await seedNode(suite.db, tenantId, locationId);
     const otherTenant = await seedTenant(suite.db);
-    await withTenant(suite.db, tenantId, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       insertReservedSeriesTx(tx, [{ tenantId, nodeId: node, code: "FA", purpose: "standard" }]),
     );
     await expect(
-      withTenant(suite.db, tenantId, (tx) => readStandardSeriesIdTx(tx, otherTenant, node)),
+      withTransaction(suite.db, (tx) => readStandardSeriesIdTx(tx, otherTenant, node)),
     ).rejects.toMatchObject({
       code: "series.no_standard_for_node",
       params: { tenantId: otherTenant, nodeId: node },
     });
     await expect(
-      withTenant(suite.db, tenantId, (tx) => readStandardSeriesIdTx(tx, tenantId, node)),
+      withTransaction(suite.db, (tx) => readStandardSeriesIdTx(tx, tenantId, node)),
     ).resolves.toEqual(expect.any(String));
   });
 
@@ -149,7 +149,7 @@ describe("reserved-identity accessors", () => {
 
   it("readStandardSeriesId ignores a RETIRED standard series (a cold restore retires the old one)", async () => {
     const node = await seedNode(suite.db, tenantId, locationId);
-    await withTenant(suite.db, tenantId, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       insertReservedSeriesTx(tx, [
         { tenantId, nodeId: node, code: "FA", purpose: "standard" },
         { tenantId, nodeId: node, code: "FA-210441234", purpose: "standard" },
@@ -169,7 +169,7 @@ describe("reserved-identity accessors", () => {
 
   it("readStandardSeriesId is LOUD on two live standard series (a data-integrity corruption)", async () => {
     const node = await seedNode(suite.db, tenantId, locationId);
-    await withTenant(suite.db, tenantId, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       insertReservedSeriesTx(tx, [
         { tenantId, nodeId: node, code: "X1", purpose: "standard" },
         { tenantId, nodeId: node, code: "X2", purpose: "standard" },
@@ -183,16 +183,14 @@ describe("reserved-identity accessors", () => {
   it("retireNodeSeriesTx retires every LIVE series of the node and only those", async () => {
     const node = await seedNode(suite.db, tenantId, locationId);
     const other = await seedNode(suite.db, tenantId, locationId);
-    await withTenant(suite.db, tenantId, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       insertReservedSeriesTx(tx, [
         { tenantId, nodeId: node, code: "FA", purpose: "standard" },
         { tenantId, nodeId: node, code: "RE", purpose: "rectificative" },
         { tenantId, nodeId: other, code: "FA", purpose: "standard" },
       ]),
     );
-    const retired = await withTenant(suite.db, tenantId, (tx) =>
-      retireNodeSeriesTx(tx, tenantId, node),
-    );
+    const retired = await withTransaction(suite.db, (tx) => retireNodeSeriesTx(tx, tenantId, node));
     expect(retired).toBe(2);
     const rows = await suite.db
       .select({ nodeId: invoiceSeries.nodeId, retiredAt: invoiceSeries.retiredAt })
@@ -201,15 +199,13 @@ describe("reserved-identity accessors", () => {
     expect(rows.filter((r) => r.nodeId === node).every((r) => r.retiredAt !== null)).toBe(true);
     expect(rows.filter((r) => r.nodeId === other).every((r) => r.retiredAt === null)).toBe(true);
     // Idempotent on the already-retired: nothing left to retire.
-    expect(
-      await withTenant(suite.db, tenantId, (tx) => retireNodeSeriesTx(tx, tenantId, node)),
-    ).toBe(0);
+    expect(await withTransaction(suite.db, (tx) => retireNodeSeriesTx(tx, tenantId, node))).toBe(0);
   });
 
   it("insertNodeSeriesTx refuses duplicate codes within a batch with a domain error", async () => {
     const node = await seedNode(suite.db, tenantId, locationId);
     await expect(
-      withTenant(suite.db, tenantId, (tx) =>
+      withTransaction(suite.db, (tx) =>
         insertNodeSeriesTx(tx, tenantId, node, [
           { code: "FA-7", purpose: "standard" },
           { code: "FA-7", purpose: "rectificative" },
@@ -220,11 +216,11 @@ describe("reserved-identity accessors", () => {
 
   it("insertNodeSeriesTx inserts at next_number 1 and refuses a code the node holds, live OR retired", async () => {
     const node = await seedNode(suite.db, tenantId, locationId);
-    await withTenant(suite.db, tenantId, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       insertReservedSeriesTx(tx, [{ tenantId, nodeId: node, code: "FA", purpose: "standard" }]),
     );
-    await withTenant(suite.db, tenantId, (tx) => retireNodeSeriesTx(tx, tenantId, node));
-    await withTenant(suite.db, tenantId, (tx) =>
+    await withTransaction(suite.db, (tx) => retireNodeSeriesTx(tx, tenantId, node));
+    await withTransaction(suite.db, (tx) =>
       insertNodeSeriesTx(tx, tenantId, node, [{ code: "FA-7", purpose: "standard" }]),
     );
     const [fresh] = await suite.db
@@ -235,7 +231,7 @@ describe("reserved-identity accessors", () => {
     // Both the retired FA and the live FA-7 reserve their codes.
     for (const code of ["FA", "FA-7"]) {
       const err = await captureError(() =>
-        withTenant(suite.db, tenantId, (tx) =>
+        withTransaction(suite.db, (tx) =>
           insertNodeSeriesTx(tx, tenantId, node, [{ code, purpose: "standard" }]),
         ),
       );
@@ -243,6 +239,6 @@ describe("reserved-identity accessors", () => {
       expect(isAppError(err) && err.params).toEqual({ code });
     }
     // An empty list is a no-op, not an INSERT with no rows.
-    await withTenant(suite.db, tenantId, (tx) => insertNodeSeriesTx(tx, tenantId, node, []));
+    await withTransaction(suite.db, (tx) => insertNodeSeriesTx(tx, tenantId, node, []));
   });
 });

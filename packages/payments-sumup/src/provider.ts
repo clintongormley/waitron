@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { AppError, tenantId as brandTenantId, tillId as brandTillId } from "@waitron/shared";
 import type { Decimal, TenantId } from "@waitron/shared";
-import { withTenant } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type {
   CardDetails,
@@ -42,7 +42,7 @@ export const NOT_FOUND_GRACE_MS = 15 * 60_000;
 
 export interface SumUpCloudProviderOptions {
   client: SumUpClient;
-  /** A plain `Database` handle; every phase is scoped with `withTenant(db, tenantId, …)`. */
+  /** A plain `Database` handle; every phase is scoped with `withTransaction(db, …)`. */
   db: Database;
   /** The tenant this provider serves — a per-till object, one tenant, known at construction. */
   tenantId: TenantId;
@@ -129,7 +129,7 @@ export class SumUpCloudProvider implements PaymentProvider {
   }
 
   private inTenant<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
-    return withTenant(this.opts.db, this.opts.tenantId, fn);
+    return withTransaction(this.opts.db, fn);
   }
 
   async collect(params: CollectParams): Promise<PaymentResult> {

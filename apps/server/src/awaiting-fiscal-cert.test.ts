@@ -11,7 +11,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, withTenant, type Database } from "@waitron/db";
+import { asAppUser, withTransaction, type Database } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { loadKeyRing } from "@waitron/credentials";
 import { hashPassword, hashPin } from "@waitron/identity";
@@ -50,7 +50,7 @@ afterAll(async () => {
 /** Insert a manager (with a dashboard login email) into a seeded tenant so the box-status route's
  * `authorizeManager("system.manage")` gate resolves — `app_user` holds INSERT on `persons`. */
 async function seedManager(tenantId: string): Promise<void> {
-  await withTenant(suite.admin, tenantId, async (tx) => {
+  await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     await tx.execute(sql`
       insert into persons (tenant_id, display_name, email, pin_hash, password_hash, role)

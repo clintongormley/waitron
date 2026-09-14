@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, asAppUser, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, hashPin, loginWithPin } from "@waitron/identity";
@@ -12,7 +12,7 @@ import { SESSION_COOKIE } from "./till-session.js";
 import "./errors.js";
 
 // PGlite, not real Postgres: the schedule routes are LOGIC (session → verb → JSON) over mutable
-// planning rows. Every DB touch runs through `withTenant` + `asAppUser` exactly as production does, but
+// planning rows. Every DB touch runs through `withTransaction` + `asAppUser` exactly as production does, but
 // the app role's grants and — the crux — the "requester is the SESSION's personId, never the
 // body's" identity property need a real non-superuser role to MEAN anything, so they are proven
 // against real Postgres in `schedule-api.pg.test.ts`. Here we prove the route mechanics: the happy
@@ -58,7 +58,7 @@ function mountApp(): Hono {
 /** Open a real shift session for `personId` (through the production `loginWithPin` path, on the app
  * role) and return the cookie header that carries it — the credential every schedule route gates on. */
 async function cookieFor(personId: string, pin: string): Promise<string> {
-  const session = await withTenant(suite.db, tenantId, async (tx) => {
+  const session = await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     return loginWithPin(tx, { tenantId, tillId, personId, pin });
   });

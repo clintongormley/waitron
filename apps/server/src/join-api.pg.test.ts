@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import { resolveManagementSession } from "@waitron/identity";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { mountJoinApi } from "./join-api.js";
@@ -13,7 +13,7 @@ import type { Logger } from "./logger.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import "./errors.js";
 
-// Real Postgres, not PGlite (CLAUDE.md §4): every route here runs as `app_user` under `withTenant`,
+// Real Postgres, not PGlite (CLAUDE.md §4): every route here runs as `app_user` under `withTransaction`,
 // so the join_requests / devices / tills grants are enforced. PGlite connects as a superuser holding
 // every privilege, where a missing GRANT passes and fails only in production. Each test provisions
 // its OWN tenant, so its rows are that test's alone and order-independent across the shared clone.
@@ -58,7 +58,7 @@ async function knock(
   venue: Venue,
   input: { kind: JoinRequestKind; label: string; numbers?: () => number },
 ): Promise<{ joinId: string; verificationNumber: string }> {
-  return withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const made = await createJoinRequest(tx, venue.cfg, input);
     return { joinId: made.joinId, verificationNumber: made.verificationNumber };
@@ -169,7 +169,7 @@ describe("the pairing-mode control", () => {
       update management_sessions set last_seen_at = now() - interval '10 minutes'
       where id = ${sessionId}`);
       const session = () =>
-        withTenant(suite.admin, venue.cfg.tenantId, (tx) =>
+        withTransaction(suite.admin, (tx) =>
           resolveManagementSession(tx, sessionId, { touch: false }),
         );
       const before = await session();
@@ -513,7 +513,7 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
     expect((await errorOf(res)).code).toBe("device.join_mismatch");
 
     // A SEPARATE request, so the deny is read back across the transaction boundary the route committed
-    // at. Throwing the mismatch from inside `withTenant` would roll the consuming delete back and turn
+    // at. Throwing the mismatch from inside `withTransaction` would roll the consuming delete back and turn
     // a wrong tap into an unlimited retry — the 400 alone cannot tell the two shapes apart.
     const retry = await send(
       app,

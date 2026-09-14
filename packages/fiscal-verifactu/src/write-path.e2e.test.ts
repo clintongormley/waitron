@@ -7,7 +7,7 @@ import { recordSale } from "@waitron/core";
 import type { RecordSaleLine } from "@waitron/core";
 import { buildQrPayload, computeHuella } from "@waitron/verifactu";
 import type { RegistroAlta } from "@waitron/verifactu";
-import { asAppUser, incidents, saleLines, sales, withTenant } from "@waitron/db";
+import { asAppUser, incidents, saleLines, sales, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { tillId as brandTillId } from "@waitron/shared";
 import type { NodeId, SeriesId, TenantId, TillId } from "@waitron/shared";
@@ -58,7 +58,7 @@ beforeEach(async () => {
 });
 
 async function sell(overrides: Record<string, unknown> = {}) {
-  return withTenant(pg.db, tenantId, async (tx) => {
+  return withTransaction(pg.db, async (tx) => {
     await asAppUser(tx);
     return recordSale(tx, backend, saleInput({ tenantId, tillId, nodeId, seriesId, ...overrides }));
   });
@@ -214,7 +214,7 @@ describe("the write path against the real Veri*Factu backend", () => {
     // and confirm the module's own tables roll back too. A module holding its own connection
     // would leave all three behind.
     await expect(
-      withTenant(pg.db, tenantId, async (tx) => {
+      withTransaction(pg.db, async (tx) => {
         await asAppUser(tx);
         await recordSale(tx, backend, saleInput({ tenantId, tillId, nodeId, seriesId }));
         throw new Error("simulated crash after the fiscal write");
@@ -304,7 +304,7 @@ describe("parent_line_id is not part of the huella", () => {
 
   async function huellaFor(parentLineNo: number | null): Promise<string> {
     let huella: string | undefined;
-    await withTenant(pg.db, tenantId, async (tx) => {
+    await withTransaction(pg.db, async (tx) => {
       await asAppUser(tx);
       const { saleId } = await recordSale(
         tx,
@@ -435,7 +435,7 @@ describe("line note/doneness are not part of the huella", () => {
 
   async function huellaFor(note: string, doneness: string): Promise<string> {
     let huella: string | undefined;
-    await withTenant(pg.db, tenantId, async (tx) => {
+    await withTransaction(pg.db, async (tx) => {
       await asAppUser(tx);
       const { saleId } = await recordSale(
         tx,
@@ -498,7 +498,7 @@ describe("till_id is inert to the huella and the chain (SP-A.2 §16.4(b))", () =
    *  the transaction, then roll back so the next call re-allocates `A/1` against the same empty chain. */
   async function recordFor(till: TillId): Promise<RecordSnapshot> {
     let snapshot: RecordSnapshot | undefined;
-    await withTenant(pg.db, tenantId, async (tx) => {
+    await withTransaction(pg.db, async (tx) => {
       await asAppUser(tx);
       const { saleId } = await recordSale(
         tx,

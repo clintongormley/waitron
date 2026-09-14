@@ -2,7 +2,7 @@
 // fresh chain. `waitron-provision venue` covers a fresh venue, seeding its first node as it stands
 // the venue up. `scripts/register-till.ts` is the argv/stdout shim over this module.
 import { and, eq } from "drizzle-orm";
-import { nodes, withTenant } from "@waitron/db";
+import { nodes, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type { SeedReport, WaitronModule } from "@waitron/module";
 import { AppError, locationId as brandLocationId } from "@waitron/shared";
@@ -43,7 +43,7 @@ export async function provisionNode(
   params: ProvisionNodeParams,
   modules: readonly WaitronModule[],
 ): Promise<readonly SeedReport[]> {
-  return withTenant(db, params.tenantId, async (tx) => {
+  return withTransaction(db, async (tx) => {
     const locationId = await ownedNodeLocation(tx, params.tenantId, params.nodeId);
     const node = {
       tenantId: params.tenantId,

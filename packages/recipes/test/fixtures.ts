@@ -4,7 +4,7 @@ import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { sql } from "drizzle-orm";
 import type { Database, Transaction } from "@waitron/db";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import {
   CATALOGUE_MIGRATIONS,
   createCatalogue,
@@ -32,7 +32,7 @@ export async function seedVenue(db: Database): Promise<SeededVenue> {
 
 /** Seed a catalogue + one product; returns the product id, for recipe tests. */
 export async function seedProduct(db: Database, tenantId: TenantId): Promise<string> {
-  return withTenant(db, tenantId, async (tx: Transaction) => {
+  return withTransaction(db, async (tx: Transaction) => {
     await asAppUser(tx);
     const cat = await createCatalogue(tx, tenantId, { name: "Deli" });
     const unit = await createUnit(

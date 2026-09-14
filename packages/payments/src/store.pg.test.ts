@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { withTenant } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { decimal } from "@waitron/shared";
 import {
@@ -43,7 +43,7 @@ describe("findCapturedPaymentForWorkingOrder", () => {
       };
       const paymentKey = { tenantId: tenant.tenantId, provider: "stripe", paymentRef: "replay-1" };
 
-      await withTenant(probe, tenant.tenantId, (tx) =>
+      await withTransaction(probe, (tx) =>
         insertCapturedPayment(tx, {
           tenantId: tenant.tenantId,
           workingOrderId: tenant.workingOrderId,
@@ -55,20 +55,18 @@ describe("findCapturedPaymentForWorkingOrder", () => {
       );
 
       // Before association: the RESUME branch — captured but P3 never ran, saleId null.
-      const beforeAssoc = await withTenant(probe, tenant.tenantId, (tx) =>
+      const beforeAssoc = await withTransaction(probe, (tx) =>
         findCapturedPaymentForWorkingOrder(tx, orderKey),
       );
       expect(beforeAssoc?.saleId).toBeNull();
 
-      await withTenant(probe, tenant.tenantId, (tx) =>
-        associatePaymentWithSale(tx, { ...paymentKey, saleId }),
-      );
+      await withTransaction(probe, (tx) => associatePaymentWithSale(tx, { ...paymentKey, saleId }));
 
       // After association: the REPLAY branch — the sale is already filed, saleId populated. This is
       // the branch the whole return shape exists for, and the only assertion of it anywhere:
       // store.test.ts pins the resume branch (`saleId: null`) and reads the associated value back
       // through getPaymentByRef instead.
-      const afterAssoc = await withTenant(probe, tenant.tenantId, (tx) =>
+      const afterAssoc = await withTransaction(probe, (tx) =>
         findCapturedPaymentForWorkingOrder(tx, orderKey),
       );
       expect(afterAssoc?.saleId).toBe(saleId);
@@ -85,7 +83,7 @@ describe("payments card columns", () => {
     const tenant = await seedWorkingOrder(postgres.admin, freshNif());
     const probe = await postgres.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
-      const row = await withTenant(probe, tenant.tenantId, async (tx) => {
+      const row = await withTransaction(probe, async (tx) => {
         await insertAttempting(tx, {
           tenantId: tenant.tenantId,
           workingOrderId: tenant.workingOrderId,
@@ -116,7 +114,7 @@ describe("payments card columns", () => {
     const probe = await postgres.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
       await expect(
-        withTenant(probe, tenant.tenantId, async (tx) => {
+        withTransaction(probe, async (tx) => {
           await insertAttempting(tx, {
             tenantId: tenant.tenantId,
             workingOrderId: tenant.workingOrderId,
@@ -144,7 +142,7 @@ describe("payments card columns", () => {
     const probe = await postgres.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
       await expect(
-        withTenant(probe, tenant.tenantId, async (tx) => {
+        withTransaction(probe, async (tx) => {
           await insertAttempting(tx, {
             tenantId: tenant.tenantId,
             workingOrderId: tenant.workingOrderId,
@@ -173,7 +171,7 @@ describe("findCapturedPaymentForWorkingOrderAnyProvider", () => {
     const tenant = await seedWorkingOrder(postgres.admin, freshNif());
     const probe = await postgres.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
-      await withTenant(probe, tenant.tenantId, async (tx) => {
+      await withTransaction(probe, async (tx) => {
         await insertAttempting(tx, {
           tenantId: tenant.tenantId,
           workingOrderId: tenant.workingOrderId,
@@ -191,7 +189,7 @@ describe("findCapturedPaymentForWorkingOrderAnyProvider", () => {
         });
       });
 
-      const row = await withTenant(probe, tenant.tenantId, (tx) =>
+      const row = await withTransaction(probe, (tx) =>
         findCapturedPaymentForWorkingOrderAnyProvider(tx, {
           tenantId: tenant.tenantId,
           workingOrderId: tenant.workingOrderId,
@@ -212,7 +210,7 @@ describe("findCapturedPaymentForWorkingOrderAnyProvider", () => {
     const tenant = await seedWorkingOrder(postgres.admin, freshNif());
     const probe = await postgres.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
-      const row = await withTenant(probe, tenant.tenantId, (tx) =>
+      const row = await withTransaction(probe, (tx) =>
         findCapturedPaymentForWorkingOrderAnyProvider(tx, {
           tenantId: tenant.tenantId,
           workingOrderId: tenant.workingOrderId,

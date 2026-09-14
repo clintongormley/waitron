@@ -2,7 +2,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import {
@@ -18,7 +18,7 @@ const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] }
 
 async function fixture() {
   const tenantId = await seedTenant(suite.db);
-  const session = await withTenant(suite.db, tenantId, async (tx) => {
+  const session = await withTransaction(suite.db, async (tx) => {
     const person = await tx.execute<{ id: string }>(
       sql`insert into persons (tenant_id, display_name, pin_hash, role) values (${tenantId}, 'Manager', ${hashPin("1234")}, 'manager') returning id`,
     );
@@ -69,14 +69,14 @@ describe("management live events", () => {
     await suite.db.execute(
       sql`update management_sessions set last_seen_at = now() - interval '10 minutes' where id = ${session.id}`,
     );
-    const before = await withTenant(suite.db, tenantId, (tx) =>
+    const before = await withTransaction(suite.db, (tx) =>
       resolveManagementSession(tx, session.id, { touch: false }),
     );
     const response = await app.request(path, { headers: { cookie } });
     const reader = response.body!.getReader();
     try {
       await reader.read();
-      const after = await withTenant(suite.db, tenantId, (tx) =>
+      const after = await withTransaction(suite.db, (tx) =>
         resolveManagementSession(tx, session.id, { touch: false }),
       );
       expect(after.expiresAt).toBe(before.expiresAt);

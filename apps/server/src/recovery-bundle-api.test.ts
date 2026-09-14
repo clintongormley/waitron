@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
@@ -66,7 +66,7 @@ async function setupTenant(): Promise<{ tenantId: string; managerId: string }> {
     ),
     { db: suite.admin, modules: ALL_MODULES },
   );
-  const managerId = await withTenant(suite.admin, venue.tenantId, async (tx) => {
+  const managerId = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const m = await tx.execute<{ id: string }>(sql`
       insert into persons (tenant_id, display_name, email, pin_hash, password_hash, role)

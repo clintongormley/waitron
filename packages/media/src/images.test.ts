@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { withTenant, CORE_MIGRATIONS } from "@waitron/db";
+import { withTransaction, CORE_MIGRATIONS } from "@waitron/db";
 import { CATALOGUE_MIGRATIONS, writeContentLanguages } from "@waitron/catalogue";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -26,7 +26,7 @@ const photo = new Uint8Array([0xff, 0xd8, 0xff, 1, 2, 3]);
 describe("image library", () => {
   it("stores bytes with required default metadata and returns the same image for duplicate bytes", async () => {
     const tenantId = await seedTenant(suite.db);
-    await withTenant(suite.db, tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       await writeContentLanguages(tx, tenantId, { defaultLanguage: "en", languages: ["en", "fr"] });
       const first = await uploadImage(
         tx,
@@ -70,12 +70,10 @@ describe("metadata, labels and references", () => {
       [{ ...good, bytes: new Uint8Array([1, 2, 3]) }, "media.unsupported_type"],
     ] as const) {
       await expect(
-        withTenant(suite.db, tenantId, (tx) =>
-          uploadImage(tx, tenantId, input as typeof good, options),
-        ),
+        withTransaction(suite.db, (tx) => uploadImage(tx, tenantId, input as typeof good, options)),
       ).rejects.toMatchObject({ code });
     }
-    await withTenant(suite.db, tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       // Alt text is optional: an upload with no alt text succeeds and stores an empty map.
       const { created, image } = await uploadImage(
         tx,
@@ -91,7 +89,7 @@ describe("metadata, labels and references", () => {
 
   it("derives labels from current assignments, edits metadata without changing bytes, and removes unused images", async () => {
     const tenantId = await seedTenant(suite.db);
-    await withTenant(suite.db, tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       const first = await uploadImage(
         tx,
         tenantId,
@@ -133,7 +131,7 @@ describe("metadata, labels and references", () => {
 
   it("shows active and inactive product uses and blocks deletion until every use is cleared", async () => {
     const tenantId = await seedTenant(suite.db);
-    await withTenant(suite.db, tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       const { image } = await uploadImage(
         tx,
         tenantId,
@@ -217,7 +215,7 @@ describe("metadata, labels and references", () => {
       altText: { en: "Loaf" },
       labels: ["food"],
     };
-    const { image } = await withTenant(suite.db, a, (tx) =>
+    const { image } = await withTransaction(suite.db, (tx) =>
       uploadImage(tx, a, input, { fallbackLanguage: "en", maxUploadBytes: 100 }),
     );
     for (const action of [
@@ -226,15 +224,15 @@ describe("metadata, labels and references", () => {
       (tx: Parameters<typeof readImage>[0]) => updateImage(tx, b, image.id, input, "en"),
       (tx: Parameters<typeof readImage>[0]) => deleteImage(tx, b, image.id),
     ] as ((tx: Parameters<typeof readImage>[0]) => Promise<unknown>)[])
-      await expect(withTenant(suite.db, b, action)).rejects.toMatchObject({
+      await expect(withTransaction(suite.db, action)).rejects.toMatchObject({
         code: "image.not_found",
       });
-    await withTenant(suite.db, b, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       expect(await readImageBytes(tx, b, image.filename)).toBeNull();
       expect(await listImageLabels(tx, b)).toEqual([]);
       expect(await listImageTranslationGaps(tx, b, "fr")).toEqual([]);
     });
-    await withTenant(suite.db, a, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       expect(await listImageTranslationGaps(tx, a, "fr")).toEqual([
         { kind: "image", id: image.id },
       ]);
@@ -244,7 +242,7 @@ describe("metadata, labels and references", () => {
 
   it("reports a missing name but not missing alt text as a translation gap", async () => {
     const tenantId = await seedTenant(suite.db);
-    await withTenant(suite.db, tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       // Alt text is optional, so an image named in French but without French alt text is complete;
       // only a missing name in the target language is a gap that blocks a default-language change.
       await uploadImage(
@@ -274,7 +272,7 @@ describe("metadata, labels and references", () => {
 describe("search and sorting", () => {
   it("ranks name words above alt words, stems translations, searches labels and combines label filters", async () => {
     const tenantId = await seedTenant(suite.db);
-    await withTenant(suite.db, tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       const add = async (
         marker: number,
         names: Record<string, string>,
@@ -323,7 +321,7 @@ describe("search and sorting", () => {
 
   it("sorts by name using the requested translation then site default, date in either direction and stable pages", async () => {
     const tenantId = await seedTenant(suite.db);
-    await withTenant(suite.db, tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       await writeContentLanguages(tx, tenantId, { defaultLanguage: "en", languages: ["en", "fr"] });
       const added = [];
       for (let n = 0; n < 3; n++)
@@ -395,7 +393,7 @@ describe("input boundaries", () => {
   ])("rejects invalid search options %j", async (options) => {
     const tenantId = await seedTenant(suite.db);
     await expect(
-      withTenant(suite.db, tenantId, (tx) =>
+      withTransaction(suite.db, (tx) =>
         listImages(tx, tenantId, options as Parameters<typeof listImages>[2]),
       ),
     ).rejects.toMatchObject({ code: "image.invalid_query" });
@@ -412,7 +410,7 @@ describe("input boundaries", () => {
     },
   ])("serves validated $contentType bytes", async ({ bytes, contentType }) => {
     const tenantId = await seedTenant(suite.db);
-    await withTenant(suite.db, tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       const { image } = await uploadImage(
         tx,
         tenantId,
@@ -433,12 +431,12 @@ describe("input boundaries", () => {
     };
     for (const names of [null, [], { zz: "unknown" }, { en: "A", "en-GB": "B" }, { en: 42 }]) {
       await expect(
-        withTenant(suite.db, tenantId, (tx) =>
+        withTransaction(suite.db, (tx) =>
           uploadImage(tx, tenantId, { ...input, names } as typeof input, { maxUploadBytes: 100 }),
         ),
       ).rejects.toThrow();
     }
-    await withTenant(suite.db, tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       await uploadImage(tx, tenantId, input, { maxUploadBytes: 100 });
       const { image } = await uploadImage(
         tx,
@@ -454,7 +452,7 @@ describe("input boundaries", () => {
 
 it("keeps a name match above repeated alt-text matches when sorting by relevance", async () => {
   const tenantId = await seedTenant(suite.db);
-  await withTenant(suite.db, tenantId, async (tx) => {
+  await withTransaction(suite.db, async (tx) => {
     const name = await uploadImage(
       tx,
       tenantId,
@@ -480,7 +478,7 @@ it("keeps a name match above repeated alt-text matches when sorting by relevance
 
 it("sorts by the default when the requested language was disabled while retaining its translations", async () => {
   const tenantId = await seedTenant(suite.db);
-  await withTenant(suite.db, tenantId, async (tx) => {
+  await withTransaction(suite.db, async (tx) => {
     await writeContentLanguages(tx, tenantId, { defaultLanguage: "fr", languages: ["fr"] });
     const first = await uploadImage(
       tx,
@@ -517,7 +515,7 @@ it.each([
   "matches $language word forms rather than requiring an exact token",
   async ({ language, plural, singular }) => {
     const tenantId = await seedTenant(suite.db);
-    await withTenant(suite.db, tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       const { image } = await uploadImage(
         tx,
         tenantId,
@@ -561,7 +559,7 @@ it("maps the bundled PostgreSQL stemmers and keeps unknown dictionary languages 
 it("protects an image used only by a category and releases it after clearing the reference", async () => {
   const { createCategory, updateCategory } = await import("@waitron/catalogue");
   const tenantId = await seedTenant(suite.db);
-  await withTenant(suite.db, tenantId, async (tx) => {
+  await withTransaction(suite.db, async (tx) => {
     const { image } = await uploadImage(
       tx,
       tenantId,
@@ -606,7 +604,7 @@ it("rejects another tenant's category image", async () => {
   const { createCategory } = await import("@waitron/catalogue");
   const tenantId = await seedTenant(suite.db);
   const other = await seedTenant(suite.db);
-  const { image } = await withTenant(suite.db, other, (tx) =>
+  const { image } = await withTransaction(suite.db, (tx) =>
     uploadImage(
       tx,
       other,
@@ -615,7 +613,7 @@ it("rejects another tenant's category image", async () => {
     ),
   );
   await expect(
-    withTenant(suite.db, tenantId, (tx) =>
+    withTransaction(suite.db, (tx) =>
       createCategory(tx, tenantId, { name: { en: "Food" }, image: image.filename }),
     ),
   ).rejects.toMatchObject({ code: "category.image_not_found" });

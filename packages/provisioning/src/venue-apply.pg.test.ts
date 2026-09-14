@@ -2,7 +2,7 @@
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
-import { createPostgresDb, withTenant, type Database } from "@waitron/db";
+import { createPostgresDb, withTransaction, type Database } from "@waitron/db";
 import { withRole } from "./identifiers.js";
 import { applyInstance, withDatabase } from "./instance-apply.js";
 import { planInstance } from "./instance-plan.js";
@@ -136,7 +136,7 @@ describe("applyVenue against a real container, as the non-superuser owner", () =
     ]);
 
     // Read the committed venue back in one transaction with explicit tenant and node predicates.
-    const { counts, node, sif, profiles } = await withTenant(owner, result.tenantId, async (tx) => {
+    const { counts, node, sif, profiles } = await withTransaction(owner, async (tx) => {
       const counts = await tx.execute<{
         tenants: number;
         nodes: number;

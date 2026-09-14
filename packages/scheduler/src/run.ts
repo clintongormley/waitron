@@ -1,5 +1,5 @@
 import { isAppError } from "@waitron/shared";
-import { withTenant } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import type { TenantId } from "@waitron/shared";
 import { derive, horizonStartFor, type DueWork } from "./derive.js";
@@ -97,7 +97,7 @@ export async function runDue(
   for (const tenantId of tenantIds) {
     for (const duty of deps.duties) {
       try {
-        const snapshot = await withTenant(deps.db, tenantId, (tx) =>
+        const snapshot = await withTransaction(deps.db, (tx) =>
           readSnapshot(tx, { tenantId, duty: duty.name, horizonStart }),
         );
         const derivation = derive(snapshot, now, deps);
@@ -189,7 +189,7 @@ async function runOne(
   work: DueWork,
   now: Date,
 ): Promise<CompletedRun | null> {
-  const claimed = await withTenant(deps.db, tenantId, (tx) => {
+  const claimed = await withTransaction(deps.db, (tx) => {
     if (work.kind === "gap") {
       return claimGap(tx, { tenantId, duty: duty.name, period: work.period, now });
     }
@@ -221,9 +221,8 @@ async function runOne(
   // means some other non-terminal row already carries this period — the enqueue guard's whole
   // point — and that row's due time is not this run's to report: either the snapshot already
   // folded it in, or the concurrent tick that inserted it reports it.
-  const [won, enqueuedAt] = await withTenant(
+  const [won, enqueuedAt] = await withTransaction(
     deps.db,
-    tenantId,
     async (tx): Promise<[boolean, Date | null]> => {
       const completed = await completeRun(tx, {
         id: claimed.id,

@@ -314,12 +314,12 @@ export type AcceptResult =
  * another tenant's, or already decided) all return zero rows and fold into the one
  * `join_request.not_found` — a device accept can never consume an agent's request.
  *
- * ONE transaction: the caller's `withTenant` covers the consuming delete, the register
+ * ONE transaction: the caller's `withTransaction` covers the consuming delete, the register
  * auto-creation and the device insert, so a LATER failure (an unknown profile, a station that does
  * not exist, the register insert) rolls the consumption back too — the request survives for a
  * genuine retry, only a wrong number or a successful accept ever makes the delete stick.
  *
- * A WRONG CHOICE DENIES — AND THAT IS WHY THIS RETURNS RATHER THAN THROWS. `withTenant` IS the
+ * A WRONG CHOICE DENIES — AND THAT IS WHY THIS RETURNS RATHER THAN THROWS. `withTransaction` IS the
  * transaction (`packages/db/src/tenancy.ts:15`, `db.transaction((tx) => fn(tx))`), so an `AppError`
  * thrown from here rolls the (already-consumed) row back into existence and a wrong tap becomes an
  * unlimited retry — the exact opposite of the property that makes one-in-three an acceptable guess
@@ -397,7 +397,7 @@ export type AgentAcceptResult =
  * predicate rides along (a device row, another tenant's, or an already-decided one all fold into
  * `join_request.not_found`), then — only on a matching choice — insert the real `print_agents` row with
  * the request's own id and token hash, so the bearer the agent has held since join keeps working.
- * ONE transaction: the caller's `withTenant` covers the delete and the insert together.
+ * ONE transaction: the caller's `withTransaction` covers the delete and the insert together.
  */
 export async function acceptPrintAgentJoinRequest(
   tx: Transaction,

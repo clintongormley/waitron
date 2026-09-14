@@ -1,4 +1,4 @@
-import { asAppUser, captureError, pgErrorCode, withTenant } from "@waitron/db";
+import { asAppUser, captureError, pgErrorCode, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -27,7 +27,7 @@ beforeAll(async () => {
 
 /** Runs `fn` inside a tenant transaction, downgraded to the non-owner application role. */
 async function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  return withTenant(suite.admin, ctx.tenantId, async (tx) => {
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     return fn(tx);
   });
@@ -78,7 +78,7 @@ describe("time_entries is immutable, as the app role", () => {
 
   it("rejects UPDATE by trigger even when the privilege is granted", async () => {
     // Grant the privilege inside a transaction that rolls back, so the trigger handles the UPDATE.
-    await withTenant(suite.admin, ctx.tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await tx.execute(sql`grant update, delete on time_entries to app_user`);
       await tx.execute(sql`set local role app_user`);
       await insertTimeEntry(tx, ctx);
@@ -98,7 +98,7 @@ describe("time_entries is immutable, as the app role", () => {
     // and the per-node rekey's node_id/recorded_at — inherit immutability with no extra DDL. Grant
     // UPDATE (rolled back), then watch the trigger still reject a rewrite of each. Deleting the
     // trigger from 0001 fails this.
-    await withTenant(suite.admin, ctx.tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await tx.execute(sql`grant update on time_entries to app_user`);
       await tx.execute(sql`set local role app_user`);
       await insertTimeEntry(tx, ctx);
@@ -125,7 +125,7 @@ describe("time_entries is immutable, as the app role", () => {
     // in the set before firing any trigger, so the grant must cover both or a 42501 pre-empts the
     // trigger. With both granted, the BEFORE TRUNCATE trigger on time_entries fires first and aborts
     // with WT001 — it runs ahead of any actual truncation, so workforce_chains is never touched.
-    await withTenant(suite.admin, ctx.tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await tx.execute(sql`grant truncate on time_entries, workforce_chains to app_user`);
       await tx.execute(sql`set local role app_user`);
       const error = await captureError(() => tx.execute(sql`truncate time_entries cascade`));

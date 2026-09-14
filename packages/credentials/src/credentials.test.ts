@@ -1,7 +1,7 @@
 // Real PostgreSQL: exercises the database path through a non-superuser LOGIN and its grants.
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { withTenant } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import { loadKeyRing } from "./keyring.js";
 import { credentialTenants, putCredential } from "./store.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -37,14 +37,14 @@ describe("credentialTenants", () => {
     const without = await seedTenant(suite.admin);
     const probe = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
-      await withTenant(probe, withStripe, (tx) =>
+      await withTransaction(probe, (tx) =>
         putCredential(tx, RING, {
           tenantId: withStripe,
           purpose: "payments.stripe",
           value: STRIPE,
         }),
       );
-      await withTenant(probe, without, (tx) =>
+      await withTransaction(probe, (tx) =>
         putCredential(tx, RING, {
           tenantId: without,
           purpose: "fiscal.aeat",

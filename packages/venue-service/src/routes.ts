@@ -1,6 +1,6 @@
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { AppError } from "@waitron/shared";
-import { asAppUser, withTenant, type Transaction } from "@waitron/db";
+import { asAppUser, withTransaction, type Transaction } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
 import type { ModuleRouteContext, ModuleRoutes, ServiceMode } from "@waitron/module";
 import {
@@ -107,7 +107,7 @@ function requirePreparationRouteInput(body: Record<string, unknown>): Preparatio
 export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
   mount(app, ctx: ModuleRouteContext, log: Logger): void {
     const gated = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> =>
-      withTenant(ctx.db, ctx.cfg.tenantId, async (tx) => {
+      withTransaction(ctx.db, async (tx) => {
         await asAppUser(tx);
         await authorizeManager(tx, {
           managementSessionId: sessionId,

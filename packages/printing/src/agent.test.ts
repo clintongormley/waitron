@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -11,7 +11,7 @@ import type { PrintAgentConfig } from "./agent.js";
 import "./errors.js";
 
 // Real Postgres (a `core` template clone), not PGlite: auth exercises the REAL deployment role and its
-// exact grants — every call runs through `withTenant` + `asAppUser`, the shape the Task-6 route uses.
+// exact grants — every call runs through `withTransaction` + `asAppUser`, the shape the Task-6 route uses.
 // (Agent enrolment is join-and-accept, in apps/server/src/join-requests.ts; this suite covers only the
 // bearer-token auth core that stays here.)
 const LOCALE = "es-ES";
@@ -37,7 +37,8 @@ function asApp<T>(
   cfg: { tenantId: string },
   fn: (tx: Transaction) => Promise<T>,
 ): Promise<T> {
-  return withTenant(db, cfg.tenantId, async (tx) => {
+  void cfg;
+  return withTransaction(db, async (tx) => {
     await asAppUser(tx);
     return fn(tx);
   });
@@ -127,13 +128,11 @@ describe("authenticateAgent", () => {
     expect(own.agentId).toBe(agentId);
 
     // Under tenant B's cfg the SAME token is refused by `authenticateAgent`'s explicit `tenant_id
-    // = cfg.tenantId` predicate. The superuser connection and `withTenant` add no tenant
+    // = cfg.tenantId` predicate. The superuser connection and `withTransaction` add no tenant
     // filtering. The control uses a valid token for tenant A: removing the predicate would let
     // that row and its matching secret authenticate under tenant B's cfg.
     expect(
-      await codeOf(() =>
-        withTenant(suite.admin, cfgB.tenantId, (tx) => authenticateAgent(tx, cfgB, token)),
-      ),
+      await codeOf(() => withTransaction(suite.admin, (tx) => authenticateAgent(tx, cfgB, token))),
     ).toBe("agent.unauthorized");
   });
 });

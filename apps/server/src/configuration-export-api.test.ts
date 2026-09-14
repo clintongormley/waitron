@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { startManagementSession } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -52,7 +52,7 @@ const suite = usePgliteDb({
   setup: async (db) => {
     venue = await applyVenue(planVenue(request, ALL_MODULES), { db, modules: ALL_MODULES });
     moduleVersions = await schemaVersionsByModule(db, ALL_MODULES);
-    cookie = await withTenant(db, venue.tenantId, async (tx) => {
+    cookie = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       const admin = await tx.execute<{ id: string }>(sql`
         select id from persons where tenant_id = ${venue.tenantId} and role = 'admin'
@@ -75,7 +75,7 @@ const suite = usePgliteDb({
       ),
       { db, modules: ALL_MODULES },
     );
-    foreignCookie = await withTenant(db, foreignVenue.tenantId, async (tx) => {
+    foreignCookie = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       const admin = await tx.execute<{ id: string }>(sql`
         select id from persons where tenant_id = ${foreignVenue.tenantId} and role = 'admin'

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
@@ -221,7 +221,7 @@ async function knockAndAccept(
   const res = await send(app, "POST", "/api/device/join", { body: { name: input.name } });
   expect(res.status).toBe(200);
   const knock = (await res.json()) as { joinId: string; verificationNumber: string };
-  const accepted = await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+  const accepted = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     return acceptDeviceJoinRequest(tx, venue.cfg, knock.joinId, {
       choice: knock.verificationNumber,
@@ -504,7 +504,7 @@ describe("GET /api/device/join/status", () => {
     expect(await pending.json()).toEqual({ status: "pending" });
 
     const profileId = await seedProfile(venue.cfg, "till");
-    await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return acceptDeviceJoinRequest(tx, venue.cfg, joinId, {
         choice: verificationNumber,
@@ -534,7 +534,7 @@ describe("GET /api/device/join/status", () => {
     const jar = deviceCookieFrom(knock);
     const { joinId } = (await knock.json()) as { joinId: string };
 
-    await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return denyJoinRequest(tx, venue.cfg, joinId);
     });
@@ -599,7 +599,7 @@ describe("Device API over real Postgres — the device-guarded routes", () => {
     const venue = await setupVenue(suite.admin);
     const app = mountApp(venue.cfg);
 
-    const fria = await withTenant(suite.admin, venue.cfg.tenantId, async (tx) => {
+    const fria = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return createStation(tx, venue.cfg, { name: "Fría", isDefault: false });
     });

@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { hasCode } from "@waitron/shared";
 import { aadFor, seal } from "./cipher.js";
 import { loadKeyRing } from "./keyring.js";
@@ -44,7 +44,7 @@ beforeEach(async () => {
 describe("rotateCredentials", () => {
   it("re-seals every row onto the current key and advances its version", async () => {
     const tenantId = await seedTenant(suite.db);
-    await withTenant(suite.db, tenantId, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       putCredential(tx, RING_V1, { tenantId, purpose: "payments.stripe", value: STRIPE }),
     );
 
@@ -57,7 +57,7 @@ describe("rotateCredentials", () => {
     expect(versions.rows[0]!.key_version).toBe(2);
 
     // Readable with the new key ALONE — the old key can now be retired.
-    const actual = await withTenant(suite.db, tenantId, (tx) =>
+    const actual = await withTransaction(suite.db, (tx) =>
       getCredential(tx, RING_V2_ONLY, { tenantId, purpose: "payments.stripe" }),
     );
     expect(actual).toEqual(STRIPE);
@@ -65,7 +65,7 @@ describe("rotateCredentials", () => {
 
   it("is idempotent — a second run rotates nothing", async () => {
     const tenantId = await seedTenant(suite.db);
-    await withTenant(suite.db, tenantId, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       putCredential(tx, RING_V1, {
         tenantId,
         purpose: "fiscal.aeat",
@@ -90,10 +90,10 @@ describe("rotateCredentials", () => {
     // from "always try `previous`". That per-row selection property is pinned separately by
     // store.test.ts's "serves a row on either ring member" test.
     const tenantId = await seedTenant(suite.db);
-    await withTenant(suite.db, tenantId, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       putCredential(tx, RING_V1, { tenantId, purpose: "payments.stripe", value: STRIPE }),
     );
-    await withTenant(suite.db, tenantId, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       putCredential(tx, RING_BOTH, {
         tenantId,
         purpose: "fiscal.aeat",
@@ -113,7 +113,7 @@ describe("rotateCredentials", () => {
 
   it("refuses to run without a previous key when rows still need one", async () => {
     const tenantId = await seedTenant(suite.db);
-    await withTenant(suite.db, tenantId, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       putCredential(tx, RING_V1, { tenantId, purpose: "payments.stripe", value: STRIPE }),
     );
     const error = await captured(() => rotateCredentials(suite.db, RING_V2_ONLY));
@@ -133,7 +133,7 @@ describe("rotateCredentials", () => {
     const tenantId = await seedTenant(suite.db);
     const strangerKey = Buffer.alloc(32, 9);
     const sealed = seal(strangerKey, aadFor(tenantId, "payments.stripe"), JSON.stringify(STRIPE));
-    await withTenant(suite.db, tenantId, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       tx.insert(tenantCredentials).values({
         tenantId,
         purpose: "payments.stripe",
@@ -163,10 +163,10 @@ describe("rotateCredentials", () => {
     // credentials.test.ts's "ordering-probe" row — since this row is never meant to be
     // decrypted; only the iv/auth-tag LENGTH constraints need satisfying, not real ciphertext.
     const tenantId = await seedTenant(suite.db);
-    await withTenant(suite.db, tenantId, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       putCredential(tx, RING_V1, { tenantId, purpose: "payments.stripe", value: STRIPE }),
     );
-    await withTenant(suite.db, tenantId, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       tx.insert(tenantCredentials).values({
         tenantId,
         purpose: "legacy.retired-purpose",
@@ -194,10 +194,10 @@ describe("rotateCredentials", () => {
     // This exercises the count rule without claiming to simulate concurrent deletion.
     const p = await seedTenant(suite.db);
     const q = await seedTenant(suite.db);
-    await withTenant(suite.db, p, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       putCredential(tx, RING_V1, { tenantId: p, purpose: "payments.stripe", value: STRIPE }),
     );
-    await withTenant(suite.db, q, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       putCredential(tx, RING_V1, {
         tenantId: q,
         purpose: "fiscal.aeat",

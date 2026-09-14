@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { CREDENTIALS_MIGRATIONS, loadKeyRing, putCredential } from "@waitron/credentials";
 import type { IncidentSink } from "@waitron/payments";
@@ -59,7 +59,7 @@ async function seedSumUp(value: {
   affiliateKey: string;
 }): Promise<TenantId> {
   const tenantId = await seedTenant(suite.db);
-  await withTenant(suite.db, tenantId, (tx) =>
+  await withTransaction(suite.db, (tx) =>
     putCredential(tx, ring, { tenantId, purpose: "payments.sumup", value }),
   );
   return tenantId;
@@ -495,7 +495,7 @@ describe("deferredClient", () => {
     });
     const client = deferredClient({ db: suite.db, ring, tenantId, fetch });
     await expect(client.memberships()).rejects.toMatchObject({ code: "credentials.missing" });
-    await withTenant(suite.db, tenantId, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       putCredential(tx, ring, {
         tenantId,
         purpose: "payments.sumup",

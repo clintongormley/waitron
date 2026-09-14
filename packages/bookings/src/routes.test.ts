@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, withTenant, type Database } from "@waitron/db";
+import { asAppUser, withTransaction, type Database } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { hashPin, registerModulePermissions, startManagementSession } from "@waitron/identity";
@@ -21,7 +21,7 @@ import { BOOKINGS_ROUTES } from "./routes.js";
 registerModulePermissions(BOOKINGS_PERMISSIONS);
 
 // Real Postgres, not PGlite: every DB touch below goes through `BOOKINGS_ROUTES`' `gated` helper
-// (withTenant + asAppUser + authorizeManager), so the booking routes run as the non-superuser
+// (withTransaction + asAppUser + authorizeManager), so the booking routes run as the non-superuser
 // `app_user` and the table GRANTS are actually enforced. PGlite connects as a superuser holding every
 // privilege (CLAUDE.md §4), so a missing grant would pass there and fail only at runtime. The
 // `booking.manage` gate is proven by deletion on the block below. `core.openTab` is `fakeCore` (the
@@ -58,7 +58,7 @@ async function setupVenue(): Promise<Venue> {
     values (${tenantId}, ${locationId}, 'Caja 1') returning id`);
   const nodeId = await seedNode(db, tenantId, brandLocationId(locationId));
 
-  const { managerSid, staffSid } = await withTenant(db, tenantId, async (tx) => {
+  const { managerSid, staffSid } = await withTransaction(db, async (tx) => {
     await asAppUser(tx);
     const mgr = await tx.execute<{ id: string }>(sql`
       insert into persons (tenant_id, display_name, pin_hash, role)
@@ -96,7 +96,7 @@ function mountApp(ctx: ModuleRouteContext): Hono {
 
 /** Insert an ACTIVE dining table for the venue as the app role, returning its id. */
 async function seedTable(cfg: BookingConfig, label = "12"): Promise<string> {
-  return withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const row = await tx.execute<{ id: string }>(sql`
       insert into dining_tables (tenant_id, location_id, label, active)

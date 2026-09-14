@@ -14,7 +14,7 @@ import {
   invoiceSeries,
   saleLines,
   sales,
-  withTenant,
+  withTransaction,
 } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { IDENTITY_MIGRATIONS, hashPin, loginWithPin } from "@waitron/identity";
@@ -83,7 +83,7 @@ async function seedPerson(role: "staff" | "supervisor" | "manager" | "admin"): P
 
 /** Opens a shift session for `personId` at this tenant's till and returns its id. */
 async function openSession(personId: string): Promise<string> {
-  const session = await withTenant(suite.db, tenantId, (tx) =>
+  const session = await withTransaction(suite.db, (tx) =>
     loginWithPin(tx, { tenantId, tillId, personId, pin: "1234" }),
   );
   return session.id;
@@ -198,7 +198,7 @@ function correctionInput(
 /** Records an ORIGINAL sale exactly as the application will: as `app_user`, in one transaction,
  * on a node already registered with the backend. */
 async function sell(backend: FiscalBackend, overrides: Partial<RecordSaleInput> = {}) {
-  return withTenant(suite.db, tenantId, async (tx) => {
+  return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     await backend.registerNode(tx, nodeId, { tenantId });
     return recordSale(tx, backend, saleInput(overrides));
@@ -211,7 +211,7 @@ async function correct(
   correctsSaleId: SaleId,
   overrides: Partial<RecordCorrectionInput> = {},
 ) {
-  return withTenant(suite.db, tenantId, async (tx) => {
+  return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     return recordCorrection(tx, backend, correctionInput(correctsSaleId, overrides));
   });
@@ -325,7 +325,7 @@ describe("recordCorrection — the sale being corrected", () => {
     // annulled sale is a staff/UI error. Reuses `sale.voided` (ratified decision, plan §4.3).
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId } = await sell(backend);
-    await withTenant(suite.db, tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       await recordVoid(tx, backend, saleId, "Wrong table", { sessionId: managerSessionId });
     });

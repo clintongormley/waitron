@@ -10,7 +10,7 @@ import { validateThemeOverride } from "./theme.js";
  * `tenant_id`, which doubles as the `ON CONFLICT` target — the `putReceipt` shape.
  *
  * Every function takes the caller's transaction, opened with
- * `withTenant(deps.db, tenantId, …)` + `asAppUser(tx)`. Exercised in
+ * `withTransaction(deps.db, …)` + `asAppUser(tx)`. Exercised in
  * `theme-store.test.ts` (real Postgres, as a non-superuser `app_user` member — PGlite holds every
  * grant, CLAUDE.md §4).
  *

@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { encryptTotpSecret, hashPassword, hashPin } from "@waitron/identity";
 import { DEFAULT_RECEIPT } from "@waitron/layouts";
@@ -13,12 +13,12 @@ import { ALL_MODULES } from "./modules.js";
 import { createPasswordThrottle, type PasswordThrottle } from "./password-throttle.js";
 
 // Real Postgres, not PGlite: these routes are the dashboard's management surface, and everything they
-// do runs `withTenant` + `asAppUser`, so every read and write is subject to app_user's grants.
+// do runs `withTransaction` + `asAppUser`, so every read and write is subject to app_user's grants.
 // PGlite connects as a superuser holding every privilege (CLAUDE.md §4), so it cannot show that the
 // created person actually lands as the app role — the whole point of this file. The
 // login path (`loginManager`) also needs a migrated DB (persons + management_sessions), which only the
 // container provides. No probe role is needed here (unlike `till-api.pg.test.ts`): the management API
-// wires no card provider, so every DB op goes through `withTenant` + `asAppUser` from `suite.admin`.
+// wires no card provider, so every DB op goes through `withTransaction` + `asAppUser` from `suite.admin`.
 const LOCALE = "es-ES";
 const PASSWORD = "correct horse"; // ≥ MIN_PASSWORD_LENGTH; the manager's & staff's seeded password.
 // Dashboard sign-in resolves the person by EMAIL (not a client-supplied id), so each seeded person
@@ -93,7 +93,7 @@ async function setupTenant(): Promise<{ tenantId: string; managerId: string; sta
     { db: suite.admin, modules: ALL_MODULES },
   );
 
-  const { managerId, staffId } = await withTenant(suite.admin, venue.tenantId, async (tx) => {
+  const { managerId, staffId } = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const manager = await tx.execute<{ id: string }>(sql`
       insert into persons (tenant_id, display_name, email, pin_hash, password_hash, role)
@@ -119,7 +119,7 @@ function mountApp(
   const app = new Hono();
   // `secureCookies: false` so the session cookie rides the non-TLS `app.request` (mirrors
   // `till-api.pg.test.ts`'s `apiDeps`). `deps.db` is the owner connection; the routes drop to
-  // `app_user` themselves via `withTenant` + `asAppUser`. `rpId`/`origin` are the loopback passkey
+  // `app_user` themselves via `withTransaction` + `asAppUser`. `rpId`/`origin` are the loopback passkey
   // Relying Party values (these suites exercise the staff routes, not the passkey ceremonies — those
   // are covered in Task 5 — but the widened `ManagementApiDeps` requires both).
   mountManagementApi(
@@ -166,7 +166,8 @@ async function login(app: Hono, email: string, password = PASSWORD): Promise<str
 /** Count the tenant's persons named `displayName`, read back as the app role — the proof a
  * genuine tenant-scoped row landed, not merely that a route returned a success status. */
 async function countPersonsNamed(tenantId: string, displayName: string): Promise<number> {
-  const rows = await withTenant(suite.admin, tenantId, async (tx) => {
+  void tenantId;
+  const rows = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const r = await tx.execute<{ display_name: string }>(
       sql`select display_name from persons where display_name = ${displayName}`,
@@ -320,7 +321,7 @@ describe("Management API staff + session routes over real Postgres", () => {
 
   it("does not count the expected authenticator transition as a failed password", async () => {
     const { tenantId } = await setupTenant();
-    await withTenant(suite.admin, tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       await tx.execute(sql`
         insert into persons (tenant_id, display_name, email, pin_hash, password_hash, role, totp_secret)

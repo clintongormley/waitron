@@ -1,4 +1,4 @@
-import { CORE_MIGRATIONS, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -24,7 +24,7 @@ const suite = usePgliteDb({
 });
 
 function run<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  return withTenant(suite.db, tenantId, fn);
+  return withTransaction(suite.db, fn);
 }
 
 /** Registers a passkey for a person, the same row shape `finishPasskeyRegistration` writes
@@ -33,7 +33,7 @@ function run<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
  * credential id is unique per call so two seeded passkeys in one tenant do not collide on
  * `webauthn_credentials_credential_id_uq`. */
 async function seedPasskey(input: { tenantId: string; personId: string }): Promise<void> {
-  await withTenant(suite.db, input.tenantId, (tx) =>
+  await withTransaction(suite.db, (tx) =>
     tx.insert(webauthnCredentials).values({
       tenantId: input.tenantId,
       personId: input.personId,
@@ -72,7 +72,7 @@ describe("the passkey offer", () => {
     // The person id exists — in the FIRST tenant. A read that trusts a globally unique id answers
     // about someone else's person; one tenant per database is not the query's isolation boundary.
     await expect(
-      withTenant(suite.db, otherTenantId, (tx) =>
+      withTransaction(suite.db, (tx) =>
         shouldOfferPasskey(tx, { tenantId: otherTenantId, personId }),
       ),
     ).resolves.toBe(false);
@@ -107,7 +107,7 @@ describe("the passkey offer", () => {
     // The write is the dangerous direction: a stamp that lands on another tenant's person silently
     // cancels an offer that tenant never saw. One database per tenant is not the write's isolation
     // boundary either.
-    await withTenant(suite.db, otherTenantId, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       markPasskeyOffered(tx, { tenantId: otherTenantId, personId }),
     );
 

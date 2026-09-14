@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -33,7 +33,8 @@ async function setup(): Promise<PrintConfig> {
 /** Run `fn` as the real deployment role — a tenant-scoped tx that switches to `app_user` first, the
  * shape the Task-6 route wraps every runtime call in. */
 function asApp<T>(db: Database, cfg: PrintConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  return withTenant(db, cfg.tenantId, async (tx) => {
+  void cfg;
+  return withTransaction(db, async (tx) => {
     await asAppUser(tx);
     return fn(tx);
   });
@@ -197,7 +198,7 @@ describe("double-pull race (real Postgres)", () => {
       const gate = new Promise<void>((resolve) => (releaseA = resolve));
       let aClaimedResolve!: (v: ClaimedJob[]) => void;
       const aClaimed = new Promise<ClaimedJob[]>((resolve) => (aClaimedResolve = resolve));
-      const aDone = withTenant(connA, cfg.tenantId, async (tx) => {
+      const aDone = withTransaction(connA, async (tx) => {
         await asAppUser(tx);
         const claimed = await claimPrintJobs(tx, cfg, agentA, {
           locationId: cfg.locationId,
@@ -215,7 +216,7 @@ describe("double-pull race (real Postgres)", () => {
       // READ COMMITTED) and blocks at its own id-keyed UPDATE — a lock waiter — then re-marks every row
       // once A commits, a double claim. Release A the moment EITHER is observed so neither deadlocks.
       let bSettled = false;
-      const bDone = withTenant(connB, cfg.tenantId, async (tx) => {
+      const bDone = withTransaction(connB, async (tx) => {
         await asAppUser(tx);
         return claimPrintJobs(tx, cfg, agentB, { locationId: cfg.locationId, visibleKeys: [] });
       }).then((r) => {

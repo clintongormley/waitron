@@ -1,6 +1,6 @@
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import { buildAltaRecord, serializeEnvio } from "@waitron/verifactu";
 import type { Cabecera, EnvioRegistro, RegistroAlta } from "@waitron/verifactu";
 import { fromRegistroRow, toRegistroRow } from "./registro-row.js";
@@ -79,7 +79,7 @@ async function storeF3AsAppUser(record: RegistroAlta): Promise<string> {
     offsetMinutes: 120,
     entorno: "production",
   });
-  await withTenant(suite.admin, till.tenantId, async (tx) => {
+  await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     await tx.insert(registrosFacturacion).values(row);
   });

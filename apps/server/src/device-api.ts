@@ -14,7 +14,7 @@ import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { and, desc, eq } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
-import { asAppUser, deviceProfiles, devices, ticketItems, withTenant } from "@waitron/db";
+import { asAppUser, deviceProfiles, devices, ticketItems, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { authorizeManager, type Permission } from "@waitron/identity";
 import { kindOfFormFactor, listDeviceProfiles } from "@waitron/layouts";
@@ -211,7 +211,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
   // `device.manage`, then run `fn`. Every management route funnels its DB work through here so the gate
   // is applied identically and in exactly one place (purchasing-api's `gated`, permission baked in).
   const gated = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> =>
-    withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+    withTransaction(deps.db, async (tx) => {
       await asAppUser(tx);
       await authorizeManager(tx, {
         managementSessionId: sessionId,
@@ -221,7 +221,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
     });
 
   // A by-id device predicate that ALSO scopes to this tenant — the one place the by-id management
-  // writes build their `.where`. Since RLS was dropped (#255) `withTenant` no longer isolates by
+  // writes build their `.where`. Since RLS was dropped (#255) `withTransaction` no longer isolates by
   // tenant, so a by-id read OR write must carry its own `tenant_id` scope (CLAUDE.md §3;
   // till-reroute-S3): a globally-unique device UUID is NOT the query's isolation boundary, so a
   // request scoped to tenant A must update/read zero of tenant B's rows (→ 404 / omitted), never
@@ -250,7 +250,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       }
       const body = await readJsonBody<{ name?: unknown }>(c);
       const name = requireString(body.name, "name");
-      const made = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const made = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         const request = await createJoinRequest(tx, deps.cfg, { kind: "device", label: name });
         if (auto) {
@@ -296,7 +296,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       const token = raw.slice(dot + 1);
       // The selector goes into a bare-uuid comparison, where a non-uuid would `22P02` a 500.
       if (!isUuid(joinId)) throw new AppError("device.unauthorized", {});
-      const status = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const status = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         return readJoinStatus(tx, deps.cfg, joinId, token);
       });
@@ -346,7 +346,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       // bound `kds_station`; the handheld kind makes it reachable and it is now covered by a test.)
       if (device.stationId === null) throw new AppError("device.unauthorized", {});
       const stationId = device.stationId;
-      const queue = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const queue = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         return listStationQueue(tx, deps.cfg, stationId);
       });
@@ -376,7 +376,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       // `to` reaches `advanceTicketItem` as-is (cast): the verb owns target validation, refusing
       // "queued"/garbage/absent as `ticket.invalid_transition` before any enum reaches the column.
       const to = body.to as TicketState;
-      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         // `advanceTicketItem` NEVER checks the station (KDS-1), so the station-ownership guard is
         // the route's job: fetch the item's own station and refuse a foreign one BEFORE the bump.
@@ -423,7 +423,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
               eq(deviceProfiles.id, devices.deviceProfileId),
             ),
           )
-          // Scope the list to THIS tenant explicitly — since RLS was dropped (#255) `withTenant` no
+          // Scope the list to THIS tenant explicitly — since RLS was dropped (#255) `withTransaction` no
           // longer isolates SELECTs, so without this a manager sees (and, via the by-id writes below,
           // could reassign/revoke) every tenant's devices in a multi-tenant DB (CLAUDE.md §3).
           .where(eq(devices.tenantId, deps.cfg.tenantId))
@@ -574,13 +574,13 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
   // Mounted ONLY in devMode, so outside dev this route DOES NOT EXIST (404) — the same fail-closed shape
   // as the override header. The chooser lists the venue's active devices so a browser can adopt one via
   // the dev-override header; the mint-and-adopt and reset routes it used to sit beside are gone. A
-  // browser with no device knocks like any other. The read runs under `withTenant` + `asAppUser`;
+  // browser with no device knocks like any other. The read runs under `withTransaction` + `asAppUser`;
   // nothing here returns a token or reader credential.
   if (deps.devMode) {
     app.get("/api/dev/devices", (c) =>
       run(c, log, async () =>
         c.json(
-          await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+          await withTransaction(deps.db, async (tx) => {
             await asAppUser(tx);
             // Active-only projection — the switcher chooses among devices a browser can BECOME, and a
             // revoked device is not one. NO token/tokenHash column is selected: the credential never

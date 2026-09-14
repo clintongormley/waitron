@@ -1,5 +1,5 @@
 import { putCredential, type KeyRing } from "@waitron/credentials";
-import { withTenant, type Database } from "@waitron/db";
+import { withTransaction, type Database } from "@waitron/db";
 import { AppError, tenantId as brandTenantId } from "@waitron/shared";
 import { isCertKind, type CertKind } from "./aeat-transport.js";
 import "./errors.js";
@@ -95,7 +95,7 @@ export function parseAeatCert(raw: unknown): AeatCert {
  * non-empty `certKind` (a `"bogus"` value only fails far downstream when the drain picks a SOAP host)
  * and any non-empty `pfxBase64` (a non-base64 blob only fails at decode time).
  *
- * The seal runs under `withTenant` (the write's own transaction), and the tenant must already exist
+ * The seal runs under `withTransaction` (the write's own transaction), and the tenant must already exist
  * (the seal runs AFTER `applyVenue` mints it — the FK is `restrict`).
  */
 export async function sealAeatSecret(
@@ -106,7 +106,7 @@ export async function sealAeatSecret(
   const cert = parseAeatCert(raw);
 
   const tenant = brandTenantId(tenantId);
-  await withTenant(deps.db, tenant, (tx) =>
+  await withTransaction(deps.db, (tx) =>
     putCredential(tx, deps.ring, {
       tenantId: tenant,
       purpose: "fiscal.aeat",

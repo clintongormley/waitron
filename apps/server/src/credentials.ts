@@ -1,4 +1,4 @@
-import { withTenant } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { getCredential } from "@waitron/credentials";
 import type { KeyRing, Purpose } from "@waitron/credentials";
@@ -15,5 +15,5 @@ export function readCredential(
   tenantId: TenantId,
   purpose: Purpose,
 ): Promise<Record<string, string>> {
-  return withTenant(db, tenantId, (tx) => getCredential(tx, ring, { tenantId, purpose }));
+  return withTransaction(db, (tx) => getCredential(tx, ring, { tenantId, purpose }));
 }

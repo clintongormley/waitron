@@ -56,7 +56,7 @@ export const MAX_DELIVERY_ATTEMPTS = 5;
 export const PRINT_JOB_LEASE_MS = 60_000;
 
 export interface AgentRuntimeDeps {
-  /** A tenant-scoped transaction (the Task-6 route wraps this in `withTenant` + `asAppUser`). */
+  /** A tenant-scoped transaction (the Task-6 route wraps this in `withTransaction` + `asAppUser`). */
   tx: Transaction;
   /** The tenant the agent belongs to, enforced by the pull's explicit tenant predicate. */
   cfg: { tenantId: string };
@@ -105,7 +105,7 @@ export type JobOutcome = { status: "done" } | { status: "failed"; error: string 
  * PULL (design §3c step 1) — atomically CLAIM a batch of this agent's due jobs, flipping them
  * `queued`/`failed`→`printing`, and RETURN each with its printer's connection facts. Extracted from
  * `runAgentOnce` (Controller Ruling 6) so the SERVER path can claim-and-COMMIT within one HTTP request
- * (the route's `withTenant` transaction is the commit boundary) and then return the claimed jobs to a
+ * (the route's `withTransaction` transaction is the commit boundary) and then return the claimed jobs to a
  * remote agent, holding NO lock or transaction across that agent's socket write. `runAgentOnce` (local
  * mode) still calls this, then pushes+reports in the SAME transaction.
  *

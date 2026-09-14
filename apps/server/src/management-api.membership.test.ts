@@ -5,7 +5,7 @@ import {
   asAppUser,
   readNodeMembership,
   stampDeployment,
-  withTenant,
+  withTransaction,
   writeNodeMembership,
   type Database,
 } from "@waitron/db";
@@ -85,7 +85,7 @@ async function setupVenue(): Promise<{ designated: AdoptResult; adminPersonId: s
     nodeId: venue.nodeId,
     seriesId: venue.seriesIds[0]!,
   };
-  const adminPersonId = await withTenant(appDb, designated.tenantId, async (tx) => {
+  const adminPersonId = await withTransaction(appDb, async (tx) => {
     await asAppUser(tx);
     const r = await tx.execute<{ id: string }>(
       sql`select id from persons where tenant_id = ${venue.tenantId} and role = 'admin'`,
@@ -98,7 +98,7 @@ async function setupVenue(): Promise<{ designated: AdoptResult; adminPersonId: s
 /** Insert a NON-admin (staff) person carrying a dashboard password — staff lacks `mirror.create`, so it
  * authenticates but fails authorization → 403. */
 async function seedStaff(tenantId: string): Promise<string> {
-  return withTenant(suite.admin, tenantId, async (tx) => {
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const r = await tx.execute<{ id: string }>(sql`
       insert into persons (tenant_id, display_name, pin_hash, password_hash, role)

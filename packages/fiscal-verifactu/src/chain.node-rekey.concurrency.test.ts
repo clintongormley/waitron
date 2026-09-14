@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { recordSale } from "@waitron/core";
-import { asAppUser, captureError, pgErrorCode, withTenant } from "@waitron/db";
+import { asAppUser, captureError, pgErrorCode, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { nodeId as brandNodeId, seriesId as brandSeriesId } from "@waitron/shared";
 import type { NodeId } from "@waitron/shared";
@@ -187,7 +187,7 @@ describe("the series↔node guard (record-sale)", () => {
     const other = await seedTill(suite.admin, "OTH"); // a DIFFERENT node (and tenant)
     const backend = backendFor();
     const error = await captureError(() =>
-      withTenant(suite.admin, node.tenantId, async (tx) => {
+      withTransaction(suite.admin, async (tx) => {
         await asAppUser(tx);
         // node.seriesId belongs to node.nodeId, but we claim to process on `other.nodeId`.
         return recordSale(
@@ -207,7 +207,7 @@ describe("the series↔node guard (record-sale)", () => {
 
   it("accepts a sale whose node owns the series", async () => {
     const backend = backendFor();
-    const result = await withTenant(suite.admin, node.tenantId, async (tx) => {
+    const result = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return recordSale(
         tx,
@@ -229,11 +229,11 @@ describe("the series↔node guard (record-sale)", () => {
 });
 
 describe("node references and app-role appends", () => {
-  // Property 5 (design §9.3): the app role can append node-keyed rows under withTenant; the composite
+  // Property 5 (design §9.3): the app role can append node-keyed rows under withTransaction; the composite
   // (tenant_id, node_id) FK on `sales` blocks a cross-tenant node reference.
   it("lets the app role append under its own tenant context", async () => {
     const saleId = await seedSale(suite.admin, node, 1);
-    const appended = await withTenant(suite.admin, node.tenantId, async (tx) => {
+    const appended = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return appendToChain(tx, node.tenantId, node.nodeId, altaFor(node.tillId, saleId, 1, 1));
     });

@@ -2,7 +2,7 @@ import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { recordSale } from "@waitron/core";
-import { asAppUser, sales, withTenant } from "@waitron/db";
+import { asAppUser, sales, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { decimal, saleId as brandSaleId } from "@waitron/shared";
 import type { NodeId, SeriesId, TenantId, TillId } from "@waitron/shared";
@@ -42,7 +42,7 @@ async function useSeriesCode(code: string): Promise<void> {
 }
 
 function sell() {
-  return withTenant(pg.db, tenantId, async (tx) => {
+  return withTransaction(pg.db, async (tx) => {
     await asAppUser(tx);
     return recordSale(tx, backend, saleInput({ tenantId, tillId, nodeId, seriesId }));
   });
@@ -107,7 +107,7 @@ describe("a record AEAT could not accept never enters the chain", () => {
     };
 
     await expect(
-      withTenant(pg.db, tenantId, (tx) => appendToChain(tx, tenantId, nodeId, registro)),
+      withTransaction(pg.db, (tx) => appendToChain(tx, tenantId, nodeId, registro)),
     ).rejects.toMatchObject({
       code: "fiscal.record_invalid",
       params: { fields: ["NumSerieFacturaAnulada"] },
@@ -141,7 +141,7 @@ describe("a record whose totals disagree with themselves is written, filed and f
 
   it("records the sale rather than refusing it", async () => {
     await useSeriesCode("FS");
-    const { saleId } = await withTenant(pg.db, tenantId, async (tx) => {
+    const { saleId } = await withTransaction(pg.db, async (tx) => {
       await asAppUser(tx);
       return recordSale(tx, backend, mismatchedSale());
     });
@@ -156,7 +156,7 @@ describe("a record whose totals disagree with themselves is written, filed and f
 
   it("raises a warning incident against that sale", async () => {
     await useSeriesCode("FS");
-    const { saleId } = await withTenant(pg.db, tenantId, async (tx) => {
+    const { saleId } = await withTransaction(pg.db, async (tx) => {
       await asAppUser(tx);
       return recordSale(tx, backend, mismatchedSale());
     });
@@ -191,7 +191,7 @@ describe("a recipient's name is checked as closely as the issuer's", () => {
    *
    * `packages/core`'s `recordSale` hardcodes `counterparty: null`, so the F1 branch is reached by
    * calling the backend directly — the same bypass `backend.test.ts`'s own F1 cases use. The sale
-   * row is inserted on the SAME `withTenant` transaction, which is what makes the "nothing was
+   * row is inserted on the SAME `withTransaction` transaction, which is what makes the "nothing was
    * written" assertions below meaningful: a refusal rolls back both or neither. */
   // `sales_pkey` is global while the tenant is fresh each `beforeEach`, so each case mints its own
   // id and invoice number — a shared literal would make a case that EXPECTS the write to succeed
@@ -202,7 +202,7 @@ describe("a recipient's name is checked as closely as the issuer's", () => {
     sequence += 1;
     const saleId = `77777777-7777-4777-8777-7777777770${String(sequence).padStart(2, "0")}`;
     const invoiceNumber = 900 + sequence;
-    return withTenant(pg.db, tenantId, async (tx) => {
+    return withTransaction(pg.db, async (tx) => {
       await asAppUser(tx);
       await tx.insert(sales).values({
         id: saleId,

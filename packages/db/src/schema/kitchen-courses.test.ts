@@ -4,7 +4,7 @@ import type { Transaction } from "../client.js";
 import { captureError, pgErrorCode } from "../testing/errors.js";
 import { useTemplateDb } from "../testing/lifecycle.js";
 import { asAppUser } from "../testing/roles.js";
-import { withTenant } from "../tenancy.js";
+import { withTransaction } from "../tenancy.js";
 import { catalogues, products } from "./catalogue.js";
 import { kitchenCourses } from "./kitchen-courses.js";
 import { tenants } from "./tenants.js";
@@ -63,7 +63,8 @@ describe("kitchen_courses schema (columns, defaults, course FKs)", () => {
   });
 
   function asApp<T>(tenant: string, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-    return withTenant(suite.admin, tenant, async (tx) => {
+    void tenant;
+    return withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return fn(tx);
     });

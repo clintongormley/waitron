@@ -40,7 +40,7 @@ import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 import pg from "pg";
 import { and, eq } from "drizzle-orm";
-import { asAppUser, createPostgresDb, tills, withTenant, type Database } from "@waitron/db";
+import { asAppUser, createPostgresDb, tills, withTransaction, type Database } from "@waitron/db";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { listDeviceProfiles } from "@waitron/layouts";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -440,7 +440,7 @@ async function seedDemoDevices(
 
   // The profiles + stations the devices bind to — provisioning seeds one profile per form factor
   // (till/kds/phone-portrait) and one default preparation station.
-  const { profiles, stations } = await withTenant(db, cfg.tenantId, async (tx) => {
+  const { profiles, stations } = await withTransaction(db, async (tx) => {
     await asAppUser(tx);
     return {
       profiles: await listDeviceProfiles(tx, cfg.tenantId),
@@ -465,7 +465,7 @@ async function seedDemoDevices(
   // The register the till device just minted, re-read fresh — `enrolDeviceForTest` returns the
   // device, not its register, and the counter's register is the one the handheld rings into.
   const counter = (
-    await withTenant(db, cfg.tenantId, async (tx) => {
+    await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       return tx
         .select({ id: tills.id })

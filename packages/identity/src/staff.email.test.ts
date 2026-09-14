@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { IDENTITY_MIGRATIONS } from "./migrations.js";
-import { withTenant } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
@@ -18,7 +18,8 @@ afterEach(async () => {
 });
 
 function run<T>(db: Database, tenantId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  return withTenant(db, tenantId, fn);
+  void tenantId;
+  return withTransaction(db, fn);
 }
 
 describe("createPerson / setEmail email_taken on a real unique index", () => {

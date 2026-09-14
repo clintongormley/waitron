@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { withTenant } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type { AckState } from "@waitron/fiscal";
 
@@ -97,7 +97,7 @@ export async function deleteAck(tx: Transaction, registroId: string): Promise<vo
 
 /** Every undelivered ack for the requested tenant, oldest submission first. */
 export async function pendingAcks(db: Database, tenantId: string): Promise<Ack[]> {
-  return withTenant(db, tenantId, async (tx) => {
+  return withTransaction(db, async (tx) => {
     const { rows } = await tx.execute<{
       registro_id: string;
       submitted_at: string | Date;
@@ -118,13 +118,13 @@ export async function pendingAcks(db: Database, tenantId: string): Promise<Ack[]
   });
 }
 
-/** Marks one ack delivered, so `pendingAcks` stops returning it. Runs inside `withTenant`. */
+/** Marks one ack delivered, so `pendingAcks` stops returning it. Runs inside `withTransaction`. */
 export async function markDelivered(
   db: Database,
   tenantId: string,
   recordId: string,
 ): Promise<void> {
-  await withTenant(db, tenantId, (tx) =>
+  await withTransaction(db, (tx) =>
     tx.execute(
       sql`update acks set delivered_at = now() where tenant_id = ${tenantId} and registro_id = ${recordId}`,
     ),

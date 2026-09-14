@@ -1,6 +1,6 @@
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { asAppUser, withTenant, type Database } from "@waitron/db";
+import { asAppUser, withTransaction, type Database } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
 import type { SlotDrain } from "@waitron/sync";
 import type { KeyRing } from "@waitron/credentials";
@@ -59,7 +59,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
 /**
  * Registers `POST /api/box/retire` on the shared trading app — the management action a fully-drained
  * fenced node self-evicts with (retire/evict R3). Gated exactly like `GET /api/box/status`:
- * `requireManagementSession` → 401 before any DB work, then `withTenant` + `asAppUser` +
+ * `requireManagementSession` → 401 before any DB work, then `withTransaction` + `asAppUser` +
  * `authorizeManager("system.manage")` for the manager check (a `manager`-role person holds it), then
  * `retireSelf` runs on the app pool. `retireSelf` owns all retire SEMANTICS — the four ordered refusals,
  * idempotency, the abort-before-write mint; this route is only the auth + status-mapping glue.
@@ -73,7 +73,7 @@ export function mountBoxRetireApi(app: Hono, deps: BoxRetireDeps, log: Logger): 
   app.post("/api/box/retire", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c); // throws 401 if absent
-      await withTenant(deps.appDb, deps.tenantId, async (tx) => {
+      await withTransaction(deps.appDb, async (tx) => {
         await asAppUser(tx);
         await authorizeManager(tx, {
           managementSessionId: sessionId,

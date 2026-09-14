@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { asAppUser, sales, saleLines, withTenant } from "@waitron/db";
+import { asAppUser, sales, saleLines, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import { ALL_MODULES } from "../../src/modules.js";
@@ -133,7 +133,7 @@ describe("seedSales", () => {
     // (a) It recorded something.
     expect(count).toBeGreaterThan(0);
 
-    const read = await withTenant(suite.admin, brandTenantId(venue.tenantId), async (tx) => {
+    const read = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       const saleRows = await tx
         .select({ id: sales.id, issuedAt: sales.issuedAt, total: sales.total })
@@ -209,7 +209,7 @@ describe("seedSales", () => {
 
     expect(count).toBe(0);
 
-    const saleRows = await withTenant(suite.admin, brandTenantId(venue.tenantId), async (tx) => {
+    const saleRows = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return tx.select({ id: sales.id }).from(sales).where(eq(sales.tenantId, venue.tenantId));
     });
@@ -293,7 +293,7 @@ describe("seedSales", () => {
     });
     expect(count).toBeGreaterThan(0);
 
-    const rows = await withTenant(suite.admin, brandTenantId(venue.tenantId), async (tx) => {
+    const rows = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return tx
         .select({

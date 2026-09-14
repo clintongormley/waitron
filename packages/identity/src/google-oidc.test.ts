@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { CORE_MIGRATIONS, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -22,7 +22,7 @@ const suite = usePgliteDb({
     tenantId = await seedTenant(db);
   },
 });
-const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTenant(suite.db, tenantId, fn);
+const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, fn);
 const config = {
   clientId: "client.apps.googleusercontent.com",
   redirectUri: "https://waitron.example/management-api/google/callback",

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, asAppUser, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { addDecimal, subtractDecimal } from "@waitron/shared";
 import type { TenantId } from "@waitron/shared";
@@ -44,7 +44,7 @@ function runPeriod(
   opts: { year?: number; tenantId?: TenantId } = {},
 ): Promise<VatReturn> {
   const tenantId = opts.tenantId ?? venue.tenantId;
-  return withTenant(suite.db, tenantId, async (tx) => {
+  return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     return computeVatReturn(tx, { tenantId, year: opts.year ?? 2026, period });
   });

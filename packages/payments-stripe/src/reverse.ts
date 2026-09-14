@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { AppError, decimal } from "@waitron/shared";
 import type { Decimal, TenantId } from "@waitron/shared";
-import { withTenant } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type { PaymentResult } from "@waitron/payments";
 import {
@@ -33,7 +33,7 @@ export interface StripeRefunder {
  */
 export interface ReverseViaStripeOptions {
   /**
-   * The tenant whose payment is being reversed. Both database phases use `withTenant`.
+   * The tenant whose payment is being reversed. Both database phases use `withTransaction`.
    * The first lookup uses only the payment reference; its returned tenant id must match this
    * value before any refund is issued or local state is changed.
    */
@@ -68,7 +68,7 @@ export interface ReverseViaStripeOptions {
  * real refund; SAME-reversal retry-safety (a persisted per-reversal id) is deferred, and reconcile
  * backstops Stripe-vs-local drift.
  *
- * Both database phases run through `withTenant` with the required tenant id. */
+ * Both database phases run through `withTransaction` with the required tenant id. */
 export async function reverseViaStripe(
   db: Database,
   client: StripeRefunder,
@@ -88,7 +88,7 @@ export async function reverseViaStripe(
   }: ReverseViaStripeOptions,
 ): Promise<PaymentResult> {
   // The ONE opener for every database phase below — the T1 pre-check and whichever T2 write the
-  // outcome selects — so they cannot drift apart. `withTenant` OPENS a transaction, which is why
+  // outcome selects — so they cannot drift apart. `withTransaction` OPENS a transaction, which is why
   // this wraps only those short phases: the processor refund between them is a network call and
   // stays outside every transaction (T1/T2), as does the `resolveProcessorRef` lookup feeding it.
   //
@@ -96,7 +96,7 @@ export async function reverseViaStripe(
   // : …`). It is gone with the option's optionality: it was the mechanism by which every
   // interactive-provider reversal failed closed under a real role.
   const inTransaction = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> =>
-    withTenant(db, tenantId, fn);
+    withTransaction(db, fn);
 
   const found = await inTransaction(async (tx) => {
     const f = await findPaymentByRef(tx, provider, ref);

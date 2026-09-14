@@ -16,7 +16,7 @@ import {
   saleLines,
   saleSubstitutions,
   sales,
-  withTenant,
+  withTransaction,
 } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { IDENTITY_MIGRATIONS, hashPin, loginWithPin } from "@waitron/identity";
@@ -57,7 +57,7 @@ beforeEach(async () => {
     sql`insert into persons (tenant_id, display_name, pin_hash, role)
         values (${tenantId}, 'P', ${hashPin("1234")}, 'manager') returning id`,
   );
-  const session = await withTenant(suite.db, tenantId, (tx) =>
+  const session = await withTransaction(suite.db, (tx) =>
     loginWithPin(tx, { tenantId, tillId, personId: rows[0]!.id, pin: "1234" }),
   );
   voidSessionId = session.id;
@@ -174,7 +174,7 @@ function substitutionInput(
 /** Records an ORIGINAL simplified ticket exactly as the application will: as `app_user`, in one
  * transaction, on a node already registered with the backend. */
 async function sellTicket(backend: FiscalBackend, overrides: Partial<RecordSaleInput> = {}) {
-  return withTenant(suite.db, tenantId, async (tx) => {
+  return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     await backend.registerNode(tx, nodeId, { tenantId });
     return recordSale(tx, backend, saleInput(overrides));
@@ -187,7 +187,7 @@ async function substitute(
   substitutedSaleIds: SaleId[],
   overrides: Partial<RecordSubstitutionInput> = {},
 ) {
-  return withTenant(suite.db, tenantId, async (tx) => {
+  return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     return recordSubstitution(tx, backend, substitutionInput(substitutedSaleIds, overrides));
   });
@@ -242,7 +242,7 @@ describe("recordSubstitution — the substituted tickets (input guards)", () => 
     // reuses `sale.voided`, the same code `recordCorrection` reuses for the analogous refusal.
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId } = await sellTicket(backend);
-    await withTenant(suite.db, tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       await recordVoid(tx, backend, saleId, "Wrong table", { sessionId: voidSessionId });
     });
@@ -284,7 +284,7 @@ describe("recordSubstitution — error propagation", () => {
     const foreignTicket = await seedBareSale(suite.db, other);
 
     const error = await captureError(() =>
-      withTenant(suite.db, tenantId, (tx) =>
+      withTransaction(suite.db, (tx) =>
         recordSubstitution(tx, backend, substitutionInput([foreignTicket])),
       ),
     );

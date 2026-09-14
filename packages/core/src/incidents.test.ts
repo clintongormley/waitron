@@ -13,7 +13,7 @@ import {
   incidents,
   pgErrorMessage,
   sales,
-  withTenant,
+  withTransaction,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
@@ -161,7 +161,7 @@ function failingChain(): FakeFiscalBackend {
  * with no prior `registerNode`, exactly like a real backend).
  */
 async function sell(backend: FiscalBackend, overrides: Partial<RecordSaleInput> = {}) {
-  return withTenant(suite.db, tenantId, async (tx) => {
+  return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     await backend.registerNode(tx, nodeId, { tenantId });
     return recordSale(tx, backend, input(overrides));
@@ -283,7 +283,7 @@ describe("incidents — chain verification failure", () => {
     // neither survives.
     const backend = failingChain();
     await expect(
-      withTenant(suite.db, tenantId, async (tx) => {
+      withTransaction(suite.db, async (tx) => {
         await asAppUser(tx);
         await backend.registerNode(tx, nodeId, { tenantId });
         await recordSale(tx, backend, input());
@@ -328,7 +328,7 @@ describe("recordIncident — no sale attached", () => {
     // ./incidents.ts's own doc comment on `saleId`. Nothing in Task 18's own write path omits it
     // (`recordSale`/`recordVoid` always have one), so this is the one place that path is
     // exercised at all before plan 3 exists to call it for real.
-    await withTenant(suite.db, tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       await recordIncident(tx, {
         tenantId,
@@ -356,7 +356,7 @@ describe("openIncidents", () => {
     }));
     await sell(failingChain());
     await sell(failingChain(), { clock: later });
-    const rows = await withTenant(suite.db, tenantId, async (tx) => {
+    const rows = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       return openIncidents(tx, tillId);
     });
@@ -366,13 +366,13 @@ describe("openIncidents", () => {
 
   it("excludes acknowledged incidents", async () => {
     await sell(failingChain());
-    await withTenant(suite.db, tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       // The one permitted mutation, and it must be permitted for app_user — a column-level GRANT
       // that omitted acknowledged_at would fail here. This update acknowledges the fixture rows.
       await tx.update(incidents).set({ acknowledgedAt: new Date().toISOString() });
     });
-    const rows = await withTenant(suite.db, tenantId, async (tx) => {
+    const rows = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       return openIncidents(tx, tillId);
     });
@@ -382,7 +382,7 @@ describe("openIncidents", () => {
   it("scopes incidents to one till", async () => {
     const other = await seedTenant(suite.db, { tenantId });
     await sell(failingChain());
-    const rows = await withTenant(suite.db, tenantId, async (tx) => {
+    const rows = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       return openIncidents(tx, other.tillId);
     });
@@ -399,7 +399,7 @@ describe("openIncidents", () => {
     // `captureError`/`pgErrorMessage` (this task's own governing conventions) read that instead.
     await sell(failingChain());
     const error = await captureError(() =>
-      withTenant(suite.db, tenantId, async (tx) => {
+      withTransaction(suite.db, async (tx) => {
         await asAppUser(tx);
         await tx.update(incidents).set({ code: "nothing.happened" });
       }),
@@ -443,7 +443,7 @@ describe("recordIncidentOnce", () => {
   }
 
   it("inserts the first time and returns true", async () => {
-    await withTenant(suite.db, tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       const inserted = await recordIncidentOnce(tx, {
         tenantId,
@@ -459,7 +459,7 @@ describe("recordIncidentOnce", () => {
   });
 
   it("de-dups a second raise for the same open (till, code, sale) and returns false", async () => {
-    await withTenant(suite.db, tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       const input: RecordIncidentInput = {
         tenantId,
@@ -481,7 +481,7 @@ describe("recordIncidentOnce", () => {
   });
 
   it("raises a fresh one after the prior incident is acknowledged", async () => {
-    await withTenant(suite.db, tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       const input: RecordIncidentInput = {
         tenantId,
@@ -504,7 +504,7 @@ describe("recordIncidentOnce", () => {
   });
 
   it("does not de-dup a different code for the same till", async () => {
-    await withTenant(suite.db, tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       const base = {
         tenantId,
@@ -532,7 +532,7 @@ describe("recordIncidentOnce", () => {
     const { saleId: saleA } = await sell(backend);
     const { saleId: saleB } = await sell(backend);
 
-    await withTenant(suite.db, tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       const error = new AppError("clock.degraded", { tillId, anchorAgeSeconds: 999 });
       const forSaleA = await recordIncidentOnce(tx, {
@@ -593,11 +593,11 @@ describe("incidents open-dedup invariant (partial unique index)", () => {
       severity: "error",
       detectedAt: new Date("2026-07-24T10:00:00Z"),
     };
-    await withTenant(suite.db, tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       await recordIncident(tx, input);
     });
-    await withTenant(suite.db, tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       await recordIncident(tx, input);
     });
@@ -608,7 +608,7 @@ describe("incidents open-dedup invariant (partial unique index)", () => {
   it("de-dups two orphan (sale_id NULL) raises via NULLS NOT DISTINCT", async () => {
     const { tenantId, tillId } = await seedTillForIncidents();
     const raise = () =>
-      withTenant(suite.db, tenantId, async (tx) => {
+      withTransaction(suite.db, async (tx) => {
         await asAppUser(tx);
         return recordIncidentOnce(tx, {
           tenantId,
@@ -637,7 +637,7 @@ describe("incidents open-dedup invariant (partial unique index)", () => {
       detectedAt: new Date("2026-07-24T10:00:00Z"),
     };
     const raise = () =>
-      withTenant(suite.db, tenantId, async (tx) => {
+      withTransaction(suite.db, async (tx) => {
         await asAppUser(tx);
         return recordIncidentOnce(tx, input);
       });

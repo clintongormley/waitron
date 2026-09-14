@@ -1,4 +1,4 @@
-import { CORE_MIGRATIONS, captureError, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, captureError, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -27,7 +27,7 @@ const suite = usePgliteDb({
 });
 
 function run<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  return withTenant(suite.db, tenantId, fn);
+  return withTransaction(suite.db, fn);
 }
 
 async function codeOfRejection(fn: () => Promise<unknown>): Promise<string | undefined> {
@@ -277,7 +277,7 @@ describe("listPendingAbsences", () => {
       endsOn: "2026-07-02",
       status: "approved",
     });
-    const rows = await withTenant(suite.db, listTenant, (tx) =>
+    const rows = await withTransaction(suite.db, (tx) =>
       listPendingAbsences(tx, { tenantId: listTenant }),
     );
     // created_at ASC → [early, late], the REVERSE of insertion order; the approved absence is excluded.

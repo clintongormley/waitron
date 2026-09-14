@@ -30,7 +30,13 @@
 //   pnpm --filter @waitron/server demo:allergens
 //   # or: pnpm --filter @waitron/server exec tsx scripts/allergens-demo.ts
 import { sql } from "drizzle-orm";
-import { CORE_MIGRATIONS, asAppUser, createPgliteDb, runMigrations, withTenant } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  asAppUser,
+  createPgliteDb,
+  runMigrations,
+  withTransaction,
+} from "@waitron/db";
 import type { Database } from "@waitron/db";
 import {
   ALLERGEN_CODES,
@@ -175,9 +181,9 @@ async function main(): Promise<void> {
     const venue = await seedVenue(db);
 
     // Author the catalogue as the application role (not the superuser owner), exactly as the
-    // running POS does: `withTenant` opens the transaction, `asAppUser` selects the app role on
+    // running POS does: `withTransaction` opens the transaction, `asAppUser` selects the app role on
     // PostgreSQL.
-    await withTenant(db, venue.tenantId, async (tx) => {
+    await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       const cat = await createCatalogue(tx, venue.tenantId, { name: "Delicatessen" });
       const comida = await createCategory(tx, venue.tenantId, { name: { en: "Comida" } });
@@ -240,7 +246,7 @@ async function main(): Promise<void> {
     // share both a catalogue and a created_at, so the print order falls to the random-uuid id
     // tiebreak, not seed order. Order is immaterial here — the matrix labels each row's review
     // state explicitly.
-    const products = await withTenant(db, venue.tenantId, async (tx) => {
+    const products = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       return (await listAvailableProducts(tx, venue.locationId)).products;
     });

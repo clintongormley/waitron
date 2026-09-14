@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import { sql } from "drizzle-orm";
-import { asAppUser, withTenant, type Database, type Transaction } from "@waitron/db";
+import { asAppUser, withTransaction, type Database, type Transaction } from "@waitron/db";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import {
@@ -17,11 +17,13 @@ import { writeContentLanguages } from "./content-languages.js";
 import { createCatalogue, createProduct } from "./operations.js";
 import { seedLegacySellingUnits } from "../test/fixtures.js";
 const suite = useTemplateDb({ template: "core" });
-const app = <T>(db: Database, tenant: string, action: (tx: Transaction) => Promise<T>) =>
-  withTenant(db, tenant, async (tx) => {
+const app = <T>(db: Database, tenant: string, action: (tx: Transaction) => Promise<T>) => {
+  void tenant;
+  return withTransaction(db, async (tx) => {
     await asAppUser(tx);
     return action(tx);
   });
+};
 async function fixture() {
   const tenantId = await seedTenant(suite.admin);
   await seedLegacySellingUnits(suite.admin, tenantId);

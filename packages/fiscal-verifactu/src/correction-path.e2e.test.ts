@@ -1,6 +1,6 @@
 import { asc, eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import { computeHuella } from "@waitron/verifactu";
 import type { SaleForFiscalRecord } from "@waitron/fiscal";
 import { decimal, saleId as brandSaleId, seriesId as brandSeriesId } from "@waitron/shared";
@@ -95,7 +95,7 @@ function originalSaleFor(saleId: string, invoiceNumber: number): SaleForFiscalRe
  * the original sale's id — the `correctsSaleId` a correction points at. */
 async function recordOriginal(): Promise<string> {
   const originalId = await seedSale(suite.admin, till, 1);
-  await withTenant(suite.admin, till.tenantId, async (tx) => {
+  await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     await backend.recordSale(tx, originalSaleFor(originalId, 1));
   });
@@ -132,7 +132,7 @@ async function correct(
   const total = overrides.total ?? "-123.45";
   const correctiveId = await seedCorrectiveRow(invoiceNumber, correctsSaleId, total);
   const sale = { ...correctiveSaleFor(correctiveId, invoiceNumber), ...overrides };
-  await withTenant(suite.admin, till.tenantId, async (tx) => {
+  await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     await backend.recordCorrection(tx, sale, { correctsSaleId: brandSaleId(correctsSaleId) });
   });

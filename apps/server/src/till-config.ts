@@ -5,7 +5,7 @@ import "./errors.js";
 import { eq } from "drizzle-orm";
 import { AppError, locationId, nodeId, seriesId, tenantId, tillId } from "@waitron/shared";
 import type { LocationId, NodeId, SeriesId, TenantId, TillId } from "@waitron/shared";
-import { asAppUser, locations, nodes, orderFlow, withTenant } from "@waitron/db";
+import { asAppUser, locations, nodes, orderFlow, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { isUnset } from "./env-value.js";
 
@@ -191,7 +191,7 @@ export function tryLoadTillConfig(
 /**
  * Read the venue's pay-timing mode from the till's own LOCATION row — the DB half of the config
  * `loadTillConfig` cannot resolve from the environment. Runs as the app role under the till's
- * tenant (`withTenant` + `asAppUser`), in the database holding this tenant; the `eq(id)` filter
+ * tenant (`withTransaction` + `asAppUser`), in the database holding this tenant; the `eq(id)` filter
  * selects exactly the till's own location. Called ONCE at boot (`boot.ts`), not per request: the
  * mode is provisioning-time config, stable for the process lifetime, so re-reading it on every
  * place/collect would be a needless round trip on the till's hottest path.
@@ -200,7 +200,7 @@ export async function readOrderFlow(
   db: Database,
   cfg: Pick<TillConfig, "tenantId" | "locationId">,
 ): Promise<OrderFlow> {
-  return withTenant(db, cfg.tenantId, async (tx) => {
+  return withTransaction(db, async (tx) => {
     await asAppUser(tx);
     const [row] = await tx
       .select({ orderFlow: locations.orderFlow })
@@ -228,7 +228,7 @@ export async function readFilingModule(
   db: Database,
   cfg: Pick<TillConfig, "tenantId" | "nodeId">,
 ): Promise<string | null> {
-  return withTenant(db, cfg.tenantId, async (tx) => {
+  return withTransaction(db, async (tx) => {
     await asAppUser(tx);
     const [row] = await tx
       .select({ filingModule: nodes.filingModule })

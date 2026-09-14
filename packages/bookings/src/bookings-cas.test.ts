@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, diningTables, withTenant } from "@waitron/db";
+import { asAppUser, diningTables, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type { CoreServices } from "@waitron/module";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
@@ -40,7 +40,8 @@ function asApp<T>(
   cfg: BookingConfig,
   fn: (tx: Transaction) => Promise<T>,
 ): Promise<T> {
-  return withTenant(d, cfg.tenantId, async (tx) => {
+  void cfg;
+  return withTransaction(d, async (tx) => {
     await asAppUser(tx);
     return fn(tx);
   });

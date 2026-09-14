@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type Stripe from "stripe";
-import { CORE_MIGRATIONS, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { CREDENTIALS_MIGRATIONS, loadKeyRing, putCredential } from "@waitron/credentials";
 import type { IncidentSink } from "@waitron/payments";
@@ -89,7 +89,7 @@ function fakeMakeStripe(
 
 async function seedStripe(value: Record<string, string>): Promise<TenantId> {
   const tenantId = await seedTenant(suite.db);
-  await withTenant(suite.db, tenantId, (tx) =>
+  await withTransaction(suite.db, (tx) =>
     putCredential(tx, ring, { tenantId, purpose: "payments.stripe", value }),
   );
   return tenantId;
@@ -418,7 +418,7 @@ describe("deferredStripeClient", () => {
     await expect(client.cancelReaderAction("tmr_abc")).rejects.toMatchObject({
       code: "credentials.missing",
     });
-    await withTenant(suite.db, tenantId, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       putCredential(tx, ring, { tenantId, purpose: "payments.stripe", value: FOUR_FIELDS }),
     );
     await client.cancelReaderAction("tmr_abc");

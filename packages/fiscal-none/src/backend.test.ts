@@ -9,7 +9,7 @@ import { NoneBackend } from "./backend.js";
 const make = (): FiscalBackend => new NoneBackend();
 
 // NoneBackend touches no database — every method is a pure no-op returning a fixed shape — so the
-// suite needs no db/withTenant. A stub transaction proves the point: the interface hands it in, the
+// suite needs no db/withTransaction. A stub transaction proves the point: the interface hands it in, the
 // backend never uses it.
 const tx = {} as never;
 

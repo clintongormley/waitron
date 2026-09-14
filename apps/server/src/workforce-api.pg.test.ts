@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { hashPassword, hashPin, startManagementSession } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
@@ -12,7 +12,7 @@ import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 
 // Real Postgres, not PGlite: this suite proves the workforce write group's `schedule.manage` gate BY
 // DELETION, and that a decide lands `decided_by_person_id` through app_user's TABLE-level UPDATE grant
-// (which a column-level grant would not cover). Every DB touch goes through `withTenant` + `asAppUser`
+// (which a column-level grant would not cover). Every DB touch goes through `withTransaction` + `asAppUser`
 // from `suite.admin`, so the routes run as the non-superuser app role; a PGlite superuser holds every
 // privilege, so a missing or narrowed grant would pass there (CLAUDE.md §4). The route mechanics are
 // already proven in-process on PGlite (`workforce-api.test.ts`).
@@ -68,7 +68,7 @@ async function setupVenue(): Promise<Venue> {
     ),
     { db: suite.admin, modules: ALL_MODULES },
   );
-  const seeded = await withTenant(suite.admin, venue.tenantId, async (tx) => {
+  const seeded = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const loc = await tx.execute<{ id: string }>(
       sql`select id from locations where tenant_id = ${venue.tenantId} limit 1`,
@@ -329,7 +329,7 @@ describe("Workforce API over real Postgres (roster publish, decide columns, gate
   });
 
   it("assembles planned-vs-actual for the tenant's own location as the app role", async () => {
-    // The route assembles + returns rows under withTenant + asAppUser (the windowing/scoping logic is
+    // The route assembles + returns rows under withTransaction + asAppUser (the windowing/scoping logic is
     // already covered on PGlite in Task 5). Seed one shift on a PUBLISHED roster version as admin
     // (tenant_id explicit; the planned side is published-only, so a null-version draft would be excluded)
     // and assert it comes back as a no-show — proving the read runs as app_user without leaking or 500-ing.

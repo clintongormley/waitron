@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { withTenant } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import { pgErrorCode } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { hashPin } from "./verify-pin.js";
@@ -23,7 +23,7 @@ function insertPerson(
   displayName: string,
   email: string | null,
 ): Promise<unknown> {
-  return withTenant(probe, tenantId, (tx) =>
+  return withTransaction(probe, (tx) =>
     tx.execute(sql`
       insert into persons (tenant_id, display_name, pin_hash, email)
       values (${tenantId}, ${displayName}, ${PIN}, ${email})`),

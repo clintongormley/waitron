@@ -14,7 +14,7 @@ import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import {
   locationId as brandLocationId,
@@ -143,7 +143,7 @@ async function setupVenue(): Promise<SeededVenue> {
   );
 
   const cfg = tillConfigFromVenue(venue);
-  const available = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  const available = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const cat = await createCatalogue(tx, cfg.tenantId, { name: "Delicatessen" });
     const bebidas = await createCategory(tx, cfg.tenantId, { name: { [LOCALE]: "Bebidas" } });
@@ -183,7 +183,7 @@ async function setupTwoTabs(): Promise<{
   cafe: AvailableProduct;
 }> {
   const { cfg, cafe } = await setupVenue();
-  const { tabA, tabB } = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  const { tabA, tabB } = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const a = await createTable(tx, cfg, { label: "A" });
     const b = await createTable(tx, cfg, { label: "B" });
@@ -267,7 +267,7 @@ describe("concurrent transferLines on the same pair serialise (ascending-id lock
       expect(new Set(pids).size).toBe(2); // distinct backends — on PGlite these collapse (a false pass).
 
       const runOn = (d: Database, from: string, to: string) =>
-        withTenant(d, cfg.tenantId, async (tx) => {
+        withTransaction(d, async (tx) => {
           await asAppUser(tx);
           await transferLines(tx, cfg, from, to, [{ lineNo: 1, quantity: "1" }]);
         });
@@ -300,7 +300,7 @@ describe("concurrent transferLines on the same pair serialise (ascending-id lock
 describe("H2 — after a partial transfer, each tab files its OWN single registro (no double-file, no re-price)", () => {
   it("transfer 1 café A→B, then pay BOTH tabs → exactly one sale + one registro each, at the locked price", async () => {
     const { cfg, tabA, tabB } = await setupTwoTabs(); // A: café×4, B: café×4
-    await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       await transferLines(tx, cfg, tabA, tabB, [{ lineNo: 1, quantity: "1" }]); // A→B: 1 café (partial split)
     });

@@ -14,7 +14,7 @@ import {
   asAppUser,
   createPostgresDb,
   runMigrations,
-  withTenant,
+  withTransaction,
 } from "@waitron/db";
 import { IDENTITY_MIGRATIONS, hashPassword, hashPin } from "@waitron/identity";
 import { PAYMENTS_MIGRATIONS } from "@waitron/payments";
@@ -154,7 +154,7 @@ async function main(): Promise<void> {
     // product, one each-priced product, in two categories, assigned to the venue's location; and a
     // cashier with a KNOWN PIN ("5555") the login route can verify. Spanish names are fine — apps/* is
     // out of the english-only guard's scope.
-    await withTenant(db, cfg.tenantId, async (tx) => {
+    await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       const cat = await createCatalogue(tx, cfg.tenantId, { name: "Delicatessen" });
       const comida = await createCategory(tx, cfg.tenantId, { name: { es: "Comida" } });

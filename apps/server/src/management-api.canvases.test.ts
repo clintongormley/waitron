@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { DEFAULT_CANVASES } from "@waitron/layouts";
@@ -85,7 +85,7 @@ async function setupTenant(): Promise<{ tenantId: string }> {
     { db: suite.admin, modules: ALL_MODULES },
   );
 
-  await withTenant(suite.admin, venue.tenantId, async (tx) => {
+  await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     await tx.execute(sql`
       insert into persons (tenant_id, display_name, email, pin_hash, password_hash, role)

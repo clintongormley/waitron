@@ -1,6 +1,6 @@
 import type { MiddlewareHandler } from "hono";
 import { sql } from "drizzle-orm";
-import { withTenant, type Database, type DeploymentMode } from "@waitron/db";
+import { withTransaction, type Database, type DeploymentMode } from "@waitron/db";
 import {
   clearManagementCookie,
   readManagementSessionId,
@@ -27,7 +27,7 @@ const UNUSABLE_PIN_HASH = "mirror-viewer-never-logs-in";
  * mirror's tenant as `app_user` (which already holds INSERT/UPDATE on both tables; no new grant).
  */
 export async function ensureMirrorViewer(db: Database, tenantId: string): Promise<void> {
-  await withTenant(db, tenantId, async (tx) => {
+  await withTransaction(db, async (tx) => {
     await tx.execute(sql`
       insert into persons (id, tenant_id, display_name, pin_hash, role, status)
       values (${MIRROR_VIEWER_PERSON_ID}, ${tenantId}, 'mirror viewer', ${UNUSABLE_PIN_HASH}, 'admin', 'active')
@@ -75,12 +75,13 @@ export function mirrorSession(
   secure: boolean,
   getMode: () => DeploymentMode,
 ): MiddlewareHandler {
+  void tenantId;
   return async (c, next) => {
     if (getMode() !== "mirror") {
       // Promoted: drop the ambient admin. Only act when the request still presents the ambient id —
       // otherwise there is nothing to end, and requireManagementSession handles the no-cookie case.
       if (readManagementSessionId(c) === MIRROR_VIEWER_SESSION_ID) {
-        await withTenant(db, tenantId, (tx) =>
+        await withTransaction(db, (tx) =>
           tx.execute(sql`update management_sessions set ended_at = now()
                          where id = ${MIRROR_VIEWER_SESSION_ID} and ended_at is null`),
         );
@@ -92,7 +93,7 @@ export function mirrorSession(
     // ended (`ended_at is not null`). Clearing `ended_at` must NOT be gated behind the last_seen_at
     // throttle alone — a stamped `ended_at` with a still-fresh `last_seen_at` would otherwise keep the
     // session dead and 401 the next dashboard request.
-    await withTenant(db, tenantId, (tx) =>
+    await withTransaction(db, (tx) =>
       tx.execute(sql`update management_sessions set last_seen_at = now(), ended_at = null
                      where id = ${MIRROR_VIEWER_SESSION_ID}
                        and (last_seen_at is null or last_seen_at < now() - interval '1 minute'

@@ -10,7 +10,7 @@ import { tenantId as brandTenantId } from "@waitron/shared";
 
 import { describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import { ALL_MODULES } from "../../src/modules.js";
@@ -78,7 +78,7 @@ describe("seedCatalogues", () => {
   it("creates restaurant, lunch and deli menus and routes each category to its preparation station", async () => {
     const { tenantId, locationId } = await provisionVenue();
 
-    const res = await withTenant(suite.admin, tenantId, async (tx) => {
+    const res = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       const out = await seedCatalogues(tx, brandTenantId(tenantId), { locationId, locale: LOCALE });
       const menus = await listAccessibleCatalogues(tx, locationId);

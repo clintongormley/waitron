@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, asAppUser, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import type { TenantId } from "@waitron/shared";
 import { seedPurchaseInvoice, seedVenue } from "../test/fixtures.js";
@@ -18,7 +18,7 @@ beforeEach(async () => {
 
 function run(opts: { year: number; month: number; tenantId?: TenantId }): Promise<InputVatReturn> {
   const tenantId = opts.tenantId ?? venue.tenantId;
-  return withTenant(suite.db, tenantId, async (tx) => {
+  return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     return computeInputVat(tx, {
       tenantId,
@@ -169,7 +169,7 @@ describe("computeInputVat", () => {
       total: "121.00",
       lines: [{ rate: "21.00", base: "100.00", tax: "21.00" }],
     });
-    const ret = await withTenant(suite.db, venue.tenantId, (tx) =>
+    const ret = await withTransaction(suite.db, (tx) =>
       computeInputVat(tx, {
         tenantId: venue.tenantId,
         year: 2026,

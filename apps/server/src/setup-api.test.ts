@@ -210,7 +210,7 @@ function makeDeps(overrides: Partial<SetupDeps> = {}): {
   });
   const runFiscalTest = vi.fn().mockResolvedValue({ status: "accepted" });
   const assertFiscalReady = vi.fn().mockResolvedValue(undefined);
-  // The regime's provisioning-secret seal runs `withTenant(db, …)` — i.e. `db.transaction(cb)`. A fake
+  // The regime's provisioning-secret seal runs `withTransaction(db, …)` — i.e. `db.transaction(cb)`. A fake
   // db that RECORDS the seal (in order, into `calls`) and resolves stands in for the real vault write.
   // The seal's DB correctness — the sealed row, the right tenant, the round-trip — is covered by the
   // regime's `provisioning-secret.test.ts` and boot.ts's end-to-end live-seal test; here we only assert

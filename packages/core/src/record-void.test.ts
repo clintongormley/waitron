@@ -17,7 +17,7 @@ import {
   pgErrorCode,
   saleVoids,
   sales,
-  withTenant,
+  withTransaction,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
@@ -79,7 +79,7 @@ async function seedPerson(role: "staff" | "supervisor" | "manager" | "admin"): P
 
 /** Opens a shift session for `personId` at this tenant's till and returns its id. */
 async function openSession(personId: string): Promise<string> {
-  const session = await withTenant(suite.db, tenantId, (tx) =>
+  const session = await withTransaction(suite.db, (tx) =>
     loginWithPin(tx, { tenantId, tillId, personId, pin: "1234" }),
   );
   return session.id;
@@ -153,7 +153,7 @@ function saleInput(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
  * (`fiscal.node_not_registered`), matching a real backend. Mirrors record-sale.test.ts's own `run`.
  */
 async function sell(backend: FiscalBackend, overrides: Partial<RecordSaleInput> = {}) {
-  return withTenant(suite.db, tenantId, async (tx) => {
+  return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     await backend.registerNode(tx, nodeId, { tenantId });
     return recordSale(tx, backend, saleInput(overrides));
@@ -166,7 +166,7 @@ async function voidSale(
   reason = "Wrong table",
   authz: AuthzInput = { sessionId: managerSessionId },
 ) {
-  return withTenant(suite.db, tenantId, async (tx) => {
+  return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     return recordVoid(tx, backend, saleId, reason, authz);
   });
@@ -291,7 +291,7 @@ describe("recordVoid — numbering", () => {
     expect(row?.invoiceNumber).toBe(2);
 
     const error = await captureError(() =>
-      withTenant(suite.db, tenantId, async (tx) => {
+      withTransaction(suite.db, async (tx) => {
         await asAppUser(tx);
         await tx.insert(sales).values({
           tenantId,
@@ -476,7 +476,7 @@ describe("recordVoid — atomicity", () => {
   it("rolls back the sale_voids projection when the fiscal step fails", async () => {
     // Mirrors record-sale.test.ts's identical "recordSale — atomicity" test for the write path.
     // `sale_voids` is appended BEFORE `backend.recordVoid` is even called (record-void.ts's own
-    // ordering comment), both inside the ONE transaction `voidSale`'s `withTenant` opens. Left
+    // ordering comment), both inside the ONE transaction `voidSale`'s `withTransaction` opens. Left
     // uncovered, a future refactor that split those two writes across separate transactions would
     // pass every OTHER test in this file — none of them fails the fiscal step AFTER the projection
     // insert has already run — while producing a corrupt half-void in production: a `sale_voids`

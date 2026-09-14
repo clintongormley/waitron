@@ -4,7 +4,7 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { createFakeAeat } from "@waitron/verifactu/src/testing/fake-aeat.js";
 import type { RegistroAlta, VerifactuClient } from "@waitron/verifactu";
 import { recordSale, recordVoid } from "@waitron/core";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { hashPin, loginWithPin } from "@waitron/identity";
 import { VerifactuBackend } from "./backend.js";
@@ -63,7 +63,7 @@ async function storeAllAtAeat(resolveClient: DrainDeps["resolveClient"]): Promis
 async function incidentsFor(
   tenantId: string,
 ): Promise<{ code: string; severity: string; params: Record<string, unknown> }[]> {
-  const { rows } = await withTenant(pg.db, tenantId, (tx) =>
+  const { rows } = await withTransaction(pg.db, (tx) =>
     tx.execute<{ code: string; severity: string; params: Record<string, unknown> }>(
       sql`select code, severity, params from incidents where tenant_id = ${tenantId}`,
     ),
@@ -74,7 +74,7 @@ async function incidentsFor(
 /** The committed `envios.estado` per registro — used to prove reconcile now CORRECTS state toward
  * the authority (plan 3b Task 5), on top of the classification the cases above already assert. */
 async function estadosFor(tenantId: string): Promise<Map<string, string>> {
-  const { rows } = await withTenant(pg.db, tenantId, (tx) =>
+  const { rows } = await withTransaction(pg.db, (tx) =>
     tx.execute<{ registro_id: string; estado: string }>(
       sql`select registro_id, estado from envios where tenant_id = ${tenantId}`,
     ),
@@ -85,7 +85,7 @@ async function estadosFor(tenantId: string): Promise<Map<string, string>> {
 /** The committed `acks.state` per registro — used to prove the ack↔estado invariant still holds
  * after a drift correction (the acks row must agree with whatever `envios.estado` converged to). */
 async function ackStatesFor(tenantId: string): Promise<Map<string, string>> {
-  const { rows } = await withTenant(pg.db, tenantId, (tx) =>
+  const { rows } = await withTransaction(pg.db, (tx) =>
     tx.execute<{ registro_id: string; state: string }>(
       sql`select registro_id, state from acks where tenant_id = ${tenantId}`,
     ),
@@ -100,7 +100,7 @@ async function reconciledResubmitAtFor(
   tenantId: string,
   registroId: string,
 ): Promise<string | null> {
-  const { rows } = await withTenant(pg.db, tenantId, (tx) =>
+  const { rows } = await withTransaction(pg.db, (tx) =>
     tx.execute<{ reconciled_resubmit_at: string | null }>(
       sql`select reconciled_resubmit_at from envios where tenant_id = ${tenantId} and registro_id = ${registroId}`,
     ),
@@ -118,7 +118,8 @@ async function altaIdentityFor(
   tenantId: string,
   saleId: string,
 ): Promise<{ id: string; facturaKey: string }> {
-  const { rows } = await withTenant(pg.db, tenantId, (tx) =>
+  void tenantId;
+  const { rows } = await withTransaction(pg.db, (tx) =>
     tx.execute<{ id: string; id_emisor_factura: string; num_serie_factura: string; fecha: string }>(
       sql`
         select id, id_emisor_factura, num_serie_factura,
@@ -140,7 +141,7 @@ async function altaIdentityFor(
  * mirror of `reconcile.ts`'s own `hasSiblingAnulacion`, used here only to confirm the fixture set
  * up the state the reconcile test actually means to exercise. */
 async function hasAnulacion(tenantId: string, altaRegistroId: string): Promise<boolean> {
-  const { rows } = await withTenant(pg.db, tenantId, (tx) =>
+  const { rows } = await withTransaction(pg.db, (tx) =>
     tx.execute<{ sale_id: string }>(sql`
       select r2.sale_id from registros_facturacion r1
       join registros_facturacion r2
@@ -179,7 +180,7 @@ describe("reconcile — the three audit cases", () => {
     await storeAllAtAeat(resolveClient); // AEAT now holds all three as Correcta
 
     // Our acknowledgement was lost: our side reads pendiente though AEAT already holds them.
-    await withTenant(pg.db, seeded.tenantId, (tx) =>
+    await withTransaction(pg.db, (tx) =>
       tx.execute(sql`update envios set estado = 'pendiente' where tenant_id = ${seeded.tenantId}`),
     );
 
@@ -259,7 +260,7 @@ describe("reconcile — the three audit cases", () => {
 
     // Simulate an already-remediated record: the marker is set (a prior sweep's first detection),
     // but AEAT STILL has no trace of it.
-    await withTenant(pg.db, seeded.tenantId, (tx) =>
+    await withTransaction(pg.db, (tx) =>
       tx.execute(
         sql`update envios set reconciled_resubmit_at = ${SERVER_NOW.toISOString()} where registro_id = ${seeded.registroIds[0]}`,
       ),
@@ -334,7 +335,7 @@ describe("reconcile — the three audit cases", () => {
     await storeAllAtAeat(resolveClient); // aceptado at us, AEAT holds it Correcta
 
     // Simulate a marker left over from an earlier noTrace remediation that has since self-healed.
-    await withTenant(pg.db, seeded.tenantId, (tx) =>
+    await withTransaction(pg.db, (tx) =>
       tx.execute(
         sql`update envios set reconciled_resubmit_at = ${SERVER_NOW.toISOString()} where registro_id = ${seeded.registroIds[0]}`,
       ),
@@ -454,7 +455,7 @@ describe("reconcile — the three audit cases", () => {
       sql`insert into persons (tenant_id, display_name, pin_hash, role)
           values (${tenantId}, 'P', ${hashPin("1234")}, 'manager') returning id`,
     );
-    const voidSession = await withTenant(pg.db, tenantId, (tx) =>
+    const voidSession = await withTransaction(pg.db, (tx) =>
       loginWithPin(tx, { tenantId, tillId, personId: mgr[0]!.id, pin: "1234" }),
     );
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
@@ -466,7 +467,7 @@ describe("reconcile — the three audit cases", () => {
       resolveClient,
     });
 
-    const sale = await withTenant(pg.db, tenantId, async (tx) => {
+    const sale = await withTransaction(pg.db, async (tx) => {
       await asAppUser(tx);
       return recordSale(tx, backend, saleInput({ tenantId, tillId, nodeId, seriesId }));
     });
@@ -475,7 +476,7 @@ describe("reconcile — the three audit cases", () => {
     // that column itself, which is the only reason `DRAIN_AT` works for every OTHER test in this file.
     // Pin it to `DRAIN_AT` so the drain below is deterministic rather than wall-clock-relative (a
     // Copilot review point — clock skew / slow CI could otherwise flake a `Date.now()`-based due time).
-    await withTenant(pg.db, tenantId, async (tx) => {
+    await withTransaction(pg.db, async (tx) => {
       await asAppUser(tx);
       await tx.execute(
         sql`update envios set proximo_intento_en = ${DRAIN_AT.toISOString()} where tenant_id = ${tenantId}`,
@@ -484,7 +485,7 @@ describe("reconcile — the three audit cases", () => {
     await drain(drainDeps(resolveClient), DRAIN_AT); // alta: local aceptado, AEAT Correcta
 
     const alta = await altaIdentityFor(tenantId, sale.saleId);
-    await withTenant(pg.db, tenantId, async (tx) => {
+    await withTransaction(pg.db, async (tx) => {
       await asAppUser(tx);
       await recordVoid(tx, backend, sale.saleId, "staff error", { sessionId: voidSession.id });
     });
@@ -700,7 +701,7 @@ describe("reconcile — in-flight tolerance and non-cases", () => {
     await storeAllAtAeat(resolveClient);
     // A record we already know AEAT refused: not stored there, and our side reads rechazado.
     aeat.forget(seeded.facturaKeys[0]!);
-    await withTenant(pg.db, seeded.tenantId, (tx) =>
+    await withTransaction(pg.db, (tx) =>
       tx.execute(sql`update envios set estado = 'rechazado' where tenant_id = ${seeded.tenantId}`),
     );
 

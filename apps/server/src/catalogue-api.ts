@@ -13,7 +13,7 @@ import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { sql } from "drizzle-orm";
 import { AppError, FALLBACK_LOCALE } from "@waitron/shared";
-import { asAppUser, withTenant, type Database, type Transaction } from "@waitron/db";
+import { asAppUser, withTransaction, type Database, type Transaction } from "@waitron/db";
 import {
   addCatalogueToLocation,
   catalogueExists,
@@ -87,7 +87,7 @@ export interface CatalogueApiDeps {
     language: string,
   ) => Promise<{ kind: string; id: string }[]>;
   db: Database;
-  /** `cfg.tenantId` scopes every `withTenant` below (one tenant per database). `nodeId` is this
+  /** `cfg.tenantId` scopes every `withTransaction` below (one tenant per database). `nodeId` is this
    * node's id, carried on the uniform write-path `cfg` shape every mounted API takes; it no longer
    * stamps a capture origin — the application outbox and its capture triggers were removed (native
    * replication ships every row). */
@@ -350,7 +350,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
   // CATALOGUE_WRITE_PERMISSION, then run `fn`. Every route funnels its DB work through here so the gate
   // is applied identically and in exactly one place — the design §3 seam.
   const gated = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> =>
-    withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+    withTransaction(deps.db, async (tx) => {
       await asAppUser(tx);
       const auth = await authorizeManager(tx, {
         managementSessionId: sessionId,
@@ -502,7 +502,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
   // Language choices are public content metadata; this read neither requires nor touches a session.
   app.get("/api/content-languages", (c) =>
     run(c, log, async () => {
-      const config = await withTenant(deps.db, tenantId, async (tx) => {
+      const config = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         return readContentLanguages(tx, tenantId, deps.venueLocale ?? FALLBACK_LOCALE);
       });
@@ -1200,7 +1200,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
 
   // ── Option groups (reusable modifier groups) ─────────────────────────────────────────────────────
   // CRUD the tenant's reusable `option_groups`. Every route is gated exactly like the catalogue/product
-  // routes above — `requireManagementSession` first (401), then `gated` runs the op under withTenant +
+  // routes above — `requireManagementSession` first (401), then `gated` runs the op under withTransaction +
   // asAppUser + `authorizeManager(person.manage)` (403). Body-shape screens mirror the product routes;
   // the DOMAIN select-bound invariant is `createOptionGroup`/`updateOptionGroup`'s `options.group_invalid`.
   app.get("/management-api/option-groups", (c) =>

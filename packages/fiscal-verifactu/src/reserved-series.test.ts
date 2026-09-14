@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { withTenant } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { TENANT_A, seedTenants } from "../test/fixtures.js";
@@ -44,7 +44,7 @@ describe("liveSeriesBases", () => {
   const suite = usePgliteDb({ migrations: [...TEST_MIGRATIONS], setup: seedTenants });
 
   it("keeps one base per (code, purpose) pair in first-seen order", async () => {
-    await withTenant(suite.db, TENANT_A.id, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       const node = { tenantId: TENANT_A.id, nodeId: TENANT_A.nodeId };
       const identity = { ...node, nif: "89890001K", idSistemaInformatico: "WT" };
       await registerSif(tx, identity);
@@ -77,7 +77,7 @@ describe("liveSeriesBases across purposes", () => {
   const suite = usePgliteDb({ migrations: [...TEST_MIGRATIONS], setup: seedTenants });
 
   it("keeps FA standard and FA-1 rectificative distinct when installation 1 is registered", async () => {
-    await withTenant(suite.db, TENANT_A.id, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       const node = { tenantId: TENANT_A.id, nodeId: TENANT_A.nodeId };
       const sif = await registerSif(tx, { ...node, nif: "89890001K", idSistemaInformatico: "WT" });
       expect(sif.numeroInstalacion).toBe(1);

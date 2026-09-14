@@ -1,6 +1,6 @@
 // Real PostgreSQL checks refund writers contending on the payment row lock.
 import { describe, expect, it } from "vitest";
-import { withTenant } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { decimal } from "@waitron/shared";
 import { insertCapturedPayment, recordRefund } from "./store.js";
@@ -33,7 +33,7 @@ describe("concurrent reversals serialise on the payment row's FOR UPDATE lock", 
       const held = new Promise<void>((resolve) => (release = resolve));
       let acquire!: () => void;
       const acquired = new Promise<void>((resolve) => (acquire = resolve));
-      holding = withTenant(holder, seeded.tenantId, async (tx) => {
+      holding = withTransaction(holder, async (tx) => {
         await recordRefund(tx, { ...key, amount: decimal("12.00") }); // takes FOR UPDATE on the row
         acquire(); // signal the lock is held
         await held; // hold the tx open
@@ -41,7 +41,7 @@ describe("concurrent reversals serialise on the payment row's FOR UPDATE lock", 
       await acquired; // do not race before the lock is actually held
 
       const start = Date.now();
-      const secondDone = withTenant(waiter, seeded.tenantId, (tx) =>
+      const secondDone = withTransaction(waiter, (tx) =>
         recordRefund(tx, { ...key, amount: decimal("8.00") }),
       );
       // Give the waiter a beat; it must still be blocked on the lock.

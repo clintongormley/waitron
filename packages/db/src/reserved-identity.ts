@@ -1,11 +1,11 @@
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { Endorsement } from "@waitron/membership";
-import { AppError, tenantId as brandTenantId } from "@waitron/shared";
+import { AppError } from "@waitron/shared";
 import type { Database, Transaction } from "./client.js";
 import "./errors.js";
 import { nodes } from "./schema/nodes.js";
 import { invoiceSeries } from "./schema/series.js";
-import { withTenant } from "./tenancy.js";
+import { withTransaction } from "./tenancy.js";
 
 export interface ReservedNodeInput {
   id: string; // the standby's own nodeId
@@ -22,7 +22,7 @@ export interface ReservedNodeInput {
  * Insert the standby's OWN dormant node row (design §6 R2): its distinct nodeId, its public key, and
  * the primary's endorsement of that key, all in one INSERT so public_key and endorsement land together.
  * Owner-role: `nodes` grants app_user SELECT only (`drizzle/0001_db_baseline_sql.sql`), so these writes need the
- * owner (adopt already runs on ownerDb). Caller supplies a `withTenant` tx so this commits with the
+ * owner (adopt already runs on ownerDb). Caller supplies a `withTransaction` tx so this commits with the
  * reserved SIF + sealed key in one transaction (CLAUDE.md §3 — a write-path helper takes a `tx`).
  */
 export async function insertReservedNodeTx(
@@ -62,7 +62,8 @@ export function readNodeEndorsement(
   tenantId: string,
   nodeId: string,
 ): Promise<Endorsement | null> {
-  return withTenant(db, brandTenantId(tenantId), async (tx) => {
+  void tenantId;
+  return withTransaction(db, async (tx) => {
     const [row] = await tx
       .select({ endorsement: nodes.endorsement })
       .from(nodes)
@@ -107,15 +108,13 @@ export async function readStandardSeriesIdTx(
   return row.id;
 }
 
-/** {@link readStandardSeriesIdTx} under its own `withTenant` (app_user SELECT suffices). */
+/** {@link readStandardSeriesIdTx} under its own `withTransaction` (app_user SELECT suffices). */
 export function readStandardSeriesId(
   db: Database,
   tenantId: string,
   nodeId: string,
 ): Promise<string> {
-  return withTenant(db, brandTenantId(tenantId), (tx) =>
-    readStandardSeriesIdTx(tx, tenantId, nodeId),
-  );
+  return withTransaction(db, (tx) => readStandardSeriesIdTx(tx, tenantId, nodeId));
 }
 
 /**

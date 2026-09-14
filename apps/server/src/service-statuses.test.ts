@@ -1,4 +1,4 @@
-import { asAppUser, captureError, withTenant } from "@waitron/db";
+import { asAppUser, captureError, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -17,7 +17,8 @@ import "./errors.js";
 const suite = useTemplateDb({ template: "core_identity" });
 
 function asApp<T>(tenantId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  return withTenant(suite.admin, tenantId, async (tx) => {
+  void tenantId;
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     return fn(tx);
   });
@@ -28,7 +29,7 @@ async function seedSession(tenantId: string, role: PersonRoleValue): Promise<str
   const person = await suite.admin.execute<{ id: string }>(sql`
     insert into persons (tenant_id, display_name, pin_hash, role)
     values (${tenantId}, ${`${role} operator`}, 'seed-pin-hash', ${role}) returning id`);
-  const session = await withTenant(suite.admin, tenantId, (tx) =>
+  const session = await withTransaction(suite.admin, (tx) =>
     startManagementSession(tx, { tenantId, personId: person.rows[0]!.id }),
   );
   return session.id;

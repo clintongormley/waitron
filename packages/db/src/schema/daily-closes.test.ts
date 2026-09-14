@@ -5,7 +5,7 @@ import { captureError, pgErrorCode } from "../testing/errors.js";
 import { useTemplateDb } from "../testing/lifecycle.js";
 import { asAppUser } from "../testing/roles.js";
 import { seedNode } from "../testing/seed.js";
-import { withTenant } from "../tenancy.js";
+import { withTransaction } from "../tenancy.js";
 import { locations, tenants } from "./tenants.js";
 
 // Real Postgres, not PGlite, and not describeEachTarget: the headline assertions are the two
@@ -106,7 +106,7 @@ describe("frozen daily close schema (append-only triggers, columns, composite FK
     // The positive control for the trigger rejections below: without a write that SUCCEEDS, a
     // rejection could equally mean the role has no access to the table at all. It also pins the column
     // list a close is written with and that the nested snapshot jsonb round-trips.
-    const row = await withTenant(suite.admin, TENANT_A, async (tx) => {
+    const row = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       await tx.execute(
         insertCloseSql({
@@ -145,7 +145,7 @@ describe("frozen daily close schema (append-only triggers, columns, composite FK
     // not a backstop. Grant UPDATE inside a transaction that rolls back, and watch the second layer
     // (daily_closes_immutable → reject_mutation() → WT001) catch it. Remove that trigger from the
     // migration and THIS test goes red while the matrix stays green.
-    await withTenant(suite.admin, TENANT_A, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await tx.execute(sql`grant update on daily_closes to app_user`);
       await tx.execute(sql`set local role app_user`);
       await tx.execute(
@@ -171,7 +171,7 @@ describe("frozen daily close schema (append-only triggers, columns, composite FK
     // STATEMENT trigger, TRUNCATE walks straight through every row-level protection above. No
     // CASCADE: nothing references daily_closes.id (the whole close is one frozen jsonb document — no
     // child table — design D1).
-    await withTenant(suite.admin, TENANT_A, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await tx.execute(sql`grant truncate on daily_closes to app_user`);
       await tx.execute(sql`set local role app_user`);
       const error = await captureError(() => tx.execute(sql`truncate daily_closes`));

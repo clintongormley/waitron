@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, printJobs, withTenant } from "@waitron/db";
+import { asAppUser, printJobs, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -67,7 +67,7 @@ const suite = usePgliteDb({
     cfg = makeCfg(tenantId, till.rows[0]!.id, loc.rows[0]!.id, nodeId);
 
     // One sellable product, routed to the default station by the fire fallback (no explicit station/course).
-    await withTenant(db, tenantId, async (tx) => {
+    await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       const catalogue = await createCatalogue(tx, tenantId, { name: "Carta" });
       const cafe = await createProduct(tx, tenantId, {
@@ -143,7 +143,7 @@ function printCfg(): PrintConfig {
 }
 
 async function openSession(db: Database): Promise<string> {
-  const session = await withTenant(db, cfg.tenantId, async (tx) => {
+  const session = await withTransaction(db, async (tx) => {
     await asAppUser(tx);
     return loginWithPin(tx, {
       tenantId: cfg.tenantId,
@@ -199,7 +199,7 @@ async function placeAndFire(): Promise<string> {
 
 /** Create a live cloud_poll printer and attach it to the default station (app role). */
 async function attachPrinterToDefaultStation(): Promise<string> {
-  return withTenant(suite.db, cfg.tenantId, async (tx: Transaction) => {
+  return withTransaction(suite.db, async (tx: Transaction) => {
     await asAppUser(tx);
     const { id } = await createPrinter(tx, printCfg(), {
       name: `Cocina ${randomUUID()}`,
@@ -213,7 +213,7 @@ async function attachPrinterToDefaultStation(): Promise<string> {
 
 /** The database's print-job outbox, each job's printer + decoded ESC/POS bytes. */
 async function printJobsFor(printerId: string): Promise<{ id: string; ticket: string }[]> {
-  const rows = await withTenant(suite.db, cfg.tenantId, async (tx) => {
+  const rows = await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     return tx
       .select({ id: printJobs.id, printerId: printJobs.printerId, payload: printJobs.payload })

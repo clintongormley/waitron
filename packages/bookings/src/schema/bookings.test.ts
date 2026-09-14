@@ -6,7 +6,7 @@ import {
   captureError,
   pgErrorCode,
   tenants,
-  withTenant,
+  withTransaction,
   type Transaction,
 } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
@@ -70,7 +70,8 @@ describe("bookings schema (staff reservations — columns, CHECK, composite FKs)
   });
 
   function asApp<T>(tenant: string, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-    return withTenant(suite.admin, tenant, async (tx) => {
+    void tenant;
+    return withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return fn(tx);
     });

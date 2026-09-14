@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { recordSale, recordVoid } from "@waitron/core";
 import { computeHuella } from "@waitron/verifactu";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { hashPin, loginWithPin } from "@waitron/identity";
 import type { NodeId, SaleId, SeriesId, TenantId, TillId } from "@waitron/shared";
@@ -49,7 +49,7 @@ beforeEach(async () => {
     sql`insert into persons (tenant_id, display_name, pin_hash, role)
         values (${tenantId}, 'P', ${hashPin("1234")}, 'manager') returning id`,
   );
-  const session = await withTenant(pg.db, tenantId, (tx) =>
+  const session = await withTransaction(pg.db, (tx) =>
     loginWithPin(tx, { tenantId, tillId, personId: rows[0]!.id, pin: "1234" }),
   );
   voidSessionId = session.id;
@@ -62,14 +62,14 @@ beforeEach(async () => {
 });
 
 async function sell() {
-  return withTenant(pg.db, tenantId, async (tx) => {
+  return withTransaction(pg.db, async (tx) => {
     await asAppUser(tx);
     return recordSale(tx, backend, saleInput({ tenantId, tillId, nodeId, seriesId }));
   });
 }
 
 async function voidSale(saleId: SaleId, reason = "staff error") {
-  return withTenant(pg.db, tenantId, async (tx) => {
+  return withTransaction(pg.db, async (tx) => {
     await asAppUser(tx);
     return recordVoid(tx, backend, saleId, reason, { sessionId: voidSessionId });
   });

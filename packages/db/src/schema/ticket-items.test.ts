@@ -6,7 +6,7 @@ import { captureError, pgErrorCode } from "../testing/errors.js";
 import { useTemplateDb } from "../testing/lifecycle.js";
 import { asAppUser } from "../testing/roles.js";
 import { seedNode } from "../testing/seed.js";
-import { withTenant } from "../tenancy.js";
+import { withTransaction } from "../tenancy.js";
 import { catalogues, products } from "./catalogue.js";
 import { locations, tenants, tills } from "./tenants.js";
 import { ticketItems } from "./ticket-items.js";
@@ -104,7 +104,8 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
   }
 
   function asApp<T>(tenant: string, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-    return withTenant(suite.admin, tenant, async (tx) => {
+    void tenant;
+    return withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return fn(tx);
     });

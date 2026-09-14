@@ -187,7 +187,7 @@ declare module "@waitron/shared" {
     "provisioning.second_venue": Record<string, never>;
     /** A SECOND, DIFFERENT tenant was asked to stand up in a database that already holds
      * one. Refused: one tenant per database is the post-RLS isolation boundary. This branch dropped
-     * row-level security on the premise that each database carries a single tenant, so `withTenant`
+     * row-level security on the premise that each database carries a single tenant, so `withTransaction`
      * no longer filters rows by tenant (`packages/db/src/tenancy.ts`); a second `(country, tax_id)`
      * in the same database would therefore expose one business's rows to the other — a cross-tenant
      * leak a hash-chained fiscal record (§5) cannot take back. The invariant is enforced at EVERY

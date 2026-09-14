@@ -5,7 +5,7 @@ import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   asAppUser,
-  withTenant,
+  withTransaction,
   installChangeFeed,
   startChangeListener,
   CORE_CHANGE_SOURCES,
@@ -83,7 +83,7 @@ it("refuses another tenant's manager before checking an address or reading print
 
 beforeAll(async () => {
   tenantA = await seedTenantWithLocation();
-  const { managerSid, staffSid } = await withTenant(suite.admin, tenantA.tenantId, async (tx) => {
+  const { managerSid, staffSid } = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const mgr = await tx.execute<{ id: string }>(sql`
       insert into persons (tenant_id, display_name, pin_hash, role)
@@ -174,7 +174,7 @@ async function joinAndAccept(
     verificationNumber: string;
   };
   const joinId = token.slice(0, token.indexOf("."));
-  await withTenant(suite.admin, tenant.tenantId, async (tx) => {
+  await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const result = await acceptPrintAgentJoinRequest(tx, cfgOf(tenant), joinId, {
       choice: verificationNumber,
@@ -204,7 +204,7 @@ async function createUsbPrinter(app: Hono, localKey: string, name: string): Prom
 }
 
 async function enqueue(tenant: Tenant, printerId: string, payload: Uint8Array): Promise<string> {
-  return withTenant(suite.admin, tenant.tenantId, async (tx) => {
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const { jobId } = await enqueuePrintJob(tx, tenant, printerId, payload);
     return jobId;
@@ -486,7 +486,7 @@ describe("Print API over real Postgres (as the app role)", () => {
   });
 
   it("the agents list is tenant-scoped — tenant A's manager never sees tenant B's agents (CLAUDE.md §3)", async () => {
-    // Since RLS was dropped (#255) `withTenant` no longer isolates SELECTs, so the list route must carry
+    // Since RLS was dropped (#255) `withTransaction` no longer isolates SELECTs, so the list route must carry
     // its own `tenantId` predicate; without it tenant A's manager reads EVERY tenant's agents in a
     // multi-tenant DB. Proven by DELETION: drop the `.where(eq(printAgents.tenantId, …))` from the list
     // route and tenant B's row appears in tenant A's list below. Both agents seeded directly (owner SQL).
@@ -1026,7 +1026,7 @@ describe("print job resend as the deployment role", () => {
       )?.canResend,
     ).toBe(false);
     const foreign = await seedTenantWithLocation();
-    const foreignSession = await withTenant(suite.admin, foreign.tenantId, async (tx) => {
+    const foreignSession = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       const person = await tx.execute<{ id: string }>(sql`
         insert into persons (tenant_id, display_name, pin_hash, role)

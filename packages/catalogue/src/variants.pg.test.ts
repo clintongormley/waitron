@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, withTenant, type Database, type Transaction } from "@waitron/db";
+import { asAppUser, withTransaction, type Database, type Transaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { type TenantId } from "@waitron/shared";
@@ -17,7 +17,8 @@ import { createUnit } from "./units.js";
 
 const suite = useTemplateDb({ template: "core" });
 function app<T>(db: Database, tenantId: TenantId, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  return withTenant(db, tenantId, async (tx) => {
+  void tenantId;
+  return withTransaction(db, async (tx) => {
     await asAppUser(tx);
     return fn(tx);
   });

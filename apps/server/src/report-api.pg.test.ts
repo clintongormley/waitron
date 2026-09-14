@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { hashPassword, hashPin, startManagementSession } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
@@ -12,7 +12,7 @@ import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import "./errors.js";
 
 // Real Postgres, not PGlite: this suite refuses the modelo 303 export and the overview to a staff
-// session, with every DB touch under test going through the route's own `withTenant` + `asAppUser`,
+// session, with every DB touch under test going through the route's own `withTransaction` + `asAppUser`,
 // so the reads run as the non-superuser app role rather than the superuser the harness hands out
 // (CLAUDE.md §4). Only the `report.export` case carries a guard-by-deletion receipt (recorded on it);
 // the `report.view` case asserts the refusal without one. The route mechanics (year/period/
@@ -80,7 +80,7 @@ async function setupVenue(): Promise<Venue> {
     { db: suite.admin, modules: ALL_MODULES },
   );
 
-  const { managerSid, staffSid } = await withTenant(suite.admin, venue.tenantId, async (tx) => {
+  const { managerSid, staffSid } = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const mgr = await tx.execute<{ id: string }>(sql`
       insert into persons (tenant_id, display_name, pin_hash, role)

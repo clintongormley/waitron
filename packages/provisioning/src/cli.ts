@@ -554,7 +554,7 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
       // One tenant per database is the post-RLS isolation boundary (§5), enforced here, at the
       // setup-api provision handler (`provisionVenue`) and at the mirror adopt orchestrator
       // (`adoptFromPrimary`) — every tenant-creation path — through the shared `assertNoForeignTenant`
-      // guard: with row-level security gone, `withTenant` no longer filters by tenant, so a foreign
+      // guard: with row-level security gone, `withTransaction` no longer filters by tenant, so a foreign
       // `(country, tax_id)` in this database would expose one business's rows to the other. The SAME
       // identity proceeds to `applyVenue`, which reuses an exact same-venue plan and refuses different
       // venue details — and an empty database proceeds as the first tenant. The identity applied is the

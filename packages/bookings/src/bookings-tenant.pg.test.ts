@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type { CoreServices } from "@waitron/module";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
@@ -23,7 +23,7 @@ import "./errors.js";
 
 // Real PostgreSQL (a shared-container clone of the whole-manifest template), as the non-superuser
 // `app_user`, NOT PGlite — the exact shape the till-reroute S3 leak was only caught by (CLAUDE.md §3):
-// RLS was dropped (#255), so `withTenant` no longer isolates SELECTs and every by-id read/write must
+// RLS was dropped (#255), so `withTransaction` no longer isolates SELECTs and every by-id read/write must
 // scope `tenantId` ITSELF. A booking's id is a globally-unique UUID; a second tenant that learns one
 // must not be able to read its private `contact_name` or mutate its row through the booking verbs.
 const LOCALE = "es-ES";
@@ -34,7 +34,8 @@ beforeAll(() => {
 });
 
 function asApp<T>(cfg: BookingConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  return withTenant(db, cfg.tenantId, async (tx) => {
+  void cfg;
+  return withTransaction(db, async (tx) => {
     await asAppUser(tx);
     return fn(tx);
   });

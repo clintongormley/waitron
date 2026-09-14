@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { asAppUser, withTenant, type Database } from "@waitron/db";
+import { asAppUser, withTransaction, type Database } from "@waitron/db";
 import {
   assignCatalogueToLocation,
   createCatalogue,
@@ -114,7 +114,7 @@ export async function setupVenue(db: Database): Promise<Venue> {
     sql`update locations set order_flow = 'ticket_then_pay' where id = ${cfg.locationId}`,
   );
 
-  const seeded = await withTenant(db, cfg.tenantId, async (tx) => {
+  const seeded = await withTransaction(db, async (tx) => {
     await asAppUser(tx);
     const cat = await createCatalogue(tx, cfg.tenantId, { name: "Delicatessen" });
     const bebidas = await createCategory(tx, cfg.tenantId, { name: { [LOCALE]: "Bebidas" } });

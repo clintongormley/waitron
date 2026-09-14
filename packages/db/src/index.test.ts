@@ -1,7 +1,14 @@
 import { join } from "node:path";
 import { getTableName, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { createPgliteDb, locations, runMigrations, tenants, tills, withTenant } from "./index.js";
+import {
+  createPgliteDb,
+  locations,
+  runMigrations,
+  tenants,
+  tills,
+  withTransaction,
+} from "./index.js";
 
 const FOLDER_A = join(import.meta.dirname, "..", "test", "migrations-a");
 
@@ -31,11 +38,11 @@ describe("package public surface (./index.js)", () => {
   // `tenancy.test.ts` imports its subjects from the deep paths
   // (`./schema/tenants.js`, `./tenancy.js`), never from `./index.js`, so it
   // cannot catch a re-export deleted from the root. The brief lists
-  // `withTenant` and the three tables (`tenants`, `locations`, `tills`) under
+  // `withTransaction` and the three tables (`tenants`, `locations`, `tills`) under
   // "Produces" — this is the one test that pins them as part of the actual
   // package surface a consumer imports.
-  it("re-exports withTenant and the tenancy tables from the package root", () => {
-    expect(withTenant).toBeTypeOf("function");
+  it("re-exports withTransaction and the tenancy tables from the package root", () => {
+    expect(withTransaction).toBeTypeOf("function");
     expect(getTableName(tenants)).toBe("tenants");
     expect(getTableName(locations)).toBe("locations");
     expect(getTableName(tills)).toBe("tills");

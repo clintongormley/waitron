@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { withTenant } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { recordIncident } from "@waitron/core";
 import type { IncidentSeverity } from "@waitron/core";
@@ -286,11 +286,11 @@ async function drainTenant(
   // it must COMMIT before anything else in this pass reads `envios`, so that a row it just
   // recovered is visible to countDue/claimBatch's own, later transactions as an ordinary
   // `pendiente` row rather than something they need to special-case.
-  await withTenant(db, tenantId, (tx) => recoverStaleClaims(tx, tenantId, now));
+  await withTransaction(db, (tx) => recoverStaleClaims(tx, tenantId, now));
 
   // Read flow state + the current due count in one short tx — mirrors T1's own claim tx: short-
   // lived, no network call inside it.
-  const { flujo, dueCount0 } = await withTenant(db, tenantId, async (tx) => ({
+  const { flujo, dueCount0 } = await withTransaction(db, async (tx) => ({
     flujo: await readFlujo(tx, tenantId),
     dueCount0: await countDue(tx, tenantId, now),
   }));
@@ -335,7 +335,7 @@ async function drainTenant(
     // behind it unreachable, this pass or any later one.
     let claimed: { sendable: DueRow[]; rawCount: number };
     for (;;) {
-      claimed = await withTenant(db, tenantId, async (tx) => {
+      claimed = await withTransaction(db, async (tx) => {
         const c = await claimBatch(
           tx,
           tenantId,
@@ -370,7 +370,7 @@ async function drainTenant(
       const respuesta = await client.submit(cabecera, registros);
 
       // T2 — persist the response (CSV + estados) atomically, then recount what's still due.
-      dueCount = await withTenant(db, tenantId, async (tx) => {
+      dueCount = await withTransaction(db, async (tx) => {
         await persistResponse(tx, client, batch, respuesta, now, result);
         return countDue(tx, tenantId, now);
       });
@@ -389,7 +389,7 @@ async function drainTenant(
       // pendiente, incidencia, an exponentially later proximo_intento_en per row) rather than
       // leave it stuck `enviando`, and stop this tenant's loop — the retry is scheduled via each
       // row's own `proximo_intento_en`, not retried immediately against a server that just failed.
-      await withTenant(db, tenantId, (tx) => backoffBatch(tx, batch, now, result));
+      await withTransaction(db, (tx) => backoffBatch(tx, batch, now, result));
       break;
     }
   }
@@ -397,7 +397,7 @@ async function drainTenant(
   // Persist the server's latest wait `t` as this tenant's gate for its NEXT pass — never an
   // in-memory timer (envio-flujo.ts's own doc comment).
   const proximoEnvioEn = new Date(now.getTime() + t * 1000);
-  await withTenant(db, tenantId, (tx) => upsertFlujo(tx, tenantId, proximoEnvioEn, t));
+  await withTransaction(db, (tx) => upsertFlujo(tx, tenantId, proximoEnvioEn, t));
   // `dueCount > 0` here only via the defensive break above; see this function's own doc comment.
   if (dueCount > 0) bumpNextDue(result, proximoEnvioEn);
 }

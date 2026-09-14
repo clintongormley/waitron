@@ -1,5 +1,5 @@
 import type { Context, Hono } from "hono";
-import { asAppUser, withTenant, type Database } from "@waitron/db";
+import { asAppUser, withTransaction, type Database } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import { createErrorBoundary, requireManagementSession } from "@waitron/server-kit";
@@ -29,7 +29,7 @@ export function mountEmailInboxApi(app: Hono, deps: EmailInboxApiDeps, log: Logg
   const run = createErrorBoundary(STATUS, "email_inbox.failed");
   const authorize = async (c: Context): Promise<void> => {
     const sessionId = requireManagementSession(c);
-    await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+    await withTransaction(deps.db, async (tx) => {
       await asAppUser(tx);
       await authorizeManager(tx, { managementSessionId: sessionId, permission: "person.manage" });
     });

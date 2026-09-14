@@ -3,7 +3,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { captureError, pgErrorCode } from "../testing/errors.js";
 import { useTemplateDb } from "../testing/lifecycle.js";
 import { asAppUser } from "../testing/roles.js";
-import { withTenant } from "../tenancy.js";
+import { withTransaction } from "../tenancy.js";
 import { tenants } from "./tenants.js";
 
 const TENANT_A = "11111111-1111-4111-8111-111111111111";
@@ -25,7 +25,7 @@ describe("join_requests", () => {
   });
 
   it("accepts a device request and a print_agent request in the same tenant", async () => {
-    await withTenant(suite.admin, TENANT_A, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       await tx.execute(sql`
         insert into join_requests
@@ -41,7 +41,7 @@ describe("join_requests", () => {
   });
 
   it("refuses an unknown kind", async () => {
-    await withTenant(suite.admin, TENANT_A, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       const e = await captureError(() =>
         tx.execute(sql`

@@ -7,7 +7,7 @@ import {
   purchaseInvoiceVat,
   purchaseInvoices,
   sales,
-  withTenant,
+  withTransaction,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
@@ -156,7 +156,7 @@ const suite = usePgliteDb({
     // A MANAGER (role `manager`, holds `report.export`) and a STAFF person (holds nothing) as the app
     // role, then a live management session for each so the route tests drive the gate through a real
     // cookie. `pin_hash` is NOT NULL, so a value is supplied though these sessions are minted directly.
-    const { managerSid, staffSid } = await withTenant(db, tenantId, async (tx) => {
+    const { managerSid, staffSid } = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       const mgr = await tx.execute<{ id: string }>(sql`
         insert into persons (tenant_id, display_name, pin_hash, role)

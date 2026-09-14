@@ -6,7 +6,7 @@ import {
   optionGroupItems,
   optionGroups,
   productOptionGroups,
-  withTenant,
+  withTransaction,
 } from "@waitron/db";
 import { createModifier } from "./modifiers.js";
 import {
@@ -27,7 +27,7 @@ const suite = useCatalogueDb();
 it("publishes an attached text modifier without requiring choice rows", async () => {
   const { tenantId, locationId } = await seedVenue(suite.db);
   await seedLegacySellingUnits(suite.db, tenantId);
-  await withTenant(suite.db, tenantId, async (tx) => {
+  await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     const menu = await createCatalogue(tx, tenantId, { name: "Menu" });
     await assignCatalogueToLocation(tx, locationId, menu.id);
@@ -71,7 +71,7 @@ it("publishes an attached text modifier without requiring choice rows", async ()
 it("projects only published available choices, clears excluded defaults, and keeps empty required modifiers", async () => {
   const { tenantId } = await seedVenue(suite.db);
   await seedLegacySellingUnits(suite.db, tenantId);
-  await withTenant(suite.db, tenantId, async (tx) => {
+  await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     const menu = await createCatalogue(tx, tenantId, { name: "Menu" });
     const section = await createMenuSection(tx, tenantId, {

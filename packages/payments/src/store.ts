@@ -652,7 +652,7 @@ export async function expireInitiated(
  * identifiers an inbound webhook carries, with NO tenant context. Calls the `resolve_payment_tenant`
  * function, which returns only tenant_id using the caller's privileges. Runs on a
  * plain `db` handle, OUTSIDE any tenant scope — the app-level orchestrator calls this first, then
- * opens `withTenant(tenantId)` for the settle + `recordSale` + associate. Returns null for an unknown
+ * opens `withTransaction(tenantId)` for the settle + `recordSale` + associate. Returns null for an unknown
  * reference (the missingLocal case reconcile audits per-tenant). Mirrors fiscal drain's
  * `tenantsWithWork` call over `envios_tenants_with_work`. */
 export async function resolvePaymentTenant(

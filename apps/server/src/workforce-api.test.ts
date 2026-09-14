@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, asAppUser, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, asAppUser, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, hashPin, startManagementSession } from "@waitron/identity";
@@ -24,7 +24,7 @@ const suite = usePgliteDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     tenantId = await seedTenant(db);
-    const seeded = await withTenant(db, tenantId, async (tx) => {
+    const seeded = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       const loc = await tx.execute<{ id: string }>(sql`
         insert into locations (tenant_id, name, invoice_locales, operation_description)
@@ -294,7 +294,7 @@ describe("mountWorkforceApi — shift routes", () => {
 
 describe("mountWorkforceApi — publish", () => {
   async function seedConvenio(): Promise<void> {
-    await withTenant(suite.db, tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       await tx.execute(sql`
         insert into convenio_config (tenant_id, location_id)
@@ -363,7 +363,7 @@ describe("mountWorkforceApi — publish", () => {
   it("409s publish when the location has no convenio_config (convenio.not_found)", async () => {
     const app = mountApp();
     // A DIFFERENT location with no convenio row.
-    const otherLoc = await withTenant(suite.db, tenantId, async (tx) => {
+    const otherLoc = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       const r = await tx.execute<{ id: string }>(sql`
         insert into locations (tenant_id, name, invoice_locales, operation_description)
@@ -393,7 +393,7 @@ describe("mountWorkforceApi — publish", () => {
 
 describe("mountWorkforceApi — swap + absence approvals", () => {
   async function seedAcceptedSwap(): Promise<string> {
-    return withTenant(suite.db, tenantId, async (tx) => {
+    return withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       const shift = await tx.execute<{ id: string }>(sql`
         insert into shifts (tenant_id, person_id, location_id, starts_at, starts_offset_minutes, ends_at, ends_offset_minutes)
@@ -406,7 +406,7 @@ describe("mountWorkforceApi — swap + absence approvals", () => {
     });
   }
   async function seedRequestedAbsence(): Promise<string> {
-    return withTenant(suite.db, tenantId, async (tx) => {
+    return withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       const r = await tx.execute<{ id: string }>(sql`
         insert into absences (tenant_id, person_id, absence_kind, starts_on, ends_on)

@@ -1,6 +1,6 @@
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, printJobs, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, printJobs, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -80,7 +80,7 @@ describe("runAgentOnce (pull → push → report)", () => {
   it("pulls a queued job, pushes the exact bytes, and reports done", async () => {
     const cfg = await setup();
     const agentId = await seedAgent(cfg);
-    await withTenant(suite.db, cfg.tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       const printerId = await seedPrinter(tx, cfg);
       const { jobId } = await enqueuePrintJob(
         tx,
@@ -110,7 +110,7 @@ describe("runAgentOnce (pull → push → report)", () => {
   it("isolates a down printer: it fails that job (attempts++) without blocking another printer's job", async () => {
     const cfg = await setup();
     const agentId = await seedAgent(cfg);
-    await withTenant(suite.db, cfg.tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       const down = await createPrinter(tx, cfg, {
         name: "Down",
         transport: "network_tcp",
@@ -150,7 +150,7 @@ describe("runAgentOnce (pull → push → report)", () => {
   it("records a non-Error push rejection as its stringified form in last_error", async () => {
     const cfg = await setup();
     const agentId = await seedAgent(cfg);
-    await withTenant(suite.db, cfg.tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       const printerId = await seedPrinter(tx, cfg);
       const { jobId } = await enqueuePrintJob(tx, cfg, printerId, new Uint8Array([1]));
       // A transport that rejects with a bare string, not an Error — the non-Error branch of the
@@ -174,7 +174,7 @@ describe("runAgentOnce (pull → push → report)", () => {
   it("retries a failed job on a later run, up to the attempt cap", async () => {
     const cfg = await setup();
     const agentId = await seedAgent(cfg);
-    await withTenant(suite.db, cfg.tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       const printerId = await seedPrinter(tx, cfg);
       const { jobId } = await enqueuePrintJob(tx, cfg, printerId, new Uint8Array([7]));
 
@@ -209,7 +209,7 @@ describe("runAgentOnce (pull → push → report)", () => {
   it("stops retrying once a job has reached the attempt cap (bounded)", async () => {
     const cfg = await setup();
     const agentId = await seedAgent(cfg);
-    await withTenant(suite.db, cfg.tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       const printerId = await seedPrinter(tx, cfg);
       const { jobId } = await enqueuePrintJob(tx, cfg, printerId, new Uint8Array([9]));
       // Drive the job straight to the cap so it is no longer claimable.
@@ -242,7 +242,7 @@ describe("runAgentOnce (pull → push → report)", () => {
       insert into locations (tenant_id, name, invoice_locales, operation_description)
       values (${cfg.tenantId}, 'Terrace', array['es-ES'], 'Sale on premises') returning id`);
     const otherLocationId = rows[0]!.id;
-    await withTenant(suite.db, cfg.tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       const printerId = await seedPrinter(tx, cfg);
       const { jobId } = await enqueuePrintJob(tx, cfg, printerId, new Uint8Array([1]));
 
@@ -265,7 +265,7 @@ describe("runAgentOnce (pull → push → report)", () => {
   it("reports an empty batch when the agent has no queued work", async () => {
     const cfg = await setup();
     const agentId = await seedAgent(cfg);
-    await withTenant(suite.db, cfg.tenantId, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       await seedPrinter(tx, cfg); // a printer, but no jobs
       const sink = new FakeSink();
       expect(

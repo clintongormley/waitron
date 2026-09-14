@@ -5,7 +5,7 @@ import {
   DEFAULT_TIME_ZONE,
   asAppUser,
   ticketItems,
-  withTenant,
+  withTransaction,
   workingOrderLines,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
@@ -87,7 +87,8 @@ async function setupVenue(opts: { timeZone?: string } = {}): Promise<TillConfig>
 }
 
 function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  return withTenant(db, cfg.tenantId, async (tx) => {
+  void cfg;
+  return withTransaction(db, async (tx) => {
     await asAppUser(tx);
     return fn(tx);
   });
@@ -527,7 +528,7 @@ async function setupTabVenue(): Promise<{
     tipsEnabled: false,
     orderFlow: "prepay",
   };
-  const { cafeId, aguaId, tableId } = await withTenant(db, tenantId, async (tx) => {
+  const { cafeId, aguaId, tableId } = await withTransaction(db, async (tx) => {
     await asAppUser(tx);
     const cat = await createCatalogue(tx, tenantId, { name: "Carta" });
     const bebidas = await createCategory(tx, tenantId, { name: { en: "Bebidas" } });

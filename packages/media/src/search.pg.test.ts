@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { expect, it } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { listImages, uploadImage } from "./images.js";
@@ -9,7 +9,7 @@ const suite = useTemplateDb({ template: "media" });
 
 it("preserves exclusions, phrases and OR while stemming multilingual searches as app_user", async () => {
   const tenantId = await seedTenant(suite.admin);
-  await withTenant(suite.admin, tenantId, async (tx) => {
+  await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const role = await tx.execute<{ role: string; superuser: boolean }>(
       sql`select current_user as role, rolsuper as superuser from pg_roles where rolname = current_user`,
@@ -50,7 +50,7 @@ it("preserves exclusions, phrases and OR while stemming multilingual searches as
 it("ranks, filters and paginates multilingual results within the requested tenant as app_user", async () => {
   const tenantId = await seedTenant(suite.admin);
   const otherTenantId = await seedTenant(suite.admin);
-  await withTenant(suite.admin, tenantId, async (tx) => {
+  await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const add = async (
       marker: number,
@@ -142,7 +142,7 @@ it.each([
   { name: "Bread", query: '""', matched: false },
 ])("handles $query against $name", async ({ name, query, matched }) => {
   const tenantId = await seedTenant(suite.admin);
-  await withTenant(suite.admin, tenantId, async (tx) => {
+  await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const { image } = await uploadImage(
       tx,
@@ -168,7 +168,7 @@ it("returns rows for the default relevance sort when the search is empty", async
   // exercised this combination: the search suite only used relevance WITH a query, and an empty
   // query fell through to the date default. listImages must fall back to a date ordering instead.
   const tenantId = await seedTenant(suite.admin);
-  await withTenant(suite.admin, tenantId, async (tx) => {
+  await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     for (const [index, name] of ["First", "Second"].entries()) {
       await uploadImage(

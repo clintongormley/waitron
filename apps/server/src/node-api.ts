@@ -21,7 +21,7 @@ export interface NodeApiDeps {
   environment: DeploymentEnvironment;
   /** Reads the held membership document, or `null` when this node holds none. Injected because these
    * deps carry no `db`: the probe's one read is the whole-DB `node_membership` singleton, which has no
-   * tenant scope and so belongs outside any `withTenant` block. */
+   * tenant scope and so belongs outside any `withTransaction` block. */
   readMembership: () => Promise<SignedMembershipDocument | null>;
 }
 

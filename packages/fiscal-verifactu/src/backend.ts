@@ -4,7 +4,7 @@
 // here, is `@waitron/fiscal`'s and arrives with its types.
 import "./errors.js";
 import { eq, sql } from "drizzle-orm";
-import { tenants, withTenant } from "@waitron/db";
+import { tenants, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { AppError, decimal, sumDecimals } from "@waitron/shared";
 import type { NodeId, SaleId, TenantId, TillId } from "@waitron/shared";
@@ -759,7 +759,7 @@ export class VerifactuBackend implements FiscalBackend {
 
   /**
    * Delegates to `verifyChain` (art. 7.i). `tenantId` is supplied by the caller (always inside a
-   * `withTenant`-scoped transaction), so there is no `tenants`/`tills` lookup to recover it.
+   * `withTransaction`-scoped transaction), so there is no `tenants`/`tills` lookup to recover it.
    */
   async checkIntegrity(
     tx: Transaction,
@@ -773,11 +773,11 @@ export class VerifactuBackend implements FiscalBackend {
    * How many of this node's records AEAT has not yet confirmed — the art. 16.4 unsent count
    * (node-id rekey, 2026-08-03: the chain is per-node, so the unsent count is per-node too).
    *
-   * Filters on `tenant_id` explicitly, and opens its OWN `withTenant` because it takes no caller
+   * Filters on `tenant_id` explicitly, and opens its OWN `withTransaction` because it takes no caller
    * transaction (unlike `filedReceiptFor` and `checkIntegrity`, which are handed one).
    */
   async pendingCount(tenantId: TenantId, nodeId: NodeId): Promise<number> {
-    return withTenant(this.db, tenantId, async (tx) => {
+    return withTransaction(this.db, async (tx) => {
       const rows = await tx.execute<{ count: string }>(sql`
         select count(*)::text as count
         from envios e

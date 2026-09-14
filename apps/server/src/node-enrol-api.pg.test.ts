@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { authenticateAgent } from "@waitron/printing";
 import { AppError } from "@waitron/shared";
@@ -20,7 +20,7 @@ import type { Logger } from "./logger.js";
 import "./errors.js";
 
 // Real Postgres (a manifest template clone), NOT PGlite — the enrol WRITES a `print_agents` row as
-// `app_user` under `withTenant`, so the table grant is the property under test; PGlite's all-superuser
+// `app_user` under `withTransaction`, so the table grant is the property under test; PGlite's all-superuser
 // connection would false-pass a missing GRANT (CLAUDE.md §4). The sibling `print-api.pg.test.ts` uses
 // the same `useTemplateDb`/`seedTenantWithLocation` shape.
 const noopLog: Logger = () => {};
@@ -120,7 +120,7 @@ async function errorCodeOf(res: Response): Promise<string> {
 
 /** Resolve a minted agent token to its row id under the tenant — the production auth path. */
 async function authenticate(cfg: TillConfig, token: string): Promise<{ agentId: string }> {
-  return withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     return authenticateAgent(tx, { tenantId: cfg.tenantId }, token);
   });

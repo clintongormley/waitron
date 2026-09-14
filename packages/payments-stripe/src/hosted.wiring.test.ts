@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
-import { CORE_MIGRATIONS, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import {
   decimal,
@@ -112,7 +112,7 @@ describe("stripe hosted: initiate -> webhook -> settle -> recordSale -> associat
     const tenantId = await resolvePaymentTenant(pg.db, event!.provider, event!.externalRef);
     expect(tenantId).toBe(s.tenantId);
 
-    const saleId = await withTenant(pg.db, tenantId!, async (tx) => {
+    const saleId = await withTransaction(pg.db, async (tx) => {
       const row = await settleInitiated(tx, {
         provider: event!.provider,
         externalRef: event!.externalRef,

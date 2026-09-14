@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, sales, withTenant, workingOrders } from "@waitron/db";
+import { asAppUser, sales, withTransaction, workingOrders } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import {
@@ -64,7 +64,7 @@ const LOCALE = "es-ES";
 
 // A non-superuser LOGIN role that inherits `app_user`'s grants, for Task 7's `/api/pay` tests: the
 // `StripeTerminalProvider` this file wires in for those tests does NOT run its own writes through
-// `withTenant` + `asAppUser` (`insertAttempting`/`captureAttempting`/`failAttempting` execute at
+// `withTransaction` + `asAppUser` (`insertAttempting`/`captureAttempting`/`failAttempting` execute at
 // whatever role its `db` handle carries — see that class's own "Present because…" doc comment), so
 // `suite.admin` there would write the `payments` ledger as a superuser holding every privilege — the
 // same reasoning `till-sale-integrated.pg.test.ts`'s `integratedDeps` documents for its own
@@ -181,7 +181,7 @@ async function setupVenue(): Promise<{
   );
 
   const cfg = tillConfigFromVenue(venue);
-  const { available, operatorId } = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  const { available, operatorId } = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const cat = await createCatalogue(tx, cfg.tenantId, { name: "Delicatessen" });
     const comida = await createCategory(tx, cfg.tenantId, { name: { [LOCALE]: "Comida" } });
@@ -263,7 +263,7 @@ async function setupVenue(): Promise<{
 }
 
 /** The till API's deps for a provisioned venue: the owner connection (routes drop to `app_user`
- * themselves via `withTenant` + `asAppUser`), the real fiscal backend + system clock the sale path
+ * themselves via `withTransaction` + `asAppUser`), the real fiscal backend + system clock the sale path
  * files through, and `secureCookies:false` so the session cookie rides the non-TLS `app.request`. */
 function apiDeps(cfg: TillConfig): TillApiDeps {
   // No integrated card provider built for these suites (`cfg.tipsEnabled` is `false` — see
@@ -294,7 +294,7 @@ const RING = loadKeyRing({
  * two-readers-one-provider regression below prove the ref is not baked in. The provider is given its
  * OWN `providerDb` handle (a `PROBE_ROLE` connection the test opens/closes), since the provider's
  * `payments`-ledger writes run at whatever role THAT handle carries (see `PROBE_ROLE` above) — the
- * routes' own DB ops still run through `withTenant` + `asAppUser` off `suite.admin`. This stands in for
+ * routes' own DB ops still run through `withTransaction` + `asAppUser` off `suite.admin`. This stands in for
  * the boot pool (which would build the real seat from a sealed credential) so a capture/decline
  * genuinely round-trips the adapter without a network.
  */
@@ -366,7 +366,7 @@ async function setDefaultReader(
 /** Seal this tenant's `payments.stripe` credential so the provider counts as CONNECTED (the pay
  * path's pre-check reads only its presence). */
 async function connectStripe(cfg: TillConfig): Promise<void> {
-  await withTenant(suite.admin, cfg.tenantId, (tx) =>
+  await withTransaction(suite.admin, (tx) =>
     putCredential(tx, RING, {
       tenantId: cfg.tenantId,
       purpose: "payments.stripe",
@@ -538,7 +538,7 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
 
     // 4. A GENUINE chained fiscal record exists for this tenant/node — one, hashed (own tenant, so
     // the count is order-independent).
-    const registros = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    const registros = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return tx
         .select()
@@ -551,7 +551,7 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
     expect(registros[0]!.huella).toMatch(/^[0-9A-F]{64}$/);
 
     // 5. The sale is attributed to the logged-in operator — the whole point of the session guard.
-    const saleRows = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    const saleRows = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return tx
         .select({ operatorId: sales.operatorId })
@@ -686,7 +686,7 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
     // increments `secuencia` and carries the first record's ACTUAL huella as its predecessor
     // (`anteriorHuella`) — the four-part Encadenamiento link (schema/registros.ts). Both hashes are
     // the stored 64-hex huella the append-only table pins.
-    const registros = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    const registros = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return tx
         .select()
@@ -744,7 +744,7 @@ describe("sale-time till_id from the authenticated device (SP-A.2 cutover)", () 
     expect(res.status).toBe(401);
     expect(await res.json()).toMatchObject({ error: { code: "device.unauthorized" } });
     // Refused before the fiscal write — the unrecoverable record is never touched (CLAUDE.md §5).
-    const registros = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    const registros = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return tx
         .select()
@@ -765,7 +765,7 @@ describe("sale-time till_id from the authenticated device (SP-A.2 cutover)", () 
     // device (a kitchen screen) cannot ring a sale. The device authenticates (a real enrolled binding),
     // so this proves the SECOND branch, distinct from the no-cookie `device.unauthorized` above.
     // A distinct, non-default station name — provisioning already seeds the venue's default "Cocina".
-    const station = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    const station = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return createStation(tx, cfg, { name: "Pase", isDefault: false });
     });
@@ -789,7 +789,7 @@ describe("sale-time till_id from the authenticated device (SP-A.2 cutover)", () 
     });
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({ error: { code: "device.till_required" } });
-    const registros = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    const registros = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return tx
         .select()
@@ -856,7 +856,7 @@ describe("/api/working-orders → pay (park & retrieve, idempotent over HTTP)", 
 
     // 5. Exactly ONE chained fiscal record; the working order is now `settled` and the sale is filed
     //    under its id and attributed to the logged-in operator.
-    const after = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    const after = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return {
         registros: await tx
@@ -900,7 +900,7 @@ describe("/api/working-orders → pay (park & retrieve, idempotent over HTTP)", 
     expect(replayTicket.tender).toEqual({ method: "cash", change: "2.00" });
 
     // Still exactly ONE record — the replay filed nothing.
-    const stillOne = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    const stillOne = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return tx
         .select()
@@ -1202,7 +1202,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       expect(payRes.status).toBe(200);
       expect(await payRes.json()).toEqual({ outcome: "declined" });
 
-      const after = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+      const after = await withTransaction(suite.admin, async (tx) => {
         await asAppUser(tx);
         return {
           registros: await tx
@@ -1418,7 +1418,7 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
     expect(placed.status).toBe(200);
     expect(await placed.json()).toEqual({ id: workingOrderId, status: "placed" });
 
-    const noSaleYet = await withTenant(suite.admin, modeCfg.tenantId, async (tx) => {
+    const noSaleYet = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return tx.select({ id: sales.id }).from(sales).where(eq(sales.tenantId, modeCfg.tenantId));
     });
@@ -1548,7 +1548,7 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
     expect(ticket.tender).toEqual({ method: "cash", change: "2.00" });
     expect(ticket.qr.length).toBeGreaterThan(0); // a genuine fresh filing carries the AEAT QR
 
-    const after = await withTenant(suite.admin, modeCfg.tenantId, async (tx) => {
+    const after = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return {
         wo: await tx
@@ -1720,7 +1720,7 @@ describe("POST /api/orders/:id/collect — Mode P's counter handover", () => {
     expect(collect.status).toBe(200);
 
     // collected_at is stamped (direct witness) AND the order is GONE from the station queue.
-    const [wo] = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    const [wo] = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return tx
         .select({ collected: sql<boolean>`collected_at is not null`, status: workingOrders.status })
@@ -1849,7 +1849,7 @@ describe("handheld sales and device capability gates", () => {
 
     const deviceCookie = await enrolHandheldCookie(cfg);
     const sessionPair = await loginOperator(app, cfg, operatorId);
-    await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       const printer = await createPrinter(tx, cfg, {
         name: "Counter",
@@ -1892,7 +1892,7 @@ describe("handheld sales and device capability gates", () => {
     // node = cfg.nodeId — the SIF is the node, not the till — secuencia 1, primerRegistro, no predecessor
     // pointer, a 64-hex huella), plus the deployment `entorno` this test additionally pins. `tillId` is
     // separate device metadata; it never keys the chain.
-    const registros = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    const registros = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return tx
         .select()
@@ -1945,7 +1945,7 @@ describe("handheld sales and device capability gates", () => {
     // chain-opening shape the handheld cash parity test above asserts (own tenant, node = cfg.nodeId — the
     // SIF is the node, not the till — secuencia 1, primerRegistro, no predecessor pointer, a 64-hex
     // huella), plus the deployment `entorno`. `tillId` is separate device metadata; it never keys the chain.
-    const registros = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    const registros = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return tx
         .select()
@@ -2112,7 +2112,7 @@ describe("handheld sales and device capability gates", () => {
     expect(refused.status).toBe(403);
     expect((await refused.json()).error.code).toBe("device.forbidden_action");
     // Nothing was filed — the unrecoverable chained record the guard protects (CLAUDE.md §5).
-    const afterRefused = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    const afterRefused = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return tx
         .select()
@@ -2131,7 +2131,7 @@ describe("handheld sales and device capability gates", () => {
     });
     expect(placed.status).toBe(200);
     expect((await placed.json()).invoiceNumber).toMatch(/^A\/\d+$/);
-    const afterPlaced = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    const afterPlaced = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return tx
         .select()
@@ -2184,7 +2184,7 @@ describe("handheld sales and device capability gates", () => {
     });
     expect(refused.status).toBe(403);
     expect((await refused.json()).error.code).toBe("device.forbidden_action");
-    const afterRefused = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    const afterRefused = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return tx
         .select()
@@ -2204,7 +2204,7 @@ describe("handheld sales and device capability gates", () => {
     });
     expect(collect.status).toBe(200);
     expect((await collect.json()).invoiceNumber).toMatch(/^A\/\d+$/);
-    const after = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    const after = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return {
         wo: await tx
@@ -2262,7 +2262,7 @@ describe("handheld sales and device capability gates", () => {
     });
     expect(refused.status).toBe(403);
     expect((await refused.json()).error.code).toBe("device.forbidden_action");
-    const stillPlaced = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    const stillPlaced = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return tx
         .select({ status: workingOrders.status })
@@ -2278,7 +2278,7 @@ describe("handheld sales and device capability gates", () => {
       body: JSON.stringify({ reason: "customer left" }),
     });
     expect(cancelled.status).toBe(200);
-    const abandoned = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    const abandoned = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return tx
         .select({ status: workingOrders.status })
@@ -2294,7 +2294,7 @@ it("files every modifier mode through cash checkout and reprints their saved fac
   const product = available.find((item) => item.pricingUnit === "each")!;
   const optionId = randomUUID(),
     extraId = randomUUID();
-  const { note, option, extra } = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  const { note, option, extra } = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const note = await createModifier(
       tx,
@@ -2372,7 +2372,7 @@ it("files every modifier mode through cash checkout and reprints their saved fac
   const profileId = await seedProfileFF(cfg, "till", ["print-receipt"]);
   const deviceCookie = await enrolTillCookie(cfg, profileId);
   const headers = { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` };
-  const printerId = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  const printerId = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const printer = await createPrinter(tx, cfg, {
       name: "Modifier receipts",
@@ -2426,7 +2426,7 @@ it("files every modifier mode through cash checkout and reprints their saved fac
     { rate: "21.00", base: "2.48", tax: "0.52" },
     { rate: "10.00", base: "1.27", tax: "0.13" },
   ]);
-  const stored = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  const stored = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const rows = await tx.execute<{
       quantity: string;
@@ -2461,7 +2461,7 @@ it("files every modifier mode through cash checkout and reprints their saved fac
   ]);
   expect(stored.records).toHaveLength(1);
   expect(stored.records[0]!.huella).toMatch(/^[0-9A-F]{64}$/);
-  await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     await updateModifier(
       tx,
@@ -2492,7 +2492,7 @@ it("files every modifier mode through cash checkout and reprints their saved fac
     headers,
   });
   expect(reprint.status, await reprint.clone().text()).toBe(200);
-  const printed = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  const printed = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     return tx.execute<{ payload: Buffer }>(
       sql`select payload from print_jobs where tenant_id=${cfg.tenantId} and printer_id=${printerId} and kind='document'`,
@@ -2506,7 +2506,7 @@ it("files every modifier mode through cash checkout and reprints their saved fac
   expect(text).toContain("Frío");
   expect(text).not.toContain("Nuevo frío");
   expect(text).toContain("DUPLICADO");
-  const recordCount = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  const recordCount = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     return tx
       .select({ id: registrosFacturacion.id })

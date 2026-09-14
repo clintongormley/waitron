@@ -5,7 +5,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { sql } from "drizzle-orm";
-import { withTenant } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import { nodeId as brandNodeId, tenantId as brandTenantId } from "@waitron/shared";
 import { FISCAL_RESTORE, currentSif, registerSif } from "@waitron/fiscal-verifactu";
 import { AppError, isAppError } from "@waitron/shared";
@@ -448,7 +448,7 @@ describe("restore hooks (identity phase)", () => {
   beforeEach(resetSeries);
 
   it("restores FA standard and FA-1 rectificative through the real fiscal hook", async () => {
-    await withTenant(suite.db, brandTenantId(T.tenantId), async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       const sif = await registerSif(tx, {
         ...T,
         tenantId: brandTenantId(T.tenantId),
@@ -463,7 +463,7 @@ describe("restore hooks (identity phase)", () => {
     await restoreFromArtifact(
       makeRestoreDeps({ modules: withHooks({ "fiscal-verifactu": FISCAL_RESTORE }) }),
     );
-    const sif = await withTenant(suite.db, brandTenantId(T.tenantId), (tx) =>
+    const sif = await withTransaction(suite.db, (tx) =>
       currentSif(tx, brandTenantId(T.tenantId), brandNodeId(T.nodeId)),
     );
     const { rows } = await suite.db.execute<{ id: string; code: string; purpose: string }>(sql`

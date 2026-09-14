@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { createFakeAeat } from "@waitron/verifactu/src/testing/fake-aeat.js";
-import { withTenant } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import type { AckState } from "@waitron/fiscal";
 import { DEFAULT_SKIP_RETRY_MS, drain, type DrainDeps } from "./drain.js";
@@ -67,7 +67,7 @@ type AckRow = {
 };
 
 async function acksFor(tenantId: string): Promise<AckRow[]> {
-  const { rows } = await withTenant(pg.db, tenantId, (tx) =>
+  const { rows } = await withTransaction(pg.db, (tx) =>
     tx.execute<AckRow>(
       sql`select registro_id, state, csv, submitted_at, delivered_at from acks where tenant_id = ${tenantId}`,
     ),
@@ -79,7 +79,8 @@ async function envioFor(
   tenantId: string,
   registroId: string,
 ): Promise<{ estado: string; csv: string | null; enviado_en: string | null }> {
-  const { rows } = await withTenant(pg.db, tenantId, (tx) =>
+  void tenantId;
+  const { rows } = await withTransaction(pg.db, (tx) =>
     tx.execute<{ estado: string; csv: string | null; enviado_en: string | null }>(
       sql`select estado, csv, enviado_en from envios where registro_id = ${registroId}`,
     ),
@@ -118,7 +119,7 @@ describe("acks — production atomicity (drainer + reconcile)", () => {
 
     // Model a genuinely lost acknowledgement: our side never persisted the response, so it still
     // reads `pendiente`, has no CSV, was never claimed (`enviado_en` null), and carries no ack.
-    await withTenant(pg.db, seeded.tenantId, (tx) =>
+    await withTransaction(pg.db, (tx) =>
       tx.execute(
         sql`update envios set estado = 'pendiente', confirmado_en = null, csv = null, enviado_en = null where tenant_id = ${seeded.tenantId}`,
       ),
@@ -160,7 +161,7 @@ describe("acks — production atomicity (drainer + reconcile)", () => {
     await drain(drainDeps(resolveClient), DRAIN_AT);
 
     // Producer 2 — force record 0 into a lost-ack state and let reconcile correct + re-ack it.
-    await withTenant(pg.db, seeded.tenantId, (tx) =>
+    await withTransaction(pg.db, (tx) =>
       tx.execute(
         sql`update envios set estado = 'pendiente', confirmado_en = null, csv = null where registro_id = ${seeded.registroIds[0]}`,
       ),
@@ -169,7 +170,7 @@ describe("acks — production atomicity (drainer + reconcile)", () => {
     await reconcile(reconcileDeps(resolveClient, seeded.clock), seeded.tenantId, PERIOD);
 
     // The load-bearing invariant: for EVERY acked row, acks.state === ackStateOf(envios.estado).
-    const { rows } = await withTenant(pg.db, seeded.tenantId, (tx) =>
+    const { rows } = await withTransaction(pg.db, (tx) =>
       tx.execute<{ state: string; estado: string }>(sql`
         select a.state, e.estado
         from acks a join envios e on e.registro_id = a.registro_id
@@ -187,7 +188,7 @@ describe("acks — production atomicity (drainer + reconcile)", () => {
     const seeded = await seedPendingEnvios(pg.db, { count: 1 });
     const resolveClient = staticResolver(aeat.client());
     await drain(drainDeps(resolveClient), DRAIN_AT);
-    await withTenant(pg.db, seeded.tenantId, (tx) =>
+    await withTransaction(pg.db, (tx) =>
       tx.execute(
         sql`update envios set estado = 'pendiente', confirmado_en = null, csv = null where tenant_id = ${seeded.tenantId}`,
       ),
@@ -241,9 +242,7 @@ describe("acks — durable transport (pendingAcks / markDelivered)", () => {
     // Cert-expired at the DB level: the submission never happened, the row is still `pendiente`, so
     // no ack is produced. Mirrors the projection's cert-expired case one layer down.
     const seeded = await seedPendingEnvios(pg.db, { count: 1 });
-    await withTenant(pg.db, seeded.tenantId, (tx) =>
-      writeAck(tx, seeded.registroIds[0]!, DRAIN_AT),
-    );
+    await withTransaction(pg.db, (tx) => writeAck(tx, seeded.registroIds[0]!, DRAIN_AT));
     expect(await acksFor(seeded.tenantId)).toHaveLength(0);
   });
 
@@ -255,11 +254,11 @@ describe("acks — durable transport (pendingAcks / markDelivered)", () => {
 
     expect(await acksFor(seeded.tenantId)).toHaveLength(1);
 
-    await withTenant(pg.db, seeded.tenantId, (tx) => deleteAck(tx, seeded.registroIds[0]!));
+    await withTransaction(pg.db, (tx) => deleteAck(tx, seeded.registroIds[0]!));
     expect(await acksFor(seeded.tenantId)).toHaveLength(0);
 
     // Idempotent: deleting an already-absent ack does not throw.
-    await withTenant(pg.db, seeded.tenantId, (tx) => deleteAck(tx, seeded.registroIds[0]!));
+    await withTransaction(pg.db, (tx) => deleteAck(tx, seeded.registroIds[0]!));
     expect(await acksFor(seeded.tenantId)).toHaveLength(0);
   });
 });

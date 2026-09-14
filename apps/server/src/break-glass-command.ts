@@ -1,5 +1,5 @@
 import { and, eq, sql } from "drizzle-orm";
-import { isUniqueViolation, type Database, withTenant } from "@waitron/db";
+import { isUniqueViolation, type Database, withTransaction } from "@waitron/db";
 import { hasCode, isAppError } from "@waitron/shared";
 import {
   assertPasswordLength,
@@ -20,7 +20,7 @@ type Env = Record<string, string | undefined>;
  * The deployment holds one tenant per database. The ungated reset lives HERE, not in
  * `@waitron/identity`, on purpose: exposing a reusable ungated reset from the identity package
  * would be a permission bypass anyone could import. This command writes the account and removes its
- * login factors under `withTenant`; the write is by id.
+ * login factors under `withTransaction`; the write is by id.
  *
  * Secrets come from the environment, NEVER argv — an argv element leaks into the process table
  * (`ps`), the same reason `waitron-recovery`/`register-till` read theirs from env. The new password
@@ -103,7 +103,7 @@ export async function runBreakGlassReset(deps: {
   const db = await deps.connect(databaseUrl);
   try {
     try {
-      return await withTenant(db, tenantId, async (tx) => {
+      return await withTransaction(db, async (tx) => {
         // The deployment holds one tenant per database. The read is unfiltered: these are the box's
         // admins.
         const admins = await tx

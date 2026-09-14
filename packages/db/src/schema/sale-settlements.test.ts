@@ -3,7 +3,7 @@ import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitr
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import type { Database } from "../client.js";
-import { withTenant } from "../tenancy.js";
+import { withTransaction } from "../tenancy.js";
 import { captureError, pgErrorCode, pgErrorMessage } from "../testing/errors.js";
 import { describeEachTarget } from "../testing/harness.js";
 import { asAppUser } from "../testing/roles.js";
@@ -300,7 +300,7 @@ describeEachTarget("sale settlements — no tender after settlement", (target) =
 
   it("rejects a tender inserted after the sale is settled", async () => {
     const error = await captureError(() =>
-      withTenant(db, TENANT_A, async (tx) => {
+      withTransaction(db, async (tx) => {
         await asAppUser(tx);
         return tx
           .insert(tenders)

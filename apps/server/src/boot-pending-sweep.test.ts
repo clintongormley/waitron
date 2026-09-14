@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ForwardResult, PaymentProvider } from "@waitron/payments";
-import { CORE_MIGRATIONS, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { CREDENTIALS_MIGRATIONS, loadKeyRing, putCredential } from "@waitron/credentials";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -233,7 +233,7 @@ function recordingPool(): {
 describe("connectedCardProviderSweep", () => {
   it("sweeps a pooled provider only when the tenant has its sealed credential (negative control: none → not swept)", async () => {
     const tenantId = await seedTenant(suite.db);
-    await withTenant(suite.db, tenantId, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       putCredential(tx, ring, {
         tenantId,
         purpose: "payments.stripe",

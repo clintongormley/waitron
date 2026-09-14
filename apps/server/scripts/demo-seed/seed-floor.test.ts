@@ -7,7 +7,7 @@
 
 import { describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import { ALL_MODULES } from "../../src/modules.js";
@@ -71,7 +71,7 @@ describe("seedFloor", () => {
   it("creates restaurant and deli service zones, the placed restaurant floor, and statuses", async () => {
     const { tenantId, locationId } = await provisionVenue();
 
-    const res = await withTenant(suite.admin, tenantId, async (tx) => {
+    const res = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       await seedFloor(tx, { tenantId, locationId, locale: LOCALE });
 

@@ -2,7 +2,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, readNodeMembership, withTenant, writeNodeMembership } from "@waitron/db";
+import { asAppUser, readNodeMembership, withTransaction, writeNodeMembership } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
@@ -89,7 +89,7 @@ async function setupTenant(): Promise<{ tenantId: string; nodeId: string }> {
     { db: suite.admin, modules: ALL_MODULES },
   );
 
-  await withTenant(suite.admin, venue.tenantId, async (tx) => {
+  await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     await tx.execute(sql`
       insert into persons (tenant_id, display_name, email, pin_hash, password_hash, role)

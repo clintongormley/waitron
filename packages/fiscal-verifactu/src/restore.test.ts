@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createPgliteDb, runMigrations, withTenant } from "@waitron/db";
+import { createPgliteDb, runMigrations, withTransaction } from "@waitron/db";
 import { isAppError, locationId as brandLocationId } from "@waitron/shared";
 import type { ProvisionedNode } from "@waitron/module";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
@@ -25,7 +25,7 @@ const FLOOR = installationFloor(NOW);
 
 /** A live node: registered SIF + `FA` (standard, next_number 5) and `RE` (rectificative). */
 async function seedLiveNode(): Promise<SifRegistration> {
-  const sif = await withTenant(db, TENANT_A.id, (tx) =>
+  const sif = await withTransaction(db, (tx) =>
     registerSif(tx, { ...SIF, tenantId: TENANT_A.id, nodeId: TENANT_A.nodeId }),
   );
   await db.execute(sql`
@@ -83,11 +83,9 @@ describe("restoreFiscal", () => {
       huella: "C".repeat(64),
     });
 
-    const outcome = await withTenant(db, TENANT_A.id, (tx) => restoreFiscal(tx, NODE, NOW));
+    const outcome = await withTransaction(db, (tx) => restoreFiscal(tx, NODE, NOW));
 
-    const fresh = await withTenant(db, TENANT_A.id, (tx) =>
-      currentSif(tx, TENANT_A.id, TENANT_A.nodeId),
-    );
+    const fresh = await withTransaction(db, (tx) => currentSif(tx, TENANT_A.id, TENANT_A.nodeId));
     expect(fresh.id).not.toBe(first.id);
     expect(fresh.numeroInstalacion).toBeGreaterThanOrEqual(FLOOR);
     expect(fresh.numeroInstalacion).toBeGreaterThan(first.numeroInstalacion);
@@ -96,7 +94,7 @@ describe("restoreFiscal", () => {
     );
     expect(old[0]?.revocado_en).not.toBeNull();
     expect(
-      await withTenant(db, TENANT_A.id, (tx) => esPrimerRegistro(tx, TENANT_A.id, TENANT_A.nodeId)),
+      await withTransaction(db, (tx) => esPrimerRegistro(tx, TENANT_A.id, TENANT_A.nodeId)),
     ).toBe(true);
     const { rows: head } = await db.execute<{ secuencia: number }>(
       sql`select secuencia from cadenas where node_id = ${TENANT_A.nodeId}`,
@@ -124,7 +122,7 @@ describe("restoreFiscal", () => {
     // which is what restoring the older artifact does, and run the hook: it must not mint 2 again.
     await seedLiveNode();
     const counterAtBackup = await counterOf();
-    const later = await withTenant(db, TENANT_A.id, (tx) =>
+    const later = await withTransaction(db, (tx) =>
       registerSif(tx, { ...SIF, tenantId: TENANT_A.id, nodeId: TENANT_A.nodeId }),
     );
     await db.execute(sql`delete from registro_sif where id = ${later.id}`);
@@ -135,11 +133,9 @@ describe("restoreFiscal", () => {
       sql`update contadores_instalacion set proximo_numero = ${counterAtBackup} where nif = ${SIF.nif} and id_sistema_informatico = ${SIF.idSistemaInformatico}`,
     );
 
-    await withTenant(db, TENANT_A.id, (tx) => restoreFiscal(tx, NODE, NOW));
+    await withTransaction(db, (tx) => restoreFiscal(tx, NODE, NOW));
 
-    const fresh = await withTenant(db, TENANT_A.id, (tx) =>
-      currentSif(tx, TENANT_A.id, TENANT_A.nodeId),
-    );
+    const fresh = await withTransaction(db, (tx) => currentSif(tx, TENANT_A.id, TENANT_A.nodeId));
     // Control (run it once): delete `raiseInstallationFloor` from restoreFiscal → this mints 2 → red.
     expect(fresh.numeroInstalacion).not.toBe(later.numeroInstalacion);
     expect(fresh.numeroInstalacion).toBeGreaterThan(later.numeroInstalacion);
@@ -153,11 +149,9 @@ describe("restoreFiscal", () => {
       where nif = ${SIF.nif} and id_sistema_informatico = ${SIF.idSistemaInformatico}
     `);
 
-    await withTenant(db, TENANT_A.id, (tx) => restoreFiscal(tx, NODE, NOW));
+    await withTransaction(db, (tx) => restoreFiscal(tx, NODE, NOW));
 
-    const fresh = await withTenant(db, TENANT_A.id, (tx) =>
-      currentSif(tx, TENANT_A.id, TENANT_A.nodeId),
-    );
+    const fresh = await withTransaction(db, (tx) => currentSif(tx, TENANT_A.id, TENANT_A.nodeId));
     expect(fresh.numeroInstalacion).toBe(nextNumber);
     expect(await counterOf()).toBe(nextNumber + 1);
   });
@@ -165,10 +159,8 @@ describe("restoreFiscal", () => {
   it("creates the counter row when the restored database has none (a promoted standby's backup)", async () => {
     await seedLiveNode();
     await db.execute(sql`delete from contadores_instalacion`);
-    await withTenant(db, TENANT_A.id, (tx) => restoreFiscal(tx, NODE, NOW));
-    const fresh = await withTenant(db, TENANT_A.id, (tx) =>
-      currentSif(tx, TENANT_A.id, TENANT_A.nodeId),
-    );
+    await withTransaction(db, (tx) => restoreFiscal(tx, NODE, NOW));
+    const fresh = await withTransaction(db, (tx) => currentSif(tx, TENANT_A.id, TENANT_A.nodeId));
     expect(fresh.numeroInstalacion).toBe(FLOOR);
   });
 
@@ -176,7 +168,7 @@ describe("restoreFiscal", () => {
     await db.execute(sql`
       insert into invoice_series (tenant_id, node_id, code) values (${TENANT_A.id}, ${TENANT_A.nodeId}, 'FA')
     `);
-    const outcome = await withTenant(db, TENANT_A.id, (tx) => restoreFiscal(tx, NODE, NOW));
+    const outcome = await withTransaction(db, (tx) => restoreFiscal(tx, NODE, NOW));
     expect(outcome.series).toBeUndefined();
     expect(outcome.report).toMatch(/no live SIF/);
     const { rows } = await db.execute<{ n: number }>(
@@ -192,10 +184,8 @@ describe("restoreFiscal", () => {
     await db.execute(
       sql`update invoice_series set code = ${`FA-${first.numeroInstalacion}`} where code = 'FA'`,
     );
-    const outcome = await withTenant(db, TENANT_A.id, (tx) => restoreFiscal(tx, NODE, NOW));
-    const fresh = await withTenant(db, TENANT_A.id, (tx) =>
-      currentSif(tx, TENANT_A.id, TENANT_A.nodeId),
-    );
+    const outcome = await withTransaction(db, (tx) => restoreFiscal(tx, NODE, NOW));
+    const fresh = await withTransaction(db, (tx) => currentSif(tx, TENANT_A.id, TENANT_A.nodeId));
     expect(outcome.series).toEqual([
       { code: `FA-${fresh.numeroInstalacion}`, purpose: "standard" },
     ]);
@@ -205,7 +195,7 @@ describe("restoreFiscal", () => {
     await seedLiveNode();
     const long = "L".repeat(MAX_BASE_CODE_LENGTH + 1);
     await db.execute(sql`update invoice_series set code = ${long} where code = 'FA'`);
-    const err = await withTenant(db, TENANT_A.id, (tx) => restoreFiscal(tx, NODE, NOW)).catch(
+    const err = await withTransaction(db, (tx) => restoreFiscal(tx, NODE, NOW)).catch(
       (e: unknown) => e,
     );
     expect(isAppError(err) && err.code).toBe("series.code_too_long");
@@ -233,10 +223,8 @@ describe("restoreFiscal", () => {
       appendToChain(tx, till.tenantId, till.nodeId, altaFor(till.tillId, sale1, 1, 1)),
     );
 
-    await withTenant(db, till.tenantId, (tx) => restoreFiscal(tx, node, NOW));
-    const fresh = await withTenant(db, till.tenantId, (tx) =>
-      currentSif(tx, till.tenantId, till.nodeId),
-    );
+    await withTransaction(db, (tx) => restoreFiscal(tx, node, NOW));
+    const fresh = await withTransaction(db, (tx) => currentSif(tx, till.tenantId, till.nodeId));
 
     const sale2 = await seedSale(db, till, 2);
     const after = await db.transaction((tx) =>
@@ -251,19 +239,15 @@ describe("restoreFiscal", () => {
     );
     expect(rec[0]).toEqual({ primer_registro: true, anterior_huella: null, sif_id: fresh.id });
     expect(after.secuencia).toBe(before.secuencia + 1); // the sequence is ours and continues
-    const report = await withTenant(db, till.tenantId, (tx) =>
-      verifyChain(tx, till.tenantId, till.nodeId),
-    );
+    const report = await withTransaction(db, (tx) => verifyChain(tx, till.tenantId, till.nodeId));
     expect(report).toMatchObject({ ok: true, issues: [] });
   });
 
   it("FISCAL_RESTORE is restoreFiscal with the wall clock", async () => {
     await seedLiveNode();
     const before = installationFloor(new Date());
-    await withTenant(db, TENANT_A.id, (tx) => FISCAL_RESTORE(tx, NODE));
-    const fresh = await withTenant(db, TENANT_A.id, (tx) =>
-      currentSif(tx, TENANT_A.id, TENANT_A.nodeId),
-    );
+    await withTransaction(db, (tx) => FISCAL_RESTORE(tx, NODE));
+    const fresh = await withTransaction(db, (tx) => currentSif(tx, TENANT_A.id, TENANT_A.nodeId));
     expect(fresh.numeroInstalacion).toBeGreaterThanOrEqual(before);
   });
 });

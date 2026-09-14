@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Agent, errors as undiciErrors, fetch as undiciFetch } from "undici";
-import { CORE_MIGRATIONS, captureError, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, captureError, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { CREDENTIALS_MIGRATIONS, loadKeyRing, putCredential } from "@waitron/credentials";
 import { isAppError } from "@waitron/shared";
@@ -54,7 +54,7 @@ afterAll(async () => {
 
 async function provision(certKind: string): Promise<TenantId> {
   const tenantId = await seedTenant(suite.db);
-  await withTenant(suite.db, tenantId, (tx) =>
+  await withTransaction(suite.db, (tx) =>
     putCredential(tx, ring, {
       tenantId,
       purpose: "fiscal.aeat",

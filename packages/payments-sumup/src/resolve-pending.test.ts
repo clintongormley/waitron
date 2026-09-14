@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { AppError, decimal, tenantId as brandTenantId } from "@waitron/shared";
 import {
@@ -42,7 +42,7 @@ async function setup() {
     paymentRef: string,
     opts: { stamped?: boolean; status?: string } = {},
   ) => {
-    await withTenant(suite.db, t.tenantId, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       insertAttempting(tx, {
         tenantId: t.tenantId,
         workingOrderId: t.workingOrderId,
@@ -57,13 +57,13 @@ async function setup() {
       amount: decimal("7.00"),
     });
     if (opts.stamped !== false)
-      await withTenant(suite.db, t.tenantId, (tx) =>
+      await withTransaction(suite.db, (tx) =>
         stampAttemptingRef(tx, { tenantId: t.tenantId, provider: "sumup", paymentRef }, ctx),
       );
     return ctx;
   };
   const state = async (ref: string) => {
-    const r = await withTenant(suite.db, t.tenantId, (tx) =>
+    const r = await withTransaction(suite.db, (tx) =>
       getPaymentByRef(tx, { tenantId: t.tenantId, provider: "sumup", paymentRef: ref }),
     );
     if (r === undefined) throw new Error(`no payments row for ref ${ref}`);
@@ -131,7 +131,7 @@ describe("SumUpCloudProvider.resolvePending", () => {
 
   it("a row SumUp holds nothing for is pending inside the grace period, then failed WITH an incident after it", async () => {
     const { t, provider, state, raised } = await setup();
-    await withTenant(suite.db, t.tenantId, (tx) =>
+    await withTransaction(suite.db, (tx) =>
       insertAttempting(tx, {
         tenantId: t.tenantId,
         workingOrderId: t.workingOrderId,

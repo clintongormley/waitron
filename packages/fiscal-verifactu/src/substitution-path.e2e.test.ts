@@ -1,6 +1,6 @@
 import { asc, eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import { computeHuella } from "@waitron/verifactu";
 import type { Counterparty, SaleForFiscalRecord } from "@waitron/fiscal";
 import { decimal, saleId as brandSaleId, seriesId as brandSeriesId } from "@waitron/shared";
@@ -109,7 +109,7 @@ function ticketSaleFor(saleId: string, invoiceNumber: number): SaleForFiscalReco
  * Returns the ticket sale's id — a `substitutedSaleId` an F3 points at. */
 async function recordTicket(invoiceNumber: number): Promise<string> {
   const ticketId = await seedSale(suite.admin, till, invoiceNumber);
-  await withTenant(suite.admin, till.tenantId, async (tx) => {
+  await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     await backend.recordSale(tx, ticketSaleFor(ticketId, invoiceNumber));
   });
@@ -143,7 +143,7 @@ async function substitute(
   const invoiceNumber = overrides.invoiceNumber ?? 1;
   const substitutionId = await seedSubstitutionRow(invoiceNumber);
   const sale = substitutionSaleFor(substitutionId, invoiceNumber, overrides);
-  await withTenant(suite.admin, till.tenantId, async (tx) => {
+  await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     await backend.recordSubstitution(tx, sale, {
       substitutedSaleIds: substitutedSaleIds.map((id) => brandSaleId(id)),

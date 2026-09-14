@@ -1,6 +1,6 @@
 import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, captureError, pgErrorCode, pgErrorMessage, withTenant } from "@waitron/db";
+import { asAppUser, captureError, pgErrorCode, pgErrorMessage, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { freshNif } from "../../test/seed.js";
@@ -25,7 +25,7 @@ describe("card_readers", () => {
     const db = postgres.admin;
     const tenantId = await seedTenant(db);
 
-    await withTenant(db, tenantId, async (tx) => {
+    await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       await tx
         .insert(cardReaders)
@@ -33,7 +33,7 @@ describe("card_readers", () => {
     });
 
     // Round-trips: the row is readable and its defaults are what the schema promises.
-    const stored = await withTenant(db, tenantId, async (tx) => {
+    const stored = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       return tx
         .select()
@@ -51,7 +51,7 @@ describe("card_readers", () => {
     // `tx.insert` wraps the PG error in a DrizzleQueryError whose top-level `.message` is the
     // generic "Failed query: …"; the constraint name lives on `.cause`, read by `pgErrorMessage`.
     const dup = await captureError(() =>
-      withTenant(db, tenantId, async (tx) => {
+      withTransaction(db, async (tx) => {
         await asAppUser(tx);
         await tx
           .insert(cardReaders)

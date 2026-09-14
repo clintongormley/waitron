@@ -12,7 +12,7 @@ import { ALL_MODULES } from "./modules.js";
 import { provisionNode } from "./provision-till.js";
 
 // PGlite exercises the explicit node-ownership comparison. Both PGlite and a superuser PostgreSQL
-// connection can expose a missing tenant predicate; withTenant adds no filtering. The fiscal seed
+// connection can expose a missing tenant predicate; withTransaction adds no filtering. The fiscal seed
 // one layer down uses the same target in packages/fiscal-verifactu/src/provisioning.test.ts, as
 // do stripe-account.test.ts and aeat-transport.test.ts. No role or concurrency behaviour is under
 // test here, so a container adds

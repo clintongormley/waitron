@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, createPgliteDb, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, createPgliteDb, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { AppError, tenantId as brandTenantId } from "@waitron/shared";
 import type { TenantId } from "@waitron/shared";
@@ -60,7 +60,7 @@ describe("runDue", () => {
     // needs it and a large one would be read on every tick for nothing.
     //
     // Filter by tenant because other cases leave their ledger rows in this shared fixture.
-    const stored = await withTenant(suite.db, tenantId, (tx) =>
+    const stored = await withTransaction(suite.db, (tx) =>
       tx.execute<{ summary: Record<string, unknown> }>(
         sql`select summary from scheduled_runs where duty = 'test.duty' and tenant_id = ${tenantId}`,
       ),
@@ -92,7 +92,7 @@ describe("runDue", () => {
       outcome: "failed",
       errorCode: "payment.reconcile_unsettled",
     });
-    const snapshot = await withTenant(suite.db, tenantId, (tx) =>
+    const snapshot = await withTransaction(suite.db, (tx) =>
       readSnapshot(tx, { tenantId, duty: "test.duty", horizonStart: HORIZON_START }),
     );
     // 15 minutes: backoffBaseMs * 2^(attempts-1), attempts = 1. Store timestamps are normalised
@@ -124,7 +124,7 @@ describe("runDue", () => {
     }
     const after = await runDue(deps([duty]), [tenantId], at);
 
-    const snapshot = await withTenant(suite.db, tenantId, (tx) =>
+    const snapshot = await withTransaction(suite.db, (tx) =>
       readSnapshot(tx, { tenantId, duty: "test.duty", horizonStart: HORIZON_START }),
     );
     // A parked row is non-terminal in neither sense: it stays visible in the snapshot, but it is
@@ -300,14 +300,14 @@ describe("runDue", () => {
   // `completeRun` with ITS OWN (now-superseded) `startedAt`, the ownership fence rejects it.
   it("treats a completion lost to a mid-flight reclaim as 'this attempt owns nothing' — absent from ran", async () => {
     const duty = new FakeDuty("test.duty", async (call) => {
-      const snapshot = await withTenant(suite.db, tenantId, (tx) =>
+      const snapshot = await withTransaction(suite.db, (tx) =>
         readSnapshot(tx, { tenantId, duty: "test.duty", horizonStart: HORIZON_START }),
       );
       const row = snapshot.rows.find(
         (r) => new Date(r.periodFrom).getTime() === call.period.from.getTime(),
       );
       const reclaimAt = new Date(call.now.getTime() + DEFAULTS.staleAfterMs + 1);
-      const reclaimed = await withTenant(suite.db, tenantId, (tx) =>
+      const reclaimed = await withTransaction(suite.db, (tx) =>
         reclaimStale(tx, { id: row!.id, now: reclaimAt, staleAfterMs: DEFAULTS.staleAfterMs }),
       );
       // Confirms the reclaim actually won — otherwise the rest of this test would be asserting
@@ -323,7 +323,7 @@ describe("runDue", () => {
 
     // The row itself must still read exactly as the reclaim left it — running, at the reclaim's
     // attempt count — never overwritten by the lost attempt's (rejected) completion.
-    const snapshot = await withTenant(suite.db, tenantId, (tx) =>
+    const snapshot = await withTransaction(suite.db, (tx) =>
       readSnapshot(tx, { tenantId, duty: "test.duty", horizonStart: HORIZON_START }),
     );
     expect(snapshot.rows[0]).toMatchObject({ state: "running", attempts: 2 });
@@ -361,7 +361,7 @@ describe("runDue", () => {
     const period = dayPeriod(new Date("2026-07-24T00:00:00Z"));
     // Simulate a crashed process: claim the period directly (bypassing `runDue`, which always
     // completes what it claims) and never call `completeRun`.
-    const stranded = await withTenant(suite.db, tenantId, (tx) =>
+    const stranded = await withTransaction(suite.db, (tx) =>
       claimGap(tx, { tenantId, duty: "test.duty", period, now: NOW }),
     );
     expect(stranded).not.toBeNull();
@@ -378,7 +378,7 @@ describe("runDue", () => {
     expect(result.ran).toHaveLength(1);
     expect(result.ran[0]).toMatchObject({ outcome: "succeeded", generation: 0 });
 
-    const snapshot = await withTenant(suite.db, tenantId, (tx) =>
+    const snapshot = await withTransaction(suite.db, (tx) =>
       readSnapshot(tx, { tenantId, duty: "test.duty", horizonStart: HORIZON_START }),
     );
     // Exactly one row for the period — a RECLAIM of the stranded row, not a second row inserted

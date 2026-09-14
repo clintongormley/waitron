@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, withTenant } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import {
   AppError,
@@ -27,7 +27,7 @@ const pg = usePgliteDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
 // The provider's sync-origin node id. Value is irrelevant to these assertions (this container migrates
 // core+payments only, no sync capture triggers), but the option is required — it is threaded into the
-// adapter's withTenant so enrolled `payments` writes capture a real origin (design §4d(B)).
+// adapter's withTransaction so enrolled `payments` writes capture a real origin (design §4d(B)).
 const TEST_NODE_ID = "11111111-1111-4111-8111-111111111111";
 
 const noSleep = (): Promise<void> => Promise.resolve();
@@ -68,7 +68,7 @@ async function capturedPayment(
 ): Promise<{ paymentRef: string; tenantId: TenantId }> {
   const seeded = await seedWorkingOrder(pg.db, freshNif());
   const paymentRef = `ref-${externalRef}`;
-  await withTenant(pg.db, seeded.tenantId, (tx) =>
+  await withTransaction(pg.db, (tx) =>
     insertCapturedPayment(tx, {
       tenantId: seeded.tenantId,
       workingOrderId: seeded.workingOrderId,
@@ -346,7 +346,7 @@ describe("reverseViaStripe's tenant scoping", () => {
     const owner = await seedWorkingOrder(pg.db, freshNif());
     const stranger = await seedWorkingOrder(pg.db, freshNif());
     const paymentRef = "ref-cross-tenant";
-    await withTenant(pg.db, owner.tenantId, (tx) =>
+    await withTransaction(pg.db, (tx) =>
       insertCapturedPayment(tx, {
         tenantId: owner.tenantId,
         workingOrderId: owner.workingOrderId,

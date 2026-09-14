@@ -4,7 +4,7 @@ import type { Transaction } from "../client.js";
 import { captureError, pgErrorCode } from "../testing/errors.js";
 import { useTemplateDb } from "../testing/lifecycle.js";
 import { asAppUser } from "../testing/roles.js";
-import { withTenant } from "../tenancy.js";
+import { withTransaction } from "../tenancy.js";
 import { tenants } from "./tenants.js";
 
 // Real Postgres (a template clone), not PGlite: the app role that performs the UPDATE only exists
@@ -33,7 +33,8 @@ describe("locations.catalogue_id (a location's default menu) — tenant-consiste
   });
 
   function asApp<T>(tenant: string, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-    return withTenant(suite.admin, tenant, async (tx) => {
+    void tenant;
+    return withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return fn(tx);
     });

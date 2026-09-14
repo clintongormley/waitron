@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
@@ -76,7 +76,7 @@ describe("readChainHeight (real postgres)", () => {
     // — it is reached by a node_id that has no chain row under this tenant. A random uuid is
     // exactly that: the `node_id` predicate matches nothing, and the reader falls back to `{
     // height: 0, lastAt: null }`.
-    const result = await withTenant(suite.admin, tenantId, async (tx) => {
+    const result = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return readChainHeight(tx, randomUUID());
     });
@@ -93,7 +93,7 @@ describe("readChainHeight (real postgres)", () => {
       values (${tenantId}, ${nodeId}, 7, '2026-08-29T10:00:00Z')
       on conflict (tenant_id, node_id) do update set secuencia = 7, actualizado_en = '2026-08-29T10:00:00Z'`);
 
-    const result = await withTenant(suite.admin, tenantId, async (tx) => {
+    const result = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return readChainHeight(tx, nodeId);
     });

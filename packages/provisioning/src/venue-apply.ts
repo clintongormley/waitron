@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { withTenant, type Database, type Transaction } from "@waitron/db";
+import { withTransaction, type Database, type Transaction } from "@waitron/db";
 import { startManagementSession } from "@waitron/identity";
 import { createDeviceProfile, listDeviceProfiles } from "@waitron/layouts";
 import {
@@ -40,7 +40,7 @@ export interface VenueResult {
 }
 
 /**
- * Runs one plan as ONE transaction under `withTenant`, mirroring provisionNode (NOT applyInstance:
+ * Runs one plan as ONE transaction under `withTransaction`, mirroring provisionNode (NOT applyInstance:
  * there is no cluster DDL here, and a single transaction is what a partial venue must never be).
  * Every insert uses the ensure-tenant action's deterministic tenant id.
  *
@@ -65,7 +65,7 @@ export async function applyVenue(
   // planVenue's deriveTenantId (bootstrap-tenant.sql retired 2026-08-04). A future path inserting a
   // random-id tenant for the same identity would leave the ensure-tenant ON CONFLICT a no-op while
   // this scope adopts the derived id, so the locations FK to tenants(id) fails.
-  return withTenant(deps.db, tenantId, async (tx) => {
+  return withTransaction(deps.db, async (tx) => {
     let locationId = "";
     let tillId = "";
     let nodeId = "";

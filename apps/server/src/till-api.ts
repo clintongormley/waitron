@@ -4,7 +4,7 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { and, eq } from "drizzle-orm";
 import { AppError, isAppError, SUPPORTED_LOCALES } from "@waitron/shared";
 import type { FloorAnnotator } from "@waitron/module";
-import { asAppUser, locations, readNodeMembership, tenants, withTenant } from "@waitron/db";
+import { asAppUser, locations, readNodeMembership, tenants, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import {
   authorize,
@@ -202,7 +202,7 @@ async function resolveHttpOrderZone(
   requestedZoneId: string | undefined,
 ): Promise<string | undefined> {
   if (requestedZoneId !== undefined || lineCount === 0) return requestedZoneId;
-  return withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+  return withTransaction(deps.db, async (tx) => {
     await asAppUser(tx);
     if ((await VENUE_SERVICE.listServiceZones(tx, deps.cfg)).length === 0) return undefined;
     return (await VENUE_SERVICE.resolveNewOrderZone(tx, deps.cfg, {})).zoneId;
@@ -239,7 +239,7 @@ async function resolvePayReader(
   deviceId: string | undefined,
   requestedReaderId: string | undefined,
 ): Promise<{ id: string; provider: string; providerRef: string }> {
-  return withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+  return withTransaction(deps.db, async (tx) => {
     await asAppUser(tx);
     let readerId = requestedReaderId;
     if (readerId === undefined && deviceId !== undefined) {
@@ -645,7 +645,7 @@ function mountCourseVerb(
       const orderId = requireUuidId(c.req.param("id"), "working_order.not_found");
       const courseId = c.req.param("courseId");
       if (!isUuid(courseId)) throw new AppError("course.not_found", { courseId });
-      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         await verb(tx, deps.cfg, orderId, courseId);
       });
@@ -670,7 +670,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
 
   // The deployment holds one tenant per database. Log in: verify the operator's PIN and set the
   // httpOnly session cookie. The login runs as the app role under the till's tenant —
-  // `withTenant` + `asAppUser`, exactly as the sale path does — in this database; a wrong PIN,
+  // `withTransaction` + `asAppUser`, exactly as the sale path does — in this database; a wrong PIN,
   // unknown or suspended person surfaces as the identity credential codes `STATUS` maps to
   // 401/403.
   //
@@ -705,7 +705,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       pinThrottle.check(device.deviceId, personId);
       let session;
       try {
-        session = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        session = await withTransaction(deps.db, async (tx) => {
           await asAppUser(tx);
           return loginWithPin(tx, {
             tenantId: deps.cfg.tenantId,
@@ -750,7 +750,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       const id = readSessionId(c);
       if (id !== null && isUuid(id)) {
-        await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+        await withTransaction(deps.db, async (tx) => {
           await asAppUser(tx);
           await endSession(tx, id);
         });
@@ -767,14 +767,14 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // opaque 500) and flows through the same `locale` coercion below, so a
   // missing/non-string/unparsable `locale` all coerce to `""`, which `setPersonLocale`'s
   // `assertSupportedLocale` rejects as `locale.unsupported` (400) — the ONE rejection path, no
-  // separate request-invalid branch. Runs under `withTenant` + `asAppUser` (the write selects the
+  // separate request-invalid branch. Runs under `withTransaction` + `asAppUser` (the write selects the
   // session person by id), and returns 204 on success (no body).
   app.put("/api/session/locale", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
       const body = await readJsonBody<{ locale?: unknown }>(c);
       const locale = typeof body.locale === "string" ? body.locale : "";
-      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         await setPersonLocale(tx, { tenantId: deps.cfg.tenantId, personId, locale });
       });
@@ -784,12 +784,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
 
   // The deployment holds one tenant per database. Pre-login roster for the lock screen.
   // Deliberately UNAUTHENTICATED — it is what the operator picks their name from before any
-  // session exists — so it calls `listActiveStaff` under `withTenant` + `asAppUser` rather than
+  // session exists — so it calls `listActiveStaff` under `withTransaction` + `asAppUser` rather than
   // `requireSession`. `listActiveStaff` returns `{ personId, displayName }` only: no PIN
   // material, role or status, so there is nothing here a bystander at the counter must not see.
   app.get("/api/staff", (c) =>
     run(c, log, async () => {
-      const staff = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const staff = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         return listActiveStaff(tx);
       });
@@ -806,12 +806,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // UI needs it BEFORE login to select which pay control to render (Place/Collect for Modes I/T
   // vs the unchanged Pay for Mode P), so it rides on this same unauthenticated boot-info route
   // rather than a session-guarded one. `venueName`/`nif` still come from the `tenants` row under
-  // `withTenant` + `asAppUser`: `app_user` holds SELECT on `tenants` and the `eq(id)` filter
+  // `withTransaction` + `asAppUser`: `app_user` holds SELECT on `tenants` and the `eq(id)` filter
   // selects exactly that row.
   app.get("/api/till", (c) =>
     run(c, log, async () => {
       // Resolve the CALLING device (if any) BEFORE the boot transaction: `tryReadDevice` opens its OWN
-      // `withTenant` tx (auth + `last_seen_at`), so it cannot nest inside the read below. EVERY request
+      // `withTransaction` tx (auth + `last_seen_at`), so it cannot nest inside the read below. EVERY request
       // resolves a canvas: a cookieless request (no device) gets the `till` form-factor default, and an
       // ENROLLED device gets the canvas its DEVICE PROFILE references if set and resolvable, else the
       // built-in default for its form factor (SP-B4, generalising SP-B1 / SP-A.2 §16.3; the profile is
@@ -820,15 +820,15 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const device = await tryReadDevice({ db: deps.db, cfg: deps.cfg, devMode: deps.devMode }, c);
       // The venue's server list (till-reroute §3.2). Read HERE, outside the boot transaction below:
       // `node_membership` is a whole-DB singleton row with no `tenant_id`, so it has no place under
-      // `withTenant`'s tenant scope. Read straight off `deps.db`, like every other read in this file.
+      // `withTransaction`'s tenant scope. Read straight off `deps.db`, like every other read in this file.
       const held = await readNodeMembership(deps.db);
       // The deployment holds one tenant per database. ONE transaction reads the issuer identity
       // and the authored receipt trim (`getReceipt`, its own `tenant_receipts` row — SP-B4), plus
-      // the resolved canvas below: all run inside the same `withTenant` + `asAppUser` block,
+      // the resolved canvas below: all run inside the same `withTransaction` + `asAppUser` block,
       // never a second connection. `getReceipt` does not authorize — this boot read is
       // deliberately unauthenticated (the browser fetches it before login), and it carries no
       // secrets, only the receipt trim + canvas, same as `venueName`/`orderFlow` already here.
-      const boot = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const boot = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         const [row] = await tx
           .select({ venueName: tenants.legalName, nif: tenants.taxId })
@@ -1067,14 +1067,14 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // The sellable catalogue for this till's location. SESSION-GUARDED: `requireSession` runs
   // FIRST, so an unauthenticated request 401s (`session.required`) before any catalogue is read —
   // the operator must be logged in to see prices. The read itself runs as the app role under the
-  // till's tenant (`withTenant` + `asAppUser`), in the database holding this tenant. `menus` (the
+  // till's tenant (`withTransaction` + `asAppUser`), in the database holding this tenant. `menus` (the
   // location's accessible catalogues, default flagged, for the till's menu switcher) and
   // `products` (tagged with the catalogue each came from) are read in the SAME transaction so
   // they describe one consistent snapshot of the accessible set.
   app.get("/api/products", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
-      const { menus, products } = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const { menus, products } = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         return {
           menus: await listAccessibleCatalogues(tx, deps.cfg.locationId),
@@ -1089,7 +1089,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       await requireSession(deps, c);
       const device = await tryReadDevice(deps, c);
-      const result = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const result = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         const context = await VENUE_SERVICE.resolveNewOrderZone(tx, deps.cfg, {
           deviceId: device?.deviceId,
@@ -1113,7 +1113,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       await requireSession(deps, c);
       const zoneId = requireUuidParam(c.req.param("zoneId"), "ServiceZoneId");
-      const result = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const result = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         const context = await VENUE_SERVICE.resolveZoneContext(tx, deps.cfg, zoneId);
         return { context, ...(await VENUE_SERVICE.listZoneOffers(tx, deps.cfg, zoneId)) };
@@ -1125,7 +1125,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // Ring one walk-up sale — the HTTP face of the fiscal sale path. SESSION-GUARDED, and the guard
   // supplies the attribution: the sale is filed as `operatorId = session.personId`, so who rang it is
   // the logged-in operator, never a browser-sent value. `recordTillSale` opens its OWN
-  // `withTenant`/`asAppUser` transaction and re-prices the basket authoritatively (the request
+  // `withTransaction`/`asAppUser` transaction and re-prices the basket authoritatively (the request
   // carries no price), so it is called OUTSIDE any transaction here — nesting would deadlock the pool.
   // The sale route neither opens nor rotates the session, so it emits no Set-Cookie.
   app.post("/api/sales", (c) =>
@@ -1181,7 +1181,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
       // Resolve the calling device ONCE and thread it to both device guards below (the capability
-      // firewall and `requireSaleTillId`): `tryReadDevice` opens a `withTenant` tx and runs the CPU-heavy
+      // firewall and `requireSaleTillId`): `tryReadDevice` opens a `withTransaction` tx and runs the CPU-heavy
       // scrypt `verifySecret`, so a single read keeps both — and the one gated `last_seen_at` sighting —
       // off the redundant second pass. `null` (no cookie) still threads through fail-closed.
       const device = await tryReadDevice(deps, c);
@@ -1285,7 +1285,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // `{ id, orderNumber }` — the same idempotent-replay shape pay uses (`payWorkingOrder`) — so at most
   // one order is ever parked for the id and the retry sees the original result (a colliding id whose row
   // is no longer open re-throws the raw 23505). `parkOrder` re-reads the catalogue and prices
-  // authoritatively (the request carries no price), opening its OWN `withTenant`/`asAppUser` transaction,
+  // authoritatively (the request carries no price), opening its OWN `withTransaction`/`asAppUser` transaction,
   // so it is called OUTSIDE any transaction here. Returns the persisted `{ id, orderNumber }`.
   app.post("/api/working-orders", (c) =>
     run(c, log, async () => {
@@ -1409,7 +1409,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       // before the id parse and any fiscal write, exactly as pay/collect are. An ordinary till carries no
       // device cookie and passes.
       // Resolve the calling device ONCE and thread it to both the handheld firewall and `requireSaleTillId`
-      // below, so scrypt + the `withTenant` read run once per request rather than twice (perf; §16 path).
+      // below, so scrypt + the `withTransaction` read run once per request rather than twice (perf; §16 path).
       const device = await tryReadDevice(deps, c);
       await assertNotHandheld(deps, c, "place", device);
       const id = requireUuidId(c.req.param("id"), "working_order.not_open");
@@ -1460,7 +1460,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   app.get("/api/stations", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
-      const stations = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const stations = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         return listStations(tx, deps.cfg);
       });
@@ -1480,7 +1480,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       await requireSession(deps, c);
       const id = c.req.param("id");
       if (!isUuid(id)) throw new AppError("station.not_found", { stationId: id });
-      const queue = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const queue = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         return listStationQueue(tx, deps.cfg, id);
       });
@@ -1507,7 +1507,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       // `to` screen is needed because the verb's TICKET_TRANSITIONS-table lookup never lets an invalid
       // value reach the enum column (a lookup miss is refused before the update runs, not after).
       const to = body.to as TicketState;
-      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         await advanceTicketItem(tx, deps.cfg, id, to);
       });
@@ -1533,11 +1533,11 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       if (body.to !== "preparing" && body.to !== "ready") {
         throw new AppError("management.request_invalid", { field: "to" });
       }
-      // Bind `to` to a local: the narrowing above does not survive into the `withTenant` closure (a
+      // Bind `to` to a local: the narrowing above does not survive into the `withTransaction` closure (a
       // captured property resets to its declared `string | undefined`), the login/create-person pattern.
       const to = body.to;
       if (!isUuid(orderId) || !isUuid(stationId)) return c.body(null, 200);
-      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         await advanceTicket(tx, deps.cfg, orderId, stationId, to);
       });
@@ -1564,7 +1564,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   app.get("/api/expo/queue", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
-      const queue = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const queue = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         return listExpoQueue(tx, deps.cfg);
       });
@@ -1621,7 +1621,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       await requireSession(deps, c);
       const id = requireUuidId(c.req.param("id"), "working_order.not_found");
-      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         await reprintOrderTickets(tx, deps.cfg, id);
       });
@@ -1659,7 +1659,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // action — the active persons whose role holds `cash.drawer` (cash-drawer-authorization §5).
   // SESSION-GUARDED, not permission-gated: ANY logged-in operator may call it (they are about to
   // request a supervisor override and need the picker of who could authorize it), so
-  // `requireSession` runs FIRST and no `authorize` gate follows. Runs under `withTenant` +
+  // `requireSession` runs FIRST and no `authorize` gate follows. Runs under `withTransaction` +
   // `asAppUser`, returning the SAME no-secrets `{ personId, displayName }` shape as `GET
   // /api/staff` — no PIN material, role or status: the till shows this picker BEFORE the
   // supervisor has entered their credential. The client sends the chosen `{ personId, pin }` only
@@ -1667,7 +1667,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   app.get("/api/drawer/authorizers", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
-      const authorizers = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const authorizers = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         return listActivePersonsWithPermission(tx, "cash.drawer");
       });
@@ -1706,7 +1706,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       await assertNotHandheld(deps, c, "drawer_open", device);
       await assertDeviceCapability(deps, c, "open-cash-drawer", "drawer_open", device);
       const body = await readJsonBody<{ override?: { personId?: unknown; pin?: unknown } }>(c);
-      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         const [loc] = await tx
           .select({ policy: locations.drawerOpenPolicy })
@@ -1766,7 +1766,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       // `device.forbidden_action` (403) HERE, before the id parse and any fiscal write. An ordinary till
       // carries no device cookie and passes.
       // Resolve the calling device ONCE and thread it to both the handheld firewall and `requireSaleTillId`
-      // below, so scrypt + the `withTenant` read run once per request rather than twice (perf; §16 path).
+      // below, so scrypt + the `withTransaction` read run once per request rather than twice (perf; §16 path).
       const device = await tryReadDevice(deps, c);
       await assertNotHandheld(deps, c, "collect", device);
       const id = requireUuidId(c.req.param("id"), "working_order.not_placed");
@@ -1828,7 +1828,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       // table and is left alone.
       if (body.zoneId !== undefined && !isUuid(body.zoneId))
         throw new AppError("zone.not_found", { zoneId: body.zoneId });
-      const result = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const result = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         return createTable(tx, deps.cfg, body);
       });
@@ -1840,7 +1840,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   app.get("/api/tables", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
-      const tables = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const tables = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         return listTables(tx, deps.cfg);
       });
@@ -1854,7 +1854,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   app.get("/api/tables/state", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
-      const state = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const state = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         return listTablesWithState(tx, deps.cfg, deps.floorAnnotators ?? []);
       });
@@ -1870,7 +1870,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   app.get("/api/zones", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
-      const zones = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const zones = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         return listZones(tx, deps.cfg);
       });
@@ -1886,7 +1886,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   app.get("/api/statuses", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
-      const statuses = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const statuses = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         return listServiceStatuses(tx);
       });
@@ -1910,7 +1910,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       // ABSENT zoneId is left alone (an unassigned table, legitimate).
       if (body.zoneId !== undefined && !isUuid(body.zoneId))
         throw new AppError("zone.not_found", { zoneId: body.zoneId });
-      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         await updateTable(tx, deps.cfg, id, body);
       });
@@ -1924,7 +1924,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       await requireSession(deps, c);
       const id = c.req.param("id");
       if (!isUuid(id)) throw new AppError("table.not_found", { tableId: id });
-      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         await deactivateTable(tx, deps.cfg, id);
       });
@@ -1942,7 +1942,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const body = await readJsonBody<{
         lines?: { productId?: string; menuItemId?: string; quantity: string }[];
       }>(c);
-      const result = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const result = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         return openTab(tx, deps.cfg, { tableId: id, lines: body.lines });
       });
@@ -1979,7 +1979,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           hold?: boolean;
         } & LineExtras)[];
       }>(c);
-      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         await addTabRound(tx, deps.cfg, id, body.lines);
       });
@@ -1999,7 +1999,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const id = c.req.param("id");
       if (!isUuid(id)) throw new AppError("tab.not_open", { tabId: id });
       const lineNo = requireLineNo(id, c.req.param("lineNo"));
-      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         await voidTabLine(tx, deps.cfg, id, lineNo);
       });
@@ -2017,7 +2017,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       await requireSession(deps, c);
       const id = requireTabParam(c.req.param("id"));
-      const lines = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const lines = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         return readTabLines(tx, deps.cfg, id);
       });
@@ -2039,7 +2039,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       await requireSession(deps, c);
       const id = requireTabParam(c.req.param("id"));
       const lineNo = requireLineNo(id, c.req.param("lineNo"));
-      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         await markLineServed(tx, deps.cfg, id, lineNo);
       });
@@ -2055,7 +2055,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       await requireSession(deps, c);
       const id = requireTabParam(c.req.param("id"));
       const lineNo = requireLineNo(id, c.req.param("lineNo"));
-      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         await unmarkLineServed(tx, deps.cfg, id, lineNo);
       });
@@ -2087,7 +2087,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       if (courseId !== null && !isUuid(courseId)) {
         throw new AppError("course.not_found", { courseId });
       }
-      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         await setLineCourse(tx, deps.cfg, id, lineNo, courseId);
       });
@@ -2109,7 +2109,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       await requireSession(deps, c);
       const id = requireTabParam(c.req.param("id"));
       const body = await readJsonBody<{ lineNos?: number[] }>(c);
-      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         await sendLines(tx, deps.cfg, id, body.lineNos ?? []);
       });
@@ -2131,7 +2131,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       await requireSession(deps, c);
       const id = requireTabParam(c.req.param("id"));
       const body = await readJsonBody<{ lineNos?: number[] }>(c);
-      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         await recallLines(tx, deps.cfg, id, body.lineNos ?? []);
       });
@@ -2152,7 +2152,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       // A present-but-malformed statusId is screened to status.not_found (it names no status), not a 500.
       if (statusId !== null && !isUuid(statusId))
         throw new AppError("status.not_found", { statusId });
-      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         await setTableStatus(tx, deps.cfg, id, statusId);
       });
@@ -2209,12 +2209,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       if (typeof body.rotation !== "number")
         throw new AppError("management.request_invalid", { field: "rotation" });
       // Bind the narrowed fields to locals (the typeof narrowings above do not survive into the
-      // `withTenant` closure — a captured property resets to its declared type). `shape` is cast to
+      // `withTransaction` closure — a captured property resets to its declared type). `shape` is cast to
       // `FloorTableShape` here; the verb re-validates enum membership (→ placement.invalid), so the cast
       // asserts nothing the verb does not check.
       const { zoneId, posX, posY, rotation } = body;
       const shape = body.shape as FloorTableShape;
-      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         await authorize(tx, { sessionId, permission: "venue.configure" });
         await setTablePlacement(tx, deps.cfg, id, { zoneId, posX, posY, shape, rotation });
@@ -2233,7 +2233,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const { sessionId } = await requireSession(deps, c);
       const id = c.req.param("id");
       if (!isUuid(id)) throw new AppError("table.not_found", { tableId: id });
-      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         await authorize(tx, { sessionId, permission: "venue.configure" });
         await clearPlacement(tx, deps.cfg, id);
@@ -2245,7 +2245,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // The deployment holds one tenant per database. Relocate a tab to a free table (TS-3, design
   // §3a). SESSION-GUARDED. The tab `:id` and the body `toTableId` are both isUuid-screened before
   // any query — a malformed tab id → `tab.not_open` (409), a malformed target → `table.not_found`
-  // (404), never a 500. The verb runs on a fresh withTenant/asAppUser transaction. Returns 200
+  // (404), never a 500. The verb runs on a fresh withTransaction/asAppUser transaction. Returns 200
   // empty.
   app.post("/api/tabs/:id/move", (c) =>
     run(c, log, async () => {
@@ -2254,7 +2254,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const body = await readJsonBody<{ toTableId: string }>(c);
       if (!isUuid(body.toTableId))
         throw new AppError("table.not_found", { tableId: body.toTableId });
-      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         await moveTab(tx, deps.cfg, tabId, body.toTableId);
       });
@@ -2270,7 +2270,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const tabId = requireTabParam(c.req.param("id"));
       const body = await readJsonBody<{ tableId: string }>(c);
       if (!isUuid(body.tableId)) throw new AppError("table.not_found", { tableId: body.tableId });
-      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         await joinTable(tx, deps.cfg, tabId, body.tableId);
       });
@@ -2287,7 +2287,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const intoTabId = requireTabParam(c.req.param("id"));
       const body = await readJsonBody<{ fromTabId: string; freeSourceTable: boolean }>(c);
       if (!isUuid(body.fromTabId)) throw new AppError("tab.not_open", { tabId: body.fromTabId });
-      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         await mergeTabs(tx, deps.cfg, intoTabId, body.fromTabId, {
           freeSourceTable: body.freeSourceTable,
@@ -2302,7 +2302,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // GUARDED. Both ids are `isUuid`-screened BEFORE any query — a malformed one passed into
   // `eq(workingOrders.id, …)` would 22P02 → an opaque 500, so it is refused as `tab.not_open` (the SAME
   // fail-closed code an absent/closed/foreign tab gets). `transferLines` is tx-level, so this route
-  // opens the `withTenant`/`asAppUser` transaction around it. Returns 200 with an empty body; the till
+  // opens the `withTransaction`/`asAppUser` transaction around it. Returns 200 with an empty body; the till
   // re-reads the two tabs' state.
   app.post("/api/tabs/:id/transfer", (c) =>
     run(c, log, async () => {
@@ -2313,7 +2313,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         transfers: { lineNo: number; quantity?: string }[];
       }>(c);
       if (!isUuid(body.toTabId)) throw new AppError("tab.not_open", { tabId: body.toTabId });
-      await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         await transferLines(tx, deps.cfg, fromTabId, body.toTabId, body.transfers);
       });
@@ -2328,7 +2328,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // `eq(workingOrders.id, …)` would 22P02 → an opaque 500). The body is shape-screened (non-object/null/
   // array → `management.request_invalid` naming "body") before any field access — a literal JSON `null`
   // body used to reach `body.transfers` as a TypeError → opaque 500 (Copilot). `splitOffCheck` is
-  // tx-level, so this route opens the `withTenant`/`asAppUser` transaction around it. Returns 200
+  // tx-level, so this route opens the `withTransaction`/`asAppUser` transaction around it. Returns 200
   // `{ checkId }`; no fiscal write happens here (the check files only when it is later paid), so this
   // stays on the ALLOWED side of the order-only firewall like the other tab verbs.
   app.post("/api/tabs/:id/split", (c) =>
@@ -2356,7 +2356,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       if (!Array.isArray(body.transfers)) {
         throw new AppError("management.request_invalid", { field: "transfers" });
       }
-      const result = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const result = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         return splitOffCheck(tx, deps.cfg, fromTabId, body.transfers);
       });
@@ -2374,7 +2374,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // "body") BEFORE the `tableId` check — a literal JSON `null` body used to reach `body.tableId` as a
   // TypeError → opaque 500 (Copilot); screening it first also keeps a missing body out of the
   // domain-specific `table.not_joined`, since "no body" is a request-shape fault, not a claim about a
-  // table. The verb is tx-level, so this route opens the `withTenant`/`asAppUser` transaction around
+  // table. The verb is tx-level, so this route opens the `withTransaction`/`asAppUser` transaction around
   // it. Returns 200 `{ tabId }` (the new anchored tab, with items) or `{}` (freed). No fiscal write.
   app.post("/api/tabs/:id/unjoin", (c) =>
     run(c, log, async () => {
@@ -2405,7 +2405,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       if (body.transfers !== undefined && !Array.isArray(body.transfers)) {
         throw new AppError("management.request_invalid", { field: "transfers" });
       }
-      const result = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+      const result = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         return unjoinTable(tx, deps.cfg, tabId, body.tableId, body.transfers);
       });

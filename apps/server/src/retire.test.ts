@@ -39,7 +39,7 @@ const CARRIER_ID = "carrier-1";
 // mint, and the term-guarded persist): none of these has a privilege / concurrency dependency,
 // and the reads/writes all succeed as the PGlite superuser (CLAUDE.md §4 — pick the lighter
 // target when the heavier one's justification does not apply). `readSlotDrain` is injected,
-// so the real app_user/withTenant path (the only privilege-sensitive part) is never exercised
+// so the real app_user/withTransaction path (the only privilege-sensitive part) is never exercised
 // here — it is the caller's (Task 3) concern. Setup runs CREDENTIALS_MIGRATIONS and establishes a
 // node identity so the mint has a key to sign with; the gate paths that throw before the mint are
 // harmless to it.

@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { asAppUser, CORE_MIGRATIONS, withTenant } from "@waitron/db";
+import { asAppUser, CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
@@ -26,7 +26,7 @@ beforeEach(async () => {
   await suite.db.execute(sql`delete from management_sessions`);
   await suite.db.execute(sql`delete from persons`);
   tenantId = await seedTenant(suite.db);
-  await withTenant(suite.db, tenantId, async (tx) => {
+  await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     const person = await tx.execute<{ id: string }>(sql`
       insert into persons (tenant_id, display_name, pin_hash, role)
@@ -171,7 +171,7 @@ describe("unit management routes", () => {
       })
     ).json()) as { id: string };
 
-    const [a, b] = await withTenant(suite.db, tenantId, async (tx) => {
+    const [a, b] = await withTransaction(suite.db, async (tx) => {
       const menu = await tx.execute<{ id: string }>(sql`
         insert into catalogues (tenant_id, name) values (${tenantId}, 'Menu') returning id`);
       const ids: string[] = [];
@@ -287,7 +287,7 @@ describe("unit management routes", () => {
 
   it("does not expose or mutate another tenant's unit through either manager session", async () => {
     const otherTenantId = await seedTenant(suite.db);
-    const other = await withTenant(suite.db, otherTenantId, async (tx) => {
+    const other = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       const unit = await tx.execute<{ id: string }>(sql`
         insert into units (tenant_id, name, abbreviation, precision)

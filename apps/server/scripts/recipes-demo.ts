@@ -14,7 +14,7 @@
 // 1. boots an in-memory PGlite and applies `CORE_MIGRATIONS`;
 // 2. seeds a tenant + location as the PGlite superuser — `app_user` holds no INSERT on `tenants`,
 //    deliberately (a running POS cannot create tenants);
-// 3. as the application role (`withTenant` opens the transaction, `asAppUser` selects the app
+// 3. as the application role (`withTransaction` opens the transaction, `asAppUser` selects the app
 //    role on PostgreSQL, exactly as the running POS does), walks the six-step story below,
 //    reading the PUBLISHED `products.allergens` column back after each mutation and asserting it
 //    matches.
@@ -38,7 +38,7 @@ import {
   createPgliteDb,
   products,
   runMigrations,
-  withTenant,
+  withTransaction,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import {
@@ -121,8 +121,8 @@ async function main(): Promise<void> {
     const venue = await seedVenue(db);
 
     // The whole story runs in one application-role transaction: every op takes `tx` and runs
-    // inside that `withTenant` transaction, and each read below sees the writes above it.
-    await withTenant(db, venue.tenantId, async (tx) => {
+    // inside that `withTransaction` transaction, and each read below sees the writes above it.
+    await withTransaction(db, async (tx) => {
       await asAppUser(tx);
 
       console.log("recipes-demo: allergen inheritance from ingredients to a product, end-to-end");

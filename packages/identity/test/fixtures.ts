@@ -1,4 +1,4 @@
-import { captureError, withTenant } from "@waitron/db";
+import { captureError, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { isAppError } from "@waitron/shared";
 import { sql } from "drizzle-orm";
@@ -49,7 +49,7 @@ export async function openSession(
   tillId: string,
   personId: string,
 ): Promise<string> {
-  const session = await withTenant(db, tenantId, (tx) =>
+  const session = await withTransaction(db, (tx) =>
     loginWithPin(tx, { tenantId, tillId, personId, pin: "1234" }),
   );
   return session.id;
@@ -67,7 +67,7 @@ export async function seedPersonWithPassword(
   role: PersonRoleValue = "manager",
 ): Promise<string> {
   const personId = await seedPerson(db, tenantId, role);
-  await withTenant(db, tenantId, (tx) =>
+  await withTransaction(db, (tx) =>
     tx.execute(
       sql`update persons set password_hash = ${hashPassword("correct horse")} where id = ${personId}`,
     ),
@@ -87,7 +87,7 @@ export async function seedManager(
   opts: { email: string; role?: PersonRoleValue; status?: "pending" | "active" | "suspended" },
 ): Promise<string> {
   const personId = await seedPerson(db, tenantId, opts.role ?? "manager", opts.status ?? "active");
-  await withTenant(db, tenantId, (tx) =>
+  await withTransaction(db, (tx) =>
     tx.execute(
       sql`update persons set password_hash = ${hashPassword("correct horse")}, email = ${opts.email} where id = ${personId}`,
     ),
@@ -107,7 +107,7 @@ export async function openManagementSession(
 ): Promise<{ personId: string; sessionId: string }> {
   const email = `mgr-${crypto.randomUUID()}@example.test`;
   const personId = await seedManager(db, tenantId, { email, role });
-  const session = await withTenant(db, tenantId, (tx) =>
+  const session = await withTransaction(db, (tx) =>
     loginManager(tx, { tenantId, email, password: "correct horse" }),
   );
   return { personId, sessionId: session.id };

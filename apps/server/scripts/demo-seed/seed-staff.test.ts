@@ -3,7 +3,7 @@
 import { tenantId as brandTenantId } from "@waitron/shared";
 import { describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
-import { asAppUser, withTenant } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import { ALL_MODULES } from "../../src/modules.js";
@@ -66,7 +66,7 @@ describe("seedStaff", () => {
   it("seeds staff across all roles, all on the demo PIN", async () => {
     const { tenantId } = await provisionVenue();
 
-    const persons = await withTenant(suite.admin, tenantId, async (tx) => {
+    const persons = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       await seedStaff(tx, brandTenantId(tenantId));
 
@@ -103,7 +103,7 @@ describe("seedStaff", () => {
   it("gives every person an email while preserving which demo accounts have preset passwords", async () => {
     const { tenantId } = await provisionVenue();
 
-    const rows = await withTenant(suite.admin, tenantId, async (tx) => {
+    const rows = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       await seedStaff(tx, brandTenantId(tenantId));
 

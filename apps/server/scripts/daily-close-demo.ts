@@ -33,7 +33,13 @@ import { recordCorrection, recordSale, settleSale } from "@waitron/core";
 import type { RecordCorrectionInput, RecordSaleInput } from "@waitron/core";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import type { TrustedClock } from "@waitron/fiscal";
-import { CORE_MIGRATIONS, asAppUser, createPgliteDb, runMigrations, withTenant } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  asAppUser,
+  createPgliteDb,
+  runMigrations,
+  withTransaction,
+} from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { IDENTITY_MIGRATIONS, hashPin, loginWithPin } from "@waitron/identity";
 import {
@@ -139,7 +145,7 @@ async function main(): Promise<void> {
 
     // Register the node once (a one-time admin action recordSale itself never performs), as app_user
     // in its own committed transaction so the later write transactions see it.
-    await withTenant(db, venue.tenantId, async (tx) => {
+    await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       await backend.registerNode(tx, venue.nodeId, { tenantId: venue.tenantId });
     });
@@ -170,7 +176,7 @@ async function main(): Promise<void> {
         tenders: [{ method: "cash", amount: "121.00", tipAmount: "0.00", settledAt: ISSUED_AT }],
       },
     };
-    const saleA = await withTenant(db, venue.tenantId, async (tx) => {
+    const saleA = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       return recordSale(tx, backend, saleAInput);
     });
@@ -198,13 +204,13 @@ async function main(): Promise<void> {
       clock,
       settlement: { kind: "deferred" },
     };
-    const saleB = await withTenant(db, venue.tenantId, async (tx) => {
+    const saleB = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       return recordSale(tx, backend, saleBInput);
     });
 
     // Settle Sale B later the same day, by card.
-    await withTenant(db, venue.tenantId, async (tx) => {
+    await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       await settleSale(tx, {
         tenantId: venue.tenantId,
@@ -215,7 +221,7 @@ async function main(): Promise<void> {
 
     // Open the supervisor's shift session — the authorizer the rectificativa's `sale.rectify` gate
     // requires — exactly as a till would at the start of a shift.
-    const authorizerSession = await withTenant(db, venue.tenantId, async (tx) => {
+    const authorizerSession = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       return loginWithPin(tx, {
         tenantId: venue.tenantId,
@@ -248,13 +254,13 @@ async function main(): Promise<void> {
       clock,
       authz: { sessionId: authorizerSession.id },
     };
-    await withTenant(db, venue.tenantId, async (tx) => {
+    await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       await recordCorrection(tx, backend, correctionInput);
     });
 
     // The read: as the application role, exactly as a till/report consumer would call it.
-    const close = await withTenant(db, venue.tenantId, async (tx) => {
+    const close = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       return computeDailyClose(tx, {
         tenantId: venue.tenantId,

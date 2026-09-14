@@ -1,4 +1,4 @@
-import { withTenant } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { getCredential } from "@waitron/credentials";
 import type { KeyRing } from "@waitron/credentials";
@@ -58,7 +58,7 @@ export async function sumupClientForTenant(deps: {
   tenantId: TenantId;
   fetch?: typeof fetch;
 }): Promise<SumUpClient> {
-  const payload = await withTenant(deps.db, deps.tenantId, (tx) =>
+  const payload = await withTransaction(deps.db, (tx) =>
     getCredential(tx, deps.ring, { tenantId: deps.tenantId, purpose: CREDENTIAL_PURPOSE }),
   );
   return sumupClient({

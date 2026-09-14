@@ -9,7 +9,7 @@ import {
   createProduct,
   writeContentLanguages,
 } from "@waitron/catalogue";
-import { asAppUser, CORE_MIGRATIONS, withTenant, workingOrderLines } from "@waitron/db";
+import { asAppUser, CORE_MIGRATIONS, withTransaction, workingOrderLines } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -54,7 +54,8 @@ beforeAll(() => {
 });
 
 async function scoped<T>(tenantId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  return withTenant(db, tenantId, async (tx) => {
+  void tenantId;
+  return withTransaction(db, async (tx) => {
     await asAppUser(tx);
     return fn(tx);
   });

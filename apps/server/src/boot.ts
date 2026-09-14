@@ -19,7 +19,7 @@ import {
   setFenceLsnTx,
   setSingletonRoleTx,
   readMirrorConfig,
-  withTenant,
+  withTransaction,
   type Database,
 } from "@waitron/db";
 import { credentialTenants, loadKeyRing, tenantCredentials } from "@waitron/credentials";
@@ -425,7 +425,7 @@ export function connectedCardProviderSweep(deps: {
     const purposes = [...new Set(deps.contributions.map((c) => c.credentialPurpose))];
     // No card seats at all → nothing pooled to sweep (only the simulator, already added).
     if (purposes.length > 0) {
-      const held = await withTenant(deps.db, deps.tenantId, async (tx) => {
+      const held = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         const rows = await tx
           .select({ purpose: tenantCredentials.purpose })
@@ -2181,7 +2181,7 @@ export async function startServer(
     // the same read `report-api` uses, so an `at: "auto"` / wall-clock schedule fires in the venue's
     // local time rather than the interim UTC placeholder the previous task carried.
     readClock: () =>
-      withTenant(db, till.tenantId, async (tx) => {
+      withTransaction(db, async (tx) => {
         await asAppUser(tx);
         return resolveVenueClock(tx, till.tenantId, till.nodeId);
       }),

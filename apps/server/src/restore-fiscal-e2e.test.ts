@@ -1,5 +1,5 @@
 import { uploadImage, readImageBytes } from "@waitron/media";
-import { withTenant } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import { execFile } from "node:child_process";
 import { cp, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -244,7 +244,7 @@ beforeAll(async () => {
     const baselineAdmin = await createPostgresDb(pg.uri);
     try {
       await seedFiscalRegistro(baselineAdmin);
-      await withTenant(baselineAdmin, F.tenantId, async (tx) => {
+      await withTransaction(baselineAdmin, async (tx) => {
         await uploadImage(
           tx,
           F.tenantId,
@@ -382,7 +382,7 @@ describe("fiscal restore (real Postgres, end to end)", () => {
       expect(await readFile(join(dirs.stateDir, "secrets.env"), "utf8")).toBe(
         "WAITRON_CREDENTIALS_KEY=deadbeef\n",
       );
-      await withTenant(db, F.tenantId, async (tx) => {
+      await withTransaction(db, async (tx) => {
         const images = await tx.execute<{
           filename: string;
           names: Record<string, string>;

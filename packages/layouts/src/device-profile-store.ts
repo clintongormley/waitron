@@ -18,7 +18,7 @@ import { validateCapabilities, validateInactivityTimeout } from "./device-profil
  * shape exactly — read that file's header for the (tx, …)-is-caller-scoped convention.
  *
  * Every function takes the caller's transaction, opened with
- * `withTenant(deps.db, tenantId, …)` + `asAppUser(tx)`. Exercised in
+ * `withTransaction(deps.db, …)` + `asAppUser(tx)`. Exercised in
  * `device-profile-store.pg.test.ts` (real Postgres, as a non-superuser `app_user` member — PGlite
  * holds every grant, CLAUDE.md §4).
  *

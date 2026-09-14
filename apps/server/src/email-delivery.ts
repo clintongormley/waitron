@@ -1,4 +1,4 @@
-import { withTenant, type Database } from "@waitron/db";
+import { withTransaction, type Database } from "@waitron/db";
 import { tryGetCredential, type KeyRing } from "@waitron/credentials";
 import type { TenantId } from "@waitron/shared";
 
@@ -18,7 +18,7 @@ export async function resolveEmailDelivery(
   tenantId: TenantId,
   practiceMode: boolean,
 ): Promise<EmailDelivery> {
-  const configured = await withTenant(db, tenantId, (tx) =>
+  const configured = await withTransaction(db, (tx) =>
     tryGetCredential(tx, ring, { tenantId, purpose: "email.smtp" }),
   );
   if (configured !== null) {

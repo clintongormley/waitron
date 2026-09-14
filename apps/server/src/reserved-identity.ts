@@ -4,7 +4,7 @@ import { putCredential, tryGetCredential, type KeyRing } from "@waitron/credenti
 import {
   insertReservedNodeTx,
   insertReservedSeriesTx,
-  withTenant,
+  withTransaction,
   type Database,
 } from "@waitron/db";
 import type { WaitronModule } from "@waitron/module";
@@ -65,7 +65,7 @@ export async function establishReservedStandbyIdentity(
   },
 ): Promise<void> {
   const tenant = brandTenantId(args.tenantId);
-  await withTenant(deps.ownerDb, tenant, async (tx) => {
+  await withTransaction(deps.ownerDb, async (tx) => {
     const existing = await tryGetCredential(tx, deps.ring, {
       tenantId: tenant,
       purpose: NODE_KEY_PURPOSE,

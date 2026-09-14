@@ -19,7 +19,7 @@ import { listOutstandingSales, recordCorrection, recordSale, settleSale } from "
 import type { OutstandingSale, RecordCorrectionInput, RecordSaleInput } from "@waitron/core";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { TrustedClock } from "@waitron/fiscal";
-import { createPostgresDb, withTenant } from "@waitron/db";
+import { createPostgresDb, withTransaction } from "@waitron/db";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { deploymentEnvironment } from "../src/config.js";
 import {
@@ -140,20 +140,20 @@ async function main(): Promise<void> {
       settlement: { kind: "deferred" },
       clock,
     };
-    const sale = await withTenant(db, tenant, (tx) => recordSale(tx, backend, saleInput));
+    const sale = await withTransaction(db, (tx) => recordSale(tx, backend, saleInput));
     console.log(
       `1. issued invoice-first sale ${sale.saleId} (total ${saleTotal}), fiscal ${sale.fiscal.recordId}`,
     );
 
     // 2. Outstanding: the full total.
-    const before = await withTenant(db, tenant, (tx) => listOutstandingSales(tx, tenant));
+    const before = await withTransaction(db, (tx) => listOutstandingSales(tx, tenant));
     console.log(`2. outstanding: ${formatOutstanding(before)}`);
 
     // Seed a supervisor (holds `sale.rectify`) and open a shift session — the authorizer
     // recordCorrection's gate now requires (Task 10). Task 13's venue-seed comes later, so this
     // runbook creates its own. Written as its own transaction so the session is committed and
     // visible to the correction's own transaction below.
-    const authorizerSession = await withTenant(db, tenant, async (tx) => {
+    const authorizerSession = await withTransaction(db, async (tx) => {
       const [person] = await tx
         .insert(persons)
         .values({
@@ -194,17 +194,17 @@ async function main(): Promise<void> {
       clock,
       authz: { sessionId: authorizerSession.id },
     };
-    const corr = await withTenant(db, tenant, (tx) => recordCorrection(tx, backend, corrInput));
+    const corr = await withTransaction(db, (tx) => recordCorrection(tx, backend, corrInput));
     console.log(
       `3. issued rectificativa ${corr.saleId} (total ${corrTotal}), fiscal ${corr.fiscal.recordId}`,
     );
 
     // 4. Outstanding: now the net.
-    const afterCorrection = await withTenant(db, tenant, (tx) => listOutstandingSales(tx, tenant));
+    const afterCorrection = await withTransaction(db, (tx) => listOutstandingSales(tx, tenant));
     console.log(`4. outstanding: ${formatOutstanding(afterCorrection)}`);
 
     // 5. Settle at the net.
-    await withTenant(db, tenant, (tx) =>
+    await withTransaction(db, (tx) =>
       settleSale(tx, {
         tenantId: tenant,
         saleId: sale.saleId,
@@ -216,7 +216,7 @@ async function main(): Promise<void> {
     console.log(`5. settled ${sale.saleId} at ${net}`);
 
     // 6. Outstanding: empty.
-    const afterSettle = await withTenant(db, tenant, (tx) => listOutstandingSales(tx, tenant));
+    const afterSettle = await withTransaction(db, (tx) => listOutstandingSales(tx, tenant));
     console.log(`6. outstanding: ${formatOutstanding(afterSettle)}`);
   } finally {
     await db.close();

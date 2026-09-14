@@ -123,7 +123,7 @@ export {
 } from "./reserved-identity.js";
 export { allocateInvoiceNumber } from "./allocate-number.js";
 export { allocateOrderNumber } from "./allocate-order-number.js";
-export { withTenant } from "./tenancy.js";
+export { withTransaction } from "./tenancy.js";
 export {
   isPgError,
   isUniqueViolation,

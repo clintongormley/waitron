@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { withTenant } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import {
@@ -26,7 +26,7 @@ import { freshNif, seedForSale } from "../test/seed.js";
 import type { SeededForSale } from "../test/seed.js";
 
 // This mirrors async.wiring.test.ts's capstone composition (verify -> resolveTenant ->
-// withTenant{ settleInitiated + recordSale + associate }), but proves the SAME idempotency under
+// withTransaction{ settleInitiated + recordSale + associate }), but proves the SAME idempotency under
 // real concurrent delivery instead of sequential redelivery: two independent Postgres connections,
 // each running the full orchestration inside its own transaction, racing on the same settlement
 // event via the acquired-signal pattern reversal.concurrency.test.ts / incident-dedup.concurrency
@@ -110,7 +110,7 @@ async function orchestrate(
   if (event === null) return null;
   const tenantId = await resolvePaymentTenant(db, event.provider, event.externalRef);
   if (tenantId === null) return null;
-  return withTenant(db, tenantId, async (tx) => {
+  return withTransaction(db, async (tx) => {
     const row = await settleInitiated(tx, {
       provider: event.provider,
       externalRef: event.externalRef,

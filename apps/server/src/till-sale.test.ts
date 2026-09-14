@@ -8,7 +8,7 @@ import {
   productOptionGroups,
   saleLines,
   sales,
-  withTenant,
+  withTransaction,
   workingOrderLines,
 } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
@@ -157,7 +157,7 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
   );
 
   const cfg = tillConfigFromVenue(venue);
-  const catalogue = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+  const catalogue = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const cat = await createCatalogue(tx, cfg.tenantId, { name: "Delicatessen" });
     const comida = await createCategory(tx, cfg.tenantId, { name: { [LOCALE]: "Comida" } });
@@ -351,7 +351,7 @@ describe("recordTillSale", () => {
       variants: true,
     });
     const workingOrderId = randomUUID();
-    await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       await setMenuVariants(tx, cfg.tenantId, waterOfferId, [
         { variantId: variantIds!.double, unitPrice: "4.10", available: true },
@@ -501,7 +501,7 @@ describe("recordTillSale", () => {
     expect(prep.rows).toEqual([{ count: 1 }]);
 
     // A genuine chained fiscal record exists — one for this tenant's single sale.
-    const rows = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    const rows = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return tx
         .select()
@@ -583,7 +583,7 @@ describe("recordTillSale", () => {
 
     await FakeFiscalBackend.install(suite.admin);
     const fake = new FakeFiscalBackend(suite.admin);
-    await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       await fake.registerNode(tx, cfg.nodeId, { tenantId: cfg.tenantId });
     });
@@ -650,7 +650,7 @@ describe("priceOrderLines re-keys bare catalogue content to the venue invoice_lo
       { db: suite.admin, modules: ALL_MODULES },
     );
     const cfg = tillConfigFromVenue(venue);
-    const productId = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    const productId = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       const cat = await createCatalogue(tx, cfg.tenantId, { name: "Delicatessen" });
       const bebidas = await createCategory(tx, cfg.tenantId, { name: { [LOCALE]: "Bebidas" } });
@@ -685,7 +685,7 @@ describe("priceOrderLines re-keys bare catalogue content to the venue invoice_lo
     });
     expect(result.invoiceNumber).toMatch(/^A\/\d+$/);
 
-    const { woLines, slLines } = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    const { woLines, slLines } = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       const woLines = await tx
         .select({ descriptions: workingOrderLines.descriptions })
@@ -720,7 +720,7 @@ describe("priceOrderLines re-keys bare catalogue content to the venue invoice_lo
       tender: { method: "cash", amount: "1.50" },
     });
 
-    const lines = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    const lines = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return tx
         .select({ descriptions: workingOrderLines.descriptions })
@@ -791,7 +791,7 @@ describe("ordering modifiers — parent + child lines", () => {
       { db: suite.admin, modules: ALL_MODULES },
     );
     const cfg = tillConfigFromVenue(venue);
-    const available = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    const available = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       const cat = await createCatalogue(tx, cfg.tenantId, { name: "Delicatessen" });
       const comida = await createCategory(tx, cfg.tenantId, { name: { [LOCALE]: "Comida" } });
@@ -1012,7 +1012,7 @@ describe("ordering modifiers — parent + child lines", () => {
       "Queso",
     ]);
 
-    const { wol, sl } = await withTenant(suite.admin, v.cfg.tenantId, async (tx) => {
+    const { wol, sl } = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       const wol = await tx
         .select({
@@ -1080,7 +1080,7 @@ describe("ordering modifiers — parent + child lines", () => {
     expect(result.total).toBe("21.00");
     expect(result.lines).toHaveLength(2); // parent + one child (the duplicate is a single summed line)
 
-    const { wol, sl } = await withTenant(suite.admin, v.cfg.tenantId, async (tx) => {
+    const { wol, sl } = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       const wol = await tx
         .select({
@@ -1131,7 +1131,7 @@ describe("ordering modifiers — parent + child lines", () => {
 
     // PARK: persist an OPEN order with parent + child lines, and capture the PREVIEW price its lines
     // were built from (the same authoritative `priceBasketWithOptions` result).
-    const preview = await withTenant(suite.admin, v.cfg.tenantId, async (tx) => {
+    const preview = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       const { priced } = await createOpenOrder(
         tx,
@@ -1173,7 +1173,7 @@ describe("ordering modifiers — parent + child lines", () => {
     // filed PARENT's id, not `null`. `readLockedLines` reconstructs each child's `parentLineNo` from
     // its stored `parent_line_id`, so the persisted-order file path preserves parent→child linkage
     // exactly as a live walk-up does — a child sale_line is never orphaned by the re-price.
-    const filed = await withTenant(suite.admin, v.cfg.tenantId, async (tx) => {
+    const filed = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       const [sale] = await tx
         .select({ id: sales.id })
@@ -1214,7 +1214,7 @@ describe("ordering modifiers — parent + child lines", () => {
     const queso = itemOf(burger, "Queso");
 
     const tableId = randomUUID();
-    await withTenant(suite.admin, v.cfg.tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       await tx.execute(
         sql`insert into dining_tables (id, tenant_id, location_id, label, active)
@@ -1223,7 +1223,7 @@ describe("ordering modifiers — parent + child lines", () => {
     });
 
     // Open a tab and send a round of the burger with two options.
-    const tabId = await withTenant(suite.admin, v.cfg.tenantId, async (tx) => {
+    const tabId = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       const { tabId } = await openTab(tx, v.cfg, { tableId });
       await addTabRound(tx, v.cfg, tabId, [
@@ -1245,7 +1245,7 @@ describe("ordering modifiers — parent + child lines", () => {
     expect(result.total).toBe("10.25");
     expect(result.lines).toHaveLength(3);
 
-    const filed = await withTenant(suite.admin, v.cfg.tenantId, async (tx) => {
+    const filed = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       const [sale] = await tx
         .select({ id: sales.id })
@@ -1274,7 +1274,7 @@ describe("ordering modifiers — parent + child lines", () => {
     const burger = burgerOf(v);
 
     const tableId = randomUUID();
-    const tabId = await withTenant(suite.admin, v.cfg.tenantId, async (tx) => {
+    const tabId = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       await tx.execute(
         sql`insert into dining_tables (id, tenant_id, location_id, label, active)
@@ -1307,7 +1307,7 @@ describe("ordering modifiers — parent + child lines", () => {
     const queso = itemOf(burger, "Queso");
 
     const tableId = randomUUID();
-    await withTenant(suite.admin, v.cfg.tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       await tx.execute(
         sql`insert into dining_tables (id, tenant_id, location_id, label, active)
@@ -1317,7 +1317,7 @@ describe("ordering modifiers — parent + child lines", () => {
 
     // Tab: dish#1 (line_no 1) + bacon child (line_no 2); dish#2 (line_no 3) + queso child (line_no 4).
     // Then VOID the bacon child (line_no 2), leaving {1,3,4} — non-contiguous.
-    const tabId = await withTenant(suite.admin, v.cfg.tenantId, async (tx) => {
+    const tabId = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       const { tabId } = await openTab(tx, v.cfg, { tableId });
       await addTabRound(tx, v.cfg, tabId, [
@@ -1337,7 +1337,7 @@ describe("ordering modifiers — parent + child lines", () => {
     expect(result.total).toBe("18.75");
     expect(result.lines).toHaveLength(3);
 
-    const filed = await withTenant(suite.admin, v.cfg.tenantId, async (tx) => {
+    const filed = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       const [sale] = await tx
         .select({ id: sales.id })

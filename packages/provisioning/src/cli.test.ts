@@ -1459,7 +1459,7 @@ describe("runCli venue", () => {
 
   it("refuses a SECOND, DIFFERENT fiscal identity in the same database, before applying (§5)", async () => {
     // One tenant per database is the post-RLS isolation boundary: this branch dropped row-level
-    // security, so `withTenant` no longer filters by tenant and a second tenant would leak one
+    // security, so `withTransaction` no longer filters by tenant and a second tenant would leak one
     // business's rows to the other. `venue` is one of the tenant-creation paths (the setup-api
     // `provisionVenue` and the mirror `adoptFromPrimary` are the others), and each calls the shared
     // `assertNoForeignTenant`: it reads the existing `(country, tax_id)` set and refuses any identity

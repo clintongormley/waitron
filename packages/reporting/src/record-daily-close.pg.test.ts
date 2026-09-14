@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { asAppUser, captureError, pgErrorCode, withTenant } from "@waitron/db";
+import { asAppUser, captureError, pgErrorCode, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { isAppError } from "@waitron/shared";
@@ -31,7 +31,7 @@ beforeEach(async () => {
   venue = await seedVenue(suite.admin);
 });
 
-/** Runs `recordDailyClose` on `db` under the real app role, inside `withTenant` — the exact shape
+/** Runs `recordDailyClose` on `db` under the real app role, inside `withTransaction` — the exact shape
  * the running POS uses. Each caller passes its own `db` (a distinct backend) so two of them
  * genuinely contend. */
 function record(
@@ -39,7 +39,7 @@ function record(
   businessDay: string,
   cashCounts: CashCountInput[],
 ): Promise<DailyCloseRecord> {
-  return withTenant(db, venue.tenantId, async (tx) => {
+  return withTransaction(db, async (tx) => {
     await asAppUser(tx);
     return recordDailyClose(tx, {
       tenantId: venue.tenantId,
@@ -149,7 +149,7 @@ describe("recordDailyClose under real contention", () => {
       await acquired;
 
       const error = await captureError(() =>
-        withTenant(waiter, venue.tenantId, async (tx) => {
+        withTransaction(waiter, async (tx) => {
           await asAppUser(tx);
           await tx.execute(sql`set local lock_timeout = '250ms'`);
           return recordDailyClose(tx, {
