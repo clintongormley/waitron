@@ -1174,7 +1174,8 @@ turns out to need a design moves to its track.
    `placeOrder`/`sendToPrep`, which now check the tenant). `cancelPlacedOrder` locks and updates by id
    (`apps/server/src/working-order.ts` `:3514`, `:3523`); `markCollected` reads and updates by id
    (`:3600`, `:3624`) and reads `ticket_items` by order id (`:3614`). `readLockedLines` (`:682`) takes
-   no `cfg`; its `till-sale.ts` callers were not checked. Same class as the by-id rule in `CLAUDE.md`
+   no `cfg`; its one caller, `priceStoredOrder` (`:729`), is called from `till-sale.ts`, and those
+   calls were not checked. Same class as the by-id rule in `CLAUDE.md`
    §3: write the two-tenant probe first, record what it does, then scope.
 2. **A concurrent-corrective race in `settleSale` is untranslated** — a raw `P0001` from the coverage
    trigger with no `sale.*` code. Give the trigger a SQLSTATE and translate it when reachable.

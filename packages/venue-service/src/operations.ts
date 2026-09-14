@@ -1079,8 +1079,8 @@ export async function deletePreparationRoute(
 
 type PreparationRouteOutcome = PreparationRoute | AppError;
 
-/** PostgreSQL's uuid input accepts upper case, braces and missing hyphens, so ids a caller passes
- *  are compared with the ids a query returns in this one spelling. */
+/** PostgreSQL's uuid input accepts upper case, braces, and hyphens after any group of four digits or
+ *  none, so ids a caller passes are compared with the ids a query returns in this one spelling. */
 function canonicalUuid(id: string): string {
   return id.toLowerCase().replace(/[{}-]/g, "");
 }
@@ -1202,7 +1202,8 @@ async function resolvePreparationRouteOutcomes(
 }
 
 /** Resolve every product's preparation route in one batch; throws the first failing product's
- *  coded error in input order. An empty list returns an empty map without querying. */
+ *  coded error in input order. The map is keyed by the caller's spelling of each id, the first one
+ *  when two spellings name one product. An empty list returns an empty map without querying. */
 export async function resolvePreparationRoutes(
   tx: Transaction,
   cfg: VenueScope,

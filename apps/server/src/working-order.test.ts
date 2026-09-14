@@ -1950,27 +1950,31 @@ describe("placeOrder / sendToPrep fire ticket items", () => {
     expect(items[0]!.state).toBe("queued");
   });
 
-  it("placeOrder refuses another tenant's order id as not open, and leaves that order alone", async () => {
-    const owner = await setupVenue("ticket_then_pay");
-    const intruder = await setupVenue("ticket_then_pay");
-    await withTenant(db, owner.cfg.tenantId, async (tx) => {
+  it("placeOrder against a FOREIGN tenant's order id throws not_open and leaves that order alone", async () => {
+    const tenantA = await setupVenue("ticket_then_pay");
+    const tenantB = await setupVenue("ticket_then_pay");
+    expect(tenantB.cfg.tenantId).not.toBe(tenantA.cfg.tenantId);
+    await withTenant(db, tenantA.cfg.tenantId, async (tx) => {
       await asAppUser(tx);
-      await createStation(tx, owner.cfg, { name: "Cocina", isDefault: true });
+      await createStation(tx, tenantA.cfg, { name: "Cocina", isDefault: true });
     });
-    await withTenant(db, intruder.cfg.tenantId, async (tx) => {
+    await withTenant(db, tenantB.cfg.tenantId, async (tx) => {
       await asAppUser(tx);
-      await createStation(tx, intruder.cfg, { name: "Intruder kitchen", isDefault: true });
+      await createStation(tx, tenantB.cfg, { name: "Tenant B kitchen", isDefault: true });
     });
     const id = randomUUID();
-    await parkOrder({ db }, owner.cfg, { id, lines: [{ productId: owner.cafeId, quantity: "1" }] });
+    await parkOrder({ db }, tenantA.cfg, {
+      id,
+      lines: [{ productId: tenantA.cafeId, quantity: "1" }],
+    });
 
     await expect(
       placeOrder(
         { db, backend: stubBackend, clock: stubClock },
-        intruder.cfg,
+        tenantB.cfg,
         id,
         OPERATOR,
-        intruder.cfg.tillId,
+        tenantB.cfg.tillId,
       ),
     ).rejects.toMatchObject({ code: "working_order.not_open", params: { workingOrderId: id } });
 
@@ -1980,20 +1984,24 @@ describe("placeOrder / sendToPrep fire ticket items", () => {
     expect(order.rows).toEqual([{ status: "open", items: 0 }]);
   });
 
-  it("sendToPrep refuses another tenant's order id as not settled, and fires nothing", async () => {
-    const owner = await setupVenue();
-    const intruder = await setupVenue();
-    await withTenant(db, intruder.cfg.tenantId, async (tx) => {
+  it("sendToPrep against a FOREIGN tenant's order id throws not_settled and fires nothing", async () => {
+    const tenantA = await setupVenue();
+    const tenantB = await setupVenue();
+    expect(tenantB.cfg.tenantId).not.toBe(tenantA.cfg.tenantId);
+    await withTenant(db, tenantB.cfg.tenantId, async (tx) => {
       await asAppUser(tx);
-      await createStation(tx, intruder.cfg, { name: "Intruder kitchen", isDefault: true });
+      await createStation(tx, tenantB.cfg, { name: "Tenant B kitchen", isDefault: true });
     });
     const id = randomUUID();
-    await parkOrder({ db }, owner.cfg, { id, lines: [{ productId: owner.cafeId, quantity: "1" }] });
+    await parkOrder({ db }, tenantA.cfg, {
+      id,
+      lines: [{ productId: tenantA.cafeId, quantity: "1" }],
+    });
     await db.execute(
       sql`update working_orders set status = 'settled', settled_at = now() where id = ${id}`,
     );
 
-    await expect(sendToPrep({ db }, intruder.cfg, id)).rejects.toMatchObject({
+    await expect(sendToPrep({ db }, tenantB.cfg, id)).rejects.toMatchObject({
       code: "working_order.not_settled",
       params: { workingOrderId: id },
     });

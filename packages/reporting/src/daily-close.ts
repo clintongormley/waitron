@@ -21,7 +21,7 @@ export async function computeDailyClose(
   validateCutover(input.dayCutover);
   validateBusinessDay(input.businessDay);
 
-  // One transaction is one connection: its queries run one at a time, so they are awaited in turn.
+  // Awaited in turn on the one transaction, never `Promise.all` (docs/developers/conventions-data.md).
   const vat = await computeVatSummary(tx, input);
   const cash = await computeCashUp(tx, input);
   const counts = await computeCloseCounts(tx, input);

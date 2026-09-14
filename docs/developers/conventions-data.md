@@ -241,7 +241,7 @@ Queries sharing one transaction are awaited one at a time, never started togethe
 the first finishes, so starting them together saves nothing. Measured with `pg@8.22.0` against
 `postgres:18-alpine` on 2026-09-14: two 200 ms `pg_sleep` queries took 426 ms through one client
 under `Promise.all` and 214 ms through two clients (Codex measured 411 ms and 203 ms on the same
-branch). The pattern also stops working on the next major driver version. The installed driver
+branch). The installed driver also
 warns: _"Calling client.query() when the client is already executing a query is deprecated and will
 be removed in pg@9.0"_ (`node_modules/.pnpm/pg@8.22.0/node_modules/pg/lib/client.js:36`). In that run
 the warning printed for three queries started together and not for two, because it fires only when

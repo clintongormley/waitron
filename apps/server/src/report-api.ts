@@ -254,9 +254,8 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
           timeZone: clock.timeZone,
           dayCutover: clock.dayCutover,
         };
-        // Sequential, not Promise.all: these three reads share ONE transaction, so they cannot
-        // safely run at once — a single connection processes one query at a time. Awaiting each in
-        // turn keeps that explicit rather than leaning on the driver to serialise them for us.
+        // Sequential, not Promise.all: these reads share ONE transaction, whose connection queues
+        // them anyway, and pg 9 removes that queueing (docs/developers/conventions-data.md).
         const close = await computeDailyClose(tx, input);
         const topSellers = await computeTopSellers(tx, {
           tenantId,
