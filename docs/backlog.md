@@ -1275,6 +1275,13 @@ turns out to need a design moves to its track.
 
 **House rules and their guards:**
 
+- **Keep an eye on `CLAUDE.md`'s size over time — it is no longer gated** (owner, 2026-09-14). The
+  hard byte-ceiling in `scripts/claude-md-pointers.test.ts` was removed: it once made a session stop
+  mid-work to ask what to do when an addition crossed the limit, which was the costlier mistake. So
+  add rules to `CLAUDE.md` freely. The file was ~45.5 KB when the gate came off; if it drifts well
+  past that, do the prune the gate used to force — move the receipts (mechanism, measurement,
+  incident) into the matching `docs/developers/` topic file and leave the rule plus its one-line
+  pointer behind, per `CLAUDE.md` §7. This is a periodic housekeeping check, not a blocker.
 - **The pointers guard is deliberately narrower than "every pointer"** (#337).
   `scripts/claude-md-pointers.test.ts` checks every markdown link in `CLAUDE.md` and the topic files,
   and backticked paths under `apps/`, `packages/`, `docs/`, `scripts/`, `deploy/`, `bench/`,

@@ -545,8 +545,8 @@ would otherwise relitigate.
 The receipt goes in the matching topic file under `docs/developers/`. That split is what keeps this
 file loadable: it is read into every session, so a paragraph here is paid for on every turn of every
 session, while a paragraph in a topic file is paid for only when somebody needs it.
-`scripts/claude-md-pointers.test.ts` fails if a topic file goes missing, if this file grows past its
-budget, or if a path it names does not exist — every markdown link, and backticked paths under
+`scripts/claude-md-pointers.test.ts` fails if a topic file goes missing or if a path it names does
+not exist — every markdown link, and backticked paths under
 `apps/`, `packages/`, `docs/`, `scripts/`, `deploy/`, `bench/`, `.github/` or `.husky/`. It does NOT
 check a root-level filename such as `eslint.config.js`, nor a bare directory: the guard is narrower
 than "every pointer", which is exactly the hedge the rule above asks for.
