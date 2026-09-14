@@ -128,17 +128,23 @@ function encodable(text: string, cs: CharacterSet): boolean {
 /**
  * Normalise `s` to NFC and replace every character `cs` cannot print: first a fixed fallback, then the
  * character without its accents, then `?`. Every character of the result encodes to exactly one byte,
- * so `.length` of the result is its printed width.
+ * so `.length` of the result is its printed width. Map every control character (0x00–0x1F, 0x7F) to
+ * a single space, as they would otherwise reach the printer and interfere with layout or commands.
  */
 export function prepareText(s: string, cs: CharacterSet): string {
   let out = "";
   for (const ch of s.normalize("NFC")) {
-    const fallback = FALLBACK[ch];
-    if (encodable(ch, cs)) out += ch;
-    else if (fallback !== undefined && encodable(fallback, cs)) out += fallback;
-    else {
-      const stripped = ch.normalize("NFD").replace(/\p{Diacritic}/gu, "");
-      out += stripped !== "" && encodable(stripped, cs) ? stripped : "?";
+    const codePoint = ch.codePointAt(0)!;
+    if (codePoint < 0x20 || codePoint === 0x7f) {
+      out += " ";
+    } else {
+      const fallback = FALLBACK[ch];
+      if (encodable(ch, cs)) out += ch;
+      else if (fallback !== undefined && encodable(fallback, cs)) out += fallback;
+      else {
+        const stripped = ch.normalize("NFD").replace(/\p{Diacritic}/gu, "");
+        out += stripped !== "" && encodable(stripped, cs) ? stripped : "?";
+      }
     }
   }
   return out;

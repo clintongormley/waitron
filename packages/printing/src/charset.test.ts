@@ -113,4 +113,13 @@ describe("prepareText / encodeText", () => {
       expect(decodeBytes(bytes, cs)).toBe(prepared);
     }
   });
+
+  it("maps control characters to spaces in every set", () => {
+    for (const cs of ["wpc1252", "pc858", "plain"] as const) {
+      const prepared = prepareText("a\nb\tc\u{1b}@\u{7f}", cs);
+      expect(prepared).toBe("a b c @ ");
+      const bytes = encodeText("a\nb\tc\u{1b}@\u{7f}", cs);
+      expect(bytes).toHaveLength(prepared.length);
+    }
+  });
 });

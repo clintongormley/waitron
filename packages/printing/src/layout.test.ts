@@ -86,6 +86,10 @@ describe("wrapText", () => {
       }
     }
   });
+
+  it("caps the first-line indent when it exceeds the column count", () => {
+    expect(wrapText("      abc", 3)).toEqual(["  a", "bc"]);
+  });
 });
 
 describe("labelAmountLines", () => {
@@ -129,6 +133,10 @@ describe("labelAmountLines", () => {
   it("right-aligns an amount with an empty label", () => {
     expect(labelAmountLines("", "1,00 €", 10)).toEqual(["    1,00 €"]);
   });
+
+  it("drops the amount to its own line when label and amount fill the row exactly", () => {
+    expect(labelAmountLines("12345", "12345", 10)).toEqual(["12345", "     12345"]);
+  });
 });
 
 const mm = (squares: number, dots: number, dpi: number): number => (squares * dots * 25.4) / dpi;
@@ -142,7 +150,8 @@ describe("chooseQrDots", () => {
     expect(chooseQrDots(49, 180, 504)).toBe(5); // 34.6 mm (6 dots: 41.5, over 40)
     expect(chooseQrDots(49, 203, 504)).toBe(6); // 36.8 mm
     expect(chooseQrDots(53, 203, 504)).toBe(5); // 33.2 mm (6 dots: 39.8, further from 35)
-    expect(chooseQrDots(65, 180, 360)).toBe(4); // 36.7 mm; 5 dots would be 365 dots wide
+    expect(chooseQrDots(65, 180, 360)).toBe(4); // 36.7 mm (5 dots: 45.9 mm, over 40)
+    expect(chooseQrDots(25, 203, 360)).toBe(10); // 31.3 mm; 330 dots, without border would pick 11
   });
 
   it("keeps every grid size 37-77 within 30-40 mm at both resolutions and both widths", () => {

@@ -8,7 +8,7 @@ export type Resolution = "180dpi" | "203dpi";
 
 const COLUMNS: Readonly<Record<PaperWidth, number>> = { "58mm": 30, "80mm": 42 };
 
-/** Dots one character occupies: the TM-T88III prints 42 columns in 512 dots and 30 in 360. */
+/** A 12-dot character: 42 × 12 = 504 fits the TM-T88III's 512-dot line; 30 × 12 = 360 its 58 mm line. */
 export const DOTS_PER_COLUMN = 12;
 
 export function columnsFor(width: PaperWidth): number {
@@ -86,32 +86,24 @@ export function labelAmountLines(
   return lines;
 }
 
-const QR_MIN_MM = 30;
-const QR_MAX_MM = 40;
 const QR_TARGET_MM = 35;
 /** The QR standard's blank border, in squares per side, counted when fitting the paper. */
 export const QR_QUIET_ZONE = 4;
 
 /**
  * Dots per QR square for a code `squares` wide (without its border) on a `dpi` printer whose images
- * must fit `safeWidthDots`. Picks the whole number that keeps the printed code within 30-40 mm
- * (Orden HAC/1177/2024 art. 21.1) and the bordered image within the paper, closest to 35 mm, the
- * smaller on a tie. When no size is within 30-40 mm it returns the fitting size closest to 35 mm, and
- * 1 when nothing fits at all: it never throws, because the receipt is built inside the sale's
- * transaction.
+ * must fit `safeWidthDots`. Picks the dot size closest to 35 mm (the target), and the smaller on a
+ * tie. When a fit is in range 30–40 mm (Orden HAC/1177/2024 art. 21.1), prefers sizes within range,
+ * otherwise returns the fitting size nearest 35 mm. When nothing fits, returns 1: it never throws,
+ * because the receipt is built inside the sale's transaction.
  */
 export function chooseQrDots(squares: number, dpi: number, safeWidthDots: number): number {
-  let best: { dots: number; inRange: boolean; distance: number } | undefined;
+  let best: { dots: number; distance: number } | undefined;
   for (let dots = 1; (squares + 2 * QR_QUIET_ZONE) * dots <= safeWidthDots; dots++) {
     const mm = (squares * dots * 25.4) / dpi;
-    const inRange = mm >= QR_MIN_MM && mm <= QR_MAX_MM;
     const distance = Math.abs(mm - QR_TARGET_MM);
-    if (
-      best === undefined ||
-      (inRange && !best.inRange) ||
-      (inRange === best.inRange && distance < best.distance)
-    ) {
-      best = { dots, inRange, distance };
+    if (best === undefined || distance < best.distance) {
+      best = { dots, distance };
     }
   }
   return best?.dots ?? 1;
