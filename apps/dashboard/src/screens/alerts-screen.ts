@@ -51,19 +51,31 @@ export class AlertsScreen extends LitElement {
   @state() private open: AlertView[] = [];
   @state() private handled: AlertView[] = [];
   @state() private visible: boolean | null = null;
-  @state() private loading = true;
-  /** A failed read. Kept apart from `actionError`: a refresh failing after a successful write is a
-   * load failure, not a failed save. */
-  @state() private loadError: string | null = null;
+  @state() private openLoading = true;
+  @state() private handledLoading = true;
+  /** Failed reads, one per list, so one list's success never hides the other's failure. Kept apart
+   * from `actionError`: a refresh failing after a successful write is a load failure, not a failed
+   * save. */
+  @state() private openError: string | null = null;
+  @state() private handledError: string | null = null;
   @state() private actionError: string | null = null;
   @state() private busyKey: string | null = null;
 
-  readonly #queries = new DashboardQueries(
+  // One controller per list: a controller's error callback does not say which query failed.
+  readonly #openQueries = new DashboardQueries(
     this,
     () => this.api,
     (error) => {
-      this.loadError = codeOf(error);
-      this.loading = false;
+      this.openError = codeOf(error);
+      this.openLoading = false;
+    },
+  );
+  readonly #handledQueries = new DashboardQueries(
+    this,
+    () => this.api,
+    (error) => {
+      this.handledError = codeOf(error);
+      this.handledLoading = false;
     },
   );
 
@@ -84,17 +96,19 @@ export class AlertsScreen extends LitElement {
   }
 
   #load(): void {
-    void this.#queries
+    void this.#openQueries
       .watch("listAlerts", [], (response) => {
         this.visible = response.visible;
         this.open = response.alerts;
-        this.loading = false;
-        this.loadError = null;
+        this.openLoading = false;
+        this.openError = null;
       })
       .catch(() => undefined);
-    void this.#queries
+    void this.#handledQueries
       .watch("listHandledAlerts", [], (response) => {
         this.handled = response.alerts;
+        this.handledLoading = false;
+        this.handledError = null;
       })
       .catch(() => undefined);
   }
@@ -182,7 +196,7 @@ export class AlertsScreen extends LitElement {
 
   override render(): TemplateResult {
     const error = html`${
-      this.loadError === null
+      this.openError === null && this.handledError === null
         ? nothing
         : html`<p role="alert" data-test="alerts-load-error">${t("alerts.load_error")}</p>`
     }${
@@ -215,7 +229,7 @@ export class AlertsScreen extends LitElement {
             .rows=${this.open}
             .columns=${this.#openColumns()}
             .rowKey=${(a: AlertView) => a.key}
-            .loading=${this.loading}
+            .loading=${this.openLoading}
             .loadingMessage=${t("alerts.loading")}
             .emptyMessage=${t("alerts.none")}
           ></wt-data-table>
@@ -227,7 +241,7 @@ export class AlertsScreen extends LitElement {
             .rows=${this.handled}
             .columns=${this.#handledColumns()}
             .rowKey=${(a: AlertView) => a.key}
-            .loading=${this.loading}
+            .loading=${this.handledLoading}
             .loadingMessage=${t("alerts.loading")}
             .emptyMessage=${t("alerts.no_handled")}
           ></wt-data-table>

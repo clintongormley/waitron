@@ -155,6 +155,61 @@ describe("dashboard-alerts-screen", () => {
     expect(goTo.mock.calls[0]![0].detail).toEqual({ screen: "backup" });
   });
 
+  it("offers no Go to for a screen the session may not open", async () => {
+    const { el } = await mountWidget<AlertsScreen>("dashboard-alerts-screen", {
+      api: stubApi(),
+      canOpen: () => false,
+    });
+    await flush(el);
+    expect(rows(el, "open-alerts-table")).toHaveLength(2);
+    expect(
+      el
+        .shadowRoot!.querySelector("[data-test=open-alerts-table]")!
+        .shadowRoot!.querySelector("[data-test=alert-go-to]"),
+    ).toBeNull();
+  });
+
+  it("shows the Open tab for an unknown view and corrects the URL in place", async () => {
+    history.replaceState(null, "", "/manage/alerts/view/bogus");
+    const before = history.length;
+    const { el } = await mountWidget<AlertsScreen>("dashboard-alerts-screen", { api: stubApi() });
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("wt-tabs")!.value).toBe("open");
+    expect(location.pathname).toBe("/manage/alerts/view/open");
+    expect(history.length).toBe(before);
+  });
+
+  it("keeps the load error shown while Handled fails, even after Open refreshes", async () => {
+    const listAlerts = vi.fn().mockResolvedValue({ visible: true, alerts: [open, ongoing] });
+    const api = stubApi({
+      listAlerts,
+      // The retry never settles, so only Open's refresh can change what the screen shows.
+      listHandledAlerts: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "server.internal" })
+        .mockReturnValue(new Promise(() => {})),
+    });
+    history.replaceState(null, "", "/manage/alerts/view/handled");
+    const { el } = await mountWidget<AlertsScreen>("dashboard-alerts-screen", { api });
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=alerts-load-error]")).not.toBeNull();
+    api.liveData.invalidate([{ type: "incidents" }]);
+    await vi.waitFor(() => expect(listAlerts).toHaveBeenCalledTimes(2));
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=alerts-load-error]")).not.toBeNull();
+  });
+
+  it("shows the loading message on Handled until its own read arrives", async () => {
+    const api = stubApi({ listHandledAlerts: vi.fn().mockReturnValue(new Promise(() => {})) });
+    history.replaceState(null, "", "/manage/alerts/view/handled");
+    const { el } = await mountWidget<AlertsScreen>("dashboard-alerts-screen", { api });
+    await flush(el);
+    expect(rows(el, "open-alerts-table")).toHaveLength(2);
+    const handledTable = el.shadowRoot!.querySelector("[data-test=handled-alerts-table]")!;
+    expect(handledTable.shadowRoot!.textContent).toContain("Loading alerts…");
+    expect(handledTable.shadowRoot!.textContent).not.toContain("Nothing was handled");
+  });
+
   it("says so when the session may see no alerts", async () => {
     const api = stubApi({ listAlerts: vi.fn().mockResolvedValue({ visible: false, alerts: [] }) });
     const { el } = await mountWidget<AlertsScreen>("dashboard-alerts-screen", { api });
