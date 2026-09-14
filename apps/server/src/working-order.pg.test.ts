@@ -1222,6 +1222,7 @@ describe("cross-tenant isolation — a by-id read never reaches another tenant's
   it("abandonHeldOrder against a FOREIGN tenant's order id throws not_open — never abandons the other tenant's order", async () => {
     const { cfg: tenantA } = await setupVenue();
     const { cfg: tenantB, cafe: cafeB } = await setupVenue();
+    expect(tenantB.tenantId).not.toBe(tenantA.tenantId);
 
     const bOrderId = randomUUID();
     await parkOrder({ db: suite.admin }, tenantB, {
@@ -1242,6 +1243,7 @@ describe("cross-tenant isolation — a by-id read never reaches another tenant's
   it("updateHeldOrder against a FOREIGN tenant's order id throws not_open — never a raw 23503, never mutates it", async () => {
     const { cfg: tenantA, cafe: cafeA } = await setupVenue();
     const { cfg: tenantB, cafe: cafeB } = await setupVenue();
+    expect(tenantB.tenantId).not.toBe(tenantA.tenantId);
 
     const bOrderId = randomUUID();
     await parkOrder({ db: suite.admin }, tenantB, {
