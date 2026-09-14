@@ -408,7 +408,7 @@ export class CategoriesScreen extends LitElement {
         label: t("categories.name"),
         searchValue: (category) => this.#text(category.name),
         sortValue: (category) => this.#text(category.name),
-        cell: (category, context) => this.#nameCell(category, context?.ancestorOnly ?? false),
+        cell: (category, context) => this.#nameCell(category, context.ancestorOnly),
       },
       {
         key: "parent",
