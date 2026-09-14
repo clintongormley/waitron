@@ -464,7 +464,7 @@ What it left open:
 **The integrated product editor — LANDED #345 (2026-09-13), and the overhaul is complete.** The
 dashboard now has one Products list and one editor, replacing the old combined catalogue screen. A
 product carries a translated name and optional description, a separate kitchen name, an image, a tax
-choice, its selling unit, its categories with one marked as the Reporting Category, its ordered
+choice, its selling unit, its categories with at most one marked as the Reporting Category, its ordered
 reusable modifiers, direct allergen and dietary declarations, and ordered variants — Small and Large,
 each with its own price. One transaction saves the whole thing. You can create a unit, a category or a
 modifier without leaving the product you are editing: the draft survives cancelling the nested form, a

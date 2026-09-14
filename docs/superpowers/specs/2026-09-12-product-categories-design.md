@@ -41,6 +41,17 @@ refer to the category. Show those dependencies and let you resolve them first. D
 silently remove products, reparent children or discard routing rules. A historical copied category
 label does not prevent deletion and remains readable afterwards.
 
+> **Corrected 2026-09-14 (final review).** Two rules stated above were retired by the Categories
+> screen work, and the paragraphs are left as the original design intent rather than the shipped
+> behaviour. First, deletion is no longer refused when something refers to the category: it is
+> confirmed, shows what depends on it, and then goes ahead — removing the product memberships,
+> clearing the reporting category from any product using it, moving direct children up to the
+> deleted category's own parent, and dropping its preparation routes. Second, a product's reporting
+> category is now optional, so removing it while other memberships remain no longer requires
+> choosing a replacement in the same save; it may simply be left unset. The acceptance list further
+> down this file restates both retired rules. The current source of truth is
+> `docs/developers/product-categories.md`.
+
 ## Model and behavior
 
 Public category shape: `Category { id, name: LocalizedText, image: string | null, parentId: string | null }`.
@@ -85,3 +96,9 @@ reference, not the library image. Include category names in content-language gap
 - An image used only by a category cannot be deleted; unreferencing it releases that dependency.
 - Default-language changes include category names and preserve disabled translations.
 - Another tenant's manager/IDs cannot read or alter hierarchy, images or membership.
+
+> **Corrected 2026-09-14 (final review).** Two lines above no longer describe how the software
+> behaves, for the reasons given in the correction further up this file. "Referenced categories
+> cannot be deleted" is retired — a delete now cascades. And in "primary replacement and final
+> removal are atomic", the replacement is no longer required: a product's reporting category may be
+> left unset. The current source of truth is `docs/developers/product-categories.md`.

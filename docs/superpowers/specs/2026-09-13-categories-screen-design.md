@@ -73,6 +73,15 @@ Today four places enforce "categories present ⇒ reporting category present":
 - The picker and the editor drop their "reporting category required" validation and offer a "None"
   choice.
 
+> **Corrected 2026-09-14 (final review).** `category.primary_required` did NOT stop being thrown.
+> `packages/catalogue/src/operations.ts` still throws it when a product patch sends
+> `categoryId: null` and the product has more than one membership — a legacy write path this branch
+> deliberately left alone, because no first-party caller sends that field any more. The test that
+> holds it live is in `packages/catalogue/src/categories.test.ts` ("an old single-category editor
+> cannot silently clear additional memberships"). So the relaxation above is true of
+> `replaceProductCategories` only, not of every path. The current statement of which path behaves
+> which way lives in `docs/developers/product-categories.md`.
+
 Receipts that a missing reporting category is already safe downstream, read on the `categories`
 branch head: kitchen routing in `packages/venue-service/src/operations.ts` matches category routes
 with an always-false condition when the product's category is null; the sale path copies a nullable label

@@ -16,6 +16,8 @@
 - **Every commit uses `git commit -s`.** Commit after each task.
 - **No hardcoded chrome** in `packages/ui`: colours, spacing, radii, font sizes read `--wt-*` tokens. A data colour applied as an inline style is the one exemption (as `wt-table-token`'s status badge already does).
 - **Error codes name the domain concept and are never renamed once shipped.** New code this plan adds: `category.color_invalid`. Codes it stops throwing but keeps registered: `category.in_use`, `category.primary_required`.
+
+  > **Corrected 2026-09-14 (final review).** `category.primary_required` is NOT retired. It is still thrown by `packages/catalogue/src/operations.ts` when a product patch sends `categoryId: null` and the product holds more than one membership — a legacy write path this plan's work deliberately left alone. Only `replaceProductCategories` stopped throwing it. The live test is in `packages/catalogue/src/categories.test.ts` ("an old single-category editor cannot silently clear additional memberships"), and the current statement of which path behaves which way lives in `docs/developers/product-categories.md`.
 - **A by-id read scopes to the tenant itself** (`eq(table.tenantId, cfg.tenantId)`), never trusting a UUID's global uniqueness. Every new read and write is tenant-scoped.
 - **Multi-table writes share one transaction**; write-path functions take `tx: Transaction` and never open their own.
 - **No backfill / no backwards-compatibility code** (pre-production). Schema changes drop/recreate; existing rows read the new column as its default.
