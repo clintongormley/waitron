@@ -268,7 +268,7 @@ descendants), and see the products assigned directly to it — a child's product
 its parent. Deleting a category is confirmed and then goes ahead rather than refused: the confirmation
 first shows what will change — the products losing that membership (and any that lose their
 reporting category with it) and the child categories moving up to the deleted category's own parent.
-The delete also drops the category's kitchen preparation routes; since the category-overhaul branch
+The delete also drops the category's kitchen preparation routes; since #362
 (2026-09-14) the confirmation no longer lists those. Labels already written onto past orders stay
 readable and never block a deletion. Under the hood the single stored category name became translated
 JSON in the existing core row, and the new hierarchy, picture and membership tables belong to the
@@ -326,7 +326,7 @@ What it left open:
   `categories.delete_children_under`, `categories.delete_children_top`, `categories.add_selected` in
   `apps/dashboard/src/i18n/strings.ts`), so one product or child reads "Quitarlo de 1 productos",
   "Mover 1 categorías hijas …" or "Añadir 1 productos", and the English is just as wrong. The same
-  strings are on `origin/main`, so this predates the category-overhaul branch. **Next action:** give
+  strings are on `origin/main`, so this predates #362. **Next action:** give
   each a one-item form, or use a plural-aware formatter if the dashboard adopts one.
 - **A shadow-root styling bug affects `wt-data-table` cells throughout the dashboard.** During QA, a
   real rendering issue was found and fixed in `apps/dashboard/src/screens/categories-screen.ts`: custom
@@ -839,7 +839,7 @@ ongoing overhaul listed at the top of Track A.
   **Next action:** reproduce each in a browser test, then mark the chosen option with `.selected`.
 - **`wt-combobox`** (#351, 2026-09-13). It is a searchable dropdown in `packages/ui`: pick one option
   or several (`multiple`), and optionally offer to add what was typed when nothing matches. It landed
-  with nothing using it; the category-overhaul branch (2026-09-14) is the first adopter, for the
+  with nothing using it; #362 (2026-09-14) is the first adopter, for the
   category form's parent picker (`apps/dashboard/src/widgets/category-form.ts`) and the
   product-categories editor's category and reporting-category dropdowns
   (`apps/dashboard/src/widgets/category-membership-picker.ts`). Left out on purpose, per its
@@ -848,13 +848,13 @@ ongoing overhaul listed at the top of Track A.
   count instead). **Undecided:** how it relates to the `wt-select` row above. The combobox does not
   sort its options, and neither its design nor that row mentions the other, so decide whether
   `wt-select` becomes a non-searchable mode of the combobox or stays a separate element before
-  building either. The category-overhaul branch adopted the combobox for the pickers above without
+  building either. #362 adopted the combobox for the pickers above without
   answering the `wt-select` question, which is still open for the owner. **Next action:** the owner
   answers the `wt-select` question.
 - **Shared database-backed table paging, search and sorting** (owner decision 2026-09-12; users
   first). 50 per page with a server-enforced maximum; search and sort over the whole dataset; debounce,
   reset on filter change, ignore superseded responses, keep passive live refreshes. Deliberately kept
-  out of #328. `wt-data-table`'s toolbar search box and filter dropdowns (category-overhaul branch)
+  out of #328. `wt-data-table`'s toolbar search box and filter dropdowns (#362)
   filter the rows already in the browser and emit no `wt-*` event of their own when the search text
   or a filter changes (only sorting and row selection do), so server-backed paging cannot reuse them
   as they stand.
