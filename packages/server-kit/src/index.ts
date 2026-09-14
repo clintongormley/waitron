@@ -10,7 +10,7 @@ import "./errors.js";
 
 export { createErrorBoundary } from "./error-boundary.js";
 export { codeOf } from "./error-code.js";
-export { readJsonBody } from "./read-json-body.js";
+export { readJsonBody, readRawJsonBody } from "./read-json-body.js";
 export {
   requireBodyUuid,
   requireEnum,

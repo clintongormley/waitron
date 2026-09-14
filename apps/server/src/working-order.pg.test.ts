@@ -34,6 +34,7 @@ import {
   addTabRound,
   advanceTicket,
   advanceTicketItem,
+  bumpCourseReady,
   cancelPlacedOrder,
   fireCourse,
   getHeldOrder,
@@ -1221,6 +1222,7 @@ describe("cross-tenant isolation — a by-id read never reaches another tenant's
   it("abandonHeldOrder against a FOREIGN tenant's order id throws not_open — never abandons the other tenant's order", async () => {
     const { cfg: tenantA } = await setupVenue();
     const { cfg: tenantB, cafe: cafeB } = await setupVenue();
+    expect(tenantB.tenantId).not.toBe(tenantA.tenantId);
 
     const bOrderId = randomUUID();
     await parkOrder({ db: suite.admin }, tenantB, {
@@ -1241,6 +1243,7 @@ describe("cross-tenant isolation — a by-id read never reaches another tenant's
   it("updateHeldOrder against a FOREIGN tenant's order id throws not_open — never a raw 23503, never mutates it", async () => {
     const { cfg: tenantA, cafe: cafeA } = await setupVenue();
     const { cfg: tenantB, cafe: cafeB } = await setupVenue();
+    expect(tenantB.tenantId).not.toBe(tenantA.tenantId);
 
     const bOrderId = randomUUID();
     await parkOrder({ db: suite.admin }, tenantB, {
@@ -2653,5 +2656,106 @@ describe("coursing editing verbs — recallLines racing fireCourse (Copilot #191
     // the ticket `fireCourse` printed) — this assertion fails on it.
     const recalledSlips = await recalledSlipsSince(cfg.tenantId, jobsBefore);
     expect(after[0]!.fired === false).toBe(recalledSlips >= 1);
+  });
+});
+
+// Cross-tenant isolation for the ticket-prep verbs (CLAUDE.md §3, conventions-data.md "A by-id read
+// still needs its own eq(table.tenantId, cfg.tenantId)"). These three verbs update `ticket_items`
+// filtered by a working-order/course/station/item id but WITHOUT a tenant predicate today, so a
+// caller under tenant A can advance tenant B's kitchen rows. `withTenant` does not isolate these
+// writes (RLS was dropped, #255). Real Postgres as `app_user` (rolsuper=f): on PGlite every
+// connection is a superuser, so the leak would pass silently. Each verb's assertion differs by its
+// not-found behaviour: the two silent no-op verbs (bumpCourseReady/advanceTicket) resolve either way,
+// so the load-bearing check is that tenant B's rows are UNCHANGED; advanceTicketItem does throw.
+describe("cross-tenant isolation — a ticket-prep verb never advances another tenant's items", () => {
+  it("bumpCourseReady with a FOREIGN tenant's order+course ids leaves that tenant's items unchanged", async () => {
+    const { cfg: tenantA } = await setupVenue();
+    const { cfg: tenantB, cafe: cafeB } = await modeVenue("prepay");
+    expect(tenantB.tenantId).not.toBe(tenantA.tenantId);
+
+    // Route B's café to a course so its fired item carries a non-null course_id (bumpCourseReady
+    // filters on course_id, and `course_id = NULL` never matches — an unrouted item would make the
+    // probe vacuous, CLAUDE.md §4).
+    const courseB = await asTenant(tenantB, (tx) => createCourse(tx, tenantB, { name: "Único" }));
+    await asTenant(tenantB, (tx) => setProductCourse(tx, tenantB, cafeB.id, courseB.id));
+
+    const bOrderId = randomUUID();
+    await payWorkingOrder(
+      { db: suite.admin, backend, clock },
+      tenantB,
+      {
+        id: bOrderId,
+        lines: [{ productId: cafeB.id, quantity: "1" }],
+        tender: { method: "cash", amount: "5.00" },
+      },
+      OPERATOR,
+    );
+    expect(await ticketStateOf(bOrderId)).toBe("queued"); // B's fired item, bump-able
+
+    // As tenant A, call bump with B's real order + course ids. It resolves (a silent no-op verb), but
+    // must touch nothing of B's.
+    await expect(
+      asTenant(tenantA, (tx) => bumpCourseReady(tx, tenantA, bOrderId, courseB.id)),
+    ).resolves.toBeUndefined();
+
+    expect(await ticketStateOf(bOrderId)).toBe("queued"); // unchanged — before the fix it is bumped to `ready`
+  });
+
+  it("advanceTicket with a FOREIGN tenant's order+station ids leaves that tenant's items unchanged", async () => {
+    const { cfg: tenantA } = await setupVenue();
+    const { cfg: tenantB, cafe: cafeB } = await modeVenue("ticket_then_pay");
+    expect(tenantB.tenantId).not.toBe(tenantA.tenantId);
+
+    const bOrderId = randomUUID();
+    await parkOrder({ db: suite.admin }, tenantB, {
+      id: bOrderId,
+      lines: [{ productId: cafeB.id, quantity: "1" }],
+    });
+    await placeOrder(
+      { db: suite.admin, backend, clock },
+      tenantB,
+      bOrderId,
+      OPERATOR,
+      tenantB.tillId,
+    );
+    const stationB = await defaultStationId(tenantB);
+    expect(await ticketStateOf(bOrderId)).toBe("queued");
+
+    await expect(
+      asTenant(tenantA, (tx) => advanceTicket(tx, tenantA, bOrderId, stationB, "preparing")),
+    ).resolves.toBeUndefined();
+
+    expect(await ticketStateOf(bOrderId)).toBe("queued"); // unchanged — before the fix it advances to `preparing`
+  });
+
+  it("advanceTicketItem against a FOREIGN tenant's item id throws invalid_transition — never advances it", async () => {
+    const { cfg: tenantA } = await setupVenue();
+    const { cfg: tenantB, cafe: cafeB } = await modeVenue("prepay");
+    expect(tenantB.tenantId).not.toBe(tenantA.tenantId);
+
+    const bOrderId = randomUUID();
+    await payWorkingOrder(
+      { db: suite.admin, backend, clock },
+      tenantB,
+      {
+        id: bOrderId,
+        lines: [{ productId: cafeB.id, quantity: "1" }],
+        tender: { method: "cash", amount: "5.00" },
+      },
+      OPERATOR,
+    );
+    const [bItem] = await ticketItemIdsFor(bOrderId);
+    expect(await ticketStateOf(bOrderId)).toBe("queued"); // B's item is genuinely advanceable
+
+    // As tenant A the foreign item is invisible: the scoped update matches nothing and the scoped
+    // read-back finds no row, so it is refused exactly as a non-existent item is.
+    await expect(
+      asTenant(tenantA, (tx) => advanceTicketItem(tx, tenantA, bItem!, "preparing")),
+    ).rejects.toMatchObject({
+      code: "ticket.invalid_transition",
+      params: { ticketItemId: bItem },
+    });
+
+    expect(await ticketStateOf(bOrderId)).toBe("queued"); // unchanged — before the fix A advances it to `preparing`
   });
 });

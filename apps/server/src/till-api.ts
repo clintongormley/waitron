@@ -32,7 +32,7 @@ import { cardProviderById, cardReaders, deviceCardReaders } from "@waitron/payme
 import { tenantCredentials } from "@waitron/credentials";
 import { routableServers } from "@waitron/membership";
 import { createErrorBoundary } from "@waitron/server-kit";
-import { readJsonBody } from "@waitron/server-kit";
+import { readJsonBody, readRawJsonBody } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 import type { OnboardingIntent } from "./trading-config.js";
 import { VENUE_SERVICE } from "./modules.js";
@@ -681,7 +681,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // roster login and never reaches here.
   app.post("/api/session", (c) =>
     run(c, log, async () => {
-      const { personId: rawPersonId, pin } = await c.req.json<{ personId: string; pin: string }>();
+      const { personId: rawPersonId, pin } = await readJsonBody<{ personId: string; pin: string }>(
+        c,
+      );
       // Canonicalise the personId BEFORE it keys the throttle. Postgres canonicalises UUIDs on cast, so
       // `loginWithPin` resolves the SAME person from an uppercase/dash-free spelling — but the throttle
       // keys on the STRING, so each spelling would be a distinct back-off bucket a brute-forcer cycles
@@ -1135,7 +1137,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       // SEPARATE bank terminal the POS never talks to (`recordManualCardPayment` makes no network call), so
       // it is fiscally identical to cash and needs no reader. Only the INTEGRATED reader (`POST /api/pay`,
       // below) stays fenced (`assertNotHandheld`). An ordinary till carries no device cookie either way.
-      const body = await c.req.json<TillSaleRequest>();
+      const body = await readJsonBody<TillSaleRequest>(c);
       // `workingOrderId` is OPTIONAL: absent (a walk-up `recordTillSale` mints a fresh id for) and a
       // well-formed-but-unknown one are both valid; only a MALFORMED one is an error. Un-screened it
       // becomes `payWorkingOrder`'s `req.id` and `22P02`s at its `eq(workingOrders.id, req.id)` lock read
@@ -1194,7 +1196,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       // cash or manual-card sale on `/api/sales`, node-keyed, which runs NO capability guard — only the
       // INTEGRATED leg here is fenced.)
       await assertDeviceCapability(deps, c, "integrated-card-payment", "pay", device);
-      const body = await c.req.json<IntegratedPayRequest>();
+      const body = await readJsonBody<IntegratedPayRequest>(c);
       // The pay-body `id` is REQUIRED (it names the order to charge), and un-screened it `22P02`s at
       // `payWorkingOrderIntegrated`'s `eq(workingOrders.id, req.id)` lock read (till-sale.ts) → an opaque
       // 500 — the identical exposure to `/api/sales`'s `workingOrderId`. Screened here (before the
@@ -1288,14 +1290,14 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   app.post("/api/working-orders", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
-      const body = await c.req.json<{
+      const body = await readJsonBody<{
         id: string;
         // A parked line MAY carry per-line `LineExtras` (NON-FISCAL) — forwarded to `parkOrder` →
         // `priceOrderLines`, which validates + persists them on the parent dish line.
         lines: ({ productId?: string; menuItemId?: string; quantity: string } & LineExtras)[];
         zoneId?: string;
         label?: string;
-      }>();
+      }>(c);
       // The client MINTS `body.id` — it becomes the `working_orders.id` PK `createOpenOrder` INSERTs
       // (a `uuid` column), so un-screened a malformed one `22P02`s → an opaque 500, the same 7b exposure
       // as the sale/pay bodies. (Distinct from the 23505 re-park idempotency `parkOrder` now handles: that
@@ -1361,12 +1363,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       await requireSession(deps, c);
       const id = requireUuidId(c.req.param("id"), "working_order.not_open");
-      const body = await c.req.json<{
+      const body = await readJsonBody<{
         // A line MAY carry per-line `LineExtras` (NON-FISCAL) — forwarded to `updateHeldOrder` →
         // `priceOrderLines`, which validates + persists them on the parent dish line.
         lines: ({ productId?: string; menuItemId?: string; quantity: string } & LineExtras)[];
         label?: string;
-      }>();
+      }>(c);
       await updateHeldOrder({ db: deps.db }, deps.cfg, id, {
         lines: body.lines,
         label: body.label,
@@ -1499,7 +1501,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       await requireSession(deps, c);
       const id = c.req.param("id");
       if (!isUuid(id)) throw new AppError("ticket.invalid_transition", { ticketItemId: id });
-      const body = await c.req.json<{ to?: string }>();
+      const body = await readJsonBody<{ to?: string }>(c);
       // `body.to` reaches `advanceTicketItem` as-is (cast): the verb owns the target validation, throwing
       // `ticket.invalid_transition` for `"queued"`, a missing field, or any garbage value — no route-level
       // `to` screen is needed because the verb's TICKET_TRANSITIONS-table lookup never lets an invalid
@@ -1527,7 +1529,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       await requireSession(deps, c);
       const orderId = c.req.param("id");
       const stationId = c.req.param("sid");
-      const body = await c.req.json<{ to?: string }>();
+      const body = await readJsonBody<{ to?: string }>(c);
       if (body.to !== "preparing" && body.to !== "ready") {
         throw new AppError("management.request_invalid", { field: "to" });
       }
@@ -1768,7 +1770,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const device = await tryReadDevice(deps, c);
       await assertNotHandheld(deps, c, "collect", device);
       const id = requireUuidId(c.req.param("id"), "working_order.not_placed");
-      const body = await c.req.json<{ tender: TillTender }>();
+      const body = await readJsonBody<{ tender: TillTender }>(c);
       // SP-A.2 §16.4 cutover: collect settles under the AUTHENTICATED device's `till_id`, not env — Mode T
       // files `recordSale` immediate, Mode I settles the deferred invoice. Only `tillId` changes;
       // `nodeId`/`seriesId` (the SIF/chain key) stay `deps.cfg`.
@@ -1798,7 +1800,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       // parse and any amendment write. An ordinary till carries no device cookie and passes.
       await assertNotHandheld(deps, c, "cancel");
       const id = requireUuidId(c.req.param("id"), "working_order.not_placed");
-      const body = await c.req.json<{ reason: string }>();
+      const body = await readJsonBody<{ reason: string }>(c);
       await cancelPlacedOrder(
         { db: deps.db, backend: deps.backend, clock: deps.clock },
         deps.cfg,
@@ -1816,7 +1818,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   app.post("/api/tables", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
-      const body = await c.req.json<{ label: string; zoneId?: string; capacity?: number }>();
+      const body = await readJsonBody<{ label: string; zoneId?: string; capacity?: number }>(c);
       requireCapacity(body.capacity);
       // Screen a present `zoneId` as a UUID BEFORE the DB touch — the twin of the `:id` screen on the
       // sibling routes, one field over. A well-formed-but-missing zoneId already surfaces
@@ -1900,7 +1902,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       await requireSession(deps, c);
       const id = c.req.param("id");
       if (!isUuid(id)) throw new AppError("table.not_found", { tableId: id });
-      const body = await c.req.json<{ label?: string; zoneId?: string; capacity?: number }>();
+      const body = await readJsonBody<{ label?: string; zoneId?: string; capacity?: number }>(c);
       requireCapacity(body.capacity);
       // Screen a present `zoneId` as a UUID BEFORE the DB touch — same as the create route above and the
       // `:id` screen on this route: a malformed zoneId un-screened reaches the `zone_id` uuid column →
@@ -1937,9 +1939,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       await requireSession(deps, c);
       const id = c.req.param("id");
       if (!isUuid(id)) throw new AppError("table.not_found", { tableId: id });
-      const body = await c.req.json<{
+      const body = await readJsonBody<{
         lines?: { productId?: string; menuItemId?: string; quantity: string }[];
-      }>();
+      }>(c);
       const result = await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
         return openTab(tx, deps.cfg, { tableId: id, lines: body.lines });
@@ -1958,7 +1960,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       // Each round line MAY carry a `courseId` OVERRIDE (KDS-2 §5b) the tab screen's per-line course
       // picker set — the ring-time resolver applies `<override> ?? product.course_id` (`addTabRound` →
       // `priceOrderLines`). Absent (the picker left on the product default) = the product's default course.
-      const body = await c.req.json<{
+      const body = await readJsonBody<{
         // A round line MAY carry selected modifier `options` (ordering modifiers) — threaded through
         // `addTabRound` → `priceOrderLines`, which expands each into a parent + child rows. Optional, so
         // a plain `{productId, quantity}` round is unchanged. An option MAY carry a per-option `quantity`
@@ -1976,7 +1978,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           modifierSelections?: ModifierSelection[];
           hold?: boolean;
         } & LineExtras)[];
-      }>();
+      }>(c);
       await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
         await addTabRound(tx, deps.cfg, id, body.lines);
@@ -2076,7 +2078,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       await requireSession(deps, c);
       const id = requireTabParam(c.req.param("id"));
       const lineNo = requireLineNo(id, c.req.param("lineNo"));
-      const body = await c.req.json<{ courseId?: string | null }>();
+      const body = await readJsonBody<{ courseId?: string | null }>(c);
       // An absent `courseId` key means "clear the course" (the null branch) — coerce it so `undefined`
       // never reaches `setLineCourse`, where an omitted query param would surface as an opaque
       // `server.internal` 500 instead of the clean null-clear the `{ courseId: string | null }` contract
@@ -2106,7 +2108,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       await requireSession(deps, c);
       const id = requireTabParam(c.req.param("id"));
-      const body = await c.req.json<{ lineNos?: number[] }>();
+      const body = await readJsonBody<{ lineNos?: number[] }>(c);
       await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
         await sendLines(tx, deps.cfg, id, body.lineNos ?? []);
@@ -2128,7 +2130,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       await requireSession(deps, c);
       const id = requireTabParam(c.req.param("id"));
-      const body = await c.req.json<{ lineNos?: number[] }>();
+      const body = await readJsonBody<{ lineNos?: number[] }>(c);
       await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
         await recallLines(tx, deps.cfg, id, body.lineNos ?? []);
@@ -2145,7 +2147,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       await requireSession(deps, c);
       const id = c.req.param("id");
       if (!isUuid(id)) throw new AppError("table.not_found", { tableId: id });
-      const body = await c.req.json<{ statusId: string | null }>();
+      const body = await readJsonBody<{ statusId: string | null }>(c);
       const statusId = body.statusId ?? null;
       // A present-but-malformed statusId is screened to status.not_found (it names no status), not a 500.
       if (statusId !== null && !isUuid(statusId))
@@ -2182,14 +2184,13 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const { sessionId } = await requireSession(deps, c);
       const id = c.req.param("id");
       if (!isUuid(id)) throw new AppError("table.not_found", { tableId: id });
-      const body =
-        (await c.req.json<{
-          zoneId?: unknown;
-          posX?: unknown;
-          posY?: unknown;
-          shape?: unknown;
-          rotation?: unknown;
-        }>()) ?? {};
+      const body = await readJsonBody<{
+        zoneId?: unknown;
+        posX?: unknown;
+        posY?: unknown;
+        shape?: unknown;
+        rotation?: unknown;
+      }>(c);
       if (typeof body !== "object" || body === null || Array.isArray(body)) {
         throw new AppError("management.request_invalid", { field: "body" });
       }
@@ -2250,7 +2251,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       await requireSession(deps, c);
       const tabId = requireTabParam(c.req.param("id"));
-      const body = await c.req.json<{ toTableId: string }>();
+      const body = await readJsonBody<{ toTableId: string }>(c);
       if (!isUuid(body.toTableId))
         throw new AppError("table.not_found", { tableId: body.toTableId });
       await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
@@ -2267,7 +2268,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       await requireSession(deps, c);
       const tabId = requireTabParam(c.req.param("id"));
-      const body = await c.req.json<{ tableId: string }>();
+      const body = await readJsonBody<{ tableId: string }>(c);
       if (!isUuid(body.tableId)) throw new AppError("table.not_found", { tableId: body.tableId });
       await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
@@ -2284,7 +2285,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       await requireSession(deps, c);
       const intoTabId = requireTabParam(c.req.param("id"));
-      const body = await c.req.json<{ fromTabId: string; freeSourceTable: boolean }>();
+      const body = await readJsonBody<{ fromTabId: string; freeSourceTable: boolean }>(c);
       if (!isUuid(body.fromTabId)) throw new AppError("tab.not_open", { tabId: body.fromTabId });
       await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
@@ -2307,10 +2308,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       await requireSession(deps, c);
       const fromTabId = requireTabParam(c.req.param("id"));
-      const body = await c.req.json<{
+      const body = await readJsonBody<{
         toTabId: string;
         transfers: { lineNo: number; quantity?: string }[];
-      }>();
+      }>(c);
       if (!isUuid(body.toTabId)) throw new AppError("tab.not_open", { tabId: body.toTabId });
       await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
@@ -2334,16 +2335,17 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       await requireSession(deps, c);
       const fromTabId = requireTabParam(c.req.param("id"));
-      const body = await c.req.json<{
-        transfers: { lineNo: number; quantity?: string }[];
-      }>();
-      // Screen the body shape BEFORE any field access: a literal JSON `null` body parses successfully
-      // (no SyntaxError — `c.req.json()` just returns `null`), so `body.transfers` below would throw
-      // `Cannot read properties of null` and escape as an opaque 500, the exact class the id screen above
-      // exists to prevent. Same object/null/array guard as the `/api/tables/:id/placement` sibling
-      // (till-api.ts, PUT placement route above), naming "body" — checked on the RAW parse result (no
-      // `?? {}` first), because coalescing null to `{}` before this check would make it unreachable for
-      // a null body (proven: `null ?? {}` is `{}`, so `body === null` never fires downstream of that).
+      // Read the RAW parse — NOT `readJsonBody` (which would coalesce a null body to `{}`). This route
+      // must tell a null/empty/malformed body apart from a well-formed object so it can refuse the
+      // former as a body-shape fault (field "body") below. `readRawJsonBody` returns the parsed body,
+      // or `null` for a literal JSON `null`, an empty or malformed body (the SyntaxError), so all three
+      // land in the SAME refusal rather than escaping as an opaque `server.internal` 500; a
+      // non-SyntaxError (e.g. a double-read) is a real server fault and is rethrown.
+      const body = await readRawJsonBody<{ transfers: { lineNo: number; quantity?: string }[] }>(c);
+      // Screen the body shape BEFORE any field access: a null (literal, or the coerced empty/malformed
+      // body) and a non-object primitive/array all fail here as `management.request_invalid` naming
+      // "body" — the same guard the `/api/tables/:id/placement` sibling uses — before `body.transfers`
+      // could throw. A well-formed object carrying a bad `transfers` is caught just below.
       if (typeof body !== "object" || body === null || Array.isArray(body)) {
         throw new AppError("management.request_invalid", { field: "body" });
       }
@@ -2378,13 +2380,18 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       await requireSession(deps, c);
       const tabId = requireTabParam(c.req.param("id"));
-      const body = await c.req.json<{
+      // Read the RAW parse — same reasoning as `/split` above: this route must distinguish a
+      // null/empty/malformed body (refused as field "body") from a well-formed object, so it uses
+      // `readRawJsonBody`, not `readJsonBody`. A literal null, and a SyntaxError from an empty/malformed
+      // body, both surface as `null` to land in the same refusal rather than an opaque 500; other
+      // throws rethrow.
+      const body = await readRawJsonBody<{
         tableId: string;
         transfers?: { lineNo: number; quantity?: string }[];
-      }>();
-      // Screen the body shape BEFORE any field access — same reasoning as `/split` above: a literal
-      // JSON `null` body parses successfully, so `body.tableId` would throw before `isUuid` ever ran,
-      // escaping as an opaque 500. This ALSO keeps a null body out of the domain-specific
+      }>(c);
+      // Screen the body shape BEFORE any field access: a null (literal, or the coerced empty/malformed
+      // body) and a non-object primitive/array fail here as `management.request_invalid` naming "body",
+      // before `body.tableId` reaches `isUuid`. This keeps a bad body out of the domain-specific
       // `table.not_joined` a well-formed-but-wrong `tableId` gets below — a missing body is a request-
       // shape fault, not a claim about a table.
       if (typeof body !== "object" || body === null || Array.isArray(body)) {

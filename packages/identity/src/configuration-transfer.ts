@@ -10,6 +10,7 @@ export const IDENTITY_CONFIGURATION_TRANSFER = {
         "email_verified_at",
         "google_subject",
         "pending_email",
+        "passkey_offered_at",
       ],
     },
   ],

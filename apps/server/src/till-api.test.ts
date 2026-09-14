@@ -2959,9 +2959,9 @@ describe("PUT + DELETE /api/tables/:id/placement — the on-till authorize(till.
     // "PUT body screens" case, which uses the same trick for the same reason).
     const id = randomUUID();
 
-    // A `null` body coerces to `{}` (`?? {}`), then the first field screen fires (field "body" is only
-    // for a non-object TRUTHY body such as an array) — the same null-body discipline the management-api
-    // sibling follows, and the only case that exercises the `?? {}` fallback itself.
+    // A `null` body coerces to `{}` (`readJsonBody`), then the first field screen fires (field "body"
+    // is only for a non-object TRUTHY body such as an array) — the same null-body discipline the
+    // management-api sibling follows, and the only case that exercises that coercion itself.
     const nullBody = await app.request(`/api/tables/${id}/placement`, {
       method: "PUT",
       headers: { "content-type": "application/json", cookie: managerCookie },

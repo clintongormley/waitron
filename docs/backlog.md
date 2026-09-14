@@ -102,11 +102,7 @@ brainstorm → spec → plan → PR; fiscal-adjacent ones take owner sign-off at
    [ui-review.md](ui-review.md), and the first physical print since #327: slips, duplicates, the
    drawer pulse, the feed-before-cut.
 
-6. **The two remaining by-id read classes** (C1) — request-supplied table ids and the `ticket_items`
-   reads. Same class as the cross-tenant leak the run-it seat caught on till-reroute S3; CLAUDE.md §3
-   makes it a rule.
-
-7. **The bootable USB installer** (B3) — the last piece of "install without a terminal".
+6. **The bootable USB installer** (B3) — the last piece of "install without a terminal".
 
 Then the on-prem mirror, then the cloud primary — under *Afterwards*. Everything else ranks beneath
 these.
@@ -1184,18 +1180,23 @@ turns out to need a design moves to its track.
 
 **Correctness:**
 
-1. **The two remaining by-id read classes** — request-supplied TABLE-id reads (`moveTab`/`joinTable`'s
-   `toTableId`, `assertTableAvailable`) and `ticket_items` reads and updates in
-   `bumpCourseReady`/`advanceTicketItem`/`advanceTicket`. Each needs its own `eq(tenantId)`.
-2. **till-api's bare `c.req.json()` sites still 500 on a malformed body** (~19 on the sale and pay
-   path, each needing per-route validation tracing before moving to the shared `readJsonBody`); the till PIN login gives an opaque 500
-   instead of a clean 401.
-3. **`report-api.ts` runs three concurrent queries on ONE `withTenant` transaction** — serial and
-   deprecated in pg@8, broken in pg@9. Sequential awaits or one combined query.
-3. **A concurrent-corrective race in `settleSale` is untranslated** — a raw `P0001` from the coverage
+1. **A concurrent-corrective race in `settleSale` is untranslated** — a raw `P0001` from the coverage
    trigger with no `sale.*` code. Give the trigger a SQLSTATE and translate it when reachable.
-4. **Location-scope the by-id verb family together** (`getHeldOrder`/`updateHeldOrder`/
+2. **Location-scope the by-id verb family together** (`getHeldOrder`/`updateHeldOrder`/
    `abandonHeldOrder`, `updateTable`/`deactivateTable`/`openTab`) when multi-location lands.
+3. **`fireLines` fans preparation-route lookups out across one shared transaction** (pre-existing,
+   predates this branch). `fireLines` in `apps/server/src/working-order.ts` runs a `Promise.all` over
+   the order's lines, each line calling `resolvePreparationRoute(tx, …)` on the SAME transaction at the
+   same time — the very shared-connection pattern this branch made sequential in `report-api.ts`. It
+   works today only because node-postgres quietly serialises queries on one connection; it is fragile
+   and breaks outright under a driver that rejects concurrent queries on one connection. Sequentialise
+   the loop (or resolve the routes up front), and consider a guard so the pattern cannot creep back.
+4. **`setup-api.ts` still reads its body with the bare `c.req.json().catch(() => null)` pattern**
+   (pre-existing, predates this branch). Two provisioning routes in `apps/server/src/setup-api.ts`
+   catch every parse error to `null` — the same malformed-body handling this branch replaced with the
+   shared `readJsonBody`/`readRawJsonBody` helpers in `till-api.ts`, in a file this branch did not
+   touch. Its `catch(() => null)` is actually broader than the helpers: it swallows a non-`SyntaxError`
+   fault (a real server bug) to `null` too, rather than rethrowing it. Move these to the shared helper.
 
 **The development stack:**
 
@@ -1220,26 +1221,12 @@ turns out to need a design moves to its track.
 
 **Dashboard, till and setup:**
 
-- **An imported configuration carries "already offered a passkey" but no passkeys** (found
-  2026-09-13, not fixed). A configuration transfer copies the `persons` rows with six columns
-  stripped — `packages/identity/src/configuration-transfer.ts` names them, and the import in
-  `apps/server/src/configuration-transfer.ts` blanks them again on the way in — but
-  `passkey_offered_at` is not one of them, so it travels. No passkey rows travel at all: identity
-  contributes only `persons`, and nothing contributes `webauthn_credentials`. So a person who had
-  been offered a passkey on the source box arrives on the new one holding none and already stamped,
-  and `shouldOfferPasskey` (`packages/identity/src/passkey-offer.ts`) never offers again. It does
-  not bite immediately, because imported people arrive suspended with their PIN and password wiped —
-  it bites once someone reactivates them and they sign in for the first time. The fix is one line:
-  strip the column on transfer, the way the six secrets are stripped.
-
-  Two things to know before making that one-line change. The import does not merely blank a stripped
-  column on the way in — it REFUSES a bundle that carries one at all
-  (`apps/server/src/configuration-transfer.ts:316-318`, throwing `setup.request_invalid` named for
-  the table and the column), which is a separate check from the overwrite at lines 427-433 that
-  blanks the six secret fields and forces `status = "suspended"`. So adding `passkey_offered_at` to
-  the stripped list makes every bundle exported before the change invalid outright, rather than
-  importable with the column blanked. That is acceptable only because nothing is in production yet;
-  the day a real venue is live, this stops being a one-line change.
+- **An imported configuration no longer carries "already offered a passkey"** (fixed 2026-09-14).
+  A configuration transfer no longer lets `passkey_offered_at` travel: it is stripped on export and
+  the import refuses a bundle that still carries it, alongside the other person columns the transfer
+  already leaves behind. Before the fix a person offered a passkey on the source box arrived on the new one holding no
+  passkey but already stamped, so `shouldOfferPasskey` never offered again after they were reactivated
+  and first signed in.
 - **Timestamps across the printers and devices screens show UTC** — `formatIsoMinute`
   (`apps/dashboard/src/date-utils.ts:27`) slices the ISO string. One shared formatter, not a per-call-site patch.
 - The till renders `person.suspended` as "Account suspended" — align with the dashboard's Disabled

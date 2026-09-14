@@ -254,18 +254,19 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
           timeZone: clock.timeZone,
           dayCutover: clock.dayCutover,
         };
-        const [close, topSellers, openTables] = await Promise.all([
-          computeDailyClose(tx, input),
-          computeTopSellers(tx, {
-            tenantId,
-            fromBusinessDay: businessDay,
-            toBusinessDay: businessDay,
-            timeZone: clock.timeZone,
-            dayCutover: clock.dayCutover,
-            limit: 5,
-          }),
-          countOpenTables(tx, tenantId, nodeId),
-        ]);
+        // Sequential, not Promise.all: these three reads share ONE transaction, so they cannot
+        // safely run at once — a single connection processes one query at a time. Awaiting each in
+        // turn keeps that explicit rather than leaning on the driver to serialise them for us.
+        const close = await computeDailyClose(tx, input);
+        const topSellers = await computeTopSellers(tx, {
+          tenantId,
+          fromBusinessDay: businessDay,
+          toBusinessDay: businessDay,
+          timeZone: clock.timeZone,
+          dayCutover: clock.dayCutover,
+          limit: 5,
+        });
+        const openTables = await countOpenTables(tx, tenantId, nodeId);
         return {
           businessDay,
           takings: {
@@ -299,18 +300,17 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
           timeZone: clock.timeZone,
           dayCutover: clock.dayCutover,
         };
-        const [close, topSellers] = await Promise.all([
-          computeDailyClose(tx, input),
-          computeTopSellers(tx, {
-            tenantId,
-            nodeId,
-            fromBusinessDay: businessDay,
-            toBusinessDay: businessDay,
-            timeZone: clock.timeZone,
-            dayCutover: clock.dayCutover,
-            limit: 10,
-          }),
-        ]);
+        // Sequential, not Promise.all: both reads share ONE transaction (see the overview route).
+        const close = await computeDailyClose(tx, input);
+        const topSellers = await computeTopSellers(tx, {
+          tenantId,
+          nodeId,
+          fromBusinessDay: businessDay,
+          toBusinessDay: businessDay,
+          timeZone: clock.timeZone,
+          dayCutover: clock.dayCutover,
+          limit: 10,
+        });
         return { businessDay, vat: close.vat, cash: close.cash, counts: close.counts, topSellers };
       });
       return c.json(result);
@@ -340,10 +340,9 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
           timeZone: clock.timeZone,
           dayCutover: clock.dayCutover,
         };
-        const [vat, topSellers] = await Promise.all([
-          computeVatSummaryForPeriod(tx, common),
-          computeTopSellers(tx, { ...common, limit: 10 }),
-        ]);
+        // Sequential, not Promise.all: both reads share ONE transaction (see the overview route).
+        const vat = await computeVatSummaryForPeriod(tx, common);
+        const topSellers = await computeTopSellers(tx, { ...common, limit: 10 });
         return { from, to, vat, topSellers };
       });
       return c.json(result);
