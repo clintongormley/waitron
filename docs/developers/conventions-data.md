@@ -139,7 +139,10 @@ zone offer catalogue, then performed separate product-variant and menu-variant r
 therefore repeated the same sequential database work. `priceOrderLines` now reads one zone snapshot
 and one tenant-scoped batch of product variants before its in-memory line loop. The focused
 `working-order.test.ts` probe spies on both contribution methods: one `listZoneOffers` call and no
-per-line `resolveZoneOffer` calls for a repeated-offer basket.
+per-line `resolveZoneOffer` calls for a repeated-offer basket. Kitchen routing follows the same
+rule: `fireLines` makes one `resolvePreparationRoutes` call per fire, which answers for every product
+with at most four reads; `working-order.test.ts` checks the single call and
+`packages/venue-service/src/operations.test.ts` checks the read count for one product and for five.
 
 **Grants and roles**
 
@@ -232,6 +235,11 @@ to `Transaction`, and an ESLint backstop was declined (2026-09-03). **Splitting 
 across transactions is a commented decision, never a default** — the two that do it
 (`provisionVenue`'s latch, `adoptFromPrimary`'s idempotent steps) say so in their headers because a
 non-DB step sits between the writes.
+
+Queries sharing one transaction are awaited one at a time, never started together with
+`Promise.all`: a single connection runs one query at a time. No guard checks this across the
+codebase; the `apps/server/src/report-api.ts` routes say so in comments, and the `fireLines` routing
+test in "Resolve shared catalogue data once" covers only that call site.
 
 ## A by-id read still needs its own `eq(table.tenantId, cfg.tenantId)` — one-tenant-per-database is NOT the query's isolation boundary
 

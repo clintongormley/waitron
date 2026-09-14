@@ -1174,18 +1174,6 @@ turns out to need a design moves to its track.
    trigger with no `sale.*` code. Give the trigger a SQLSTATE and translate it when reachable.
 2. **Location-scope the by-id verb family together** (`getHeldOrder`/`updateHeldOrder`/
    `abandonHeldOrder`, `updateTable`/`deactivateTable`/`openTab`) when multi-location lands.
-3. **`resolvePreparationRoute` re-reads the zone context once per distinct product, not once per
-   order** (pre-existing; surfaced while fixing `fireLines`'s shared-transaction fan-out, 2026-09-14).
-   `resolvePreparationRoute` (`packages/venue-service/src/operations.ts`) calls
-   `resolveZoneContext(tx, cfg, zoneId)` on every invocation, but `zoneId` is invariant across an
-   order. `fireLines` now resolves routes once per distinct product (down from once per line), so the
-   zone-context query runs once per distinct product rather than once per order. Closing "resolve
-   once" fully means changing `resolvePreparationRoute`'s public contract
-   (`packages/module/src/module.ts`, called from other places too), a larger change than a bugfix
-   branch should carry — do it as its own change. Note: no automated guard was added for the
-   concurrent-queries-on-one-connection anti-pattern (deferred deliberately); it is pinned by the §3
-   convention prose in `conventions-data.md` and the per-site resolve-once tests (`fireLines`,
-   `report-api`), not by a general guard.
 
 **The development stack:**
 
