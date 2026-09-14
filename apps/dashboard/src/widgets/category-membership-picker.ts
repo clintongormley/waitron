@@ -89,6 +89,10 @@ export class CategoryMembershipPicker extends LitElement {
         multiple
         label=${t("categories.categories_label")}
         placeholder=${t("categories.categories_placeholder")}
+        searchPlaceholder=${t("categories.combobox_search")}
+        noResultsLabel=${t("categories.combobox_no_results")}
+        .countLabel=${(count: number) =>
+          t("categories.combobox_selected").replace("{count}", String(count))}
         .disabled=${this.busy}
         .options=${this.categories.map((category) => ({
           value: category.id,
@@ -110,6 +114,8 @@ export class CategoryMembershipPicker extends LitElement {
         data-test="reporting-category"
         label=${t("editor.reporting_category")}
         placeholder=${t("categories.none")}
+        searchPlaceholder=${t("categories.combobox_search")}
+        noResultsLabel=${t("categories.combobox_no_results")}
         .disabled=${this.busy || this.draft.categoryIds.length === 0}
         .options=${[
           { value: "", label: t("categories.none") },

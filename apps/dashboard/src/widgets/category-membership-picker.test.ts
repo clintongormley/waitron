@@ -174,3 +174,32 @@ it("offers a None option that maps the reporting category to null", async () => 
     primaryCategoryId: null,
   });
 });
+
+it("labels both comboboxes' search, empty and count text in the reader's language", async () => {
+  const { el } = await mountWidget<CategoryMembershipPicker>(
+    "dashboard-category-membership-picker",
+    {
+      categories: [food, drink],
+      languages: { defaultLanguage: "en", languages: ["en"] },
+      value: { categoryIds: ["food", "drink"], primaryCategoryId: "food" },
+    },
+  );
+  for (const test of ["member-categories", "reporting-category"]) {
+    const combobox = el.shadowRoot!.querySelector<
+      HTMLElement & { updateComplete: Promise<unknown> }
+    >(`wt-combobox[data-test="${test}"]`)!;
+    await combobox.updateComplete;
+    const search = combobox.shadowRoot!.querySelector<HTMLInputElement>("input.search")!;
+    expect(search.placeholder).toBe(t("categories.combobox_search"));
+    search.value = "zzz";
+    search.dispatchEvent(new Event("input"));
+    await combobox.updateComplete;
+    expect(combobox.shadowRoot!.textContent).toContain(t("categories.combobox_no_results"));
+  }
+  const multi = el.shadowRoot!.querySelector<HTMLElement>(
+    'wt-combobox[data-test="member-categories"]',
+  )!;
+  expect(multi.shadowRoot!.querySelector(".value")!.textContent!.trim()).toBe(
+    t("categories.combobox_selected").replace("{count}", "2"),
+  );
+});
