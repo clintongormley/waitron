@@ -435,28 +435,35 @@ export class WtDataTable<Row = unknown> extends LitElement {
   }
 
   /** In tree mode a matching row's ancestors must stay so it is not shown as a false top-level row.
-   * Returns the rows to render plus the set of keys present only as an ancestor of a match. */
-  #treeVisible(): { rows: readonly Row[]; ancestorOnly: ReadonlySet<string> } {
+   * Takes the rows that passed the toolbar and returns the rows to render plus the set of keys
+   * present only as an ancestor of a match. */
+  #treeVisible(visible: readonly Row[]): {
+    rows: readonly Row[];
+    ancestorOnly: ReadonlySet<string>;
+  } {
     const parentOf = this.rowParent!;
-    const indexOf = new Map<Row, number>();
-    this.rows.forEach((row, i) => indexOf.set(row, i));
-    const keyOf = (row: Row) => this.rowKey(row, indexOf.get(row)!);
-    const matched = new Set(this.#visibleRows().map(keyOf));
+    const keys = this.rows.map((row, index) => this.rowKey(row, index));
+    const keyByRow = new Map<Row, string>();
+    const rowByKey = new Map<string, Row>();
+    this.rows.forEach((row, index) => {
+      keyByRow.set(row, keys[index]!);
+      if (!rowByKey.has(keys[index]!)) rowByKey.set(keys[index]!, row);
+    });
+    const matched = new Set(visible.map((row) => keyByRow.get(row)!));
     const included = new Set(matched);
-    for (const row of this.rows) {
-      if (!matched.has(keyOf(row))) continue;
+    this.rows.forEach((row, index) => {
+      if (!matched.has(keys[index]!)) return;
       const visited = new Set<string>();
-      let current: Row | undefined = row;
-      let parentKey = current ? parentOf(current) : null;
+      let parentKey = parentOf(row);
       while (parentKey && !visited.has(parentKey)) {
         visited.add(parentKey);
         included.add(parentKey);
-        current = this.rows.find((r) => keyOf(r) === parentKey);
-        parentKey = current ? parentOf(current) : null;
+        const parent = rowByKey.get(parentKey);
+        parentKey = parent ? parentOf(parent) : null;
       }
-    }
+    });
     const ancestorOnly = new Set([...included].filter((key) => !matched.has(key)));
-    return { rows: this.rows.filter((row) => included.has(keyOf(row))), ancestorOnly };
+    return { rows: this.rows.filter((_row, index) => included.has(keys[index]!)), ancestorOnly };
   }
 
   #treeRows(
@@ -665,7 +672,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
     const isTree = this.rowParent !== undefined;
     // In tree mode kept ancestors keep a deep match on screen, so "no matches" counts the rows the
     // tree actually renders, not just the ones that matched.
-    const treeVisible = isTree ? this.#treeVisible() : undefined;
+    const treeVisible = isTree ? this.#treeVisible(visible) : undefined;
     const renderedCount = isTree ? treeVisible!.rows.length : visible.length;
     if (renderedCount === 0)
       return html`${this.#renderToolbar()}
