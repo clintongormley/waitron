@@ -3,6 +3,8 @@ import { expect, it } from "vitest";
 import { and, eq, sql } from "drizzle-orm";
 import {
   asAppUser,
+  optionGroups,
+  optionGroupItems,
   productOptionGroups,
   withTenant,
   workingOrders,
@@ -92,6 +94,28 @@ it("saves complete definitions as app_user, preserves ids/order, and scopes ever
   });
   await app(tenant, (tx) => deleteModifier(tx, tenant, created.id));
   expect(await app(tenant, (tx) => listModifiers(tx, tenant))).toEqual([]);
+});
+
+it("reads a stored-inactive non-yes/no modifier as available", async () => {
+  // The write side forces available:true for text/extras/options (only yes/no is authored), so a
+  // stored active=false on such a group is an inconsistency the read must not surface: the
+  // projection and validateModifierSelections still offer it, so reading it back as unavailable
+  // would hide it from the till widgets and leave an unsatisfiable required selection. Insert the
+  // raw inconsistent row as the owner (the contract cannot produce it) and read it back.
+  const tenant = await seedTenant(suite.admin);
+  const groupId = randomUUID();
+  await suite.admin.insert(optionGroups).values({
+    tenantId: tenant,
+    id: groupId,
+    name,
+    type: "options",
+    active: false,
+  });
+  await suite.admin
+    .insert(optionGroupItems)
+    .values({ tenantId: tenant, id: randomUUID(), groupId, name: { en: "Oat" }, active: true });
+  const [modifier] = await app(tenant, (tx) => listModifiers(tx, tenant));
+  expect(modifier).toMatchObject({ id: groupId, type: "options", available: true });
 });
 
 it("rolls back the whole save when a choice belongs to another modifier", async () => {

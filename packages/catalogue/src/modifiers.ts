@@ -42,7 +42,14 @@ export async function listModifiers(tx: Transaction, tenantId: string): Promise<
     )
     .orderBy(optionGroupItems.sort, optionGroupItems.id);
   return groups.map((group): Modifier => {
-    const common = { id: group.id, name: group.name, available: group.active };
+    // Mirror the write side, which forces available:true for every non-yes/no type (only yes/no is
+    // authored). A stored active=false on such a group is an inconsistency; reading it back as
+    // unavailable would hide it from the till while the projection still requires a selection.
+    const common = {
+      id: group.id,
+      name: group.name,
+      available: group.type === "yes-no" ? group.active : true,
+    };
     if (group.type === "text") return { ...common, type: "text" };
     if (group.type === "yes-no")
       return {
@@ -94,22 +101,21 @@ export async function getModifier(
   return found;
 }
 
-async function assertUnused(
-  tx: Transaction,
-  tenantId: string,
-  modifierId: string,
-  retainedOrders: boolean,
-): Promise<void> {
+/** Predicate matching a working_order_lines row that still uses this modifier — by saved snapshot or
+ * by a chosen choice. Shared by the delete refusal and the dashboard's order count so the two never
+ * drift; keep them reading the identical predicate. */
+const openOrderUse = (tenantId: string, modifierId: string) => sql`
+    tenant_id = ${tenantId} and (
+      modifier_snapshots @> ${JSON.stringify([{ modifierId }])}::jsonb
+      or option_group_item_id in (
+        select id from option_group_items where tenant_id = ${tenantId} and group_id = ${modifierId}
+      )
+    )`;
+
+async function assertUnused(tx: Transaction, tenantId: string, modifierId: string): Promise<void> {
   const result = await tx.execute<{ dependency: string }>(sql`
     select 'product' as dependency from product_option_groups where tenant_id = ${tenantId} and group_id = ${modifierId}
     union all select 'menu' as dependency from menu_item_option_groups where tenant_id = ${tenantId} and group_id = ${modifierId}
-    ${
-      retainedOrders
-        ? sql`union all select 'order' as dependency from working_order_lines where tenant_id = ${tenantId} and (
-      modifier_snapshots @> ${JSON.stringify([{ modifierId }])}::jsonb or option_group_item_id in (select id from option_group_items where tenant_id = ${tenantId} and group_id = ${modifierId})
-    )`
-        : sql``
-    }
     limit 1
   `);
   if (result.rows[0])
@@ -226,7 +232,7 @@ export async function updateModifier(
   await validateLabels(tx, tenantId, input, fallbackLanguage);
   await lockModifierDefinitions(tx, tenantId);
   const old = await getModifier(tx, tenantId, modifierId);
-  if (old.type !== input.type) await assertUnused(tx, tenantId, modifierId, false);
+  if (old.type !== input.type) await assertUnused(tx, tenantId, modifierId);
   await tx
     .update(optionGroups)
     .set(groupValues(input))
@@ -245,13 +251,7 @@ export async function deleteModifier(
   // is different: its line still references this modifier — by saved snapshot or chosen item — and
   // deleting would orphan a live, un-settled basket line, so a live reference refuses the delete.
   const open = await tx.execute<{ one: number }>(sql`
-    select 1 as one from working_order_lines
-    where tenant_id = ${tenantId} and (
-      modifier_snapshots @> ${JSON.stringify([{ modifierId }])}::jsonb
-      or option_group_item_id in (
-        select id from option_group_items where tenant_id = ${tenantId} and group_id = ${modifierId}
-      )
-    ) limit 1`);
+    select 1 as one from working_order_lines where ${openOrderUse(tenantId, modifierId)} limit 1`);
   if (open.rows[0]) throw new AppError("modifier.in_use", { modifierId, dependency: "order" });
   await tx
     .delete(optionGroups)
@@ -309,13 +309,7 @@ export async function modifierDependants(
     )
     .orderBy(menuItems.id);
   const orders = await tx.execute<{ count: number }>(sql`
-    select count(*)::int as count from working_order_lines
-    where tenant_id = ${tenantId} and (
-      modifier_snapshots @> ${JSON.stringify([{ modifierId }])}::jsonb
-      or option_group_item_id in (
-        select id from option_group_items where tenant_id = ${tenantId} and group_id = ${modifierId}
-      )
-    )`);
+    select count(*)::int as count from working_order_lines where ${openOrderUse(tenantId, modifierId)}`);
   return {
     products: productRows,
     menus: menuRows,

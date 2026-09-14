@@ -16,8 +16,10 @@ import {
   setProductOptionGroups,
 } from "./operations.js";
 
-// The delete under test crosses grants and must run as the table OWNER, so a real backend is
-// required rather than PGlite's single superuser session.
+// A real backend is used for the RESTRICT→CASCADE control described at the delete below: before
+// migration 0012 this same delete threw a foreign-key RESTRICT violation, watched red on a real
+// container. The CASCADE fires regardless of the deleter's role, so this does NOT require the table
+// owner — the run-it review deleted as app_user and the cascade still fired.
 const suite = useTemplateDb({ template: "core" });
 
 function app<T>(
