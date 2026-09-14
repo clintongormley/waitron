@@ -22,6 +22,8 @@ it.each([
   ["getDailyClose", ["2026-09-11"], "sale_lines"],
   ["getSalesPeriod", ["2026-09-01", "2026-09-11"], "sale_substitutions"],
   ["getPlannedVsActual", ["location", "2026-09-01", "2026-09-11"], "roster_versions"],
+  ["listAlerts", [], "incidents"],
+  ["listHandledAlerts", [], "incidents"],
 ] as const)(
   "refreshes %s when its contributing %s query changes through %s",
   async (name, args, type) => {

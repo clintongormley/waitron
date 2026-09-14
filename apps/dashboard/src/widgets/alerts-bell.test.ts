@@ -78,6 +78,15 @@ describe("dashboard-alerts-bell", () => {
     expect(popup(el).matches(":popover-open")).toBe(true);
   });
 
+  it("shows loading only on the Mark handled button of the alert being handled", async () => {
+    const { el } = await mountWidget<AlertsBell>("dashboard-alerts-bell", {
+      alerts: [event("1"), event("2"), event("3")],
+      busyKey: "incident:2",
+    });
+    const loading = qa(el, "[data-test=alert-handle]").map((b) => b.hasAttribute("loading"));
+    expect(loading).toEqual([false, true, false]);
+  });
+
   it("offers Go to only for an ongoing alert whose screen the session may open, and closes", async () => {
     const { el } = await mountWidget<AlertsBell>("dashboard-alerts-bell", {
       alerts: [ongoing],
@@ -141,6 +150,27 @@ describe("dashboard-alerts-bell", () => {
       expect(rect.width).toBeGreaterThanOrEqual(400 - 2 * 8 - 1);
       expect(rect.left).toBeGreaterThanOrEqual(0);
       expect(rect.right).toBeLessThanOrEqual(400);
+    } finally {
+      await page.viewport(width, height);
+    }
+  });
+
+  it("opens about 44 characters wide on a desktop screen", async () => {
+    const width = window.innerWidth,
+      height = window.innerHeight;
+    await page.viewport(1280, 800);
+    try {
+      const { el } = await mountWidget<AlertsBell>("dashboard-alerts-bell", {
+        alerts: [event("1")],
+      });
+      el.open();
+      // A probe in the same font as the panel says what 44ch is here.
+      const probe = document.createElement("div");
+      probe.style.width = "44ch";
+      menu(el).shadowRoot!.append(probe);
+      const expected = probe.getBoundingClientRect().width;
+      probe.remove();
+      expect(popup(el).getBoundingClientRect().width).toBeCloseTo(expected, 0);
     } finally {
       await page.viewport(width, height);
     }

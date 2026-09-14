@@ -1548,7 +1548,7 @@ export const es: Record<StringKey, string> = {
   "alerts.no_access": "No tienes acceso a ningún aviso.",
   "alerts.load_error": "No se han podido cargar los avisos.",
   "alerts.severity.error": "Problema",
-  "alerts.severity.warning": "Aviso",
+  "alerts.severity.warning": "Advertencia",
   "alerts.area.fiscal": "Facturación AEAT",
   "alerts.area.payments": "Pagos con tarjeta",
   "alerts.area.diagnostics": "Sistema",

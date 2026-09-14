@@ -60,6 +60,10 @@ export class AlertsScreen extends LitElement {
   @state() private handledError: string | null = null;
   @state() private actionError: string | null = null;
   @state() private busyKey: string | null = null;
+  /** Whether each list has ever read successfully. Until it has, its empty message would claim an
+   * empty list the failed read never showed. */
+  #openLoaded = false;
+  #handledLoaded = false;
 
   // One controller per list: a controller's error callback does not say which query failed.
   readonly #openQueries = new DashboardQueries(
@@ -100,6 +104,7 @@ export class AlertsScreen extends LitElement {
       .watch("listAlerts", [], (response) => {
         this.visible = response.visible;
         this.open = response.alerts;
+        this.#openLoaded = true;
         this.openLoading = false;
         this.openError = null;
       })
@@ -107,6 +112,7 @@ export class AlertsScreen extends LitElement {
     void this.#handledQueries
       .watch("listHandledAlerts", [], (response) => {
         this.handled = response.alerts;
+        this.#handledLoaded = true;
         this.handledLoading = false;
         this.handledError = null;
       })
@@ -231,7 +237,7 @@ export class AlertsScreen extends LitElement {
             .rowKey=${(a: AlertView) => a.key}
             .loading=${this.openLoading}
             .loadingMessage=${t("alerts.loading")}
-            .emptyMessage=${t("alerts.none")}
+            .emptyMessage=${this.openError !== null && !this.#openLoaded ? "" : t("alerts.none")}
           ></wt-data-table>
         </div>
         <div slot="handled">
@@ -243,7 +249,9 @@ export class AlertsScreen extends LitElement {
             .rowKey=${(a: AlertView) => a.key}
             .loading=${this.handledLoading}
             .loadingMessage=${t("alerts.loading")}
-            .emptyMessage=${t("alerts.no_handled")}
+            .emptyMessage=${
+              this.handledError !== null && !this.#handledLoaded ? "" : t("alerts.no_handled")
+            }
           ></wt-data-table>
         </div>
       </wt-tabs>`;

@@ -28,6 +28,9 @@ export function formatAlertTime(iso: string | null): string {
   }).format(new Date(iso));
 }
 
+/** A screen with no navigation label is named by its screen name, like an unknown area. */
 export function goToLabel(screen: string): string {
-  return t("alerts.go_to").replace("{screen}", tKit(`nav.${screen}`));
+  const key = `nav.${screen}`;
+  const label = tKit(key);
+  return t("alerts.go_to").replace("{screen}", label === key ? screen : label);
 }

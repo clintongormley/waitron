@@ -210,6 +210,38 @@ describe("dashboard-alerts-screen", () => {
     expect(handledTable.shadowRoot!.textContent).not.toContain("Nothing was handled");
   });
 
+  it("shows no empty message under the load error when a list has never loaded", async () => {
+    const api = stubApi({
+      listAlerts: vi.fn().mockRejectedValue({ code: "server.internal" }),
+      listHandledAlerts: vi.fn().mockRejectedValue({ code: "server.internal" }),
+    });
+    const { el } = await mountWidget<AlertsScreen>("dashboard-alerts-screen", { api });
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=alerts-load-error]")).not.toBeNull();
+    const text = (test: string) =>
+      el.shadowRoot!.querySelector(`[data-test=${test}]`)!.shadowRoot!.textContent!;
+    expect(text("handled-alerts-table")).not.toContain("Nothing was handled");
+    expect(text("open-alerts-table")).not.toContain("Nothing needs attention");
+  });
+
+  it("keeps the empty message after a list that loaded empty fails to refresh", async () => {
+    const api = stubApi({
+      listHandledAlerts: vi
+        .fn()
+        .mockResolvedValueOnce({ visible: true, alerts: [] })
+        .mockRejectedValue({ code: "server.internal" }),
+    });
+    const { el } = await mountWidget<AlertsScreen>("dashboard-alerts-screen", { api });
+    await flush(el);
+    api.liveData.invalidate([{ type: "incidents" }]);
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[data-test=alerts-load-error]")).not.toBeNull(),
+    );
+    await flush(el);
+    const handledTable = el.shadowRoot!.querySelector("[data-test=handled-alerts-table]")!;
+    expect(handledTable.shadowRoot!.textContent).toContain("Nothing was handled");
+  });
+
   it("says so when the session may see no alerts", async () => {
     const api = stubApi({ listAlerts: vi.fn().mockResolvedValue({ visible: false, alerts: [] }) });
     const { el } = await mountWidget<AlertsScreen>("dashboard-alerts-screen", { api });
