@@ -1049,3 +1049,21 @@ it("keeps the products dialog's Close button disabled while a membership save is
   finish();
   await vi.waitFor(() => expect(close.disabled).toBe(false));
 });
+
+it("words each filter's catch-all option as All …, like the other screens' filters", async () => {
+  setLocale("en-GB");
+  const { el } = await mount();
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="mode-flat"]')!.click();
+  await el.updateComplete;
+  const list = el.shadowRoot!.querySelector("wt-data-table")!;
+  await list.updateComplete;
+  expect(
+    list.shadowRoot!.querySelector('select[data-filter="parent"] option')!.textContent!.trim(),
+  ).toBe("All parents");
+  await openProducts(el, "food");
+  const members = el.shadowRoot!.querySelector('wt-data-table[data-test="category-products"]')!;
+  await (members as HTMLElementTagNameMap["wt-data-table"]).updateComplete;
+  expect(
+    members.shadowRoot!.querySelector('select[data-filter="primary"] option')!.textContent!.trim(),
+  ).toBe("All reporting categories");
+});
