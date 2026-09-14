@@ -76,7 +76,7 @@ import type {
   ProductAllergens,
 } from "@waitron/catalogue";
 import { formatInvoiceNumber, recordSale } from "@waitron/core";
-import type { FloorAnnotator } from "@waitron/module";
+import type { FloorAnnotator, PreparationRoute } from "@waitron/module";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { FloorTableShape } from "./tables.js";
 import { VENUE_SERVICE } from "./modules.js";
@@ -1168,6 +1168,7 @@ export async function fireLines(
     .from(kitchenStations)
     .where(
       and(
+        eq(kitchenStations.tenantId, cfg.tenantId),
         eq(kitchenStations.locationId, cfg.locationId),
         eq(kitchenStations.isDefault, true),
         eq(kitchenStations.active, true),
@@ -1191,7 +1192,7 @@ export async function fireLines(
       categories,
       and(eq(categories.tenantId, products.tenantId), eq(categories.id, products.categoryId)),
     )
-    .where(inArray(products.id, productIds));
+    .where(and(eq(products.tenantId, cfg.tenantId), inArray(products.id, productIds)));
   const routeByProduct = new Map(routes.map((route) => [route.productId, route]));
 
   // --- KDS-2 hold-and-fire (§3c): snapshot each line's course + decide fired-vs-held ---
@@ -1206,7 +1207,7 @@ export async function fireLines(
 
   // Aggregate existing items per venue course: anyFired lets later rounds join food
   // already cooking, and itemCount includes prior rounds when choosing the earliest
-  // course. The join matches tenant ids and the course list is location-scoped.
+  // course. The join matches tenant ids and the course list is tenant- and location-scoped.
   const courseRows = await tx
     .select({
       id: kitchenCourses.id,
@@ -1223,7 +1224,9 @@ export async function fireLines(
         eq(ticketItems.workingOrderId, orderId),
       ),
     )
-    .where(eq(kitchenCourses.locationId, cfg.locationId))
+    .where(
+      and(eq(kitchenCourses.tenantId, cfg.tenantId), eq(kitchenCourses.locationId, cfg.locationId)),
+    )
     .groupBy(kitchenCourses.id, kitchenCourses.displayOrder);
 
   // Courses with an EXISTING fired item — a new item of one joins the already-cooking course and fires.
@@ -1247,25 +1250,12 @@ export async function fireLines(
 
   const serviceContext = await VENUE_SERVICE.findOrderContext(tx, cfg, orderId);
 
-  // Resolve each fired line's venue-service preparation route ONCE per DISTINCT product, sequentially,
-  // BEFORE the line loop — never a query per line, and never fanned out concurrently over the shared
-  // `tx` (one connection serialises them anyway, and pg 9 drops that queue). The route depends only on
-  // (zone, product) and `serviceContext.zoneId` is constant across the order, so distinct products are
-  // all that vary. This is "resolve shared catalogue data once before a basket's line loop" (§3,
-  // conventions-data.md) and makes the map body below pure — no per-line await.
-  const serviceRouteByProduct = new Map<
-    string,
-    Awaited<ReturnType<typeof VENUE_SERVICE.resolvePreparationRoute>>
-  >();
-  if (serviceContext !== null) {
-    // Same distinct-product set as `productIds` above — both derived from these parent `lines`.
-    for (const productId of productIds) {
-      serviceRouteByProduct.set(
-        productId,
-        await VENUE_SERVICE.resolvePreparationRoute(tx, cfg, serviceContext.zoneId, productId),
-      );
-    }
-  }
+  // One batched venue-service route read per fire, before the line loop, so the map body below stays
+  // pure: the route depends only on (zone, product) and the zone is fixed for the order.
+  const serviceRouteByProduct =
+    serviceContext === null
+      ? new Map<string, PreparationRoute>()
+      : await VENUE_SERVICE.resolvePreparationRoutes(tx, cfg, serviceContext.zoneId, productIds);
 
   // Resolve + snapshot each line's station AND course, refusing the whole fire if any line has nowhere
   // to go. `firedAt` is `sql`now()`` (fired) or null (held), so the array is not annotated
@@ -3375,7 +3365,7 @@ export async function placeOrder(
     const [locked] = await tx
       .select({ status: workingOrders.status })
       .from(workingOrders)
-      .where(eq(workingOrders.id, id))
+      .where(and(eq(workingOrders.tenantId, cfg.tenantId), eq(workingOrders.id, id)))
       .for("update");
     if (locked === undefined || locked.status !== "open") {
       throw new AppError("working_order.not_open", { workingOrderId: id });
@@ -3486,7 +3476,9 @@ export async function placeOrder(
         doneness: workingOrderLines.doneness,
       })
       .from(workingOrderLines)
-      .where(eq(workingOrderLines.workingOrderId, id))
+      .where(
+        and(eq(workingOrderLines.tenantId, cfg.tenantId), eq(workingOrderLines.workingOrderId, id)),
+      )
       .orderBy(workingOrderLines.lineNo);
     await fireLines(tx, cfg, id, firedLines);
 
@@ -3563,7 +3555,7 @@ export async function sendToPrep(
     const [order] = await tx
       .select({ status: workingOrders.status })
       .from(workingOrders)
-      .where(eq(workingOrders.id, id));
+      .where(and(eq(workingOrders.tenantId, cfg.tenantId), eq(workingOrders.id, id)));
     if (order === undefined || order.status !== "settled") {
       throw new AppError("working_order.not_settled", { workingOrderId: id });
     }
@@ -3581,7 +3573,9 @@ export async function sendToPrep(
         doneness: workingOrderLines.doneness,
       })
       .from(workingOrderLines)
-      .where(eq(workingOrderLines.workingOrderId, id))
+      .where(
+        and(eq(workingOrderLines.tenantId, cfg.tenantId), eq(workingOrderLines.workingOrderId, id)),
+      )
       .orderBy(workingOrderLines.lineNo);
     await fireLines(tx, cfg, id, firedLines);
   });

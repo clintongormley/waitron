@@ -21,11 +21,10 @@ export async function computeDailyClose(
   validateCutover(input.dayCutover);
   validateBusinessDay(input.businessDay);
 
-  const [vat, cash, counts] = await Promise.all([
-    computeVatSummary(tx, input),
-    computeCashUp(tx, input),
-    computeCloseCounts(tx, input),
-  ]);
+  // Awaited in turn on the one transaction, never `Promise.all` (docs/developers/conventions-data.md).
+  const vat = await computeVatSummary(tx, input);
+  const cash = await computeCashUp(tx, input);
+  const counts = await computeCloseCounts(tx, input);
 
   return {
     tenantId: input.tenantId,

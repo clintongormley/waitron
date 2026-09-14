@@ -1203,22 +1203,24 @@ turns out to need a design moves to its track.
 
 **Correctness:**
 
-1. **A concurrent-corrective race in `settleSale` is untranslated** — a raw `P0001` from the coverage
+1. **Two order verbs still read `working_orders` by id alone** (found 2026-09-14 while scoping
+   `placeOrder`/`sendToPrep`, which now check the tenant). `cancelPlacedOrder` locks and updates by id
+   (`apps/server/src/working-order.ts` `:3514`, `:3523`); `markCollected` reads and updates by id
+   (`:3600`, `:3624`) and reads `ticket_items` by order id (`:3614`). `readLockedLines` (`:682`) takes
+   no `cfg`; its one caller, `priceStoredOrder` (`:729`), is called from `till-sale.ts`, and those
+   calls were not checked. Same class as the by-id rule in `CLAUDE.md`
+   §3: write the two-tenant probe first, record what it does, then scope.
+2. **A concurrent-corrective race in `settleSale` is untranslated** — a raw `P0001` from the coverage
    trigger with no `sale.*` code. Give the trigger a SQLSTATE and translate it when reachable.
-2. **Location-scope the by-id verb family together** (`getHeldOrder`/`updateHeldOrder`/
+3. **Location-scope the by-id verb family together** (`getHeldOrder`/`updateHeldOrder`/
    `abandonHeldOrder`, `updateTable`/`deactivateTable`/`openTab`) when multi-location lands.
-3. **`resolvePreparationRoute` re-reads the zone context once per distinct product, not once per
-   order** (pre-existing; surfaced while fixing `fireLines`'s shared-transaction fan-out, 2026-09-14).
-   `resolvePreparationRoute` (`packages/venue-service/src/operations.ts`) calls
-   `resolveZoneContext(tx, cfg, zoneId)` on every invocation, but `zoneId` is invariant across an
-   order. `fireLines` now resolves routes once per distinct product (down from once per line), so the
-   zone-context query runs once per distinct product rather than once per order. Closing "resolve
-   once" fully means changing `resolvePreparationRoute`'s public contract
-   (`packages/module/src/module.ts`, called from other places too), a larger change than a bugfix
-   branch should carry — do it as its own change. Note: no automated guard was added for the
-   concurrent-queries-on-one-connection anti-pattern (deferred deliberately); it is pinned by the §3
-   convention prose in `conventions-data.md` and the per-site resolve-once tests (`fireLines`,
-   `report-api`), not by a general guard.
+4. **Nothing stops two queries being started at once on one transaction.** The rule and its receipt
+   are in `docs/developers/conventions-data.md` under "Multi-table writes share ONE transaction"; no
+   test or lint rule enforces it. A guard could fail a test whenever a query is issued on a
+   transaction while another is still running. A search of non-test `apps/server/src` and
+   `packages/*/src` on 2026-09-14, after `computeDailyClose` was made sequential, found no remaining
+   `Promise.all` over one transaction: the rest read or delete files, call HTTP or storage
+   services, close pools, or query through a pool.
 
 **The development stack:**
 

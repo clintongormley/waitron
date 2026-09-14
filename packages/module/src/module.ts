@@ -173,12 +173,16 @@ export interface VenueServiceContribution {
     cfg: { tenantId: TenantId; locationId: LocationId },
     zoneId: string,
   ): Promise<OrderServiceContext>;
-  resolvePreparationRoute(
+  /** Resolves every product in one batch. An unknown zone throws `service_zone.not_found` before any
+   *  product error; otherwise throws the first failing product's coded error in input order. Keys are
+   *  the caller's spelling of each id (the first, when two spellings name one product). An empty list
+   *  returns an empty map without querying. */
+  resolvePreparationRoutes(
     tx: Transaction,
     cfg: { tenantId: TenantId; locationId: LocationId },
     zoneId: string,
-    productId: string,
-  ): Promise<PreparationRoute>;
+    productIds: readonly string[],
+  ): Promise<ReadonlyMap<string, PreparationRoute>>;
   listZoneOffers(
     tx: Transaction,
     cfg: { tenantId: TenantId; locationId: LocationId },

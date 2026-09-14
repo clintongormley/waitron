@@ -1806,42 +1806,122 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
     });
   });
 
-  it("resolves the venue-service route ONCE for two lines of the same product", async () => {
-    // fireLines resolves each fired line's preparation route through the venue service. Two lines of
-    // the SAME product share one route, so the resolver must run once for that product, not once per
-    // line — the "resolve shared catalogue data once before a basket's line loop" rule (§3), and the
-    // reason the map body no longer awaits a query per line on the shared transaction.
-    const { cfg, zoneId, premiumCafeOfferId, cafeId } = await setupVenue();
+  it("never routes a line by another tenant's product, even when handed its id", async () => {
+    // Production callers read product ids from working_order_lines, whose foreign key keeps them in the
+    // tenant; this hands fireLines a foreign id directly to check its own products read.
+    const venue = await setupVenue();
+    const other = await setupVenue();
+    const foreignProductId = await withTenant(db, other.cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const foreignBar = await createStation(tx, other.cfg, { name: "Foreign bar" });
+      return makeProduct(tx, other.cfg, other.catalogueId, { stationId: foreignBar.id });
+    });
+    await withTenant(db, venue.cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const cocina = await createStation(tx, venue.cfg, { name: "Cocina", isDefault: true });
+      const orderId = randomUUID();
+      await createOpenOrder(tx, venue.cfg, orderId, [line(venue.cafeId)], null);
+      const [orderLine] = await tx
+        .select({
+          id: workingOrderLines.id,
+          courseId: workingOrderLines.courseId,
+          parentLineId: workingOrderLines.parentLineId,
+          note: workingOrderLines.note,
+          doneness: workingOrderLines.doneness,
+        })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, orderId));
+
+      await fireLines(tx, venue.cfg, orderId, [{ ...orderLine!, productId: foreignProductId }]);
+
+      const items = await ticketItemsFor(tx, orderId);
+      expect(items.map((item) => item.stationId)).toEqual([cocina.id]);
+    });
+  });
+
+  it("never falls back to another tenant's default station, even when cfg names its location", async () => {
+    // fireLines trusts cfg; the default-station read must still keep to cfg's tenant.
+    const venue = await setupVenue();
+    const other = await setupVenue();
+    await withTenant(db, other.cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await createStation(tx, other.cfg, { name: "Foreign default", isDefault: true });
+    });
+    await withTenant(db, venue.cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const orderId = randomUUID();
+      await createOpenOrder(tx, venue.cfg, orderId, [line(venue.cafeId)], null);
+      const lines = await tx
+        .select({
+          id: workingOrderLines.id,
+          productId: workingOrderLines.productId,
+          courseId: workingOrderLines.courseId,
+          parentLineId: workingOrderLines.parentLineId,
+          note: workingOrderLines.note,
+          doneness: workingOrderLines.doneness,
+        })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, orderId));
+      const mixed = { ...venue.cfg, locationId: other.cfg.locationId };
+
+      await expect(fireLines(tx, mixed, orderId, lines)).rejects.toMatchObject({
+        code: "station.no_default",
+        params: { locationId: other.cfg.locationId },
+      });
+    });
+  });
+
+  it("resolves every fired product's venue-service route in ONE batched call", async () => {
+    // Two lines of cafe and one of agua: one call carrying each distinct product once, never a call
+    // per line or per product on the shared transaction.
+    const { cfg, zoneId, catalogueId, premiumCafeOfferId, cafeId, aguaId } = await setupVenue();
     await withTenant(db, cfg.tenantId, async (tx) => {
       await asAppUser(tx);
       await tx.execute(sql`
         update departments set default_service_mode = 'table_tab'
         where tenant_id = ${cfg.tenantId} and location_id = ${cfg.locationId}`);
       const bar = await createStation(tx, cfg, { name: "Bar", isDefault: true });
+      const kitchen = await createStation(tx, cfg, { name: "Kitchen" });
       const product = await tx.execute<{ category_id: string }>(sql`
         select category_id from products where tenant_id = ${cfg.tenantId} and id = ${cafeId}`);
       await tx.execute(sql`
         insert into preparation_routes (tenant_id, location_id, zone_id, category_id, station_id)
         values (${cfg.tenantId}, ${cfg.locationId}, ${zoneId}, ${product.rows[0]!.category_id}, ${bar.id})`);
+      await tx.execute(sql`
+        insert into preparation_routes (tenant_id, location_id, zone_id, product_id, station_id)
+        values (${cfg.tenantId}, ${cfg.locationId}, ${zoneId}, ${aguaId}, ${kitchen.id})`);
+      const section = await createMenuSection(tx, cfg.tenantId, {
+        menuId: catalogueId,
+        name: { [LOCALE]: "Agua" },
+      });
+      const aguaOffer = await createMenuItem(tx, cfg.tenantId, {
+        menuId: catalogueId,
+        productId: aguaId,
+        sectionId: section.id,
+        grossPrice: "2.00",
+      });
       const table = await tx.execute<{ id: string }>(sql`
         insert into dining_tables (tenant_id, location_id, label, zone_id)
         values (${cfg.tenantId}, ${cfg.locationId}, 'Two of a kind', ${zoneId}) returning id`);
       const { tabId } = await openTab(tx, cfg, { tableId: table.rows[0]!.id });
 
-      const resolveRoute = vi.spyOn(VENUE_SERVICE, "resolvePreparationRoute");
+      const resolveRoutes = vi.spyOn(VENUE_SERVICE, "resolvePreparationRoutes");
       try {
         await addTabRound(tx, cfg, tabId, [
           { menuItemId: premiumCafeOfferId, quantity: "1" },
           { menuItemId: premiumCafeOfferId, quantity: "1" },
+          { menuItemId: aguaOffer.id, quantity: "1" },
         ]);
-        const productCalls = resolveRoute.mock.calls.filter((call) => call[3] === cafeId);
-        expect(productCalls).toHaveLength(1);
-        // Both fired lines still route to the resolved station.
+        expect(resolveRoutes).toHaveBeenCalledTimes(1);
+        expect(resolveRoutes.mock.calls[0]!.slice(2)).toEqual([zoneId, [cafeId, aguaId]]);
         const items = await ticketItemsFor(tx, tabId);
-        expect(items).toHaveLength(2);
-        expect(items.every((item) => item.stationId === bar.id)).toBe(true);
+        expect(items).toHaveLength(3);
+        const stationsOf = (productId: string) =>
+          items.filter((item) => item.productId === productId).map((item) => item.stationId);
+        expect(stationsOf(cafeId)).toEqual([bar.id, bar.id]);
+        expect(stationsOf(aguaId)).toEqual([kitchen.id]);
       } finally {
-        resolveRoute.mockRestore();
+        resolveRoutes.mockRestore();
       }
     });
   });
@@ -1868,6 +1948,67 @@ describe("placeOrder / sendToPrep fire ticket items", () => {
     expect(items).toHaveLength(1);
     expect(items[0]!.stationId).toBe(cocinaId);
     expect(items[0]!.state).toBe("queued");
+  });
+
+  it("placeOrder against a FOREIGN tenant's order id throws not_open and leaves that order alone", async () => {
+    const tenantA = await setupVenue("ticket_then_pay");
+    const tenantB = await setupVenue("ticket_then_pay");
+    expect(tenantB.cfg.tenantId).not.toBe(tenantA.cfg.tenantId);
+    await withTenant(db, tenantA.cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await createStation(tx, tenantA.cfg, { name: "Cocina", isDefault: true });
+    });
+    await withTenant(db, tenantB.cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await createStation(tx, tenantB.cfg, { name: "Tenant B kitchen", isDefault: true });
+    });
+    const id = randomUUID();
+    await parkOrder({ db }, tenantA.cfg, {
+      id,
+      lines: [{ productId: tenantA.cafeId, quantity: "1" }],
+    });
+
+    await expect(
+      placeOrder(
+        { db, backend: stubBackend, clock: stubClock },
+        tenantB.cfg,
+        id,
+        OPERATOR,
+        tenantB.cfg.tillId,
+      ),
+    ).rejects.toMatchObject({ code: "working_order.not_open", params: { workingOrderId: id } });
+
+    const order = await db.execute<{ status: string; items: number }>(sql`
+      select status, (select count(*)::int from ticket_items where working_order_id = ${id}) as items
+      from working_orders where id = ${id}`);
+    expect(order.rows).toEqual([{ status: "open", items: 0 }]);
+  });
+
+  it("sendToPrep against a FOREIGN tenant's order id throws not_settled and fires nothing", async () => {
+    const tenantA = await setupVenue();
+    const tenantB = await setupVenue();
+    expect(tenantB.cfg.tenantId).not.toBe(tenantA.cfg.tenantId);
+    await withTenant(db, tenantB.cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await createStation(tx, tenantB.cfg, { name: "Tenant B kitchen", isDefault: true });
+    });
+    const id = randomUUID();
+    await parkOrder({ db }, tenantA.cfg, {
+      id,
+      lines: [{ productId: tenantA.cafeId, quantity: "1" }],
+    });
+    await db.execute(
+      sql`update working_orders set status = 'settled', settled_at = now() where id = ${id}`,
+    );
+
+    await expect(sendToPrep({ db }, tenantB.cfg, id)).rejects.toMatchObject({
+      code: "working_order.not_settled",
+      params: { workingOrderId: id },
+    });
+
+    const items = await db.execute<{ items: number }>(sql`
+      select count(*)::int as items from ticket_items where working_order_id = ${id}`);
+    expect(items.rows).toEqual([{ items: 0 }]);
   });
 
   it("sendToPrep refuses an order that is not settled (working_order.not_settled)", async () => {

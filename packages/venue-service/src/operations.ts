@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, isNull, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, or } from "drizzle-orm";
 import {
   catalogues,
   categories,
@@ -405,25 +405,22 @@ export async function listVenueReadiness(
         resolveContentText(offer.descriptions, defaultLanguage, defaultLanguage) || offer.productId,
       ]),
     );
+    const outcomes = await resolvePreparationRouteOutcomes(tx, cfg, zone.id, [
+      ...productsById.keys(),
+    ]);
     for (const [productId, productName] of productsById) {
-      try {
-        await resolvePreparationRoute(tx, cfg, zone.id, productId);
-      } catch (error) {
-        if (
-          error instanceof AppError &&
-          (error.code === "route.missing" || error.code === "route.station_inactive")
-        ) {
-          issues.push({
-            code: "zone.route_missing",
-            zoneId: zone.id,
-            zoneName: zone.name,
-            productId,
-            productName,
-          });
-          continue;
-        }
-        throw error;
+      const outcome = outcomes.get(productId);
+      if (!(outcome instanceof AppError)) continue;
+      if (outcome.code !== "route.missing" && outcome.code !== "route.station_inactive") {
+        throw outcome;
       }
+      issues.push({
+        code: "zone.route_missing",
+        zoneId: zone.id,
+        zoneName: zone.name,
+        productId,
+        productName,
+      });
     }
   }
   return issues;
@@ -1080,62 +1077,144 @@ export async function deletePreparationRoute(
   if (row === undefined) throw new AppError("route.not_found", { routeId });
 }
 
-/** Resolve zone/product, zone/category, venue/product, then venue/category. */
-export async function resolvePreparationRoute(
+type PreparationRouteOutcome = PreparationRoute | AppError;
+
+/** PostgreSQL's uuid input accepts upper case, braces, and hyphens after any group of four digits or
+ *  none, so ids a caller passes are compared with the ids a query returns in this one spelling. */
+function canonicalUuid(id: string): string {
+  return id.toLowerCase().replace(/[{}-]/g, "");
+}
+
+/** Most specific first: zone+product, zone+category, venue+product, venue+category. Within one
+ *  location and zone, the partial unique indexes on `preparation_routes` allow at most one row per
+ *  rank for a product, so ranks never tie. */
+function routeRank(route: { zoneId: string | null; productId: string | null }): number {
+  if (route.zoneId !== null) return route.productId !== null ? 4 : 3;
+  return route.productId !== null ? 2 : 1;
+}
+
+/** Resolve each distinct product in `productIds` to its route or its coded error, in input order,
+ *  in at most three reads whatever the number of products. A missing zone still throws. */
+async function resolvePreparationRouteOutcomes(
   tx: Transaction,
   cfg: VenueScope,
   zoneId: string,
-  productId: string,
-): Promise<PreparationRoute> {
-  await resolveZoneContext(tx, cfg, zoneId);
-  const [product] = await tx
-    .select({ categoryId: products.categoryId })
-    .from(products)
-    .where(and(eq(products.id, productId), eq(products.tenantId, cfg.tenantId)));
-  if (product === undefined) {
-    throw new AppError("route.subject_not_found", { subject: "product", id: productId });
+  productIds: readonly string[],
+): Promise<Map<string, PreparationRouteOutcome>> {
+  const spellingByUuid = new Map<string, string>();
+  for (const id of productIds) {
+    const uuid = canonicalUuid(id);
+    if (!spellingByUuid.has(uuid)) spellingByUuid.set(uuid, id);
   }
-  const [route] = await tx
+  const ids = [...spellingByUuid.values()];
+  const outcomes = new Map<string, PreparationRouteOutcome>();
+  if (ids.length === 0) return outcomes;
+  await resolveZoneContext(tx, cfg, zoneId);
+  const productRows = await tx
+    .select({ id: products.id, categoryId: products.categoryId })
+    .from(products)
+    .where(and(inArray(products.id, ids), eq(products.tenantId, cfg.tenantId)));
+  const categoryById = new Map(productRows.map((row) => [canonicalUuid(row.id), row.categoryId]));
+  const categoryIds = [
+    ...new Set(productRows.flatMap((row) => (row.categoryId === null ? [] : [row.categoryId]))),
+  ];
+  const routes = await tx
     .select({
+      zoneId: preparationRoutes.zoneId,
+      productId: preparationRoutes.productId,
+      categoryId: preparationRoutes.categoryId,
       stationId: preparationRoutes.stationId,
       noPreparation: preparationRoutes.noPreparation,
+      stationActive: kitchenStations.active,
     })
     .from(preparationRoutes)
+    .leftJoin(
+      kitchenStations,
+      and(
+        eq(kitchenStations.tenantId, cfg.tenantId),
+        eq(kitchenStations.id, preparationRoutes.stationId),
+        eq(kitchenStations.locationId, cfg.locationId),
+      ),
+    )
     .where(
       and(
         eq(preparationRoutes.tenantId, cfg.tenantId),
         eq(preparationRoutes.locationId, cfg.locationId),
         or(eq(preparationRoutes.zoneId, zoneId), isNull(preparationRoutes.zoneId)),
-        or(
-          eq(preparationRoutes.productId, productId),
-          product.categoryId === null
-            ? sql`false`
-            : eq(preparationRoutes.categoryId, product.categoryId),
-        ),
-      ),
-    )
-    .orderBy(
-      desc(sql<number>`case
-        when ${preparationRoutes.zoneId} is not null and ${preparationRoutes.productId} is not null then 4
-        when ${preparationRoutes.zoneId} is not null and ${preparationRoutes.categoryId} is not null then 3
-        when ${preparationRoutes.productId} is not null then 2
-        else 1 end`),
-    )
-    .limit(1);
-  if (route === undefined) throw new AppError("route.missing", { zoneId, productId });
-  if (route.noPreparation) return { kind: "no_preparation" };
-  const stationId = route.stationId!;
-  const [station] = await tx
-    .select({ id: kitchenStations.id })
-    .from(kitchenStations)
-    .where(
-      and(
-        eq(kitchenStations.id, stationId),
-        eq(kitchenStations.tenantId, cfg.tenantId),
-        eq(kitchenStations.locationId, cfg.locationId),
-        eq(kitchenStations.active, true),
+        categoryIds.length === 0
+          ? inArray(preparationRoutes.productId, ids)
+          : or(
+              inArray(preparationRoutes.productId, ids),
+              inArray(preparationRoutes.categoryId, categoryIds),
+            ),
       ),
     );
-  if (station === undefined) throw new AppError("route.station_inactive", { stationId });
-  return { kind: "station", stationId };
+
+  type RouteRow = (typeof routes)[number];
+  const routesByProduct = new Map<string, RouteRow[]>();
+  const routesByCategory = new Map<string, RouteRow[]>();
+  for (const route of routes) {
+    // Exactly one of productId and categoryId is set on every route row.
+    const [index, key] =
+      route.productId !== null
+        ? [routesByProduct, canonicalUuid(route.productId)]
+        : [routesByCategory, route.categoryId!];
+    const listed = index.get(key);
+    if (listed === undefined) index.set(key, [route]);
+    else listed.push(route);
+  }
+  const winners = new Map<string, RouteRow>();
+  for (const id of ids) {
+    const uuid = canonicalUuid(id);
+    if (!categoryById.has(uuid)) continue;
+    const categoryId = categoryById.get(uuid) ?? null;
+    const candidates = [
+      ...(routesByProduct.get(uuid) ?? []),
+      ...(categoryId === null ? [] : (routesByCategory.get(categoryId) ?? [])),
+    ];
+    const winner = candidates.reduce<RouteRow | undefined>(
+      (best, route) => (best === undefined || routeRank(route) > routeRank(best) ? route : best),
+      undefined,
+    );
+    if (winner !== undefined) winners.set(id, winner);
+  }
+
+  for (const id of ids) {
+    const winner = winners.get(id);
+    if (!categoryById.has(canonicalUuid(id))) {
+      outcomes.set(id, new AppError("route.subject_not_found", { subject: "product", id }));
+    } else if (winner === undefined) {
+      outcomes.set(id, new AppError("route.missing", { zoneId, productId: id }));
+    } else if (winner.noPreparation) {
+      outcomes.set(id, { kind: "no_preparation" });
+    } else {
+      // A station in another location joins as null, and reads as inactive here.
+      const stationId = winner.stationId!;
+      outcomes.set(
+        id,
+        winner.stationActive === true
+          ? { kind: "station", stationId }
+          : new AppError("route.station_inactive", { stationId }),
+      );
+    }
+  }
+  return outcomes;
+}
+
+/** Resolve every product's preparation route in one batch; throws the first failing product's
+ *  coded error in input order. The map is keyed by the caller's spelling of each id, the first one
+ *  when two spellings name one product. An empty list returns an empty map without querying. */
+export async function resolvePreparationRoutes(
+  tx: Transaction,
+  cfg: VenueScope,
+  zoneId: string,
+  productIds: readonly string[],
+): Promise<ReadonlyMap<string, PreparationRoute>> {
+  const outcomes = await resolvePreparationRouteOutcomes(tx, cfg, zoneId, productIds);
+  const routes = new Map<string, PreparationRoute>();
+  for (const [productId, outcome] of outcomes) {
+    if (outcome instanceof AppError) throw outcome;
+    routes.set(productId, outcome);
+  }
+  return routes;
 }

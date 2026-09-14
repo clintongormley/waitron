@@ -272,7 +272,9 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   functions take a `tx: Transaction` and never open their own; a route handler opens exactly one
   `withTenant` per request. This is a convention, not a compiler guarantee — `Database` is assignable
   to `Transaction`. **Splitting one logical change across transactions is a commented decision, never
-  a default.**
+  a default.** **Queries on one transaction are awaited in turn, never `Promise.all`** — pg 9 removes
+  the queueing that makes it work; no guard enforces it (receipt in
+  [conventions-data.md](docs/developers/conventions-data.md)).
 - **A by-id read still needs its own `eq(table.tenantId, cfg.tenantId)` — one-tenant-per-database is
   NOT the query's isolation boundary.** Since RLS was dropped, `withTenant` no longer isolates
   SELECTs, so every read scopes to the tenant itself, a by-id read as much as a list read, never

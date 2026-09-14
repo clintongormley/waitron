@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   CATALOGUE_MIGRATIONS,
   createCatalogue,
@@ -14,6 +14,7 @@ import type { Database, Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import {
+  AppError,
   locationId as brandLocationId,
   tenantId as brandTenantId,
   tillId as brandTillId,
@@ -35,7 +36,7 @@ import {
   listZoneOffers,
   recordOrderServiceContext,
   recordWorkingLineContexts,
-  resolvePreparationRoute,
+  resolvePreparationRoutes,
   resolveNewOrderZone,
   resolveZoneOffer,
   resolveZoneContext,
@@ -284,16 +285,19 @@ describe("venue service routing", () => {
       );
 
       await expect(
-        resolvePreparationRoute(tx, { tenantId, locationId }, upstairsZone.rows[0]!.id, negroni.id),
-      ).resolves.toEqual({ kind: "station", stationId: upstairsBar.rows[0]!.id });
-      await expect(
-        resolvePreparationRoute(
-          tx,
-          { tenantId, locationId },
-          downstairsZone.rows[0]!.id,
+        resolvePreparationRoutes(tx, { tenantId, locationId }, upstairsZone.rows[0]!.id, [
           negroni.id,
-        ),
-      ).resolves.toEqual({ kind: "station", stationId: downstairsBar.rows[0]!.id });
+        ]),
+      ).resolves.toEqual(
+        new Map([[negroni.id, { kind: "station", stationId: upstairsBar.rows[0]!.id }]]),
+      );
+      await expect(
+        resolvePreparationRoutes(tx, { tenantId, locationId }, downstairsZone.rows[0]!.id, [
+          negroni.id,
+        ]),
+      ).resolves.toEqual(
+        new Map([[negroni.id, { kind: "station", stationId: downstairsBar.rows[0]!.id }]]),
+      );
     });
   });
 
@@ -624,22 +628,22 @@ describe("venue service routing", () => {
         },
       );
       await expect(
-        resolvePreparationRoute(tx, { tenantId, locationId }, zone.rows[0]!.id, product.id),
-      ).resolves.toEqual({ kind: "no_preparation" });
+        resolvePreparationRoutes(tx, { tenantId, locationId }, zone.rows[0]!.id, [product.id]),
+      ).resolves.toEqual(new Map([[product.id, { kind: "no_preparation" }]]));
       await deletePreparationRoute(tx, { tenantId, locationId }, routeId);
       await expect(
-        resolvePreparationRoute(tx, { tenantId, locationId }, zone.rows[0]!.id, product.id),
-      ).rejects.toMatchObject({ code: "route.missing" });
+        resolvePreparationRoutes(tx, { tenantId, locationId }, zone.rows[0]!.id, [product.id]),
+      ).rejects.toMatchObject({
+        code: "route.missing",
+        params: { zoneId: zone.rows[0]!.id, productId: product.id },
+      });
       await expect(
-        resolvePreparationRoute(
-          tx,
-          { tenantId, locationId },
-          zone.rows[0]!.id,
+        resolvePreparationRoutes(tx, { tenantId, locationId }, zone.rows[0]!.id, [
           "00000000-0000-4000-8000-000000000099",
-        ),
+        ]),
       ).rejects.toMatchObject({
         code: "route.subject_not_found",
-        params: { subject: "product" },
+        params: { subject: "product", id: "00000000-0000-4000-8000-000000000099" },
       });
     });
   });
@@ -685,8 +689,11 @@ describe("venue service routing", () => {
         vatClass: "general",
       });
       await expect(
-        resolvePreparationRoute(tx, { tenantId, locationId }, zone.rows[0]!.id, product.id),
-      ).rejects.toMatchObject({ code: "route.missing" });
+        resolvePreparationRoutes(tx, { tenantId, locationId }, zone.rows[0]!.id, [product.id]),
+      ).rejects.toMatchObject({
+        code: "route.missing",
+        params: { zoneId: zone.rows[0]!.id, productId: product.id },
+      });
       await expect(
         createPreparationRoute(
           tx,
@@ -697,6 +704,360 @@ describe("venue service routing", () => {
           },
         ),
       ).rejects.toMatchObject({ code: "route.station_inactive" });
+    });
+  });
+});
+
+async function seedRoutingVenue() {
+  const { tenantId } = await seedUnitTenant();
+  const location = await db.execute<{ id: string }>(sql`
+    insert into locations (tenant_id, name, invoice_locales, operation_description)
+    values (${tenantId}, 'Venue', array['en-GB'], 'Hospitality') returning id`);
+  const otherLocation = await db.execute<{ id: string }>(sql`
+    insert into locations (tenant_id, name, invoice_locales, operation_description)
+    values (${tenantId}, 'Second venue', array['en-GB'], 'Hospitality') returning id`);
+  const locationId = brandLocationId(location.rows[0]!.id);
+  const zone = await db.execute<{ id: string }>(sql`
+    insert into floor_zones (tenant_id, location_id, name)
+    values (${tenantId}, ${locationId}, 'Dining room') returning id`);
+  const otherZone = await db.execute<{ id: string }>(sql`
+    insert into floor_zones (tenant_id, location_id, name)
+    values (${tenantId}, ${locationId}, 'Terrace') returning id`);
+  const cfg = { tenantId, locationId };
+  await scoped(tenantId, async (tx) => {
+    const department = await createDepartment(tx, cfg, {
+      name: "Restaurant",
+      defaultServiceMode: "table_tab",
+    });
+    await configureZone(tx, cfg, { zoneId: zone.rows[0]!.id, departmentId: department.id });
+    await configureZone(tx, cfg, { zoneId: otherZone.rows[0]!.id, departmentId: department.id });
+  });
+  return {
+    tenantId,
+    cfg,
+    otherLocationId: otherLocation.rows[0]!.id,
+    zoneId: zone.rows[0]!.id,
+    otherZoneId: otherZone.rows[0]!.id,
+  };
+}
+
+async function insertStation(
+  tx: Transaction,
+  tenantId: string,
+  locationId: string,
+  name: string,
+): Promise<string> {
+  const row = await tx.execute<{ id: string }>(sql`
+    insert into kitchen_stations (tenant_id, location_id, name)
+    values (${tenantId}, ${locationId}, ${name}) returning id`);
+  return row.rows[0]!.id;
+}
+
+async function productWithCategory(
+  tx: Transaction,
+  tenantId: ReturnType<typeof brandTenantId>,
+  menuId: string,
+  name: string,
+  withCategory = true,
+): Promise<{ id: string; categoryId: string }> {
+  const category = withCategory
+    ? await createCategory(tx, tenantId, { name: { en: `${name} category` } })
+    : null;
+  const product = await createProduct(tx, tenantId, {
+    catalogueId: menuId,
+    categoryId: category?.id ?? null,
+    descriptions: { en: name },
+    pricingUnit: "each",
+    unitPrice: "0.00",
+    vatClass: "general",
+  });
+  return { id: product.id, categoryId: category?.id ?? "" };
+}
+
+async function rejection(promise: Promise<unknown>): Promise<{ code: string; params: unknown }> {
+  const error = await promise.then(
+    () => undefined,
+    (caught: unknown) => caught,
+  );
+  if (!(error instanceof AppError)) throw new Error(`expected an AppError, got ${String(error)}`);
+  return { code: error.code, params: error.params };
+}
+
+const station = (stationId: string) => ({ kind: "station" as const, stationId });
+const UNKNOWN_ID = "00000000-0000-4000-8000-000000000099";
+
+describe("resolvePreparationRoutes", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("picks the most specific route for every product in one batch", async () => {
+    const { tenantId, cfg, zoneId, otherZoneId } = await seedRoutingVenue();
+    await scoped(tenantId, async (tx) => {
+      const at = (name: string) => insertStation(tx, tenantId, cfg.locationId, name);
+      const zoneProduct = await at("Zone product winner");
+      const zoneCategory = await at("Zone category winner");
+      const venueProduct = await at("Venue product winner");
+      const venueCategory = await at("Venue category winner");
+      const uncategorised = await at("Uncategorised winner");
+      const losingZoneCategory = await at("Losing zone category");
+      const losingVenueProduct = await at("Losing venue product");
+      const losingVenueCategory = await at("Losing venue category");
+      const otherZone = await at("Other zone");
+      const menu = await createCatalogue(tx, tenantId, { name: "Precedence" });
+      const p4 = await productWithCategory(tx, tenantId, menu.id, "Rank four");
+      const p3 = await productWithCategory(tx, tenantId, menu.id, "Rank three");
+      const p2 = await productWithCategory(tx, tenantId, menu.id, "Rank two");
+      const p1 = await productWithCategory(tx, tenantId, menu.id, "Rank one");
+      const bare = await productWithCategory(tx, tenantId, menu.id, "No category", false);
+      const skipped = await productWithCategory(tx, tenantId, menu.id, "No preparation");
+      const route = (input: Parameters<typeof createPreparationRoute>[2]) =>
+        createPreparationRoute(tx, cfg, input);
+
+      await route({ zoneId, productId: p4.id, target: station(zoneProduct) });
+      await route({ zoneId, categoryId: p4.categoryId, target: station(losingZoneCategory) });
+      await route({ productId: p4.id, target: station(losingVenueProduct) });
+      await route({ categoryId: p4.categoryId, target: station(losingVenueCategory) });
+
+      await route({ zoneId, categoryId: p3.categoryId, target: station(zoneCategory) });
+      await route({ productId: p3.id, target: station(losingVenueProduct) });
+      await route({ categoryId: p3.categoryId, target: station(losingVenueCategory) });
+      await route({ zoneId: otherZoneId, productId: p3.id, target: station(otherZone) });
+
+      await route({ productId: p2.id, target: station(venueProduct) });
+      await route({ categoryId: p2.categoryId, target: station(losingVenueCategory) });
+      await route({ zoneId: otherZoneId, productId: p2.id, target: station(otherZone) });
+
+      await route({ categoryId: p1.categoryId, target: station(venueCategory) });
+      await route({ zoneId: otherZoneId, categoryId: p1.categoryId, target: station(otherZone) });
+
+      await route({ productId: bare.id, target: station(uncategorised) });
+
+      await route({ productId: skipped.id, target: { kind: "no_preparation" } });
+      await route({ categoryId: skipped.categoryId, target: station(losingVenueCategory) });
+
+      await expect(
+        resolvePreparationRoutes(tx, cfg, zoneId, [
+          p4.id,
+          p3.id,
+          p2.id,
+          p1.id,
+          bare.id,
+          skipped.id,
+        ]),
+      ).resolves.toEqual(
+        new Map<string, unknown>([
+          [p4.id, station(zoneProduct)],
+          [p3.id, station(zoneCategory)],
+          [p2.id, station(venueProduct)],
+          [p1.id, station(venueCategory)],
+          [bare.id, station(uncategorised)],
+          [skipped.id, { kind: "no_preparation" }],
+        ]),
+      );
+    });
+  });
+
+  it("matches a product id however the caller spells it, keyed by the caller's spelling", async () => {
+    const { tenantId, cfg, zoneId } = await seedRoutingVenue();
+    await scoped(tenantId, async (tx) => {
+      const grill = await insertStation(tx, tenantId, cfg.locationId, "Grill");
+      const menu = await createCatalogue(tx, tenantId, { name: "Spelling" });
+      const routed = await productWithCategory(tx, tenantId, menu.id, "Routed");
+      const unrouted = await productWithCategory(tx, tenantId, menu.id, "Unrouted");
+      await createPreparationRoute(tx, cfg, { productId: routed.id, target: station(grill) });
+      const upper = routed.id.toUpperCase();
+      const braced = `{${routed.id.replaceAll("-", "")}}`;
+
+      await expect(resolvePreparationRoutes(tx, cfg, zoneId, [upper])).resolves.toEqual(
+        new Map([[upper, station(grill)]]),
+      );
+      await expect(resolvePreparationRoutes(tx, cfg, zoneId, [upper, braced])).resolves.toEqual(
+        new Map([[upper, station(grill)]]),
+      );
+      await expect(
+        rejection(resolvePreparationRoutes(tx, cfg, zoneId, [unrouted.id.toUpperCase()])),
+      ).resolves.toEqual({
+        code: "route.missing",
+        params: { zoneId, productId: unrouted.id.toUpperCase() },
+      });
+    });
+  });
+
+  it("throws the first failing product's coded error in input order", async () => {
+    const { tenantId, cfg, zoneId } = await seedRoutingVenue();
+    await scoped(tenantId, async (tx) => {
+      const grill = await insertStation(tx, tenantId, cfg.locationId, "Grill");
+      const closedBar = await insertStation(tx, tenantId, cfg.locationId, "Closed bar");
+      const menu = await createCatalogue(tx, tenantId, { name: "Errors" });
+      const ok = await productWithCategory(tx, tenantId, menu.id, "Routed");
+      const missing = await productWithCategory(tx, tenantId, menu.id, "Unrouted");
+      const inactive = await productWithCategory(tx, tenantId, menu.id, "Closed");
+      await createPreparationRoute(tx, cfg, { productId: ok.id, target: station(grill) });
+      await createPreparationRoute(tx, cfg, { productId: inactive.id, target: station(closedBar) });
+      await tx.execute(sql`update kitchen_stations set active = false where id = ${closedBar}`);
+
+      const missingRoute = { code: "route.missing", params: { zoneId, productId: missing.id } };
+      const inactiveStation = {
+        code: "route.station_inactive",
+        params: { stationId: closedBar },
+      };
+      await expect(
+        rejection(resolvePreparationRoutes(tx, cfg, zoneId, [ok.id, missing.id, inactive.id])),
+      ).resolves.toEqual(missingRoute);
+      await expect(
+        rejection(resolvePreparationRoutes(tx, cfg, zoneId, [ok.id, inactive.id, missing.id])),
+      ).resolves.toEqual(inactiveStation);
+      await expect(
+        rejection(resolvePreparationRoutes(tx, cfg, zoneId, [missing.id, UNKNOWN_ID])),
+      ).resolves.toEqual(missingRoute);
+      await expect(
+        rejection(resolvePreparationRoutes(tx, cfg, zoneId, [UNKNOWN_ID, missing.id])),
+      ).resolves.toEqual({
+        code: "route.subject_not_found",
+        params: { subject: "product", id: UNKNOWN_ID },
+      });
+      await expect(
+        rejection(resolvePreparationRoutes(tx, cfg, UNKNOWN_ID, [ok.id])),
+      ).resolves.toEqual({ code: "service_zone.not_found", params: { zoneId: UNKNOWN_ID } });
+    });
+  });
+
+  it("ignores another tenant's product and another location's routes and stations", async () => {
+    const { tenantId, cfg, zoneId, otherLocationId } = await seedRoutingVenue();
+    const other = await seedUnitTenant();
+    const foreignProductId = await scoped(other.tenantId, async (tx) => {
+      const menu = await createCatalogue(tx, other.tenantId, { name: "Foreign" });
+      return (await productWithCategory(tx, other.tenantId, menu.id, "Foreign")).id;
+    });
+    await scoped(tenantId, async (tx) => {
+      const elsewhere = await insertStation(tx, tenantId, otherLocationId, "Elsewhere");
+      const menu = await createCatalogue(tx, tenantId, { name: "Scoping" });
+      const routedElsewhere = await productWithCategory(tx, tenantId, menu.id, "Routed elsewhere");
+      const stationElsewhere = await productWithCategory(
+        tx,
+        tenantId,
+        menu.id,
+        "Station elsewhere",
+      );
+      await createPreparationRoute(
+        tx,
+        { tenantId, locationId: brandLocationId(otherLocationId) },
+        { categoryId: routedElsewhere.categoryId, target: station(elsewhere) },
+      );
+      // createPreparationRoute refuses a route to another location's station, so it is written directly.
+      await tx.execute(sql`
+        insert into preparation_routes (tenant_id, location_id, product_id, station_id)
+        values (${tenantId}, ${cfg.locationId}, ${stationElsewhere.id}, ${elsewhere})`);
+
+      await expect(
+        rejection(resolvePreparationRoutes(tx, cfg, zoneId, [foreignProductId])),
+      ).resolves.toEqual({
+        code: "route.subject_not_found",
+        params: { subject: "product", id: foreignProductId },
+      });
+      await expect(
+        rejection(resolvePreparationRoutes(tx, cfg, zoneId, [routedElsewhere.id])),
+      ).resolves.toEqual({
+        code: "route.missing",
+        params: { zoneId, productId: routedElsewhere.id },
+      });
+      await expect(
+        rejection(resolvePreparationRoutes(tx, cfg, zoneId, [stationElsewhere.id])),
+      ).resolves.toEqual({ code: "route.station_inactive", params: { stationId: elsewhere } });
+    });
+  });
+
+  it("issues the same three queries for one product as for five", async () => {
+    const { tenantId, cfg, zoneId } = await seedRoutingVenue();
+    await scoped(tenantId, async (tx) => {
+      const menu = await createCatalogue(tx, tenantId, { name: "Counting" });
+      const expected = new Map<string, unknown>();
+      for (const name of ["One", "Two", "Three", "Four", "Five"]) {
+        const stationId = await insertStation(tx, tenantId, cfg.locationId, name);
+        const product = await productWithCategory(tx, tenantId, menu.id, name);
+        await createPreparationRoute(tx, cfg, {
+          productId: product.id,
+          target: station(stationId),
+        });
+        expected.set(product.id, station(stationId));
+      }
+      const productIds = [...expected.keys()];
+      const prepared = vi.spyOn(tx._.session, "prepareQuery");
+
+      await expect(resolvePreparationRoutes(tx, cfg, zoneId, [productIds[0]!])).resolves.toEqual(
+        new Map([[productIds[0]!, expected.get(productIds[0]!)]]),
+      );
+      expect(prepared).toHaveBeenCalledTimes(3);
+
+      prepared.mockClear();
+      await expect(resolvePreparationRoutes(tx, cfg, zoneId, productIds)).resolves.toEqual(
+        expected,
+      );
+      expect(prepared).toHaveBeenCalledTimes(3);
+    });
+  });
+
+  it("returns an empty map without querying when there are no products", async () => {
+    const { tenantId, cfg } = await seedRoutingVenue();
+    await scoped(tenantId, async (tx) => {
+      const prepared = vi.spyOn(tx._.session, "prepareQuery");
+      await expect(resolvePreparationRoutes(tx, cfg, UNKNOWN_ID, [])).resolves.toEqual(new Map());
+      expect(prepared).not.toHaveBeenCalled();
+
+      // Control: the spy does see this function's queries, so the zero above is not a blind seam.
+      await expect(
+        rejection(resolvePreparationRoutes(tx, cfg, UNKNOWN_ID, [UNKNOWN_ID])),
+      ).resolves.toEqual({ code: "service_zone.not_found", params: { zoneId: UNKNOWN_ID } });
+      expect(prepared).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("reports every unroutable product in a zone, in menu order", async () => {
+    const { tenantId, cfg, zoneId, otherZoneId } = await seedRoutingVenue();
+    await scoped(tenantId, async (tx) => {
+      const grill = await insertStation(tx, tenantId, cfg.locationId, "Grill");
+      const closedBar = await insertStation(tx, tenantId, cfg.locationId, "Closed bar");
+      const menu = await createCatalogue(tx, tenantId, { name: "Dining" });
+      const section = await createMenuSection(tx, tenantId, {
+        menuId: menu.id,
+        name: { en: "Everything" },
+      });
+      const inactive = await productWithCategory(tx, tenantId, menu.id, "Closed cocktail");
+      const ok = await productWithCategory(tx, tenantId, menu.id, "Steak");
+      const missing = await productWithCategory(tx, tenantId, menu.id, "Mystery dish");
+      for (const [displayOrder, product] of [inactive, ok, missing].entries()) {
+        await createMenuItem(tx, tenantId, {
+          menuId: menu.id,
+          productId: product.id,
+          sectionId: section.id,
+          grossPrice: "5.00",
+          displayOrder,
+        });
+      }
+      await allowMenuInZone(tx, cfg, zoneId, menu.id, { makeDefault: true });
+      // The second zone is left without a menu so only the first zone's routes are reported.
+      await createPreparationRoute(tx, cfg, { productId: ok.id, target: station(grill) });
+      await createPreparationRoute(tx, cfg, { productId: inactive.id, target: station(closedBar) });
+      await tx.execute(sql`update kitchen_stations set active = false where id = ${closedBar}`);
+
+      await expect(listVenueReadiness(tx, cfg)).resolves.toEqual([
+        { code: "zone.menu_missing", zoneId: otherZoneId, zoneName: "Terrace" },
+        {
+          code: "zone.route_missing",
+          zoneId,
+          zoneName: "Dining room",
+          productId: inactive.id,
+          productName: "Closed cocktail",
+        },
+        {
+          code: "zone.route_missing",
+          zoneId,
+          zoneName: "Dining room",
+          productId: missing.id,
+          productName: "Mystery dish",
+        },
+      ]);
     });
   });
 });
