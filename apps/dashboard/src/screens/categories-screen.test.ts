@@ -315,6 +315,81 @@ it("shows the delete preview with product, child and route links, disabling Dele
   expect(links.some((link) => link.textContent?.includes("Grill"))).toBe(true);
 });
 
+// Since the delete cascades rather than being refused, this preview is the ONLY warning a manager
+// gets about what an irreversible delete will do. A failed fetch must therefore never look like
+// "nothing depends on this": it says so, and Delete stays unavailable.
+it("says the delete preview failed and keeps Delete disabled", async () => {
+  const fx = apiFixture();
+  fx.api.getCategoryDependants.mockRejectedValue(new Error("offline"));
+  const { el } = await mountWidget<CategoriesScreen>("dashboard-categories-screen", {
+    api: fx.client,
+  });
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("wt-data-table")!.rows.length).toBe(2),
+  );
+  const table = el.shadowRoot!.querySelector("wt-data-table")!;
+  await table.updateComplete;
+  const actions = table.shadowRoot!.querySelector("wt-row-actions")!;
+  actions.querySelectorAll("wt-button")[1]!.click();
+  await el.updateComplete;
+  const modal = [...el.shadowRoot!.querySelectorAll("wt-modal")].find((modal) => modal.open)!;
+  await vi.waitFor(() =>
+    expect(modal.querySelector('[data-test="dependants-error"]')).not.toBeNull(),
+  );
+  const warning = modal.querySelector('[data-test="dependants-error"]')!;
+  expect(warning.textContent).toContain(t("categories.delete_preview_error"));
+  expect(warning.getAttribute("role")).toBe("alert");
+  // It has to LOOK like a warning, not just be one. This node is a child of wt-modal in the
+  // screen's own shadow root, so the screen's .error rule does reach it — unlike the cell markup
+  // this branch had to move onto ::part(). Read the colour rather than assume either way.
+  const dangerToken = getComputedStyle(el).getPropertyValue("--wt-color-danger").trim();
+  expect(getComputedStyle(warning).color).toBe(hexToRgb(dangerToken));
+  // Not still pretending to load, and not offering the delete either.
+  expect(modal.querySelector("wt-spinner")).toBeNull();
+  const deleteButton = modal.querySelector<HTMLElementTagNameMap["wt-button"]>(
+    'wt-button[variant="danger"]',
+  )!;
+  expect(deleteButton.disabled).toBe(true);
+});
+
+// A failure on one category must not poison the next one the manager opens.
+it("clears a failed delete preview when the dialog is reopened", async () => {
+  const fx = apiFixture();
+  fx.api.getCategoryDependants.mockRejectedValueOnce(new Error("offline"));
+  const { el } = await mountWidget<CategoriesScreen>("dashboard-categories-screen", {
+    api: fx.client,
+  });
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("wt-data-table")!.rows.length).toBe(2),
+  );
+  const table = el.shadowRoot!.querySelector("wt-data-table")!;
+  await table.updateComplete;
+  const openDelete = (index: number) => {
+    const actions = [...table.shadowRoot!.querySelectorAll("wt-row-actions")][index]!;
+    actions.querySelectorAll("wt-button")[1]!.click();
+  };
+  openDelete(0);
+  await el.updateComplete;
+  const modal = [...el.shadowRoot!.querySelectorAll("wt-modal")].find((modal) => modal.open)!;
+  await vi.waitFor(() =>
+    expect(modal.querySelector('[data-test="dependants-error"]')).not.toBeNull(),
+  );
+  modal.querySelector<HTMLElementTagNameMap["wt-button"]>('wt-button[slot="cancel"]')!.click();
+  await el.updateComplete;
+  openDelete(1);
+  await el.updateComplete;
+  const deleteButton = modal.querySelector<HTMLElementTagNameMap["wt-button"]>(
+    'wt-button[variant="danger"]',
+  )!;
+  // `updateComplete` inside the retry: the second fetch resolves on its own microtask, so the
+  // assertion has to wait for the state change AND for lit to paint it.
+  await vi.waitFor(async () => {
+    await el.updateComplete;
+    expect(deleteButton.disabled).toBe(false);
+  });
+  expect(modal.querySelector('[data-test="dependants-error"]')).toBeNull();
+});
+
 it("a delete-modal product link points at the product editor", async () => {
   const fx = apiFixture();
   fx.api.getCategoryDependants.mockResolvedValue({

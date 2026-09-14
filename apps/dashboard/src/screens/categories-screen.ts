@@ -1,5 +1,5 @@
 import { LocaleChangeController } from "../state/locale-controller.js";
-import { LitElement, css, html, nothing, type PropertyValues } from "lit";
+import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, selectStyles, setContentLanguages, type DataTableColumn } from "@waitron/ui";
 import { resolveEnabledContentText, type ContentLanguages } from "@waitron/shared";
@@ -137,6 +137,9 @@ export class CategoriesScreen extends LitElement {
   @state() private edited: CategorySummary | null = null;
   @state() private deleting: CategorySummary | null = null;
   @state() private dependants: CategoryDependants | null = null;
+  /** The preview fetch failed. Distinct from `dependants === null` (still loading) and from a
+   * loaded object whose lists are all empty (genuinely nothing depends on this category). */
+  @state() private dependantsError = false;
   @state() private membershipOpen = false;
   @state() private memberProduct: Product | null = null;
   @state() private membership: ProductCategories = { categoryIds: [], primaryCategoryId: null };
@@ -249,24 +252,26 @@ export class CategoriesScreen extends LitElement {
   #openDelete(category: CategorySummary): void {
     this.saveError = "";
     this.dependants = null;
+    this.dependantsError = false;
     this.deleting = category;
     void this.#loadDependants(category.id);
   }
   #closeDelete(): void {
     this.deleting = null;
     this.dependants = null;
+    this.dependantsError = false;
   }
-  /** Feeds the delete confirmation's preview. A failure here must not block the confirmation
-   * itself — the actual `deleteCategory` call below still enforces the real dependants server-side
-   * (`category.in_use`) — so a failed preview just falls back to showing no known dependants rather
-   * than trapping the dialog with a permanently-disabled Delete button. */
+  /** Feeds the delete confirmation's preview, which is the only warning there is: the delete
+   * cascades and cannot be undone, and nothing refuses it server-side. So a failed fetch gets its
+   * own state rather than an empty stand-in — an empty preview is indistinguishable from "nothing
+   * depends on this", which would have a manager confirm the cascade blind. `dependants` stays
+   * null, which keeps Delete disabled; `dependantsError` is what tells the dialog to say why. */
   async #loadDependants(id: string): Promise<void> {
     try {
       const dependants = await this.api.getCategoryDependants(id);
       if (this.deleting?.id === id) this.dependants = dependants;
     } catch {
-      if (this.deleting?.id === id)
-        this.dependants = { products: [], children: [], parentId: null, routes: [] };
+      if (this.deleting?.id === id) this.dependantsError = true;
     }
   }
   async #delete(): Promise<void> {
@@ -552,11 +557,16 @@ export class CategoriesScreen extends LitElement {
   }
   /** The delete confirmation's preview: a spinner until `#loadDependants` resolves, then the
    * consequence list the brief calls for — sections with nothing in them are omitted entirely,
-   * and the "this cannot be undone" intro only appears when there is something to lose. */
+   * and the "this cannot be undone" intro only appears when there is something to lose. A failed
+   * fetch says so instead, because silence here would read as "nothing to lose". */
   #renderDependants() {
+    if (this.dependantsError)
+      return html`<p class="error" data-test="dependants-error" role="alert">
+        ${t("categories.delete_preview_error")}
+      </p>`;
     const dependants = this.dependants;
     if (!dependants) return html`<wt-spinner></wt-spinner>`;
-    const sections: unknown[] = [];
+    const sections: TemplateResult[] = [];
     if (dependants.products.length > 0) {
       sections.push(
         html`<p>
