@@ -6,8 +6,7 @@ import { baseStyles, selectStyles } from "../base-styles.js";
 export interface DataTableColumn<Row> {
   key: string;
   label: string;
-  // Second parameter is OPTIONAL so every existing 1-arg column definition stays assignable.
-  cell: (row: Row, context?: { ancestorOnly: boolean }) => unknown;
+  cell: (row: Row, context: { ancestorOnly: boolean }) => unknown;
   sortValue?: (row: Row) => string | number | null | undefined;
   searchValue?: (row: Row) => string;
   filter?: {

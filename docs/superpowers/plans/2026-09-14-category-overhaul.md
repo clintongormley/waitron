@@ -205,6 +205,8 @@ Add properties and state to `wt-data-table.ts`:
 @state() private searchText = "";
 ```
 
+> **Note (2026-09-14, review fix round):** the final code has `searchPlaceholder = ""`, falling back to `searchLabel` (see the note under the toolbar render below).
+
 Add `searchValue?: (row: Row) => string;` to the `DataTableColumn<Row>` interface (after `sortValue`).
 
 Add a helper that decides which rows pass the current search. It reads `searchValue`, falling back to the column's `sortValue` coerced to a string:
@@ -270,6 +272,8 @@ Render the toolbar above the `.scroll` region in both flat and tree paths (wrap 
   </div>`;
 }
 ```
+
+> **Note (2026-09-14, review fix round):** the final code defaults `searchPlaceholder` to empty and binds `placeholder=${this.searchPlaceholder || this.searchLabel}`, so an unset placeholder repeats the search label rather than reading "Search".
 
 Add toolbar styles to the `css` block (tokens only). The search box grows; the (future) filter group sits at the right and the row wraps on narrow screens:
 
@@ -425,6 +429,8 @@ export interface DataTableColumn<Row> {
   align?: "start" | "end";
 }
 ```
+
+> **Note (2026-09-14, review fix round):** the "every existing 1-arg column definition stays assignable" half of the comment above did not hold — a function taking one argument is assignable to a type whose second parameter is required, and only a function wanting a third argument is refused (checked with `tsc --strict`). Once the table's own calls all passed the context, the parameter was made required and the comment deleted.
 
 Filter selections keyed by column key ("" = all):
 
@@ -1661,3 +1667,5 @@ screen renders at phone width."
 **Known risk to watch during execution:** the strict i18n key-mirroring guard means Task 7's key **removal** must land with the last screen reference (deferred to Task 13). This is called out in both tasks. Tasks 8–13 should run in one continuous stretch so the working tree builds at each commit.
 
 **Fresh-context review applied (2026-09-14).** A separate reviewer checked this plan against the spec and the real code and found, now fixed inline: (1) `dashboard-category-form` has a second consumer, `catalogue-screen.ts`, whose `.locales` binding must also change — Lit prop bindings are not typechecked, so this would silently regress the inline create-category form (Task 10 now covers it); (2) `DataTableColumn.cell`'s second parameter must be optional or the primitive's own 1-arg calls break the `@waitron/ui` typecheck at Task 3's commit (fixed); (3) the dashboard test harness reader locale defaults to `es-ES`, so the content-language tests must `setLocale("en-GB")` (Tasks 10, 11, 13 fixed); (4) `--wt-space-9` does not exist and a `rem` fallback trips the token guard — use `--wt-space-6` (Task 2 fixed); (5) `PropertyValues` must be imported (Task 5 fixed); (6) the delete test must read affected-product rows from the table's shadow root, not the dialog's light DOM (Task 13 fixed). The reviewer confirmed the i18n removal-ordering, the `#productColumns` refactor, the test selectors and the `wt-combobox` API are otherwise sound.
+
+**Note (2026-09-14, review fix round).** Finding (2) above was only half right. Optional was needed while the primitive's own calls passed one argument, but the other stated reason — keeping 1-arg column definitions assignable — was false: a 1-arg function is assignable whether the second parameter is optional or required. With every call passing the context, `DataTableColumn.cell`'s second parameter is now required.
