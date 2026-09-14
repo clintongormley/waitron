@@ -48,7 +48,13 @@ same columns over products not yet in the category, with a checkbox per row and 
 that selects every row the search and filter leave visible. A product stays picked when a later
 search hides it, and "Add N products" sends the whole selection to the bulk-add route in one write.
 Every table on the page remembers its sort and filter choices for the browser tab; none remembers
-typed search text.
+typed search text. The category list keeps one remembered view for both modes, so a Parent filter
+chosen in the flat list hides nothing in the tree, which has no Parent column, and applies again in
+the flat list — also after leaving the page and coming back in the same tab. When a filter stops
+offering the chosen category but still offers others (a parent whose only child was deleted, say),
+the choice is forgotten and the filter goes back to "All parents" or "All reporting categories". If
+it offers no categories at all, the filter also reads "All" and hides nothing, but the choice is kept
+and applies again if that category is offered later.
 
 ## API and Products integration
 

@@ -1182,3 +1182,90 @@ it("offers only categories something refers to in the Parent and Reporting categ
   // Only Eggs is some product's reporting category, labelled by its own name.
   expect(options(members, "primary")).toEqual([["eggs", "Eggs"]]);
 });
+
+const breakfastUnderFood: CategorySummary = {
+  id: "breakfast",
+  name: { en: "Breakfast" },
+  image: null,
+  color: null,
+  parentId: "food",
+};
+const juiceUnderDrink: CategorySummary = {
+  ...breakfastUnderFood,
+  id: "juice",
+  name: { en: "Juice" },
+  parentId: "drink",
+};
+/** Mounts the screen over two parents with one child each, waiting for all four rows. */
+async function mountNested() {
+  const fx = apiFixture();
+  fx.api.listCategories.mockResolvedValue([food, breakfastUnderFood, drink, juiceUnderDrink]);
+  const mounted = await mountWidget<CategoriesScreen>("dashboard-categories-screen", {
+    api: fx.client,
+  });
+  const list = mounted.el.shadowRoot!.querySelector("wt-data-table")!;
+  await vi.waitFor(() => expect(list.rows.length).toBe(4));
+  return { ...fx, ...mounted, list };
+}
+async function chooseMode(el: CategoriesScreen, mode: "flat" | "tree"): Promise<void> {
+  el.shadowRoot!.querySelector<HTMLElement>(`[data-test="mode-${mode}"]`)!.click();
+  await el.updateComplete;
+  await el.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
+}
+function parentFilter(el: CategoriesScreen): HTMLSelectElement {
+  return el
+    .shadowRoot!.querySelector("wt-data-table")!
+    .shadowRoot!.querySelector<HTMLSelectElement>('select[data-filter="parent"]')!;
+}
+function listedKeys(el: CategoriesScreen): string[] {
+  return [
+    ...el
+      .shadowRoot!.querySelector("wt-data-table")!
+      .shadowRoot!.querySelectorAll("tr[data-row-key]"),
+  ].map((row) => row.getAttribute("data-row-key")!);
+}
+
+it("keeps a Parent filter chosen in flat mode through tree mode and a reopened screen", async () => {
+  const first = await mountNested();
+  await chooseMode(first.el, "flat");
+  parentFilter(first.el).value = "food";
+  parentFilter(first.el).dispatchEvent(new Event("change"));
+  await first.list.updateComplete;
+  expect(listedKeys(first.el)).toEqual(["breakfast"]);
+  await chooseMode(first.el, "tree");
+  expect(listedKeys(first.el)).toHaveLength(4); // no Parent column, so the choice hides nothing
+  cleanupWidgets();
+
+  const { el, list } = await mountNested();
+  await list.updateComplete;
+  expect(list.rowParent).toBeDefined(); // reopened in tree mode, where there is no Parent column
+  await chooseMode(el, "flat");
+  expect(parentFilter(el).value).toBe("food");
+  expect(listedKeys(el)).toEqual(["breakfast"]);
+});
+
+it("resets the Parent filter to All parents when the chosen parent stops being one", async () => {
+  const { el, api, list } = await mountNested();
+  await chooseMode(el, "flat");
+  parentFilter(el).value = "food";
+  parentFilter(el).dispatchEvent(new Event("change"));
+  await list.updateComplete;
+  expect(listedKeys(el)).toEqual(["breakfast"]);
+  // Deleting Food's only child leaves Food a parent of nothing, so the filter no longer offers it.
+  api.listCategories.mockResolvedValue([food, drink, juiceUnderDrink]);
+  list
+    .shadowRoot!.querySelector('tr[data-row-key="breakfast"] wt-row-actions')!
+    .querySelectorAll("wt-button")[1]!
+    .click();
+  await el.updateComplete;
+  const modal = [...el.shadowRoot!.querySelectorAll("wt-modal")].find((each) => each.open)!;
+  const deleteButton = modal.querySelector<HTMLElementTagNameMap["wt-button"]>(
+    'wt-button[variant="danger"]',
+  )!;
+  await vi.waitFor(() => expect(deleteButton.disabled).toBe(false));
+  deleteButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  await vi.waitFor(() => expect(list.rows.length).toBe(3));
+  await list.updateComplete;
+  expect(parentFilter(el).value).toBe("");
+  expect(listedKeys(el).sort()).toEqual(["drink", "food", "juice"]);
+});

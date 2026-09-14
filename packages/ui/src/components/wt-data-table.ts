@@ -223,29 +223,23 @@ export class WtDataTable<Row = unknown> extends LitElement {
    * key and restores them on the next visit. Search text is never persisted. */
   @property() viewKey?: string;
   @state() private searchText = "";
-  /** The chosen value for each filterable column, keyed by column key; "" (or absent) means "all". */
+  /** Every filter choice, chosen or restored, keyed by column key; an absent key means "all". A
+   * choice filters rows only while its column offers it (see #activeFilter), and #judgeFilters
+   * removes one its column's options no longer include. */
   @state() private filterSelections: Record<string, string> = {};
   @state() private collapsed = new Set<string>();
   #restored = false;
-  /** Stored filter values not yet judged, because their column has no options to judge them by. */
-  #pendingFilters: Record<string, unknown> = {};
-
-  override connectedCallback(): void {
-    super.connectedCallback();
-    this.#restoreView();
-  }
 
   protected override willUpdate(changed: PropertyValues<this>): void {
-    if (changed.has("viewKey")) {
-      this.#restored = false;
-      this.#pendingFilters = {};
-    }
-    if (changed.has("viewKey") || changed.has("columns")) this.#restoreView();
+    if (changed.has("viewKey")) this.#restored = false;
+    if (!changed.has("viewKey") && !changed.has("columns")) return;
+    this.#restoreView();
+    if (this.#judgeFilters()) this.#persistView();
   }
 
   /** Reads the stored view once there are columns to check it against. A stored sort is adopted
-   * only if a current column can sort by it, and its direction only together with that column; each stored filter waits in #pendingFilters
-   * until #adoptPendingFilters can judge it. */
+   * only if a current column can sort by it, and its direction only together with that column.
+   * Stored filter strings join filterSelections, to be judged like any other choice. */
   #restoreView(): void {
     if (!this.viewKey || this.columns.length === 0) return;
     if (!this.#restored) {
@@ -271,29 +265,41 @@ export class WtDataTable<Row = unknown> extends LitElement {
           if (parsed.sortDirection === "ascending" || parsed.sortDirection === "descending")
             this.sortDirection = parsed.sortDirection;
         }
-        if (parsed.filters && typeof parsed.filters === "object")
-          this.#pendingFilters = { ...(parsed.filters as Record<string, unknown>) };
+        if (parsed.filters && typeof parsed.filters === "object") {
+          const stored = Object.entries(parsed.filters as Record<string, unknown>).filter(
+            (entry): entry is [string, string] => typeof entry[1] === "string" && entry[1] !== "",
+          );
+          this.filterSelections = { ...this.filterSelections, ...Object.fromEntries(stored) };
+        }
       } catch {
         // A malformed store is ignored, exactly like a first visit.
       }
     }
-    this.#adoptPendingFilters();
   }
 
-  /** A stored filter value is applied only if it equals one of its column's current option values;
-   * anything else, including a value for a column without a filter, is dropped. A value whose
-   * column has no options yet stays pending and is judged against the first non-empty list. */
-  #adoptPendingFilters(): void {
-    const adopted: Record<string, string> = {};
-    for (const [key, value] of Object.entries(this.#pendingFilters)) {
-      const filter = this.columns.find((column) => column.key === key)?.filter;
-      if (filter && filter.options.length === 0) continue;
-      delete this.#pendingFilters[key];
-      if (filter && filter.options.some((option) => option.value === value))
-        adopted[key] = value as string;
-    }
-    if (Object.keys(adopted).length > 0)
-      this.filterSelections = { ...this.filterSelections, ...adopted };
+  /** The options a column's filter currently offers, or undefined while it offers none: the column
+   * is absent, has no filter, or has an empty list (a consumer still loading the data behind it). */
+  #offered(key: string): { value: string }[] | undefined {
+    const options = this.columns.find((column) => column.key === key)?.filter?.options;
+    return options && options.length > 0 ? options : undefined;
+  }
+
+  /** Removes every choice whose column offers options that do not include it, and reports whether it
+   * removed any. A choice whose column offers none waits, kept and stored but not applied, until the
+   * column offers a non-empty list to judge it by. */
+  #judgeFilters(): boolean {
+    const kept = Object.entries(this.filterSelections).filter(([key, value]) => {
+      const options = this.#offered(key);
+      return !options || options.some((option) => option.value === value);
+    });
+    if (kept.length === Object.keys(this.filterSelections).length) return false;
+    this.filterSelections = Object.fromEntries(kept);
+    return true;
+  }
+
+  /** The choice that narrows rows for this column, or "" when there is none or it is waiting. */
+  #activeFilter(column: DataTableColumn<Row>): string {
+    return this.#offered(column.key) ? (this.filterSelections[column.key] ?? "") : "";
   }
 
   #persistView(): void {
@@ -409,20 +415,17 @@ export class WtDataTable<Row = unknown> extends LitElement {
     return term === "" || this.#searchHaystack(row).includes(term);
   }
 
-  /** A row passes the filters only if every active dropdown (a non-"all" selection) matches it. */
-  #passesFilters(row: Row): boolean {
-    for (const column of this.columns) {
-      if (!column.filter) continue;
-      const selected = this.filterSelections[column.key] ?? "";
-      if (selected !== "" && column.filter.value(row) !== selected) return false;
-    }
-    return true;
-  }
-
   /** The rows left after the toolbar: every active filter (AND), then the search term. The single
    * choke point every render path funnels through, so flat and tree mode narrow identically. */
   #visibleRows(): readonly Row[] {
-    return this.rows.filter((row) => this.#passesFilters(row) && this.#passesSearch(row));
+    const active = this.columns.flatMap((column) => {
+      const selected = this.#activeFilter(column);
+      return selected === "" ? [] : [{ value: column.filter!.value, selected }];
+    });
+    return this.rows.filter(
+      (row) =>
+        active.every(({ value, selected }) => value(row) === selected) && this.#passesSearch(row),
+    );
   }
 
   #sortedRows(rows: readonly Row[]): Row[] {
@@ -623,36 +626,33 @@ export class WtDataTable<Row = unknown> extends LitElement {
       ${
         hasFilters
           ? html`<div class="table-filters">
-              ${this.columns.map((column) =>
-                column.filter
+              ${this.columns.map((column) => {
+                const active = this.#activeFilter(column);
+                return column.filter
                   ? html`<select
                       class="table-filter"
                       name=${`${column.key}-filter`}
                       data-filter=${column.key}
                       aria-label=${column.filter.label}
                       @change=${(event: Event) => {
-                        this.filterSelections = {
-                          ...this.filterSelections,
-                          [column.key]: (event.target as HTMLSelectElement).value,
-                        };
+                        const next = { ...this.filterSelections };
+                        const value = (event.target as HTMLSelectElement).value;
+                        if (value === "") delete next[column.key];
+                        else next[column.key] = value;
+                        this.filterSelections = next;
                         this.#persistView();
                       }}
                     >
-                      <option value="" .selected=${!this.filterSelections[column.key]}>
-                        ${column.filter.allLabel}
-                      </option>
+                      <option value="" .selected=${active === ""}>${column.filter.allLabel}</option>
                       ${column.filter.options.map(
                         (option) =>
-                          html`<option
-                            value=${option.value}
-                            .selected=${this.filterSelections[column.key] === option.value}
-                          >
+                          html`<option value=${option.value} .selected=${active === option.value}>
                             ${option.label}
                           </option>`,
                       )}
                     </select>`
-                  : nothing,
-              )}
+                  : nothing;
+              })}
             </div>`
           : nothing
       }

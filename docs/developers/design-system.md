@@ -224,12 +224,15 @@ container query cannot read a `--wt-*` token. A column exposes text to the searc
 Give the table a `viewKey` and it remembers its sort and filter choices in the tab's session storage
 — never the search text. It restores them once it has columns: a stored sort only if a current
 column can still sort by it — its direction is restored with that column or not at all, so the
-starting sort stands whole — and a stored filter value only if it equals one of that column's
-current option values, with the dropdown showing the restored choice. Any other stored filter value
-(one for a column with no filter, or one the options no longer include) is dropped rather than
-hiding every row, and is not written back. While a column's options are empty — a screen still
-loading the data it builds them from — its stored value waits, and is judged against the first
-non-empty list.
+starting sort stands whole — and every stored filter value that is a non-empty string. A filter
+choice, restored or picked, narrows rows only while its column offers it, and its dropdown then
+shows it. Each time the columns change, every choice is checked against its column's current option
+values. One the options no longer include is cleared — the dropdown returns to its "all" option and
+the stored view is rewritten without it — rather than hiding every row behind a dropdown that reads
+"all". A choice whose column is not rendered, has no `filter`, or has an empty option list (a screen
+still loading the data it builds them from) waits instead: it hides no rows, stays in storage when
+the view is saved for another change, and is checked when the column next has a non-empty list. So
+one `viewKey` can serve two layouts that show different columns.
 
 In tree mode the table keeps a match's ancestor rows and tells each cell, via its second argument's
 `ancestorOnly`, whether the row is present only to hold a descendant's place — mute those with a

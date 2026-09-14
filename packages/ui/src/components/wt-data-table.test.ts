@@ -645,10 +645,7 @@ test("a restored filter's dropdown shows the restored choice", async () => {
 });
 
 test("drops a stored filter value the column no longer offers, or that is not a string", async () => {
-  sessionStorage.setItem(
-    "test.stale",
-    JSON.stringify({ filters: { status: "deleted", name: "Ada Active", gone: "x" } }),
-  );
+  sessionStorage.setItem("test.stale", JSON.stringify({ filters: { status: "deleted" } }));
   const stale = await tableS({
     viewKey: "test.stale",
     searchable: true,
@@ -698,6 +695,76 @@ test("a stored filter waits for its column's options to load before it is kept o
   el.rows = rowsS;
   await el.updateComplete;
   expect(rowKeysS(el)).toEqual(["2"]);
+});
+
+const sortableName: DataTableColumn<RowS> = { ...withStatus[0]!, sortValue: (r: RowS) => r.name };
+const statusFilter = withStatus[1]!.filter!;
+function statusOffering(options: { value: string; label: string }[]): DataTableColumn<RowS>[] {
+  return [sortableName, { ...withStatus[1]!, filter: { ...statusFilter, options } }];
+}
+function statusSelect(el: WtDataTable<RowS>): HTMLSelectElement {
+  return el.shadowRoot!.querySelector<HTMLSelectElement>('select[data-filter="status"]')!;
+}
+function storedFilters(key: string): unknown {
+  return JSON.parse(sessionStorage.getItem(key)!).filters;
+}
+
+// A consumer may leave a column out in one layout (a tree that shows the parent by nesting) and
+// put it back in another, so a stored value outlives the column's absence.
+test("a stored filter for a column that is not rendered waits for the column, and is not overwritten meanwhile", async () => {
+  sessionStorage.setItem("test.absent", JSON.stringify({ filters: { status: "off" } }));
+  const el = await tableS({ viewKey: "test.absent", searchable: true, columns: [sortableName] });
+  expect(rowKeysS(el)).toEqual(["1", "2"]);
+  el.shadowRoot!.querySelector<HTMLButtonElement>('button[data-sort="name"]')!.click();
+  await el.updateComplete;
+  expect(storedFilters("test.absent")).toEqual({ status: "off" });
+  el.columns = [sortableName, withStatus[1]!];
+  await el.updateComplete;
+  expect(rowKeysS(el)).toEqual(["2"]);
+  expect(statusSelect(el).value).toBe("off");
+});
+
+test("a stored filter is still dropped when its column appears with options that exclude it", async () => {
+  sessionStorage.setItem("test.absent-stale", JSON.stringify({ filters: { status: "deleted" } }));
+  const el = await tableS({
+    viewKey: "test.absent-stale",
+    searchable: true,
+    columns: [sortableName],
+  });
+  el.columns = [sortableName, withStatus[1]!];
+  await el.updateComplete;
+  expect(rowKeysS(el)).toEqual(["1", "2"]);
+  expect(storedFilters("test.absent-stale")).toEqual({});
+});
+
+test("a chosen filter is cleared when its column's options stop offering it", async () => {
+  const el = await tableS({ viewKey: "test.shrink", searchable: true, columns: withStatus });
+  statusSelect(el).value = "off";
+  statusSelect(el).dispatchEvent(new Event("change"));
+  await el.updateComplete;
+  expect(rowKeysS(el)).toEqual(["2"]);
+  el.columns = statusOffering([{ value: "active", label: "Active" }]);
+  await el.updateComplete;
+  expect(rowKeysS(el)).toEqual(["1", "2"]);
+  expect(statusSelect(el).value).toBe("");
+  expect(storedFilters("test.shrink")).toEqual({});
+});
+
+// An empty option list reads as "not loaded yet", the same rule a restored value follows.
+test("a chosen filter waits, unapplied, while its column offers no options at all", async () => {
+  const el = await tableS({ viewKey: "test.emptied", searchable: true, columns: withStatus });
+  statusSelect(el).value = "off";
+  statusSelect(el).dispatchEvent(new Event("change"));
+  await el.updateComplete;
+  el.columns = statusOffering([]);
+  await el.updateComplete;
+  expect(rowKeysS(el)).toEqual(["1", "2"]);
+  expect(statusSelect(el).value).toBe("");
+  expect(storedFilters("test.emptied")).toEqual({ status: "off" });
+  el.columns = withStatus;
+  await el.updateComplete;
+  expect(rowKeysS(el)).toEqual(["2"]);
+  expect(statusSelect(el).value).toBe("off");
 });
 
 test("writes sort changes back to session storage", async () => {
