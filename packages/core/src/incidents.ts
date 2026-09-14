@@ -170,7 +170,7 @@ function toTenantIncident(row: TenantIncidentRow): TenantIncident {
   };
 }
 
-/** Every open incident in the tenant, newest first. */
+/** Every open incident in the tenant, newest first; ties break on id so the order is stable. */
 export async function listOpenIncidents(
   tx: Transaction,
   tenantId: TenantId,
@@ -179,11 +179,11 @@ export async function listOpenIncidents(
     .select(tenantIncidentColumns)
     .from(incidents)
     .where(and(eq(incidents.tenantId, tenantId), isNull(incidents.acknowledgedAt)))
-    .orderBy(desc(incidents.detectedAt));
+    .orderBy(desc(incidents.detectedAt), desc(incidents.id));
   return rows.map(toTenantIncident);
 }
 
-/** Incidents handled at or after `handledSince`, most recently handled first. */
+/** Incidents handled at or after `handledSince`, most recently handled first, ties by id. */
 export async function listHandledIncidents(
   tx: Transaction,
   tenantId: TenantId,
@@ -198,7 +198,7 @@ export async function listHandledIncidents(
         gte(incidents.acknowledgedAt, handledSince.toISOString()),
       ),
     )
-    .orderBy(desc(incidents.acknowledgedAt));
+    .orderBy(desc(incidents.acknowledgedAt), desc(incidents.id));
   return rows.map(toTenantIncident);
 }
 

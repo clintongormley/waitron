@@ -785,4 +785,68 @@ describe("tenant incident reads", () => {
     );
     expect(rows.map((r) => r.tillId)).toEqual([secondTill.tillId, tillId]);
   });
+
+  // The suite's database outlives each test, so every call mints fresh ids. They are inserted in
+  // ascending order: a read with no second sort key tends to hand tied rows back in that order,
+  // which fails the descending expectation.
+  async function insertTied(acknowledgedAt: string | null): Promise<string[]> {
+    const prefix = crypto.randomUUID().slice(0, -2);
+    const ids = ["0a", "0b", "0c"].map((suffix) => `${prefix}${suffix}`);
+    for (const [index, id] of ids.entries()) {
+      await suite.db.insert(incidents).values({
+        id,
+        tenantId,
+        tillId,
+        code: `test.tied_${index}`,
+        params: {},
+        severity: "error",
+        detectedAt: BASE.toISOString(),
+        acknowledgedAt,
+        acknowledgedBy: acknowledgedAt === null ? null : "00000000-0000-4000-8000-000000000001",
+      });
+    }
+    return ids;
+  }
+
+  it("orders open incidents detected at the same instant by id, highest first", async () => {
+    const ids = await insertTied(null);
+    const rows = await asApp((tx) => listOpenIncidents(tx, tenantId));
+    expect(rows.map((r) => r.id)).toEqual(ids.reverse());
+  });
+
+  it("orders incidents handled at the same instant by id, highest first", async () => {
+    const ids = await insertTied("2026-03-10T10:00:00.000Z");
+    const rows = await asApp((tx) =>
+      listHandledIncidents(tx, tenantId, new Date("2026-03-01T00:00:00Z")),
+    );
+    expect(rows.map((r) => r.id)).toEqual(ids.reverse());
+  });
+
+  it("includes an incident handled exactly at the cut-off and excludes one a millisecond before", async () => {
+    const cutOff = new Date("2026-03-10T10:00:00.000Z");
+    await raise(tenantId, tillId, BASE);
+    const secondTill = await seedTenant(suite.db, { tenantId });
+    await raise(tenantId, secondTill.tillId, BASE);
+    const open = await asApp((tx) => listOpenIncidents(tx, tenantId));
+    const byTill = new Map(open.map((r) => [r.tillId, r.id]));
+    const person = "00000000-0000-4000-8000-000000000001";
+    await asApp((tx) =>
+      markIncidentHandled(tx, {
+        tenantId,
+        id: byTill.get(tillId)!,
+        personId: person,
+        handledAt: cutOff,
+      }),
+    );
+    await asApp((tx) =>
+      markIncidentHandled(tx, {
+        tenantId,
+        id: byTill.get(secondTill.tillId)!,
+        personId: person,
+        handledAt: new Date(cutOff.getTime() - 1),
+      }),
+    );
+    const rows = await asApp((tx) => listHandledIncidents(tx, tenantId, cutOff));
+    expect(rows.map((r) => r.tillId)).toEqual([tillId]);
+  });
 });
