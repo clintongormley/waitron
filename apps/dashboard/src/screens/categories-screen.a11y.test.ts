@@ -121,6 +121,34 @@ describe.each(["light", "dark"] as const)("categories (%s)", (theme) => {
     await expectNoA11yViolations(host);
   });
 
+  it("opens the membership editor with comboboxes and lozenges accessibly", async () => {
+    const { el, host } = await mountWidget<CategoriesScreen>(
+      "dashboard-categories-screen",
+      { api: membersApi() },
+      theme,
+    );
+    await vi.waitFor(() => expect(el.shadowRoot!.querySelector("wt-spinner")).toBeNull());
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    table.shadowRoot!.querySelector<HTMLElement>('[data-category="food"]')!.click();
+    await el.updateComplete;
+    // The member list carries the Edit-membership / Remove row actions; the first opens the picker.
+    const members = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>(
+      '[data-test="category-products"]',
+    )!;
+    await members.updateComplete;
+    members
+      .shadowRoot!.querySelector("wt-row-actions")!
+      .querySelector<HTMLElement>("wt-button")!
+      .click();
+    await el.updateComplete;
+    // The product belongs to two categories, so the picker shows a multi-select combobox with two
+    // lozenge chips and the single-select reporting combobox — the states this case exists to scan.
+    const picker = el.shadowRoot!.querySelector("dashboard-category-membership-picker")!;
+    await picker.updateComplete;
+    await expectNoA11yViolations(host);
+  });
+
   it("shows the resolved delete preview accessibly", async () => {
     const api = {
       ...membersApi(),

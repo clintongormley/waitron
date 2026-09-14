@@ -46,6 +46,7 @@ export class CategoriesScreen extends LitElement {
       }
       .heading {
         display: flex;
+        flex-wrap: wrap;
         align-items: center;
         justify-content: space-between;
         gap: var(--wt-space-3);
@@ -56,6 +57,7 @@ export class CategoriesScreen extends LitElement {
       }
       .header-actions {
         display: flex;
+        flex-wrap: wrap;
         gap: var(--wt-space-3);
         align-items: center;
       }
