@@ -3174,14 +3174,18 @@ export class DashboardApi {
       body: JSON.stringify({ passphrase }),
     });
     if (!response.ok) {
-      let code = "server.internal";
-      try {
-        const body = JSON.parse(await response.text()) as { error?: { code?: unknown } };
-        if (typeof body.error?.code === "string") code = body.error.code;
-      } catch {
-        // The same fallback as the JSON request helper for a malformed error response.
-      }
-      throw { code };
+      // This binary path decodes its own errors, so it mirrors the shared request helper exactly: the
+      // untrusted body is parsed only when it is an object (a vanished route answers text/plain, and
+      // the literal `null` parses cleanly), `code` is read only when it is a string, and the answered
+      // HTTP `status` rides along — so a caught export rejection is the same `{ code, status }` shape
+      // every dashboard consumer already branches on.
+      const parsed: unknown = await response.json().catch(() => undefined);
+      const isRecord = (v: unknown): v is Record<string, unknown> =>
+        typeof v === "object" && v !== null && !Array.isArray(v);
+      const envelope = isRecord(parsed) && isRecord(parsed.error) ? parsed.error : undefined;
+      const rawCode = envelope?.code;
+      const code = typeof rawCode === "string" ? rawCode : "server.internal";
+      throw { code, status: response.status };
     }
     return response.blob();
   }
