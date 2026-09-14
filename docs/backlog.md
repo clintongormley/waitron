@@ -851,13 +851,33 @@ ongoing overhaul listed at the top of Track A.
   `Intl.Collator`; lists in a lifecycle order say so; then migrate the screens, including the filter
   dropdowns `wt-data-table` draws in its toolbar, which are raw `<select>`s too. Fix
   `wt-data-table`'s locale-less `localeCompare` at the same time.
-- **Two till dropdowns may show the wrong choice when they first appear** (found 2026-09-14; read,
-  not run). `apps/till/src/screens/till-counter-screen.ts:321` (service zone) and
-  `apps/till/src/widgets/line-extras-editor.ts:95` (doneness) bind only `.value` on a `<select>`
-  whose options come from a `${…}` list, and mark no option selected. The CLAUDE.md §3 `<select>`
-  rule says such a dropdown shows its first option when its first value is another one: a chosen
-  service zone that is not the first zone, or a doneness already set when the picker first renders.
-  **Next action:** reproduce each in a browser test, then mark the chosen option with `.selected`.
+- **The counter till's service zone dropdown may show the wrong zone when it first appears** (found
+  2026-09-14; read, not run). `apps/till/src/screens/till-counter-screen.ts:321` binds only `.value`
+  on a `<select>` whose options come from a `${…}` list, and marks no option selected. The CLAUDE.md
+  §3 `<select>` rule says such a dropdown shows its first option. The zones and the chosen zone
+  arrive together at login (`apps/till/src/till-app.ts`, `listDefaultZoneOffers`), so the fault
+  would show whenever the till's starting zone is not the first zone listed. The starting zone is the
+  device's row in `device_zone_defaults`, else the zone whose policy has `is_counter_default`; no
+  dashboard screen or route sets either, so only seed data or SQL changes it. `listServiceZones` has
+  no `ORDER BY`, so which zone is "first" is whatever the database returns. **Next action:** a case
+  in `till-counter-screen.test.ts` with two zones and the second chosen, asserting on
+  `select.selectedOptions[0]`, not `select.value`; then mark the chosen option with `.selected`.
+- **Remove the built-in doneness picker; doneness becomes a modifier the venue adds itself** (owner
+  decision 2026-09-14). The built-in picker is unreachable today: the till shows it only when
+  `products.diet.contains` includes `meat` (`isMeatProduct` in
+  `apps/till/src/widgets/line-extras-editor.ts`), and since #345 nothing in the dashboard writes that
+  field — the old product form that could is no longer mounted, and recipe editing left the
+  dashboard. On the dev database on 2026-09-14 all 45 products had an empty `contains` list. Venues
+  already have the tool: an options modifier (#341) whose choices are rare … well done, attached to
+  the products that need it. **Next action:** remove doneness end to end — the `doneness` enum and
+  its column on `working_order_lines` and `ticket_items` (`packages/db/src/schema/orders.ts`,
+  `ticket-items.ts`; schema change, no data migration), `working_order.invalid_doneness` and its
+  validation in `apps/server/src/working-order.ts`, the doneness line on kitchen tickets
+  (`kitchen-ticket.ts`, `kitchen-print.ts`), the till's picker, label and store field, and the
+  note/doneness test in `packages/fiscal-verifactu/src/write-path.e2e.test.ts` (which proves those
+  fields stay out of the invoice hash; keep the note half). The line note stays. Check first that an
+  options modifier prints prominently enough on a kitchen ticket to replace the upper-cased doneness
+  line.
 - **`wt-combobox`** (#351, 2026-09-13). It is a searchable dropdown in `packages/ui`: pick one option
   or several (`multiple`), and optionally offer to add what was typed when nothing matches. It landed
   with nothing using it; #362 (2026-09-14) is the first adopter, for the
@@ -960,7 +980,7 @@ ongoing overhaul listed at the top of Track A.
   fire/collect routes. Then the low-priority KDS list under *Detail → KDS*.
 - **Order-timing and modifier follow-ons**: delivery-order floor flash, idle-floor escalation,
   station-kind threshold defaults, an unbumped-since-fire metric; on-screen modifier `×N`, the shared
-  `#allergens` render, the KDS-versus-till unreviewed-dish call, post-fire note and doneness edit
+  `#allergens` render, the KDS-versus-till unreviewed-dish call, post-fire note edit
   (needs a re-fire endpoint), the TS-4 partial-transfer modifier-split guard.
 - **Handheld live updates** — the app is pull-only, so two waiters on one table see stale data until
   a refetch. A sizable new subsystem; spec it when it matters.
