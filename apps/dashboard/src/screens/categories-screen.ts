@@ -1,6 +1,7 @@
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { keyed } from "lit/directives/keyed.js";
 import {
   baseStyles,
   isHexColor,
@@ -760,18 +761,23 @@ export class CategoriesScreen extends LitElement {
                     >${t("categories.add_products")}</wt-button
                   >
                 </div>
-                <wt-data-table
-                  data-test="category-products"
-                  aria-label=${t("categories.products_modal")}
-                  searchable
-                  searchLabel=${t("categories.search_products")}
-                  noMatchesMessage=${t("categories.products_no_matches")}
-                  viewKey="waitron.categories.members.table"
-                  .rows=${members}
-                  .columns=${this.#memberColumns()}
-                  .rowKey=${(product: Product) => product.id}
-                  .emptyMessage=${t("categories.no_products")}
-                ></wt-data-table>
+                <!-- Keyed on the opened category: each open gets a fresh table, so a search typed
+                     for one category never hides another's products. -->
+                ${keyed(
+                  this.selected,
+                  html`<wt-data-table
+                    data-test="category-products"
+                    aria-label=${t("categories.products_modal")}
+                    searchable
+                    searchLabel=${t("categories.search_products")}
+                    noMatchesMessage=${t("categories.products_no_matches")}
+                    viewKey="waitron.categories.members.table"
+                    .rows=${members}
+                    .columns=${this.#memberColumns()}
+                    .rowKey=${(product: Product) => product.id}
+                    .emptyMessage=${t("categories.no_products")}
+                  ></wt-data-table>`,
+                )}
                 <wt-form-actions slot="footer"
                   ><wt-button
                     data-test="close-products"

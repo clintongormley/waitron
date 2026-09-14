@@ -909,3 +909,114 @@ it("ignores a ?category= deep link for an unknown id", async () => {
     history.replaceState(null, "", previous);
   }
 });
+
+/** The search box inside a nested `wt-data-table`, found fresh each time because a reopened dialog
+ * may render a new table element. */
+async function tableSearch(el: CategoriesScreen, test: string): Promise<HTMLInputElement> {
+  await el.updateComplete;
+  const table = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>(
+    `wt-data-table[data-test="${test}"]`,
+  )!;
+  await table.updateComplete;
+  return table.shadowRoot!.querySelector<HTMLInputElement>(".table-search")!;
+}
+async function typeInto(el: CategoriesScreen, test: string, value: string): Promise<void> {
+  const input = await tableSearch(el, test);
+  input.value = value;
+  input.dispatchEvent(new Event("input"));
+  await tableSearch(el, test);
+}
+function renderedKeys(el: CategoriesScreen, test: string): string[] {
+  const table = el.shadowRoot!.querySelector(`wt-data-table[data-test="${test}"]`)!;
+  return [...table.shadowRoot!.querySelectorAll("tr[data-row-key]")].map((row) =>
+    row.getAttribute("data-row-key")!,
+  );
+}
+async function openProducts(el: CategoriesScreen, id: string): Promise<void> {
+  const list = el.shadowRoot!.querySelector("wt-data-table")!;
+  await list.updateComplete;
+  list.shadowRoot!.querySelector<HTMLElement>(`[data-category="${id}"]`)!.click();
+  await el.updateComplete;
+}
+/** Clicks a dialog's dismiss button and waits for the native dialog's own `close` to arrive as
+ * `wt-close`: that event is queued as a separate task, so reopening before it lands would have the
+ * late event close the reopened dialog. */
+async function dismiss(el: CategoriesScreen, dialog: string, button: string): Promise<void> {
+  const modal = el.shadowRoot!.querySelector(`wt-modal[data-test="${dialog}"]`)!;
+  const closed = new Promise((resolve) =>
+    modal.addEventListener("wt-close", resolve, { once: true }),
+  );
+  modal.querySelector<HTMLElement>(button)!.click();
+  await closed;
+  await el.updateComplete;
+}
+async function closeProducts(el: CategoriesScreen): Promise<void> {
+  await dismiss(el, "products-modal", '[data-test="close-products"]');
+}
+
+it.each([
+  ["a different category", "drink"],
+  ["the same category", "food"],
+])("starts the products dialog with an empty search when reopened for %s", async (_, next) => {
+  const { el } = await mount();
+  await openProducts(el, "food");
+  await typeInto(el, "category-products", "does-not-match");
+  expect(renderedKeys(el, "category-products")).toEqual([]);
+  await closeProducts(el);
+  await openProducts(el, next);
+  expect((await tableSearch(el, "category-products")).value).toBe("");
+  // Toast belongs to both Food and Drinks, so an unfiltered table shows it either way.
+  expect(renderedKeys(el, "category-products")).toEqual(["p"]);
+});
+
+it("starts the add-products list with an empty search each time it opens", async () => {
+  const fx = apiFixture();
+  const juice: Product = { ...product, id: "q", descriptions: { en: "Juice" }, categoryIds: [] };
+  fx.api.listLibraryProducts.mockResolvedValue([product, juice]);
+  const { el } = await mountWidget<CategoriesScreen>("dashboard-categories-screen", {
+    api: fx.client,
+  });
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("wt-data-table")!.rows.length).toBe(2),
+  );
+  await openProducts(el, "food");
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="add-products"]')!.click();
+  await typeInto(el, "category-add-products", "does-not-match");
+  expect(renderedKeys(el, "category-add-products")).toEqual([]);
+  // Cancel returns to the member list without closing the dialog.
+  el.shadowRoot!.querySelector<HTMLElement>(
+    'wt-modal[data-test="products-modal"] wt-button[slot="cancel"]',
+  )!.click();
+  await el.updateComplete;
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="add-products"]')!.click();
+  expect((await tableSearch(el, "category-add-products")).value).toBe("");
+  expect(renderedKeys(el, "category-add-products")).toEqual(["q"]);
+});
+
+it("starts the delete preview's product list with an empty search each time it opens", async () => {
+  const { el, api } = await mount();
+  api.getCategoryDependants.mockResolvedValue({
+    products: [{ id: "p", name: { en: "Toast" }, reporting: true }],
+    children: [],
+    parentId: null,
+    routes: [],
+  });
+  const openDelete = async () => {
+    const list = el.shadowRoot!.querySelector("wt-data-table")!;
+    await list.updateComplete;
+    list
+      .shadowRoot!.querySelector('tr[data-row-key="food"] wt-row-actions')!
+      .querySelectorAll("wt-button")[1]!
+      .click();
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector('[data-test="category-delete-products"]')).not.toBeNull(),
+    );
+  };
+  await openDelete();
+  await typeInto(el, "category-delete-products", "does-not-match");
+  expect(renderedKeys(el, "category-delete-products")).toEqual([]);
+  await dismiss(el, "delete-dialog", 'wt-button[slot="cancel"]');
+  await openDelete();
+  expect((await tableSearch(el, "category-delete-products")).value).toBe("");
+  expect(renderedKeys(el, "category-delete-products")).toEqual(["p"]);
+});
