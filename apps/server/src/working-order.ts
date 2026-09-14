@@ -1247,66 +1247,79 @@ export async function fireLines(
 
   const serviceContext = await VENUE_SERVICE.findOrderContext(tx, cfg, orderId);
 
+  // Resolve each fired line's venue-service preparation route ONCE per DISTINCT product, sequentially,
+  // BEFORE the line loop — never a query per line, and never fanned out concurrently over the shared
+  // `tx` (one connection serialises them anyway, and pg 9 drops that queue). The route depends only on
+  // (zone, product) and `serviceContext.zoneId` is constant across the order, so distinct products are
+  // all that vary. This is "resolve shared catalogue data once before a basket's line loop" (§3,
+  // conventions-data.md) and makes the map body below pure — no per-line await.
+  const serviceRouteByProduct = new Map<
+    string,
+    Awaited<ReturnType<typeof VENUE_SERVICE.resolvePreparationRoute>>
+  >();
+  if (serviceContext !== null) {
+    // Same distinct-product set as `productIds` above — both derived from these parent `lines`.
+    for (const productId of productIds) {
+      serviceRouteByProduct.set(
+        productId,
+        await VENUE_SERVICE.resolvePreparationRoute(tx, cfg, serviceContext.zoneId, productId),
+      );
+    }
+  }
+
   // Resolve + snapshot each line's station AND course, refusing the whole fire if any line has nowhere
   // to go. `firedAt` is `sql`now()`` (fired) or null (held), so the array is not annotated
   // `$inferInsert` — that type carries no `SQL` member; `.values()` accepts one per column.
-  const values = (
-    await Promise.all(
-      lines.map(async (line) => {
-        const route = line.productId === null ? undefined : routeByProduct.get(line.productId);
-        const serviceRoute =
-          serviceContext === null || line.productId === null
-            ? null
-            : await VENUE_SERVICE.resolvePreparationRoute(
-                tx,
-                cfg,
-                serviceContext.zoneId,
-                line.productId,
-              );
-        if (serviceRoute?.kind === "no_preparation") return null;
-        const stationId =
-          serviceRoute?.kind === "station"
-            ? serviceRoute.stationId
-            : (route?.productStationId ?? route?.categoryStationId ?? defaultStationId);
-        if (stationId === null || stationId === undefined) {
-          throw new AppError("station.no_default", { locationId: cfg.locationId });
-        }
-        const courseId = courseByLine.get(line.id) ?? null;
-        // Fired NOW (§3c) if: no course (null fires earliest, §2b) OR its course is already fired for this
-        // order OR its course is the order's earliest (min display_order). Else HELD (`fired_at` NULL) until
-        // `fireCourse` stamps it. For a this-venue course (every A1-screened override, and the usual product
-        // default) `displayOrderByCourse.get` is defined and the three checks decide fire vs held as intended.
-        // A FOREIGN product-default course (the shared-catalogue corner above) is absent from the maps, so all
-        // three checks are false and the line holds — and is then unfireable (Debt → KDS-2); harmless in the
-        // incoherent state that alone produces it.
-        // Coursing editing (A3): `hold === true` short-circuits the whole course decision — the round-send
-        // asked for this line to be INSERTED but NOT fired, so it holds (`fired_at NULL`) even when its course
-        // is the order's earliest (or already fired). It is then released like any other held line, by
-        // `sendLines`/`fireCourse`. Absent `hold` falls through to the unchanged auto-fire-by-course rule.
-        const fired =
-          line.hold === true
-            ? false
-            : courseId === null ||
-              firedCourseIds.has(courseId) ||
-              displayOrderByCourse.get(courseId) === earliestDisplayOrder;
-        return {
-          tenantId: cfg.tenantId,
-          nodeId: cfg.nodeId,
-          workingOrderId: orderId,
-          workingOrderLineId: line.id,
-          stationId,
-          courseId,
-          // Per-line customisation (spec §2/§3), NON-FISCAL: snapshot the parent line's note/doneness onto
-          // the ticket item at fire — frozen here like `station_id`/`course_id`, so editing the draft line
-          // afterwards never moves this fired ticket.
-          note: line.note,
-          doneness: line.doneness,
-          firedAt: fired ? sql`now()` : null,
-          state: "queued" as const,
-        };
-      }),
-    )
-  ).filter((value): value is NonNullable<typeof value> => value !== null);
+  const values = lines
+    .map((line) => {
+      const route = line.productId === null ? undefined : routeByProduct.get(line.productId);
+      const serviceRoute =
+        serviceContext === null || line.productId === null
+          ? null
+          : (serviceRouteByProduct.get(line.productId) ?? null);
+      if (serviceRoute?.kind === "no_preparation") return null;
+      const stationId =
+        serviceRoute?.kind === "station"
+          ? serviceRoute.stationId
+          : (route?.productStationId ?? route?.categoryStationId ?? defaultStationId);
+      if (stationId === null || stationId === undefined) {
+        throw new AppError("station.no_default", { locationId: cfg.locationId });
+      }
+      const courseId = courseByLine.get(line.id) ?? null;
+      // Fired NOW (§3c) if: no course (null fires earliest, §2b) OR its course is already fired for this
+      // order OR its course is the order's earliest (min display_order). Else HELD (`fired_at` NULL) until
+      // `fireCourse` stamps it. For a this-venue course (every A1-screened override, and the usual product
+      // default) `displayOrderByCourse.get` is defined and the three checks decide fire vs held as intended.
+      // A FOREIGN product-default course (the shared-catalogue corner above) is absent from the maps, so all
+      // three checks are false and the line holds — and is then unfireable (Debt → KDS-2); harmless in the
+      // incoherent state that alone produces it.
+      // Coursing editing (A3): `hold === true` short-circuits the whole course decision — the round-send
+      // asked for this line to be INSERTED but NOT fired, so it holds (`fired_at NULL`) even when its course
+      // is the order's earliest (or already fired). It is then released like any other held line, by
+      // `sendLines`/`fireCourse`. Absent `hold` falls through to the unchanged auto-fire-by-course rule.
+      const fired =
+        line.hold === true
+          ? false
+          : courseId === null ||
+            firedCourseIds.has(courseId) ||
+            displayOrderByCourse.get(courseId) === earliestDisplayOrder;
+      return {
+        tenantId: cfg.tenantId,
+        nodeId: cfg.nodeId,
+        workingOrderId: orderId,
+        workingOrderLineId: line.id,
+        stationId,
+        courseId,
+        // Per-line customisation (spec §2/§3), NON-FISCAL: snapshot the parent line's note/doneness onto
+        // the ticket item at fire — frozen here like `station_id`/`course_id`, so editing the draft line
+        // afterwards never moves this fired ticket.
+        note: line.note,
+        doneness: line.doneness,
+        firedAt: fired ? sql`now()` : null,
+        state: "queued" as const,
+      };
+    })
+    .filter((value): value is NonNullable<typeof value> => value !== null);
   if (values.length === 0) return;
   let inserted: { workingOrderLineId: string; stationId: string; firedAt: string | null }[];
   try {
