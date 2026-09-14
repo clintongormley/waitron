@@ -107,6 +107,23 @@ it("changes an unused type without leaking fields and retains disabled-language 
     defaultValue: false,
   });
 });
+it("shows the modifier-level Available switch only for a yes-no modifier", async () => {
+  const el = await mount(); // type defaults to "text"
+  const availableSwitch = () => el.shadowRoot!.querySelector('[name="available"]');
+  expect(availableSwitch()).toBeNull();
+  await change(el, "type", "yes-no");
+  expect(availableSwitch()).not.toBeNull();
+  await change(el, "type", "extras");
+  expect(availableSwitch()).toBeNull();
+});
+it("submits available true for a non-yes-no modifier", async () => {
+  const el = await mount(); // type text
+  const submit = vi.fn();
+  el.addEventListener("wt-submit", submit);
+  await change(el, "name-es", "Nota");
+  await click(el, "save");
+  expect(submit.mock.calls[0]![0].detail.value.available).toBe(true);
+});
 it("renders extras choices as a table with a preselect checkbox per row", async () => {
   const el = await mount(extra);
   const rows = el.shadowRoot!.querySelectorAll("tbody tr");
@@ -368,14 +385,16 @@ it("names the choice a server-rejected choice field belongs to", async () => {
   expect(choicesError(el)).toContain("Bacon");
   expect(choicesError(el)).toContain(t("modifiers.choice_problem"));
 });
-it("blocks an available required empty choice set", async () => {
+it("blocks a required extras with no available choice, and clears once one is available", async () => {
   const el = await mount({ ...extra, required: true, choices: [extra.choices[0]!] });
   const submit = vi.fn();
   el.addEventListener("wt-submit", submit);
   await change(el, "available-a", false);
   await click(el, "save");
   expect(submit).not.toHaveBeenCalled();
-  await change(el, "available", false);
+  // An extras modifier has no modifier-level Available switch; the only way to satisfy a required
+  // set is to make a choice available again.
+  await change(el, "available-a", true);
   await click(el, "save");
   expect(submit).toHaveBeenCalledTimes(1);
 });
