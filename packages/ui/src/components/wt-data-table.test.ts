@@ -1,5 +1,5 @@
 import { html } from "lit";
-import { afterEach, expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { cleanup, mount } from "../test-helpers.js";
 import type { DataTableColumn, WtDataTable } from "./wt-data-table.js";
 import "./wt-data-table.js";
@@ -490,4 +490,69 @@ test("search and filter combine with AND", async () => {
 test("a column with no filter contributes no dropdown", async () => {
   const el = await tableS({ searchable: true, columns: withStatus });
   expect(el.shadowRoot!.querySelectorAll("select[data-filter]").length).toBe(1);
+});
+
+test("restores a stored sort and filter from session storage under viewKey", async () => {
+  sessionStorage.setItem(
+    "test.table",
+    JSON.stringify({ sortKey: "count", sortDirection: "descending", filters: {} }),
+  );
+  const el = await table({ viewKey: "test.table", searchable: true });
+  expect(el.sortKey).toBe("count");
+  expect(el.sortDirection).toBe("descending");
+  sessionStorage.clear();
+});
+
+test("writes sort changes back to session storage", async () => {
+  const el = await table({ viewKey: "test.table2", searchable: true });
+  el.shadowRoot!.querySelector<HTMLButtonElement>('button[data-sort="name"]')!.click();
+  await el.updateComplete;
+  expect(JSON.parse(sessionStorage.getItem("test.table2")!).sortKey).toBe("name");
+  sessionStorage.clear();
+});
+
+test("ignores a stored sort column that no longer exists", async () => {
+  sessionStorage.setItem(
+    "test.table3",
+    JSON.stringify({ sortKey: "gone", sortDirection: "ascending", filters: {} }),
+  );
+  const el = await table({ viewKey: "test.table3", sortKey: "name", sortDirection: "ascending" });
+  expect(el.sortKey).toBe("name"); // fell back to the default, not "gone"
+  sessionStorage.clear();
+});
+
+test("never stores search text, even alongside a real write", async () => {
+  const el = await table({ viewKey: "test.table4", searchable: true });
+  const input = el.shadowRoot!.querySelector<HTMLInputElement>(".table-search")!;
+  input.value = "ada";
+  input.dispatchEvent(new Event("input"));
+  // A sort persists the view; the typed search term must not ride along.
+  el.shadowRoot!.querySelector<HTMLButtonElement>('button[data-sort="name"]')!.click();
+  await el.updateComplete;
+  const stored = JSON.parse(sessionStorage.getItem("test.table4")!);
+  expect(stored.sortKey).toBe("name");
+  expect(stored.search).toBeUndefined();
+  sessionStorage.clear();
+});
+
+test("a throwing getItem does not break the table", async () => {
+  const spy = vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+    throw new Error("blocked");
+  });
+  const el = await table({ viewKey: "test.table5" });
+  expect(el.shadowRoot!.querySelector("table")).not.toBeNull();
+  spy.mockRestore();
+});
+
+test("a throwing setItem does not break the table", async () => {
+  const spy = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+    throw new Error("blocked");
+  });
+  const el = await table({ viewKey: "test.table6", searchable: true });
+  el.shadowRoot!.querySelector<HTMLButtonElement>('button[data-sort="name"]')!.click();
+  await el.updateComplete;
+  expect(el.sortKey).toBe("name");
+  expect(rowText(el)).toEqual(["Ada10Edit", "Bea2Edit"]);
+  spy.mockRestore();
+  sessionStorage.clear();
 });

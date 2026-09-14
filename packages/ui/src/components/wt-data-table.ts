@@ -1,13 +1,12 @@
 import { LitElement, css, html, nothing } from "lit";
+import type { PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "../base-styles.js";
 
 export interface DataTableColumn<Row> {
   key: string;
   label: string;
-  // Second parameter is OPTIONAL so the primitive's own 1-arg call sites still compile before the
-  // ancestor-walk task threads the context in, and every existing 1-arg column definition stays
-  // assignable. The primitive is the only site that INVOKES cell; external code only defines it.
+  // Second parameter is OPTIONAL so every existing 1-arg column definition stays assignable.
   cell: (row: Row, context?: { ancestorOnly: boolean }) => unknown;
   sortValue?: (row: Row) => string | number | null | undefined;
   searchValue?: (row: Row) => string;
@@ -216,10 +215,73 @@ export class WtDataTable<Row = unknown> extends LitElement {
   @property() searchLabel = "Search";
   @property() searchPlaceholder = "Search";
   @property() noMatchesMessage = "No matches";
+  /** When set, the tab's session storage remembers this table's sort and filter choices under this
+   * key and restores them on the next visit. Search text is never persisted. */
+  @property() viewKey?: string;
   @state() private searchText = "";
   /** The chosen value for each filterable column, keyed by column key; "" (or absent) means "all". */
   @state() private filterSelections: Record<string, string> = {};
   @state() private collapsed = new Set<string>();
+  #restored = false;
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.#restoreView();
+  }
+
+  protected override willUpdate(changed: PropertyValues<this>): void {
+    if (changed.has("viewKey") || (changed.has("columns") && this.viewKey && !this.#restored)) {
+      this.#restoreView();
+      this.#restored = true;
+    }
+  }
+
+  // columns may be assigned after connectedCallback, so the restore re-runs once they arrive.
+  #restoreView(): void {
+    if (!this.viewKey) return;
+    let raw: string | null = null;
+    try {
+      raw = sessionStorage.getItem(this.viewKey);
+    } catch {
+      return; // storage blocked; defaults stand
+    }
+    if (!raw) return;
+    try {
+      const parsed = JSON.parse(raw) as {
+        sortKey?: string | null;
+        sortDirection?: SortDirection;
+        filters?: Record<string, string>;
+      };
+      // Only adopt a stored sort column the current columns still offer as sortable.
+      if (
+        typeof parsed.sortKey === "string" &&
+        this.columns.some((c) => c.key === parsed.sortKey && c.sortValue !== undefined)
+      )
+        this.sortKey = parsed.sortKey;
+      if (parsed.sortDirection === "ascending" || parsed.sortDirection === "descending")
+        this.sortDirection = parsed.sortDirection;
+      if (parsed.filters && typeof parsed.filters === "object")
+        this.filterSelections = { ...parsed.filters };
+    } catch {
+      // A malformed store is ignored, exactly like a first visit.
+    }
+  }
+
+  #persistView(): void {
+    if (!this.viewKey) return;
+    try {
+      sessionStorage.setItem(
+        this.viewKey,
+        JSON.stringify({
+          sortKey: this.sortKey,
+          sortDirection: this.sortDirection,
+          filters: this.filterSelections,
+        }),
+      );
+    } catch {
+      // The remembered view is a convenience; the table works without it.
+    }
+  }
 
   #emitSelection(next: string[]): void {
     this.dispatchEvent(
@@ -264,6 +326,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
         composed: true,
       }),
     );
+    this.#persistView();
   }
 
   /**
@@ -526,6 +589,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
                           ...this.filterSelections,
                           [column.key]: (event.target as HTMLSelectElement).value,
                         };
+                        this.#persistView();
                       }}
                     >
                       <option value="">${column.filter.allLabel}</option>
