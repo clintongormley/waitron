@@ -78,18 +78,17 @@ export function asServedDiet(line: OrderLine): DietProfile {
   return deriveAsServedDiet(derivation, override, overlays);
 }
 
-/** Direct suitability declarations after every selected modifier's reviewed invalidation. */
+/** Direct suitability declarations after every selected modifier's invalidation; a choice with no
+ * dietary effect invalidates nothing and leaves the dish's claims intact. */
 export function asServedDietaryDeclarations(line: OrderLine): DietaryLabel[] {
   const base = line.product.dietaryDeclarations as DietaryLabel[] | undefined;
   if (base === undefined) return [];
   const effects = selectedItems(line)
     .filter((item) => item !== undefined)
     .map((item) =>
-      item!.dietaryEffect === undefined
-        ? null
-        : item!.dietaryEffect === null
-          ? null
-          : { invalidates: item!.dietaryEffect.invalidates as DietaryLabel[] },
+      item!.dietaryEffect == null
+        ? { invalidates: [] as DietaryLabel[] }
+        : { invalidates: item!.dietaryEffect.invalidates as DietaryLabel[] },
     );
   return effects.length === 0
     ? expandDietaryDeclarations(base)
