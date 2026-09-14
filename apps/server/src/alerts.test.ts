@@ -341,6 +341,41 @@ describe("readOpenAlerts", () => {
       expect.objectContaining({ area: "backup" }),
     );
   });
+  it("replaces a source that throws before returning a promise, and keeps reading the others", async () => {
+    const v = await seedVenue();
+    const throwing: AlertSource = {
+      area: "backup",
+      permission: "diagnostics.view",
+      read: () => {
+        throw new AppError("server.internal", {});
+      },
+    };
+    const healthy: AlertSource = {
+      area: "printing",
+      permission: "diagnostics.view",
+      read: async () => [
+        {
+          key: "printing.jobs_waiting:p1",
+          code: "printing.jobs_waiting",
+          params: {},
+          severity: "error",
+          since: null,
+        },
+      ],
+    };
+    const r = createAlertRegistry({ claims: [], sources: [throwing, healthy] });
+    const alerts = await asApp(v.tenantId, (tx) =>
+      readOpenAlerts(
+        tx,
+        { registry: r, tenantId: v.tenantId, now: NOW, log: noopLog },
+        new Set(["diagnostics.view"]),
+      ),
+    );
+    expect(alerts.map((a) => a.key)).toEqual([
+      "alert.source_unavailable:backup",
+      "printing.jobs_waiting:p1",
+    ]);
+  });
 });
 
 describe("readHandledAlerts", () => {

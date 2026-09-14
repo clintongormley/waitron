@@ -2,7 +2,7 @@
 // connection-role question, and grants are enforced once the session assumes app_user.
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { asAppUser, withTenant, type Database } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
@@ -12,6 +12,21 @@ import { hashPin, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import { AppError, tillId as brandTillId, type TenantId, type TillId } from "@waitron/shared";
 import { mountAlertsApi } from "./alerts-api.js";
+
+// No real role holds payments.manage without fiscal.view and diagnostics.view, so a test replaces
+// one role's held set while the real alert claims stay in force.
+const roleOverride = vi.hoisted(() => new Map<string, string[]>());
+vi.mock("@waitron/identity", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@waitron/identity")>();
+  return {
+    ...actual,
+    permissionsForRole: (role: Parameters<typeof actual.permissionsForRole>[0]) =>
+      roleOverride.get(role) ?? actual.permissionsForRole(role),
+  };
+});
+afterEach(() => {
+  roleOverride.clear();
+});
 import { createAlertRegistry } from "./alerts.js";
 import { ALL_ALERT_CLAIMS } from "./modules.js";
 import "./errors.js";
@@ -234,6 +249,49 @@ describe("alert routes", () => {
     expect(
       (await post(app, `/management-api/alerts/incidents/${id}/handled`, v.admin)).status,
     ).toBe(204);
+  });
+
+  it("shows and lets handle only payment alerts to a session holding payments.manage alone", async () => {
+    roleOverride.set("supervisor", ["payments.manage"]);
+    const v = await seedVenue();
+    const payment = await raise(v, "payment.offline_forward_declined");
+    const others = [
+      await raise(v, "fiscal.registro_rechazado"),
+      await raise(v, "chain.verification_failed"),
+      await raise(v, "clock.jump_detected"),
+      await raise(v, "printing.mystery"),
+    ];
+    const app = appFor(v);
+    const codes = async (path: string) =>
+      ((await (await get(app, path, v.supervisor)).json()) as { alerts: { code: string }[] }).alerts
+        .map((a) => a.code)
+        .sort();
+    expect(await codes("/management-api/alerts")).toEqual(["payment.offline_forward_declined"]);
+
+    const expected = ["fiscal.view", "fiscal.view", "fiscal.view", "diagnostics.view"];
+    for (const [i, id] of others.entries()) {
+      const res = await post(app, `/management-api/alerts/incidents/${id}/handled`, v.supervisor);
+      expect(res.status).toBe(403);
+      expect(await res.json()).toEqual({
+        error: { code: "authorization.not_permitted", params: { permission: expected[i] } },
+      });
+    }
+    expect(
+      (await post(app, `/management-api/alerts/incidents/${payment}/handled`, v.supervisor)).status,
+    ).toBe(204);
+    // Handled by the full manager, so the handled list has something to hide from this session.
+    for (const id of others)
+      expect(
+        (await post(app, `/management-api/alerts/incidents/${id}/handled`, v.manager)).status,
+      ).toBe(204);
+    expect(await codes("/management-api/alerts/handled")).toEqual([
+      "payment.offline_forward_declined",
+    ]);
+    expect(
+      ((await (await get(app, "/management-api/alerts/handled", v.manager)).json()) as {
+        alerts: unknown[];
+      }).alerts,
+    ).toHaveLength(5);
   });
 
   it("answers alert.not_found to a session holding no alert permission, even for a real id", async () => {

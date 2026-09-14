@@ -15,8 +15,8 @@ import {
   sales,
   withTenant,
 } from "@waitron/db";
-import type { Transaction } from "@waitron/db";
-import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
+import type { Database, Transaction } from "@waitron/db";
+import { usePgliteDb, useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import {
   findIncident,
   listHandledIncidents,
@@ -848,5 +848,90 @@ describe("tenant incident reads", () => {
     );
     const rows = await asApp((tx) => listHandledIncidents(tx, tenantId, cutOff));
     expect(rows.map((r) => r.tillId)).toEqual([tillId]);
+  });
+});
+
+describe("markIncidentHandled — two managers at once (real Postgres only)", () => {
+  // Two callers on distinct backends: PGlite serialises every query onto one, so a race there is a
+  // false pass (CLAUDE.md §4).
+  const postgres = useTemplateDb({ template: "core_identity" });
+
+  it("keeps the first committed handler and time, and both calls succeed", async () => {
+    const seed = await seedTenant(postgres.admin);
+    await withTenant(postgres.admin, seed.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await recordIncident(tx, {
+        tenantId: seed.tenantId,
+        tillId: seed.tillId,
+        error: new AppError("chain.verification_failed", {
+          tillId: seed.tillId,
+          issues: [{ issueCode: "predecessor-hash-mismatch", recordId: null, issueParams: {} }],
+        }),
+        severity: "error",
+        detectedAt: BASE,
+      });
+    });
+    const [open] = await withTenant(postgres.admin, seed.tenantId, async (tx) => {
+      await asAppUser(tx);
+      return listOpenIncidents(tx, seed.tenantId);
+    });
+    const first = { personId: "00000000-0000-4000-8000-000000000001", handledAt: BASE };
+    const second = {
+      personId: "00000000-0000-4000-8000-000000000002",
+      handledAt: new Date(BASE.getTime() + 5_000),
+    };
+    const mark = (db: Database, by: typeof first) =>
+      withTenant(db, seed.tenantId, async (tx) => {
+        await asAppUser(tx);
+        await markIncidentHandled(tx, { tenantId: seed.tenantId, id: open!.id, ...by });
+      });
+
+    let holder: Database | undefined;
+    let waiter: Database | undefined;
+    let release: () => void = () => {};
+    let holderRun: Promise<void> | undefined;
+    let waiterRun: Promise<void> | undefined;
+    try {
+      holder = await postgres.pg.connect();
+      waiter = await postgres.pg.connect();
+      const held = new Promise<void>((resolve) => (release = resolve));
+      let acquire!: () => void;
+      const acquired = new Promise<void>((resolve) => (acquire = resolve));
+
+      // The holder's update locks the row and pauses before commit, so the waiter's update must
+      // wait for it and then re-check the row the holder committed.
+      holderRun = withTenant(holder, seed.tenantId, async (tx) => {
+        await asAppUser(tx);
+        await markIncidentHandled(tx, { tenantId: seed.tenantId, id: open!.id, ...first });
+        acquire();
+        await held;
+      });
+      await acquired;
+      let waiterDone = false;
+      waiterRun = mark(waiter, second).finally(() => {
+        waiterDone = true;
+      });
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      expect(waiterDone).toBe(false);
+
+      release();
+      await holderRun;
+      await waiterRun;
+    } finally {
+      release();
+      if (holderRun !== undefined) await holderRun.catch(() => {});
+      if (waiterRun !== undefined) await waiterRun.catch(() => {});
+      if (holder !== undefined) await holder.close();
+      if (waiter !== undefined) await waiter.close();
+    }
+
+    const stored = await withTenant(postgres.admin, seed.tenantId, async (tx) => {
+      await asAppUser(tx);
+      return findIncident(tx, seed.tenantId, open!.id);
+    });
+    expect({
+      personId: stored?.acknowledgedBy,
+      handledAt: stored?.acknowledgedAt?.toISOString(),
+    }).toEqual({ personId: first.personId, handledAt: first.handledAt.toISOString() });
   });
 });
