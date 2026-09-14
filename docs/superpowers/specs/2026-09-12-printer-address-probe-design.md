@@ -1,5 +1,10 @@
 # A3: check a printer address
 
+> **2026-09-14 update:** the connection check itself is still byte-free, but a reachable address is now
+> also sent one read-only IPP Get-Printer-Attributes request on port 631, to tell office printers
+> from receipt printers. The "any accepted unicast address" reasoning below assumed nothing was sent;
+> see `docs/backlog.md` → A3, _Office printers greyed out in the scan_.
+
 Add a known printer on a routed network from the dashboard's Add printer dialog. Enter an IP address
 and port (9100 by default), then Check address. Keep automatic discovery and the existing Add / Add
 again actions. A successful TCP connection establishes reachability, not printer identity or paper

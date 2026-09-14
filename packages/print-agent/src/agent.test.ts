@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createAgent } from "./agent.js";
 import type { AgentClient, Failure, JoinStatus, NodeProbe, PullReply, Result } from "./client.js";
+import type { DiscoveredDevice } from "./host.js";
 import { fakeHost } from "./testing/fake-host.js";
 import { FakeSink, type PrinterTarget } from "./transport.js";
 
@@ -515,6 +516,117 @@ describe("createAgent — inventory, discovery and resolve", () => {
       status: "done",
     });
     expect(host.logs.some((line) => line.includes("address probe failed"))).toBe(true);
+  });
+
+  describe("office-printer classification", () => {
+    const H = "192.168.20.56";
+    const target = { host: H, port: 9100, expiresInMs: 30000 };
+    const scannedHp = { transport: "network_tcp" as const, host: H, port: 9100, name: "HP" };
+    const probedHp = { transport: "network_tcp" as const, host: H, port: 9100 };
+    const openWindowWithProbe = () =>
+      vi.fn().mockResolvedValue(
+        okR<PullReply>({
+          nodeId: "n1",
+          servers: [],
+          jobs: [],
+          discoveryUntil: 10_000_000_000,
+          networkProbes: [target],
+        }),
+      );
+    const markHp = async (devices: DiscoveredDevice[]) =>
+      devices.map((d) => (d.host === H ? { ...d, pagePrinter: true as const } : d));
+
+    it("classifies the merged scan and probe results once, so a scan duplicate of a typed address is reported marked", async () => {
+      const markPagePrinters = vi.fn(markHp);
+      const host = fakeHost({
+        config: CONFIG,
+        token: "a1.s",
+        scan: async () => [{ ...scannedHp }],
+        probeNetwork: async () => [{ ...probedHp }],
+        markPagePrinters,
+      });
+      const c = client({ pullJobs: openWindowWithProbe() });
+      const agent = createAgent({ host, client: c });
+      await agent.runOnce(); // opens the window and records the typed address
+      expect(markPagePrinters).not.toHaveBeenCalled();
+      await agent.runOnce(); // scans, probes, merges, then classifies
+      expect(markPagePrinters).toHaveBeenCalledTimes(1);
+      expect(markPagePrinters).toHaveBeenCalledWith([scannedHp]);
+      expect(inventoryOf(c, 1).scanned).toStrictEqual([{ ...scannedHp, pagePrinter: true }]);
+    });
+
+    it("does not classify when nothing on the list is a network device", async () => {
+      const markPagePrinters = vi.fn(markHp);
+      const bt = { transport: "bluetooth" as const, localKey: "AA:BB:CC" };
+      const host = fakeHost({
+        config: CONFIG,
+        token: "a1.s",
+        scan: async () => [bt],
+        markPagePrinters,
+      });
+      const c = client({
+        pullJobs: vi
+          .fn()
+          .mockResolvedValue(
+            okR<PullReply>({ nodeId: "n1", servers: [], jobs: [], discoveryUntil: 10_000_000_000 }),
+          ),
+      });
+      const agent = createAgent({ host, client: c });
+      await agent.runOnce();
+      await agent.runOnce();
+      expect(inventoryOf(c, 1).scanned).toStrictEqual([bt]);
+      expect(markPagePrinters).not.toHaveBeenCalled();
+    });
+
+    it("a throwing classification never blocks the job pull and reports the devices unmarked", async () => {
+      const host = fakeHost({
+        config: CONFIG,
+        token: "a1.s",
+        scan: async () => [{ ...scannedHp }],
+        markPagePrinters: async () => {
+          throw new Error("ipp exploded");
+        },
+      });
+      const c = client({
+        pullJobs: vi
+          .fn()
+          .mockResolvedValueOnce(
+            okR<PullReply>({ nodeId: "n1", servers: [], jobs: [], discoveryUntil: 10_000_000_000 }),
+          )
+          .mockResolvedValue(
+            okR<PullReply>({
+              nodeId: "n1",
+              servers: [],
+              jobs: [usbJob("classify-print")],
+              discoveryUntil: null,
+            }),
+          ),
+      });
+      const agent = createAgent({ host, client: c });
+      await agent.runOnce();
+      await agent.runOnce();
+      expect(inventoryOf(c, 1).scanned).toStrictEqual([scannedHp]);
+      expect(c.report).toHaveBeenCalledWith(expect.any(String), "a1.s", "classify-print", {
+        status: "done",
+      });
+      expect(host.logs.some((line) => line.includes("office-printer check failed"))).toBe(true);
+    });
+
+    it("reports the merged devices unchanged on a host without the classifier", async () => {
+      const host = fakeHost({
+        config: CONFIG,
+        token: "a1.s",
+        scan: async () => [{ ...scannedHp }],
+        probeNetwork: async () => [{ ...probedHp }],
+      });
+      expect(host.markPagePrinters).toBeUndefined();
+      const c = client({ pullJobs: openWindowWithProbe() });
+      const agent = createAgent({ host, client: c });
+      await agent.runOnce();
+      await agent.runOnce();
+      expect(inventoryOf(c, 1).scanned).toStrictEqual([scannedHp]);
+      expect(host.logs.some((line) => line.includes("office-printer check failed"))).toBe(false);
+    });
   });
 
   it("reports visible devices on every pull", async () => {

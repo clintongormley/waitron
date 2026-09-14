@@ -191,6 +191,8 @@ export const en = {
   "printers.probe_missing":
     "No print agent reported this address. Check the address, port, printer power and network connection, and make sure a print agent is online. Then try again.",
   "printers.probe_registered": "Address reachable. This printer is already added.",
+  "printers.probe_page_printer":
+    "Address reachable, but this is an office printer. Office printers are not supported for receipts, so it can't be added.",
   "printers.port_invalid": "Enter a whole port number from 1 to 65535",
   "printers.device_required": "Enter the device ID",
   "printers.poll_required": "Enter the cloud polling ID",
@@ -619,6 +621,7 @@ export const en = {
   "printers.discovered_title": "Discovered printers",
   "printers.no_discovered": "No printers found yet — click Scan, or check the printer is on.",
   "printers.discovered_seen_on": "Seen on {agent}",
+  "printers.page_printer_hint": "Office printer — not supported for receipts",
   "printers.seen_at": "Seen on {agent} · {time}",
   "printers.bluetooth_pair_note":
     "Pair a Bluetooth printer first on the box's setup page (port 9110); it then appears below.",
@@ -1372,6 +1375,8 @@ export const es: Record<StringKey, string> = {
   "printers.probe_missing":
     "Ningún agente de impresión ha comunicado esta dirección. Revisa la dirección, el puerto, la alimentación y la conexión de la impresora, y comprueba que haya un agente conectado. Después, inténtalo de nuevo.",
   "printers.probe_registered": "Dirección accesible. Esta impresora ya está añadida.",
+  "printers.probe_page_printer":
+    "Dirección accesible, pero es una impresora de oficina. Las impresoras de oficina no sirven para imprimir recibos, así que no se puede añadir.",
   "printers.port_invalid": "Introduce un número entero de puerto entre 1 y 65535",
   "printers.device_required": "Introduce el ID del dispositivo",
   "printers.poll_required": "Introduce el ID de consulta en la nube",
@@ -1773,6 +1778,7 @@ export const es: Record<StringKey, string> = {
   "printers.no_discovered":
     "Aún no se ha detectado ninguna impresora — pulsa Buscar o comprueba que esté encendida.",
   "printers.discovered_seen_on": "Detectada en {agent}",
+  "printers.page_printer_hint": "Impresora de oficina: no sirve para imprimir recibos",
   "printers.seen_at": "Detectada en {agent} · {time}",
   "printers.bluetooth_pair_note":
     "Empareja primero una impresora Bluetooth en la página de configuración del equipo (puerto 9110); después aparecerá abajo.",

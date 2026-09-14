@@ -1216,6 +1216,10 @@ export interface DiscoveredPrinter {
   make?: string | null;
   model?: string | null;
   name?: string | null;
+  /** Present (always `true`) when an agent reporting this address saw A4/letter paper over IPP: an
+   * office printer, which cannot print receipts, so the dashboard shows it without an Add action unless
+   * it is a disabled registration. */
+  pagePrinter?: true;
   alreadyRegistered: boolean;
   /** The registered printer this device matches (usb/bluetooth on `localKey`, network on host:port), or null. */
   printerId: string | null;

@@ -206,6 +206,8 @@ interface DiscoveredDeviceWire {
   make?: string;
   model?: string;
   name?: string;
+  /** True when the agent saw A4/letter media over IPP: an office printer, not a receipt printer. */
+  pagePrinter?: true;
 }
 
 /** An optional string on a wire object: present-and-a-string passes through, anything else is dropped
@@ -240,7 +242,7 @@ function screenVisible(raw: unknown): VisibleDeviceWire[] {
 
 /** Shape-screen the posted `scanned` array into `DiscoveredDeviceWire[]`, DROPPING malformed entries: a
  * present `transport` that is one of the known `print_transport` members is required; `localKey`/`host`
- * (strings) and `port` (an integer) are optional and dropped when malformed. */
+ * (strings), `port` (an integer) and `pagePrinter` (exactly `true`) are optional and dropped when malformed. */
 function screenScanned(raw: unknown): DiscoveredDeviceWire[] {
   if (!Array.isArray(raw)) return [];
   const members = printTransport.enumValues as readonly string[];
@@ -257,6 +259,7 @@ function screenScanned(raw: unknown): DiscoveredDeviceWire[] {
       make: wireString(d.make),
       model: wireString(d.model),
       name: wireString(d.name),
+      pagePrinter: d.pagePrinter === true ? true : undefined,
     });
   }
   return out;
@@ -306,6 +309,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     make?: string;
     model?: string;
     name?: string;
+    pagePrinter?: true;
     lastSeenAt: number;
   }
   const discovered = new Map<string, DiscoveredEntry>(); // key: `${agentId}:${transport}:${localKey ?? host+":"+port}`
@@ -653,6 +657,12 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
         (e.localKey !== undefined ? byKey.get(e.localKey) : undefined) ??
         (e.host !== undefined ? byHostPort.get(`${e.host}:${e.port ?? 9100}`) : undefined) ??
         null;
+      // Each agent checks on its own and a failed check leaves a device unmarked, so an address is an
+      // office printer for every agent's entry once any agent reporting that address marked it.
+      const pagePrinterAddresses = new Set<string>();
+      for (const e of discovered.values())
+        if (e.pagePrinter && e.host !== undefined)
+          pagePrinterAddresses.add(`${e.host}:${e.port ?? 9100}`);
       return c.json(
         [...discovered.values()].map((e) => {
           const printerId = printerIdOf(e);
@@ -666,6 +676,10 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             make: e.make,
             model: e.model,
             name: e.name,
+            pagePrinter:
+              e.host !== undefined && pagePrinterAddresses.has(`${e.host}:${e.port ?? 9100}`)
+                ? (true as const)
+                : undefined,
             alreadyRegistered: printerId !== null,
             printerId,
             lastSeenAt: new Date(e.lastSeenAt).toISOString(),

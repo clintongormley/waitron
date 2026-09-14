@@ -60,6 +60,9 @@ export interface DiscoveredDevice {
   make?: string;
   model?: string;
   name?: string;
+  /** Set when the device answered an IPP paper-size query listing A4 or US letter, so it is an office
+   * printer, not an ESC/POS receipt printer. Absent means unknown or not a page printer. */
+  pagePrinter?: true;
 }
 
 /** The outcome of a {@link Host.pair} attempt — `ok` with the paired device's `localKey` on success,
@@ -100,6 +103,11 @@ export interface Host {
   scan(kinds?: TransportKind[]): Promise<DiscoveredDevice[]>;
   /** Bounded TCP connection checks; send no bytes and return only reachable targets. */
   probeNetwork(targets: NetworkProbe[]): Promise<DiscoveredDevice[]>;
+  /** Asks port 631 of each network device's host one IPP Get-Printer-Attributes query, or reuses a
+   * recent answer, and returns the devices with office printers marked `pagePrinter: true`. A failed
+   * check leaves the device unmarked. The loop calls it at most once per pull, over the merged scan and
+   * probe results, and treats a throw as "nothing marked". */
+  markPagePrinters?(devices: DiscoveredDevice[]): Promise<DiscoveredDevice[]>;
   /** Turns a claimed job's connection facts into a {@link PrinterTarget} the transport can send to —
    * for a local job, mapping its `localKey` to the box's current device path. Throws when the device
    * is gone, so the loop marks the job failed rather than sending nowhere. */

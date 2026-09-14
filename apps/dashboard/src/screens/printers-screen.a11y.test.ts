@@ -96,7 +96,7 @@ const tills: Till[] = [
 ];
 
 // Two discovered USB devices — one unregistered (its Add action render) and one
-// disabled registration (offered for adding again) — so the
+// disabled registration (offered for adding again) — plus an office printer, so the
 // usb/bluetooth create surface is in the a11y tree. Typed loosely (the stub is cast to DashboardApi), the shape matching DiscoveredPrinter.
 const discovered = [
   {
@@ -121,6 +121,19 @@ const discovered = [
     name: null,
     alreadyRegistered: true,
     printerId: "p3",
+    lastSeenAt: "2026-08-25T14:30:00.000Z",
+  },
+  {
+    // An office printer: its muted row and explanation replace the Add action, so axe checks their contrast.
+    agentId: "a1",
+    agentName: "Cocina agent",
+    transport: "network_tcp",
+    host: "10.0.0.56",
+    port: 9100,
+    name: "HP LaserJet",
+    pagePrinter: true,
+    alreadyRegistered: false,
+    printerId: null,
     lastSeenAt: "2026-08-25T14:30:00.000Z",
   },
 ];
@@ -250,6 +263,7 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
     expect(q(el, "[data-test=discovered-row-SN-2]")).not.toBeNull();
     expect(q(el, "[data-test=register-SN-2]")!.textContent).toContain(t("printers.add_again"));
     expect(q(el, "[data-test=printer-last-seen-p3]")).toBeNull();
+    expect(q(el, "[data-test='page-printer-10.0.0.56:9100']")).not.toBeNull();
     expect(q(el, "[data-test=new-transport]")).toBeNull();
     await expectNoA11yViolations(host);
     q(el, "[data-test=probe-printer]")!.click();

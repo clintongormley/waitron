@@ -1,10 +1,12 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { createServer } from "node:net";
 import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentStatus } from "@waitron/print-agent";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { EnvConfig } from "./config.js";
 import { createContainerHost } from "./host.js";
+import type { MediaQuery } from "./ipp-probe.js";
 import { FileState } from "./state.js";
 
 let dir: string;
@@ -217,6 +219,116 @@ describe("createContainerHost — the rest of the seam", () => {
       devicePath: "/dev/usb/lp0",
     });
     expect(devices.resolve).toHaveBeenCalledWith(job);
+  });
+
+  it("checks a typed address over TCP without asking IPP, and marks page printers in a separate step", async () => {
+    const hp = await readFile(
+      new URL("./__fixtures__/hp-color-laserjet-m181fw-media-supported.ipp", import.meta.url),
+    );
+    const server = createServer((socket) => socket.destroy());
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("No TCP port");
+    const target = { host: "127.0.0.1", port: address.port, expiresInMs: 30000 };
+    const found = { transport: "network_tcp" as const, host: "127.0.0.1", port: address.port };
+    try {
+      const pageQuery = vi.fn<MediaQuery>(async () => hp);
+      const pageHost = createContainerHost({
+        env: baseEnv,
+        state: new FileState(dir),
+        onStatus: () => {},
+        mediaQuery: pageQuery,
+      });
+      expect(await pageHost.probeNetwork([target])).toStrictEqual([found]);
+      expect(pageQuery).not.toHaveBeenCalled();
+      expect(await pageHost.markPagePrinters!([found])).toStrictEqual([
+        { ...found, pagePrinter: true },
+      ]);
+      expect(pageQuery).toHaveBeenCalledWith("127.0.0.1", 1500);
+
+      const closedHost = createContainerHost({
+        env: baseEnv,
+        state: new FileState(dir),
+        onStatus: () => {},
+        mediaQuery: async () => undefined,
+      });
+      expect(await closedHost.markPagePrinters!([found])).toStrictEqual([found]);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
+  describe("markPagePrinters caches each host's answer for 30 seconds", () => {
+    const device = (host: string) => ({ transport: "network_tcp" as const, host, port: 9100 });
+
+    it.each([
+      ["a page-printer reply", "page" as const, [{ ...device("10.0.0.5"), pagePrinter: true }]],
+      ["a receipt-printer reply", "roll" as const, [device("10.0.0.5")]],
+      ["no reply", "none" as const, [device("10.0.0.5")]],
+      ["a thrown query", "throw" as const, [device("10.0.0.5")]],
+    ])(
+      "remembers %s, then asks again once 30 seconds have passed",
+      async (_label, kind, expected) => {
+        const hp = await readFile(
+          new URL("./__fixtures__/hp-color-laserjet-m181fw-media-supported.ipp", import.meta.url),
+        );
+        const query = vi.fn<MediaQuery>(async () => {
+          if (kind === "throw") throw new Error("socket hang up");
+          if (kind === "page") return hp;
+          if (kind === "roll") return new Uint8Array([0x02, 0x00, 0x00, 0x00, 0, 0, 0, 1, 0x03]);
+          return undefined;
+        });
+        let clock = 1_000_000;
+        const host = createContainerHost({
+          env: baseEnv,
+          state: new FileState(dir),
+          onStatus: () => {},
+          mediaQuery: query,
+          now: () => clock,
+        });
+        expect(await host.markPagePrinters!([device("10.0.0.5")])).toStrictEqual(expected);
+        expect(query).toHaveBeenCalledTimes(1);
+        clock += 29_999;
+        expect(await host.markPagePrinters!([device("10.0.0.5")])).toStrictEqual(expected);
+        expect(query).toHaveBeenCalledTimes(1);
+        clock += 1;
+        expect(await host.markPagePrinters!([device("10.0.0.5")])).toStrictEqual(expected);
+        expect(query).toHaveBeenCalledTimes(2);
+      },
+    );
+
+    it("asks only the hosts it has no fresh answer for", async () => {
+      const query = vi.fn<MediaQuery>(async () => undefined);
+      let clock = 0;
+      const host = createContainerHost({
+        env: baseEnv,
+        state: new FileState(dir),
+        onStatus: () => {},
+        mediaQuery: query,
+        now: () => clock,
+      });
+      await host.markPagePrinters!([device("10.0.0.5")]);
+      clock += 10_000;
+      await host.markPagePrinters!([device("10.0.0.5"), device("10.0.0.6")]);
+      expect(query.mock.calls.map(([h]) => h)).toEqual(["10.0.0.5", "10.0.0.6"]);
+      expect(host.now()).toBe(10_000);
+    });
+
+    it("asks again when the clock has moved back past a remembered answer", async () => {
+      const query = vi.fn<MediaQuery>(async () => undefined);
+      let clock = 1_000_000;
+      const host = createContainerHost({
+        env: baseEnv,
+        state: new FileState(dir),
+        onStatus: () => {},
+        mediaQuery: query,
+        now: () => clock,
+      });
+      await host.markPagePrinters!([device("10.0.0.5")]);
+      clock -= 1;
+      await host.markPagePrinters!([device("10.0.0.5")]);
+      expect(query).toHaveBeenCalledTimes(2);
+    });
   });
 
   it("logs one structured JSON line per call, carrying the level, message and fields", () => {

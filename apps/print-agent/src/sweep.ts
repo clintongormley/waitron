@@ -1,5 +1,6 @@
 import type { networkInterfaces } from "node:os";
 import type { DiscoveredDevice } from "@waitron/print-agent";
+import { forEachBounded } from "./pool.js";
 
 /** Enumerate the box's own IPv4 subnets, bound the port-9100 sweep and merge discovery results.
  * `linux-devices.ts` supplies interfaces and `tcp-probe.ts` supplies byte-free TCP connections.
@@ -98,18 +99,13 @@ export async function sweepPort(opts: SweepOptions): Promise<DiscoveredDevice[]>
   const concurrency = opts.concurrency ?? DEFAULT_CONCURRENCY;
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const open: boolean[] = new Array<boolean>(opts.hosts.length).fill(false);
-  let next = 0;
-  const worker = async (): Promise<void> => {
-    while (next < opts.hosts.length) {
-      const i = next++;
-      try {
-        open[i] = await opts.connect(opts.hosts[i]!, opts.port, timeoutMs);
-      } catch {
-        open[i] = false;
-      }
+  await forEachBounded(opts.hosts, concurrency, async (host, i) => {
+    try {
+      open[i] = await opts.connect(host, opts.port, timeoutMs);
+    } catch {
+      open[i] = false;
     }
-  };
-  await Promise.all(Array.from({ length: Math.min(concurrency, opts.hosts.length) }, worker));
+  });
   return opts.hosts
     .filter((_, i) => open[i])
     .map((host) => ({ transport: "network_tcp", host, port: opts.port }));

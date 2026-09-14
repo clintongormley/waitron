@@ -25,6 +25,7 @@ export function fakeHost(
     visibleDevices: () => Promise<VisibleDevice[]>;
     scan: (kinds?: TransportKind[]) => Promise<DiscoveredDevice[]>;
     probeNetwork: (targets: NetworkProbe[]) => Promise<DiscoveredDevice[]>;
+    markPagePrinters: (devices: DiscoveredDevice[]) => Promise<DiscoveredDevice[]>;
     resolve: (job: WireJob) => Promise<PrinterTarget>;
     pair: (mac: string) => Promise<PairResult>;
   }> = {},
@@ -79,6 +80,9 @@ export function fakeHost(
     visibleDevices: overrides.visibleDevices ?? (async () => []),
     scan: overrides.scan ?? (async () => []),
     probeNetwork: overrides.probeNetwork ?? (async () => []),
+    ...(overrides.markPagePrinters === undefined
+      ? {}
+      : { markPagePrinters: overrides.markPagePrinters }),
     resolve:
       overrides.resolve ??
       (async (job) => ({

@@ -812,6 +812,69 @@ describe("POST /print-api/agent/jobs — inventory pull + discovery window", () 
     expect(rows.find((r) => r.host === host)).toMatchObject({ printerId });
   });
 
+  it("GET /management-api/discovered-printers marks a scanned office printer only when the agent sent exactly true", async () => {
+    const app = mountApp();
+    const { token } = await joinAndAccept(app, "Inventory agent");
+    const host = "10.9.251.1";
+    await pull(app, token, {
+      visible: [],
+      scanned: [
+        { transport: "network_tcp", host, port: 631, pagePrinter: true },
+        { transport: "network_tcp", host, port: 632, pagePrinter: false },
+        { transport: "network_tcp", host, port: 633, pagePrinter: "true" },
+        { transport: "network_tcp", host, port: 634, pagePrinter: 1 },
+        { transport: "network_tcp", host, port: 9100 },
+      ],
+    });
+    const res = await send(app, "GET", "/management-api/discovered-printers", {
+      cookie: managerCookie,
+    });
+    expect(res.status).toBe(200);
+    const rows = (await res.json()) as Record<string, unknown>[];
+    const byPort = new Map(rows.map((r) => [r.port, r]));
+    expect(byPort.get(631)).toMatchObject({ pagePrinter: true });
+    for (const port of [632, 633, 634, 9100]) {
+      expect(byPort.get(port)).toBeDefined();
+      expect(byPort.get(port)).not.toHaveProperty("pagePrinter");
+    }
+  });
+
+  it("GET /management-api/discovered-printers marks every agent's entry for an address one agent saw as an office printer", async () => {
+    const app = mountApp();
+    const first = await joinAndAccept(app, "Kitchen agent");
+    const second = await joinAndAccept(app, "Bar agent");
+    const host = "10.9.252.1";
+    await pull(app, first.token, {
+      visible: [],
+      scanned: [
+        { transport: "network_tcp", host, port: 9100, pagePrinter: true },
+        { transport: "network_tcp", host: "10.9.252.2", port: 9100 },
+      ],
+    });
+    await pull(app, second.token, {
+      visible: [],
+      scanned: [
+        { transport: "network_tcp", host, port: 9100 },
+        { transport: "network_tcp", host, port: 9101 },
+        { transport: "network_tcp", host: "10.9.252.2", port: 9100 },
+      ],
+    });
+    const res = await send(app, "GET", "/management-api/discovered-printers", {
+      cookie: managerCookie,
+    });
+    expect(res.status).toBe(200);
+    const rows = (await res.json()) as Record<string, unknown>[];
+    const at = (agentId: string, h: string, port: number) =>
+      rows.find((r) => r.agentId === agentId && r.host === h && r.port === port);
+    expect(at(first.agentId, host, 9100)).toMatchObject({ pagePrinter: true });
+    // Fails while entries are reported per agent: the second agent's copy carries no mark of its own.
+    expect(at(second.agentId, host, 9100)).toMatchObject({ pagePrinter: true });
+    // Controls: another port on the same host, and another host, stay unmarked for both agents.
+    expect(at(second.agentId, host, 9101)).not.toHaveProperty("pagePrinter");
+    expect(at(first.agentId, "10.9.252.2", 9100)).not.toHaveProperty("pagePrinter");
+    expect(at(second.agentId, "10.9.252.2", 9100)).not.toHaveProperty("pagePrinter");
+  });
+
   it("POST /management-api/printers with a duplicate local_key → 409 printer.already_registered", async () => {
     const app = mountApp();
     await joinAndAccept(app);
