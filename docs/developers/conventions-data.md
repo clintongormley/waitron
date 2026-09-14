@@ -20,11 +20,14 @@ An incident whose code no module claims (`alerts.events` on its module descripto
 longest prefix) is shown under diagnostics, to `diagnostics.view` only
 (`UNCLAIMED` in `apps/server/src/alerts.ts`). A code with no entry in
 `apps/dashboard/src/i18n/alert-messages.ts` is shown as a generic sentence with the raw code beneath
-it. The guard, `scripts/alert-codes.test.ts` (root project), collects every dotted string literal
+it. The guard, `scripts/alert-codes.test.ts` (root project), collects code-shaped string literals
 from the files in its `INCIDENT_CODE_SOURCES` list, minus `NOT_RECORDED`, and checks each has a claim
-and both wordings. It reads text, which makes it weaker than its name:
+and both wordings. It reads text, which makes it weaker than its name in four ways, the same four its
+opening comment lists:
 
-- A code built at runtime (a template literal, or a string spliced from parts) escapes the scan.
+- It matches only double-quoted literals with one dot and nothing but lowercase letters and
+  underscores (`/"([a-z_]+\.[a-z_]+)"/`). A single-quoted or backtick code, a code with a digit or a
+  second dot, and a code built at runtime all escape the scan.
 - A listed code counts as recorded because its text appears in a listed file, not because anything
   in production raises it. The guard's opening comment names the codes counted that way.
 - A file that only names a code and hands it to a writer elsewhere (as `packages/fiscal/src/clock.ts`

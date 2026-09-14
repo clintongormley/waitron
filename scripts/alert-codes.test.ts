@@ -1,8 +1,12 @@
-// Reads source TEXT, which makes it weaker than its name in three ways:
-// - A code built at runtime (a template literal, or a string spliced from parts) escapes the scan.
+// Reads source TEXT, which makes it weaker than its name in four ways:
+// - It matches only double-quoted literals with one dot and nothing but lowercase letters and
+//   underscores (`/"([a-z_]+\.[a-z_]+)"/`). A single-quoted or backtick code, a code with a digit or a
+//   second dot, and a code built at runtime all escape the scan.
 // - A code counts as recorded because its text appears in a listed file, not because anything in
 //   production raises it. The `clock.` and `fiscal.reconcile_` codes are counted although no
 //   production path raises them today.
+// - A file that only names a code and hands it to a writer elsewhere (as `packages/fiscal/src/clock.ts`
+//   builds the clock warnings `packages/core/src/record-sale.ts` records) is scanned only if listed.
 // - The writers check recognises only `recordIncident(`, `recordIncidentOnce(` and `incidents(tx`.
 //   A new file that records incidents through a sink under another name, or passes a transaction
 //   variable not named `tx`, is not caught, and neither are the codes that file names.
