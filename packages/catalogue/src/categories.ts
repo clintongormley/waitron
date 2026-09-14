@@ -330,8 +330,11 @@ export async function replaceProductCategories(
 }
 /**
  * Add many products to one category. A product with no reporting category gets this one; a product
- * that already has one keeps it. Adding a product that is already a member is a no-op, so the
- * caller may resubmit its whole selection.
+ * that already has one keeps it. Resubmitting a product that is already a member is safe — it never
+ * fails and never duplicates the membership — but it is not a no-op: the reporting category is
+ * chosen from the product's own current value, not from whether the membership is new, so an
+ * existing member that still has no reporting category is given this one. Only an existing member
+ * that already has a reporting category comes out unchanged.
  */
 export async function addProductsToCategory(
   tx: Transaction,

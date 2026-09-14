@@ -72,9 +72,12 @@ reporting category for), `children` carries `{ id, name }` per direct child, and
 module is not installed, since that is the module owning the table.
 
 The bulk add assigns a whole selection to one category in a single write. A product that has no
-reporting category yet takes this one; a product that already has one keeps it. Adding a product
-that is already a member changes nothing, so a caller may resubmit a selection. An empty list is
-accepted and does nothing. The whole selection is checked before anything is written: an unknown,
+reporting category yet takes this one; a product that already has one keeps it. Resubmitting a
+product that is already a member is safe: it never fails and it does not add the membership twice.
+It is not, however, entirely without effect — the reporting category is decided from what the
+product currently has, not from whether the membership is new, so an existing member with no
+reporting category is given this one. Only an existing member that already has a reporting category
+comes out unchanged. An empty list is accepted and does nothing. The whole selection is checked before anything is written: an unknown,
 foreign or repeated id rejects the entire request with `category.membership_invalid`, and nothing
 is added.
 
