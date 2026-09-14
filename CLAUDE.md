@@ -231,6 +231,12 @@ area** — these lines tell you what the rule is, not why it exists or how it br
 - **Error codes name the DOMAIN CONCEPT, never the throwing package** — `series.not_found`, not
   `db.series_not_found`. **Never renamed once shipped**; deprecate and add a sibling. `server.*` is
   reserved for facts about the process itself. Every file that throws a code imports its registry.
+- **A recorded incident code needs an area claim and English and Spanish alert wording**, or the
+  dashboard files it under diagnostics or shows a generic sentence. Guard: `scripts/alert-codes.test.ts`
+  — it reads TEXT from a hand-listed set of files: a code built at runtime escapes it; a listed code
+  counts as recorded even when no production path raises it (`clock.*`, `fiscal.reconcile_*` today);
+  a file that only names a code (as `packages/fiscal/src/clock.ts` feeds `record-sale.ts`) is caught
+  only if listed; and it spots a new writer only by `recordIncident(`, `recordIncidentOnce(` or `incidents(tx`.
 - **Spanish domain terms are deliberate, and a module declares its own.** One declaring home per word;
   a fiscal term never goes in the base list. Guard: `scripts/english-only.test.ts`. `apps/*` is out of
   scope by a recorded decision, so Spanish identifiers in app UI code are caught only by review.
