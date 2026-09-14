@@ -363,6 +363,20 @@ the legacy product-patch path, the missing module seat for delete dependants, an
 bug. [Design](superpowers/specs/2026-09-13-categories-screen-design.md),
 [plan](superpowers/plans/2026-09-13-categories-screen.md).
 
+**Category management reworked — LANDED #362 (2026-09-14).** The categories screen, its form, the
+product-categories editor and the products dialog now share one layout. Parent and category pickers
+are searchable dropdowns (`wt-combobox`, its first dashboard use), and category names show in the
+reader's own language instead of the venue's default, which was a bug. The shared table
+(`wt-data-table`) gained opt-in behaviour any screen can use: a search box, a filter dropdown per
+column, a starting sort, parent rows kept visible when a tree is filtered, and a sort-and-filter view
+remembered for the browser tab. The delete confirmation no longer lists kitchen routes, though
+deleting still removes them. What it left open is recorded where it belongs: the plural-for-one
+wording (in the #340 list above), two till dropdowns that may show the wrong choice and the
+`wt-select` question (under A7 below), and why server-backed paging (also A7) cannot
+reuse the table's search and filters as they stand.
+[Design](superpowers/specs/2026-09-14-category-overhaul-design.md),
+[plan](superpowers/plans/2026-09-14-category-overhaul.md).
+
 **Product modifiers — LANDED #341 (2026-09-13).** Modifiers are now written once and attached to as
 many products as you like, instead of being retyped per product. There are four kinds: free text (a
 note the kitchen sees), extras (priced additions), options (pick from a list) and a plain yes/no.
