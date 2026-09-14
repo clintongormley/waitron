@@ -185,7 +185,7 @@ The siblings that already avoid it: `apps/dashboard/src/screens/device-profiles-
 `#renderCanvasOptions` and its form-factor dropdown put `?selected` on each option (an attribute
 binding, which the probe above did not test), and every mapped `<select>` in
 `apps/dashboard/src/widgets/product-editor.ts` binds both `.value` and `.selected`. Nothing guards
-the rule; two dropdowns that bind `.value` alone are listed in `docs/backlog.md`.
+the rule; the dropdowns a text scan found still binding `.value` alone over mapped options are listed in `docs/backlog.md`.
 
 **Printing and hardware**
 

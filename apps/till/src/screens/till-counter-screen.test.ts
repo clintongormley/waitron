@@ -34,6 +34,24 @@ const counterTab: TabDef = {
   ],
 };
 
+/** Two counter zones, with Deli counter listed second. */
+const deliSecond: ServiceZoneSummary[] = [
+  {
+    id: "downstairs",
+    name: "Downstairs bar",
+    departmentId: "bar",
+    departmentName: "Bar",
+    serviceMode: "prepay",
+  },
+  {
+    id: "deli",
+    name: "Deli counter",
+    departmentId: "deli",
+    departmentName: "Deli",
+    serviceMode: "prepay",
+  },
+];
+
 const mount = (over: Partial<TillCounterScreen> = {}) =>
   mountWidget<TillCounterScreen>("till-counter-screen", {
     store: new WorkingOrderStore(),
@@ -98,6 +116,26 @@ describe("till-counter-screen", () => {
     select.dispatchEvent(new Event("change"));
     el.shadowRoot!.querySelector<HTMLElement>(".service-zone-refresh")!.click();
     expect(seen).toEqual(["downstairs", "upstairs"]);
+  });
+
+  it("shows the chosen service zone on first render when it is not the first zone listed", async () => {
+    const { el } = await mount({ serviceZones: deliSecond, selectedServiceZoneId: "deli" });
+    const select = el.shadowRoot!.querySelector<HTMLSelectElement>('select[name="service-zone"]')!;
+    expect(select.selectedOptions[0]!.textContent).toBe("Deli counter");
+  });
+
+  it("follows the chosen service zone when the app switches it after a pick", async () => {
+    const { el } = await mount({ serviceZones: deliSecond, selectedServiceZoneId: "deli" });
+    const select = el.shadowRoot!.querySelector<HTMLSelectElement>('select[name="service-zone"]')!;
+    select.value = "downstairs";
+    select.dispatchEvent(new Event("change"));
+    el.selectedServiceZoneId = "downstairs";
+    await el.updateComplete;
+    expect(select.selectedOptions[0]!.textContent).toBe("Downstairs bar");
+
+    el.selectedServiceZoneId = "deli";
+    await el.updateComplete;
+    expect(select.selectedOptions[0]!.textContent).toBe("Deli counter");
   });
 
   it("keeps the service zone fixed while the basket has lines", async () => {

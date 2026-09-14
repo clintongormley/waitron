@@ -315,15 +315,11 @@ export class TillCounterScreen extends LitElement {
         this.serviceZones.length > 0
           ? html`<div class="service-zone">
               <label for="service-zone">${t("service_zone.label")}</label>
-              <select
-                id="service-zone"
-                name="service-zone"
-                .value=${this.selectedServiceZoneId}
-                @change=${this.#pickServiceZone}
-              >
-                ${this.serviceZones.map(
-                  (zone) => html`<option value=${zone.id}>${zone.name}</option>`,
-                )}
+              <select id="service-zone" name="service-zone" @change=${this.#pickServiceZone}>
+                ${this.serviceZones.map((zone) => {
+                  const chosen = zone.id === this.selectedServiceZoneId;
+                  return html`<option value=${zone.id} .selected=${chosen}>${zone.name}</option>`;
+                })}
               </select>
               <wt-button
                 class="service-zone-refresh"
