@@ -546,6 +546,62 @@ test("the search box and filter dropdowns draw the focus ring when focused", asy
   }
 });
 
+test("the search box and filter dropdown paint from the theme tokens", async () => {
+  const el = await tableS({ searchable: true, columns: withStatus });
+  host.style.setProperty("--wt-tap-min", "52px");
+  host.style.setProperty("--wt-color-border", "rgb(1, 2, 3)");
+  host.style.setProperty("--wt-color-bg", "rgb(4, 5, 6)");
+  host.style.setProperty("--wt-color-surface", "rgb(7, 8, 9)");
+  host.style.setProperty("--wt-color-text", "rgb(10, 11, 12)");
+  const search = el.shadowRoot!.querySelector<HTMLInputElement>(".table-search")!;
+  const filter = el.shadowRoot!.querySelector<HTMLSelectElement>('select[data-filter="status"]')!;
+  expect(getComputedStyle(search).borderColor).toBe("rgb(1, 2, 3)");
+  expect(getComputedStyle(search).backgroundColor).toBe("rgb(4, 5, 6)");
+  expect(getComputedStyle(search).color).toBe("rgb(10, 11, 12)");
+  expect(search.getBoundingClientRect().height).toBeGreaterThanOrEqual(52);
+  expect(getComputedStyle(filter).borderColor).toBe("rgb(1, 2, 3)");
+  expect(getComputedStyle(filter).backgroundColor).toBe("rgb(7, 8, 9)");
+  expect(getComputedStyle(filter).color).toBe("rgb(10, 11, 12)");
+  expect(filter.getBoundingClientRect().height).toBeGreaterThanOrEqual(52);
+});
+
+test("the toolbar stacks the filters under a full-width search box at phone width", async () => {
+  const el = await tableS({ searchable: true, columns: withStatus });
+  el.style.width = "360px";
+  await el.updateComplete;
+  const toolbar = el
+    .shadowRoot!.querySelector<HTMLElement>(".table-toolbar")!
+    .getBoundingClientRect();
+  const search = el
+    .shadowRoot!.querySelector<HTMLElement>(".table-search")!
+    .getBoundingClientRect();
+  const filters = el
+    .shadowRoot!.querySelector<HTMLElement>(".table-filters")!
+    .getBoundingClientRect();
+  expect(filters.top).toBeGreaterThanOrEqual(search.bottom);
+  expect(search.width).toBeCloseTo(toolbar.width, 0);
+});
+
+test("the toolbar keeps the search box and filters on one line when wide", async () => {
+  const el = await tableS({ searchable: true, columns: withStatus });
+  el.style.width = "1000px";
+  await el.updateComplete;
+  const toolbar = el
+    .shadowRoot!.querySelector<HTMLElement>(".table-toolbar")!
+    .getBoundingClientRect();
+  const search = el
+    .shadowRoot!.querySelector<HTMLElement>(".table-search")!
+    .getBoundingClientRect();
+  const filter = el
+    .shadowRoot!.querySelector<HTMLElement>(".table-filter")!
+    .getBoundingClientRect();
+  expect(filter.top).toBeLessThan(search.bottom);
+  expect(search.right).toBeLessThan(filter.left);
+  expect(filter.right).toBeCloseTo(toolbar.right, 0);
+  // Natural width, not stretched: the dropdown is far narrower than the space the search box fills.
+  expect(filter.width).toBeLessThan(search.width / 2);
+});
+
 test("search and filter combine with AND", async () => {
   const el = await tableS({ searchable: true, columns: withStatus });
   const input = el.shadowRoot!.querySelector<HTMLInputElement>(".table-search")!;

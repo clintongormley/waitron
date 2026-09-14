@@ -1,7 +1,7 @@
 import { LitElement, css, html, nothing } from "lit";
 import type { PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles } from "../base-styles.js";
+import { baseStyles, selectStyles } from "../base-styles.js";
 
 export interface DataTableColumn<Row> {
   key: string;
@@ -25,6 +25,7 @@ type SortDirection = "ascending" | "descending";
 export class WtDataTable<Row = unknown> extends LitElement {
   static override styles = [
     baseStyles,
+    selectStyles,
     css`
       :host {
         display: block;
@@ -130,8 +131,13 @@ export class WtDataTable<Row = unknown> extends LitElement {
         margin-bottom: var(--wt-space-3);
       }
 
+      /* The basis is the narrowest the search box may be while sharing its line with the filters;
+         any narrower and the filters wrap below it and the search box fills its own line. A media
+         or container query cannot read a token, so the wrap is sized by the controls, not by a
+         breakpoint. */
       .table-search {
-        flex: 1 1 min(100%, var(--wt-space-6));
+        flex: 1 1 calc(var(--wt-tap-min) * 8);
+        min-width: 0;
         min-height: var(--wt-tap-min);
         padding: var(--wt-space-2) var(--wt-space-3);
         border: 1px solid var(--wt-color-border);
@@ -145,16 +151,13 @@ export class WtDataTable<Row = unknown> extends LitElement {
         display: flex;
         flex-wrap: wrap;
         gap: var(--wt-space-2);
+        max-width: 100%;
       }
 
       .table-filter {
+        width: auto;
+        max-width: 100%;
         min-height: var(--wt-tap-min);
-        padding: var(--wt-space-2) var(--wt-space-3);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-        background: var(--wt-color-surface);
-        color: var(--wt-color-text);
-        font: inherit;
       }
 
       .tree-toggle {
