@@ -23,6 +23,12 @@ export class WtRowActions extends LitElement {
         color: var(--wt-color-text);
         font: inherit;
         cursor: pointer;
+        position: relative;
+      }
+      ::slotted([slot="badge"]) {
+        position: absolute;
+        inset-block-start: 0;
+        inset-inline-end: 0;
       }
       [popover] {
         position: fixed;
@@ -66,13 +72,19 @@ export class WtRowActions extends LitElement {
 
   private onTriggerClick(event: MouseEvent): void {
     event.preventDefault();
-    if (this.popup.matches(":popover-open")) {
-      this.popup.hidePopover();
-    } else {
-      // Opening synchronously makes its dimensions available before the first paint.
-      this.popup.showPopover();
-      this.positionPopup();
-    }
+    if (this.popup.matches(":popover-open")) this.hide();
+    else this.show();
+  }
+
+  /** Opens the menu. Positioned synchronously so its first paint is already in place. */
+  show(): void {
+    if (this.popup.matches(":popover-open")) return;
+    this.popup.showPopover();
+    this.positionPopup();
+  }
+
+  hide(): void {
+    if (this.popup.matches(":popover-open")) this.popup.hidePopover();
   }
 
   private positionPopup(): void {
@@ -130,8 +142,9 @@ export class WtRowActions extends LitElement {
         @keydown=${this.onKeydown}
       >
         <wt-icon name=${this.icon} size=${this.iconSize}></wt-icon>
+        <slot name="badge"></slot>
       </button>
-      <div id="actions" popover @toggle=${this.onToggle} @keydown=${this.onKeydown}>
+      <div id="actions" part="popup" popover @toggle=${this.onToggle} @keydown=${this.onKeydown}>
         <div class="actions"><slot @click=${this.onAction}></slot></div>
       </div>
     `;

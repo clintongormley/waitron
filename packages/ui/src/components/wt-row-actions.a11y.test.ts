@@ -31,4 +31,15 @@ describe.each(["light", "dark"] as const)("wt-row-actions a11y (%s theme)", (the
     const result = await axe.run(host);
     expect(result.violations.map(({ id }) => id)).toContain("button-name");
   });
+
+  test("a trigger carrying a badge, closed and open", async () => {
+    const el = await mountThemed(
+      `<wt-row-actions label="Alerts, 3 open"><span slot="badge">3</span>
+        <wt-button>See all alerts</wt-button></wt-row-actions>`,
+      theme,
+    );
+    await expectNoA11yViolations(host);
+    (el as unknown as { show(): void }).show();
+    await expectNoA11yViolations(host);
+  });
 });

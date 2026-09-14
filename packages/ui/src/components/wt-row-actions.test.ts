@@ -1,5 +1,5 @@
 import { html, nothing } from "lit";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, test, vi } from "vitest";
 import { userEvent } from "@vitest/browser/context";
 import type { WtButton } from "./wt-button.js";
 import "./wt-button.js";
@@ -286,4 +286,51 @@ it("does not close for disabled actions or already handled Escape", async () => 
   await userEvent.click(trigger);
   trigger.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
   expect(popup.matches(":popover-open")).toBe(false);
+});
+
+test("puts a badge-slotted element inside the trigger button", async () => {
+  const el = (await mount(
+    '<wt-row-actions label="Alerts"><span slot="badge">3</span><wt-button>See all</wt-button></wt-row-actions>',
+  )) as WtRowActions;
+  const slot = el.shadowRoot!.querySelector<HTMLSlotElement>("button slot[name=badge]")!;
+  expect(slot.assignedElements().map((e) => e.textContent)).toEqual(["3"]);
+});
+
+test("show() opens the popup and hide() closes it", async () => {
+  const el = (await mount(
+    '<wt-row-actions label="Alerts"><wt-button>See all</wt-button></wt-row-actions>',
+  )) as WtRowActions;
+  const popup = el.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+  el.show();
+  expect(popup.matches(":popover-open")).toBe(true);
+  expect(popup.style.top).not.toBe("");
+  el.hide();
+  expect(popup.matches(":popover-open")).toBe(false);
+});
+
+test("a consumer can size the popup through its part", async () => {
+  const style = document.createElement("style");
+  style.textContent = "wt-row-actions.wide::part(popup) { width: 300px; }";
+  document.head.append(style);
+  try {
+    const el = (await mount(
+      '<wt-row-actions class="wide" label="Alerts"><wt-button>See all</wt-button></wt-row-actions>',
+    )) as WtRowActions;
+    el.show();
+    expect(
+      el.shadowRoot!.querySelector<HTMLElement>("[popover]")!.getBoundingClientRect().width,
+    ).toBe(300);
+  } finally {
+    style.remove();
+  }
+});
+
+test("pins the badge to the trigger's top trailing corner", async () => {
+  const el = (await mount(
+    '<wt-row-actions label="Alerts"><span slot="badge">3</span></wt-row-actions>',
+  )) as WtRowActions;
+  const trigger = el.shadowRoot!.querySelector("button")!.getBoundingClientRect();
+  const badge = el.querySelector("span")!.getBoundingClientRect();
+  expect(badge.top).toBeCloseTo(trigger.top, 0);
+  expect(badge.right).toBeCloseTo(trigger.right, 0);
 });
