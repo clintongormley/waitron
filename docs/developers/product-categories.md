@@ -11,12 +11,19 @@ products. A child's products do not count towards its parent. Create and edit fo
 the name, choose an image from the shared library, and choose or clear a parent. You cannot choose
 the category itself or any of its descendants.
 
-A primary category is optional in the data model, the API, and the dashboard: a product may hold
-memberships with no reporting category at all. `dashboard-category-membership-picker`'s
-reporting-category select offers an explicit "None" option, and the product editor's category
-picker can be left on its default "Choose…" placeholder; both submit with `primaryCategoryId: null`
-in that state. The only remaining check is that a primary, if set, must be one of the currently
-selected categories. Removing the last membership clears primary.
+A primary category is optional in the data model and on the write path every current UI flow uses:
+a product may hold memberships with no reporting category at all.
+`dashboard-category-membership-picker`'s reporting-category select offers an explicit "None" option,
+and the product editor's category picker can be left on its default "Choose…" placeholder; both
+submit with `primaryCategoryId: null` through `replaceProductCategories`, whose only remaining check
+is that a primary, if set, must be one of the currently selected categories. Removing the last
+membership clears primary.
+
+One older write path is the exception, and the API is not uniform because of it. Sending
+`categoryId: null` in a product patch (`updateProduct`, the `PATCH` product route) still refuses with
+`category.primary_required` when the product has more than one membership, and when it is allowed it
+clears every membership along with the reporting category. That is the coupling the picker no longer
+has. It stays because nothing first-party sends `categoryId` in a product patch any more.
 
 Deleting a category is confirmed and then goes ahead. It is no longer refused when something refers
 to it. The delete removes the product memberships, clears the reporting category from any product
@@ -109,7 +116,8 @@ write; cancelling the product afterwards leaves that category available.
 membership checkboxes and an explicit primary selector. Products integrates this real picker; the
 Categories screen already uses it for category-side assignment and removal. The old combined
 catalogue page remains until Products integration. Its single selector can add/select a primary;
-it refuses to clear a product with multiple memberships.
+it refuses to clear a product with multiple memberships, because it writes through the legacy
+`updateProduct` path described above rather than through `replaceProductCategories`.
 
 ## Storage and migration
 

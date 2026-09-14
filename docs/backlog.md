@@ -323,6 +323,13 @@ What it left open:
 - **A category's colour is stored but shown nowhere outside the categories screen.** Nothing on the
   till, in menus or in reports reads it yet. The colour is data a future consumer can follow; nobody
   has decided whether or how one should.
+- **One legacy write path still ties the reporting category to membership.** Sending
+  `categoryId: null` in a product patch (`updateProduct` in `packages/catalogue/src/operations.ts`)
+  refuses with `category.primary_required` when the product has more than one membership, and
+  otherwise clears every membership along with the reporting category — the coupling
+  `replaceProductCategories` dropped. Left alone on purpose: nothing first-party sends `categoryId` in
+  a product patch any more. **Next action:** remove the coupling if and when a real client needs the
+  relaxed behaviour on that route, rather than pre-emptively changing a legacy contract.
 - **No "category dependants" seat exists on the module contract.** The delete-preview route
   (`GET .../:id/dependants`) is core-catalogue-specific; a module that wants its own kind of
   dependant (beyond products, child categories and preparation routes) has nowhere to plug in one.
