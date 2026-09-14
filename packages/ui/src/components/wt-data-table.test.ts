@@ -710,10 +710,13 @@ test("writes sort changes back to session storage", async () => {
 test("ignores a stored sort column that no longer exists", async () => {
   sessionStorage.setItem(
     "test.table3",
-    JSON.stringify({ sortKey: "gone", sortDirection: "ascending", filters: {} }),
+    JSON.stringify({ sortKey: "gone", sortDirection: "descending", filters: {} }),
   );
   const el = await table({ viewKey: "test.table3", sortKey: "name", sortDirection: "ascending" });
   expect(el.sortKey).toBe("name"); // fell back to the default, not "gone"
+  // The direction belonged to the rejected column, so it is not applied to the default one.
+  expect(el.sortDirection).toBe("ascending");
+  expect(rowText(el)).toEqual(["Ada10Edit", "Bea2Edit"]);
 });
 
 test("never stores search text, even alongside a real write", async () => {

@@ -243,8 +243,8 @@ export class WtDataTable<Row = unknown> extends LitElement {
     if (changed.has("viewKey") || changed.has("columns")) this.#restoreView();
   }
 
-  /** Reads the stored view once there are columns to check it against. A stored sort column is
-   * adopted only if a current column can sort by it; each stored filter waits in #pendingFilters
+  /** Reads the stored view once there are columns to check it against. A stored sort is adopted
+   * only if a current column can sort by it, and its direction only together with that column; each stored filter waits in #pendingFilters
    * until #adoptPendingFilters can judge it. */
   #restoreView(): void {
     if (!this.viewKey || this.columns.length === 0) return;
@@ -266,10 +266,11 @@ export class WtDataTable<Row = unknown> extends LitElement {
         if (
           typeof parsed.sortKey === "string" &&
           this.columns.some((c) => c.key === parsed.sortKey && c.sortValue !== undefined)
-        )
+        ) {
           this.sortKey = parsed.sortKey;
-        if (parsed.sortDirection === "ascending" || parsed.sortDirection === "descending")
-          this.sortDirection = parsed.sortDirection;
+          if (parsed.sortDirection === "ascending" || parsed.sortDirection === "descending")
+            this.sortDirection = parsed.sortDirection;
+        }
         if (parsed.filters && typeof parsed.filters === "object")
           this.#pendingFilters = { ...(parsed.filters as Record<string, unknown>) };
       } catch {

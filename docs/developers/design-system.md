@@ -223,7 +223,8 @@ container query cannot read a `--wt-*` token. A column exposes text to the searc
 
 Give the table a `viewKey` and it remembers its sort and filter choices in the tab's session storage
 — never the search text. It restores them once it has columns: a stored sort only if a current
-column can still sort by it, and a stored filter value only if it equals one of that column's
+column can still sort by it — its direction is restored with that column or not at all, so the
+starting sort stands whole — and a stored filter value only if it equals one of that column's
 current option values, with the dropdown showing the restored choice. Any other stored filter value
 (one for a column with no filter, or one the options no longer include) is dropped rather than
 hiding every row, and is not written back. While a column's options are empty — a screen still
