@@ -6,7 +6,7 @@ import { applyTokens, setContentLanguages } from "@waitron/ui";
 declare module "@vitest/browser/context" {
   interface BrowserCommands {
     // Moves the real cursor off every element, clearing CSS `:hover`. See `parkPointer` in
-    // apps/till/vitest.config.ts for why `userEvent.unhover()` cannot be used for this.
+    // packages/ui/src/vitest-park-pointer.ts for why `userEvent.unhover()` cannot be used for this.
     parkPointer: () => Promise<void>;
   }
 }
