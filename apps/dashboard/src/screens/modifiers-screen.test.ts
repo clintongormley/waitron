@@ -43,30 +43,50 @@ function submitText(form: ModifierForm) {
   );
 }
 async function create(el: ModifiersScreen) {
-  el.shadowRoot!.querySelector<HTMLElement>('[data-test="create"]')!.click();
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="create-modifier"]')!.click();
   await el.updateComplete;
   return el.shadowRoot!.querySelector<ModifierForm>("dashboard-modifier-form")!;
 }
 it("shows searchable rows and opens the shared form", async () => {
   const el = await mount();
-  const table = el.shadowRoot!.querySelector("wt-data-table") as unknown as { rows: Modifier[] };
+  const table = el.shadowRoot!.querySelector("wt-data-table") as unknown as {
+    rows: Modifier[];
+    searchable: boolean;
+  };
+  // The table receives every row and searches them itself via each column's searchValue; the
+  // screen no longer filters the list or renders its own search box.
   expect(table.rows).toEqual([modifier]);
-  el.shadowRoot!.querySelector('[name="modifier-search"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "absent" } }),
-  );
-  await el.updateComplete;
-  expect(table.rows).toEqual([]);
+  expect(table.searchable).toBe(true);
+  expect(el.shadowRoot!.querySelector('[name="modifier-search"]')).toBeNull();
   expect((await create(el)).open).toBe(true);
 });
-it("opens the new-modifier form from a round add button with an accessible name", async () => {
+it("adds a modifier from a header button with an accessible name", async () => {
   const el = await mount();
-  const add = el.shadowRoot!.querySelector<HTMLElement>('[data-test="create"]')!;
-  expect(add.getAttribute("shape")).toBe("round");
-  expect(add.getAttribute("aria-label")).toBe(t("modifiers.new"));
-  expect(el.shadowRoot!.querySelector("wt-row-actions")).toBeNull(); // the old kebab is gone from the heading
-  add.click();
+  const button = el.shadowRoot!.querySelector<HTMLElement>('[data-test="create-modifier"]')!;
+  expect(button.textContent).toContain(t("modifiers.add"));
+  button.click();
   await el.updateComplete;
   expect(el.shadowRoot!.querySelector<ModifierForm>("dashboard-modifier-form")!.open).toBe(true);
+});
+it("configures the table to remember its view and default to Name ascending", async () => {
+  const el = await mount();
+  const table = el.shadowRoot!.querySelector("wt-data-table")! as unknown as {
+    viewKey: string;
+    sortKey: string;
+    sortDirection: string;
+    searchable: boolean;
+  };
+  expect(table.viewKey).toBe("waitron.modifiers.table");
+  expect(table.sortKey).toBe("name");
+  expect(table.sortDirection).toBe("ascending");
+  expect(table.searchable).toBe(true);
+});
+it("has no modifier-level Available column", async () => {
+  const el = await mount();
+  const table = el.shadowRoot!.querySelector("wt-data-table")! as unknown as {
+    columns: { key: string }[];
+  };
+  expect(table.columns.map((c) => c.key)).toEqual(["name", "type", "choices", "actions"]);
 });
 it("keeps failed saves in the form and closes after successful writes even if reload fails", async () => {
   const client = api({

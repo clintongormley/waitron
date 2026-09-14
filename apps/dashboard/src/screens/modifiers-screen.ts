@@ -1,14 +1,17 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, setContentLanguages, currentContentLanguages } from "@waitron/ui";
+import {
+  baseStyles,
+  setContentLanguages,
+  currentContentLanguages,
+  type DataTableColumn,
+} from "@waitron/ui";
 import { resolveEnabledContentText, type ContentLanguages } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-dialog.js";
-import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import "@waitron/ui/src/components/wt-icon.js";
 import "../widgets/modifier-form.js";
 import type { DashboardApi, Modifier, ModifierInput } from "../api/client.js";
 import { DashboardQueries } from "../api/query-controller.js";
@@ -34,10 +37,6 @@ export class ModifiersScreen extends LitElement {
         gap: var(--wt-space-3);
         margin-bottom: var(--wt-space-4);
       }
-      wt-input {
-        display: block;
-        margin-bottom: var(--wt-space-4);
-      }
       .error {
         color: var(--wt-color-danger);
       }
@@ -49,12 +48,13 @@ export class ModifiersScreen extends LitElement {
   @state() private loading = true;
   @state() private loadError = false;
   @state() private error: string | null = null;
-  @state() private query = "";
   @state() private open = false;
   @state() private value: Modifier | null = null;
   @state() private busy = false;
   @state() private fieldErrors: Record<string, string> = {};
   @state() private deleting: Modifier | null = null;
+  // Task 10 fleshes out the details modal that this drives; for now it only records the selection.
+  @state() private detailing: Modifier | null = null;
   readonly #queries = new DashboardQueries(
     this,
     () => this.api,
@@ -88,6 +88,16 @@ export class ModifiersScreen extends LitElement {
     this.value = value;
     this.fieldErrors = {};
     this.open = true;
+  }
+  // Stub for Task 10 — opening the read-only details modal. For now it only records the selection.
+  #openDetails(modifier: Modifier): void {
+    this.detailing = modifier;
+  }
+  // Stub for Task 11 — the delete dialog gains a dependants preview there. For now it just arms the
+  // existing confirmation, exactly as the old row delete button did.
+  #openDelete(modifier: Modifier): void {
+    this.deleting = modifier;
+    this.error = null;
   }
   #message(error: unknown): string {
     const code = codeOf(error);
@@ -157,28 +167,52 @@ export class ModifiersScreen extends LitElement {
     return resolveEnabledContentText(modifier.name, currentLocale(), currentContentLanguages());
   }
   override render() {
-    const columns = [
+    // The selected modifier is recorded now; Task 10's details modal reads it. Referenced here so
+    // the field is not write-only before that modal exists.
+    void this.detailing;
+    const columns: DataTableColumn<Modifier>[] = [
       {
         key: "name",
         label: t("modifiers.name"),
-        cell: (modifier: Modifier) => this.#name(modifier),
-        sortValue: (modifier: Modifier) => this.#name(modifier),
+        searchValue: (modifier) => this.#name(modifier),
+        sortValue: (modifier) => this.#name(modifier),
+        cell: (modifier) =>
+          html`<wt-button
+            variant="ghost"
+            data-test=${`open-${modifier.id}`}
+            @click=${() => this.#openDetails(modifier)}
+            >${this.#name(modifier)}</wt-button
+          >`,
       },
       {
         key: "type",
         label: t("modifiers.type"),
-        cell: (modifier: Modifier) => t(`modifiers.${modifier.type}`),
+        sortValue: (modifier) => t(`modifiers.${modifier.type}`),
+        cell: (modifier) => t(`modifiers.${modifier.type}`),
+        filter: {
+          label: t("modifiers.type"),
+          allLabel: t("modifiers.filter_type_all"),
+          value: (modifier) => modifier.type,
+          options: (["text", "extras", "options", "yes-no"] as const).map((type) => ({
+            value: type,
+            label: t(`modifiers.${type}`),
+          })),
+        },
       },
       {
-        key: "available",
-        label: t("modifiers.available"),
-        cell: (modifier: Modifier) =>
-          t(modifier.available ? "modifiers.available" : "modifiers.unavailable"),
+        key: "choices",
+        label: t("modifiers.choices"),
+        sortValue: (modifier) =>
+          modifier.type === "extras" || modifier.type === "options" ? modifier.choices.length : 0,
+        cell: (modifier) =>
+          modifier.type === "extras" || modifier.type === "options"
+            ? String(modifier.choices.length)
+            : "",
       },
       {
         key: "actions",
         label: t("action.edit"),
-        cell: (modifier: Modifier) =>
+        cell: (modifier) =>
           html`<wt-row-actions label=${`${t("action.edit")}: ${this.#name(modifier)}`}
             ><wt-button
               align="start"
@@ -190,10 +224,7 @@ export class ModifiersScreen extends LitElement {
               align="start"
               variant="ghost"
               data-test=${`delete-${modifier.id}`}
-              @click=${() => {
-                this.deleting = modifier;
-                this.error = null;
-              }}
+              @click=${() => this.#openDelete(modifier)}
               >${t("action.delete")}</wt-button
             ></wt-row-actions
           >`,
@@ -202,14 +233,12 @@ export class ModifiersScreen extends LitElement {
     return html`<div class="heading">
         <h1>${t("modifiers.title")}</h1>
         <wt-button
-          data-test="create"
-          shape="round"
+          data-test="create-modifier"
           variant="primary"
-          aria-label=${t("modifiers.new")}
           .disabled=${!this.locales}
           @click=${() => this.#edit(null)}
-          ><wt-icon name="plus"></wt-icon
-        ></wt-button>
+          >${t("modifiers.add")}</wt-button
+        >
       </div>
       ${this.loading ? html`<p role="status">${t("modifiers.loading")}</p>` : nothing}
       ${
@@ -224,21 +253,19 @@ export class ModifiersScreen extends LitElement {
       }
       ${
         !this.loading && !this.loadError
-          ? html`<wt-input
-                name="modifier-search"
-                label=${t("modifiers.search")}
-                .value=${this.query}
-                @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                  event.stopPropagation();
-                  this.query = event.detail.value;
-                }}
-              ></wt-input
-              ><wt-data-table
-                label=${t("modifiers.title")}
-                .columns=${columns}
-                .rows=${this.modifiers.filter((modifier) => this.#name(modifier).toLocaleLowerCase().includes(this.query.toLocaleLowerCase()))}
-                emptyText=${t("modifiers.empty")}
-              ></wt-data-table>`
+          ? html`<wt-data-table
+              aria-label=${t("modifiers.title")}
+              searchable
+              searchLabel=${t("modifiers.search")}
+              noMatchesMessage=${t("modifiers.no_matches")}
+              viewKey="waitron.modifiers.table"
+              sortKey="name"
+              sortDirection="ascending"
+              .rows=${this.modifiers}
+              .columns=${columns}
+              .rowKey=${(modifier: Modifier) => modifier.id}
+              .emptyMessage=${t("modifiers.empty")}
+            ></wt-data-table>`
           : nothing
       }
       <dashboard-modifier-form
