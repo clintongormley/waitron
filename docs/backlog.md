@@ -848,8 +848,9 @@ ongoing overhaul listed at the top of Track A.
   first). 50 per page with a server-enforced maximum; search and sort over the whole dataset; debounce,
   reset on filter change, ignore superseded responses, keep passive live refreshes. Deliberately kept
   out of #328. `wt-data-table`'s toolbar search box and filter dropdowns (category-overhaul branch)
-  filter the rows already in the browser and emit no event when the search text or a filter changes,
-  so server-backed paging cannot reuse them as they stand.
+  filter the rows already in the browser and emit no `wt-*` event of their own when the search text
+  or a filter changes (only sorting and row selection do), so server-backed paging cannot reuse them
+  as they stand.
 - **Tell people by email when their account's security changes** (owner, 2026-09-12): password changed,
   passkey or authenticator added or removed, recovery codes regenerated, email changed, Google login
   connected or disconnected. No link, one line on what to do if it was not them. Open: notify the OLD
