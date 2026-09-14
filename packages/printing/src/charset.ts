@@ -80,3 +80,76 @@ export function decodeBytes(bytes: Iterable<number>, cs: CharacterSet): string {
   for (const b of bytes) out += String.fromCodePoint(decode[b & 0xff]!);
   return out;
 }
+
+function reverse(decode: readonly number[]): ReadonlyMap<number, number> {
+  const encode = new Map<number, number>();
+  decode.forEach((codePoint, byte) => encode.set(codePoint, byte));
+  return encode;
+}
+
+const ENCODE: Readonly<Record<Exclude<CharacterSet, "plain">, ReadonlyMap<number, number>>> = {
+  wpc1252: reverse(WPC1252_TO_UNICODE),
+  pc858: reverse(PC858_TO_UNICODE),
+};
+
+/**
+ * Replacements for characters a set lacks, tried before an accent is stripped and before `?`. Each
+ * applies only when the set cannot print the original character.
+ */
+const FALLBACK: Readonly<Record<string, string>> = {
+  "€": "EUR",
+  Ñ: "N",
+  ñ: "n",
+  Ç: "C",
+  ç: "c",
+  "¿": "?",
+  "¡": "!",
+  "\u{2018}": "'",
+  "\u{2019}": "'",
+  "\u{201c}": '"',
+  "\u{201d}": '"',
+  "\u{2013}": "-",
+  "\u{2014}": "-",
+  "\u{2026}": "...",
+  º: "o",
+  ª: "a",
+  "\u{a0}": " ",
+  "\u{202f}": " ",
+};
+
+function encodable(text: string, cs: CharacterSet): boolean {
+  for (const c of text) {
+    const codePoint = c.codePointAt(0)!;
+    if (cs === "plain" ? codePoint >= 0x80 : !ENCODE[cs].has(codePoint)) return false;
+  }
+  return true;
+}
+
+/**
+ * Normalise `s` to NFC and replace every character `cs` cannot print: first a fixed fallback, then the
+ * character without its accents, then `?`. Every character of the result encodes to exactly one byte,
+ * so `.length` of the result is its printed width.
+ */
+export function prepareText(s: string, cs: CharacterSet): string {
+  let out = "";
+  for (const ch of s.normalize("NFC")) {
+    const fallback = FALLBACK[ch];
+    if (encodable(ch, cs)) out += ch;
+    else if (fallback !== undefined && encodable(fallback, cs)) out += fallback;
+    else {
+      const stripped = ch.normalize("NFD").replace(/\p{Diacritic}/gu, "");
+      out += stripped !== "" && encodable(stripped, cs) ? stripped : "?";
+    }
+  }
+  return out;
+}
+
+/** `prepareText`, then one byte per character. */
+export function encodeText(s: string, cs: CharacterSet): number[] {
+  const bytes: number[] = [];
+  for (const c of prepareText(s, cs)) {
+    const codePoint = c.codePointAt(0)!;
+    bytes.push(cs === "plain" ? codePoint : ENCODE[cs].get(codePoint)!);
+  }
+  return bytes;
+}
