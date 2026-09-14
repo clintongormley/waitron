@@ -227,7 +227,7 @@ export type BoxStatusDeps = {
  * management API's `STATUS` map assigns them (reused, not reinvented). `requireManagementSession`
  * throws `management_session.required` (401); `authorizeManager` re-resolves the session
  * (`management_session.required`/`.expired` → 401, `person.suspended` → 403) and refuses a role without
- * `till.configure` with `authorization.not_permitted` (403). Any other thrown value is a server fault
+ * `system.manage` with `authorization.not_permitted` (403). Any other thrown value is a server fault
  * the boundary answers with an opaque 500.
  */
 const STATUS: Record<string, ContentfulStatusCode> = {
@@ -240,7 +240,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
 /**
  * Registers `GET /api/box/status` on the shared trading app. Gated exactly like the FP-1 status routes:
  * `requireManagementSession` → 401 before any DB work, then `withTenant` + `asAppUser` +
- * `authorizeManager("till.configure")` for the tenant-scoped chain read (a `manager`-role person holds
+ * `authorizeManager("system.manage")` for the tenant-scoped chain read (a `manager`-role person holds
  * it). The composed status is assembled by `collectBoxStatus` from the sibling slice-4a readers; a cert
  * path absent (plain-HTTP boot) yields `cert.available:false`, a lag reader absent (sync off, or Task 6
  * not yet wired) yields `replication.configured:false`.
@@ -254,7 +254,7 @@ export function mountBoxStatusApi(app: Hono, deps: BoxStatusDeps, log: Logger): 
         await asAppUser(tx);
         await authorizeManager(tx, {
           managementSessionId: sessionId,
-          permission: "till.configure",
+          permission: "system.manage",
         });
         return readChainHeight(tx, deps.cfg.nodeId);
       });

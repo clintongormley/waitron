@@ -394,7 +394,7 @@ describe("device-profile store on real Postgres, as the app role", () => {
   });
 
   it("refuses a create from a staff-role session — the authorizeManager gate (differential)", async () => {
-    // Staff holds no till.configure, so authorizeManager throws authorization.not_permitted BEFORE any
+    // Staff holds no layout.configure, so authorizeManager throws authorization.not_permitted BEFORE any
     // write. Deleting the authorizeManager call from createDeviceProfile makes this succeed → a row
     // lands, failing both assertions.
     const staffTenant = await seedTenant(suite.admin);

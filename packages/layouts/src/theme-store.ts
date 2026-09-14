@@ -14,7 +14,7 @@ import { validateThemeOverride } from "./theme.js";
  * `theme-store.test.ts` (real Postgres, as a non-superuser `app_user` member — PGlite holds every
  * grant, CLAUDE.md §4).
  *
- * `putTenantTheme` runs, in order: (1) `authorizeManager(..., "till.configure")` — the write gate,
+ * `putTenantTheme` runs, in order: (1) `authorizeManager(..., "layout.configure")` — the write gate,
  * before any DB write, proven by-deletion in the suite; (2) `validateThemeOverride` — fail-closed on
  * an invalid `theme` (throws `theme.invalid` before the write); (3) an `INSERT … ON CONFLICT
  * (tenant_id) DO UPDATE`. `getTenantTheme` casts the opaque jsonb back to `ThemeOverride` WITHOUT
@@ -38,14 +38,14 @@ export async function getTenantTheme(
   return row.theme as ThemeOverride;
 }
 
-/** Author (create or replace) the tenant's base theme. Manager/admin only (`till.configure`). */
+/** Author (create or replace) the tenant's base theme. Manager/admin only (`layout.configure`). */
 export async function putTenantTheme(
   tx: Transaction,
   input: { managementSessionId: string; tenantId: string; theme: unknown },
 ): Promise<void> {
   await authorizeManager(tx, {
     managementSessionId: input.managementSessionId,
-    permission: "till.configure",
+    permission: "layout.configure",
   });
   const theme = validateThemeOverride(input.theme);
   await tx

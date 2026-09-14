@@ -42,7 +42,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
 /**
  * `POST /api/box/recovery-bundle` — download the box's passphrase-encrypted recovery bundle. Gated
  * exactly like `GET /api/box/status`: `requireManagementSession` → 401, then `withTenant` + `asAppUser`
- * + `authorizeManager("till.configure")`. The passphrase rides the JSON body (never the URL/query — it
+ * + `authorizeManager("system.manage")`. The passphrase rides the JSON body (never the URL/query — it
  * is a secret). The bundle carries the box's UNRECOVERABLE state (vault master key + fiscal identity +
  * CA/leaf), so it is returned as an attachment and logged (session id only, never the passphrase or
  * any secret). POST, not GET: it carries a secret and produces a sensitive artifact.
@@ -56,7 +56,7 @@ export function mountRecoveryBundleApi(app: Hono, deps: RecoveryBundleDeps, log:
         await asAppUser(tx);
         await authorizeManager(tx, {
           managementSessionId: sessionId,
-          permission: "till.configure",
+          permission: "system.manage",
         });
       });
       const body = await readJsonBody<{ passphrase?: unknown }>(c);

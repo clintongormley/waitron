@@ -491,7 +491,7 @@ describe("/management-api/service-statuses", () => {
   });
 
   it("a STAFF session is refused on every route (403 authorization.not_permitted)", async () => {
-    // A staff person CAN log in but holds no `till.configure`, so each verb's `authorizeManager`
+    // A staff person CAN log in but holds no `venue.configure`, so each verb's `authorizeManager`
     // refuses it 403 — after the route's session guard + body/id screens, before any write. Deleting
     // the authorize call from a verb flips its case to a 2xx (proven by deletion in
     // `service-statuses.test.ts`); here the same 403 is exercised end-to-end over HTTP.

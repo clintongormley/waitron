@@ -169,12 +169,12 @@ export class TillCardGrid extends LitElement {
   }
 
   /**
-   * Permission→LOCKED (spec §5.2). Only `till.configure` (on `table-layout-editor`) exists in the
+   * Permission→LOCKED (spec §5.2). Only `venue.configure` (on `table-layout-editor`) exists in the
    * catalogue, so this can only ever be true for that card — never for a sale-critical card
    * (product-grid/basket/total/tender-pay carry no required permission).
    */
   #locked(card: CardInstance): boolean {
-    return CARD_REQUIRED_PERMISSION[card.type] === "till.configure" && !this.canConfigureTill;
+    return CARD_REQUIRED_PERMISSION[card.type] === "venue.configure" && !this.canConfigureTill;
   }
 
   #cell(card: CardInstance): TemplateResult | typeof nothing {
@@ -240,7 +240,7 @@ export class TillCardGrid extends LitElement {
       // from this grid cell (the cell itself draws no title/close). `.canExitToCounter=${false}` keeps a stray back-to-counter
       // from escaping the tab shell. The floor screen serves both the read-only floor-plan card and the
       // manager's table-layout-editor card — the latter with `canEdit`. The table-layout-editor card's
-      // permission LOCK (till.configure) is enforced by `#locked`/`.cell.locked` at the CELL level above,
+      // permission LOCK (venue.configure) is enforced by `#locked`/`.cell.locked` at the CELL level above,
       // not here. `canEdit` is @property({ attribute: false }) on the floor screen, so it must be set as a
       // PROPERTY (`.canEdit=`), never a bare attribute — a bare `canEdit` would not reach it. The
       // read-only floor-plan card mounts the SAME screen without edit; the two arms differ only by `canEdit`.

@@ -1057,7 +1057,7 @@ describe("Management API — receipt routes (Task 7)", () => {
     const { tenantId } = await setupTenant();
     const app = mountApp(tenantId);
     // A staff person CAN log in (login checks the credential, not the role) but holds no
-    // `till.configure`, so each route is refused 403 before any read/write.
+    // `layout.configure`, so each route is refused 403 before any read/write.
     const cookie = await login(app, STAFF_EMAIL);
     const json = { "content-type": "application/json" };
 

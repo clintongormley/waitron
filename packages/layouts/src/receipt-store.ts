@@ -13,7 +13,7 @@ import { validateReceiptConfig } from "./validate.js";
  * receipt-store.test.ts (real Postgres, as a non-superuser `app_user` member — PGlite holds every
  * grant, §4).
  *
- * `putReceipt` runs, in order: (1) `authorizeManager(..., "till.configure")` — the write gate, before
+ * `putReceipt` runs, in order: (1) `authorizeManager(..., "layout.configure")` — the write gate, before
  * any DB write, proven by-deletion; (2) `validateReceiptConfig` — fail-closed (throws `receipt.invalid`
  * before the write); (3) `INSERT … ON CONFLICT (tenant_id) DO UPDATE`. `getReceipt` casts the opaque
  * jsonb back WITHOUT re-validating (the write validated it, the only writer is this service) and
@@ -30,14 +30,14 @@ export async function getReceipt(tx: Transaction, tenantId: string): Promise<Rec
   return row.receipt as ReceiptConfig;
 }
 
-/** Author (create or replace) the tenant's receipt trim. Manager/admin only (`till.configure`). */
+/** Author (create or replace) the tenant's receipt trim. Manager/admin only (`layout.configure`). */
 export async function putReceipt(
   tx: Transaction,
   input: { managementSessionId: string; tenantId: string; receipt: unknown },
 ): Promise<void> {
   await authorizeManager(tx, {
     managementSessionId: input.managementSessionId,
-    permission: "till.configure",
+    permission: "layout.configure",
   });
   const receipt = validateReceiptConfig(input.receipt);
   await tx

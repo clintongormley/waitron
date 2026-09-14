@@ -20,7 +20,7 @@ describe("card-contract registry", () => {
     );
   });
   it("gives the table-layout-editor a required permission", () => {
-    expect(CARD_CONTRACTS["table-layout-editor"].requiredPermission).toBe("till.configure");
+    expect(CARD_CONTRACTS["table-layout-editor"].requiredPermission).toBe("venue.configure");
   });
   it("requires the integrated-card-payment capability on the pay card", () => {
     expect(CARD_CONTRACTS["tender-pay"].requiredCapability).toBe("integrated-card-payment");

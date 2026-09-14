@@ -111,5 +111,5 @@ export const CARD_REQUIRED_CAPABILITY: Partial<Record<CardType, CapabilityFlag>>
 };
 
 export const CARD_REQUIRED_PERMISSION: Partial<Record<CardType, string>> = {
-  "table-layout-editor": "till.configure",
+  "table-layout-editor": "venue.configure",
 };

@@ -392,7 +392,7 @@ describe("/management-api/zones", () => {
   });
 
   it("a STAFF session is refused on every zone route (403 authorization.not_permitted)", async () => {
-    // A staff person CAN log in but holds no `till.configure`, so each route's `authorizeManager`
+    // A staff person CAN log in but holds no `venue.configure`, so each route's `authorizeManager`
     // refuses it 403 — after the session guard + body/id screens, before any write. Dropping the
     // authorize call from a route flips its case to a 2xx (the gate deletion-proof).
     const someId = randomUUID();
@@ -825,7 +825,7 @@ describe("/management-api/tables", () => {
 // The manager-gated PUT/DELETE that place a table on / remove it from the floor-plan canvas, thin
 // wrappers over Task 2's `setTablePlacement` / `clearPlacement`. Same gate + `run` mapping as the FP-1
 // zone/table routes above (`requireManagementSession` 401 first, then `withVenueAuth`'s
-// `authorizeManager(till.configure)` 403). These placement tests read the row back with a DIRECT
+// `authorizeManager(venue.configure)` 403). These placement tests read the row back with a DIRECT
 // `dining_tables` read (`readPlacement`) — a tight row receipt for exactly the four columns the
 // PUT/DELETE write. The management `GET /tables` surface (`listTables`) DOES now project those columns
 // (Task 7b), verified end-to-end by the "GET projects a placed table's placement columns" case in the
@@ -888,7 +888,7 @@ describe("/management-api/tables/:id/placement", () => {
     expect(unauth.status).toBe(401);
     expect(await unauth.json()).toMatchObject({ error: { code: "management_session.required" } });
 
-    // A staff session CAN log in but holds no `till.configure`, so `authorizeManager` (inside
+    // A staff session CAN log in but holds no `venue.configure`, so `authorizeManager` (inside
     // `withVenueAuth`) refuses it 403 — the gate deletion-proof: dropping that authorize call flips
     // this case to 204.
     const staff = await req(
@@ -1428,7 +1428,7 @@ describe("/management-api/stations (KDS-1 config)", () => {
   });
 
   it("a STAFF session is refused on every station/routing route (403 authorization.not_permitted)", async () => {
-    // A staff person CAN log in but holds no `till.configure`, so each route's `authorizeManager` refuses
+    // A staff person CAN log in but holds no `venue.configure`, so each route's `authorizeManager` refuses
     // it 403 — after the session guard + body/id screens, before any write. Dropping the authorize call
     // from `withVenueAuth` flips each case to a 2xx (the gate deletion-proof).
     const someId = randomUUID();
@@ -1742,7 +1742,7 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
   });
 
   it("a STAFF session is refused on every course/product-course/fire-control route (403 authorization.not_permitted)", async () => {
-    // A staff person CAN log in but holds no `till.configure`, so each route's `authorizeManager` refuses
+    // A staff person CAN log in but holds no `venue.configure`, so each route's `authorizeManager` refuses
     // it 403 — after the session guard + body/id screens, before any write. Dropping the authorize call
     // from `withVenueAuth` flips each case to a 2xx (the gate deletion-proof).
     const someId = randomUUID();

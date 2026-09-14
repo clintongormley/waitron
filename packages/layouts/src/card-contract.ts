@@ -93,7 +93,7 @@ export const CARD_CONTRACTS: Record<CardType, CardContract> = {
   },
   "table-layout-editor": {
     configSchema: {},
-    requiredPermission: "till.configure",
+    requiredPermission: "venue.configure",
     visibilityStates: [],
     defaultColSpan: GRID_MAX_COLUMNS,
     defaultRowSpan: 12,
