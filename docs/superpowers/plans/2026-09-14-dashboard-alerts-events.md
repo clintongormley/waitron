@@ -30,7 +30,7 @@
 ## Rulings (where this plan narrows or fills in the spec)
 
 1. **Wording lives in the dashboard app** (`apps/dashboard/src/i18n/alert-messages.ts`), registered through a new kit registry. Why: the packages that own these codes (`core`, `payments`, `fiscal-verifactu`) have no dashboard folder, and the app already holds their `payment.*` error wording in `apps/dashboard/src/i18n/codes.ts`. A module with its own dashboard folder can call `registerAlertMessages` itself.
-2. **Core's `chain.` and `clock.` claims are server-owned** (`apps/server/src/alert-claims.ts`). Why: the `core` descriptor's seat values come from `@waitron/db`, which cannot depend on `@waitron/module`. Payments and fiscal-verifactu claims travel on their descriptors' `alerts` seat.
+2. **Core's `chain.` and `clock.` claims are written inline on the `core` descriptor** in `@waitron/composition`, the way that descriptor already writes its `migrations` literal. Payments and fiscal-verifactu export their claims from their own packages. Every claim therefore comes from `ALL_MODULES`.
 3. **The list routes answer `{ visible, alerts }`.** `visible` is true when the session holds at least one alert permission. A session holding none, or a session from another tenant, gets `{ visible: false, alerts: [] }` rather than an error. The bell shows only when `visible` is true, so the server stays the one authority on who sees alerts.
 4. **Each ongoing source reads inside a savepoint** (`tx.transaction(...)`). Why: all reads share one transaction, and a failed query would otherwise abort it for every source after it.
 5. **A malformed incident id answers `alert.not_found`** (404), like an unknown or another tenant's id.
@@ -38,7 +38,7 @@
 7. **`handledBy` is the person's display name**, looked up server-side, or `null` when no person has that id.
 8. **Warning colour tokens are added** (`--wt-color-warning`, `--wt-color-on-warning`): the design system has none, and the spec needs amber.
 9. **`wt-row-actions` gains** a `badge` slot inside its trigger, `part="popup"` on its popover, and public `show()`/`hide()`. The bell is a `wt-row-actions` instance, so the panel reuses its popover positioning.
-10. **The panel lists at most five alerts** (`PANEL_LIMIT`); "See all" opens the screen.
+10. **The panel lists at most five alerts** (`PANEL_LIMIT`); "See all" opens the screen. Its width is `44ch` capped by the viewport and its height `70vh`: sizes relative to text and screen, as the sidebar's `18ch` is, not chrome tokens.
 11. **The Alerts screen is reachable by any non-staff session.** It shows a "no access" notice when the server answers `visible: false`. Why: a deep link resolves before the first alerts read arrives.
 12. **A pop-up compares against the previous read only**, as the spec says. An alert that clears and returns raises a pop-up again.
 
@@ -50,8 +50,7 @@
 | `packages/core/src/incidents.ts` | tenant-scoped incident reads and the handled update |
 | `packages/module/src/alerts.ts` | alert model, source and claim types, `ModuleAlerts` seat |
 | `packages/payments/src/alerts.ts`, `packages/fiscal-verifactu/src/alerts.ts` | each area's event-code claim |
-| `packages/composition/src/modules.ts` | fills the `alerts` seat |
-| `apps/server/src/alert-claims.ts` | server-owned claims (`chain.`, `clock.`), import-light for the root guard |
+| `packages/composition/src/modules.ts` | fills the `alerts` seat, core's claims inline |
 | `apps/server/src/alerts.ts` | registry, claim lookup, open and handled reads, sorting |
 | `apps/server/src/alerts-api.ts` | the three routes |
 | `apps/server/src/modules.ts`, `boot.ts` | assembly and mount |
@@ -131,6 +130,7 @@ sees rejected invoice records and chain or clock problems."
 **Files:**
 - Modify: `packages/core/src/incidents.ts`
 - Modify: `packages/core/src/index.ts` (the `./incidents.js` export line)
+- Modify: `packages/db/src/schema/incidents.ts` (one index); generated: a new `packages/db/drizzle/00NN_*.sql` plus its `meta/` snapshot and journal entry
 - Test: `packages/core/src/incidents.test.ts`
 
 **Interfaces:**
@@ -418,6 +418,26 @@ export type { TenantIncident } from "./incidents.js";
 
 (If `index.ts` already exports the `Incident` types on another line, keep that line.)
 
+- [ ] **Step 3b: Index the handled read**
+
+The open read matches the shape of the partial unique index `incidents_open_dedup` (`tenant_id` first, `WHERE acknowledged_at IS NULL`); whether the planner uses it has not been measured. The handled read filters and sorts on `acknowledged_at`, which no index covers. Add to the index list in `packages/db/src/schema/incidents.ts`:
+
+```ts
+    // The dashboard's Handled tab: incidents handled since a date, most recent first.
+    index("incidents_handled_idx").on(t.acknowledgedAt),
+```
+
+It is keyed on `acknowledged_at` alone, not `(tenant_id, acknowledged_at)`, so it survives `feat/drop-tenant-id` removing the column. Then generate the migration and read it:
+
+```bash
+pnpm --filter @waitron/db db:generate
+git status --short packages/db/drizzle
+```
+
+Expected: one new `.sql` file containing only `CREATE INDEX "incidents_handled_idx" ON "incidents" USING btree ("acknowledged_at");`, plus the snapshot and journal changes. If it contains anything else, stop and report: the schema and the migrations had already drifted. Then run `pnpm vitest run scripts/journal-monotonic.test.ts scripts/classification-complete.test.ts` → PASS.
+
+If a rebase later collides on the migration number, regenerate (CLAUDE.md §3); never hand-edit the snapshot or journal.
+
 - [ ] **Step 4: Run and verify**
 
 Run: `pnpm --filter @waitron/core exec vitest run src/incidents.test.ts` → PASS.
@@ -427,14 +447,16 @@ Then `pnpm --filter @waitron/core typecheck && pnpm format:check && pnpm lint`.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/core/src/incidents.ts packages/core/src/incidents.test.ts packages/core/src/index.ts
+git add packages/core/src/incidents.ts packages/core/src/incidents.test.ts packages/core/src/index.ts \
+  packages/db/src/schema/incidents.ts packages/db/drizzle
 git commit -s -m "Read a tenant's incidents and mark one handled
 
 Adds the reads the dashboard alerts need: every open incident in the
 tenant, incidents handled since a date, one incident by id, and marking
 one handled. Every read is limited to the tenant. Marking an incident
 that is already handled changes nothing, so the first person and time
-are kept."
+are kept. A new index on acknowledged_at serves the handled list, which
+no existing index covered."
 ```
 
 ---
@@ -446,7 +468,6 @@ are kept."
 - Modify: `packages/module/src/module.ts` (add the seat to `WaitronModule`), `packages/module/src/index.ts`
 - Create: `packages/payments/src/alerts.ts`, `packages/payments/src/alerts.test.ts`; modify `packages/payments/src/index.ts`
 - Create: `packages/fiscal-verifactu/src/alerts.ts`, `packages/fiscal-verifactu/src/alerts.test.ts`; modify `packages/fiscal-verifactu/src/index.ts`
-- Create: `apps/server/src/alert-claims.ts`
 - Modify: `packages/composition/src/modules.ts`, `packages/composition/src/composition.test.ts`
 - Modify: `apps/server/src/modules.ts`, `apps/server/src/modules.test.ts`
 
@@ -481,7 +502,7 @@ export interface ModuleAlerts {
 }
 ```
 
-- Produces: `PAYMENTS_ALERTS` (`@waitron/payments`), `FISCAL_ALERTS` (`@waitron/fiscal-verifactu`), `SERVER_ALERT_CLAIMS: readonly AlertEventClaim[]` (`apps/server/src/alert-claims.ts`), `ALL_ALERT_CLAIMS: readonly AlertEventClaim[]` and `enabledAlertSources(modules): readonly AlertSource[]` (`apps/server/src/modules.ts`).
+- Produces: `PAYMENTS_ALERTS` (`@waitron/payments`), `FISCAL_ALERTS` (`@waitron/fiscal-verifactu`), `ALL_ALERT_CLAIMS: readonly AlertEventClaim[]` and `enabledAlertSources(modules): readonly AlertSource[]` (`apps/server/src/modules.ts`).
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -519,6 +540,14 @@ describe("ALL_MODULES alerts seat", () => {
     expect(ALL_MODULES.find((m) => m.name === "payments")?.alerts).toBe(PAYMENTS_ALERTS);
     expect(ALL_MODULES.find((m) => m.name === "fiscal-verifactu")?.alerts).toBe(FISCAL_ALERTS);
   });
+  it("core claims chain. and clock. incidents for the fiscal area under fiscal.view", () => {
+    expect(ALL_MODULES.find((m) => m.name === "core")?.alerts).toEqual({
+      events: [
+        { prefix: "chain.", area: "fiscal", permission: "fiscal.view" },
+        { prefix: "clock.", area: "fiscal", permission: "fiscal.view" },
+      ],
+    });
+  });
 });
 ```
 
@@ -528,7 +557,7 @@ In `apps/server/src/modules.test.ts` add (import `ALL_ALERT_CLAIMS`, `enabledAle
 describe("alert assembly", () => {
   it("collects every module's event-code claims", () => {
     expect(ALL_ALERT_CLAIMS.map((c) => c.prefix)).toEqual(
-      expect.arrayContaining(["payment.", "fiscal."]),
+      expect.arrayContaining(["chain.", "clock.", "payment.", "fiscal."]),
     );
   });
 
@@ -657,20 +686,17 @@ export const FISCAL_ALERTS: ModuleAlerts = {
 
 and in `packages/fiscal-verifactu/src/index.ts`: `export { FISCAL_ALERTS } from "./alerts.js";`
 
-`apps/server/src/alert-claims.ts` (type-only imports, so the root guard can load it cheaply):
+In `packages/composition/src/modules.ts`: add `PAYMENTS_ALERTS` to the `@waitron/payments` import and `FISCAL_ALERTS` to the `@waitron/fiscal-verifactu` import; add `alerts: PAYMENTS_ALERTS,` to the `payments` descriptor and `alerts: FISCAL_ALERTS,` to the `fiscal-verifactu` descriptor; and add to the `core` descriptor, after its `migrations` line:
 
 ```ts
-import type { AlertEventClaim } from "@waitron/module";
-
-/** Core's own incident codes. They are claimed here because the core descriptor's seat values come
- * from `@waitron/db`, which cannot depend on `@waitron/module`. */
-export const SERVER_ALERT_CLAIMS: readonly AlertEventClaim[] = [
-  { prefix: "chain.", area: "fiscal", permission: "fiscal.view" },
-  { prefix: "clock.", area: "fiscal", permission: "fiscal.view" },
-];
+    // Core's own incident codes: chain integrity and clock trust, shown with the tax-filing alerts.
+    alerts: {
+      events: [
+        { prefix: "chain.", area: "fiscal", permission: "fiscal.view" },
+        { prefix: "clock.", area: "fiscal", permission: "fiscal.view" },
+      ],
+    },
 ```
-
-In `packages/composition/src/modules.ts`: add `PAYMENTS_ALERTS` to the `@waitron/payments` import and `FISCAL_ALERTS` to the `@waitron/fiscal-verifactu` import; add `alerts: PAYMENTS_ALERTS,` to the `payments` descriptor and `alerts: FISCAL_ALERTS,` to the `fiscal-verifactu` descriptor.
 
 In `apps/server/src/modules.ts`: extend the `@waitron/module` type import with `AlertEventClaim, AlertSource`, and append:
 
@@ -700,15 +726,15 @@ Also run the root guards that read descriptors and package manifests: `pnpm vite
 git add packages/module/src/alerts.ts packages/module/src/module.ts packages/module/src/index.ts \
   packages/payments/src/alerts.ts packages/payments/src/alerts.test.ts packages/payments/src/index.ts \
   packages/fiscal-verifactu/src/alerts.ts packages/fiscal-verifactu/src/alerts.test.ts packages/fiscal-verifactu/src/index.ts \
-  apps/server/src/alert-claims.ts packages/composition/src/modules.ts packages/composition/src/composition.test.ts \
+  packages/composition/src/modules.ts packages/composition/src/composition.test.ts \
   apps/server/src/modules.ts apps/server/src/modules.test.ts
 git commit -s -m "Add an alerts seat to modules and claim each area's incident codes
 
 A module can now say which incident codes belong to it, which area they
 show under and which permission is needed to see them, and it can offer
 ongoing checks. Payments claims payment. codes under payments.manage and
-fiscal-verifactu claims fiscal. codes under fiscal.view. Core's chain.
-and clock. codes are claimed by the server under fiscal.view."
+fiscal-verifactu claims fiscal. codes under fiscal.view, and core claims
+its chain. and clock. codes under fiscal.view."
 ```
 
 ---
@@ -773,7 +799,6 @@ import {
   readHandledAlerts,
   readOpenAlerts,
 } from "./alerts.js";
-import { SERVER_ALERT_CLAIMS } from "./alert-claims.js";
 import { ALL_ALERT_CLAIMS } from "./modules.js";
 import "./errors.js";
 
@@ -786,7 +811,7 @@ beforeAll(() => {
 const NOW = new Date("2026-09-14T12:00:00.000Z");
 const noopLog: Logger = () => {};
 const registry = createAlertRegistry({
-  claims: [...SERVER_ALERT_CLAIMS, ...ALL_ALERT_CLAIMS],
+  claims: ALL_ALERT_CLAIMS,
   sources: [],
 });
 const EVERYTHING = new Set(["fiscal.view", "payments.manage", "diagnostics.view"]);
@@ -1218,7 +1243,7 @@ from the last 30 days come back with the name of whoever handled them."
   - `POST /management-api/alerts/incidents/:id/handled` → `204`; `404 alert.not_found`; `403 authorization.not_permitted { permission }`; `401 management_session.required`
 - Produces (TS): `export interface AlertsApiDeps { db: Database; cfg: { tenantId: string }; registry: AlertRegistry; now: () => Date }` and `export function mountAlertsApi(app: Hono, deps: AlertsApiDeps, log: Logger): void`.
 
-The session's permissions are empty when its tenant is not `cfg.tenantId`. The POST order is: session (401), incident lookup in this tenant (404), area permission (403), update.
+The session's permissions are empty when its tenant is not `cfg.tenantId`. The POST order is: session (401); a session holding no alert permission at all answers 404 before any lookup, so it learns nothing about which ids exist; incident lookup in this tenant (404); that incident's area permission (403); update.
 
 - [ ] **Step 1: Write the failing tests** — `apps/server/src/alerts-api.test.ts`:
 
@@ -1238,7 +1263,6 @@ import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import { AppError, tillId as brandTillId, type TenantId, type TillId } from "@waitron/shared";
 import { mountAlertsApi } from "./alerts-api.js";
 import { createAlertRegistry } from "./alerts.js";
-import { SERVER_ALERT_CLAIMS } from "./alert-claims.js";
 import { ALL_ALERT_CLAIMS } from "./modules.js";
 import "./errors.js";
 
@@ -1256,6 +1280,7 @@ interface Venue {
   tillId: TillId;
   manager: string;
   supervisor: string;
+  admin: string;
 }
 
 async function seedVenue(): Promise<Venue> {
@@ -1280,6 +1305,7 @@ async function seedVenue(): Promise<Venue> {
     tillId: brandTillId(till.rows[0]!.id),
     manager: await cookie("manager", "Marta"),
     supervisor: await cookie("supervisor", "Sergio"),
+    admin: await cookie("admin", "Ana"),
   };
 }
 
@@ -1298,14 +1324,17 @@ async function raise(v: Venue, code: string, severity: "warning" | "error" = "er
   });
 }
 
-function appFor(v: Pick<Venue, "tenantId">): Hono {
+function appFor(
+  v: Pick<Venue, "tenantId">,
+  registry = createAlertRegistry({ claims: ALL_ALERT_CLAIMS, sources: [] }),
+): Hono {
   const app = new Hono();
   mountAlertsApi(
     app,
     {
       db,
       cfg: { tenantId: v.tenantId },
-      registry: createAlertRegistry({ claims: [...SERVER_ALERT_CLAIMS, ...ALL_ALERT_CLAIMS], sources: [] }),
+      registry,
       now: () => NOW,
     },
     noopLog,
@@ -1382,14 +1411,33 @@ describe("alert routes", () => {
     expect((await post(app, `/management-api/alerts/incidents/${id}/handled`, v.manager)).status).toBe(204);
   });
 
-  it("refuses to mark a fiscal incident handled without fiscal.view", async () => {
+  it("refuses a session that sees some alerts to handle an incident in an area it does not hold", async () => {
+    // Every real role that sees alerts holds every alert permission today, so this registry puts
+    // fiscal. under an admin-only permission: the manager still sees payments and diagnostics.
+    const registry = createAlertRegistry({
+      claims: [
+        { prefix: "fiscal.", area: "fiscal", permission: "node.promote" },
+        { prefix: "payment.", area: "payments", permission: "payments.manage" },
+      ],
+      sources: [],
+    });
+    const v = await seedVenue();
+    const id = await raise(v, "fiscal.registro_rechazado");
+    const app = appFor(v, registry);
+    const refused = await post(app, `/management-api/alerts/incidents/${id}/handled`, v.manager);
+    expect(refused.status).toBe(403);
+    expect(await refused.json()).toEqual({
+      error: { code: "authorization.not_permitted", params: { permission: "node.promote" } },
+    });
+    expect((await post(app, `/management-api/alerts/incidents/${id}/handled`, v.admin)).status).toBe(204);
+  });
+
+  it("answers alert.not_found to a session holding no alert permission, even for a real id", async () => {
     const v = await seedVenue();
     const id = await raise(v, "fiscal.registro_rechazado");
     const res = await post(appFor(v), `/management-api/alerts/incidents/${id}/handled`, v.supervisor);
-    expect(res.status).toBe(403);
-    expect(await res.json()).toEqual({
-      error: { code: "authorization.not_permitted", params: { permission: "fiscal.view" } },
-    });
+    expect(res.status).toBe(404);
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe("alert.not_found");
   });
 
   it("answers alert.not_found for an unknown, a malformed, and another tenant's id", async () => {
@@ -1490,7 +1538,8 @@ export function mountAlertsApi(app: Hono, deps: AlertsApiDeps, log: Logger): voi
     run(c, log, async () => {
       const id = c.req.param("id");
       await inSession(c, async (tx, { personId, held }) => {
-        const incident = isUuid(id) ? await findIncident(tx, tenantId, id) : null;
+        const incident =
+          alertsVisible(deps.registry, held) && isUuid(id) ? await findIncident(tx, tenantId, id) : null;
         if (incident === null) throw new AppError("alert.not_found", { id });
         const { permission } = claimFor(deps.registry, incident.code);
         if (!held.has(permission)) throw new AppError("authorization.not_permitted", { permission });
@@ -1507,7 +1556,6 @@ In `apps/server/src/boot.ts`: add imports
 ```ts
 import { mountAlertsApi } from "./alerts-api.js";
 import { createAlertRegistry } from "./alerts.js";
-import { SERVER_ALERT_CLAIMS } from "./alert-claims.js";
 ```
 
 and add `ALL_ALERT_CLAIMS, enabledAlertSources` to the existing `./modules.js` import. Directly after the `mountDiagnosticsApi(...)` line:
@@ -1521,7 +1569,7 @@ and add `ALL_ALERT_CLAIMS, enabledAlertSources` to the existing `./modules.js` i
       db,
       cfg: { tenantId: till.tenantId },
       registry: createAlertRegistry({
-        claims: [...SERVER_ALERT_CLAIMS, ...ALL_ALERT_CLAIMS],
+        claims: ALL_ALERT_CLAIMS,
         sources: enabledAlertSources(setsToMigrate),
       }),
       now,
@@ -1535,7 +1583,7 @@ and add `ALL_ALERT_CLAIMS, enabledAlertSources` to the existing `./modules.js` i
 - [ ] **Step 4: Run and verify**
 
 Run: `pnpm --filter @waitron/server exec vitest run src/alerts-api.test.ts src/alerts.test.ts` → PASS.
-Mutation check: change `session.tenantId === deps.cfg.tenantId ? ... : []` to always use `permissionsForRole(session.role)` → "another tenant's manager" FAILS. Remove `isUuid(id) ?` guard (always call `findIncident`) → the malformed id case FAILS with a 500. Restore both.
+Mutation check: change `session.tenantId === deps.cfg.tenantId ? ... : []` to always use `permissionsForRole(session.role)` → "another tenant's manager" FAILS. Remove the `isUuid(id)` condition (always call `findIncident`) → the malformed id case FAILS with a 500. Change `claimFor(...).permission` to `alertsVisible(deps.registry, held)` → "refuses a session that sees some alerts" FAILS. Restore all three.
 Then `pnpm --filter @waitron/server typecheck && pnpm format:check && pnpm lint && pnpm vitest run scripts/module-seams.test.ts`.
 
 - [ ] **Step 5: Commit**
@@ -1580,7 +1628,8 @@ import { alertMessage, hasAlertMessage, registerAlertMessages } from "./alert-me
 
 registerAlertMessages({
   "test.rejected": { en: "Rejected: {mensaje} (code {codigo})", es: "Rechazado: {mensaje} (código {codigo})" },
-  "test.count": { en: "{count} payments", es: "{count} pagos" },
+  // Placeholder non-English text: dashboard-kit's tests are scanned by the english-only guard.
+  "test.count": { en: "{count} payments", es: "{count} ES" },
 });
 
 describe("alertMessage", () => {
@@ -1663,7 +1712,7 @@ In `packages/dashboard-kit/src/index.ts` add `export * from "./alert-messages.js
 
 - [ ] **Step 4: Run and verify**
 
-Run: `pnpm --filter @waitron/dashboard-kit exec vitest run src/alert-messages.test.ts` → PASS. Then `pnpm --filter @waitron/dashboard-kit typecheck && pnpm format:check && pnpm lint`.
+Run: `pnpm --filter @waitron/dashboard-kit exec vitest run src/alert-messages.test.ts` → PASS. Then `pnpm vitest run scripts/english-only.test.ts` → PASS (dashboard-kit is a generic package; its source and tests are scanned for Spanish words). Then `pnpm --filter @waitron/dashboard-kit typecheck && pnpm format:check && pnpm lint`.
 
 - [ ] **Step 5: Commit**
 
@@ -1686,7 +1735,7 @@ one, so the screen can show it with its raw code."
 - Create: `scripts/alert-codes.test.ts`
 
 **Interfaces:**
-- Consumes: Task 3's `SERVER_ALERT_CLAIMS` and `ALL_MODULES[*].alerts`; Task 6's `registerAlertMessages`.
+- Consumes: Task 3's `ALL_MODULES[*].alerts`; Task 6's `registerAlertMessages`.
 - Produces: `ALERT_MESSAGES` (the table); `apps/dashboard/src/i18n/alerts.ts` re-exports `alertMessage` and `hasAlertMessage` after registering.
 
 The incident codes recorded in production source today (found by a whole-repo search on 2026-09-14; the guard re-derives them):
@@ -1694,7 +1743,7 @@ The incident codes recorded in production source today (found by a whole-repo se
 `fiscal.aceptado_con_errores`, `fiscal.duplicado_anulado`, `fiscal.environment_mismatch`, `fiscal.environment_unknown`, `fiscal.huella_divergente`, `fiscal.reconcile_drift_anulada`, `fiscal.reconcile_drift_errores`, `fiscal.reconcile_no_trace`, `fiscal.record_totals_disagree`, `fiscal.registro_rechazado`,
 `payment.offline_forward_declined`, `payment.pending_outcome_unactionable`, `payment.reconcile_drift`, `payment.reconcile_lost_settlement`, `payment.reconcile_missing_local`, `payment.reconcile_orphan`, `payment.reconcile_remediation_failed`, `payment.reconcile_unsettled`.
 
-Params each can use come from the registries: `packages/core/src/errors.ts`, `packages/fiscal/src/errors.ts`, `packages/fiscal-verifactu/src/errors.ts`, `packages/payments/src/errors.ts`. The reconcilers raise again after an incident is handled if the problem is still there, so their sentences say so.
+Params each can use come from the registries: `packages/core/src/errors.ts`, `packages/fiscal/src/errors.ts`, `packages/fiscal-verifactu/src/errors.ts`, `packages/payments/src/errors.ts`. The reconcilers raise again after an incident is handled when a later check still finds the problem, so their sentences say so; `payment.reconcile_remediation_failed` is the exception (those payments are never retried).
 
 - [ ] **Step 1: Write the failing guard** — `scripts/alert-codes.test.ts`:
 
@@ -1706,7 +1755,6 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { describe, expect, it } from "vitest";
 import { ALL_MODULES } from "../packages/composition/src/index.js";
-import { SERVER_ALERT_CLAIMS } from "../apps/server/src/alert-claims.js";
 import { ALERT_MESSAGES } from "../apps/dashboard/src/i18n/alert-messages.js";
 
 const root = join(import.meta.dirname, "..");
@@ -1796,10 +1844,9 @@ describe("incident codes reach the dashboard alerts", () => {
   });
 
   it("every recorded code is claimed by an area", () => {
-    const prefixes = [
-      ...SERVER_ALERT_CLAIMS,
-      ...ALL_MODULES.flatMap((module) => module.alerts?.events ?? []),
-    ].map((claim) => claim.prefix);
+    const prefixes = ALL_MODULES.flatMap((module) => module.alerts?.events ?? []).map(
+      (claim) => claim.prefix,
+    );
     expect(recordedCodes().filter((code) => !prefixes.some((p) => code.startsWith(p)))).toEqual([]);
   });
 
@@ -1822,8 +1869,8 @@ Expected: FAIL on the missing `apps/dashboard/src/i18n/alert-messages.js` import
 ```ts
 // English and Spanish sentences for every alert code. `{name}` slots are filled from the alert's
 // params. Kept free of imports so the root guard (`scripts/alert-codes.test.ts`) can load it.
-const RETURNS_EN = " If it is still wrong after you mark it handled, it will appear again.";
-const RETURNS_ES = " Si sigue mal después de marcarlo como resuelto, volverá a aparecer.";
+const RETURNS_EN = " If the next check still finds it after you mark it handled, it will appear again.";
+const RETURNS_ES = " Si la próxima comprobación lo sigue encontrando después de marcarlo como resuelto, volverá a aparecer.";
 
 export const ALERT_MESSAGES: Readonly<Record<string, { readonly en: string; readonly es: string }>> = {
   "alert.source_unavailable": {
@@ -1899,8 +1946,8 @@ export const ALERT_MESSAGES: Readonly<Record<string, { readonly en: string; read
     es: `El proveedor de pagos indica que {count} pagos se cobraron, pero aquí no se completaron. Revisa esos pedidos.${RETURNS_ES}`,
   },
   "payment.reconcile_orphan": {
-    en: `{count} card payments were taken for orders that were already closed or abandoned. Check whether they need refunding.${RETURNS_EN}`,
-    es: `Se cobraron {count} pagos con tarjeta de pedidos ya cerrados o abandonados. Comprueba si hay que devolverlos.${RETURNS_ES}`,
+    en: `{count} card payments were taken for orders that were already closed or abandoned. Waitron refunds some of these by itself; check the rest.${RETURNS_EN}`,
+    es: `Se cobraron {count} pagos con tarjeta de pedidos ya cerrados o abandonados. Waitron devuelve algunos por sí mismo; revisa el resto.${RETURNS_ES}`,
   },
   "payment.reconcile_missing_local": {
     en: `The card provider reports {count} payments that are not recorded here.${RETURNS_EN}`,
@@ -2645,7 +2692,6 @@ markIncidentHandled(incidentId: string): Promise<void>;
 | `alerts.handled_by` | {time} by {person} | {time} por {person} |
 | `alerts.someone` | someone | alguien |
 | `alerts.loading` | Loading alerts… | Cargando avisos… |
-| `alerts.no_open` | Nothing needs attention. | No hay nada que requiera atención. |
 | `alerts.no_handled` | Nothing was handled in the last 30 days. | No se ha resuelto nada en los últimos 30 días. |
 | `alerts.no_access` | You don't have access to any alerts. | No tienes acceso a ningún aviso. |
 | `alerts.load_error` | Alerts could not be loaded. | No se han podido cargar los avisos. |
@@ -3219,7 +3265,6 @@ export class AlertsBell extends LitElement {
         incidentId === null
           ? nothing
           : html`<wt-button
-              data-keep-open
               size="sm"
               variant="secondary"
               data-test="alert-handle"
@@ -3285,7 +3330,7 @@ declare global {
 - [ ] **Step 4: Run and verify**
 
 Run the Step 2 command → PASS.
-Break-it check: remove `data-keep-open` from the handle button → "asks to handle an event without closing the panel" FAILS. Restore.
+Break-it checks, each restored: add `this.#menu()?.hide();` to `#onHandle` → "asks to handle an event without closing the panel" FAILS; remove `this.#menu()?.hide();` from `#onSeeAll` → "See all asks for the screen and closes the panel" FAILS. (Each handler stops its click, so `wt-row-actions` never sees it: the panel closes only where this element calls `hide()`.)
 Then `pnpm --filter @waitron/dashboard typecheck && pnpm format:check && pnpm lint`.
 
 - [ ] **Step 5: Commit**
@@ -3320,6 +3365,7 @@ import { userEvent } from "@vitest/browser/context";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setLocale } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { LiveData } from "@waitron/dashboard-kit";
 import type { AlertView, AlertsResponse, DashboardApi } from "../api/client.js";
 import "./alerts-screen.js";
 import type { AlertsScreen } from "./alerts-screen.js";
@@ -3350,6 +3396,8 @@ function stubApi(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}): 
     listAlerts: vi.fn().mockResolvedValue({ visible: true, alerts: [open, ongoing] } satisfies AlertsResponse),
     listHandledAlerts: vi.fn().mockResolvedValue({ visible: true, alerts: [handled] } satisfies AlertsResponse),
     markIncidentHandled: vi.fn().mockResolvedValue(undefined),
+    // A real LiveData: marking handled refreshes through invalidation, as in the running app.
+    liveData: new LiveData(),
     ...overrides,
   } as unknown as DashboardApi;
 }
@@ -3400,16 +3448,26 @@ describe("dashboard-alerts-screen", () => {
     expect(el.shadowRoot!.querySelector("wt-tabs")!.value).toBe("handled");
   });
 
-  it("marks an event handled and reads both lists again", async () => {
-    const api = stubApi();
+  it("marking an event handled moves it from Open to Handled", async () => {
+    const nowHandled: AlertView = { ...open, handledAt: "2026-09-14T14:00:00.000Z", handledBy: "Ana" };
+    const api = stubApi({
+      listAlerts: vi
+        .fn()
+        .mockResolvedValueOnce({ visible: true, alerts: [open, ongoing] })
+        .mockResolvedValue({ visible: true, alerts: [ongoing] }),
+      listHandledAlerts: vi
+        .fn()
+        .mockResolvedValueOnce({ visible: true, alerts: [handled] })
+        .mockResolvedValue({ visible: true, alerts: [nowHandled, handled] }),
+    });
     const { el } = await mountWidget<AlertsScreen>("dashboard-alerts-screen", { api });
     await flush(el);
     const button = rows(el, "open-alerts-table")[0]!.querySelector<HTMLElement>("[data-test=alert-handle]")!;
     await userEvent.click(button);
-    await flush(el);
     expect(api.markIncidentHandled).toHaveBeenCalledWith("i1");
-    expect(vi.mocked(api.listAlerts).mock.calls.length).toBeGreaterThanOrEqual(2);
-    expect(vi.mocked(api.listHandledAlerts).mock.calls.length).toBeGreaterThanOrEqual(2);
+    await vi.waitFor(() => expect(rows(el, "open-alerts-table")).toHaveLength(1));
+    await vi.waitFor(() => expect(rows(el, "handled-alerts-table")).toHaveLength(2));
+    expect(rows(el, "handled-alerts-table")[0]!.textContent).toContain("Ana");
   });
 
   it("shows the error when marking handled fails and keeps the alert listed", async () => {
@@ -3451,7 +3509,10 @@ describe("dashboard-alerts-screen", () => {
     const api = stubApi({ listAlerts: vi.fn().mockRejectedValue({ code: "server.internal" }) });
     const { el } = await mountWidget<AlertsScreen>("dashboard-alerts-screen", { api });
     await flush(el);
-    expect(el.shadowRoot!.querySelector("[data-test=alerts-error]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=alerts-load-error]")!.textContent).toContain(
+      "Alerts could not be loaded",
+    );
+    expect(el.shadowRoot!.querySelector("[data-test=alerts-error]")).toBeNull();
   });
 });
 ```
@@ -3462,6 +3523,7 @@ Cell content lives in `wt-data-table`'s shadow root, which is why the tests reac
 
 ```ts
 import { afterEach, describe, it, vi } from "vitest";
+import { LiveData } from "@waitron/dashboard-kit";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import type { AlertView, DashboardApi } from "../api/client.js";
 import "./alerts-screen.js";
@@ -3480,6 +3542,7 @@ const api = (visible = true) =>
     listAlerts: vi.fn().mockResolvedValue({ visible, alerts: visible ? alerts : [] }),
     listHandledAlerts: vi.fn().mockResolvedValue({ visible, alerts: visible ? handled : [] }),
     markIncidentHandled: vi.fn(),
+    liveData: new LiveData(),
   }) as unknown as DashboardApi;
 
 const settle = async (el: AlertsScreen) => {
@@ -3565,14 +3628,17 @@ export class AlertsScreen extends LitElement {
   @state() private handled: AlertView[] = [];
   @state() private visible: boolean | null = null;
   @state() private loading = true;
-  @state() private error: string | null = null;
+  /** A failed read. Kept apart from `actionError`: a refresh failing after a successful write is a
+   * load failure, not a failed save. */
+  @state() private loadError: string | null = null;
+  @state() private actionError: string | null = null;
   @state() private busyKey: string | null = null;
 
   readonly #queries = new DashboardQueries(
     this,
     () => this.api,
     (error) => {
-      this.error = codeOf(error);
+      this.loadError = codeOf(error);
       this.loading = false;
     },
   );
@@ -3599,6 +3665,7 @@ export class AlertsScreen extends LitElement {
         this.visible = response.visible;
         this.open = response.alerts;
         this.loading = false;
+        this.loadError = null;
       })
       .catch(() => undefined);
     void this.#queries
@@ -3610,17 +3677,18 @@ export class AlertsScreen extends LitElement {
 
   async #handle(alert: AlertView, incidentId: string): Promise<void> {
     this.busyKey = alert.key;
-    this.error = null;
+    this.actionError = null;
     try {
       await this.api.markIncidentHandled(incidentId);
     } catch (error) {
-      this.error = codeOf(error);
+      this.actionError = codeOf(error);
       return;
     } finally {
       this.busyKey = null;
     }
-    // The write succeeded; a failed re-read is reported by the query controller as a load error.
-    this.#load();
+    // Invalidate rather than re-watch: the shell's bell observes the same query, so its shared cache
+    // entry would survive a release and hand back the stale value.
+    this.api.liveData.invalidate([{ type: "incidents" }]);
   }
 
   #goTo(event: MouseEvent, screen: string): void {
@@ -3687,12 +3755,15 @@ export class AlertsScreen extends LitElement {
   }
 
   override render(): TemplateResult {
-    const error =
-      this.error === null
+    const error = html`${
+      this.loadError === null
         ? nothing
-        : html`<p role="alert" data-test="alerts-error">
-            ${this.loading ? t("alerts.load_error") : codeMessage(this.error)}
-          </p>`;
+        : html`<p role="alert" data-test="alerts-load-error">${t("alerts.load_error")}</p>`
+    }${
+      this.actionError === null
+        ? nothing
+        : html`<p role="alert" data-test="alerts-error">${codeMessage(this.actionError)}</p>`
+    }`;
     if (this.visible === false)
       return html`<h1 class="title">${t("alerts.title")}</h1>
         <p data-test="alerts-no-access">${t("alerts.no_access")}</p>`;
@@ -3720,7 +3791,7 @@ export class AlertsScreen extends LitElement {
             .rowKey=${(a: AlertView) => a.key}
             .loading=${this.loading}
             .loadingMessage=${t("alerts.loading")}
-            .emptyMessage=${t("alerts.no_open")}
+            .emptyMessage=${t("alerts.none")}
           ></wt-data-table>
         </div>
         <div slot="handled">
@@ -3751,7 +3822,7 @@ The `.title` rule matches the printers screen's heading.
 - [ ] **Step 4: Run and verify**
 
 Run the Step 2 command → PASS.
-Break-it check: delete the `this.#load()` line at the end of `#handle` → "marks an event handled and reads both lists again" FAILS. Restore.
+Break-it check: delete the `invalidate` line at the end of `#handle` → "marking an event handled moves it from Open to Handled" FAILS. Restore. (Why invalidation rather than re-watching is tested in Task 14, where the bell and the screen observe the same query.)
 Then `pnpm --filter @waitron/dashboard typecheck && pnpm format:check && pnpm lint`.
 
 - [ ] **Step 5: Commit**
@@ -3784,7 +3855,7 @@ Behaviour to build:
 2. Each read sets `alertsVisible`. When not visible it clears the alerts and releases the watch.
 3. `AlertArrivals.next` decides the pop-up: one new alert shows its wording; several show `alerts.toast_many`; the tone is `error` if any new one is an error. The first read shows nothing.
 4. Pressing the pop-up opens the bell's panel.
-5. `wt-alert-handle` calls `api.markIncidentHandled`, shows the error code on the bell if it fails, and re-watches alerts once it succeeds.
+5. `wt-alert-handle` calls `api.markIncidentHandled`, shows the error code on the bell if it fails, and invalidates the `incidents` resource once it succeeds so every observer of the alert queries reads again.
 6. `wt-alerts-see-all` selects `alerts`; `wt-alert-go-to` selects its screen. Both go through `#selectScreen`.
 7. `#returnToLogin` releases the watch, resets arrivals, and clears alerts, visibility, pop-up, bell error and busy key.
 8. `#permittedScreen("alerts")` returns `"alerts"` for a non-staff session. The bell's and screen's `canOpen` is `(s) => this.#permittedScreen(s) === s`.
@@ -3819,10 +3890,18 @@ describe("alerts in the shell", () => {
       "[data-test=alert-toast]",
     )!;
 
-  beforeEach(() => setLocale("en-GB"));
+  // The shell applies the session's language on login, so the session itself must be English.
+  const alertsApi = (overrides: Record<string, unknown> = {}) =>
+    alertsApi({
+      getMe: vi.fn().mockResolvedValue({ ...meResponse, sessionDefault: "en-GB" }),
+      liveData: new LiveData(),
+      ...overrides,
+    });
+  const countOf = (el: DashboardApp) =>
+    (bell(el)!.shadowRoot!.querySelector("wt-count-badge") as HTMLElement & { count: number }).count;
 
   it("shows the bell with its count when alerts are visible, and no pop-up on the first read", async () => {
-    const api = stubApi({
+    const api = alertsApi({
       listAlerts: vi.fn().mockResolvedValue({ visible: true, alerts: [alert("1", "error"), alert("2")] }),
     });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request: stubRequest });
@@ -3834,7 +3913,7 @@ describe("alerts in the shell", () => {
   });
 
   it("shows no bell when the session may see no alerts", async () => {
-    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api: stubApi(), request: stubRequest });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api: alertsApi(), request: stubRequest });
     await flush(el);
     expect(bell(el)).toBeNull();
   });
@@ -3845,7 +3924,7 @@ describe("alerts in the shell", () => {
       .fn()
       .mockResolvedValueOnce({ visible: true, alerts: [alert("1")] })
       .mockResolvedValue({ visible: true, alerts: [alert("1"), alert("2", "error")] });
-    const api = stubApi({ listAlerts, liveData });
+    const api = alertsApi({ listAlerts, liveData });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request: stubRequest });
     await flush(el);
     liveData.invalidate([{ type: "incidents", id: "new" }]);
@@ -3859,21 +3938,49 @@ describe("alerts in the shell", () => {
     expect(popup.matches(":popover-open")).toBe(true);
   });
 
-  it("marks an alert handled from the panel and reads alerts again", async () => {
-    const api = stubApi({
-      listAlerts: vi.fn().mockResolvedValue({ visible: true, alerts: [alert("7")] }),
+  it("marks an alert handled from the panel and the bell updates", async () => {
+    const api = alertsApi({
+      listAlerts: vi
+        .fn()
+        .mockResolvedValueOnce({ visible: true, alerts: [alert("7")] })
+        .mockResolvedValue({ visible: true, alerts: [] }),
     });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request: stubRequest });
     await flush(el);
-    const calls = vi.mocked(api.listAlerts).mock.calls.length;
     bell(el)!.shadowRoot!.querySelector<HTMLElement>("[data-test=alert-handle]")!.click();
-    await flush(el);
     expect(api.markIncidentHandled).toHaveBeenCalledWith("7");
-    expect(vi.mocked(api.listAlerts).mock.calls.length).toBeGreaterThan(calls);
+    await vi.waitFor(() => expect(countOf(el)).toBe(0));
+  });
+
+  it("handling on the Alerts screen also updates the bell, which reads the same query", async () => {
+    const api = alertsApi({
+      listAlerts: vi
+        .fn()
+        .mockResolvedValueOnce({ visible: true, alerts: [alert("7")] })
+        .mockResolvedValue({ visible: true, alerts: [] }),
+      listHandledAlerts: vi.fn().mockResolvedValue({ visible: true, alerts: [] }),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request: stubRequest });
+    await flush(el);
+    bell(el)!.shadowRoot!.querySelector<HTMLElement>("[data-test=alerts-see-all]")!.click();
+    await flush(el);
+    const screen = el.shadowRoot!.querySelector("dashboard-alerts-screen")!;
+    await vi.waitFor(() =>
+      expect(
+        screen.shadowRoot!
+          .querySelector("[data-test=open-alerts-table]")!
+          .shadowRoot!.querySelector("[data-test=alert-handle]"),
+      ).not.toBeNull(),
+    );
+    screen.shadowRoot!
+      .querySelector("[data-test=open-alerts-table]")!
+      .shadowRoot!.querySelector<HTMLElement>("[data-test=alert-handle]")!
+      .click();
+    await vi.waitFor(() => expect(countOf(el)).toBe(0));
   });
 
   it("See all opens the Alerts screen", async () => {
-    const api = stubApi({
+    const api = alertsApi({
       listAlerts: vi.fn().mockResolvedValue({ visible: true, alerts: [alert("1")] }),
       listHandledAlerts: vi.fn().mockResolvedValue({ visible: true, alerts: [] }),
     });
@@ -3887,7 +3994,7 @@ describe("alerts in the shell", () => {
 
   it("does not open the Alerts screen for a staff session", async () => {
     history.replaceState(null, "", "/manage/alerts");
-    const api = stubApi({ getMe: vi.fn().mockResolvedValue({ ...meResponse, role: "staff", permissions: [] }) });
+    const api = alertsApi({ getMe: vi.fn().mockResolvedValue({ ...meResponse, role: "staff", permissions: [] }) });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request: stubRequest });
     await flush(el);
     expect(el.shadowRoot!.querySelector("dashboard-alerts-screen")).toBeNull();
@@ -3895,7 +4002,7 @@ describe("alerts in the shell", () => {
   });
 
   it("forgets the previous session's alerts on logout", async () => {
-    const api = stubApi({
+    const api = alertsApi({
       listAlerts: vi.fn().mockResolvedValue({ visible: true, alerts: [alert("1")] }),
     });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request: stubRequest });
@@ -3915,8 +4022,6 @@ describe("alerts in the shell", () => {
   });
 });
 ```
-
-If the file's `stubApi` type does not accept `liveData`, pass it through the `overrides` record as the other overrides are.
 
 In `dashboard-app.a11y.test.ts`, add one case to its existing theme loop that mounts a manager with `listAlerts` resolving `{ visible: true, alerts: [<one error alert>] }`, waits for the probe the way the file's other cases do, and runs its axe helper on the host, with the bell closed and then after `(bell as AlertsBell).open()`.
 
@@ -4038,7 +4143,9 @@ Methods:
     } finally {
       if (this.isConnected) this.alertBusyKey = null;
     }
-    if (this.isConnected) this.#watchAlerts();
+    // Invalidate rather than re-watch: the Alerts screen may observe the same query, and a shared
+    // cache entry survives one side releasing it.
+    if (this.isConnected) this.api.liveData.invalidate([{ type: "incidents" }]);
   }
 
   #canOpenScreen = (screen: string): boolean => this.#permittedScreen(screen) === screen;
@@ -4118,7 +4225,7 @@ Add a one-line mention to the class doc comment listing the faces: "…or see an
 - [ ] **Step 4: Run and verify**
 
 Run: `pnpm --filter @waitron/dashboard exec vitest run src/dashboard-app.test.ts src/dashboard-app.a11y.test.ts` → PASS (the whole files: existing shell tests must stay green with the new stub methods).
-Break-it checks, each restored: in `#applyAlerts` replace `this.#alertArrivals.next(response.alerts)` with `response.alerts` → "no pop-up on the first read" FAILS; delete `this.#clearAlerts()` from `#returnToLogin` → "forgets the previous session's alerts on logout" FAILS.
+Break-it checks, each restored: delete the `invalidate` line in `#onAlertHandle` → "marks an alert handled from the panel and the bell updates" FAILS; replace the `invalidate` line in the screen's `#handle` with a re-watch of its own two queries → "handling on the Alerts screen also updates the bell" FAILS (the shell still holds the shared cache entry); in `#applyAlerts` replace `this.#alertArrivals.next(response.alerts)` with `response.alerts` → "no pop-up on the first read" FAILS; delete `this.#clearAlerts()` from `#returnToLogin` → "forgets the previous session's alerts on logout" FAILS.
 Then `pnpm --filter @waitron/dashboard typecheck && pnpm format:check && pnpm lint`.
 
 - [ ] **Step 5: Commit**
@@ -4158,7 +4265,9 @@ See all opens the Alerts screen. Logging out clears it all."
 ```markdown
 - **A recorded incident code needs an area claim and English and Spanish alert wording**, or the
   dashboard shows it only under diagnostics with a generic sentence. Guard: `scripts/alert-codes.test.ts`
-  — it reads source TEXT, so a code built at runtime escapes it.
+  — it reads source TEXT from a listed set of files, so it misses a code built at runtime, a code
+  written in an unlisted file that records nothing itself (the way `packages/fiscal/src/clock.ts`
+  feeds `record-sale.ts`), and an incidents sink not called `incidents(tx`.
 ```
 
 - [ ] **Step 4: Look at it** (CLAUDE.md §4: open it in both themes and at phone width)
@@ -4199,3 +4308,4 @@ Update the ledger `docs/handoffs/2026-09-14-dashboard-alerts.md`: branch 1 tasks
 - Spec coverage: model (T3), sources and seat (T3, T4), `fiscal.view` (T1), three routes (T5), marking handled (T2, T5), bell/panel/screen/pop-up (T12–T14), shared badge and toast (T8, T9), wording for every code in use (T7), code-coverage guard (T7), passive refresh (T11), look at it (T15). The ongoing checks and caches are branch 2 and are not here.
 - The spec's route test "a session with only `payments.manage`" is at service level (ruling 6).
 - The spec's "The poll carries the passive header" is tested in T11 (`live-queries.test.ts`); the server side is the existing global `x-waitron-live` middleware in `boot.ts`, unchanged.
+- A fresh-context plan-vs-spec review ran on 2026-09-14 (no blockers; six important, seven minor). Every finding is applied here: core claims inline on the descriptor, the area-mismatch refusal tested with a registry that splits permissions, 404 before lookup for a session with no alert permission, invalidation after marking handled (a re-watch returns the shared cache entry), separate load and action errors, English sessions in the shell tests, no `data-keep-open`, a non-Spanish kit fixture plus the english-only guard in Task 6's verify step, the guard's full blind spots in CLAUDE.md, an index for the handled read, and corrected reconcile wording.
