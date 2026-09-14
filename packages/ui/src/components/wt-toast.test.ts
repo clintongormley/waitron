@@ -68,6 +68,86 @@ test("keyboard focus inside pauses the timer until focus leaves", async () => {
   expect(el.open).toBe(false);
 });
 
+test("a new message while hovered does not start the countdown", async () => {
+  vi.useFakeTimers();
+  const el = (await mount('<wt-toast open message="Hi" duration="1000"></wt-toast>')) as WtToast;
+  part(el, ".toast")!.dispatchEvent(new MouseEvent("mouseenter"));
+  el.message = "Two new alerts";
+  await el.updateComplete;
+  vi.advanceTimersByTime(5_000);
+  expect(el.open).toBe(true);
+});
+
+test("focus leaving while hovered stays paused", async () => {
+  vi.useFakeTimers();
+  const el = (await mount('<wt-toast open message="Hi" duration="1000"></wt-toast>')) as WtToast;
+  const toast = part(el, ".toast")!;
+  toast.dispatchEvent(new MouseEvent("mouseenter"));
+  part(el, ".message")!.focus();
+  part(el, ".message")!.blur();
+  vi.advanceTimersByTime(5_000);
+  expect(el.open).toBe(true);
+  toast.dispatchEvent(new MouseEvent("mouseleave"));
+  vi.advanceTimersByTime(999);
+  expect(el.open).toBe(true);
+  vi.advanceTimersByTime(1);
+  expect(el.open).toBe(false);
+});
+
+test("the pointer leaving while focus stays inside stays paused", async () => {
+  vi.useFakeTimers();
+  const el = (await mount('<wt-toast open message="Hi" duration="1000"></wt-toast>')) as WtToast;
+  const toast = part(el, ".toast")!;
+  part(el, ".message")!.focus();
+  toast.dispatchEvent(new MouseEvent("mouseenter"));
+  toast.dispatchEvent(new MouseEvent("mouseleave"));
+  vi.advanceTimersByTime(5_000);
+  expect(el.open).toBe(true);
+  part(el, ".message")!.blur();
+  vi.advanceTimersByTime(999);
+  expect(el.open).toBe(true);
+  vi.advanceTimersByTime(1);
+  expect(el.open).toBe(false);
+});
+
+test("show() opens it, and on an open toast restarts the full countdown", async () => {
+  vi.useFakeTimers();
+  const el = (await mount('<wt-toast message="Hi" duration="1000"></wt-toast>')) as WtToast;
+  el.show();
+  await el.updateComplete;
+  expect(el.open).toBe(true);
+  vi.advanceTimersByTime(900);
+  // The same message again changes no property, so only show() can restart the countdown.
+  el.show();
+  await el.updateComplete;
+  vi.advanceTimersByTime(999);
+  expect(el.open).toBe(true);
+  vi.advanceTimersByTime(1);
+  expect(el.open).toBe(false);
+});
+
+test("show() does not start the countdown while hovered", async () => {
+  vi.useFakeTimers();
+  const el = (await mount('<wt-toast open message="Hi" duration="1000"></wt-toast>')) as WtToast;
+  part(el, ".toast")!.dispatchEvent(new MouseEvent("mouseenter"));
+  el.show();
+  vi.advanceTimersByTime(5_000);
+  expect(el.open).toBe(true);
+});
+
+test("closing while hovered does not leave a reopened toast paused", async () => {
+  // Closing removes the hovered element, so no mouseleave ever arrives for it.
+  vi.useFakeTimers();
+  const el = (await mount('<wt-toast open message="Hi" duration="1000"></wt-toast>')) as WtToast;
+  part(el, ".toast")!.dispatchEvent(new MouseEvent("mouseenter"));
+  part(el, ".close")!.click();
+  await el.updateComplete;
+  el.show();
+  await el.updateComplete;
+  vi.advanceTimersByTime(1_000);
+  expect(el.open).toBe(false);
+});
+
 test("its events cross shadow boundaries and swallow the click that caused them", async () => {
   // Inside a shadow root, only a composed event reaches a document listener.
   const el = (await mountInShadowRoot(
