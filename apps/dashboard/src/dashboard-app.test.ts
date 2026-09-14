@@ -846,7 +846,8 @@ describe("dashboard-app", () => {
     const hostBox = el.getBoundingClientRect();
     const bannerBox = banner.getBoundingClientRect();
 
-    expect(shell.firstElementChild).toBe(banner);
+    // The banner shares its first row only with the pop-up that hangs below it.
+    expect(shell.firstElementChild!.firstElementChild).toBe(banner);
     expect(bannerBox.left).toBeCloseTo(hostBox.left, 0);
     expect(bannerBox.right).toBeCloseTo(hostBox.right, 0);
     expect(sidebar.getBoundingClientRect().top).toBeGreaterThanOrEqual(bannerBox.bottom);
@@ -3292,13 +3293,31 @@ describe("alerts in the shell", () => {
       .mockResolvedValueOnce({ visible: true, alerts: [alert("1")] })
       .mockResolvedValue({ visible: true, alerts: [alert("1"), alert("2", "error")] });
     const api = alertsApi({ listAlerts, liveData });
-    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request: stubRequest });
+    const { el, host } = await mountWidget<DashboardApp>("dashboard-app", {
+      api,
+      request: stubRequest,
+    });
     await flush(el);
     liveData.invalidate([{ type: "incidents", id: "new" }]);
     await vi.waitFor(() => expect(toast(el).open).toBe(true));
     await el.updateComplete;
     await toast(el).updateComplete;
-    return { el, liveData };
+    return { el, host, liveData };
+  }
+
+  /** Runs `body` at a real viewport size inside the real page's outer margin (`index.html` pads the
+   * body by 24px), then restores the size. */
+  async function atViewport(host: HTMLElement, width: number, body: () => Promise<void>) {
+    const before = { width: window.innerWidth, height: window.innerHeight };
+    host.style.padding = "24px";
+    try {
+      await page.viewport(width, 800);
+      await vi.waitFor(() => expect(window.innerWidth).toBe(width));
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      await body();
+    } finally {
+      await page.viewport(before.width, before.height);
+    }
   }
 
   it("shows the bell with its count when alerts are visible, and no pop-up on the first read", async () => {
@@ -3328,6 +3347,65 @@ describe("alerts in the shell", () => {
       "alerts-bell",
       "account-menu",
     ]);
+  });
+
+  it.each([360, 400, 480])(
+    "fits every banner item without overlap at %ipx, with the bell and the account menu",
+    async (width) => {
+      const api = alertsApi({
+        listAlerts: vi.fn().mockResolvedValue({ visible: true, alerts: [alert("1", "error")] }),
+      });
+      const { el, host } = await mountWidget<DashboardApp>("dashboard-app", {
+        api,
+        request: stubRequest,
+      });
+      await flush(el);
+      await atViewport(host, width, async () => {
+        const banner = brandBanner(el)!;
+        const items = [
+          "[data-test=nav-toggle]",
+          ".brand-logo",
+          "[data-test=venue-name]",
+          "[data-test=mode-indicator]",
+          "[data-test=alerts-bell]",
+          "[data-test=account-menu]",
+        ].map((selector) => {
+          const box = el.shadowRoot!.querySelector(selector)!.getBoundingClientRect();
+          return { selector, box };
+        });
+        const outer = banner.getBoundingClientRect();
+        for (const { selector, box } of items) {
+          expect(box.width, `${selector} is visible`).toBeGreaterThan(0);
+          expect(box.left, `${selector} starts inside the banner`).toBeGreaterThanOrEqual(
+            outer.left,
+          );
+          expect(box.right, `${selector} ends inside the banner`).toBeLessThanOrEqual(outer.right);
+        }
+        for (const [i, a] of items.entries()) {
+          for (const b of items.slice(i + 1)) {
+            const overlapX = Math.min(a.box.right, b.box.right) - Math.max(a.box.left, b.box.left);
+            const overlapY = Math.min(a.box.bottom, b.box.bottom) - Math.max(a.box.top, b.box.top);
+            expect(overlapX > 0.5 && overlapY > 0.5, `${a.selector} overlaps ${b.selector}`).toBe(
+              false,
+            );
+          }
+        }
+        expect(banner.scrollWidth).toBeLessThanOrEqual(banner.clientWidth);
+        const [, logo, , , , menu] = items;
+        expect(menu!.box.top, "the account menu shares the lockup's row").toBeLessThan(
+          logo!.box.bottom,
+        );
+      });
+    },
+  );
+
+  it.each([1280, 400])("puts the pop-up below the banner at %ipx", async (width) => {
+    const { el, host } = await mountWithPopup();
+    await atViewport(host, width, async () => {
+      expect(toast(el).getBoundingClientRect().top).toBeGreaterThanOrEqual(
+        brandBanner(el)!.getBoundingClientRect().bottom,
+      );
+    });
   });
 
   it("shows no bell when the session may see no alerts", async () => {

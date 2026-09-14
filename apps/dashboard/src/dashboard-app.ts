@@ -389,6 +389,12 @@ export class DashboardApp extends LitElement {
         height: auto;
       }
 
+      .venue {
+        display: flex;
+        align-items: center;
+        gap: var(--wt-space-3);
+      }
+
       .venue-name {
         /* A floor, not zero: unbounded, this flex item was the only shrinkable thing in
            .brand-identity, so a narrow banner could squeeze it down to a couple of pixels wide —
@@ -420,13 +426,17 @@ export class DashboardApp extends LitElement {
         margin-inline-start: auto;
       }
 
-      /* The pop-up sits under the banner at the trailing edge, and spans the width on a phone. */
+      /* The pop-up hangs off the banner's real bottom edge, whatever the page margin or banner height. */
+      .banner-row {
+        position: relative;
+      }
+
       .alert-toast {
-        position: fixed;
-        inset-block-start: calc(var(--wt-tap-min) + 2 * var(--wt-space-3));
+        position: absolute;
+        inset-block-start: calc(100% + var(--wt-space-2));
         inset-inline-end: var(--wt-space-3);
         z-index: 40;
-        max-width: calc(100vw - 2 * var(--wt-space-3));
+        max-width: calc(100% - 2 * var(--wt-space-3));
       }
 
       /* The hamburger that opens the off-canvas drawer. Hidden at desktop width (the sidebar is always
@@ -458,8 +468,39 @@ export class DashboardApp extends LitElement {
          constant that drives the narrow state); 48rem matches the existing repo precedent in
          apps/till/src/screens/till-counter-screen.ts:111. */
       @media (max-width: 48rem) {
+        /* A phone cannot fit the lockup, the legal name, the mode pill and both menus on one line, so
+           the name and pill take a second row and the menus stay at the trailing edge of the first.
+           The lockup's column is the one that shrinks, so the menus keep the first row. */
+        .brand-banner {
+          display: grid;
+          grid-template-columns: auto minmax(0, max-content) 1fr auto;
+          grid-template-areas:
+            "toggle logo . actions"
+            "venue venue venue venue";
+          gap: var(--wt-space-2) 0;
+        }
+        .brand-identity {
+          display: contents;
+        }
         .nav-toggle {
           display: inline-block;
+          grid-area: toggle;
+          margin-inline-end: var(--wt-space-3);
+        }
+        .brand-logo {
+          grid-area: logo;
+          max-width: 100%;
+        }
+        .banner-actions {
+          grid-area: actions;
+          margin-inline-start: var(--wt-space-2);
+        }
+        .venue {
+          grid-area: venue;
+        }
+        .venue-name {
+          padding-inline-start: 0;
+          border-inline-start: 0;
         }
         .alert-toast {
           inset-inline: var(--wt-space-2);
@@ -1136,7 +1177,19 @@ export class DashboardApp extends LitElement {
         @keydown=${(e: KeyboardEvent) => this.#onLayoutKeydown(e)}
         @locale-selected=${(e: CustomEvent<{ code: string }>) => void this.#onLocaleSelected(e)}
       >
-        ${this.#banner(true, hasNav)}
+        <div class="banner-row">
+          ${this.#banner(true, hasNav)}
+          <wt-toast
+            class="alert-toast"
+            data-test="alert-toast"
+            .open=${this.alertToast !== null}
+            .message=${this.alertToast?.message ?? ""}
+            tone=${this.alertToast?.tone ?? "info"}
+            close-label=${t("action.close")}
+            @wt-activate=${(e: Event) => this.#onToastActivate(e)}
+            @wt-close=${(e: Event) => this.#onToastClose(e)}
+          ></wt-toast>
+        </div>
         <div class=${classMap({ layout: true, "drawer-open": hasNav && this.drawerOpen })}>
           <!-- The sidebar, shown only for a non-staff session. At desktop width it is in-flow; below the
                breakpoint (Task 12) it becomes the off-canvas drawer the hamburger toggles. When it is
@@ -1198,16 +1251,6 @@ export class DashboardApp extends LitElement {
           </div>
         </div>
         ${this.#renderProfileModal()}
-        <wt-toast
-          class="alert-toast"
-          data-test="alert-toast"
-          .open=${this.alertToast !== null}
-          .message=${this.alertToast?.message ?? ""}
-          tone=${this.alertToast?.tone ?? "info"}
-          close-label=${t("action.close")}
-          @wt-activate=${(e: Event) => this.#onToastActivate(e)}
-          @wt-close=${(e: Event) => this.#onToastClose(e)}
-        ></wt-toast>
       </div>
     `;
   }
@@ -1232,14 +1275,16 @@ export class DashboardApp extends LitElement {
             : nothing
         }
         <img class="brand-logo" src=${WAITRON_LOGO_URL} alt="Waitron" />
-        <span class="venue-name" data-test="venue-name">${this.venueName}</span>
-        ${
-          this.onboardingIntent === undefined
-            ? nothing
-            : html`<span class="mode-indicator" data-test="mode-indicator">
-                ${t(`mode.${this.onboardingIntent}`)}
-              </span>`
-        }
+        <span class="venue">
+          <span class="venue-name" data-test="venue-name">${this.venueName}</span>
+          ${
+            this.onboardingIntent === undefined
+              ? nothing
+              : html`<span class="mode-indicator" data-test="mode-indicator">
+                  ${t(`mode.${this.onboardingIntent}`)}
+                </span>`
+          }
+        </span>
       </div>
       ${
         authenticated

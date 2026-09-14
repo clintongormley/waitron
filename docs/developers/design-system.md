@@ -167,7 +167,7 @@ this floor — removing the `min-width` regresses that guard.
 | `wt-form-actions` | `cancel`, `secondary`, and default slots | — |
 | `wt-help-tooltip` | `aria-label`; default slot | — |
 | `wt-tabs` | `items` (`{ key, label }[]`), `value`, `label`; named slots matching item keys | `wt-change` — `detail: { value: string }` |
-| `wt-row-actions` | `label`, `icon` (default `kebab`), `iconSize` (property; `wt-icon`'s `sm`\|`md`\|`lg`, default `md`), `align` (`start`\|`end`, default `start` — which trigger edge the popup lines up with); default slot of action buttons; `badge` slot (drawn inside the trigger, in its top trailing corner); `part="popup"` (so a consumer can size the menu); methods `show()` and `hide()` open and close it from code | native events from actions |
+| `wt-row-actions` | `label`, `icon` (default `kebab`), `iconSize` (property; `wt-icon`'s `sm`\|`md`\|`lg`, default `md`), `align` (`start`\|`end`, default `start` — which trigger edge the popup lines up with; the popup's text starts at the start edge either way); default slot of action buttons; `badge` slot (drawn inside the trigger, in its top trailing corner); `part="popup"` (so a consumer can size the menu); methods `show()` and `hide()` open and close it from code | native events from actions |
 | `wt-data-table` | `rows`, `columns` (each has `cell` — `(row, { ancestorOnly }) => content` — and may carry `sortValue`, `searchValue` and a `filter` — `{ label, allLabel, value, options }`, which draws a dropdown whether or not the table is `searchable`), `rowKey`, `rowParent` (opts into tree mode), `collapseLabel`, `expandLabel`, `loading`, `loadingMessage`, `emptyMessage`, `errorMessage`, `aria-label`, `selectable`, `selected`, `selectionLabel` (`(row) => string`), `selectAllLabel`, `sortKey`, `sortDirection`, `searchable`, `searchLabel`, `searchPlaceholder` (defaults to `searchLabel`), `noMatchesMessage`, `viewKey` | `wt-selection-change` — `detail: { selected: string[] }`; `wt-sort-change` — `detail: { sortKey, sortDirection }`; native events from consumer-provided cells |
 | `wt-combobox` | `options` (`{value,label}[]`), `multiple`, `value`, `values`, `allowAdd`, `label`, `name`, `placeholder`, `required`, `disabled`, `invalid`, `error`, `countLabel`, `noResultsLabel`, `searchPlaceholder`, `addLabel` | `wt-change` — `detail: { value: string }` or `detail: { values: string[] }`; `wt-combobox-add` — `detail: { text: string }` |
 
@@ -479,15 +479,17 @@ banner shows the canonical Waitron lockup and the deployment tenant's legal name
 name: one deployment database represents one tenant, while that tenant can contain several
 locations. Once a session is active, put the account menu — a person-icon `wt-row-actions` popover
 holding Account settings and Log out — at the banner's trailing (right-hand in the shipped locales)
-edge. Do not show it before authentication.
+edge. Do not show it before authentication. Below the drawer breakpoint (`48rem`) the banner takes
+two rows: the menu toggle, the lockup and the menus share the first, with the lockup shrinking when
+space runs short, and the legal name and mode pill take the second in full.
 
 When the session may see alerts, the alerts bell (`dashboard-alerts-bell`, a `wt-row-actions` with
 the `bell` icon and a `wt-count-badge` in its `badge` slot) sits immediately before the account menu.
 The badge is red when any open alert is an error and amber otherwise. While there are open alerts,
 the trigger's accessible name includes the count, because the badge has no name of its own. The
 panel lists at most five alerts and, below the drawer breakpoint (`48rem`), spans the screen's width
-less a small gutter. When new alerts arrive while the page is open, a `wt-toast` appears under the
-banner at the trailing edge, and spans the width below that same breakpoint.
+less a small gutter. When new alerts arrive while the page is open, a `wt-toast` appears just below the
+banner's bottom edge at the trailing edge, and spans the banner's width below that same breakpoint.
 
 ### Dashboard sidebar navigation
 
