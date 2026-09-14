@@ -37,10 +37,14 @@ function isSecurityError(err: unknown): boolean {
 export async function isTrustBroken(
   nav: NavigatorLike = navigator,
   timeoutMs = 1500,
+  protocol: string = location.protocol,
 ): Promise<boolean> {
+  // Only HTTPS has a certificate to distrust. Over http: the probe proves nothing: a server that
+  // answers the missing script with an HTML page (the Vite dev server) gets a SecurityError too.
+  if (protocol !== "https:") return false;
   const sw = nav.serviceWorker;
   if (!sw) return false;
-  // We ship no `/sw-probe.js`, so a trusted origin 404s here (→ "not broken"); only an untrusted
+  // We ship no `/sw-probe.js`, so the box's server 404s it (→ "not broken"); only an untrusted
   // secure context short-circuits with a SecurityError before the fetch is attempted. The async IIFE
   // turns even a SYNCHRONOUS throw from `register` into a rejection this catch handles, so the probe
   // itself never throws.

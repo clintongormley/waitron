@@ -10,23 +10,36 @@ describe("isTrustBroken", () => {
     const nav = navWith(async () => {
       throw new DOMException("registration blocked", "SecurityError");
     });
-    await expect(isTrustBroken(nav)).resolves.toBe(true);
+    await expect(isTrustBroken(nav, 1500, "https:")).resolves.toBe(true);
+  });
+
+  it("is false over plain HTTP even when the probe rejects with a SecurityError", async () => {
+    // No certificate exists to distrust on http:. The Vite dev server answers the missing probe with
+    // its HTML page, and Chromium refuses an HTML service worker with a SecurityError too.
+    const nav = navWith(async () => {
+      throw new DOMException(
+        "The script has an unsupported MIME type ('text/html').",
+        "SecurityError",
+      );
+    });
+    await expect(isTrustBroken(nav, 1500, "http:")).resolves.toBe(false);
+    expect(nav.serviceWorker?.register).not.toHaveBeenCalled();
   });
 
   it("is false when the probe registers (trusted origin)", async () => {
     const nav = navWith(async () => ({}));
-    await expect(isTrustBroken(nav)).resolves.toBe(false);
+    await expect(isTrustBroken(nav, 1500, "https:")).resolves.toBe(false);
   });
 
   it("is false when serviceWorker is absent (can't tell → not broken)", async () => {
-    await expect(isTrustBroken({})).resolves.toBe(false);
+    await expect(isTrustBroken({}, 1500, "https:")).resolves.toBe(false);
   });
 
   it("is false, not a throw, on a generic/network rejection (404, offline)", async () => {
     const nav = navWith(async () => {
       throw new TypeError("Failed to fetch");
     });
-    await expect(isTrustBroken(nav)).resolves.toBe(false);
+    await expect(isTrustBroken(nav, 1500, "https:")).resolves.toBe(false);
   });
 
   it("never throws even when register throws synchronously", async () => {
@@ -37,13 +50,13 @@ describe("isTrustBroken", () => {
         },
       },
     };
-    await expect(isTrustBroken(nav)).resolves.toBe(false);
+    await expect(isTrustBroken(nav, 1500, "https:")).resolves.toBe(false);
   });
 
   it("resolves false within the timeout when register never settles (the till must always boot — C4)", async () => {
     // A registration that hangs forever must not hang boot: the bounded probe resolves "not broken"
     // when the timeout wins, so main.ts mounts the till. Uses a short real timeout.
     const nav = navWith(() => new Promise<unknown>(() => {})); // never resolves
-    await expect(isTrustBroken(nav, 10)).resolves.toBe(false);
+    await expect(isTrustBroken(nav, 10, "https:")).resolves.toBe(false);
   });
 });
