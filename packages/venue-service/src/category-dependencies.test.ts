@@ -9,7 +9,6 @@ import {
   createUnit,
   deleteCategory,
   readCategory,
-  replaceProductCategories,
 } from "@waitron/catalogue";
 import { asAppUser, CORE_MIGRATIONS, withTenant } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
@@ -52,7 +51,7 @@ it("deleting a category removes its preparation routes and the category", async 
   });
 });
 
-it("allows deletion after memberships clear even when an open order keeps the copied category label", async () => {
+it("an open order keeps its copied category label after the category is deleted", async () => {
   const { tenantId, locationId } = await venue();
   await withTenant(suite.db, tenantId, async (tx) => {
     await asAppUser(tx);
@@ -71,7 +70,6 @@ it("allows deletion after memberships clear even when an open order keeps the co
       unitPrice: "2.00",
       vatClass: "general",
     });
-    await replaceProductCategories(tx, tenantId, product.id, { categoryIds: [] });
     const order = await tx.execute<{ id: string }>(sql`
       insert into working_orders (tenant_id, till_id, order_number, label)
       values (${tenantId}, ${till.rows[0]!.id}, 1, 'Historical') returning id
