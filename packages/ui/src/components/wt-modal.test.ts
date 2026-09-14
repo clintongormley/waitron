@@ -36,7 +36,17 @@ test.each([
     expect(height - rect.bottom).toBeCloseTo(rect.top, 0);
     expect(width - rect.right).toBeCloseTo(rect.left, 0);
     expect(rect.left).toBeGreaterThanOrEqual(16);
-    expect(rect.height).toBeGreaterThan(rect.width);
+    // The width is the shared dialog-max-width token bounded by the viewport minus its two
+    // margins — no portrait aspect-ratio cap. Resolve the token with a probe rather than
+    // hardcoding 48rem, so a token change stays covered.
+    const probe = document.createElement("div");
+    probe.style.position = "fixed";
+    probe.style.width = "var(--wt-dialog-max-width)";
+    host.appendChild(probe);
+    const dialogMaxWidth = probe.getBoundingClientRect().width;
+    probe.remove();
+    const space5 = parseFloat(getComputedStyle(dialog).getPropertyValue("--wt-space-5"));
+    expect(rect.width).toBeCloseTo(Math.min(dialogMaxWidth, width - 2 * space5), 0);
   } finally {
     await page.viewport(1280, 900);
   }

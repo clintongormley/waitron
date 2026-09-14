@@ -366,10 +366,9 @@ it("closes the products dialog from a footer Close button", async () => {
 });
 
 // The delete confirmation names the category in its heading, lists the affected products in the
-// shared product table (not as links), flags the ones that lose their reporting category, and does
-// not list printing routes, although the delete still removes them. The table's rows are cell
-// markup in the table's OWN shadow root, so row text is read from `table.shadowRoot`, not the
-// dialog, which does not cross into a nested custom element's shadow.
+// shared product table (not as links), and does not list printing routes, although the delete still
+// removes them. The table's rows are cell markup in the table's OWN shadow root, so row text is read
+// from `table.shadowRoot`, not the dialog, which does not cross into a nested custom element's shadow.
 it("titles the delete dialog with the category name, shows affected products, and lists no routes", async () => {
   setLocale("en-GB");
   const { el, api } = await mount();
@@ -399,10 +398,10 @@ it("titles the delete dialog with the category name, shows affected products, an
     'wt-data-table[data-test="category-delete-products"]',
   )!;
   await table.updateComplete;
-  // The dependant resolves to a full product row inside the table's shadow root, and, since its
-  // reporting category is the one being deleted, the cleared-reporting flag shows.
+  // The dependant resolves to a full product row inside the table's shadow root. The old design's
+  // per-row "reporting category, will be cleared" flag is gone — the warning is a single top block.
   expect(table.shadowRoot!.textContent).toContain("Toast");
-  expect(table.shadowRoot!.textContent).toContain(t("categories.delete_reporting"));
+  expect(table.shadowRoot!.textContent).not.toContain("will be cleared");
 });
 
 it("shows the delete preview with the affected products and child links, disabling Delete until it resolves and listing no routes", async () => {
@@ -447,6 +446,117 @@ it("shows the delete preview with the affected products and child links, disabli
   )!;
   await products.updateComplete;
   expect(products.shadowRoot!.textContent).toContain("Toast");
+});
+
+// The delete popup now carries ONE red warning at the top that names every consequence in a single
+// paragraph, replacing the old scattered intro line, per-section headings and per-row flag. The
+// affected-products table and the child links stay below it.
+it("shows one red warning at the top combining every consequence, and drops the old per-message text", async () => {
+  setLocale("en-GB");
+  const fx = apiFixture();
+  const meals: CategorySummary = {
+    id: "meals",
+    name: { en: "Meals" },
+    image: null,
+    color: null,
+    parentId: null,
+  };
+  // The category being deleted sits under Meals, so its orphaned children move up under Meals —
+  // exercising the "children move under {parent}" sentence rather than the top-level one.
+  const foodUnderMeals: CategorySummary = { ...food, parentId: "meals" };
+  fx.api.listCategories.mockResolvedValue([meals, foodUnderMeals, drink]);
+  fx.api.getCategoryDependants.mockResolvedValue({
+    products: [{ id: "p", name: { en: "Toast" }, reporting: true }],
+    children: [{ id: "breakfast", name: { en: "Breakfast" } }],
+    parentId: "meals",
+    routes: [],
+  });
+  const { el } = await mountWidget<CategoriesScreen>("dashboard-categories-screen", {
+    api: fx.client,
+  });
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("wt-data-table")!.rows.length).toBe(3),
+  );
+  const list = el.shadowRoot!.querySelector("wt-data-table")!;
+  await list.updateComplete;
+  list
+    .shadowRoot!.querySelector('tr[data-row-key="food"] wt-row-actions')!
+    .querySelectorAll("wt-button")[1]!
+    .click();
+  await el.updateComplete;
+  const dialog = el.shadowRoot!.querySelector('[data-test="delete-dialog"]')!;
+  await vi.waitFor(() =>
+    expect(dialog.querySelector('[data-test="delete-warning"]')).not.toBeNull(),
+  );
+  // Exactly one warning paragraph, at the top, flagged as an alert, with the whole combined text.
+  const warnings = dialog.querySelectorAll('[data-test="delete-warning"]');
+  expect(warnings.length).toBe(1);
+  const warning = warnings[0]!;
+  expect(warning.getAttribute("role")).toBe("alert");
+  expect(warning.textContent!.replace(/\s+/g, " ").trim()).toBe(
+    "This cannot be undone. Deleting it removes it from 1 products. Its 1 child categories will move under Meals.",
+  );
+  // It has to LOOK like a warning: the paragraph lives in the screen's own shadow root, so the
+  // screen's .error rule reaches it — read the painted colour rather than assume it.
+  const dangerToken = getComputedStyle(el).getPropertyValue("--wt-color-danger").trim();
+  expect(getComputedStyle(warning).color).toBe(hexToRgb(dangerToken));
+  // The affected-products table and the child links both still render below the warning.
+  expect(
+    dialog.querySelector('wt-data-table[data-test="category-delete-products"]'),
+  ).not.toBeNull();
+  expect([...dialog.querySelectorAll("a")].some((a) => a.textContent?.includes("Breakfast"))).toBe(
+    true,
+  );
+  // None of the old, scattered wording survives — the colon intro or the per-row cleared flag.
+  expect(dialog.textContent).not.toContain("Deleting it will:");
+  expect(dialog.textContent).not.toContain("will be cleared");
+  const table = dialog.querySelector<HTMLElementTagNameMap["wt-data-table"]>(
+    'wt-data-table[data-test="category-delete-products"]',
+  )!;
+  await table.updateComplete;
+  expect(table.shadowRoot!.textContent).not.toContain("will be cleared");
+});
+
+// A leaf category nothing depends on gets no warning block at all — just the buttons, matching the
+// preserved empty-case behaviour (Delete still enables once the empty preview resolves).
+it("shows no warning block when nothing depends on the category", async () => {
+  const { el } = await mount();
+  const list = el.shadowRoot!.querySelector("wt-data-table")!;
+  await list.updateComplete;
+  list
+    .shadowRoot!.querySelector('tr[data-row-key="food"] wt-row-actions')!
+    .querySelectorAll("wt-button")[1]!
+    .click();
+  await el.updateComplete;
+  const modal = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-modal"]>(
+    'wt-modal[data-test="delete-dialog"]',
+  )!;
+  const deleteButton = modal.querySelector<HTMLElementTagNameMap["wt-button"]>(
+    'wt-button[variant="danger"]',
+  )!;
+  await vi.waitFor(() => expect(deleteButton.disabled).toBe(false));
+  expect(modal.querySelector('[data-test="delete-warning"]')).toBeNull();
+  expect(modal.querySelector('wt-data-table[data-test="category-delete-products"]')).toBeNull();
+  expect(modal.querySelector("wt-spinner")).toBeNull();
+});
+
+// A product's search haystack now includes every category it belongs to, not only its name and
+// reporting category — so a term unique to one of its OTHER categories finds it.
+it("finds a product by a category it belongs to beyond its reporting one", async () => {
+  const fx = apiFixture();
+  // "Beverages" appears nowhere except as Toast's non-reporting (other) category, so a match on it
+  // proves the other-categories column contributes to search.
+  fx.api.listCategories.mockResolvedValue([food, { ...drink, name: { en: "Beverages" } }]);
+  fx.api.listLibraryProducts.mockResolvedValue([product]);
+  const { el } = await mountWidget<CategoriesScreen>("dashboard-categories-screen", {
+    api: fx.client,
+  });
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("wt-data-table")!.rows.length).toBe(2),
+  );
+  await openProducts(el, "food");
+  await typeInto(el, "category-products", "Beverages");
+  expect(renderedKeys(el, "category-products")).toEqual(["p"]);
 });
 
 // Since the delete cascades rather than being refused, this preview is the ONLY warning a manager

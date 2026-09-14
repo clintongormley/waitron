@@ -217,10 +217,16 @@ export class CategoryForm extends LitElement {
           .disabled=${this.busy}
           .options=${[
             { value: "", label: t("categories.no_parent") },
-            ...this.#parents().map((category) => ({
-              value: category.id,
-              label: categoryPath(category, this.categories, currentLocale(), this.languages),
-            })),
+            ...this.#parents()
+              .map((category) => ({
+                value: category.id,
+                label: categoryPath(category, this.categories, currentLocale(), this.languages),
+              }))
+              // Same collation wt-data-table uses for these very names on the categories screen, so
+              // the dropdown and the tables agree: numeric runs in order, accents/case folded.
+              .sort((a, b) =>
+                a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: "base" }),
+              ),
           ]}
           .value=${this.parentId ?? ""}
           .error=${errors.parent ?? ""}

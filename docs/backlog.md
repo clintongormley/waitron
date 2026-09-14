@@ -323,12 +323,15 @@ What it left open:
   (`GET .../:id/dependants`) is core-catalogue-specific; a module that wants its own kind of
   dependant (beyond products, child categories and preparation routes) has nowhere to plug in one.
 - **The delete confirmation and the add-products button use a plural even for one.** The counts are
-  dropped into fixed plural sentences (`categories.delete_products`,
-  `categories.delete_children_under`, `categories.delete_children_top`, `categories.add_selected` in
-  `apps/dashboard/src/i18n/strings.ts`), so one product or child reads "Quitarlo de 1 productos",
-  "Mover 1 categorías hijas …" or "Añadir 1 productos", and the English is just as wrong. The same
-  strings are on `origin/main`, so this predates #362. **Next action:** give
-  each a one-item form, or use a plural-aware formatter if the dashboard adopts one.
+  dropped into fixed plural sentences (`categories.delete_warning_products`,
+  `categories.delete_warning_children_under`, `categories.delete_warning_children_top`,
+  `categories.add_selected` in `apps/dashboard/src/i18n/strings.ts`), so one product or child reads
+  "Al eliminarla se quitará de 1 productos", "Sus 1 categorías hijas se moverán …" or "Añadir 1
+  productos", and the English is just as wrong. The plural sentences predate #362; the three
+  `delete_warning_*` keys are the delete-confirmation strings after `fix/categories-ui-polish`
+  consolidated the old `delete_products`/`delete_children_*` lines into one warning (the plural bug
+  came along unchanged). **Next action:** give each a one-item form, or use a plural-aware formatter
+  if the dashboard adopts one.
 - **A shadow-root styling bug affects `wt-data-table` cells throughout the dashboard.** During QA, a
   real rendering issue was found and fixed in `apps/dashboard/src/screens/categories-screen.ts`: custom
   markup (a colour swatch, a thumbnail, a muted-row style) inside a `cell:` callback was styled by CSS

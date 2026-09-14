@@ -110,7 +110,10 @@ opacity dip, the same treatment for every variant. A variant-specific background
 change would need a distinct value per variant to stay visible in both themes: `--wt-color-surface`
 and `--wt-color-surface-raised`, the pair other primitives already hover onto (`wt-tabs`,
 `wt-data-table`), are identical in the light theme today, so that idiom would be invisible on
-`wt-button`'s own secondary variant, which already rests on `--wt-color-surface`.
+`wt-button`'s own secondary variant, which already rests on `--wt-color-surface`. For the same
+reason `wt-combobox`'s option rows hover onto `--wt-color-bg`, not the raised surface: the raised
+surface equals the popover panel's own background in the light theme, so a raised-surface hover
+would not show.
 
 `wt-button` also exposes its inner `<button>` as a CSS part (`part="button"`), so a consuming
 screen can layer its own hover accent onto specific buttons — `wt-button.foo::part(button):hover`
@@ -238,8 +241,10 @@ In tree mode the table keeps a match's ancestor rows and tells each cell, via it
 `ancestorOnly`, whether the row is present only to hold a descendant's place — mute those with a
 `part` on the cell.
 
-Use `wt-modal` for an add or edit form. Its portrait panel fills the viewport height with 24px
-top and bottom margins. The body scrolls independently, so your footer actions stay visible.
+Use `wt-modal` for an add or edit form. Its width is the shared `--wt-dialog-max-width` token
+(`min(90vw, 48rem)`) bounded by the viewport minus its side margins, and it fills the viewport
+height with 24px top and bottom margins. The body scrolls independently, so your footer actions
+stay visible.
 It uses the raised surface and shadow tokens: white in the light theme, with the matching dark
 surface in the dark theme. Put `wt-form-actions` in its `footer` slot to keep Cancel on the left
 and Save on the right. The one standing exception is the setup wizard, which uses a non-dismissible

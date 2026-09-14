@@ -54,11 +54,12 @@ export const en = {
   "categories.add_selected": "Add {count} products",
   "categories.select_all_products": "Select all products",
   "categories.remove_from": "Remove from this category",
-  "categories.delete_intro": "This cannot be undone. Deleting it will:",
-  "categories.delete_products": "Remove it from {count} products",
-  "categories.delete_reporting": "reporting category, will be cleared",
-  "categories.delete_children_under": "Move {count} child categories under {parent}",
-  "categories.delete_children_top": "Move {count} child categories to the top level",
+  "categories.delete_warning_intro": "This cannot be undone.",
+  "categories.delete_warning_products": "Deleting it removes it from {count} products.",
+  "categories.delete_warning_children_under":
+    "Its {count} child categories will move under {parent}.",
+  "categories.delete_warning_children_top":
+    "Its {count} child categories will move to the top level.",
   "categories.delete_preview_error":
     "Could not load what deleting this will affect. Close this and try again.",
   "categories.collapse": "Collapse",
@@ -1243,11 +1244,12 @@ export const es: Record<StringKey, string> = {
   "categories.add_selected": "Añadir {count} productos",
   "categories.select_all_products": "Seleccionar todos los productos",
   "categories.remove_from": "Quitar de esta categoría",
-  "categories.delete_intro": "No se puede deshacer. Eliminarlo hará que:",
-  "categories.delete_products": "Quitarlo de {count} productos",
-  "categories.delete_reporting": "categoría de informes, se borrará",
-  "categories.delete_children_under": "Mover {count} categorías hijas bajo {parent}",
-  "categories.delete_children_top": "Mover {count} categorías hijas al nivel superior",
+  "categories.delete_warning_intro": "No se puede deshacer.",
+  "categories.delete_warning_products": "Al eliminarla se quitará de {count} productos.",
+  "categories.delete_warning_children_under":
+    "Sus {count} categorías hijas se moverán bajo {parent}.",
+  "categories.delete_warning_children_top":
+    "Sus {count} categorías hijas se moverán al nivel superior.",
   "categories.delete_preview_error":
     "No se pudo cargar lo que se verá afectado al eliminar esta categoría. Cierra esta ventana e inténtalo de nuevo.",
   "categories.collapse": "Contraer",

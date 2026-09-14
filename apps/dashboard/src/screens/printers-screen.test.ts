@@ -2102,7 +2102,7 @@ it.each([
   [390, 844],
   [844, 390],
 ])(
-  "keeps each discovered printer's Add button visible within the portrait modal at %i × %i",
+  "keeps each discovered printer's Add button visible within the modal at %i × %i",
   async (width, height) => {
     await page.viewport(width, height);
     try {
@@ -2425,7 +2425,7 @@ it("reports a failed pairing close after dismissing the modal", async () => {
 });
 
 it.each(["agent", "printer"])(
-  "makes the Add %s modal half again as wide on desktop",
+  "sizes the Add %s modal to the full dialog width on desktop",
   async (kind) => {
     await page.viewport(1280, 900);
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {

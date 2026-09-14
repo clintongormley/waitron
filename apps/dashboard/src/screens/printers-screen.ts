@@ -93,7 +93,6 @@ export class PrintersScreen extends LitElement {
       }
       wt-modal.add-hardware {
         --wt-dialog-max-width: min(90vw, 48rem);
-        --wt-modal-aspect-ratio: 1.2;
       }
       wt-data-table::part(job-status) {
         display: inline-flex;
