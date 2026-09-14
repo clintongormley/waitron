@@ -113,6 +113,15 @@ describe("row actions", () => {
     expect(bounds.right).toBeCloseTo(anchor.right, 0);
   });
 
+  it("starts plain popup text at the start edge even when align is end", async () => {
+    const el = await mount(
+      '<wt-row-actions label="Alerts" align="end"><p>Payment check failed</p></wt-row-actions>',
+    );
+    (el as WtRowActions).show();
+    const text = el.querySelector("p")!;
+    expect(getComputedStyle(text).textAlign).toBe("start");
+  });
+
   it("allows an action to keep the popup open while it asks for confirmation", async () => {
     const { trigger, remove, popup } = await mountActions();
     remove.setAttribute("data-keep-open", "");

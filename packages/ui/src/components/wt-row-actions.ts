@@ -39,6 +39,8 @@ export class WtRowActions extends LitElement {
         background: var(--wt-color-surface);
         color: var(--wt-color-text);
         box-shadow: var(--wt-shadow-2);
+        /* Chromium maps the host's align="end" attribute to text-align, which the popup would inherit. */
+        text-align: start;
       }
       .actions {
         display: flex;
