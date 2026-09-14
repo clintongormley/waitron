@@ -210,7 +210,8 @@ export class WtDataTable<Row = unknown> extends LitElement {
   @property() sortKey: string | null = null;
   @property() sortDirection: SortDirection = "ascending";
   /** When set, a search box is drawn above the table and only rows whose text contains the typed
-   * term are shown. Which text a row exposes is each column's searchValue, or its sortValue. */
+   * term are shown. Which text a row exposes is each column's searchValue, or its sortValue. A
+   * column's filter dropdown is drawn whether or not this is set. */
   @property({ type: Boolean }) searchable = false;
   @property() searchLabel = "Search";
   /** Placeholder text for the search box; empty means it repeats `searchLabel`. */
@@ -401,7 +402,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
   }
 
   #passesSearch(row: Row): boolean {
-    const term = this.searchText.trim().toLocaleLowerCase();
+    const term = this.searchable ? this.searchText.trim().toLocaleLowerCase() : "";
     return term === "" || this.#searchHaystack(row).includes(term);
   }
 
@@ -418,7 +419,6 @@ export class WtDataTable<Row = unknown> extends LitElement {
   /** The rows left after the toolbar: every active filter (AND), then the search term. The single
    * choke point every render path funnels through, so flat and tree mode narrow identically. */
   #visibleRows(): readonly Row[] {
-    if (!this.searchable) return this.rows;
     return this.rows.filter((row) => this.#passesFilters(row) && this.#passesSearch(row));
   }
 
@@ -591,21 +591,26 @@ export class WtDataTable<Row = unknown> extends LitElement {
   }
 
   #renderToolbar() {
-    if (!this.searchable) return nothing;
+    const hasFilters = this.columns.some((column) => column.filter);
+    if (!this.searchable && !hasFilters) return nothing;
     return html`<div class="table-toolbar">
-      <input
-        class="table-search"
-        type="search"
-        autocomplete="off"
-        aria-label=${this.searchLabel}
-        placeholder=${this.searchPlaceholder || this.searchLabel}
-        .value=${this.searchText}
-        @input=${(event: Event) => {
-          this.searchText = (event.target as HTMLInputElement).value;
-        }}
-      />
       ${
-        this.columns.some((column) => column.filter)
+        this.searchable
+          ? html`<input
+              class="table-search"
+              type="search"
+              autocomplete="off"
+              aria-label=${this.searchLabel}
+              placeholder=${this.searchPlaceholder || this.searchLabel}
+              .value=${this.searchText}
+              @input=${(event: Event) => {
+                this.searchText = (event.target as HTMLInputElement).value;
+              }}
+            />`
+          : nothing
+      }
+      ${
+        hasFilters
           ? html`<div class="table-filters">
               ${this.columns.map((column) =>
                 column.filter

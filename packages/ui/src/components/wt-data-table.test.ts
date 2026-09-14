@@ -397,6 +397,7 @@ test("searchable renders a search box that narrows rows", async () => {
   input.dispatchEvent(new Event("input"));
   await el.updateComplete;
   expect(rowText(el)).toEqual(["Ada10"]);
+  expect(el.shadowRoot!.querySelector(".table-filters")).toBeNull();
 });
 
 test("the search box shows its label as the placeholder unless a placeholder is given", async () => {
@@ -408,7 +409,7 @@ test("the search box shows its label as the placeholder unless a placeholder is 
   expect(input.placeholder).toBe("Nombre o código");
 });
 
-test("no toolbar is rendered when searchable is off", async () => {
+test("no toolbar is rendered when there is neither a search box nor a filter", async () => {
   const el = await table();
   expect(el.shadowRoot!.querySelector(".table-toolbar")).toBeNull();
 });
@@ -501,6 +502,28 @@ test("renders one dropdown per filtered column and narrows on selection", async 
   select.dispatchEvent(new Event("change"));
   await el.updateComplete;
   expect(rowTextS(el).every((t) => t.includes("Active"))).toBe(true);
+});
+
+test("filter dropdowns render and narrow rows without a search box", async () => {
+  const el = await tableS({ columns: withStatus });
+  expect(el.shadowRoot!.querySelector(".table-search")).toBeNull();
+  const select = el.shadowRoot!.querySelector<HTMLSelectElement>('select[data-filter="status"]')!;
+  select.value = "off";
+  select.dispatchEvent(new Event("change"));
+  await el.updateComplete;
+  expect(rowKeysS(el)).toEqual(["2"]);
+});
+
+test("typed search text stops narrowing once the search box is turned off", async () => {
+  const el = await tableS({ searchable: true, columns: withStatus });
+  const input = el.shadowRoot!.querySelector<HTMLInputElement>(".table-search")!;
+  input.value = "ada";
+  input.dispatchEvent(new Event("input"));
+  await el.updateComplete;
+  expect(rowKeysS(el)).toEqual(["1"]);
+  el.searchable = false;
+  await el.updateComplete;
+  expect(rowKeysS(el)).toEqual(["1", "2"]);
 });
 
 test("search and filter combine with AND", async () => {
