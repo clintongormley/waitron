@@ -242,6 +242,28 @@ describe("configuration", () => {
     );
   });
 
+  it("exempts ONLY the exact fidelity basename, not a differently-prefixed file ending in the same suffix", () => {
+    // Control (§4): the exemption matched by `endsWith`, so any file whose path merely ENDS with
+    // `replication-fidelity.pg.test.ts` — a different suite that happens to share the suffix — was
+    // wrongly dropped from the scan too. It now matches the exact basename, so this decoy is scanned
+    // like any other source and its Spanish is caught. Against the old `endsWith` the decoy is
+    // exempted and this assertion fails.
+    const decoy = join(
+      PACKAGES_ROOT,
+      "replication-tests",
+      "src",
+      "other-replication-fidelity.pg.test.ts",
+    );
+    writeFileSync(decoy, "export const nombre = 1;\n");
+    try {
+      const files = sourceFilesIn("replication-tests");
+      expect(files).toContain(decoy);
+      expect(findSpanish(readSource(decoy), FORBIDDEN).map((v) => v.word)).toContain("nombre");
+    } finally {
+      rmSync(decoy, { force: true });
+    }
+  });
+
   it("would flag the fidelity suite's fiscal Spanish if scanned, so the pass is the exemption", () => {
     // Prove-by-construction, mirroring the catalogue test above: the fidelity suite really does carry
     // forbidden vocabulary (`registros_facturacion`, `cadenas`, `huella`, …), so its absence from the

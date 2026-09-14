@@ -1,5 +1,5 @@
 import { readFileSync, readdirSync, existsSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 
 /** `<repo>/packages`. Derived, so the guard survives being run from anywhere. */
 export const PACKAGES_ROOT = join(import.meta.dirname, "..", "..");
@@ -37,10 +37,12 @@ export const GENERIC_PACKAGES = [
   "print-agent",
   "diagnostics",
   "sync-enrolment",
-  // The real-database replication suites, which depend on no package (see workspace-cycles). Their
-  // test files are the whole package, so they are scanned like any other src (unlike provisioning's
-  // production-only skip); the one file that chains genuine Spanish fiscal records is exempted by
-  // name in FISCAL_FIDELITY_FIXTURES below.
+  // The real-database replication suites. They dev-depend on several packages (db, fiscal-verifactu,
+  // provisioning, shared, sync — see their package.json) but NOTHING depends on THEM, which is what
+  // lets a suite spanning both ends of a workspace dependency loop live here without closing a cycle
+  // (see workspace-cycles). Their test files are the whole package, so they are scanned like any
+  // other src (unlike provisioning's production-only skip); the one file that chains genuine Spanish
+  // fiscal records is exempted by exact basename in FISCAL_FIDELITY_FIXTURES below.
   "replication-tests",
   "composition",
   "fiscal-none",
@@ -74,13 +76,16 @@ export const GENERIC_PACKAGES = [
 export const PRODUCTION_ONLY: ReadonlySet<string> = new Set(["provisioning"]);
 
 /**
- * Individual test files excluded by exact name because their Spanish is genuine fiscal DATA, not
- * fixture sloppiness — a NARROWER exemption than `PRODUCTION_ONLY`, which skips a whole package's
- * test files. `replication-tests`' fidelity suite writes real `registros_facturacion` / `cadenas`
- * rows and asserts they replicate byte-for-byte, so it names the unrenameable Spanish fiscal tables
- * and columns (`registro_sif`, `envios`, `ultima_huella`, `importe_total`) throughout; anglicising
- * them would break the SQL. Its three sibling suites in the same package carry no Spanish and stay in
- * scope, so this is by-name, not by-package.
+ * Individual test files excluded by exact BASENAME, within the `replication-tests` package, because
+ * their Spanish is genuine fiscal DATA, not fixture sloppiness — a NARROWER exemption than
+ * `PRODUCTION_ONLY`, which skips a whole package's test files. `replication-tests`' fidelity suite
+ * writes real `registros_facturacion` / `cadenas` rows and asserts they replicate byte-for-byte, so
+ * it names the unrenameable Spanish fiscal tables and columns (`registro_sif`, `envios`,
+ * `ultima_huella`, `importe_total`) throughout; anglicising them would break the SQL. Its three
+ * sibling suites in the same package carry no Spanish and stay in scope, so this is by-name, not
+ * by-package. The match is the exact file BASENAME (not a path suffix), so a differently-prefixed
+ * file that merely ends in the same string — `other-replication-fidelity.pg.test.ts` — is NOT
+ * exempted and is scanned like any other source.
  *
  * Kept SEPARATE from `SELF` on purpose: `SELF` excludes files that exist to ENUMERATE forbidden
  * vocabulary in plain text (the wordlist itself), which this suite is not — folding it into `SELF`
@@ -326,11 +331,19 @@ export function sourceFilesIn(packageName: string): string[] {
   const root = join(PACKAGES_ROOT, packageName, "src");
   if (!existsSync(root)) return [];
   const productionOnly = PRODUCTION_ONLY.has(packageName);
+  // The fidelity exemption is scoped to `replication-tests` and matched by EXACT BASENAME, so only
+  // that one file is dropped — a differently-prefixed file ending in the same string is not (see
+  // FISCAL_FIDELITY_FIXTURES' doc comment). SELF and I18N_CATALOGUES stay `endsWith`: SELF names
+  // whole basenames that are unique tree-wide, and I18N_CATALOGUES is a deliberate path SUFFIX.
+  const fidelityExempt =
+    packageName === "replication-tests"
+      ? (entry: string) => FISCAL_FIDELITY_FIXTURES.some((name) => basename(entry) === name)
+      : () => false;
   return readdirSync(root, { recursive: true, encoding: "utf8" })
     .filter((entry) => entry.endsWith(".ts"))
     .filter((entry) => !SELF.some((name) => entry.endsWith(name)))
     .filter((entry) => !I18N_CATALOGUES.some((suffix) => entry.endsWith(suffix)))
-    .filter((entry) => !FISCAL_FIDELITY_FIXTURES.some((name) => entry.endsWith(name)))
+    .filter((entry) => !fidelityExempt(entry))
     .filter((entry) => !(productionOnly && entry.endsWith(".test.ts")))
     .map((entry) => join(root, entry))
     .filter((entry) => statSync(entry).isFile())
