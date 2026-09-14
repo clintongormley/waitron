@@ -534,12 +534,15 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
     for (const printed of printedLines(new Uint8Array(payloadOf(ids.narrow)))) {
       expect(printed.length, printed).toBeLessThanOrEqual(30);
     }
-    // The 80mm ticket lays out to its OWN wider column count (42, not 30) and still carries the whole
-    // dish name — the fired line reads "1.000 unitat x Chuletón…", so its name wraps at both widths;
-    // rejoining the wrap continuations recovers it. (The plan's `.endsWith` at 42 mis-counted this
-    // 15-char qty+unit prefix; the width difference itself is proven by narrow != wide above.)
+    // The 80mm ticket lays out to its own wider column count: a line exceeds 30 (impossible on the
+    // 58mm printer's 30 columns) yet none exceeds 42, and rejoining the wrap continuations recovers the
+    // whole dish name. The fired line reads "1.000 unitat x Chuletón…", whose 15-char qty+unit prefix
+    // wraps the name at both widths — so the plan's original `.endsWith` at 42 could never have held.
     const wideLines = printedLines(new Uint8Array(payloadOf(ids.wide)));
     for (const printed of wideLines) expect(printed.length, printed).toBeLessThanOrEqual(42);
+    // Positively pins the WIDER direction, not just narrow != wide: a 30-column layout could not
+    // produce a line this long.
+    expect(wideLines.some((printed) => printed.length > 30)).toBe(true);
     expect(wideLines.map((l) => l.trimStart()).join(" ")).toContain(
       "Chuletón de buey madurado a la brasa",
     );
