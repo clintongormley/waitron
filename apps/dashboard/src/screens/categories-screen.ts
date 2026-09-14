@@ -414,6 +414,12 @@ export class CategoriesScreen extends LitElement {
       >${this.#text(category.name)}</wt-lozenge
     >`;
   }
+  /** The full path of a category's parent, or null when it sits at the top level. The sort value
+   * and the rendered cell want the same traversal and differ only in what they show for null. */
+  #parentPath(category: CategorySummary): string | null {
+    const parent = this.categories.find((item) => item.id === category.parentId);
+    return parent ? categoryPath(parent, this.categories, currentLocale(), this.languages) : null;
+  }
   #columns(matchIds: ReadonlySet<string>): DataTableColumn<CategorySummary>[] {
     return [
       {
@@ -424,18 +430,8 @@ export class CategoriesScreen extends LitElement {
       {
         key: "parent",
         label: t("categories.parent"),
-        sortValue: (category) => {
-          const parent = this.categories.find((item) => item.id === category.parentId);
-          return parent
-            ? categoryPath(parent, this.categories, currentLocale(), this.languages)
-            : "";
-        },
-        cell: (category) => {
-          const parent = this.categories.find((item) => item.id === category.parentId);
-          return parent
-            ? categoryPath(parent, this.categories, currentLocale(), this.languages)
-            : t("categories.no_parent");
-        },
+        sortValue: (category) => this.#parentPath(category) ?? "",
+        cell: (category) => this.#parentPath(category) ?? t("categories.no_parent"),
       },
       {
         key: "products",
@@ -462,8 +458,13 @@ export class CategoriesScreen extends LitElement {
   #treeColumns(matchIds: ReadonlySet<string>): DataTableColumn<CategorySummary>[] {
     return this.#columns(matchIds).filter((column) => column.key !== "parent");
   }
+  /** A product's reporting category, or undefined when it has none (which is allowed) or when the
+   * id no longer resolves. The sort value and the rendered cell share this one lookup. */
+  #reportingCategory(product: Product): CategorySummary | undefined {
+    return this.categories.find((item) => item.id === product.primaryCategoryId);
+  }
   #reportingCell(product: Product) {
-    const category = this.categories.find((item) => item.id === product.primaryCategoryId);
+    const category = this.#reportingCategory(product);
     return category ? this.#lozenge(category) : t("categories.none");
   }
   #otherCategoriesCell(product: Product) {
@@ -479,7 +480,7 @@ export class CategoriesScreen extends LitElement {
     return this.#text(product.descriptions);
   }
   #reportingSortValue(product: Product): string {
-    const category = this.categories.find((item) => item.id === product.primaryCategoryId);
+    const category = this.#reportingCategory(product);
     return category ? this.#text(category.name) : "";
   }
   /** The products modal's member list — Edit reopens the full membership picker; Remove
