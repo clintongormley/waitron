@@ -1,7 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
-import { optionGroups, optionGroupItems, type Transaction } from "@waitron/db";
+import {
+  optionGroups,
+  optionGroupItems,
+  products,
+  productOptionGroups,
+  type Transaction,
+} from "@waitron/db";
 import { AppError } from "@waitron/shared";
+import { menuItems, menuItemOptionGroups } from "./schema/menu.js";
 import {
   parseModifierInput,
   type Modifier,
@@ -233,9 +240,85 @@ export async function deleteModifier(
   modifierId: string,
 ): Promise<void> {
   await lockModifierDefinitions(tx, tenantId);
-  await getModifier(tx, tenantId, modifierId);
-  await assertUnused(tx, tenantId, modifierId, true);
+  await getModifier(tx, tenantId, modifierId); // 404s a foreign/absent id, tenant-scoped
+  // A product or menu attachment is cascaded away by the delete, so neither blocks it. An OPEN order
+  // is different: its line still references this modifier — by saved snapshot or chosen item — and
+  // deleting would orphan a live, un-settled basket line, so a live reference refuses the delete.
+  const open = await tx.execute<{ one: number }>(sql`
+    select 1 as one from working_order_lines
+    where tenant_id = ${tenantId} and (
+      modifier_snapshots @> ${JSON.stringify([{ modifierId }])}::jsonb
+      or option_group_item_id in (
+        select id from option_group_items where tenant_id = ${tenantId} and group_id = ${modifierId}
+      )
+    ) limit 1`);
+  if (open.rows[0]) throw new AppError("modifier.in_use", { modifierId, dependency: "order" });
   await tx
     .delete(optionGroups)
     .where(and(eq(optionGroups.tenantId, tenantId), eq(optionGroups.id, modifierId)));
+}
+
+export interface ModifierDependants {
+  products: { id: string; name: Record<string, string> }[];
+  menus: { id: string; name: Record<string, string> }[];
+  orders: number;
+}
+
+/** What deleting this modifier would touch — the preview the dashboard's delete confirmation reads.
+ * Products and menus are detached (cascaded) by the delete; an open order refuses it, so `orders`
+ * gates the confirm. A menu publication has no name of its own here, so it is identified by the
+ * product the menu item is (its descriptions). */
+export async function modifierDependants(
+  tx: Transaction,
+  tenantId: string,
+  modifierId: string,
+): Promise<ModifierDependants> {
+  await getModifier(tx, tenantId, modifierId); // 404s a foreign/absent id, tenant-scoped
+  const productRows = await tx
+    .select({ id: products.id, name: products.descriptions })
+    .from(products)
+    .innerJoin(
+      productOptionGroups,
+      and(
+        eq(productOptionGroups.tenantId, products.tenantId),
+        eq(productOptionGroups.productId, products.id),
+        eq(productOptionGroups.groupId, modifierId),
+      ),
+    )
+    .where(eq(products.tenantId, tenantId))
+    .orderBy(products.id);
+  const menuRows = await tx
+    .select({ id: menuItems.id, name: products.descriptions })
+    .from(menuItemOptionGroups)
+    .innerJoin(
+      menuItems,
+      and(
+        eq(menuItems.tenantId, menuItemOptionGroups.tenantId),
+        eq(menuItems.id, menuItemOptionGroups.menuItemId),
+      ),
+    )
+    .innerJoin(
+      products,
+      and(eq(products.tenantId, menuItems.tenantId), eq(products.id, menuItems.productId)),
+    )
+    .where(
+      and(
+        eq(menuItemOptionGroups.tenantId, tenantId),
+        eq(menuItemOptionGroups.groupId, modifierId),
+      ),
+    )
+    .orderBy(menuItems.id);
+  const orders = await tx.execute<{ count: number }>(sql`
+    select count(*)::int as count from working_order_lines
+    where tenant_id = ${tenantId} and (
+      modifier_snapshots @> ${JSON.stringify([{ modifierId }])}::jsonb
+      or option_group_item_id in (
+        select id from option_group_items where tenant_id = ${tenantId} and group_id = ${modifierId}
+      )
+    )`);
+  return {
+    products: productRows,
+    menus: menuRows,
+    orders: orders.rows[0]?.count ?? 0,
+  };
 }

@@ -192,11 +192,22 @@ it.each(["type change", "deletion"] as const)(
           ? deleteModifier(tx, tenantId, modifier.id)
           : updateModifier(tx, tenantId, modifier.id, yesNoDefinition, "en"),
     );
-    expect(result).toMatchObject({ status: "rejected", reason: { code: "modifier.in_use" } });
-    expect(
+    // orderedRace has already proven the second operation waited on the publication's advisory lock.
+    // A type change still refuses the committed attachment; a delete now cascades it and succeeds,
+    // because no open order references the modifier.
+    const offers = async () =>
       (await app(suite.admin, tenantId, (tx) => listMenuOffers(tx, tenantId, [menu.id])))[0]!
-        .modifiers,
-    ).toEqual([modifier]);
+        .modifiers;
+    if (operation === "type change") {
+      expect(result).toMatchObject({ status: "rejected", reason: { code: "modifier.in_use" } });
+      expect(await offers()).toEqual([modifier]);
+    } else {
+      expect(result.status).toBe("fulfilled");
+      expect(await offers()).toEqual([]);
+      await expect(
+        app(suite.admin, tenantId, (tx) => getModifier(tx, tenantId, modifier.id)),
+      ).rejects.toMatchObject({ code: "modifier.not_found" });
+    }
   },
 );
 

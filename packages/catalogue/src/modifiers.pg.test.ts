@@ -1,7 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { expect, it } from "vitest";
-import { sql } from "drizzle-orm";
-import { asAppUser, withTenant, type Transaction } from "@waitron/db";
+import { and, eq, sql } from "drizzle-orm";
+import {
+  asAppUser,
+  productOptionGroups,
+  withTenant,
+  workingOrders,
+  workingOrderLines,
+  type Transaction,
+} from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import {
@@ -11,9 +18,17 @@ import {
   listModifiers,
   getModifier,
 } from "./modifiers.js";
-import { createCatalogue, createProduct, setProductOptionGroups } from "./operations.js";
+import { menuItemOptionGroups } from "./schema/menu.js";
+import {
+  createCatalogue,
+  createMenuItem,
+  createMenuSection,
+  createProduct,
+  setMenuItemOptionGroups,
+  setProductOptionGroups,
+} from "./operations.js";
 import { tenantId as brandTenantId } from "@waitron/shared";
-import { seedLegacySellingUnits } from "../test/fixtures.js";
+import { seedLegacySellingUnits, seedVenue } from "../test/fixtures.js";
 
 // Grants and attachment races need independent, non-superuser PostgreSQL connections.
 const suite = useTemplateDb({ template: "core" });
@@ -98,7 +113,7 @@ it("rolls back the whole save when a choice belongs to another modifier", async 
   expect(await app(tenant, (tx) => listModifiers(tx, tenant))).toEqual([original]);
 });
 
-it("blocks type changes and deletion for attached definitions, but permits other edits", async () => {
+it("blocks a type change for attached definitions, but permits other edits", async () => {
   const tenant = await seedTenant(suite.admin);
   await seedLegacySellingUnits(suite.admin, tenant);
   const definition = await app(tenant, (tx) => createModifier(tx, tenant, text, "en"));
@@ -114,9 +129,8 @@ it("blocks type changes and deletion for attached definitions, but permits other
     });
     await setProductOptionGroups(tx, brandTenantId(tenant), product.id, [definition.id]);
   });
-  await expect(
-    app(tenant, (tx) => deleteModifier(tx, tenant, definition.id)),
-  ).rejects.toMatchObject({ code: "modifier.in_use", params: { dependency: "product" } });
+  // A product attachment no longer blocks deletion (the delete cascades it away); the delete-detach
+  // path is covered separately. A TYPE CHANGE is still refused while attached.
   await expect(
     app(tenant, (tx) => updateModifier(tx, tenant, definition.id, { type: "yes-no", name }, "en")),
   ).rejects.toMatchObject({ code: "modifier.in_use" });
@@ -129,7 +143,7 @@ it("blocks type changes and deletion for attached definitions, but permits other
   ).toMatchObject({ available: true });
 });
 
-it("serializes deletion behind an attachment write and reports its committed dependency", async () => {
+it("serializes deletion behind an attachment write, then cascades the committed attachment", async () => {
   const tenant = await seedTenant(suite.admin);
   await seedLegacySellingUnits(suite.admin, tenant);
   const definition = await app(tenant, (tx) => createModifier(tx, tenant, text, "en"));
@@ -179,13 +193,21 @@ it("serializes deletion behind an attachment write and reports its committed dep
       .toBe(true);
     release();
     await writing;
-    expect(await deleting).toMatchObject({ code: "modifier.in_use" });
+    // The delete waited on the writer's advisory lock (proven above), then saw the committed
+    // attachment and cascaded it away rather than refusing — no open order references the modifier.
+    expect(await deleting).toBeUndefined();
   } finally {
     release();
     await writing;
     await writer.close();
     await deleter.close();
   }
+  expect(await app(tenant, (tx) => listModifiers(tx, tenant))).toEqual([]);
+  expect(
+    await app(tenant, (tx) =>
+      tx.select().from(productOptionGroups).where(eq(productOptionGroups.tenantId, tenant)),
+    ),
+  ).toEqual([]);
 });
 
 it("blocks a default-language change while a yes/no modifier name is untranslated", async () => {
@@ -266,5 +288,116 @@ it("maps an old author's total cap into the canonical extras definition", async 
       type: "extras",
       maxTotalQuantity: 3,
     });
+  });
+});
+
+it("deletes a modifier attached to a product and published on a menu, cascading the links", async () => {
+  const { tenantId } = await seedVenue(suite.admin);
+  await seedLegacySellingUnits(suite.admin, tenantId);
+  const choice = { id: randomUUID(), name: { en: "Oat" }, available: true };
+  const modifierId = await app(tenantId, async (tx) => {
+    const menu = await createCatalogue(tx, tenantId, { name: "Menu" });
+    const section = await createMenuSection(tx, tenantId, {
+      menuId: menu.id,
+      name: { en: "Drinks" },
+    });
+    const product = await createProduct(tx, tenantId, {
+      catalogueId: menu.id,
+      categoryId: null,
+      descriptions: { en: "Coffee" },
+      pricingUnit: "each",
+      unitPrice: "2.00",
+      vatClass: "reduced",
+    });
+    const item = await createMenuItem(tx, tenantId, {
+      menuId: menu.id,
+      sectionId: section.id,
+      productId: product.id,
+      grossPrice: "2.00",
+    });
+    const modifier = await createModifier(
+      tx,
+      tenantId,
+      { type: "options", name, choices: [choice], defaultChoiceId: choice.id },
+      "en",
+    );
+    await setProductOptionGroups(tx, tenantId, product.id, [modifier.id]);
+    await setMenuItemOptionGroups(tx, tenantId, item.id, [
+      { groupId: modifier.id, options: [{ optionId: choice.id, priceDelta: "0" }] },
+    ]);
+    return modifier.id;
+  });
+  await app(tenantId, (tx) => deleteModifier(tx, tenantId, modifierId));
+  await expect(app(tenantId, (tx) => getModifier(tx, tenantId, modifierId))).rejects.toMatchObject({
+    code: "modifier.not_found",
+  });
+  expect(
+    await app(tenantId, async (tx) => ({
+      products: await tx
+        .select()
+        .from(productOptionGroups)
+        .where(
+          and(
+            eq(productOptionGroups.tenantId, tenantId),
+            eq(productOptionGroups.groupId, modifierId),
+          ),
+        ),
+      menus: await tx
+        .select()
+        .from(menuItemOptionGroups)
+        .where(
+          and(
+            eq(menuItemOptionGroups.tenantId, tenantId),
+            eq(menuItemOptionGroups.groupId, modifierId),
+          ),
+        ),
+    })),
+  ).toEqual({ products: [], menus: [] });
+});
+
+it("refuses to delete a modifier an open working order uses", async () => {
+  const { tenantId, tillId, nodeId } = await seedVenue(suite.admin);
+  await seedLegacySellingUnits(suite.admin, tenantId);
+  const choice = { id: randomUUID(), name: { en: "Oat" }, available: true };
+  const modifierId = await app(tenantId, async (tx) => {
+    const menu = await createCatalogue(tx, tenantId, { name: "Menu" });
+    const product = await createProduct(tx, tenantId, {
+      catalogueId: menu.id,
+      categoryId: null,
+      descriptions: { en: "Coffee" },
+      pricingUnit: "each",
+      unitPrice: "2.00",
+      vatClass: "reduced",
+    });
+    const modifier = await createModifier(
+      tx,
+      tenantId,
+      { type: "options", name, choices: [choice], defaultChoiceId: choice.id },
+      "en",
+    );
+    const [order] = await tx
+      .insert(workingOrders)
+      .values({ tenantId, tillId, nodeId, orderNumber: 1 })
+      .returning();
+    await tx.insert(workingOrderLines).values({
+      tenantId,
+      workingOrderId: order!.id,
+      productId: product.id,
+      lineNo: 1,
+      descriptions: { "en-GB": "Coffee" },
+      optionGroupItemId: choice.id,
+      quantity: "1",
+      unitPrice: "1.82",
+      unitPriceGross: "2.00",
+      vatRate: "10.00",
+      lineTotal: "2.00",
+    });
+    return modifier.id;
+  });
+  await expect(
+    app(tenantId, (tx) => deleteModifier(tx, tenantId, modifierId)),
+  ).rejects.toMatchObject({
+    code: "modifier.in_use",
+    params: expect.objectContaining({ dependency: "order" }),
   });
 });
