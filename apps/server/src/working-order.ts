@@ -1516,7 +1516,7 @@ export async function recallLines(
  */
 export async function bumpCourseReady(
   tx: Transaction,
-  _cfg: TillConfig,
+  cfg: TillConfig,
   orderId: string,
   courseId: string,
 ): Promise<void> {
@@ -1525,6 +1525,9 @@ export async function bumpCourseReady(
     .set(advanceSet("ready"))
     .where(
       and(
+        // Tenant-scoped: this by-order update must not reach another tenant's `ticket_items` rows
+        // (CLAUDE.md §3) — `withTenant` does not isolate it since RLS was dropped (#255).
+        eq(ticketItems.tenantId, cfg.tenantId),
         eq(ticketItems.workingOrderId, orderId),
         eq(ticketItems.courseId, courseId),
         ne(ticketItems.state, "ready"),
@@ -2095,6 +2098,7 @@ export async function readTabLines(
  */
 async function assertTableAvailable(
   tx: Transaction,
+  cfg: TillConfig,
   table: { tabId: string | null; active: boolean } | undefined,
   tableId: string,
 ): Promise<void> {
@@ -2108,7 +2112,15 @@ async function assertTableAvailable(
     const [pointed] = await tx
       .select({ id: workingOrders.id })
       .from(workingOrders)
-      .where(and(eq(workingOrders.id, table.tabId), eq(workingOrders.status, "open")));
+      // Tenant-scoped like every other by-id read here: the occupancy check must not reach another
+      // tenant's `working_orders` row by `tab_id` alone (CLAUDE.md §3).
+      .where(
+        and(
+          eq(workingOrders.id, table.tabId),
+          eq(workingOrders.tenantId, cfg.tenantId),
+          eq(workingOrders.status, "open"),
+        ),
+      );
     if (pointed !== undefined) {
       throw new AppError("table.occupied", { tableId });
     }
@@ -2166,11 +2178,19 @@ export async function moveTab(
       zoneId: diningTables.zoneId,
     })
     .from(diningTables)
-    .where(or(eq(diningTables.id, toTableId), eq(diningTables.tabId, tabId)))
+    // Tenant-scoped: a foreign tenant's globally-unique table id must read as absent here, so the
+    // move never reaches another tenant's `dining_tables` row (CLAUDE.md §3).
+    .where(
+      and(
+        eq(diningTables.tenantId, cfg.tenantId),
+        or(eq(diningTables.id, toTableId), eq(diningTables.tabId, tabId)),
+      ),
+    )
     .orderBy(diningTables.id)
     .for("update");
   await assertTableAvailable(
     tx,
+    cfg,
     involved.find((t) => t.id === toTableId),
     toTableId,
   );
@@ -2187,7 +2207,7 @@ export async function moveTab(
   await tx
     .update(diningTables)
     .set({ tabId, statusId: null })
-    .where(eq(diningTables.id, toTableId));
+    .where(and(eq(diningTables.id, toTableId), eq(diningTables.tenantId, cfg.tenantId)));
 }
 
 /**
@@ -2210,9 +2230,11 @@ export async function joinTable(
       zoneId: diningTables.zoneId,
     })
     .from(diningTables)
-    .where(eq(diningTables.id, tableId))
+    // Tenant-scoped: a foreign tenant's globally-unique table id must read as absent here, so the
+    // join never reaches another tenant's `dining_tables` row (CLAUDE.md §3).
+    .where(and(eq(diningTables.id, tableId), eq(diningTables.tenantId, cfg.tenantId)))
     .for("update");
-  await assertTableAvailable(tx, table, tableId);
+  await assertTableAvailable(tx, cfg, table, tableId);
 
   const serviceContext = await VENUE_SERVICE.findOrderContext(tx, cfg, tabId);
   if (
@@ -2227,7 +2249,10 @@ export async function joinTable(
     });
   }
 
-  await tx.update(diningTables).set({ tabId }).where(eq(diningTables.id, tableId));
+  await tx
+    .update(diningTables)
+    .set({ tabId })
+    .where(and(eq(diningTables.id, tableId), eq(diningTables.tenantId, cfg.tenantId)));
 }
 
 /**
@@ -3636,7 +3661,7 @@ function advanceSet(to: Exclude<TicketState, "queued">) {
  */
 export async function advanceTicketItem(
   tx: Transaction,
-  _cfg: TillConfig,
+  cfg: TillConfig,
   itemId: string,
   to: TicketState,
 ): Promise<void> {
@@ -3660,6 +3685,9 @@ export async function advanceTicketItem(
     .set(advanceSet(validTo))
     .where(
       and(
+        // Tenant-scoped: a foreign tenant's item id must miss here (CLAUDE.md §3), so it is refused
+        // exactly as a non-existent item — never advanced across the tenant boundary.
+        eq(ticketItems.tenantId, cfg.tenantId),
         eq(ticketItems.id, itemId),
         eq(ticketItems.state, transition.from),
         isNotNull(ticketItems.firedAt),
@@ -3670,7 +3698,9 @@ export async function advanceTicketItem(
     const [item] = await tx
       .select({ firedAt: ticketItems.firedAt })
       .from(ticketItems)
-      .where(eq(ticketItems.id, itemId));
+      // Same tenant scope as the update above — the not-found read-back must not see another
+      // tenant's item, or a foreign held item would surface as `ticket.item_held` (CLAUDE.md §3).
+      .where(and(eq(ticketItems.id, itemId), eq(ticketItems.tenantId, cfg.tenantId)));
     if (item !== undefined && item.firedAt === null) {
       throw new AppError("ticket.item_held", { ticketItemId: itemId });
     }
@@ -3685,7 +3715,7 @@ export async function advanceTicketItem(
  */
 export async function advanceTicket(
   tx: Transaction,
-  _cfg: TillConfig,
+  cfg: TillConfig,
   orderId: string,
   stationId: string,
   to: Exclude<TicketState, "queued">,
@@ -3695,6 +3725,9 @@ export async function advanceTicket(
     .set(advanceSet(to))
     .where(
       and(
+        // Tenant-scoped: this by-order/station update must not reach another tenant's `ticket_items`
+        // rows (CLAUDE.md §3) — `withTenant` does not isolate it since RLS was dropped (#255).
+        eq(ticketItems.tenantId, cfg.tenantId),
         eq(ticketItems.workingOrderId, orderId),
         eq(ticketItems.stationId, stationId),
         eq(ticketItems.state, TICKET_TRANSITIONS[to].from),

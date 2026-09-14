@@ -533,3 +533,53 @@ describe("concurrent merge deadlock-safety (working_orders-first lock order matc
     }
   });
 });
+
+// Cross-tenant isolation for the table-service move/join verbs (CLAUDE.md §3, conventions-data.md
+// "A by-id read still needs its own eq(table.tenantId, cfg.tenantId)"). Production holds one tenant
+// per database, but the `dining_tables` by-id read a move/join does is not isolated by `withTenant`
+// (RLS was dropped, #255), so it must scope to the caller's tenant itself. The exposed argument is the
+// TARGET table id (`toTableId`/`tableId`), not the tab id — `assertTabOpen` already scopes the tab.
+// Real Postgres as `app_user` (rolsuper=f): on PGlite every connection is a superuser and the leak
+// would pass silently.
+describe("cross-tenant isolation — a move/join never reaches another tenant's table", () => {
+  it("moveTab onto a FOREIGN tenant's table id throws table.not_found — never repoints the other tenant's table", async () => {
+    const { cfg: tenantA, cafe: cafeA } = await setupVenue();
+    const { cfg: tenantB } = await setupVenue();
+    expect(tenantB.tenantId).not.toBe(tenantA.tenantId);
+
+    const srcA = await seedTable(tenantA, "MX-srcA");
+    const tabA = await openTabOn(tenantA, srcA, [{ productId: cafeA.id, quantity: "1" }]);
+    const tableB = await seedTable(tenantB, "MX-tgtB"); // tenant B's free table
+
+    await expect(
+      withTenant(suite.admin, tenantA.tenantId, async (tx) => {
+        await asAppUser(tx);
+        return moveTab(tx, tenantA, tabA, tableB);
+      }),
+    ).rejects.toMatchObject({ code: "table.not_found", params: { tableId: tableB } });
+
+    // B's table is untouched — never repointed at A's tab.
+    expect(await tabIdOf(tableB)).toBeNull();
+    // A's own source table still covers A's tab — the aborted move freed nothing.
+    expect(await tabIdOf(srcA)).toBe(tabA);
+  });
+
+  it("joinTable onto a FOREIGN tenant's table id throws table.not_found — never links the other tenant's table", async () => {
+    const { cfg: tenantA, cafe: cafeA } = await setupVenue();
+    const { cfg: tenantB } = await setupVenue();
+
+    const t1A = await seedTable(tenantA, "JX-t1A");
+    const tabA = await openTabOn(tenantA, t1A, [{ productId: cafeA.id, quantity: "1" }]);
+    const tableB = await seedTable(tenantB, "JX-tgtB"); // tenant B's free table
+
+    await expect(
+      withTenant(suite.admin, tenantA.tenantId, async (tx) => {
+        await asAppUser(tx);
+        return joinTable(tx, tenantA, tabA, tableB);
+      }),
+    ).rejects.toMatchObject({ code: "table.not_found", params: { tableId: tableB } });
+
+    // B's table is untouched — never linked to A's tab.
+    expect(await tabIdOf(tableB)).toBeNull();
+  });
+});
