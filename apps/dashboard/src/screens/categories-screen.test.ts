@@ -1020,3 +1020,38 @@ it("starts the delete preview's product list with an empty search each time it o
   expect((await tableSearch(el, "category-delete-products")).value).toBe("");
   expect(renderedKeys(el, "category-delete-products")).toEqual(["p"]);
 });
+
+it("keeps the products dialog's Close button disabled while a membership save is in flight", async () => {
+  const { el, api } = await mount();
+  let finish!: () => void;
+  api.replaceProductCategories.mockReturnValue(
+    new Promise((resolve) => {
+      finish = () => resolve({ categoryIds: ["drink"], primaryCategoryId: null });
+    }),
+  );
+  await openProducts(el, "food");
+  const members = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>(
+    'wt-data-table[data-test="category-products"]',
+  )!;
+  await members.updateComplete;
+  members.shadowRoot!.querySelector<HTMLElement>('[data-test="remove-membership"]')!.click();
+  await el.updateComplete;
+  const picker = el.shadowRoot!.querySelector("dashboard-category-membership-picker")!;
+  await picker.updateComplete;
+  picker.shadowRoot!.querySelector<HTMLElement>('[data-test="save-membership"]')!.click();
+  await el.updateComplete;
+  const close = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+    '[data-test="close-products"]',
+  )!;
+  expect(close.disabled).toBe(true);
+  expect(close.getAttribute("slot")).toBe("cancel");
+  // A person's click lands on the inner native button, which a disabled wt-button disables.
+  close.shadowRoot!.querySelector("button")!.click();
+  await el.updateComplete;
+  const modal = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-modal"]>(
+    'wt-modal[data-test="products-modal"]',
+  )!;
+  expect(modal.open).toBe(true);
+  finish();
+  await vi.waitFor(() => expect(close.disabled).toBe(false));
+});

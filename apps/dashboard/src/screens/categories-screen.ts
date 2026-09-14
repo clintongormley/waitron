@@ -780,8 +780,10 @@ export class CategoriesScreen extends LitElement {
                 )}
                 <wt-form-actions slot="footer"
                   ><wt-button
+                    slot="cancel"
                     data-test="close-products"
                     variant="secondary"
+                    .disabled=${this.busy}
                     @click=${() => {
                       this.selected = null;
                       this.addingProducts = false;
