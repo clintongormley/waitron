@@ -13,6 +13,8 @@
  * match those documented sequences, which escpos.test.ts pins byte for byte.
  */
 
+import { CHARSET_SELECT, encodeText, type CharacterSet } from "./charset.js";
+
 /** ESC — the escape lead byte (0x1B) beginning most two/three-byte commands. */
 const ESC = 0x1b;
 /** GS — the group-separator lead byte (0x1D) beginning the cut command. */
@@ -30,11 +32,9 @@ const LF = 0x0a;
 export const FEED_BEFORE_CUT = 5;
 
 /**
- * Text encoding: ONE byte per character via Latin-1 (ISO-8859-1), so every code point 0x00-0xFF maps
- * to its own byte. ESC/POS printers are byte-oriented and interpret bytes through a selected code
- * page; picking that code page (CP437/CP858/…) is a CONSUMER concern, not the builder's, so the
- * builder does not UTF-8-encode — that would emit multi-byte sequences a single-byte code page would
- * mis-render. Pure-ASCII content (the common case) is unaffected either way.
+ * The encoding of a builder created without a character set: ONE byte per character via Latin-1, so
+ * every code point 0x00-0xFF maps to its own byte. A builder created with a set encodes with that
+ * set's table instead (`charset.ts`); the drawer kick and the legacy `qr()` store data keep Latin-1.
  */
 const TEXT_ENCODING = "latin1";
 
@@ -71,15 +71,30 @@ const QR_DEFAULT_MODULE_SIZE = 6;
 export class EscBuilder {
   private readonly parts: number[] = [];
 
-  /** Initialise the printer — `ESC @`. Resets modes to power-on defaults; the usual first command. */
+  /** `charset` undefined keeps the Latin-1 builder that selects no table (the drawer kick, legacy jobs). */
+  constructor(private current?: CharacterSet) {}
+
+  /** Initialise the printer — `ESC @`, then the current character set's `ESC t` selection, if any. */
   init(): this {
     this.parts.push(ESC, 0x40);
+    if (this.current !== undefined) this.parts.push(...CHARSET_SELECT[this.current]);
     return this;
   }
 
-  /** Append the Latin-1 bytes of `s` with no terminator — raw text for the current line. */
+  /** Switch character set mid-payload: emits its `ESC t` (nothing for `plain`) and encodes later text with it. */
+  charset(cs: CharacterSet): this {
+    this.current = cs;
+    this.parts.push(...CHARSET_SELECT[cs]);
+    return this;
+  }
+
+  /** Append `s` encoded for the current character set (Latin-1 when none was given), with no terminator. */
   text(s: string): this {
-    for (const b of Buffer.from(s, TEXT_ENCODING)) this.parts.push(b);
+    if (this.current === undefined) {
+      for (const b of Buffer.from(s, TEXT_ENCODING)) this.parts.push(b);
+    } else {
+      for (const b of encodeText(s, this.current)) this.parts.push(b);
+    }
     return this;
   }
 
@@ -238,7 +253,7 @@ export class EscBuilder {
   }
 }
 
-/** Start a new ESC/POS command chain. */
-export function esc(): EscBuilder {
-  return new EscBuilder();
+/** Start a new ESC/POS command chain, optionally for a character set. */
+export function esc(charset?: CharacterSet): EscBuilder {
+  return new EscBuilder(charset);
 }
