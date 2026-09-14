@@ -419,7 +419,10 @@ export class CategoriesScreen extends LitElement {
           label: t("categories.parent"),
           allLabel: t("categories.filter_parent_all"),
           value: (category) => category.parentId ?? "",
-          options: this.#parentFilterOptions(),
+          options: this.#categoryOptions(
+            this.categories.map((category) => category.parentId),
+            (category) => categoryPath(category, this.categories, currentLocale(), this.languages),
+          ),
         },
       },
       {
@@ -449,18 +452,16 @@ export class CategoriesScreen extends LitElement {
   #treeColumns(): DataTableColumn<CategorySummary>[] {
     return this.#columns().filter((column) => column.key !== "parent");
   }
-  /** The categories that are some other category's parent, labelled by their full path. Only these
-   * can usefully narrow the Parent filter; a leaf parent value would match nothing. */
-  #parentFilterOptions(): { value: string; label: string }[] {
-    const parentIds = new Set(
-      this.categories.map((c) => c.parentId).filter((id): id is string => id !== null),
-    );
+  /** Filter options for the categories whose ids appear in `ids` (some category's parent, or some
+   * product's reporting category): a category nothing refers to would match no row. */
+  #categoryOptions(
+    ids: readonly (string | null)[],
+    label: (category: CategorySummary) => string,
+  ): { value: string; label: string }[] {
+    const referenced = new Set(ids);
     return this.categories
-      .filter((c) => parentIds.has(c.id))
-      .map((c) => ({
-        value: c.id,
-        label: categoryPath(c, this.categories, currentLocale(), this.languages),
-      }));
+      .filter((category) => referenced.has(category.id))
+      .map((category) => ({ value: category.id, label: label(category) }));
   }
   /** A product's reporting category, or undefined when it has none (which is allowed) or when the
    * id no longer resolves. The sort value and the rendered cell share this one lookup. */
@@ -519,7 +520,10 @@ export class CategoriesScreen extends LitElement {
           label: t("editor.reporting_category"),
           allLabel: t("categories.filter_reporting_all"),
           value: (product) => product.primaryCategoryId ?? "",
-          options: this.#reportingFilterOptions(),
+          options: this.#categoryOptions(
+            this.products.map((product) => product.primaryCategoryId),
+            (category) => this.#text(category.name),
+          ),
         },
       },
       {
@@ -529,16 +533,6 @@ export class CategoriesScreen extends LitElement {
       },
     ];
     return trailing ? [...base, trailing] : base;
-  }
-  /** The reporting categories at least one product actually uses, labelled by name — the only
-   * values that can usefully narrow the Reporting-category filter. */
-  #reportingFilterOptions(): { value: string; label: string }[] {
-    const ids = new Set(
-      this.products.map((product) => product.primaryCategoryId).filter((id): id is string => !!id),
-    );
-    return this.categories
-      .filter((category) => ids.has(category.id))
-      .map((category) => ({ value: category.id, label: this.#text(category.name) }));
   }
   /** The products modal's member list — the shared columns plus a row-actions column. Edit reopens
    * the full membership picker; Remove pre-fills it with this category taken out, so a cleared

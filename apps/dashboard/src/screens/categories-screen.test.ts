@@ -1133,3 +1133,52 @@ it("labels each member row's edit action Edit product categories", async () => {
   const actions = members.shadowRoot!.querySelector('tr[data-row-key="p"] wt-row-actions')!;
   expect(actions.querySelector("wt-button")!.textContent!.trim()).toBe("Edit product categories");
 });
+
+it("offers only categories something refers to in the Parent and Reporting category filters", async () => {
+  const fx = apiFixture();
+  const breakfast: CategorySummary = {
+    id: "breakfast",
+    name: { en: "Breakfast" },
+    image: null,
+    color: null,
+    parentId: "food",
+  };
+  const eggs: CategorySummary = {
+    ...breakfast,
+    id: "eggs",
+    name: { en: "Eggs" },
+    parentId: "breakfast",
+  };
+  fx.api.listCategories.mockResolvedValue([food, breakfast, eggs, drink]);
+  fx.api.listLibraryProducts.mockResolvedValue([
+    { ...product, categoryIds: ["food", "eggs"], primaryCategoryId: "eggs" },
+  ]);
+  const { el } = await mountWidget<CategoriesScreen>("dashboard-categories-screen", {
+    api: fx.client,
+  });
+  const list = el.shadowRoot!.querySelector("wt-data-table")!;
+  await vi.waitFor(() => expect(list.rows.length).toBe(4));
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="mode-flat"]')!.click();
+  await el.updateComplete;
+  const options = (table: Element, filter: string) =>
+    [
+      ...table.shadowRoot!.querySelectorAll<HTMLOptionElement>(
+        `select[data-filter="${filter}"] option`,
+      ),
+    ]
+      .slice(1)
+      .map((option) => [option.value, option.textContent!.trim()]);
+  await list.updateComplete;
+  // Food and Breakfast are parents, labelled by path; Eggs and Drinks are nobody's parent.
+  expect(options(list, "parent")).toEqual([
+    ["food", "Food"],
+    ["breakfast", "Food / Breakfast"],
+  ]);
+  await openProducts(el, "food");
+  const members = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>(
+    'wt-data-table[data-test="category-products"]',
+  )!;
+  await members.updateComplete;
+  // Only Eggs is some product's reporting category, labelled by its own name.
+  expect(options(members, "primary")).toEqual([["eggs", "Eggs"]]);
+});
