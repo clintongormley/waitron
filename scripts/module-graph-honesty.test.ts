@@ -358,10 +358,17 @@ describe("the tree's module graph is honest", () => {
   }
 
   const foundEdges = new Set<string>();
+  // The same edges keyed by kind AND target, so an anchor can pin a SPECIFIC edge shape rather than
+  // just "some edge between these two modules" — `workforce→core` exists as an FK edge too (workforce
+  // FKs `tenants`/`locations`, both core-owned), so a plain `workforce→core` anchor stays green even
+  // if the EXECUTE-FUNCTION detector is removed. Keying by kind and target is what makes the anchor a
+  // real control for that detector.
+  const foundEdgeDetails = new Set<string>();
   for (const pkg of discovered) {
     for (const raw of pkg.sqls) {
       for (const edge of crossModuleEdges(raw, pkg.moduleName)) {
         foundEdges.add(`${pkg.moduleName}→${edge.dep}`);
+        foundEdgeDetails.add(`${pkg.moduleName}→${edge.dep} via ${edge.kind} on ${edge.target}`);
       }
     }
   }
@@ -369,17 +376,24 @@ describe("the tree's module graph is honest", () => {
   // Vacuous-pass anchor. A scan that silently matched nothing would leave `violations` empty and pass
   // — identical to every descriptor being honest. So pin that the discovery found the modules that
   // are not going away (a loose floor, not an exact count — CLAUDE.md §2) AND that the scan actually
-  // resolved known real cross-module edges of BOTH shapes: an ordinary FK/trigger edge
+  // resolved known real cross-module edges of BOTH shapes: an ordinary trigger edge
   // (`workforce → identity`), and an EXECUTE-FUNCTION edge (`workforce → core`, its append-only
-  // triggers calling core's `reject_mutation`). If the tree's SQL dialect drifts out from under the
-  // regexes, one of these goes red rather than the guard passing empty.
+  // triggers calling core's `reject_mutation`). The EXECUTE-FUNCTION anchor is pinned by kind AND
+  // target on purpose: `workforce → core` also exists as an FK edge (workforce FKs `tenants` and
+  // `locations`, both core-owned), so a plain `workforce → core` anchor would stay green even with the
+  // EXECUTE-FUNCTION detector deleted. Pinning `via EXECUTE FUNCTION on reject_mutation` makes this a
+  // genuine control for that detector — remove the `executeFunctionEdges` collection and this goes
+  // red. If the tree's SQL dialect drifts out from under the regexes, one of these goes red rather
+  // than the guard passing empty.
   it("discovers the modules and finds the known real cross-module edges", () => {
     for (const name of ["core", "identity", "payments", "workforce"]) {
       expect(modules).toContain(name);
     }
     expect(modules.length).toBeGreaterThanOrEqual(8);
     expect(foundEdges.has("workforce→identity")).toBe(true);
-    expect(foundEdges.has("workforce→core")).toBe(true);
+    expect(foundEdgeDetails.has("workforce→core via EXECUTE FUNCTION on reject_mutation")).toBe(
+      true,
+    );
   });
 
   it("every FK/trigger edge in the SQL is named in the depending descriptor's requires", () => {
