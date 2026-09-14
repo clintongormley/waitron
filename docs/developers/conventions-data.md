@@ -196,12 +196,18 @@ ownership would otherwise confer. Receipt: `feat/outbox-swap-s4-s5`, probe A.
 ## A module/migration dependency graph has TWO kinds of cross-set edge
 
 FK `REFERENCES` and a `CREATE [CONSTRAINT] TRIGGER … EXECUTE FUNCTION <f>` where `<f>` is owned by a
-DIFFERENT migration set. Today NO module creates such a cross-set trigger — the outbox's capture
-triggers, which enrolled other modules' tables, were deleted with the application outbox (swap S5) —
-so every surviving migration cross-set edge is an ordinary FK. The generic live-update trigger is
-installed at boot and sits outside this migration-text guard; its behavior is exercised by
-`packages/db/src/change-feed-replication.pg.test.ts`. `scripts/module-graph-honesty.test.ts` still
-derives the trigger edge (reads text and says so), so a future one is caught.
+DIFFERENT migration set. Both exist in the tree today. The second kind is `reject_mutation`: the
+`workforce` and `fiscal-verifactu` append-only tables install `reject_mutation()` triggers, and that
+function is owned by `core` (`packages/db/drizzle`) — a cross-set trigger-function edge. It is
+harmless because both modules already declare `requires.core`, which the "the function must exist
+first" ordering needs anyway; the guard's job is to catch the case where such an edge is NOT declared.
+The outbox's capture triggers, which enrolled OTHER modules' tables, were deleted with the application
+outbox (swap S5). The generic live-update trigger is installed at boot and sits outside this
+migration-text guard; its behavior is exercised by
+`packages/db/src/change-feed-replication.pg.test.ts`. `scripts/module-graph-honesty.test.ts` derives
+both edge kinds from the SQL text (reading text, and saying so): it now scans every
+`EXECUTE (FUNCTION|PROCEDURE)` call, resolves the function's owner, and flags a cross-module one — so
+the `reject_mutation` edges surface and any future undeclared edge is caught.
 
 ## An object-privilege `GRANT` PostgreSQL accepted is not a `GRANT` that did anything
 
