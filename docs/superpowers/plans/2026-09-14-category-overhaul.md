@@ -282,7 +282,7 @@ Add toolbar styles to the `css` block (tokens only). The search box grows; the (
   margin-bottom: var(--wt-space-3);
 }
 .table-search {
-  flex: 1 1 min(100%, var(--wt-space-9, 16rem));
+  flex: 1 1 min(100%, var(--wt-space-6));
   min-height: var(--wt-tap-min);
   padding: var(--wt-space-2) var(--wt-space-3);
   border: 1px solid var(--wt-color-border);
@@ -293,7 +293,7 @@ Add toolbar styles to the `css` block (tokens only). The search box grows; the (
 }
 ```
 
-(If `--wt-space-9` does not exist, use a token that does — check `packages/ui/src/tokens`; the intent is "search stays wide but yields to wrap". Confirm the chosen token exists before committing so no-hardcoded-chrome stays green.)
+The spacing scale is `--wt-space-1` … `--wt-space-6` only — there is no 7/8/9, and `no-hardcoded-chrome.test.ts` bans any `rem`/`em` even inside a `var()` fallback (it scans raw cssText), so no `16rem` fallback. `--wt-space-6` as the flex-basis keeps the search box wide while letting the row wrap. If a genuinely wider basis is wanted, add a token to `packages/ui/src/tokens/structure.css` and its list in `structure.test.ts` first — do not inline a length.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
@@ -410,7 +410,10 @@ Extend the interface:
 export interface DataTableColumn<Row> {
   key: string;
   label: string;
-  cell: (row: Row, context: { ancestorOnly: boolean }) => unknown; // second arg lands fully in Task 4
+  // Second parameter is OPTIONAL so the primitive's own 1-arg call sites still compile in Task 3
+  // (before Task 4 threads the context in), and every existing 1-arg column definition stays
+  // assignable. The primitive is the only site that INVOKES cell; external code only defines it.
+  cell: (row: Row, context?: { ancestorOnly: boolean }) => unknown;
   sortValue?: (row: Row) => string | number | null | undefined;
   searchValue?: (row: Row) => string;
   filter?: {
@@ -698,6 +701,9 @@ Run: `pnpm --filter @waitron/ui test wt-data-table.test.ts`
 Expected: FAIL — no `viewKey`, no persistence.
 
 - [ ] **Step 3: Add viewKey persistence**
+
+Add `type PropertyValues` to the `lit` import (the file currently imports only
+`{ LitElement, css, html, nothing }`; `nothing` is already there for Tasks 2/3). Then:
 
 ```ts
 @property() viewKey?: string;
@@ -1122,17 +1128,35 @@ ancestor walk."
 **Files:**
 - Modify: `apps/dashboard/src/widgets/category-form.ts`
 - Modify: `apps/dashboard/src/screens/categories-screen.ts` (pass `.languages`)
+- Modify: `apps/dashboard/src/screens/catalogue-screen.ts` (the **second** consumer of `dashboard-category-form` — also passes the old `.locales`; must switch to `.languages`)
 - Test: `apps/dashboard/src/widgets/category-form.test.ts`
 
 **Interfaces:**
 - Consumes: `wt-combobox` (`options`, `value`, `wt-change`), `categoryPath`, `ContentLanguages`.
 - Produces: `CategoryForm.languages: ContentLanguages` replacing `locales`.
 
+**Second-consumer note (do not skip).** `dashboard-category-form` is rendered by TWO screens:
+`categories-screen.ts` (~line 837) and `catalogue-screen.ts` (~lines 377–385, inside the inline
+"create category" flow), the latter binding `.locales=${locales}` where
+`locales = this.contentLanguages?.languages ?? []`. Lit `.prop=` bindings are **not** typechecked by
+`tsc`, so renaming the property will NOT fail compile — it silently regresses the catalogue screen's
+inline category form to the `languages` default (English only), breaking its per-language name inputs
+and validation for the Spanish venue. Both bindings must change in this task.
+
 - [ ] **Step 1: Write the failing test**
 
+The dashboard widget test harness's reader locale defaults to `es-ES` (existing tests reset with
+`afterEach(() => setLocale("es-ES"))` and opt into English with `setLocale("en-GB")` — see
+`image-upload.test.ts`, `language-chooser.test.ts`). So the test MUST set the reader locale to
+English explicitly, or the correct fix still renders "Bebidas".
+
 ```ts
+import { setLocale } from "../i18n/t.js";
+// ...
+afterEach(() => setLocale("es-ES"));
+
 it("shows parent names in the reader's language, not the default content language", async () => {
-  // default language Spanish, reader English; a parent has both names.
+  setLocale("en-GB"); // reader English; venue default is Spanish
   const parent: CategorySummary = { id: "p", name: { es: "Bebidas", en: "Drinks" }, image: null, color: null, parentId: null };
   const el = await mountWidget<CategoryForm>("dashboard-category-form", {
     open: true,
@@ -1140,15 +1164,12 @@ it("shows parent names in the reader's language, not the default content languag
     categories: [parent],
     value: null,
   });
-  // reader locale is English in the test harness; assert the combobox option reads "Drinks"
   const combo = el.el.shadowRoot!.querySelector('wt-combobox[name="category-parent"]')!;
   const labels = (combo as { options: { label: string }[] }).options.map((o) => o.label);
   expect(labels).toContain("Drinks");
   expect(labels).not.toContain("Bebidas");
 });
 ```
-
-(Confirm how the widget test harness sets the reader locale; if it defaults to `en`, the above holds. If not, set it explicitly the way other dashboard widget tests do.)
 
 - [ ] **Step 2: Run the test to verify it fails**
 
@@ -1194,9 +1215,14 @@ Replace the parent `<label><select>…` with:
 
 In `categories-screen.ts`, change `.locales=${this.languages.languages}` on `<dashboard-category-form>` to `.languages=${this.languages}`.
 
+In `catalogue-screen.ts`, change the `<dashboard-category-form>` binding `.locales=${locales}` to
+`.languages=${this.contentLanguages ?? { defaultLanguage: "en", languages: ["en"] }}` (the screen
+already imports `ContentLanguages` and holds `this.contentLanguages`). If a catalogue-screen test
+asserts the inline category form's per-language inputs, keep it green.
+
 - [ ] **Step 4: Run the test to verify it passes**
 
-Run: `pnpm --filter @waitron/dashboard test category-form.test.ts`
+Run: `pnpm --filter @waitron/dashboard test category-form.test.ts catalogue-screen.test.ts`
 Expected: PASS. Update existing form tests that referenced `name="category-parent"` as a `<select>` (option elements → combobox `options`).
 
 - [ ] **Step 5: Commit**
@@ -1226,8 +1252,16 @@ venue's default language."
 
 - [ ] **Step 1: Write the failing tests**
 
+The membership picker has only one consumer (categories-screen), so no second binding to update. As
+in Task 10, the reader locale defaults to `es-ES`; set it where a test asserts an English name.
+
 ```ts
+import { setLocale } from "../i18n/t.js";
+// ...
+afterEach(() => setLocale("es-ES"));
+
 it("emits the chosen category ids and reporting id from the comboboxes", async () => {
+  setLocale("en-GB");
   const cats: CategorySummary[] = [
     { id: "food", name: { en: "Food" }, image: null, color: "#112233", parentId: null },
     { id: "drink", name: { en: "Drinks" }, image: null, color: null, parentId: null },
@@ -1428,7 +1462,7 @@ Member view: give the `wt-data-table` `searchable`, `searchLabel`, `viewKey="wai
 </wt-form-actions>
 ```
 
-(Confirm `action.close` exists; if not, add it in Task 7.)
+(`action.close` already exists in `strings.ts` — "Close" / "Cerrar" — no new key needed.)
 
 Add view: replace the checkbox column + "Select all visible" label. Give the add table:
 
@@ -1486,23 +1520,46 @@ a hand-written checkbox column."
 
 - [ ] **Step 1: Write the failing tests**
 
+The default fixture's `product` (id `"p"`, reporting category `"food"`) is already in
+`this.products`, so a dependant with `id: "p"` resolves to a full row and exercises D1's resolve +
+cleared-reporting flag. Two correctness points for the assertions:
+
+- The affected-products **table element** is in the screen's slotted DOM (reachable from the screen
+  shadow root), but its **rows** are cell markup inside the table's OWN shadow root — so assert row
+  text via `table.shadowRoot!.textContent`, not `dialog.textContent`, which does not cross into a
+  nested custom element's shadow.
+- The cleared-reporting flag text (`categories.delete_reporting` — a string key that is NOT removed)
+  is locale-dependent; set the reader locale so the assertion is stable.
+
 ```ts
-it("titles the delete dialog with the category name and lists no routes", async () => {
+import { setLocale } from "../i18n/t.js";
+// afterEach(() => setLocale("es-ES")); // add once to this file if not present
+
+it("titles the delete dialog with the category name, shows affected products, and lists no routes", async () => {
+  setLocale("en-GB");
   const { el, api } = await mount();
   api.getCategoryDependants.mockResolvedValue({
     products: [{ id: "p", name: { en: "Toast" }, reporting: true }],
     children: [], parentId: null, routes: [{ id: "r", station: "Pass", zone: null }],
   });
-  // open delete for "Food"
-  el.shadowRoot!.querySelector<HTMLElement>('[data-test="mode-flat"]')!.click();
-  await el.updateComplete;
-  // drive the row action that calls #openDelete(food) …
+  // Open the delete dialog for "Food" via its row action (drive the same path #openDelete uses).
   await vi.waitFor(() => expect(el.shadowRoot!.querySelector('[data-test="delete-dialog"]')).not.toBeNull());
   const dialog = el.shadowRoot!.querySelector('[data-test="delete-dialog"]')!;
   expect(dialog.getAttribute("heading")).toContain("Food");
   expect(dialog.textContent).not.toContain("route");
+  const table = dialog.querySelector('wt-data-table[data-test="category-delete-products"]') as { shadowRoot: ShadowRoot } | null;
+  expect(table).not.toBeNull();
+  // D1: the dependant resolved to a full product row inside the table's shadow root, and — since its
+  // reporting category is the one being deleted — the cleared-reporting flag shows.
+  expect(table!.shadowRoot.textContent).toContain("Toast");
+  expect(table!.shadowRoot.textContent).toContain(t("categories.delete_reporting"));
 });
 ```
+
+The cleared-reporting flag in the shared reporting cell must be emitted with a `part=` (not a CSS
+class), since the cell's nodes live in the table's shadow root — follow the screen's existing
+swatch/`name-muted` part pattern, and add a `wt-data-table::part(danger)` colour rule if styling is
+needed.
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
@@ -1602,3 +1659,5 @@ screen renders at phone width."
 **Type consistency:** `sortKey: string | null`, `sortDirection: SortDirection`, `wt-sort-change` detail, `DataTableColumn.filter`/`searchValue`, and the `cell(row, context)` second argument are defined once (Tasks 1–4) and used with the same names in Tasks 9, 12, 13. `languages: ContentLanguages` replaces `locales` consistently in Tasks 10–11 and both screen call sites are updated. `#productColumns` is defined in Task 12 and reused in Task 13.
 
 **Known risk to watch during execution:** the strict i18n key-mirroring guard means Task 7's key **removal** must land with the last screen reference (deferred to Task 13). This is called out in both tasks. Tasks 8–13 should run in one continuous stretch so the working tree builds at each commit.
+
+**Fresh-context review applied (2026-09-14).** A separate reviewer checked this plan against the spec and the real code and found, now fixed inline: (1) `dashboard-category-form` has a second consumer, `catalogue-screen.ts`, whose `.locales` binding must also change — Lit prop bindings are not typechecked, so this would silently regress the inline create-category form (Task 10 now covers it); (2) `DataTableColumn.cell`'s second parameter must be optional or the primitive's own 1-arg calls break the `@waitron/ui` typecheck at Task 3's commit (fixed); (3) the dashboard test harness reader locale defaults to `es-ES`, so the content-language tests must `setLocale("en-GB")` (Tasks 10, 11, 13 fixed); (4) `--wt-space-9` does not exist and a `rem` fallback trips the token guard — use `--wt-space-6` (Task 2 fixed); (5) `PropertyValues` must be imported (Task 5 fixed); (6) the delete test must read affected-product rows from the table's shadow root, not the dialog's light DOM (Task 13 fixed). The reviewer confirmed the i18n removal-ordering, the `#productColumns` refactor, the test selectors and the `wt-combobox` API are otherwise sound.
