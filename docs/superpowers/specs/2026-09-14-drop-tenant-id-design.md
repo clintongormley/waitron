@@ -52,12 +52,15 @@ conflict story. The criterion is "does the standby need it?", and it stays.
 - Every composite unique or primary key that led with `tenant_id` keeps its remaining columns:
   `UNIQUE (tenant_id, credential_id)` becomes `UNIQUE (credential_id)`, and so on. Under one tenant
   the meaning is unchanged. A key that was `tenant_id` alone becomes the one-row constraint below.
-- `tenants` becomes: `country`, `tax_id`, `legal_name`, `created_at`, plus a one-row constraint.
-  The `id` column goes: nothing references it once the foreign keys are gone. The constraint is the
-  standard shape — a `singleton boolean NOT NULL DEFAULT true` column with `CHECK (singleton)` and a
-  unique index on it — so a second insert is a constraint violation, not a convention.
-- `tenant_themes`, `tenant_receipts` and `payment_policy` get the same one-row constraint in place
-  of their `tenant_id` primary key. `tenant_credentials`' primary key becomes `purpose` alone.
+- `tenants` becomes: `id` (pinned to `1`), `country`, `tax_id`, `legal_name`, `created_at`, plus a
+  one-row constraint. The one-row shape follows the three singleton tables that already live in
+  `packages/db` — `deployment`, `mirror_config` and `node_membership` all use `id integer PRIMARY
+  KEY` with `CHECK (id = 1)` (grepped 2026-09-14). `tenants` takes the same shape: `id` changes from
+  a random `uuid` to `integer` pinned to `1`, so a second insert violates the primary key and the
+  check. Nothing references `tenants.id` once the foreign keys are gone, so the type change is safe,
+  and code that wants the row reads `where id = 1`.
+- `tenant_themes`, `tenant_receipts` and `payment_policy` get the same `id = 1` one-row shape in
+  place of their `tenant_id` primary key. `tenant_credentials`' primary key becomes `purpose` alone.
 - Table names do not change. `tenant_themes` with no tenant column reads oddly, but the names are
   pinned by classification lists and dashboard subscription names, and renaming them is churn with
   no behaviour behind it. A later change may rename them; this one does not.
