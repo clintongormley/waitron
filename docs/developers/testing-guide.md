@@ -133,6 +133,48 @@ Bind-mounting a `postgres` socket dir out of Docker Desktop's VM gives `ECONNREF
 a scratchpad path blows the 104-byte `sun_path` first). `apk add nodejs npm && npm i pg` in the
 container; parsing-only probes are fine on the host.
 
+**Logical replication tests**
+
+## A widened subscription can drop publisher writes committed before its apply worker restarts
+
+`ALTER SUBSCRIPTION … SET PUBLICATION` returns before the subscriber's running apply worker restarts
+(measured: it returned while that worker was paused and could not restart). Read in the source, not
+tested: the worker takes the new list only when it restarts. A publisher write committed in that
+window was lost, not delayed, so a longer poll cannot help. Wait for an apply worker whose
+`pg_stat_activity.backend_start` is later than a `clock_timestamp()` read taken on the subscriber
+before the ALTER, then write. `setPublicationsAndAwaitRestart` in
+`apps/server/src/replication-arc.e2e.test.ts` does this; step (4) of that file failed once on CI
+(#356) without it, its 45 s poll ending on `'Renamed pre-fence'`; fixed in #361.
+
+Receipt, 2026-09-14, PostgreSQL 18.6 (`postgres:18-alpine`), from a throwaway probe on
+`startTwoNodeCluster` (superuser connections, one table in each of two publications, subscription
+created on both then narrowed; deleted afterwards):
+
+- Apply worker paused with `docker exec … kill -STOP` for 500 ms across the widen and a write:
+  **10 / 10 lost.** The slot's `confirmed_flush_lsn` was before the write while paused and at the
+  write's position once the old worker had exited; the write was still absent after a later ledger
+  row, written after that exit, had arrived.
+- The same pause with no ALTER: 0 / 10 lost.
+- Unpaused, idle host: 0 / 221 lost, across four runs (one of those widens was to the list the
+  subscription already had, left behind by a bug in an earlier version of the probe).
+- Unpaused, 30 busy PL/pgSQL loops on each node: **8 / 500 lost.** Here "lost" means absent 3 s after
+  the write and still absent after a ledger row written at that point had arrived (waited up to 30 s;
+  it arrived every time).
+- Waiting for the apply worker's pid to change before writing: 0 / 500 lost under the same load, and
+  10 / 10 arrived when paused. That measured a pid-only wait. The start-time check the test uses has
+  the forced runs on the real test behind it instead: with the 500 ms pause, the old code left the
+  rename absent for the whole 45 s poll in 2 / 2 runs (one local, one by the Codex review seat), and
+  the start-time wait passed in 2 / 2.
+- Narrowing never let a later write through: 0 of over 1,000 unpaused, 0 / 10 paused.
+- A `SET PUBLICATION` to the list the subscription already had did not restart the worker in 5 / 5
+  tries, each over 5 s, so a restart wait after a no-op ALTER times out.
+
+Read in the PostgreSQL source (REL_18_STABLE), not tested: `LogicalRepApplyLoop` in `worker.c` handles
+a queued keepalive, calling `send_feedback` with the received position (reported as flushed when
+nothing is pending), before `AcceptInvalidationMessages(); maybe_reread_subscription();`, and a
+restarted walsender begins at the slot's `confirmed_flush` (`logical.c`, "has been already streamed,
+forwarding to").
+
 **Shelling out to git from a test**
 
 ## A test that shells out to `git` must clear `GIT_DIR` and its family
