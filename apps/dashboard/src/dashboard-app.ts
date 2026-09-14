@@ -1,15 +1,16 @@
 import { dashboardPath } from "./navigation.js";
-import { LitElement, type TemplateResult, css, html, nothing } from "lit";
+import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { classMap } from "lit/directives/class-map.js";
 import { keyed } from "lit/directives/keyed.js";
-import { baseStyles, UrlStateController } from "@waitron/ui";
+import { baseStyles, UrlStateController, type WtToast } from "@waitron/ui";
 import { resolveActiveLocale } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-icon.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
+import "@waitron/ui/src/components/wt-toast.js";
 import { currentLocale, setLocale, t } from "./i18n/t.js";
 import { codeOf, codeMessage } from "./i18n/codes.js";
 import { setContentLanguages } from "@waitron/ui";
@@ -62,7 +63,12 @@ import "./screens/diagnostics-screen.js";
 import "./screens/backup-screen.js";
 import "./screens/email-screen.js";
 import "./screens/payments-screen.js";
-import type { DashboardApi, PersonRole } from "./api/client.js";
+import "./screens/alerts-screen.js";
+import "./widgets/alerts-bell.js";
+import type { AlertsBell } from "./widgets/alerts-bell.js";
+import { alertMessage } from "./i18n/alerts.js";
+import { AlertArrivals } from "./state/alert-arrivals.js";
+import type { AlertView, AlertsResponse, DashboardApi, PersonRole } from "./api/client.js";
 import {
   consumeGoogleLoginPreference,
   rememberSuccessfulLogin,
@@ -76,10 +82,11 @@ import {
  * statuses, arrange the floor plan (zones + tables), configure the kitchen (stations + bump mode),
  * author the roster, work the approvals queues, review planned vs actual worked time, record received
  * purchase invoices, author ingredients and product recipes, manage enrolled devices, manage printing
- * (agents + printers + status), see today's business overview, or review sales & takings over a date
- * range. Exactly one permitted destination shows at a time. Non-staff sessions restore a permitted
- * path or fall back to overview; staff sessions can open their schedule. Logged-in faces share logout
- * and language controls, with navigation available to non-staff sessions.
+ * (agents + printers + status), see today's business overview, review sales & takings over a date
+ * range, or see and handle alerts (reached from the banner bell, not the sidebar). Exactly one
+ * permitted destination shows at a time. Non-staff sessions restore a permitted path or fall back to
+ * overview; staff sessions can open their schedule. Logged-in faces share logout and language
+ * controls, with navigation available to non-staff sessions.
  *
  * "Your profile" is NOT one of these — it isn't a destination you navigate to (it has no sidebar
  * entry, and swapping the main content for it made an already-narrow page fight the shell's own
@@ -114,7 +121,8 @@ type CoreScreen =
   | "diagnostics"
   | "backup"
   | "email"
-  | "payments";
+  | "payments"
+  | "alerts";
 
 /** A destination the shell can show: a core face, or an active module's own screen id. The `& {}` keeps
  * the `CoreScreen` literal autocomplete while still admitting any module id string — the one spelling
@@ -408,7 +416,17 @@ export class DashboardApp extends LitElement {
       .banner-actions {
         display: flex;
         align-items: center;
+        gap: var(--wt-space-1);
         margin-inline-start: auto;
+      }
+
+      /* The pop-up sits under the banner at the trailing edge, and spans the width on a phone. */
+      .alert-toast {
+        position: fixed;
+        inset-block-start: calc(var(--wt-tap-min) + 2 * var(--wt-space-3));
+        inset-inline-end: var(--wt-space-3);
+        z-index: 40;
+        max-width: calc(100vw - 2 * var(--wt-space-3));
       }
 
       /* The hamburger that opens the off-canvas drawer. Hidden at desktop width (the sidebar is always
@@ -442,6 +460,10 @@ export class DashboardApp extends LitElement {
       @media (max-width: 48rem) {
         .nav-toggle {
           display: inline-block;
+        }
+        .alert-toast {
+          inset-inline: var(--wt-space-2);
+          max-width: none;
         }
         .sidebar {
           position: absolute;
@@ -587,6 +609,20 @@ export class DashboardApp extends LitElement {
       this.contentLanguageError = codeOf(error);
     },
   );
+  @state() private alerts: AlertView[] = [];
+  @state() private alertsVisible = false;
+  @state() private alertError: string | null = null;
+  @state() private alertBusyKey: string | null = null;
+  @state() private alertToast: { message: string; tone: "info" | "error" } | null = null;
+  readonly #alertArrivals = new AlertArrivals();
+  readonly #alertQueries = new DashboardQueries(
+    this,
+    () => this.api,
+    (error) => diag.record("warn", "alerts.load_failed", { code: codeOf(error) }),
+  );
+  /** The last element focused outside the pop-up: where focus returns when the pop-up, holding
+   * focus, is closed. Both of its buttons are removed on press, which would drop focus to the page. */
+  #focusBeforeToast: HTMLElement | null = null;
   private sessionExpiryTimer?: ReturnType<typeof setTimeout>;
   private sessionIdleTimeoutSeconds = 30 * 60;
   private sessionGeneration = 0;
@@ -802,6 +838,7 @@ export class DashboardApp extends LitElement {
     // floored at the venue default for a browser asking for a language we do not ship.
     if (mayApplyLocale) setLocale(resolveActiveLocale(me.locale, me.sessionDefault));
     this.#loadContentLanguages();
+    this.#watchAlerts();
   }
 
   #loadContentLanguages(): void {
@@ -813,6 +850,95 @@ export class DashboardApp extends LitElement {
         this.contentLanguageError = null;
       })
       .catch(() => undefined);
+  }
+
+  #watchAlerts(): void {
+    if (this.sessionRole === undefined || this.sessionRole === "staff") return;
+    void this.#alertQueries
+      .watch("listAlerts", [], (response) => this.#applyAlerts(response))
+      .catch(() => undefined);
+  }
+
+  #applyAlerts(response: AlertsResponse): void {
+    this.alertsVisible = response.visible;
+    if (!response.visible) {
+      this.alerts = [];
+      this.alertToast = null;
+      this.#alertArrivals.reset();
+      this.#alertQueries.release("listAlerts");
+      return;
+    }
+    const arrived = this.#alertArrivals.next(response.alerts);
+    this.alerts = response.alerts;
+    if (arrived.length === 0) return;
+    this.alertToast = {
+      message:
+        arrived.length === 1
+          ? alertMessage(arrived[0]!.code, arrived[0]!.params)
+          : t("alerts.toast_many").replace("{count}", String(arrived.length)),
+      tone: arrived.some((a) => a.severity === "error") ? "error" : "info",
+    };
+  }
+
+  #clearAlerts(): void {
+    this.#alertQueries.release("listAlerts");
+    this.#alertArrivals.reset();
+    this.alerts = [];
+    this.alertsVisible = false;
+    this.alertError = null;
+    this.alertBusyKey = null;
+    this.alertToast = null;
+    this.#focusBeforeToast = null;
+  }
+
+  async #onAlertHandle(event: CustomEvent<{ incidentId: string; key: string }>): Promise<void> {
+    event.stopPropagation();
+    this.alertBusyKey = event.detail.key;
+    this.alertError = null;
+    try {
+      await this.api.markIncidentHandled(event.detail.incidentId);
+    } catch (error) {
+      if (this.isConnected) this.alertError = codeOf(error);
+      return;
+    } finally {
+      if (this.isConnected) this.alertBusyKey = null;
+    }
+    // Invalidate rather than re-watch: the Alerts screen may observe the same query, and a shared
+    // cache entry survives one side releasing it.
+    if (this.isConnected) this.api.liveData.invalidate([{ type: "incidents" }]);
+  }
+
+  #canOpenScreen = (screen: string): boolean => this.#permittedScreen(screen) === screen;
+
+  override updated(changed: PropertyValues): void {
+    // An open pop-up whose new text equals the old changes no toast property, so its countdown
+    // would not restart on its own.
+    if (changed.has("alertToast") && this.alertToast !== null)
+      this.renderRoot.querySelector<WtToast>("[data-test=alert-toast]")?.show();
+  }
+
+  #onShellFocusIn(event: FocusEvent): void {
+    if ((event.target as Element).matches("[data-test=alert-toast]")) return;
+    const deepest = event.composedPath()[0];
+    if (deepest instanceof HTMLElement) this.#focusBeforeToast = deepest;
+  }
+
+  #onToastActivate(event: Event): void {
+    event.stopPropagation();
+    const bell = this.renderRoot.querySelector<AlertsBell>("dashboard-alerts-bell");
+    if (bell === null) return;
+    bell.open();
+    const menu = bell.shadowRoot?.querySelector<HTMLElement>("wt-row-actions");
+    const first = menu?.querySelector<HTMLElement>("wt-button:not([disabled])");
+    (first ?? menu)?.focus();
+  }
+
+  #onToastClose(event: Event): void {
+    if (event.target !== event.currentTarget) return;
+    const hadFocus = (event.currentTarget as WtToast).matches(":focus-within");
+    this.alertToast = null;
+    const previous = this.#focusBeforeToast;
+    if (hadFocus && previous?.isConnected) previous.focus();
   }
 
   #scheduleSessionExpiry(seconds: number): void {
@@ -833,6 +959,7 @@ export class DashboardApp extends LitElement {
 
   #returnToLogin(code: string | null): void {
     this.#languageQueries.release("getContentLanguages");
+    this.#clearAlerts();
     this.contentLanguagesReady = false;
     this.contentLanguageError = null;
     this.liveUpdates?.stop();
@@ -1000,6 +1127,7 @@ export class DashboardApp extends LitElement {
     return html`
       <div
         class="shell"
+        @focusin=${(e: FocusEvent) => this.#onShellFocusIn(e)}
         @keydown=${(e: KeyboardEvent) => this.#onLayoutKeydown(e)}
         @locale-selected=${(e: CustomEvent<{ code: string }>) => void this.#onLocaleSelected(e)}
       >
@@ -1065,6 +1193,16 @@ export class DashboardApp extends LitElement {
           </div>
         </div>
         ${this.#renderProfileModal()}
+        <wt-toast
+          class="alert-toast"
+          data-test="alert-toast"
+          .open=${this.alertToast !== null}
+          .message=${this.alertToast?.message ?? ""}
+          tone=${this.alertToast?.tone ?? "info"}
+          close-label=${t("action.close")}
+          @wt-activate=${(e: Event) => this.#onToastActivate(e)}
+          @wt-close=${(e: Event) => this.#onToastClose(e)}
+        ></wt-toast>
       </div>
     `;
   }
@@ -1101,6 +1239,27 @@ export class DashboardApp extends LitElement {
       ${
         authenticated
           ? html`<div class="banner-actions">
+              ${
+                this.alertsVisible
+                  ? html`<dashboard-alerts-bell
+                      data-test="alerts-bell"
+                      .alerts=${this.alerts}
+                      .error=${this.alertError}
+                      .busyKey=${this.alertBusyKey}
+                      .canOpen=${this.#canOpenScreen}
+                      @wt-alert-handle=${(e: CustomEvent<{ incidentId: string; key: string }>) =>
+                        void this.#onAlertHandle(e)}
+                      @wt-alerts-see-all=${(e: Event) => {
+                        e.stopPropagation();
+                        this.#selectScreen("alerts");
+                      }}
+                      @wt-alert-go-to=${(e: CustomEvent<{ screen: string }>) => {
+                        e.stopPropagation();
+                        this.#selectScreen(e.detail.screen);
+                      }}
+                    ></dashboard-alerts-bell>`
+                  : nothing
+              }
               <wt-row-actions
                 icon="person"
                 align="end"
@@ -1159,6 +1318,7 @@ export class DashboardApp extends LitElement {
    * `#applyRequestedScreen`, which intercepts that value before this ever sees it. */
   #permittedScreen(requested: string | null): ScreenId {
     if (this.sessionRole === "staff") return "my-schedule";
+    if (requested === "alerts") return "alerts";
     const item = NAV_GROUPS.flatMap((group) => group.items).find(
       (entry) => entry.screen === requested,
     );
@@ -1467,6 +1627,15 @@ export class DashboardApp extends LitElement {
           .request=${this.request}
           .mode=${this.onboardingIntent}
         ></dashboard-payments-screen>`;
+      case "alerts":
+        return html`<dashboard-alerts-screen
+          .api=${this.api}
+          .canOpen=${this.#canOpenScreen}
+          @wt-alert-go-to=${(e: CustomEvent<{ screen: string }>) => {
+            e.stopPropagation();
+            this.#selectScreen(e.detail.screen);
+          }}
+        ></dashboard-alerts-screen>`;
       default:
         return html`<dashboard-overview-screen .api=${this.api}></dashboard-overview-screen>`;
     }

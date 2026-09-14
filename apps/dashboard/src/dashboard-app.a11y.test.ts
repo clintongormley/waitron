@@ -11,6 +11,7 @@ declare module "@vitest/browser/context" {
   }
 }
 import type { DashboardApp } from "./dashboard-app.js";
+import type { AlertsBell } from "./widgets/alerts-bell.js";
 import type { DashboardApi, PersonSummary } from "./api/client.js";
 
 /**
@@ -124,6 +125,8 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
       vat: { byRate: [], baseTotal: "0.00", taxTotal: "0.00", grossTotal: "0.00" },
       topSellers: [],
     }),
+    // The shell watches alerts for every non-staff session; default to none visible.
+    listAlerts: vi.fn().mockResolvedValue({ visible: false, alerts: [] }),
     ...overrides,
   } as unknown as DashboardApi;
 }
@@ -373,6 +376,37 @@ describe.each(["light", "dark"] as const)("dashboard-app a11y (%s theme)", (them
       ...(floor!.shadowRoot?.querySelectorAll("h1") ?? []),
     ];
     expect(h1s).toHaveLength(1);
+    await expectNoA11yViolations(host);
+  });
+
+  it("the banner's alerts bell is accessible closed and open", async () => {
+    const api = stubApi({
+      listAlerts: vi.fn().mockResolvedValue({
+        visible: true,
+        alerts: [
+          {
+            key: "incident:1",
+            kind: "event",
+            code: "payment.offline_forward_declined",
+            params: { amount: "12.50", paymentRef: "pi_1" },
+            severity: "error",
+            since: "2026-09-14T12:00:00.000Z",
+            area: "payments",
+          },
+        ],
+      }),
+    });
+    const { el, host } = await mountWidget<DashboardApp>("dashboard-app", { api }, theme);
+    await flush(el);
+    const bell = el.shadowRoot!.querySelector<AlertsBell>("[data-test=alerts-bell]");
+    expect(bell).toBeTruthy();
+    await bell!.updateComplete;
+    await expectNoA11yViolations(host);
+    bell!.open();
+    const popup = bell!
+      .shadowRoot!.querySelector("wt-row-actions")!
+      .shadowRoot!.querySelector("[popover]")!;
+    expect(popup.matches(":popover-open")).toBe(true);
     await expectNoA11yViolations(host);
   });
 
