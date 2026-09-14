@@ -1174,6 +1174,13 @@ turns out to need a design moves to its track.
    trigger with no `sale.*` code. Give the trigger a SQLSTATE and translate it when reachable.
 2. **Location-scope the by-id verb family together** (`getHeldOrder`/`updateHeldOrder`/
    `abandonHeldOrder`, `updateTable`/`deactivateTable`/`openTab`) when multi-location lands.
+3. **Nothing stops two queries being started at once on one transaction.** The rule and its receipt
+   are in `docs/developers/conventions-data.md` under "Multi-table writes share ONE transaction"; no
+   test or lint rule enforces it. A guard could fail a test whenever a query is issued on a
+   transaction while another is still running. A search of non-test `apps/server/src` and
+   `packages/*/src` on 2026-09-14, after `computeDailyClose` was made sequential, found no remaining
+   `Promise.all` over one transaction: the rest read or delete files, call HTTP or storage
+   services, close pools, or query through a pool.
 
 **The development stack:**
 

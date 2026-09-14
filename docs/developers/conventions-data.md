@@ -237,9 +237,20 @@ across transactions is a commented decision, never a default** — the two that 
 non-DB step sits between the writes.
 
 Queries sharing one transaction are awaited one at a time, never started together with
-`Promise.all`: a single connection runs one query at a time. No guard checks this across the
-codebase; the `apps/server/src/report-api.ts` routes say so in comments, and the `fireLines` routing
-test in "Resolve shared catalogue data once" covers only that call site.
+`Promise.all`. A transaction holds one connection, and the driver queues a second query on it until
+the first finishes, so starting them together saves nothing. Measured with `pg@8.22.0` against
+`postgres:18-alpine` on 2026-09-14: two 200 ms `pg_sleep` queries took 426 ms through one client
+under `Promise.all` and 214 ms through two clients (Codex measured 411 ms and 203 ms on the same
+branch). The pattern also stops working on the next major driver version. The installed driver
+warns: _"Calling client.query() when the client is already executing a query is deprecated and will
+be removed in pg@9.0"_ (`node_modules/.pnpm/pg@8.22.0/node_modules/pg/lib/client.js:36`). In that run
+the warning printed for three queries started together and not for two, because it fires only when
+a query is already waiting behind the running one. `computeDailyClose`
+(`packages/reporting/src/daily-close.ts`) started three this way until 2026-09-14.
+
+**No test or guard enforces this rule anywhere.** The `fireLines` single-call test and the
+preparation-route read-count test count calls and queries; neither can tell whether queries overlap.
+The missing guard is a Track C item in `docs/backlog.md`.
 
 ## A by-id read still needs its own `eq(table.tenantId, cfg.tenantId)` — one-tenant-per-database is NOT the query's isolation boundary
 
