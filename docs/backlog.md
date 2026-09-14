@@ -870,7 +870,7 @@ ongoing overhaul listed at the top of Track A.
 - **Seven dropdowns still bind `.value` alone over options from a list, but none is known to show
   the wrong choice today** (2026-09-14; read, not run). Each binds `.value` on a `<select>` whose
   options come from a `.map(…)` and marks no option `selected` — the shape that showed "Downstairs
-  bar" on the till while it sold from Deli counter (CLAUDE.md §3). Found by a text scan, checked by
+  bar" on the till while it sold from Deli counter, fixed by #365 (CLAUDE.md §3). Found by a text scan, checked by
   hand: `apps/dashboard/src/screens/my-schedule-screen.ts:393`, `:407`, `:459`,
   `apps/dashboard/src/screens/units-screen.ts:428`, and
   `apps/till/src/screens/till-schedule-screen.ts:390`, `:404`, `:457` (plus the doneness picker in
@@ -880,6 +880,14 @@ ongoing overhaul listed at the top of Track A.
   one of them is next touched, mark its options `.selected` the way
   `apps/till/src/screens/till-counter-screen.ts` now does, with a test that opens it on a non-first
   choice and reads `select.selectedOptions[0]`.
+- **The counter till may start in a zone its service zone dropdown does not list** (found
+  2026-09-14; read, not run). The till's zone list drops `table_tab` zones (`listDefaultZoneOffers`
+  in `apps/server/src/till-api.ts`), but its starting zone comes from `resolveNewOrderZone`
+  (`packages/venue-service/src/operations.ts`): the device's default, else the zone marked
+  `is_counter_default`, neither filtered by service mode. In real Chromium, a chosen zone missing
+  from the list makes the dropdown show the first zone (checked while reviewing #365). **Next
+  action:** find whether a `table_tab` zone can be the counter default or a device default; if it
+  can, decide whether that is refused where it is set or handled by the till.
 - **Remove the built-in doneness picker; doneness becomes a modifier the venue adds itself** (owner
   decision 2026-09-14). The built-in picker is unreachable today: the till shows it only when
   `products.diet.contains` includes `meat` (`isMeatProduct` in
