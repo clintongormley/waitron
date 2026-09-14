@@ -78,31 +78,22 @@ specs/plans in `docs/superpowers/` hold the detail — do not paste receipts bac
 Ranked 2026-09-12, with the reason for each place and the track it belongs to. Each item is its own
 brainstorm → spec → plan → PR; fiscal-adjacent ones take owner sign-off at land.
 
-1. **Walk the box setup on real devices** (B1) — the onboarding code landed (#330): certificate
-   guidance before setup details, connection retry/help, matching download/help paths over HTTP and
-   HTTPS, and an installer QR pointing at the guide, across macOS, Windows, Linux, ChromeOS, Android
-   and iPhone/iPad. What is left is physical verification — install the certificate, reopen with no
-   warning, then replace it after a re-image — tracked per OS/browser in
-   [ui-review.md](ui-review.md). This closes the 2026-09-11 setup dead-end: a re-image replaced the
-   box's CA while the browser trusted the old one, and the provisioning error offered no recovery
-   instructions.
-
-2. **The till does not load its menu until a manual refresh** (A4). Seen on the blank-box-to-selling
+1. **The till does not load its menu until a manual refresh** (A4). Seen on the blank-box-to-selling
    run; the box and sale path worked.
 
-3. **Somewhere for things that went wrong to show up** (A5). The `incidents` table has several
+2. **Somewhere for things that went wrong to show up** (A5). The `incidents` table has several
    producers and no reader, and the dashboard has no notification surface. A rejected filing, a payment drift, a
    stalled print agent and a failed or stale backup are all invisible; several other items end "…waits
    for the notification surface".
 
-4. **Backups that leave the box** (B2) — S3 first, then Drive. With the mirror deferred, a bucket is a
+3. **Backups that leave the box** (B2) — S3 first, then Drive. With the mirror deferred, a bucket is a
    standalone primary's only off-box copy. Only `LocalFsBackend` exists.
 
-5. **The displays and the printers walked at the real box** (A4, A3) — till, handheld and KDS through
+4. **The displays and the printers walked at the real box** (A4, A3) — till, handheld and KDS through
    [ui-review.md](ui-review.md), and the first physical print since #327: slips, duplicates, the
    drawer pulse, the feed-before-cut.
 
-6. **The bootable USB installer** (B3) — the last piece of "install without a terminal".
+5. **The bootable USB installer** (B3) — the last piece of "install without a terminal".
 
 Then the on-prem mirror, then the cloud primary — under *Afterwards*. Everything else ranks beneath
 these.
@@ -998,13 +989,9 @@ visible at all. That distinction is exactly what the new `CLAUDE.md` §4 rule is
 itself is not named there. **Next action:** name it and its hedge on that rule's line, whenever
 `CLAUDE.md` is next opened for a PR.
 
-Still to walk on real devices: installing the certificate, reopening without a warning, then replacing
-it after a re-image. Track each OS/browser in [ui-review.md](ui-review.md). Browser rendering and a
-successful API request do not verify an OS trust installation. The original Mac/Chrome incident
-needed removal of the old CA and a full browser quit; HTTPS-only browser policy can still prevent
-opening HTTP before any Waitron page runs — and since 2026-09-13 the guide no longer carries a written
-answer to that case, so the HTTPS-only row in [ui-review.md](ui-review.md) is now walking an
-unanswered one. `deploy/README.md` keeps the advice for whoever installs the box.
+Walked on real devices — the owner reported the certificate installation, reopening without a
+warning, and replacement after a re-image done on 2026-09-14. Which OS and browser versions were
+walked was not recorded here. `deploy/README.md` keeps the advice for whoever installs the box.
 
 ### B2. Backups that leave the box
 

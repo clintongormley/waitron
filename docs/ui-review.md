@@ -176,6 +176,9 @@ the old-certificate recovery instructions. Record the actual OS and browser vers
 | Android | Chrome, Edge, Firefox, Samsung Internet | Pending | Pending |
 | iPhone/iPad | Safari, Chrome, Edge, Firefox | Pending | Pending |
 
+**Owner reported the device walkthrough done on 2026-09-14.** The table was not filled in per row, so
+the versions walked are not recorded, and whether the HTTPS-only row below was walked is not stated.
+
 Also walk a browser with HTTPS-only navigation enabled. **The guide no longer documents a way
 through this** — the section carrying the browser's HTTP exception and the transfer-from-another-device
 route was deleted on 2026-09-13 (see *The guide restructured* in
