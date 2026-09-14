@@ -1,16 +1,17 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { CategoryMembershipPicker } from "./category-membership-picker.js";
-import { t } from "../i18n/t.js";
-import type { CategorySummary } from "../api/client.js";
+import { setLocale, t } from "../i18n/t.js";
+import type { CategorySummary, ProductCategories } from "../api/client.js";
 
 afterEach(cleanupWidgets);
+afterEach(() => setLocale("es-ES"));
 
 const food: CategorySummary = {
   id: "food",
   name: { en: "Food" },
   image: null,
-  color: null,
+  color: "#112233",
   parentId: null,
 };
 const drink: CategorySummary = {
@@ -21,28 +22,126 @@ const drink: CategorySummary = {
   parentId: null,
 };
 
+/** Drives a `wt-combobox` the way the real component does when a person picks an option. */
+function pick(combobox: HTMLElement, detail: { values: string[] } | { value: string }): void {
+  Object.assign(combobox, detail);
+  combobox.dispatchEvent(new CustomEvent("wt-change", { detail, bubbles: true, composed: true }));
+}
+
+it("emits the chosen category ids and reporting id from the comboboxes", async () => {
+  setLocale("en-GB");
+  const cats: CategorySummary[] = [
+    { id: "food", name: { en: "Food" }, image: null, color: "#112233", parentId: null },
+    { id: "drink", name: { en: "Drinks" }, image: null, color: null, parentId: null },
+  ];
+  const el = await mountWidget<CategoryMembershipPicker>("dashboard-category-membership-picker", {
+    categories: cats,
+    languages: { defaultLanguage: "en", languages: ["en"] },
+    value: { categoryIds: ["food"], primaryCategoryId: "food" },
+  });
+  // multi-select the drink category
+  const multi = el.el.shadowRoot!.querySelector<HTMLElement & { values: string[] }>(
+    'wt-combobox[data-test="member-categories"]',
+  )!;
+  multi.values = ["food", "drink"];
+  multi.dispatchEvent(
+    new CustomEvent("wt-change", {
+      detail: { values: ["food", "drink"] },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await el.el.updateComplete;
+  const events: { value: ProductCategories }[] = [];
+  el.el.addEventListener("wt-submit", (e) => events.push((e as CustomEvent).detail));
+  el.el.shadowRoot!.querySelector<HTMLElement>('[data-test="save-membership"]')!.click();
+  expect(events[0].value.categoryIds.sort()).toEqual(["drink", "food"]);
+});
+
+it("shows the chosen categories as lozenges", async () => {
+  const cats: CategorySummary[] = [
+    { id: "food", name: { en: "Food" }, image: null, color: "#112233", parentId: null },
+  ];
+  const el = await mountWidget<CategoryMembershipPicker>("dashboard-category-membership-picker", {
+    categories: cats,
+    languages: { defaultLanguage: "en", languages: ["en"] },
+    value: { categoryIds: ["food"], primaryCategoryId: "food" },
+  });
+  expect(el.el.shadowRoot!.querySelectorAll("wt-lozenge").length).toBe(1);
+});
+
+it("makes the first chosen category the reporting one and keeps it across further picks", async () => {
+  const { el } = await mountWidget<CategoryMembershipPicker>(
+    "dashboard-category-membership-picker",
+    {
+      categories: [food, drink],
+      languages: { defaultLanguage: "en", languages: ["en"] },
+      value: { categoryIds: [], primaryCategoryId: null },
+    },
+  );
+  const multi = el.shadowRoot!.querySelector<HTMLElement>(
+    'wt-combobox[data-test="member-categories"]',
+  )!;
+  pick(multi, { values: ["food"] });
+  await el.updateComplete;
+  pick(multi, { values: ["food", "drink"] });
+  await el.updateComplete;
+  const submit = vi.fn();
+  el.addEventListener("wt-submit", submit);
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="save-membership"]')!.click();
+  expect(submit.mock.calls[0]![0].detail.value).toEqual({
+    categoryIds: ["food", "drink"],
+    primaryCategoryId: "food",
+  });
+});
+
+it("clears the reporting category when its category is removed", async () => {
+  const { el } = await mountWidget<CategoryMembershipPicker>(
+    "dashboard-category-membership-picker",
+    {
+      categories: [food, drink],
+      languages: { defaultLanguage: "en", languages: ["en"] },
+      value: { categoryIds: ["food", "drink"], primaryCategoryId: "food" },
+    },
+  );
+  const multi = el.shadowRoot!.querySelector<HTMLElement>(
+    'wt-combobox[data-test="member-categories"]',
+  )!;
+  pick(multi, { values: ["drink"] });
+  await el.updateComplete;
+  const submit = vi.fn();
+  el.addEventListener("wt-submit", submit);
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="save-membership"]')!.click();
+  expect(submit.mock.calls[0]![0].detail.value).toEqual({
+    categoryIds: ["drink"],
+    primaryCategoryId: null,
+  });
+});
+
 it("submits memberships with no reporting category", async () => {
   const { el } = await mountWidget<CategoryMembershipPicker>(
     "dashboard-category-membership-picker",
     {
       categories: [food, drink],
-      locales: ["en"],
+      languages: { defaultLanguage: "en", languages: ["en"] },
       value: { categoryIds: [], primaryCategoryId: null },
     },
   );
+  const multi = el.shadowRoot!.querySelector<HTMLElement>(
+    'wt-combobox[data-test="member-categories"]',
+  )!;
+  pick(multi, { values: ["food"] });
+  await el.updateComplete;
+  pick(multi, { values: ["food", "drink"] });
+  await el.updateComplete;
+  // Choosing the first category auto-assigns it as reporting; explicitly choose "None" instead.
+  const reporting = el.shadowRoot!.querySelector<HTMLElement>(
+    'wt-combobox[data-test="reporting-category"]',
+  )!;
+  pick(reporting, { value: "" });
+  await el.updateComplete;
   const submit = vi.fn();
   el.addEventListener("wt-submit", submit);
-  for (const category of [food, drink]) {
-    el.shadowRoot!.querySelector<HTMLInputElement>(`input[value=${category.id}]`)!.click();
-    await el.updateComplete;
-  }
-  // Checking the first category auto-assigns it as primary; explicitly choose "None" instead.
-  const primary = el.shadowRoot!.querySelector<HTMLSelectElement>(
-    'select[name="primary-category"]',
-  )!;
-  primary.value = "";
-  primary.dispatchEvent(new Event("change", { bubbles: true }));
-  await el.updateComplete;
   el.shadowRoot!.querySelector<HTMLElement>('[data-test="save-membership"]')!.click();
   expect(submit).toHaveBeenCalledOnce();
   expect(submit.mock.calls[0]![0].detail.value).toEqual({
@@ -56,17 +155,16 @@ it("offers a None option that maps the reporting category to null", async () => 
     "dashboard-category-membership-picker",
     {
       categories: [food],
-      locales: ["en"],
+      languages: { defaultLanguage: "en", languages: ["en"] },
       value: { categoryIds: ["food"], primaryCategoryId: "food" },
     },
   );
-  const primary = el.shadowRoot!.querySelector<HTMLSelectElement>(
-    'select[name="primary-category"]',
-  )!;
-  const none = primary.querySelector<HTMLOptionElement>('option[value=""]')!;
-  expect(none.textContent?.trim()).toBe(t("categories.none"));
-  primary.value = "";
-  primary.dispatchEvent(new Event("change", { bubbles: true }));
+  const reporting = el.shadowRoot!.querySelector<
+    HTMLElement & { options: { value: string; label: string }[] }
+  >('wt-combobox[data-test="reporting-category"]')!;
+  const none = reporting.options.find((option) => option.value === "");
+  expect(none?.label).toBe(t("categories.none"));
+  pick(reporting, { value: "" });
   await el.updateComplete;
   const submit = vi.fn();
   el.addEventListener("wt-submit", submit);

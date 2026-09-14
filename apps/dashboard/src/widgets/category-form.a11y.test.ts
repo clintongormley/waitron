@@ -39,7 +39,11 @@ describe.each(["light", "dark"] as const)("category forms (%s)", (theme) => {
   it("names the colour radiogroup and every one of its options", async () => {
     const { el } = await mountWidget<CategoryForm>(
       "dashboard-category-form",
-      { open: true, languages: { defaultLanguage: "en", languages: ["en"] }, categories: [category] },
+      {
+        open: true,
+        languages: { defaultLanguage: "en", languages: ["en"] },
+        categories: [category],
+      },
       theme,
     );
     const group = el.shadowRoot!.querySelector('[role="radiogroup"]')!;
@@ -59,7 +63,7 @@ describe.each(["light", "dark"] as const)("category forms (%s)", (theme) => {
         "dashboard-category-membership-picker",
         {
           categories: [category],
-          locales: ["en"],
+          languages: { defaultLanguage: "en", languages: ["en"] },
           value: {
             categoryIds: state === "empty" ? [] : [category.id],
             primaryCategoryId: state === "selected" ? category.id : null,

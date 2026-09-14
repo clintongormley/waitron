@@ -1,12 +1,15 @@
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { LitElement, css, html, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, selectStyles } from "@waitron/ui";
+import { baseStyles } from "@waitron/ui";
+import type { ContentLanguages } from "@waitron/shared";
 import type { CategorySummary, ProductCategories } from "../api/client.js";
 import { categoryPath } from "./category-form.js";
-import { t } from "../i18n/t.js";
+import { t, currentLocale } from "../i18n/t.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-combobox.js";
+import "@waitron/ui/src/components/wt-lozenge.js";
 
 @customElement("dashboard-category-membership-picker")
 export class CategoryMembershipPicker extends LitElement {
@@ -17,27 +20,23 @@ export class CategoryMembershipPicker extends LitElement {
 
   static override styles = [
     baseStyles,
-    selectStyles,
     css`
       :host {
         display: grid;
         gap: var(--wt-space-3);
       }
-      fieldset {
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-      }
-      label {
+      .chips {
         display: flex;
+        flex-wrap: wrap;
         gap: var(--wt-space-2);
-        align-items: center;
-        min-height: var(--wt-tap-min);
-        overflow-wrap: anywhere;
       }
     `,
   ];
   @property({ attribute: false }) categories: readonly CategorySummary[] = [];
-  @property({ attribute: false }) locales: readonly string[] = [];
+  @property({ attribute: false }) languages: ContentLanguages = {
+    defaultLanguage: "en",
+    languages: ["en"],
+  };
   @property({ attribute: false }) value: ProductCategories = {
     categoryIds: [],
     primaryCategoryId: null,
@@ -52,15 +51,11 @@ export class CategoryMembershipPicker extends LitElement {
       };
     }
   }
-  #change(event: Event, id: string): void {
-    event.stopPropagation();
-    const selected = (event.target as HTMLInputElement).checked;
-    const ids = selected
-      ? [...this.draft.categoryIds, id]
-      : this.draft.categoryIds.filter((value) => value !== id);
+  #setCategories(ids: string[]): void {
     let primary = this.draft.primaryCategoryId;
+    const added = ids.filter((id) => !this.draft.categoryIds.includes(id));
     if (ids.length === 0) primary = null;
-    else if (selected && this.draft.categoryIds.length === 0) primary = id;
+    else if (this.draft.categoryIds.length === 0 && added.length === 1) primary = added[0]!;
     else if (primary && !ids.includes(primary)) primary = null;
     this.draft = { categoryIds: ids, primaryCategoryId: primary };
   }
@@ -84,28 +79,48 @@ export class CategoryMembershipPicker extends LitElement {
     );
   }
   override render() {
-    return html`<fieldset .disabled=${this.busy}>
-        <legend>${t("categories.membership")}</legend>
-        ${this.categories.map((category) => html`<label><input type="checkbox" name="category-membership" value=${category.id} .checked=${this.draft.categoryIds.includes(category.id)} @change=${(event: Event) => this.#change(event, category.id)} />${categoryPath(category, this.categories, this.locales[0] ?? "en")}</label>`)}
-      </fieldset>
-      <label
-        >${t("editor.reporting_category")}<select
-          name="primary-category"
-          .disabled=${this.busy || !this.draft.categoryIds.length}
-          @change=${(event: Event) => {
-            event.stopPropagation();
-            this.draft = {
-              ...this.draft,
-              primaryCategoryId: (event.target as HTMLSelectElement).value || null,
-            };
-          }}
-        >
-          <option value="" .selected=${this.draft.primaryCategoryId === null}>
-            ${t("categories.none")}
-          </option>
-          ${this.categories.filter((category) => this.draft.categoryIds.includes(category.id)).map((category) => html`<option value=${category.id} .selected=${category.id === this.draft.primaryCategoryId}>${categoryPath(category, this.categories, this.locales[0] ?? "en")}</option>`)}
-        </select></label
-      >
+    const path = (category: CategorySummary) =>
+      categoryPath(category, this.categories, currentLocale(), this.languages);
+    const chosen = this.categories.filter((category) =>
+      this.draft.categoryIds.includes(category.id),
+    );
+    return html`<wt-combobox
+        data-test="member-categories"
+        multiple
+        label=${t("categories.categories_label")}
+        placeholder=${t("categories.categories_placeholder")}
+        .disabled=${this.busy}
+        .options=${this.categories.map((category) => ({
+          value: category.id,
+          label: path(category),
+        }))}
+        .values=${[...this.draft.categoryIds]}
+        @wt-change=${(event: CustomEvent<{ values: string[] }>) => {
+          event.stopPropagation();
+          this.#setCategories(event.detail.values);
+        }}
+      ></wt-combobox>
+      <div class="chips">
+        ${chosen.map(
+          (category) =>
+            html`<wt-lozenge color=${category.color ?? ""}>${path(category)}</wt-lozenge>`,
+        )}
+      </div>
+      <wt-combobox
+        data-test="reporting-category"
+        label=${t("editor.reporting_category")}
+        placeholder=${t("categories.none")}
+        .disabled=${this.busy || this.draft.categoryIds.length === 0}
+        .options=${[
+          { value: "", label: t("categories.none") },
+          ...chosen.map((category) => ({ value: category.id, label: path(category) })),
+        ]}
+        .value=${this.draft.primaryCategoryId ?? ""}
+        @wt-change=${(event: CustomEvent<{ value: string }>) => {
+          event.stopPropagation();
+          this.draft = { ...this.draft, primaryCategoryId: event.detail.value || null };
+        }}
+      ></wt-combobox>
       <wt-form-actions
         ><wt-button
           slot="cancel"

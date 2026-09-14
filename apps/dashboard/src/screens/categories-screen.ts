@@ -885,7 +885,7 @@ export class CategoriesScreen extends LitElement {
             ? html`<p>${this.#text(this.memberProduct.descriptions)}</p>
                 <dashboard-category-membership-picker
                   .categories=${this.categories}
-                  .locales=${this.languages.languages}
+                  .languages=${this.languages}
                   .value=${this.membership}
                   .busy=${this.busy}
                   @wt-submit=${(event: CustomEvent<{ value: ProductCategories }>) => void this.#saveMembership(event)}

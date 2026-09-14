@@ -130,11 +130,17 @@ it("still lets you choose a replacement reporting category before saving", async
   await el.updateComplete;
   const picker = el.shadowRoot!.querySelector("dashboard-category-membership-picker")!;
   await picker.updateComplete;
-  const primary = picker.shadowRoot!.querySelector<HTMLSelectElement>(
-    'select[name="primary-category"]',
+  const primary = picker.shadowRoot!.querySelector<HTMLElement>(
+    'wt-combobox[data-test="reporting-category"]',
   )!;
-  primary.value = "drink";
-  primary.dispatchEvent(new Event("change", { bubbles: true }));
+  Object.assign(primary, { value: "drink" });
+  primary.dispatchEvent(
+    new CustomEvent("wt-change", {
+      detail: { value: "drink" },
+      bubbles: true,
+      composed: true,
+    }),
+  );
   await picker.updateComplete;
   picker.shadowRoot!.querySelector<HTMLElement>('[data-test="save-membership"]')!.click();
   await vi.waitFor(() =>
@@ -542,7 +548,9 @@ it.each([
     if (control.tagName.toLowerCase() === "wt-combobox") {
       const combo = control as HTMLElementTagNameMap["wt-combobox"];
       await combo.updateComplete;
-      const errorId = combo.shadowRoot!.querySelector(".trigger")!.getAttribute("aria-describedby")!;
+      const errorId = combo
+        .shadowRoot!.querySelector(".trigger")!
+        .getAttribute("aria-describedby")!;
       expect(combo.shadowRoot!.getElementById(errorId)!.textContent).toBe(form.fieldErrors[field]);
     } else {
       const errorId = control.getAttribute("aria-describedby")!;
