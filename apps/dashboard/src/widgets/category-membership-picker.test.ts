@@ -49,11 +49,6 @@ it("submits memberships with no reporting category", async () => {
     categoryIds: ["food", "drink"],
     primaryCategoryId: null,
   });
-  expect(
-    el.shadowRoot!.querySelector<HTMLElement & { errors: string[] }>("wt-form-error-summary")!
-      .errors,
-  ).toEqual([]);
-  expect(el.shadowRoot!.getElementById("primary-category-error")!.textContent).toBe("");
 });
 
 it("offers a None option that maps the reporting category to null", async () => {

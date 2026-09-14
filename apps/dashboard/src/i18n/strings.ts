@@ -28,11 +28,8 @@ export const en = {
   "categories.empty": "You have no categories yet.",
   "categories.load_error": "The categories could not be loaded.",
   "categories.delete_confirm": "Delete this category?",
-  "categories.primary_required":
-    "Choose a replacement Reporting Category before removing this membership.",
   "categories.membership": "Product categories",
   "categories.search_products": "Search products",
-  "categories.choose_primary": "Choose primary",
   "categories.no_products": "No directly assigned products.",
   "categories.mode_tree": "Tree",
   "categories.mode_flat": "Flat",
@@ -771,7 +768,6 @@ export const en = {
   "editor.price_invalid": "Enter a nonnegative price with at most two decimal places.",
   "editor.tax_required": "Choose a tax treatment.",
   "editor.variant_name_required": "Enter a variant name in the default language.",
-  "editor.reporting_category_required": "Choose a reporting category.",
   "editor.reporting_category_invalid":
     "Choose a reporting category that is one of the selected categories.",
   "editor.variants": "Variants",
@@ -1210,11 +1206,8 @@ export const es: Record<StringKey, string> = {
   "categories.empty": "Todavía no tienes categorías.",
   "categories.load_error": "No se pudieron cargar las categorías.",
   "categories.delete_confirm": "¿Eliminar esta categoría?",
-  "categories.primary_required":
-    "Elige una Categoría de informes de reemplazo antes de quitar esta asignación.",
   "categories.membership": "Categorías del producto",
   "categories.search_products": "Buscar productos",
-  "categories.choose_primary": "Elige la principal",
   "categories.no_products": "No hay productos asignados directamente.",
   "categories.mode_tree": "Árbol",
   "categories.mode_flat": "Lista",
@@ -1924,7 +1917,6 @@ export const es: Record<StringKey, string> = {
   "editor.price_invalid": "Introduce un precio no negativo con un máximo de dos decimales.",
   "editor.tax_required": "Elige un tratamiento fiscal.",
   "editor.variant_name_required": "Introduce un nombre de variante en el idioma predeterminado.",
-  "editor.reporting_category_required": "Elige una categoría de informes.",
   "editor.reporting_category_invalid":
     "Elige una categoría de informes que esté entre las categorías seleccionadas.",
   "editor.variants": "Variantes",
