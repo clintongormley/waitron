@@ -1138,6 +1138,11 @@ export type PrintTransport = "usb" | "network_tcp" | "bluetooth" | "cloud_poll";
 /** A printer's kitchen-ticket grouping — the `print_ticket_scope` pgEnum (Slice B). */
 export type PrintTicketScope = "station" | "order";
 
+/** A printer's layout settings — mirrors `@waitron/printing`'s `PaperWidth`, `Resolution`, `CharacterSet`. */
+export type PrintPaperWidth = "58mm" | "80mm";
+export type PrintResolution = "180dpi" | "203dpi";
+export type PrintCharacterSet = "wpc1252" | "pc858" | "plain";
+
 /** One outbox job's lifecycle state — the `print_job_status` pgEnum (schema/print-jobs.ts). */
 export type PrintJobStatus = "queued" | "printing" | "done" | "failed";
 
@@ -1173,6 +1178,9 @@ export interface Printer {
   localKey: string | null;
   pollId: string | null;
   ticketScope: PrintTicketScope;
+  paperWidth: PrintPaperWidth;
+  resolution: PrintResolution;
+  characterSet: PrintCharacterSet;
   active: boolean;
 }
 
@@ -1189,6 +1197,9 @@ export interface PrinterInput {
    * `printer.already_registered`. */
   localKey?: string;
   pollId?: string;
+  paperWidth?: PrintPaperWidth;
+  resolution?: PrintResolution;
+  characterSet?: PrintCharacterSet;
 }
 
 export interface PrinterAddressProbe {
@@ -1240,6 +1251,9 @@ export interface PrinterPatch {
   localKey?: string | null;
   pollId?: string | null;
   ticketScope?: PrintTicketScope;
+  paperWidth?: PrintPaperWidth;
+  resolution?: PrintResolution;
+  characterSet?: PrintCharacterSet;
   active?: boolean;
 }
 
@@ -1251,6 +1265,9 @@ export type PrintPreviewBlock =
 
 /** A bounded preview of the recorded printer commands. */
 export interface PrintJobPreview {
+  /** The printer's current column count and resolution. */
+  columns: number;
+  dpi: number;
   text: string;
   blocks: PrintPreviewBlock[];
   qrData: string[];

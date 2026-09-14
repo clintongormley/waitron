@@ -1935,7 +1935,7 @@ export async function startServer(
     // session). Routes only — no database work at boot.
     mountPrintApi(
       app,
-      { db, cfg: till, readMembership: () => readNodeMembership(db), pairingMode },
+      { db, cfg: till, readMembership: () => readNodeMembership(db), pairingMode, venueLocale },
       log,
     );
     // The card-payments MANAGEMENT surface on the SAME app (design Phase C): connect/disconnect a

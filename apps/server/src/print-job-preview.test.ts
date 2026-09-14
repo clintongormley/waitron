@@ -9,6 +9,8 @@ describe("print job preview", () => {
         esc().init().line("Café <table>").line("Total 12.50").kick().feedAndCut().bytes(),
       ),
     ).toEqual({
+      columns: 42,
+      dpi: 180,
       text: "Café <table>\nTotal 12.50\n",
       blocks: [
         { kind: "text", text: "Café <table>\nTotal 12.50\n" },
@@ -27,6 +29,8 @@ describe("print job preview", () => {
     expect(
       previewPrintJob(esc().init().line("Receipt").qr(data).line("Thank you").bytes()),
     ).toEqual({
+      columns: 42,
+      dpi: 180,
       text: "Receipt\nThank you\n",
       blocks: [
         { kind: "text", text: "Receipt\n" },
@@ -214,4 +218,37 @@ it("omits zero-sized and excessively tall raster images", () => {
     expect(result.omittedGraphics).toBe(true);
     expect(result.blocks).toEqual([]);
   }
+});
+
+describe("character sets", () => {
+  it("decodes text through the table the payload selects, including bytes 0x80-0x9F", () => {
+    const wpc = previewPrintJob(esc("wpc1252").init().line("12,50 €").bytes());
+    expect(wpc).toMatchObject({ text: "12,50 €\n", unsupported: false, truncated: false });
+    const pc = previewPrintJob(esc("pc858").init().line("Café ü ç Ç €").bytes());
+    expect(pc).toMatchObject({ text: "Café ü ç Ç €\n", unsupported: false, truncated: false });
+  });
+
+  it("returns to the starting table on ESC @", () => {
+    const result = previewPrintJob(
+      Uint8Array.of(0x1b, 0x74, 19, 0x82, 0x0a, 0x1b, 0x40, 0xe9, 0x0a),
+    );
+    expect(result).toMatchObject({ text: "é\né\n", unsupported: false, truncated: false });
+  });
+
+  it("stops at a byte 0x80-0x9F when no table was selected", () => {
+    expect(previewPrintJob(Uint8Array.of(0x41, 0x80, 0x0a)).unsupported).toBe(true);
+  });
+
+  it.each([0, 1, 17, 99])("stops the preview on character table %i", (table) => {
+    const result = previewPrintJob(Uint8Array.of(0x1b, 0x40, 0x1b, 0x74, table, 0x41));
+    expect(result.unsupported).toBe(true);
+    expect(result.text).toBe("");
+  });
+
+  it("reports the printer's column count and resolution", () => {
+    expect(previewPrintJob(Uint8Array.of(0x41), { columns: 30, dpi: 203 })).toMatchObject({
+      columns: 30,
+      dpi: 203,
+    });
+  });
 });

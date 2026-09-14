@@ -40,10 +40,10 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { perDishOptionQuantity } from "@waitron/shared";
-import { enqueuePrintJob } from "@waitron/printing";
-import type { PrintConfig } from "@waitron/printing";
+import { columnsFor, enqueuePrintJob } from "@waitron/printing";
+import type { CharacterSet, PaperWidth, PrintConfig } from "@waitron/printing";
 import { formatCorrectionSlip, formatKitchenTicket } from "./kitchen-ticket.js";
-import type { KitchenTicketItem, KitchenTicketStation } from "./kitchen-ticket.js";
+import type { KitchenLayout, KitchenTicketItem, KitchenTicketStation } from "./kitchen-ticket.js";
 import type { TillConfig } from "./till-config.js";
 
 /**
@@ -105,12 +105,22 @@ async function lockActivePrinters(
   tx: Transaction,
   tenantId: string,
   stationIds: string[],
-): Promise<{ stationId: string; printerId: string; ticketScope: "station" | "order" }[]> {
+): Promise<
+  {
+    stationId: string;
+    printerId: string;
+    ticketScope: "station" | "order";
+    paperWidth: PaperWidth;
+    characterSet: CharacterSet;
+  }[]
+> {
   return tx
     .select({
       stationId: stationPrinters.stationId,
       printerId: stationPrinters.printerId,
       ticketScope: printers.ticketScope,
+      paperWidth: printers.paperWidth,
+      characterSet: printers.characterSet,
     })
     .from(stationPrinters)
     .innerJoin(
@@ -128,6 +138,28 @@ async function lockActivePrinters(
       ),
     )
     .for("share", { of: printers });
+}
+
+/** The settings that change a kitchen ticket's bytes. Resolution does not: kitchen paper has no QR. */
+interface KitchenPrinterLayout {
+  paperWidth: PaperWidth;
+  characterSet: CharacterSet;
+}
+
+function layoutOf(printer: KitchenPrinterLayout): KitchenLayout {
+  return { columns: columnsFor(printer.paperWidth), charset: printer.characterSet };
+}
+
+/** `printers` grouped by paper width and character set, in first-seen order: one ticket per group. */
+function groupByLayout<T extends KitchenPrinterLayout>(printers: readonly T[]): T[][] {
+  const groups = new Map<string, T[]>();
+  for (const printer of printers) {
+    const key = `${printer.paperWidth}|${printer.characterSet}`;
+    const group = groups.get(key);
+    if (group === undefined) groups.set(key, [printer]);
+    else group.push(printer);
+  }
+  return [...groups.values()];
 }
 
 /**
@@ -336,13 +368,19 @@ export async function enqueueKitchenTickets(
     }))
     .sort((a, b) => a.name.localeCompare(b.name));
 
-  const printersByStation = new Map<
-    string,
-    { printerId: string; ticketScope: "station" | "order" }[]
-  >();
+  interface AttachedPrinter extends KitchenPrinterLayout {
+    printerId: string;
+    ticketScope: "station" | "order";
+  }
+  const printersByStation = new Map<string, AttachedPrinter[]>();
   for (const mapping of mappingRows) {
     const bucket = printersByStation.get(mapping.stationId) ?? [];
-    bucket.push({ printerId: mapping.printerId, ticketScope: mapping.ticketScope });
+    bucket.push({
+      printerId: mapping.printerId,
+      ticketScope: mapping.ticketScope,
+      paperWidth: mapping.paperWidth,
+      characterSet: mapping.characterSet,
+    });
     printersByStation.set(mapping.stationId, bucket);
   }
 
@@ -351,48 +389,50 @@ export async function enqueueKitchenTickets(
   const tableLabel = order.tableLabel ?? "";
   const orderNumber = order.orderNumber;
 
-  // Station-scope printers print their OWN station's items now; order-scope (group) printers are
-  // collected and deduped, then print ONE consolidated whole-event ticket each, below.
-  const groupPrinterIds = new Set<string>();
+  // Station-scope printers print their OWN station's items now, one ticket per distinct layout;
+  // order-scope (group) printers are collected and deduped by id, then print ONE consolidated
+  // whole-event ticket per distinct layout, below.
+  const groupPrinters = new Map<string, AttachedPrinter>();
   for (const station of stations) {
-    // Build this station's ticket bytes ONCE per station, then enqueue the SAME bytes to each
-    // attached station-scope printer — a station with N station-scope printers formats byte-identical
-    // bytes once, not N times. `formatKitchenTicket` is a pure byte producer, so building it for a
-    // station that turns out to have only group-scope printers computes an unused (discarded) value
-    // and enqueues nothing — no behaviour change. Mirrors the consolidated group ticket below, which
-    // is likewise built once then looped over its printers.
-    const stationTicket = formatKitchenTicket({
-      scope: "station",
-      stationName: station.name,
-      tableLabel,
-      orderNumber,
-      firedAt,
-      items: station.items,
-    });
-    for (const attached of printersByStation.get(station.id) ?? []) {
-      if (attached.ticketScope === "station") {
-        await enqueuePrintJob(tx, printCfg, attached.printerId, stationTicket);
-      } else {
-        groupPrinterIds.add(attached.printerId);
+    const attached = printersByStation.get(station.id) ?? [];
+    for (const printer of attached) {
+      if (printer.ticketScope === "order") groupPrinters.set(printer.printerId, printer);
+    }
+    const stationScope = attached.filter((printer) => printer.ticketScope === "station");
+    for (const group of groupByLayout(stationScope)) {
+      const stationTicket = formatKitchenTicket(
+        {
+          scope: "station",
+          stationName: station.name,
+          tableLabel,
+          orderNumber,
+          firedAt,
+          items: station.items,
+        },
+        layoutOf(group[0]!),
+      );
+      for (const printer of group) {
+        await enqueuePrintJob(tx, printCfg, printer.printerId, stationTicket);
       }
     }
   }
 
-  // ONE consolidated ticket of the WHOLE event per DISTINCT group printer: every involved station's items
-  // under its own sub-header, so the pass reads the whole fire at a glance.
-  if (groupPrinterIds.size > 0) {
-    const consolidated = formatKitchenTicket({
-      scope: "order",
-      tableLabel,
-      orderNumber,
-      firedAt,
-      stations: stations.map((station): KitchenTicketStation => ({
-        stationName: station.name,
-        items: station.items,
-      })),
-    });
-    for (const printerId of groupPrinterIds) {
-      await enqueuePrintJob(tx, printCfg, printerId, consolidated);
+  for (const group of groupByLayout([...groupPrinters.values()])) {
+    const consolidated = formatKitchenTicket(
+      {
+        scope: "order",
+        tableLabel,
+        orderNumber,
+        firedAt,
+        stations: stations.map((station): KitchenTicketStation => ({
+          stationName: station.name,
+          items: station.items,
+        })),
+      },
+      layoutOf(group[0]!),
+    );
+    for (const printer of group) {
+      await enqueuePrintJob(tx, printCfg, printer.printerId, consolidated);
     }
   }
 }
@@ -445,10 +485,14 @@ export async function enqueueCorrectionSlips(
 
   // Every ACTIVE printer attached to a station, keyed by station id (station- and order-scope alike — a
   // correction slip has no consolidated variant, so scope does not branch here).
-  const printersByStation = new Map<string, string[]>();
+  const printersByStation = new Map<string, (KitchenPrinterLayout & { printerId: string })[]>();
   for (const mapping of mappingRows) {
     const bucket = printersByStation.get(mapping.stationId) ?? [];
-    bucket.push(mapping.printerId);
+    bucket.push({
+      printerId: mapping.printerId,
+      paperWidth: mapping.paperWidth,
+      characterSet: mapping.characterSet,
+    });
     printersByStation.set(mapping.stationId, bucket);
   }
 
@@ -460,17 +504,22 @@ export async function enqueueCorrectionSlips(
     // A line whose station has no active printer produced no paper — nothing to correct there.
     if (attachedPrinters === undefined) continue;
     const entry = itemsByLine.get(target.workingOrderLineId)!;
-    // One slip's bytes built ONCE per item, then enqueued to each attached printer of its station.
-    const bytes = formatCorrectionSlip({
-      kind,
-      stationName: stationNames.get(target.stationId)!,
-      tableLabel: header.tableLabel,
-      orderNumber: header.orderNumber,
-      at,
-      item: entry.item,
-    });
-    for (const printerId of attachedPrinters) {
-      await enqueuePrintJob(tx, printCfg, printerId, bytes);
+    // One slip's bytes per item and distinct layout, enqueued to each printer with that layout.
+    for (const group of groupByLayout(attachedPrinters)) {
+      const bytes = formatCorrectionSlip(
+        {
+          kind,
+          stationName: stationNames.get(target.stationId)!,
+          tableLabel: header.tableLabel,
+          orderNumber: header.orderNumber,
+          at,
+          item: entry.item,
+        },
+        layoutOf(group[0]!),
+      );
+      for (const printer of group) {
+        await enqueuePrintJob(tx, printCfg, printer.printerId, bytes);
+      }
     }
   }
 }

@@ -22,6 +22,19 @@ export type {
 } from "./printers.js";
 export { enqueuePrintJob, resendPrintJob, canResendPrintJob } from "./outbox.js";
 export { FEED_BEFORE_CUT, EscBuilder, esc } from "./escpos.js";
+export { decodeBytes, encodeText, prepareText } from "./charset.js";
+export type { CharacterSet } from "./charset.js";
+export {
+  QR_QUIET_ZONE,
+  chooseQrDots,
+  columnsFor,
+  dpiValue,
+  labelAmountLines,
+  safeWidthDots,
+  withQuietZone,
+  wrapText,
+} from "./layout.js";
+export type { PaperWidth, Resolution } from "./layout.js";
 export {
   MAX_DELIVERY_ATTEMPTS,
   PULL_BATCH_LIMIT,

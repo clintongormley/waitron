@@ -304,10 +304,11 @@ describe("configuration transfer database path", () => {
            'Kitchen agent', 'source-agent-token', true, 'source-box.local')`);
       await tx.execute(sql`
         insert into printers
-          (id, tenant_id, location_id, name, transport, local_key, active)
+          (id, tenant_id, location_id, name, transport, local_key, active,
+           paper_width, resolution, character_set)
         values
           ('55555555-aaaa-aaaa-aaaa-555555555555', ${source.tenantId}, ${source.locationId},
-           'Kitchen printer', 'usb', 'B120300001', true)`);
+           'Kitchen printer', 'usb', 'B120300001', true, '58mm', '203dpi', 'pc858')`);
       await tx.execute(sql`
         insert into sales
           (tenant_id, till_id, series_id, node_id, invoice_number, issued_at,
@@ -458,6 +459,17 @@ describe("configuration transfer database path", () => {
       target_payments: 0,
       target_bookings: 0,
     });
+
+    const printerSettings = await suite.db.execute<{
+      paper_width: string;
+      resolution: string;
+      character_set: string;
+    }>(sql`
+      select paper_width, resolution, character_set from printers
+      where tenant_id = ${target.tenantId} and local_key = 'B120300001'`);
+    expect(printerSettings.rows).toEqual([
+      { paper_width: "58mm", resolution: "203dpi", character_set: "pc858" },
+    ]);
 
     const fiscal = ALL_MODULES.find((module) => module.fiscal?.id === "verifactu")!.fiscal!;
     await withTenant(suite.db, target.tenantId, (tx) =>

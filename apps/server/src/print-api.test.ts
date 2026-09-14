@@ -2,7 +2,14 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, asAppUser, joinRequests, printAgents, withTenant } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  asAppUser,
+  joinRequests,
+  printAgents,
+  printJobs,
+  withTenant,
+} from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, hashPin, startManagementSession } from "@waitron/identity";
@@ -14,9 +21,11 @@ import {
   seriesId as brandSeriesId,
   tenantId as brandTenantId,
   tillId as brandTillId,
+  type SupportedLocale,
 } from "@waitron/shared";
 import type { Logger } from "./logger.js";
 import { mountPrintApi } from "./print-api.js";
+import { formatTestPage } from "./test-page.js";
 import { acceptPrintAgentJoinRequest } from "./join-requests.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
@@ -110,7 +119,13 @@ const suite = usePgliteDb({
 /** Mount the print API. The pairing window is OPEN by default so `joinAndAccept`'s knock is admitted;
  *  `pairingOpen: false` proves the shut-window refusal. `readMembership` returns the fixture above so
  *  the pull route can echo `servers`. */
-function mountApp(opts: { pairingOpen?: boolean; enrolRateLimiter?: EnrolRateLimiter } = {}): Hono {
+function mountApp(
+  opts: {
+    pairingOpen?: boolean;
+    enrolRateLimiter?: EnrolRateLimiter;
+    venueLocale?: SupportedLocale;
+  } = {},
+): Hono {
   const app = new Hono();
   const pairingMode = createPairingMode();
   if (opts.pairingOpen ?? true) pairingMode.open();
@@ -122,6 +137,7 @@ function mountApp(opts: { pairingOpen?: boolean; enrolRateLimiter?: EnrolRateLim
       pairingMode,
       readMembership: async () => MEMBERSHIP,
       enrolRateLimiter: opts.enrolRateLimiter,
+      venueLocale: opts.venueLocale ?? "es-ES",
     },
     noopLog,
   );
@@ -1237,6 +1253,57 @@ describe("mountPrintApi — management: printers CRUD", () => {
     ).json()) as { id: string; localKey: string }[];
     expect(rows.find((r) => r.id === printerId)).toMatchObject({ localKey: secondSerial });
   });
+
+  it("stores, lists and patches the three layout settings, and rejects an unknown value", async () => {
+    const app = mountApp();
+    const created = await send(app, "POST", "/management-api/printers", {
+      cookie: managerCookie,
+      body: {
+        name: "Estrecha",
+        transport: "network_tcp",
+        host: "10.0.0.31",
+        paperWidth: "58mm",
+        characterSet: "pc858",
+      },
+    });
+    expect(created.status).toBe(201);
+    const { id } = (await created.json()) as { id: string };
+    const defaulted = await createNetworkPrinter(app, "10.0.0.32", 9100, "Por defecto");
+    const patched = await send(app, "PATCH", `/management-api/printers/${id}`, {
+      cookie: managerCookie,
+      body: { resolution: "203dpi" },
+    });
+    expect(patched.status).toBe(204);
+    const listed = (await (
+      await send(app, "GET", "/management-api/printers", { cookie: managerCookie })
+    ).json()) as { id: string; paperWidth: string; resolution: string; characterSet: string }[];
+    expect(listed.find((p) => p.id === id)).toMatchObject({
+      paperWidth: "58mm",
+      resolution: "203dpi",
+      characterSet: "pc858",
+    });
+    expect(listed.find((p) => p.id === defaulted)).toMatchObject({
+      paperWidth: "80mm",
+      resolution: "180dpi",
+      characterSet: "wpc1252",
+    });
+    for (const [method, path, body, field] of [
+      [
+        "POST",
+        "/management-api/printers",
+        { name: "Mala", transport: "network_tcp", host: "10.0.0.33", paperWidth: "70mm" },
+        "paperWidth",
+      ],
+      ["PATCH", `/management-api/printers/${id}`, { resolution: "300dpi" }, "resolution"],
+      ["PATCH", `/management-api/printers/${id}`, { characterSet: "cp437" }, "characterSet"],
+    ] as const) {
+      const res = await send(app, method, path, { cookie: managerCookie, body });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field } },
+      });
+    }
+  });
 });
 
 describe("mountPrintApi — management: test-print", () => {
@@ -1275,6 +1342,26 @@ describe("mountPrintApi — management: test-print", () => {
     });
     expect(malformed.status).toBe(400);
   });
+
+  it.each(["es-ES", "en-GB"] as const)(
+    "queues the setup test page in the venue language (%s)",
+    async (venueLocale) => {
+      const app = mountApp({ venueLocale });
+      const printerId = await createNetworkPrinter(app, "10.0.0.41", 9100, `Prueba ${venueLocale}`);
+      const res = await send(app, "POST", `/management-api/printers/${printerId}/test-print`, {
+        cookie: managerCookie,
+      });
+      expect(res.status).toBe(202);
+      const { jobId } = (await res.json()) as { jobId: string };
+      const [job] = await suite.db
+        .select({ payload: printJobs.payload })
+        .from(printJobs)
+        .where(eq(printJobs.id, jobId));
+      expect([...new Uint8Array(job!.payload)]).toEqual([
+        ...formatTestPage({ locale: venueLocale }),
+      ]);
+    },
+  );
 });
 
 describe("mountPrintApi — management: recent jobs", () => {
@@ -1298,6 +1385,72 @@ describe("mountPrintApi — management: recent jobs", () => {
         })
       ).status,
     ).toBe(404);
+  });
+
+  it("previews a job at its printer's current columns and resolution, through its character table", async () => {
+    const app = mountApp();
+    const created = await send(app, "POST", "/management-api/printers", {
+      cookie: managerCookie,
+      body: {
+        name: "Vista 58",
+        transport: "network_tcp",
+        host: "10.0.0.42",
+        paperWidth: "58mm",
+        resolution: "203dpi",
+      },
+    });
+    const { id: narrow } = (await created.json()) as { id: string };
+    const narrowJob = await enqueue(narrow, esc("pc858").init().line("Café 12,50 €").bytes());
+    const narrowPreview = await send(
+      app,
+      "GET",
+      `/management-api/print-jobs/${narrowJob}/preview`,
+      {
+        cookie: managerCookie,
+      },
+    );
+    expect(narrowPreview.status).toBe(200);
+    expect(await narrowPreview.json()).toMatchObject({
+      columns: 30,
+      dpi: 203,
+      text: "Café 12,50 €\n",
+      unsupported: false,
+      truncated: false,
+    });
+    const wide = await createNetworkPrinter(app, "10.0.0.43", 9100, "Vista 80");
+    const wideJob = await enqueue(wide, esc().init().line("x").bytes());
+    const widePreview = await send(app, "GET", `/management-api/print-jobs/${wideJob}/preview`, {
+      cookie: managerCookie,
+    });
+    expect(await widePreview.json()).toMatchObject({ columns: 42, dpi: 180 });
+  });
+
+  it("refuses to preview another tenant's print job by id", async () => {
+    const app = mountApp();
+    // A real job that exists — but under a DIFFERENT tenant. A globally-unique id is not the
+    // isolation boundary (CLAUDE.md §3): tenant A's manager must get print_job.not_found, never
+    // tenant B's bytes.
+    const foreignTenant = await seedTenant(suite.db);
+    const foreignLocation = randomUUID();
+    const foreignPrinter = randomUUID();
+    const foreignJob = randomUUID();
+    await suite.db.execute(
+      sql`insert into locations (id, tenant_id, name, invoice_locales, operation_description)
+        values (${foreignLocation}, ${foreignTenant}, 'Other', array['es-ES'], 'Other')`,
+    );
+    await suite.db.execute(
+      sql`insert into printers (id, tenant_id, location_id, name, transport, host)
+        values (${foreignPrinter}, ${foreignTenant}, ${foreignLocation}, 'Other', 'network_tcp', 'other.local')`,
+    );
+    await suite.db.execute(
+      sql`insert into print_jobs (id, tenant_id, location_id, printer_id, payload)
+        values (${foreignJob}, ${foreignTenant}, ${foreignLocation}, ${foreignPrinter}, decode('01','hex'))`,
+    );
+    const preview = await send(app, "GET", `/management-api/print-jobs/${foreignJob}/preview`, {
+      cookie: managerCookie,
+    });
+    expect(preview.status).toBe(404);
+    expect(await preview.json()).toMatchObject({ error: { code: "print_job.not_found" } });
   });
 
   it("returns an ISO last-print timestamp regardless of database date display settings", async () => {

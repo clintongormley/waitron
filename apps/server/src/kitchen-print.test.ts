@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import net from "node:net";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   asAppUser,
@@ -29,8 +29,12 @@ import type { TillConfig } from "./till-config.js";
 import { createCourse, createStation, setProductCourse, setProductStation } from "./kitchen.js";
 import { addTabRound, createOpenOrder, fireCourse, fireLines, openTab } from "./working-order.js";
 import { attachPrinterToStation } from "./station-printers.js";
-import { enqueueKitchenTickets, reprintOrderTickets } from "./kitchen-print.js";
-import { decodeTicket } from "./testing/decode-ticket.js";
+import {
+  enqueueCorrectionSlips,
+  enqueueKitchenTickets,
+  reprintOrderTickets,
+} from "./kitchen-print.js";
+import { decodeTicket, printedLines } from "./testing/decode-ticket.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import "./errors.js";
 
@@ -491,6 +495,105 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
 
     expect(jobs).toHaveLength(0); // nothing mapped → nothing enqueued (a pure no-op)
     expect(selectCalls).toBe(1); // ONLY the mapping read ran; the three detail SELECTs were skipped
+  });
+
+  it("builds one kitchen ticket per distinct paper width and character set among the printers", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    const ids = await asApp(cfg, async (tx) => {
+      const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const wide = await makePrinter(tx, cfg, "Cocina 80 A", "station");
+      const wideTwin = await makePrinter(tx, cfg, "Cocina 80 B", "station");
+      const narrow = await makePrinter(tx, cfg, "Cocina 58", "station");
+      await updatePrinter(tx, printCfg(cfg), narrow, { paperWidth: "58mm" });
+      const pass = await makePrinter(tx, cfg, "Pase 1252", "order");
+      const passPc858 = await makePrinter(tx, cfg, "Pase 858", "order");
+      await updatePrinter(tx, printCfg(cfg), passPc858, { characterSet: "pc858" });
+      for (const printerId of [wide, wideTwin, narrow, pass, passPc858]) {
+        await attachPrinterToStation(tx, printCfg(cfg), { stationId: cocina.id, printerId });
+      }
+      const steak = await makeProduct(
+        tx,
+        cfg,
+        catalogueId,
+        "Chuletón de buey madurado a la brasa",
+        {
+          stationId: cocina.id,
+        },
+      );
+      await fireNewOrder(tx, cfg, [line(steak)]);
+      return { wide, wideTwin, narrow, pass, passPc858, jobs: await printJobsFor(tx) };
+    });
+    const payloadOf = (printerId: string): Buffer => {
+      const own = ids.jobs.filter((job) => job.printerId === printerId);
+      expect(own).toHaveLength(1);
+      // PGlite decodes bytea to a Uint8Array; wrap it so `.equals` (a Node Buffer method) is available.
+      return Buffer.from(own[0]!.payload);
+    };
+    expect(payloadOf(ids.wideTwin).equals(payloadOf(ids.wide))).toBe(true);
+    expect(payloadOf(ids.narrow).equals(payloadOf(ids.wide))).toBe(false);
+    for (const printed of printedLines(new Uint8Array(payloadOf(ids.narrow)))) {
+      expect(printed.length, printed).toBeLessThanOrEqual(30);
+    }
+    // The 80mm ticket lays out to its own wider column count: a line exceeds 30 (impossible on the
+    // 58mm printer's 30 columns) yet none exceeds 42, and rejoining the wrap continuations recovers the
+    // whole dish name. The fired line reads "1.000 unitat x Chuletón…", whose 15-char qty+unit prefix
+    // wraps the name at both widths — so the plan's original `.endsWith` at 42 could never have held.
+    const wideLines = printedLines(new Uint8Array(payloadOf(ids.wide)));
+    for (const printed of wideLines) expect(printed.length, printed).toBeLessThanOrEqual(42);
+    // Positively pins the WIDER direction, not just narrow != wide: a 30-column layout could not
+    // produce a line this long.
+    expect(wideLines.some((printed) => printed.length > 30)).toBe(true);
+    expect(wideLines.map((l) => l.trimStart()).join(" ")).toContain(
+      "Chuletón de buey madurado a la brasa",
+    );
+    expect(payloadOf(ids.passPc858).equals(payloadOf(ids.pass))).toBe(false);
+    expect([...payloadOf(ids.passPc858).subarray(0, 5)]).toEqual([0x1b, 0x40, 0x1b, 0x74, 19]);
+  });
+
+  it("builds a correction slip once per distinct layout among the line's printers", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    const result = await asApp(cfg, async (tx) => {
+      const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const wide = await makePrinter(tx, cfg, "Cocina 80", "station");
+      const narrow = await makePrinter(tx, cfg, "Cocina 58", "order");
+      await updatePrinter(tx, printCfg(cfg), narrow, { paperWidth: "58mm" });
+      for (const printerId of [wide, narrow]) {
+        await attachPrinterToStation(tx, printCfg(cfg), { stationId: cocina.id, printerId });
+      }
+      const steak = await makeProduct(
+        tx,
+        cfg,
+        catalogueId,
+        "Chuletón de buey madurado a la brasa",
+        {
+          stationId: cocina.id,
+        },
+      );
+      const orderId = await fireNewOrder(tx, cfg, [line(steak)]);
+      const fired = await tx
+        .select({
+          workingOrderLineId: ticketItems.workingOrderLineId,
+          stationId: ticketItems.stationId,
+        })
+        .from(ticketItems)
+        .where(
+          and(eq(ticketItems.tenantId, cfg.tenantId), eq(ticketItems.workingOrderId, orderId)),
+        );
+      const before = new Set((await printJobsFor(tx)).map((job) => job.id));
+      await enqueueCorrectionSlips(tx, cfg, orderId, fired, "VOID");
+      const slips = (await printJobsFor(tx)).filter((job) => !before.has(job.id));
+      return { wide, narrow, slips };
+    });
+    const slipFor = (printerId: string): Buffer => {
+      const own = result.slips.filter((job) => job.printerId === printerId);
+      expect(own).toHaveLength(1);
+      // PGlite decodes bytea to a Uint8Array; wrap it so `.equals` (a Node Buffer method) is available.
+      return Buffer.from(own[0]!.payload);
+    };
+    expect(slipFor(result.narrow).equals(slipFor(result.wide))).toBe(false);
+    for (const printed of printedLines(new Uint8Array(slipFor(result.narrow)))) {
+      expect(printed.length, printed).toBeLessThanOrEqual(30);
+    }
   });
 });
 

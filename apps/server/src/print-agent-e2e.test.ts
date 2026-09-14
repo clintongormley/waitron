@@ -166,7 +166,7 @@ describe("print-agent end to end", () => {
     pairingMode.open();
     mountPrintApi(
       app,
-      { db: suite.db, cfg, pairingMode, readMembership: async () => null },
+      { db: suite.db, cfg, pairingMode, readMembership: async () => null, venueLocale: "es-ES" },
       noopLog,
     );
     mountJoinApi(app, { db: suite.db, cfg, pairingMode }, noopLog);
@@ -255,7 +255,7 @@ describe("print-agent end to end", () => {
     pairingMode.open();
     mountPrintApi(
       app,
-      { db: suite.db, cfg, pairingMode, readMembership: async () => null },
+      { db: suite.db, cfg, pairingMode, readMembership: async () => null, venueLocale: "es-ES" },
       noopLog,
     );
     mountJoinApi(app, { db: suite.db, cfg, pairingMode }, noopLog);

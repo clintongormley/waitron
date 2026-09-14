@@ -27,7 +27,7 @@ import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
-import { createPrinter, deactivatePrinter } from "@waitron/printing";
+import { createPrinter, deactivatePrinter, updatePrinter } from "@waitron/printing";
 import type { PrintConfig } from "@waitron/printing";
 import { NetworkTcpTransport, UsbTransport } from "@waitron/print-agent";
 import {
@@ -44,7 +44,7 @@ import { collectOrder, recordTillSale, reprintSale } from "./till-sale.js";
 import { openTab, parkOrder, placeOrder } from "./working-order.js";
 import { createTable } from "./tables.js";
 import { DRAWER_KICK } from "./receipt-print.js";
-import { bytesInclude, decodeTicket } from "./testing/decode-ticket.js";
+import { bytesInclude, decodeTicket, printedLines } from "./testing/decode-ticket.js";
 
 // REAL Postgres, not PGlite: the point is the auto-print HOOK writing a `print_jobs` outbox row and a
 // `drawer_opens` audit row through the deployment role, atomically with a genuine chained
@@ -425,6 +425,33 @@ describe("cash payment drawer separation", () => {
 });
 
 describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbox)", () => {
+  it("lays the automatic receipt out for the till printer's paper width and character set", async () => {
+    const { cfg, each } = await setupVenue();
+    const printerId = await makePrinter(cfg);
+    await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await updatePrinter(tx, printCfg(cfg), printerId, {
+        paperWidth: "58mm",
+        characterSet: "pc858",
+      });
+    });
+    await configureReceipt(cfg, { mode: "auto", printerId });
+    await recordTillSale(
+      deps(),
+      cfg,
+      {
+        lines: [{ productId: each.id, quantity: "2" }],
+        tender: { method: "cash", amount: "5.00" },
+      },
+      OPERATOR,
+    );
+    const receipt = (await printJobsFor(cfg))
+      .map((job) => new Uint8Array(job.payload))
+      .find((payload) => decodeTicket(payload).includes("VERI*FACTU"))!;
+    expect([...receipt.subarray(0, 5)]).toEqual([0x1b, 0x40, 0x1b, 0x74, 19]);
+    for (const line of printedLines(receipt)) expect(line.length, line).toBeLessThanOrEqual(30);
+  });
+
   it("auto + printer + CASH: enqueues separate receipt and drawer jobs, records the drawer open, never blocks filing", async () => {
     const { cfg, each } = await setupVenue();
     // A network_tcp printer, so the never-block spy below actually covers ITS delivery adapter (a

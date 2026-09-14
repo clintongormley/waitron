@@ -130,7 +130,13 @@ function mountApp(tenant: Tenant): Hono {
   pairingMode.open();
   mountPrintApi(
     app,
-    { db: suite.admin, cfg: cfgOf(tenant), pairingMode, readMembership: async () => null },
+    {
+      db: suite.admin,
+      cfg: cfgOf(tenant),
+      pairingMode,
+      readMembership: async () => null,
+      venueLocale: "es-ES",
+    },
     noopLog,
   );
   return app;

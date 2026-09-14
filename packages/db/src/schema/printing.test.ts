@@ -201,6 +201,9 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
     expect(row!.host).toBe("10.0.0.5");
     expect(row!.port).toBe(9100); // the column default applied
     expect(row!.ticketScope).toBe("station"); // the enum default
+    expect(row!.paperWidth).toBe("80mm");
+    expect(row!.resolution).toBe("180dpi");
+    expect(row!.characterSet).toBe("wpc1252");
     expect(row!.active).toBe(false);
   });
 

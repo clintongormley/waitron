@@ -1,3 +1,6 @@
+import { expect } from "vitest";
+import { previewPrintJob } from "../print-job-preview.js";
+
 /**
  * Decode an ESC/POS ticket payload (a `print_jobs.payload`) back to its Latin-1 text, for the
  * content assertions the kitchen-printing suites make. The escpos builder
@@ -32,4 +35,16 @@ export function bytesInclude(haystack: Uint8Array, needle: Uint8Array): boolean 
     return true;
   }
   return false;
+}
+
+/**
+ * The lines a payload prints, read through the character tables it selects, with every command and
+ * image skipped. Asserts the preview decoded the whole payload, so a stop part-way (an unsupported
+ * command or byte) fails the calling test instead of hiding the rest of the ticket.
+ */
+export function printedLines(bytes: Uint8Array): string[] {
+  const preview = previewPrintJob(bytes);
+  expect(preview.unsupported, "preview stopped at an unsupported command").toBe(false);
+  expect(preview.truncated, "preview was truncated").toBe(false);
+  return preview.text.split("\n");
 }

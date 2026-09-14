@@ -50,6 +50,9 @@ const printers: Printer[] = [
     localKey: null,
     pollId: null,
     ticketScope: "station",
+    paperWidth: "80mm",
+    resolution: "180dpi",
+    characterSet: "wpc1252",
     pendingJobs: 0,
     lastPrintAt: null,
     active: true,
@@ -63,6 +66,9 @@ const printers: Printer[] = [
     localKey: null,
     pollId: "poll-1",
     ticketScope: "station",
+    paperWidth: "80mm",
+    resolution: "180dpi",
+    characterSet: "wpc1252",
     pendingJobs: 0,
     lastPrintAt: null,
     active: false,
@@ -76,6 +82,9 @@ const printers: Printer[] = [
     localKey: "SN-2",
     pollId: null,
     ticketScope: "station",
+    paperWidth: "80mm",
+    resolution: "180dpi",
+    characterSet: "wpc1252",
     pendingJobs: 0,
     lastPrintAt: null,
     active: false,
@@ -196,6 +205,8 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     resendPrintJob: vi.fn().mockResolvedValue({ jobId: "resent" }),
     updateAgent: vi.fn().mockResolvedValue(undefined),
     getPrintJobPreview: vi.fn().mockResolvedValue({
+      columns: 42,
+      dpi: 180,
       text: "Receipt",
       qrData: [],
       blocks: [{ kind: "text", text: "Receipt" }],
@@ -284,6 +295,14 @@ function toggleSwitch(el: PrintersScreen, sel: string, checked: boolean): void {
   const input = q(el, sel)!.shadowRoot!.querySelector("input")!;
   input.checked = checked;
   input.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+/** Choose `value` in the native select named `name` and let the screen re-render. */
+async function chooseOption(el: PrintersScreen, name: string, value: string): Promise<void> {
+  const select = q(el, `select[name="${name}"]`) as HTMLSelectElement;
+  select.value = value;
+  select.dispatchEvent(new Event("change"));
+  await flush(el);
 }
 
 describe("printer configuration tabs", () => {
@@ -1642,6 +1661,9 @@ describe("printers-screen", () => {
       localKey: "SN-1",
       pollId: null,
       ticketScope: "station",
+      paperWidth: "80mm",
+      resolution: "180dpi",
+      characterSet: "wpc1252",
       pendingJobs: 0,
       lastPrintAt: null,
       active: true,
@@ -1679,6 +1701,9 @@ describe("printers-screen", () => {
       localKey: "SN-1",
       pollId: null,
       ticketScope: "station",
+      paperWidth: "80mm",
+      resolution: "180dpi",
+      characterSet: "wpc1252",
       pendingJobs: 0,
       lastPrintAt: null,
       active: true,
@@ -2655,4 +2680,58 @@ it("does not show a previous pairing deadline after reopening before the next op
   q(el, "[data-test=open-add-agent]")!.click();
   await flush(el);
   expect(q(el, "[data-test=pairing-until]")).toBeNull();
+});
+
+describe("printer layout settings", () => {
+  it("saves a changed paper width, resolution and character set with the connection fields", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    await openPrinter(el, "p1");
+    expect((q(el, 'select[name="printer-paper-width"]') as HTMLSelectElement).value).toBe("80mm");
+    await chooseOption(el, "printer-paper-width", "58mm");
+    await chooseOption(el, "printer-resolution", "203dpi");
+    await chooseOption(el, "printer-character-set", "pc858");
+    q(el, "[data-test=save-printer-p1]")!.click();
+    await flush(el);
+    expect(api.updatePrinter).toHaveBeenCalledWith("p1", {
+      name: "Cocina",
+      host: "10.0.0.9",
+      port: 9100,
+      active: true,
+      paperWidth: "58mm",
+      resolution: "203dpi",
+      characterSet: "pc858",
+    });
+  });
+
+  it("prints the test page and turns the two answers into settings", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    await openPrinter(el, "p1");
+    expect(q(el, "[data-test=test-page-hint-p1]")?.textContent?.trim()).toBe(
+      t("printers.test_page_hint"),
+    );
+    q(el, "[data-test=print-test-page-p1]")!.click();
+    await flush(el);
+    expect(api.testPrint).toHaveBeenCalledWith("p1");
+    const value = (name: string) => (q(el, `select[name="${name}"]`) as HTMLSelectElement).value;
+    expect(value("printer-test-line-fits")).toBe("");
+    await chooseOption(el, "printer-test-line-fits", "B");
+    expect([value("printer-paper-width"), value("printer-resolution")]).toEqual(["58mm", "203dpi"]);
+    await chooseOption(el, "printer-test-line-reads", "3");
+    expect(value("printer-character-set")).toBe("plain");
+    await chooseOption(el, "printer-test-line-fits", "D");
+    q(el, "[data-test=save-printer-p1]")!.click();
+    await flush(el);
+    expect(api.updatePrinter).toHaveBeenCalledWith("p1", {
+      name: "Cocina",
+      host: "10.0.0.9",
+      port: 9100,
+      active: true,
+      resolution: "203dpi",
+      characterSet: "plain",
+    });
+  });
 });

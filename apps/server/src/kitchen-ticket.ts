@@ -19,7 +19,7 @@
  * gains emphasis, and adding a bold command to packages/printing is out of this task's scope. The
  * layout below uses only the existing verbs.
  */
-import { esc } from "@waitron/printing";
+import { esc, prepareText, wrapText, type CharacterSet } from "@waitron/printing";
 
 /** The pass header for an `order`-scope ticket — the printed VALUE the expediter reads ("pass"). */
 const ORDER_HEADER = "PASE";
@@ -97,18 +97,30 @@ function sanitizeNote(note: string): string {
  *  the cook must not miss how a steak is wanted; the ASCII markers keep it legible on any single-byte code
  *  page, like the modifier `+`. A plain dish (no doneness/note/modifiers) emits exactly the one line it
  *  always did. */
-function emitItem(b: ReturnType<typeof esc>, item: KitchenTicketItem): void {
-  b.line(itemLine(item));
+function emitItem(b: ReturnType<typeof esc>, item: KitchenTicketItem, layout: KitchenLayout): void {
+  // Each line wraps to the paper; a continuation starts under the text after its marker.
+  const text = (s: string, indent: number): void => {
+    for (const line of wrapText(prepareText(s, layout.charset), layout.columns, indent))
+      b.line(line);
+  };
+  const prefix = `${item.qty}${item.unit ? ` ${item.unit}` : ""} x `;
+  text(itemLine(item), prepareText(prefix, layout.charset).length);
   if (item.doneness !== undefined && item.doneness !== "") {
-    b.line(`  ** ${item.doneness.replace(/_/g, " ").toUpperCase()} **`);
+    text(`  ** ${item.doneness.replace(/_/g, " ").toUpperCase()} **`, 5);
   }
-  for (const modifier of item.modifiers ?? []) b.line(`  + ${modifier}`);
+  for (const modifier of item.modifiers ?? []) text(`  + ${modifier}`, 4);
   if (item.note !== undefined && item.note !== "") {
     // Sanitise the operator-typed note (strip CR/LF and other control bytes) so it prints as one
     // sub-line and cannot garble the ticket. A note that is ALL control chars sanitises to "" — skip it.
     const note = sanitizeNote(item.note);
-    if (note !== "") b.line(`  * ${note}`);
+    if (note !== "") text(`  * ${note}`, 4);
   }
+}
+
+/** The printer settings a kitchen ticket is laid out for. Kitchen paper carries no QR, so no resolution. */
+export interface KitchenLayout {
+  columns: number;
+  charset: CharacterSet;
 }
 
 /** Local `HH:MM`, zero-padded — the fire time as the kitchen reads it off the wall clock. */
@@ -122,19 +134,24 @@ function hhmm(at: Date): string {
  * Render `ticket` to an ESC/POS payload. Pure and total: an empty `items`/`stations` array yields a
  * header-only ticket rather than throwing (the caller filters out stations with nothing fired).
  */
-export function formatKitchenTicket(ticket: KitchenTicket): Uint8Array {
-  const b = esc().init();
+export function formatKitchenTicket(ticket: KitchenTicket, layout: KitchenLayout): Uint8Array {
+  const b = esc(layout.charset).init();
+  const text = (s: string): void => {
+    for (const line of wrapText(prepareText(s, layout.charset), layout.columns)) b.line(line);
+  };
 
   // Header line differs by scope; the table / order / time block is shared by both.
-  b.line(ticket.scope === "station" ? ticket.stationName : ORDER_HEADER);
-  b.line(ticket.tableLabel).line(ticket.orderNumber).line(hhmm(ticket.firedAt));
+  text(ticket.scope === "station" ? ticket.stationName : ORDER_HEADER);
+  text(ticket.tableLabel);
+  text(ticket.orderNumber);
+  b.line(hhmm(ticket.firedAt));
 
   if (ticket.scope === "station") {
-    for (const item of ticket.items) emitItem(b, item);
+    for (const item of ticket.items) emitItem(b, item, layout);
   } else {
     for (const station of ticket.stations) {
-      b.line(station.stationName);
-      for (const item of station.items) emitItem(b, item);
+      text(station.stationName);
+      for (const item of station.items) emitItem(b, item, layout);
     }
   }
 
@@ -166,14 +183,18 @@ export interface CorrectionSlip {
  * ticket the cook is correcting. `tableLabel` is only printed when non-null (e.g. a bar tab with no
  * table).
  */
-export function formatCorrectionSlip(slip: CorrectionSlip): Uint8Array {
-  const b = esc().init();
+export function formatCorrectionSlip(slip: CorrectionSlip, layout: KitchenLayout): Uint8Array {
+  const b = esc(layout.charset).init();
+  const text = (s: string): void => {
+    for (const line of wrapText(prepareText(s, layout.charset), layout.columns)) b.line(line);
+  };
 
   b.line(`*** ${slip.kind} ***`);
-  b.line(slip.stationName);
-  if (slip.tableLabel !== null) b.line(slip.tableLabel);
-  b.line(slip.orderNumber).line(hhmm(new Date(slip.at)));
-  emitItem(b, slip.item);
+  text(slip.stationName);
+  if (slip.tableLabel !== null) text(slip.tableLabel);
+  text(slip.orderNumber);
+  b.line(hhmm(new Date(slip.at)));
+  emitItem(b, slip.item, layout);
 
   return b.feedAndCut().bytes();
 }

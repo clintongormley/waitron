@@ -698,6 +698,50 @@ The original walkthrough is retained under *Detail → Setup wizard*.
 
 ### A3. Printers from the dashboard
 
+**Printer paper width, resolution and character set — this design and plan (2026-09-14).**
+The Edit-printer dialog now asks for a printer's paper width (58mm or 80mm), print resolution
+(180dpi or 203dpi) and character set (WPC1252, PC858 or plain ASCII), each stored as a column on
+`printers` and defaulted to match the owner's TM-T88III. The receipt, payment slip, kitchen ticket
+and correction slip all format to the column count and dot pitch those settings imply, instead of
+the old fixed 42-column, 203dpi assumption. The fiscal QR on the receipt is now a raster image whose
+dot size is chosen per receipt to land as close as possible to the legal 30-40mm printed size,
+rather than the printer's own built-in QR command. A Test print button on the printer row sends a
+page exercising all three settings, so an operator can check a real printout before trusting a
+printer. [Design](superpowers/specs/2026-09-14-printer-paper-resolution-and-character-set-design.md) ·
+[Plan](superpowers/plans/2026-09-14-printer-paper-resolution-and-character-set.md).
+
+- **On-paper verification is still owed on the TM-T88III** (spec "Verification on paper" steps 1-6):
+  whether the printer's built-in QR command prints anything at all, and whether the mandated 30-40mm
+  QR size is meant to count the code's blank border or only its dark squares.
+- **58mm layout is checkable only through the preview** until a 58mm printer is available to print on
+  for real.
+- **Follow-up (ruling C): the preview no longer shows the QR link as text** for a raster receipt —
+  only the earlier, now-unused native-QR path did that. A possible fix is to carry the link alongside
+  the print job so the preview can still show it as text.
+- **Deferred (ruling H): the receipt logs no warning when no legal QR dot size exists.** No logger is
+  reachable from `receipt-print.ts`, and in practice the fallback is unreachable today for any link
+  `validate.ts` accepts (`apps/server/src/qr-link-range.test.ts`).
+- **The Edit-printer dialog follows the dashboard's own language, not the venue's** (ruling I) — a
+  recorded departure from the spec, which asked for the venue language.
+- The kitchen ticket's per-layout formatting dedup (`kitchen-print.ts`) is byte-invisible, so no test
+  guards its loss — removing it would enqueue identical bytes with nothing failing. Not a correctness
+  risk; a spy on `formatKitchenTicket` would pin it if it is ever worth doing.
+- A long single-token manual card reference wraps as "Ref." alone with the token split across the
+  following lines, and a 61-character invoice number splits over three lines at 58mm — both stay
+  within the column count and are correct, just awkward to read.
+- No committed test proves `app_user` can WRITE the three new `printers` columns — the schema test
+  only inserts with their defaults. A real-PostgreSQL upgrade probe run during review did confirm the
+  write works; a committed grant-write assertion is still owed.
+- No test covers `updatePrinter` receiving an explicit `undefined` for one of these settings — today
+  both Drizzle and `updatePrinter` silently drop it, same as an absent field.
+- The invalid-value error code is tested for 3 of the 6 field × route combinations these settings
+  offer, matching this file's existing convention for `transport`/`ticketScope`.
+- The QR preview decoder's format-information reader reads an inverted level-Q QR as level M — not a
+  false pass with any data seen so far, but worth tightening.
+- `PC858_HIGH` (the character set's upper half) is pinned at 18 of its 128 positions in the committed
+  tests; a reviewer verified the full table against Python's `cp858` codec, but that check itself was
+  never committed.
+
 **Office printers greyed out in the scan — LANDED #359 (2026-09-14).**
 Office laser printers also accept raw print jobs on port 9100, so the scan and the address check
 listed them like receipt printers. Once per job pull, the agent now asks every network printer it

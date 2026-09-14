@@ -352,4 +352,30 @@ describe("esc() ESC/POS builder", () => {
     expect(() => esc().qrRaster([[true]], { moduleSize: -1 })).toThrow(RangeError);
     expect(() => esc().qrRaster([[true]], { moduleSize: 1.5 })).toThrow(RangeError);
   });
+
+  describe("charset-aware builder", () => {
+    it("emits ESC @ then ESC t 16 on init for wpc1252, and encodes the euro as 0x80", () => {
+      expect([...esc("wpc1252").init().line("€").bytes()]).toEqual([
+        0x1b, 0x40, 0x1b, 0x74, 16, 0x80, 0x0a,
+      ]);
+    });
+    it("emits ESC t 19 and encodes the euro as 0xD5 for pc858", () => {
+      expect([...esc("pc858").init().line("€").bytes()]).toEqual([
+        0x1b, 0x40, 0x1b, 0x74, 19, 0xd5, 0x0a,
+      ]);
+    });
+    it("sends no ESC t for plain and transliterates the euro to EUR", () => {
+      expect([...esc("plain").init().line("€").bytes()]).toEqual([
+        0x1b, 0x40, 0x45, 0x55, 0x52, 0x0a,
+      ]);
+    });
+    it("switches character set mid-payload", () => {
+      expect([...esc("plain").init().charset("pc858").text("é").bytes()]).toEqual([
+        0x1b, 0x40, 0x1b, 0x74, 19, 0x82,
+      ]);
+    });
+    it("keeps Latin-1 and selects no table when no charset is given", () => {
+      expect([...esc().init().text("é€").bytes()]).toEqual([0x1b, 0x40, 0xe9, 0xac]);
+    });
+  });
 });

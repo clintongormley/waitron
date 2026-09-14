@@ -5,12 +5,16 @@ import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { and, desc, eq, gte, inArray, lt, ne, or, sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
+import type { SupportedLocale } from "@waitron/shared";
 import {
   asAppUser,
   drawerOpenPolicy,
   locations,
   printAgents,
+  printCharacterSet,
   printJobs,
+  printPaperWidth,
+  printResolution,
   printers,
   printTicketScope,
   printTransport,
@@ -24,10 +28,11 @@ import {
   claimPrintJobs,
   canResendPrintJob,
   resendPrintJob,
+  columnsFor,
   createPrinter,
   deactivatePrinter,
+  dpiValue,
   enqueuePrintJob,
-  esc,
   listPrinters,
   MAX_DELIVERY_ATTEMPTS,
   reportPrintJob,
@@ -54,6 +59,7 @@ import type { TillConfig } from "./till-config.js";
 import { requireBodyUuid, requireEnum, requireString, requireUuidParam } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 import { previewPrintJob } from "./print-job-preview.js";
+import { formatTestPage } from "./test-page.js";
 
 /**
  * The deployment holds one tenant per database. Everything `mountPrintApi` needs. `cfg` is the FULL
@@ -81,6 +87,8 @@ export interface PrintApiDeps {
    * HTTP status, not the code string, so there is no per-surface throttle code to mint.
    */
   enrolRateLimiter?: EnrolRateLimiter;
+  /** The venue's default language (`readVenueLocale`, resolved once at boot): the test page's captions. */
+  venueLocale: SupportedLocale;
 }
 
 /** Printer configuration and history reads use printer.manage; document resends use print.resend. */
@@ -88,12 +96,6 @@ const PRINTER_MANAGE_PERMISSION: Permission = "printer.manage";
 
 /** Completed history is bounded; unfinished jobs must remain visible regardless of age. */
 const RECENT_JOBS_LIMIT = 100;
-
-/** The fixed ESC/POS ticket the dashboard's test-print button enqueues (design §6) — a self-test the
- * operator triggers to confirm a printer + its agent are wired up end to end. Built ONCE at module
- * load (the bytes are deterministic); `enqueuePrintJob` copies them into each job's `bytea`. Kept
- * deliberately minimal — init, two lines, a paper feed, a full cut. */
-const TEST_PRINT_PAYLOAD = esc().init().line("Waitron").line("Test print").feedAndCut().bytes();
 
 /**
  * Every AppError CODE these routes answer, and the HTTP status it maps to. CLIENT faults only: a
@@ -710,6 +712,19 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       if (localKey !== undefined) input.localKey = localKey;
       const pollId = optionalString(body.pollId, "pollId");
       if (pollId !== undefined) input.pollId = pollId;
+      if (body.paperWidth !== undefined) {
+        input.paperWidth = requireEnum(body.paperWidth, "paperWidth", printPaperWidth.enumValues);
+      }
+      if (body.resolution !== undefined) {
+        input.resolution = requireEnum(body.resolution, "resolution", printResolution.enumValues);
+      }
+      if (body.characterSet !== undefined) {
+        input.characterSet = requireEnum(
+          body.characterSet,
+          "characterSet",
+          printCharacterSet.enumValues,
+        );
+      }
       const created = await gated(sessionId, (tx) => createPrinter(tx, deps.cfg, input));
       return c.json(created, 201);
     }),
@@ -779,6 +794,19 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           printTicketScope.enumValues,
         );
       }
+      if (body.paperWidth !== undefined) {
+        patch.paperWidth = requireEnum(body.paperWidth, "paperWidth", printPaperWidth.enumValues);
+      }
+      if (body.resolution !== undefined) {
+        patch.resolution = requireEnum(body.resolution, "resolution", printResolution.enumValues);
+      }
+      if (body.characterSet !== undefined) {
+        patch.characterSet = requireEnum(
+          body.characterSet,
+          "characterSet",
+          printCharacterSet.enumValues,
+        );
+      }
       const active = optionalBool(body.active, "active");
       if (active !== undefined) patch.active = active;
       await gated(sessionId, (tx) => updatePrinter(tx, deps.cfg, id, patch));
@@ -801,12 +829,13 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requireUuidParam(c.req.param("id"), "PrinterId");
-      // A dashboard DIAGNOSTIC (design §6): enqueue ONE known ESC/POS payload on this printer via the
-      // same never-block outbox path a fire/sale uses — the agent runtime delivers it asynchronously, so
-      // a broken/offline printer can never make this request hang (CLAUDE.md §5). `enqueuePrintJob`'s own
-      // DB-only pre-check 404s an absent id as `printer.not_found`; no new code lives here.
+      // A dashboard DIAGNOSTIC (design §6): enqueue the setup test page (`test-page.ts`) on this printer
+      // via the same never-block outbox path a fire/sale uses — the agent runtime delivers it
+      // asynchronously, so a broken/offline printer can never make this request hang (CLAUDE.md §5).
+      // `enqueuePrintJob`'s own DB-only pre-check 404s an absent id as `printer.not_found`; no new code
+      // lives here.
       const result = await gated(sessionId, (tx) =>
-        enqueuePrintJob(tx, deps.cfg, id, TEST_PRINT_PAYLOAD),
+        enqueuePrintJob(tx, deps.cfg, id, formatTestPage({ locale: deps.venueLocale })),
       );
       // 202 Accepted: the job is QUEUED for asynchronous delivery, not printed within the request.
       return c.json(result, 202);
@@ -889,12 +918,26 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       const id = requireUuidParam(c.req.param("id"), "PrintJobId");
       const [job] = await gated(sessionId, (tx) =>
         tx
-          .select({ payload: printJobs.payload })
+          .select({
+            payload: printJobs.payload,
+            paperWidth: printers.paperWidth,
+            resolution: printers.resolution,
+          })
           .from(printJobs)
+          .innerJoin(
+            printers,
+            and(eq(printers.tenantId, printJobs.tenantId), eq(printers.id, printJobs.printerId)),
+          )
           .where(and(eq(printJobs.tenantId, deps.cfg.tenantId), eq(printJobs.id, id))),
       );
       if (job === undefined) throw new AppError("print_job.not_found", { id });
-      return c.json(previewPrintJob(job.payload));
+      // The printer's CURRENT settings: a job built for 42 columns previews as it would print now.
+      return c.json(
+        previewPrintJob(job.payload, {
+          columns: columnsFor(job.paperWidth),
+          dpi: dpiValue(job.resolution),
+        }),
+      );
     }),
   );
 

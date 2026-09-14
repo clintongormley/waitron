@@ -13,6 +13,8 @@
  * match those documented sequences, which escpos.test.ts pins byte for byte.
  */
 
+import { CHARSET_SELECT, encodeText, type CharacterSet } from "./charset.js";
+
 /** ESC — the escape lead byte (0x1B) beginning most two/three-byte commands. */
 const ESC = 0x1b;
 /** GS — the group-separator lead byte (0x1D) beginning the cut command. */
@@ -30,11 +32,9 @@ const LF = 0x0a;
 export const FEED_BEFORE_CUT = 5;
 
 /**
- * Text encoding: ONE byte per character via Latin-1 (ISO-8859-1), so every code point 0x00-0xFF maps
- * to its own byte. ESC/POS printers are byte-oriented and interpret bytes through a selected code
- * page; picking that code page (CP437/CP858/…) is a CONSUMER concern, not the builder's, so the
- * builder does not UTF-8-encode — that would emit multi-byte sequences a single-byte code page would
- * mis-render. Pure-ASCII content (the common case) is unaffected either way.
+ * The encoding of a builder created without a character set: ONE byte per character via Latin-1, so
+ * every code point 0x00-0xFF maps to its own byte. A builder created with a set encodes with that
+ * set's table instead (`charset.ts`); the drawer kick and the legacy `qr()` store data keep Latin-1.
  */
 const TEXT_ENCODING = "latin1";
 
@@ -54,12 +54,9 @@ const QR_EC_LEVEL: Readonly<Record<"L" | "M" | "Q" | "H", number>> = {
 };
 
 /**
- * Default QR module size in printer dots. At ~203 dpi (≈ 8 dots/mm) a Veri*Factu cotejo-URL QR
- * encodes to roughly version 6–9 (41–53 modules per side) at EC level M, so 6 dots/module prints a
- * symbol of 41 × 6 / 8 ≈ 30.8 mm … 53 × 6 / 8 ≈ 39.8 mm — inside the mandated 30–40 mm band (Orden
- * HAC/1177/2024 art. 21.1). The EXACT printed size depends on the QR version (content length) and is
- * verified MANUALLY on the real printer (design §5); the byte tests pin only the deterministic
- * command bytes, not the millimetres.
+ * Default dots per QR square for the built-in `qr()` command and `qrRaster()`. The receipt no longer
+ * uses either default: its QR is a raster whose dot size `layout.ts` `chooseQrDots` picks from the
+ * printer's configured resolution (180 or 203 dpi) for the legal 30-40 mm.
  */
 const QR_DEFAULT_MODULE_SIZE = 6;
 
@@ -71,15 +68,30 @@ const QR_DEFAULT_MODULE_SIZE = 6;
 export class EscBuilder {
   private readonly parts: number[] = [];
 
-  /** Initialise the printer — `ESC @`. Resets modes to power-on defaults; the usual first command. */
+  /** `charset` undefined keeps the Latin-1 builder that selects no table (the drawer kick, legacy jobs). */
+  constructor(private current?: CharacterSet) {}
+
+  /** Initialise the printer — `ESC @`, then the current character set's `ESC t` selection, if any. */
   init(): this {
     this.parts.push(ESC, 0x40);
+    if (this.current !== undefined) this.parts.push(...CHARSET_SELECT[this.current]);
     return this;
   }
 
-  /** Append the Latin-1 bytes of `s` with no terminator — raw text for the current line. */
+  /** Switch character set mid-payload: emits its `ESC t` (nothing for `plain`) and encodes later text with it. */
+  charset(cs: CharacterSet): this {
+    this.current = cs;
+    this.parts.push(...CHARSET_SELECT[cs]);
+    return this;
+  }
+
+  /** Append `s` encoded for the current character set (Latin-1 when none was given), with no terminator. */
   text(s: string): this {
-    for (const b of Buffer.from(s, TEXT_ENCODING)) this.parts.push(b);
+    if (this.current === undefined) {
+      for (const b of Buffer.from(s, TEXT_ENCODING)) this.parts.push(b);
+    } else {
+      for (const b of encodeText(s, this.current)) this.parts.push(b);
+    }
     return this;
   }
 
@@ -126,10 +138,10 @@ export class EscBuilder {
    * raster fallback). Emits, in the order the printer requires: select model 2, set module size, set
    * error-correction level, store the data, print the symbol.
    *
-   * `text` is stored verbatim as its Latin-1 bytes — the same single-byte convention {@link text}
-   * uses — which is exactly right for the ASCII Veri*Factu cotejo URL. Default EC level M is mandated
-   * for that fiscal QR (Orden HAC/1177/2024 art. 21.1); `moduleSize` defaults per
-   * {@link QR_DEFAULT_MODULE_SIZE}.
+   * `text` is stored verbatim as its Latin-1 bytes, always — unlike {@link text}, which switches to
+   * the builder's selected character set once one is set. Latin-1 is exactly right for the ASCII
+   * Veri*Factu cotejo URL this command still encodes. Default EC level M is mandated for that fiscal
+   * QR (Orden HAC/1177/2024 art. 21.1); `moduleSize` defaults per {@link QR_DEFAULT_MODULE_SIZE}.
    *
    * Byte layout verified against the Epson ESC/POS TM-printer reference (GS ( k Functions 165/167/
    * 169/180/181, https://download4.epson.biz/sec_pubs/pos/reference_en/escpos/gs_lparen_lk_fn180.html
@@ -176,8 +188,9 @@ export class EscBuilder {
    * Raster fallback for printers whose firmware lacks the native `GS ( k` QR engine: packs an
    * ALREADY-COMPUTED square boolean module matrix (`true` = dark module) into a `GS v 0` raster
    * bit-image. It performs NO QR encoding — the caller supplies the matrix — so `@waitron/printing`
-   * keeps its dependency-free "pure byte assembler" shape (no `qrcode` library). Not wired to a
-   * consumer in this slice; `formatReceipt` uses the native {@link qr}.
+   * keeps its dependency-free "pure byte assembler" shape (no `qrcode` library). The receipt and the
+   * setup test page print their QR codes through it (design 2026-09-14); the matrix comes from
+   * `apps/server`'s `qrModules`.
    *
    * `GS v 0 m xL xH yL yH d1…dk` (lead bytes 0x1D 0x76 0x30): m=0 (normal); xL/xH = bytes per row =
    * ceil(pixelWidth / 8); yL/yH = pixel height. Each module expands to `moduleSize`×`moduleSize`
@@ -238,7 +251,7 @@ export class EscBuilder {
   }
 }
 
-/** Start a new ESC/POS command chain. */
-export function esc(): EscBuilder {
-  return new EscBuilder();
+/** Start a new ESC/POS command chain, optionally for a character set. */
+export function esc(charset?: CharacterSet): EscBuilder {
+  return new EscBuilder(charset);
 }

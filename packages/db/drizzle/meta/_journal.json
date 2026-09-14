@@ -176,6 +176,13 @@
       "when": 1789319913871,
       "tag": "0024_modifiers_editing_rework",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1789405973239,
+      "tag": "0025_printer_layout_settings",
+      "breakpoints": true
     }
   ]
 }

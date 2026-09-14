@@ -8,6 +8,7 @@ import { enqueuePrintJob, esc } from "@waitron/printing";
 import type { PrintConfig } from "@waitron/printing";
 import { getReceipt } from "@waitron/layouts";
 import { formatReceipt } from "./receipt-ticket.js";
+import type { ReceiptPrinterSettings } from "./receipt-ticket.js";
 import type { TillConfig } from "./till-config.js";
 import type { TillSaleResult } from "./till-sale.js";
 
@@ -17,6 +18,11 @@ export const DRAWER_KICK: Uint8Array = esc().kick().bytes();
 /** The tenant + location scope `enqueuePrintJob` runs under — `TillConfig` carries both. */
 function printConfig(cfg: TillConfig): PrintConfig {
   return { tenantId: cfg.tenantId, locationId: cfg.locationId };
+}
+
+/** The till's active receipt printer and the settings its receipts are laid out for. */
+export interface ReceiptPrinter extends ReceiptPrinterSettings {
+  id: string;
 }
 
 /**
@@ -32,9 +38,14 @@ function printConfig(cfg: TillConfig): PrintConfig {
 export async function resolveReceiptPrinter(
   tx: Transaction,
   cfg: TillConfig,
-): Promise<{ id: string } | undefined> {
+): Promise<ReceiptPrinter | undefined> {
   const [printer] = await tx
-    .select({ id: printers.id })
+    .select({
+      id: printers.id,
+      paperWidth: printers.paperWidth,
+      resolution: printers.resolution,
+      characterSet: printers.characterSet,
+    })
     .from(tills)
     .innerJoin(
       printers,
@@ -55,6 +66,7 @@ async function buildReceiptBytes(
   cfg: TillConfig,
   ticket: TillSaleResult,
   duplicate: boolean,
+  printer: ReceiptPrinterSettings,
 ): Promise<Uint8Array | undefined> {
   const [issuer] = await tx
     .select({ venueName: tenants.legalName, nif: tenants.taxId })
@@ -75,6 +87,7 @@ async function buildReceiptBytes(
     issuer: ticket.issuer ?? issuer,
     receipt,
     invoiceLocale: cfg.locale,
+    printer,
     simulated: cfg.practiceMode,
     duplicate,
   });
@@ -94,10 +107,10 @@ async function resolvePrinterAndReceipt(
   cfg: TillConfig,
   ticket: TillSaleResult,
   duplicate: boolean,
-): Promise<{ printer: { id: string }; receiptBytes: Uint8Array } | undefined> {
+): Promise<{ printer: ReceiptPrinter; receiptBytes: Uint8Array } | undefined> {
   const printer = await resolveReceiptPrinter(tx, cfg);
   if (printer === undefined) return undefined;
-  const receiptBytes = await buildReceiptBytes(tx, cfg, ticket, duplicate);
+  const receiptBytes = await buildReceiptBytes(tx, cfg, ticket, duplicate, printer);
   /* v8 ignore next -- issuer row structurally always present (buildReceiptBytes); degrade, never throw (§5) */
   if (receiptBytes === undefined) return undefined;
   return { printer, receiptBytes };

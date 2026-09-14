@@ -80,6 +80,7 @@ export async function printSalePaymentSlip(
       tip: payment.tip,
       card,
       invoiceLocale: cfg.locale,
+      printer: { paperWidth: printer.paperWidth, characterSet: printer.characterSet },
     });
     await enqueuePrintJob(
       tx,
