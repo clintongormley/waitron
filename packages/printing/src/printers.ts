@@ -7,6 +7,8 @@ import { AppError } from "@waitron/shared";
 import { isPgError, printers } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type { PrintTransport } from "@waitron/print-agent";
+import type { CharacterSet } from "./charset.js";
+import type { PaperWidth, Resolution } from "./layout.js";
 
 /** The pg SQLSTATEs a printer write may raise once the app-layer required-field pre-check passes, so a
  * driver error becomes a friendly domain code instead of an opaque 500. `23514` is the
@@ -67,6 +69,9 @@ export interface CreatePrinterInput {
   port?: number;
   localKey?: string;
   pollId?: string;
+  paperWidth?: PaperWidth;
+  resolution?: Resolution;
+  characterSet?: CharacterSet;
 }
 
 /**
@@ -125,6 +130,10 @@ export async function createPrinter(
         port: input.port,
         localKey: input.localKey,
         pollId: input.pollId,
+        // Undefined settings are omitted too, so each takes its column default (80mm, 180dpi, wpc1252).
+        paperWidth: input.paperWidth,
+        resolution: input.resolution,
+        characterSet: input.characterSet,
       })
       .returning({ id: printers.id });
     return { id: row!.id };
@@ -153,6 +162,9 @@ export interface UpdatePrinterInput {
   localKey?: string | null;
   pollId?: string | null;
   ticketScope?: "station" | "order";
+  paperWidth?: PaperWidth;
+  resolution?: Resolution;
+  characterSet?: CharacterSet;
   active?: boolean;
 }
 
@@ -166,6 +178,9 @@ export interface PrinterRow {
   localKey: string | null;
   pollId: string | null;
   ticketScope: "station" | "order";
+  paperWidth: PaperWidth;
+  resolution: Resolution;
+  characterSet: CharacterSet;
   active: boolean;
 }
 
@@ -262,6 +277,9 @@ export async function listPrinters(tx: Transaction, cfg: PrintConfig): Promise<P
       localKey: printers.localKey,
       pollId: printers.pollId,
       ticketScope: printers.ticketScope,
+      paperWidth: printers.paperWidth,
+      resolution: printers.resolution,
+      characterSet: printers.characterSet,
       active: printers.active,
     })
     .from(printers)

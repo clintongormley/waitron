@@ -347,3 +347,31 @@ describe("isPgError (@waitron/db SQLSTATE cause-walk, as printers.ts uses it)", 
     expect(isPgError("nope", "23505")).toBe(false);
   });
 });
+
+describe("printer layout settings", () => {
+  it("defaults to 80mm, 180dpi and wpc1252, and stores, updates and lists each setting", async () => {
+    const cfg = await setup();
+    const defaulted = await seedPrinter(cfg, "Defaults");
+    const { id } = await asTx(cfg, (tx) =>
+      createPrinter(tx, cfg, {
+        name: "Narrow",
+        transport: "network_tcp",
+        host: "10.0.0.10",
+        paperWidth: "58mm",
+        characterSet: "pc858",
+      }),
+    );
+    await asTx(cfg, (tx) => updatePrinter(tx, cfg, id, { resolution: "203dpi" }));
+    const rows = await asTx(cfg, (tx) => listPrinters(tx, cfg));
+    expect(rows.find((r) => r.id === defaulted)).toMatchObject({
+      paperWidth: "80mm",
+      resolution: "180dpi",
+      characterSet: "wpc1252",
+    });
+    expect(rows.find((r) => r.id === id)).toMatchObject({
+      paperWidth: "58mm",
+      resolution: "203dpi",
+      characterSet: "pc858",
+    });
+  });
+});
