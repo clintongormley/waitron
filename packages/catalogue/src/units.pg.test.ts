@@ -43,10 +43,15 @@ it("changes a product's unit even while product_units publishes updates for repl
   const tenantId = await seedTenant(suite.admin);
   const productId = await product(tenantId);
   const each = await app(suite.admin, tenantId, (tx) =>
-    createUnit(tx, tenantId, { name: { en: "each" }, precision: 0 }, "en"),
+    createUnit(
+      tx,
+      tenantId,
+      { name: { en: "each" }, precision: 0, abbreviation: { en: "u" } },
+      "en",
+    ),
   );
   const kg = await app(suite.admin, tenantId, (tx) =>
-    createUnit(tx, tenantId, { name: { en: "kg" }, precision: 3 }, "en"),
+    createUnit(tx, tenantId, { name: { en: "kg" }, precision: 3, abbreviation: { en: "u" } }, "en"),
   );
   await app(suite.admin, tenantId, (tx) => assignProductUnit(tx, tenantId, productId, each.id));
   // Reproduce production: the table publishes UPDATEs. Without a replica identity (its primary key)
@@ -96,7 +101,12 @@ it("grants app_user the exact unit-table operations and enforces them as a non-s
       { table_name: "units", privileges: "DELETE,INSERT,SELECT,UPDATE" },
     ]);
 
-    const unit = await createUnit(tx, tenantId, { name: { en: "portion" }, precision: 2 }, "en");
+    const unit = await createUnit(
+      tx,
+      tenantId,
+      { name: { en: "portion" }, precision: 2, abbreviation: { en: "u" } },
+      "en",
+    );
     await updateUnit(tx, tenantId, unit.id, { precision: 1 }, "en");
     expect(await getUnit(tx, tenantId, unit.id)).toMatchObject({ precision: 1 });
     await deleteUnit(tx, tenantId, unit.id);
@@ -107,14 +117,24 @@ it("rolls back unit creation and editing with the caller's transaction", async (
   const tenantId = await seedTenant(suite.admin);
   await expect(
     app(suite.admin, tenantId, async (tx) => {
-      await createUnit(tx, tenantId, { name: { en: "crate" }, precision: 0 }, "en");
+      await createUnit(
+        tx,
+        tenantId,
+        { name: { en: "crate" }, precision: 0, abbreviation: { en: "u" } },
+        "en",
+      );
       throw new Error("rollback create");
     }),
   ).rejects.toThrow("rollback create");
   expect(await app(suite.admin, tenantId, (tx) => listUnits(tx, tenantId))).toEqual([]);
 
   const unit = await app(suite.admin, tenantId, (tx) =>
-    createUnit(tx, tenantId, { name: { en: "box" }, precision: 0 }, "en"),
+    createUnit(
+      tx,
+      tenantId,
+      { name: { en: "box" }, precision: 0, abbreviation: { en: "u" } },
+      "en",
+    ),
   );
   await expect(
     app(suite.admin, tenantId, async (tx) => {
@@ -131,7 +151,12 @@ it("serializes assignment against deletion so the committed product reference wi
   const tenantId = await seedTenant(suite.admin);
   const productId = await product(tenantId);
   const unit = await app(suite.admin, tenantId, (tx) =>
-    createUnit(tx, tenantId, { name: { en: "portion" }, precision: 0 }, "en"),
+    createUnit(
+      tx,
+      tenantId,
+      { name: { en: "portion" }, precision: 0, abbreviation: { en: "u" } },
+      "en",
+    ),
   );
   const [assigningDb, deletingDb] = await Promise.all([suite.pg.connect(), suite.pg.connect()]);
   let release!: () => void;
@@ -178,7 +203,12 @@ it("reports unit.not_found when deletion commits before a concurrent assignment"
   const tenantId = await seedTenant(suite.admin);
   const productId = await product(tenantId);
   const unit = await app(suite.admin, tenantId, (tx) =>
-    createUnit(tx, tenantId, { name: { en: "portion" }, precision: 0 }, "en"),
+    createUnit(
+      tx,
+      tenantId,
+      { name: { en: "portion" }, precision: 0, abbreviation: { en: "u" } },
+      "en",
+    ),
   );
   const [deletingDb, assigningDb] = await Promise.all([suite.pg.connect(), suite.pg.connect()]);
   let release!: () => void;
@@ -230,9 +260,24 @@ it("skips a product another manager moved off the source unit while the selectio
   const tenantId = await seedTenant(suite.admin);
   const productId = await product(tenantId);
   const [source, other, target] = await app(suite.admin, tenantId, async (tx) => [
-    await createUnit(tx, tenantId, { name: { en: "each" }, precision: 0 }, "en"),
-    await createUnit(tx, tenantId, { name: { en: "kg" }, precision: 3 }, "en"),
-    await createUnit(tx, tenantId, { name: { en: "litre" }, precision: 2 }, "en"),
+    await createUnit(
+      tx,
+      tenantId,
+      { name: { en: "each" }, precision: 0, abbreviation: { en: "u" } },
+      "en",
+    ),
+    await createUnit(
+      tx,
+      tenantId,
+      { name: { en: "kg" }, precision: 3, abbreviation: { en: "u" } },
+      "en",
+    ),
+    await createUnit(
+      tx,
+      tenantId,
+      { name: { en: "litre" }, precision: 2, abbreviation: { en: "u" } },
+      "en",
+    ),
   ]);
   await app(suite.admin, tenantId, (tx) => assignProductUnit(tx, tenantId, productId, source!.id));
 
@@ -273,8 +318,18 @@ it("does not deadlock when two bulk reassignments list the same products in oppo
   const first = await product(tenantId, "11111111-1111-4111-8111-111111111111");
   const second = await product(tenantId, "22222222-2222-4222-8222-222222222222");
   const [source, target] = await app(suite.admin, tenantId, async (tx) => [
-    await createUnit(tx, tenantId, { name: { en: "each" }, precision: 0 }, "en"),
-    await createUnit(tx, tenantId, { name: { en: "kg" }, precision: 3 }, "en"),
+    await createUnit(
+      tx,
+      tenantId,
+      { name: { en: "each" }, precision: 0, abbreviation: { en: "u" } },
+      "en",
+    ),
+    await createUnit(
+      tx,
+      tenantId,
+      { name: { en: "kg" }, precision: 3, abbreviation: { en: "u" } },
+      "en",
+    ),
   ]);
   await app(suite.admin, tenantId, async (tx) => {
     await assignProductUnit(tx, tenantId, first, source!.id);

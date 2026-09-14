@@ -15,6 +15,7 @@ export interface Unit {
   id: string;
   name: Record<string, string>;
   precision: number;
+  abbreviation: Record<string, string>;
 }
 
 /** A product that assigns a given unit — the shape both the deletion refusal and the read return. */
@@ -31,20 +32,28 @@ export interface SellableUnit extends Unit {
 export interface CreateUnitInput {
   name: Record<string, string>;
   precision: number;
+  abbreviation: Record<string, string>;
 }
 
 export interface UpdateUnitInput {
   name?: Record<string, string>;
   precision?: number;
+  abbreviation?: Record<string, string>;
 }
 
-const UNIT_COLUMNS = { id: units.id, name: units.name, precision: units.precision };
+const UNIT_COLUMNS = {
+  id: units.id,
+  name: units.name,
+  precision: units.precision,
+  abbreviation: units.abbreviation,
+};
 const SELLABLE_UNIT_COLUMNS = { ...UNIT_COLUMNS, hardwareUnit: units.hardwareUnit };
 
 function toSellableUnit(row: {
   id: string;
   name: Record<string, string>;
   precision: number;
+  abbreviation: Record<string, string>;
   hardwareUnit: string | null;
 }): SellableUnit {
   return { ...row, hardwareUnit: row.hardwareUnit as SellableUnit["hardwareUnit"] };
@@ -57,10 +66,16 @@ export async function createUnit(
   fallbackLanguage: string,
 ): Promise<Unit> {
   await validateContentTranslations(tx, tenantId, input.name, fallbackLanguage);
+  await validateContentTranslations(tx, tenantId, input.abbreviation, fallbackLanguage);
   validateUnitPrecision(input.precision);
   const [row] = await tx
     .insert(units)
-    .values({ tenantId, name: input.name, precision: input.precision })
+    .values({
+      tenantId,
+      name: input.name,
+      abbreviation: input.abbreviation,
+      precision: input.precision,
+    })
     .returning(UNIT_COLUMNS);
   return row!;
 }
@@ -119,8 +134,15 @@ export async function updateUnit(
   if (patch.name !== undefined) {
     await validateContentTranslations(tx, tenantId, patch.name, fallbackLanguage);
   }
+  if (patch.abbreviation !== undefined) {
+    await validateContentTranslations(tx, tenantId, patch.abbreviation, fallbackLanguage);
+  }
   if (patch.precision !== undefined) validateUnitPrecision(patch.precision);
-  if (patch.name === undefined && patch.precision === undefined) {
+  if (
+    patch.name === undefined &&
+    patch.precision === undefined &&
+    patch.abbreviation === undefined
+  ) {
     return getUnit(tx, tenantId, unitId);
   }
   const [row] = await tx

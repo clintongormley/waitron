@@ -339,9 +339,22 @@ describe("catalogue operations", () => {
     locationId = venue.locationId;
     await withTenant(fx.db, tenantId, async (tx) => {
       await asAppUser(tx);
-      eachUnitId = (await createUnit(tx, tenantId, { name: { en: "each" }, precision: 0 }, "en"))
-        .id;
-      kgUnitId = (await createUnit(tx, tenantId, { name: { en: "kg" }, precision: 3 }, "en")).id;
+      eachUnitId = (
+        await createUnit(
+          tx,
+          tenantId,
+          { name: { en: "each" }, precision: 0, abbreviation: { en: "u" } },
+          "en",
+        )
+      ).id;
+      kgUnitId = (
+        await createUnit(
+          tx,
+          tenantId,
+          { name: { en: "kg" }, precision: 3, abbreviation: { en: "u" } },
+          "en",
+        )
+      ).id;
       await tx.execute(
         sql`update units
             set seed_key = case when id = ${eachUnitId} then 'each' else 'kg' end,

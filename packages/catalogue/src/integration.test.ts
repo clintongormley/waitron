@@ -101,8 +101,14 @@ describe("catalogue → priceBasket → recordSale (end-to-end)", () => {
       // strings only — this is a generic package under the english-only guard.
       const cat = await createCatalogue(tx, tenantId, { name: "Deli" });
       const food = await createCategory(tx, tenantId, { name: { en: "Food" } });
-      const kgUnitId = (await createUnit(tx, tenantId, { name: { en: "kg" }, precision: 3 }, "en"))
-        .id;
+      const kgUnitId = (
+        await createUnit(
+          tx,
+          tenantId,
+          { name: { en: "kg" }, precision: 3, abbreviation: { en: "u" } },
+          "en",
+        )
+      ).id;
       const product = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: food.id,

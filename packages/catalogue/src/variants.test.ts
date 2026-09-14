@@ -41,7 +41,12 @@ beforeEach(async () => {
   await run(async (tx) => {
     const menu = await createCatalogue(tx, tenantId, { name: "Bar" });
     menuId = menu.id;
-    const unit = await createUnit(tx, tenantId, { name: { en: "each" }, precision: 0 }, "en");
+    const unit = await createUnit(
+      tx,
+      tenantId,
+      { name: { en: "each" }, precision: 0, abbreviation: { en: "u" } },
+      "en",
+    );
     const product = await createProduct(tx, tenantId, {
       catalogueId: menu.id,
       categoryId: null,

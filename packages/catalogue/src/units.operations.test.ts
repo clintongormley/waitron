@@ -30,10 +30,56 @@ async function product(tx: Transaction, tenantId: string, name: string) {
 }
 
 describe("unit operations", () => {
+  it("requires an abbreviation in the default language", async () => {
+    const tenantId = await seedTenant(suite.db);
+    await withTenant(suite.db, tenantId, async (tx) => {
+      await expect(
+        createUnit(tx, tenantId, { name: { en: "Litre" }, precision: 3, abbreviation: {} }, "en"),
+      ).rejects.toMatchObject({ code: "content.translation_required" });
+    });
+  });
+
+  it("stores and returns the abbreviation", async () => {
+    const tenantId = await seedTenant(suite.db);
+    await withTenant(suite.db, tenantId, async (tx) => {
+      const unit = await createUnit(
+        tx,
+        tenantId,
+        { name: { en: "Litre" }, precision: 3, abbreviation: { en: "l" } },
+        "en",
+      );
+      expect(unit.abbreviation).toEqual({ en: "l" });
+      const [listed] = await listUnits(tx, tenantId);
+      expect(listed!.abbreviation).toEqual({ en: "l" });
+    });
+  });
+
+  it("updates the abbreviation and revalidates it against the default language", async () => {
+    const tenantId = await seedTenant(suite.db);
+    await withTenant(suite.db, tenantId, async (tx) => {
+      const unit = await createUnit(
+        tx,
+        tenantId,
+        { name: { en: "Litre" }, precision: 3, abbreviation: { en: "l" } },
+        "en",
+      );
+      const updated = await updateUnit(tx, tenantId, unit.id, { abbreviation: { en: "L" } }, "en");
+      expect(updated.abbreviation).toEqual({ en: "L" });
+      await expect(
+        updateUnit(tx, tenantId, unit.id, { abbreviation: {} }, "en"),
+      ).rejects.toMatchObject({ code: "content.translation_required" });
+    });
+  });
+
   it("creates, reads, updates, assigns and deletes within a tenant", async () => {
     const tenantId = await seedTenant(suite.db);
     await withTenant(suite.db, tenantId, async (tx) => {
-      const unit = await createUnit(tx, tenantId, { name: { en: "portion" }, precision: 2 }, "en");
+      const unit = await createUnit(
+        tx,
+        tenantId,
+        { name: { en: "portion" }, precision: 2, abbreviation: { en: "u" } },
+        "en",
+      );
       expect(await getUnit(tx, tenantId, unit.id)).toEqual(unit);
       expect(await listUnits(tx, tenantId)).toEqual([unit]);
       await updateUnit(tx, tenantId, unit.id, { name: { en: "serving" }, precision: 1 }, "en");
@@ -56,7 +102,12 @@ describe("unit operations", () => {
   it("lists the products using a unit, with each product's availability", async () => {
     const tenantId = await seedTenant(suite.db);
     await withTenant(suite.db, tenantId, async (tx) => {
-      const unit = await createUnit(tx, tenantId, { name: { en: "portion" }, precision: 0 }, "en");
+      const unit = await createUnit(
+        tx,
+        tenantId,
+        { name: { en: "portion" }, precision: 0, abbreviation: { en: "u" } },
+        "en",
+      );
       expect(await productsUsingUnit(tx, tenantId, unit.id)).toEqual([]);
 
       const soup = await product(tx, tenantId, "Soup");
@@ -81,7 +132,7 @@ describe("unit operations", () => {
     const owner = await seedTenant(suite.db);
     const other = await seedTenant(suite.db);
     const unit = await withTenant(suite.db, owner, (tx) =>
-      createUnit(tx, owner, { name: { en: "cup" }, precision: 0 }, "en"),
+      createUnit(tx, owner, { name: { en: "cup" }, precision: 0, abbreviation: { en: "u" } }, "en"),
     );
     await withTenant(suite.db, other, async (tx) => {
       const productId = await product(tx, other, "Tea");
@@ -101,8 +152,18 @@ describe("unit operations", () => {
   it("reassigns products from one unit to another", async () => {
     const tenantId = await seedTenant(suite.db);
     await withTenant(suite.db, tenantId, async (tx) => {
-      const from = await createUnit(tx, tenantId, { name: { en: "each" }, precision: 0 }, "en");
-      const to = await createUnit(tx, tenantId, { name: { en: "kg" }, precision: 3 }, "en");
+      const from = await createUnit(
+        tx,
+        tenantId,
+        { name: { en: "each" }, precision: 0, abbreviation: { en: "u" } },
+        "en",
+      );
+      const to = await createUnit(
+        tx,
+        tenantId,
+        { name: { en: "kg" }, precision: 3, abbreviation: { en: "u" } },
+        "en",
+      );
       const a = await product(tx, tenantId, "A");
       const b = await product(tx, tenantId, "B");
       await assignProductUnit(tx, tenantId, a, from.id);
@@ -123,14 +184,29 @@ describe("unit operations", () => {
     const owner = await seedTenant(suite.db);
     const other = await seedTenant(suite.db);
     const [foreignProduct, foreignUnit] = await withTenant(suite.db, other, async (tx) => {
-      const unit = await createUnit(tx, other, { name: { en: "each" }, precision: 0 }, "en");
+      const unit = await createUnit(
+        tx,
+        other,
+        { name: { en: "each" }, precision: 0, abbreviation: { en: "u" } },
+        "en",
+      );
       const productId = await product(tx, other, "Foreign");
       await assignProductUnit(tx, other, productId, unit.id);
       return [productId, unit] as const;
     });
     await withTenant(suite.db, owner, async (tx) => {
-      const from = await createUnit(tx, owner, { name: { en: "each" }, precision: 0 }, "en");
-      const to = await createUnit(tx, owner, { name: { en: "kg" }, precision: 3 }, "en");
+      const from = await createUnit(
+        tx,
+        owner,
+        { name: { en: "each" }, precision: 0, abbreviation: { en: "u" } },
+        "en",
+      );
+      const to = await createUnit(
+        tx,
+        owner,
+        { name: { en: "kg" }, precision: 3, abbreviation: { en: "u" } },
+        "en",
+      );
       const a = await product(tx, owner, "A");
       await assignProductUnit(tx, owner, a, from.id);
 
@@ -158,7 +234,12 @@ describe("unit operations", () => {
   it("refuses to reassign to a unit that does not exist", async () => {
     const tenantId = await seedTenant(suite.db);
     await withTenant(suite.db, tenantId, async (tx) => {
-      const from = await createUnit(tx, tenantId, { name: { en: "each" }, precision: 0 }, "en");
+      const from = await createUnit(
+        tx,
+        tenantId,
+        { name: { en: "each" }, precision: 0, abbreviation: { en: "u" } },
+        "en",
+      );
       const a = await product(tx, tenantId, "A");
       await assignProductUnit(tx, tenantId, a, from.id);
       await expect(

@@ -1,0 +1,1 @@
+ALTER TABLE "units" ADD COLUMN "abbreviation" jsonb NOT NULL;

@@ -19,7 +19,12 @@ async function fixture() {
   const tenantId = await seedTenant(suite.admin);
   return app(suite.admin, tenantId, async (tx) => {
     const menu = await createCatalogue(tx, tenantId, { name: "Bar" });
-    const unit = await createUnit(tx, tenantId, { name: { en: "each" }, precision: 0 }, "en");
+    const unit = await createUnit(
+      tx,
+      tenantId,
+      { name: { en: "each" }, precision: 0, abbreviation: { en: "u" } },
+      "en",
+    );
     const product = await createProduct(tx, tenantId, {
       catalogueId: menu.id,
       categoryId: null,
