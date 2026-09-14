@@ -1,12 +1,12 @@
 import { configDefaults, coverageConfigDefaults, defineConfig } from "vitest/config";
 import type { BrowserCommand } from "vitest/node";
+import { parkPointerCommands } from "@waitron/ui/src/vitest-park-pointer.js";
 
 type ColorScheme = "light" | "dark" | null;
 
 interface PlaywrightPage {
   emulateMedia(options: { colorScheme?: ColorScheme }): Promise<void>;
   setViewportSize(size: { width: number; height: number }): Promise<void>;
-  mouse: { move(x: number, y: number): Promise<void> };
 }
 
 /**
@@ -39,25 +39,6 @@ const setViewportSize: BrowserCommand<[width: number, height: number]> = async (
   await page.setViewportSize({ width, height });
 };
 
-/**
- * Moves the real mouse cursor off every element, so nothing is left matching CSS `:hover`.
- *
- * The cursor position belongs to the PAGE, and every test file in a worker shares one page — so a
- * `userEvent` click or hover parks the cursor at those coordinates for every later test, in this
- * file and in every file that runs after it. Whatever then renders under those coordinates is
- * `:hover`ed with no test having asked for it, and `wt-button`'s hover rule dims it to
- * `--wt-opacity-hover`, which axe scores as a colour-contrast violation.
- *
- * `userEvent.unhover()` cannot do this: @vitest/browser implements it as a hover of `html > body`,
- * which parks the cursor in the MIDDLE of the page, on top of whatever is mounted there. Negative
- * coordinates are outside the viewport, so no element can be under them. Same narrow cast at the
- * boundary as the two commands above.
- */
-const parkPointer: BrowserCommand<[]> = async (context) => {
-  const { page } = context as unknown as { page: PlaywrightPage };
-  await page.mouse.move(-1, -1);
-};
-
 // Two projects, because two test kinds need two environments. Most of the suite renders real
 // components and MUST run in a browser; a handful of pure helpers (date-utils) are plain functions
 // whose behaviour depends on the process timezone, which only a Node worker can pin.
@@ -67,6 +48,9 @@ const parkPointer: BrowserCommand<[]> = async (context) => {
 // those assertions would read one value on a UTC CI runner and another on a developer's machine in
 // Madrid. Pinning the browser to UTC makes them read the same everywhere; it does NOT prove the
 // local-time behaviour, which is exactly why the timezone-sensitive helper is tested in Node below.
+//
+// The mouse-parking command is shared: `parkPointerCommands` comes from @waitron/ui so every package
+// whose a11y suites run the `parkPointer` hook registers it the same way (a root guard enforces it).
 const browserProject = {
   extends: true,
   test: {
@@ -85,7 +69,7 @@ const browserProject = {
       commands: {
         emulateColorScheme,
         setViewportSize,
-        parkPointer,
+        ...parkPointerCommands,
       },
     },
   },

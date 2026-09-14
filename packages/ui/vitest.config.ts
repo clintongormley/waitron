@@ -1,11 +1,11 @@
 import { configDefaults, coverageConfigDefaults, defineConfig } from "vitest/config";
 import type { BrowserCommand } from "vitest/node";
+import { parkPointerCommands } from "./src/vitest-park-pointer.js";
 
 type ColorScheme = "light" | "dark" | null;
 
 interface PlaywrightPage {
   emulateMedia(options: { colorScheme?: ColorScheme }): Promise<void>;
-  mouse: { move(x: number, y: number): Promise<void> };
 }
 
 /**
@@ -20,25 +20,6 @@ const emulateColorScheme: BrowserCommand<[colorScheme: ColorScheme]> = async (
 ) => {
   const { page } = context as unknown as { page: PlaywrightPage };
   await page.emulateMedia({ colorScheme });
-};
-
-/**
- * Moves the real mouse cursor off every element, so nothing is left matching CSS `:hover`.
- *
- * The cursor position belongs to the PAGE, and every test file in a worker shares one page — so a
- * `userEvent` click or hover parks the cursor at those coordinates for every later test, in this
- * file and in every file that runs after it. Whatever then renders under those coordinates is
- * `:hover`ed with no test having asked for it, and `wt-button`'s hover rule dims it to
- * `--wt-opacity-hover`, which axe scores as a colour-contrast violation.
- *
- * `userEvent.unhover()` cannot do this: @vitest/browser implements it as a hover of `html > body`,
- * which parks the cursor in the MIDDLE of the page, on top of whatever is mounted there. Negative
- * coordinates are outside the viewport, so no element can be under them. Same narrow cast at the
- * boundary as `emulateColorScheme` above.
- */
-const parkPointer: BrowserCommand<[]> = async (context) => {
-  const { page } = context as unknown as { page: PlaywrightPage };
-  await page.mouse.move(-1, -1);
 };
 
 export default defineConfig({
@@ -57,7 +38,7 @@ export default defineConfig({
       instances: [{ browser: "chromium" }],
       commands: {
         emulateColorScheme,
-        parkPointer,
+        ...parkPointerCommands,
       },
     },
     coverage: {

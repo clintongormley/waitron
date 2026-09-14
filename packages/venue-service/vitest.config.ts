@@ -1,4 +1,5 @@
 import { configDefaults, coverageConfigDefaults, defineConfig } from "vitest/config";
+import { parkPointerCommands } from "@waitron/ui/src/vitest-park-pointer.js";
 
 export default defineConfig({
   test: {
@@ -28,6 +29,8 @@ export default defineConfig({
             headless: true,
             fileParallelism: false,
             instances: [{ browser: "chromium" }],
+            // The dashboard a11y suites import a11y-helpers.ts, whose beforeEach runs this command.
+            commands: { ...parkPointerCommands },
           },
         },
       },
