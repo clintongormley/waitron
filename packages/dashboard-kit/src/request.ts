@@ -79,7 +79,9 @@ export function createRequest(
       // the HTTP status of the answered response — its presence tells a caller the box replied at all.
       const rawParams = envelope?.params;
       const params = isRecord(rawParams) ? rawParams : undefined;
-      throw params === undefined ? { code, status: res.status } : { code, params, status: res.status };
+      throw params === undefined
+        ? { code, status: res.status }
+        : { code, params, status: res.status };
     }
     const text = await res.text();
     if (!passive) opts.onSuccess?.(path);
