@@ -8,6 +8,11 @@ import { t } from "../i18n/t.js";
 import { allergenName } from "../i18n/domain.js";
 import { codeMessage } from "../i18n/codes.js";
 afterEach(cleanupWidgets);
+// The deep-link tests below rewrite the address bar; restore it so later tests read a clean URL.
+const originalHref = location.href;
+afterEach(() => {
+  history.replaceState(null, "", originalHref);
+});
 const modifier: Modifier = { id: "m", type: "text", name: { es: "Nota" }, available: true };
 function api(overrides: Partial<DashboardApi> = {}) {
   return {
@@ -526,6 +531,22 @@ it("shows a choice's allergen and dietary summary only when present", async () =
   const second = el.shadowRoot!.querySelector('[data-test="summary-c2"]')!;
   expect(second.textContent!.trim()).toBe("");
   expect(second.querySelector("div")).toBeNull();
+});
+// A `?modifier=<id>` deep link opens that modifier's editor once, then clears the param so a refresh
+// does not reopen it — mirroring the categories screen's `?category=<id>` behaviour.
+it("opens the editor for a ?modifier=<id> deep link and clears the param", async () => {
+  history.replaceState(null, "", "/manage/modifiers?modifier=m");
+  const el = await mount();
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector<ModifierForm>("dashboard-modifier-form")!.open).toBe(true),
+  );
+  expect(new URL(location.href).searchParams.get("modifier")).toBeNull();
+});
+it("ignores an unknown ?modifier=<id> deep link without opening the editor", async () => {
+  history.replaceState(null, "", "/manage/modifiers?modifier=nope");
+  const el = await mount();
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector<ModifierForm>("dashboard-modifier-form")!.open).toBe(false);
 });
 it("clears the details modal when the dialog dismisses itself", async () => {
   const el = await mount(api({ listModifiers: vi.fn().mockResolvedValue([extrasModifier]) }));

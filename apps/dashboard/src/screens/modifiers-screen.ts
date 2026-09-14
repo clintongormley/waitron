@@ -90,6 +90,16 @@ export class ModifiersScreen extends LitElement {
           setContentLanguages(value);
         }),
       ]);
+      // A `?modifier=<id>` deep link opens that modifier's editor. An unknown id is ignored.
+      // Clearing the param stops a refresh reopening the editor.
+      const linked = new URL(location.href).searchParams.get("modifier");
+      const target = linked ? this.modifiers.find((m) => m.id === linked) : undefined;
+      if (target) {
+        this.#edit(target);
+        const url = new URL(location.href);
+        url.searchParams.delete("modifier");
+        history.replaceState(null, "", url);
+      }
     } catch {
       this.loadError = true;
     } finally {
