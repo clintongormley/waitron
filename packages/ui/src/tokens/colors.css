@@ -9,6 +9,8 @@
   --wt-color-danger: #b3261e;
   --wt-color-on-danger: #ffffff;
   --wt-color-success: #1a7f5a;
+  --wt-color-warning: #8a5300;
+  --wt-color-on-warning: #ffffff;
   --wt-color-border: #d6d9e0;
   --wt-color-focus: #1f6feb;
   --wt-color-scrim: rgb(0 0 0 / 0.4);
@@ -26,6 +28,8 @@
     --wt-color-danger: #ff6b5e;
     --wt-color-on-danger: #2a0705;
     --wt-color-success: #4ac08d;
+    --wt-color-warning: #f2b24c;
+    --wt-color-on-warning: #241500;
     --wt-color-border: #333945;
     --wt-color-focus: #4c8dff;
     --wt-color-scrim: rgb(0 0 0 / 0.4);
@@ -43,6 +47,8 @@
   --wt-color-danger: #b3261e;
   --wt-color-on-danger: #ffffff;
   --wt-color-success: #1a7f5a;
+  --wt-color-warning: #8a5300;
+  --wt-color-on-warning: #ffffff;
   --wt-color-border: #d6d9e0;
   --wt-color-focus: #1f6feb;
   --wt-color-scrim: rgb(0 0 0 / 0.4);
@@ -59,6 +65,8 @@
   --wt-color-danger: #ff6b5e;
   --wt-color-on-danger: #2a0705;
   --wt-color-success: #4ac08d;
+  --wt-color-warning: #f2b24c;
+  --wt-color-on-warning: #241500;
   --wt-color-border: #333945;
   --wt-color-focus: #4c8dff;
   --wt-color-scrim: rgb(0 0 0 / 0.4);

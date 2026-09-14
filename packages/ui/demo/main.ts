@@ -14,6 +14,7 @@ import "../src/components/wt-switch.js";
 import "../src/components/wt-tabs.js";
 import "../src/components/wt-row-actions.js";
 import "../src/components/wt-combobox.js";
+import "../src/components/wt-count-badge.js";
 
 registerIcons({
   check: "M2 8 L6 12 L14 4",
@@ -50,6 +51,11 @@ const panel = (theme: "light" | "dark") => `
       <wt-spinner size="sm" label="Cargando"></wt-spinner>
       <wt-spinner label="Cargando"></wt-spinner>
       <wt-spinner size="lg" label="Cargando"></wt-spinner>
+    </div>
+    <div class="row">
+      <wt-count-badge count="3"></wt-count-badge>
+      <wt-count-badge count="12" tone="warning"></wt-count-badge>
+      <wt-count-badge count="120" tone="error"></wt-count-badge>
     </div>
     <wt-card raised>
       <span slot="header">Ticket</span>

@@ -65,3 +65,4 @@ export { WtCombobox, type ComboboxOption } from "./components/wt-combobox.js";
 export { readableTextColor, isHexColor, CATEGORY_PALETTE } from "./category-color.js";
 
 export { WtLozenge } from "./components/wt-lozenge.js";
+export { WtCountBadge, type WtCountBadgeTone } from "./components/wt-count-badge.js";

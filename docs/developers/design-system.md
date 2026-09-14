@@ -81,8 +81,8 @@ This works whether or not `#app` also carries `data-theme` — see "Themes" abov
 
 `--wt-color-bg`, `--wt-color-surface`, `--wt-color-surface-raised`, `--wt-color-text`,
 `--wt-color-text-muted`, `--wt-color-primary`, `--wt-color-on-primary`, `--wt-color-danger`,
-`--wt-color-on-danger`, `--wt-color-success`, `--wt-color-border`, `--wt-color-focus`,
-`--wt-color-scrim`
+`--wt-color-on-danger`, `--wt-color-success`, `--wt-color-warning`, `--wt-color-on-warning`,
+`--wt-color-border`, `--wt-color-focus`, `--wt-color-scrim`
 
 Colours are semantic, not literal. There is no `--wt-color-blue`. `--wt-color-scrim` was added
 after the rest of the palette to back `wt-dialog`'s `::backdrop` — if you need a similar
@@ -154,6 +154,7 @@ this floor — removing the `min-width` regresses that guard.
 | `wt-spinner` | `size` (`sm`\|`md`\|`lg`), `label` (the status region's accessible name), `decorative` | — |
 | `wt-card` | `raised`; default slot (body), `header` slot | — |
 | `wt-lozenge` | `color` (a hex string; empty or invalid renders the neutral chip); default slot (label) | — |
+| `wt-count-badge` | `count` (renders nothing at zero; shows `99+` above 99), `tone` (`neutral`\|`warning`\|`error`, reflected). It has no accessible name: the control it decorates must say the count | — |
 | `wt-input` | `value`, `label`, `name`, `type`, `autocomplete`, `placeholder`, `required`, `disabled`, `invalid`, `error`; `help` and `end` slots | `wt-change` — `detail: { value: string }` |
 | `wt-switch` | `checked`, `disabled`, `label`, `name` | `wt-change` — `detail: { checked: boolean }` |
 | `wt-dialog` | `open`, `heading`, `aria-label` (fallback name when there is no `heading`), `dismissible` (default true; set the property `.dismissible=${false}` so Escape cannot close it); default slot (body), `footer` slot | `wt-close` |
@@ -869,7 +870,9 @@ disabled and loading states; `wt-spinner` as a status region and decorative — 
 2026-09-11; `wt-combobox` closed, closed and named only by a forwarded `aria-label`, open with
 results, open with the add row, open with no matches, multi-select with a selection, invalid with an
 error message, disabled and required — verified 2026-09-13 by running
-`packages/ui/src/components/wt-combobox.a11y.test.ts`, which covers those states in both themes). No
+`packages/ui/src/components/wt-combobox.a11y.test.ts`, which covers those states in both themes;
+`wt-count-badge` in its neutral, warning and error tones — verified 2026-09-14 by running
+`packages/ui/src/components/wt-count-badge.a11y.test.ts`). No
 token values needed changing. (axe does flag unrelated `incomplete` — not
 violation — results: a `color-contrast` "background partially obscured" reading on `wt-dialog`'s
 `.body` slot, an [axe/shadow-DOM slot-content limitation](https://github.com/dequelabs/axe-core), and
