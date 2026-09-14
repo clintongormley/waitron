@@ -76,7 +76,7 @@ import type {
   ProductAllergens,
 } from "@waitron/catalogue";
 import { formatInvoiceNumber, recordSale } from "@waitron/core";
-import type { FloorAnnotator } from "@waitron/module";
+import type { FloorAnnotator, PreparationRoute } from "@waitron/module";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { FloorTableShape } from "./tables.js";
 import { VENUE_SERVICE } from "./modules.js";
@@ -1247,25 +1247,12 @@ export async function fireLines(
 
   const serviceContext = await VENUE_SERVICE.findOrderContext(tx, cfg, orderId);
 
-  // Resolve each fired line's venue-service preparation route ONCE per DISTINCT product, sequentially,
-  // BEFORE the line loop — never a query per line, and never fanned out concurrently over the shared
-  // `tx` (one connection serialises them anyway, and pg 9 drops that queue). The route depends only on
-  // (zone, product) and `serviceContext.zoneId` is constant across the order, so distinct products are
-  // all that vary. This is "resolve shared catalogue data once before a basket's line loop" (§3,
-  // conventions-data.md) and makes the map body below pure — no per-line await.
-  const serviceRouteByProduct = new Map<
-    string,
-    Awaited<ReturnType<typeof VENUE_SERVICE.resolvePreparationRoute>>
-  >();
-  if (serviceContext !== null) {
-    // Same distinct-product set as `productIds` above — both derived from these parent `lines`.
-    for (const productId of productIds) {
-      serviceRouteByProduct.set(
-        productId,
-        await VENUE_SERVICE.resolvePreparationRoute(tx, cfg, serviceContext.zoneId, productId),
-      );
-    }
-  }
+  // One batched venue-service route read per fire, before the line loop, so the map body below stays
+  // pure: the route depends only on (zone, product) and the zone is fixed for the order.
+  const serviceRouteByProduct =
+    serviceContext === null
+      ? new Map<string, PreparationRoute>()
+      : await VENUE_SERVICE.resolvePreparationRoutes(tx, cfg, serviceContext.zoneId, productIds);
 
   // Resolve + snapshot each line's station AND course, refusing the whole fire if any line has nowhere
   // to go. `firedAt` is `sql`now()`` (fired) or null (held), so the array is not annotated

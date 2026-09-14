@@ -173,12 +173,14 @@ export interface VenueServiceContribution {
     cfg: { tenantId: TenantId; locationId: LocationId },
     zoneId: string,
   ): Promise<OrderServiceContext>;
-  resolvePreparationRoute(
+  /** Resolves every product in one batch; throws the first failing product's coded error in input
+   *  order. An empty list returns an empty map without querying. */
+  resolvePreparationRoutes(
     tx: Transaction,
     cfg: { tenantId: TenantId; locationId: LocationId },
     zoneId: string,
-    productId: string,
-  ): Promise<PreparationRoute>;
+    productIds: readonly string[],
+  ): Promise<ReadonlyMap<string, PreparationRoute>>;
   listZoneOffers(
     tx: Transaction,
     cfg: { tenantId: TenantId; locationId: LocationId },

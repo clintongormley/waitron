@@ -1806,42 +1806,57 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
     });
   });
 
-  it("resolves the venue-service route ONCE for two lines of the same product", async () => {
-    // fireLines resolves each fired line's preparation route through the venue service. Two lines of
-    // the SAME product share one route, so the resolver must run once for that product, not once per
-    // line — the "resolve shared catalogue data once before a basket's line loop" rule (§3), and the
-    // reason the map body no longer awaits a query per line on the shared transaction.
-    const { cfg, zoneId, premiumCafeOfferId, cafeId } = await setupVenue();
+  it("resolves every fired product's venue-service route in ONE batched call", async () => {
+    // Two lines of cafe and one of agua: one call carrying each distinct product once, never a call
+    // per line or per product on the shared transaction.
+    const { cfg, zoneId, catalogueId, premiumCafeOfferId, cafeId, aguaId } = await setupVenue();
     await withTenant(db, cfg.tenantId, async (tx) => {
       await asAppUser(tx);
       await tx.execute(sql`
         update departments set default_service_mode = 'table_tab'
         where tenant_id = ${cfg.tenantId} and location_id = ${cfg.locationId}`);
       const bar = await createStation(tx, cfg, { name: "Bar", isDefault: true });
+      const kitchen = await createStation(tx, cfg, { name: "Kitchen" });
       const product = await tx.execute<{ category_id: string }>(sql`
         select category_id from products where tenant_id = ${cfg.tenantId} and id = ${cafeId}`);
       await tx.execute(sql`
         insert into preparation_routes (tenant_id, location_id, zone_id, category_id, station_id)
         values (${cfg.tenantId}, ${cfg.locationId}, ${zoneId}, ${product.rows[0]!.category_id}, ${bar.id})`);
+      await tx.execute(sql`
+        insert into preparation_routes (tenant_id, location_id, zone_id, product_id, station_id)
+        values (${cfg.tenantId}, ${cfg.locationId}, ${zoneId}, ${aguaId}, ${kitchen.id})`);
+      const section = await createMenuSection(tx, cfg.tenantId, {
+        menuId: catalogueId,
+        name: { [LOCALE]: "Agua" },
+      });
+      const aguaOffer = await createMenuItem(tx, cfg.tenantId, {
+        menuId: catalogueId,
+        productId: aguaId,
+        sectionId: section.id,
+        grossPrice: "2.00",
+      });
       const table = await tx.execute<{ id: string }>(sql`
         insert into dining_tables (tenant_id, location_id, label, zone_id)
         values (${cfg.tenantId}, ${cfg.locationId}, 'Two of a kind', ${zoneId}) returning id`);
       const { tabId } = await openTab(tx, cfg, { tableId: table.rows[0]!.id });
 
-      const resolveRoute = vi.spyOn(VENUE_SERVICE, "resolvePreparationRoute");
+      const resolveRoutes = vi.spyOn(VENUE_SERVICE, "resolvePreparationRoutes");
       try {
         await addTabRound(tx, cfg, tabId, [
           { menuItemId: premiumCafeOfferId, quantity: "1" },
           { menuItemId: premiumCafeOfferId, quantity: "1" },
+          { menuItemId: aguaOffer.id, quantity: "1" },
         ]);
-        const productCalls = resolveRoute.mock.calls.filter((call) => call[3] === cafeId);
-        expect(productCalls).toHaveLength(1);
-        // Both fired lines still route to the resolved station.
+        expect(resolveRoutes).toHaveBeenCalledTimes(1);
+        expect(resolveRoutes.mock.calls[0]!.slice(2)).toEqual([zoneId, [cafeId, aguaId]]);
         const items = await ticketItemsFor(tx, tabId);
-        expect(items).toHaveLength(2);
-        expect(items.every((item) => item.stationId === bar.id)).toBe(true);
+        expect(items).toHaveLength(3);
+        const stationsOf = (productId: string) =>
+          items.filter((item) => item.productId === productId).map((item) => item.stationId);
+        expect(stationsOf(cafeId)).toEqual([bar.id, bar.id]);
+        expect(stationsOf(aguaId)).toEqual([kitchen.id]);
       } finally {
-        resolveRoute.mockRestore();
+        resolveRoutes.mockRestore();
       }
     });
   });
