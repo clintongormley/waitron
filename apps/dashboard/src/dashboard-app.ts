@@ -656,6 +656,9 @@ export class DashboardApp extends LitElement {
   @state() private alertBusyKey: string | null = null;
   @state() private alertToast: { message: string; tone: "info" | "error" } | null = null;
   readonly #alertArrivals = new AlertArrivals();
+  /** Bumped whenever the alerts state is cleared, which also happens without a new session (a
+   * re-check that finds the person is now staff), so a Mark handled started before it is ignored. */
+  #alertsGeneration = 0;
   readonly #alertQueries = new DashboardQueries(
     this,
     () => this.api,
@@ -925,6 +928,7 @@ export class DashboardApp extends LitElement {
   }
 
   #clearAlerts(): void {
+    this.#alertsGeneration += 1;
     this.#alertQueries.release("listAlerts");
     this.#alertArrivals.reset();
     this.alerts = [];
@@ -940,7 +944,11 @@ export class DashboardApp extends LitElement {
     // A request can outlive its session: an expired session is reported, and the shell returns to
     // login, before the request's own promise rejects.
     const generation = this.sessionGeneration;
-    const current = () => this.isConnected && generation === this.sessionGeneration;
+    const alertsGeneration = this.#alertsGeneration;
+    const current = () =>
+      this.isConnected &&
+      generation === this.sessionGeneration &&
+      alertsGeneration === this.#alertsGeneration;
     this.alertBusyKey = event.detail.key;
     this.alertError = null;
     try {

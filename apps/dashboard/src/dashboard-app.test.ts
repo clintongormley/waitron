@@ -3399,14 +3399,20 @@ describe("alerts in the shell", () => {
     },
   );
 
-  it.each([1280, 400])("puts the pop-up below the banner at %ipx", async (width) => {
-    const { el, host } = await mountWithPopup();
-    await atViewport(host, width, async () => {
-      expect(toast(el).getBoundingClientRect().top).toBeGreaterThanOrEqual(
-        brandBanner(el)!.getBoundingClientRect().bottom,
-      );
-    });
-  });
+  it.each([1280, 400])(
+    "puts the pop-up below the banner, and inside its width, at %ipx",
+    async (width) => {
+      const { el, host } = await mountWithPopup();
+      await atViewport(host, width, async () => {
+        const box = toast(el).getBoundingClientRect();
+        const banner = brandBanner(el)!.getBoundingClientRect();
+        expect(box.top).toBeGreaterThanOrEqual(banner.bottom);
+        expect(box.width).toBeGreaterThan(0);
+        expect(box.left).toBeGreaterThanOrEqual(banner.left);
+        expect(box.right).toBeLessThanOrEqual(banner.right);
+      });
+    },
+  );
 
   it("shows no bell when the session may see no alerts", async () => {
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
@@ -3633,10 +3639,11 @@ describe("alerts in the shell", () => {
         visible: true,
         alerts: [
           {
-            key: "ongoing:printers",
+            key: "printer.offline:kitchen",
             kind: "ongoing",
-            code: "payment.offline_forward_declined",
-            params: {},
+            // No printer code has wording on this branch; the wording is not under test here.
+            code: "printer.offline",
+            params: { printerName: "Kitchen" },
             severity: "warning",
             since: "2026-09-14T12:00:00.000Z",
             area: "printing",
@@ -3759,6 +3766,44 @@ describe("alerts in the shell", () => {
     await flush(el);
     expect(el.shadowRoot!.querySelector("dashboard-my-schedule-screen")).not.toBeNull();
     expect(bell(el)).toBeNull();
+  });
+
+  it("drops a Mark handled failure that lands after a re-check found the session is now staff", async () => {
+    let fail!: (error: unknown) => void;
+    const manager = { ...meResponse, sessionDefault: "en-GB" };
+    const getMe = vi
+      .fn()
+      .mockResolvedValueOnce(manager)
+      .mockResolvedValueOnce({ ...manager, role: "staff", permissions: [] })
+      .mockResolvedValue(manager);
+    const api = alertsApi({
+      getMe,
+      listAlerts: vi.fn().mockResolvedValue({ visible: true, alerts: [alert("7")] }),
+      markIncidentHandled: vi.fn().mockReturnValue(
+        new Promise((_resolve, reject) => {
+          fail = reject;
+        }),
+      ),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request: stubRequest });
+    await flush(el);
+    bell(el)!.shadowRoot!.querySelector<HTMLElement>("[data-test=alert-handle]")!.click();
+    document.dispatchEvent(new Event("visibilitychange"));
+    await vi.waitFor(() => expect(getMe).toHaveBeenCalledTimes(2));
+    await flush(el);
+    expect(bell(el)).toBeNull();
+    fail({ code: "alert.not_found" });
+    await flush(el);
+    // Back to a manager: the same session, so only the alerts reset can tell the failure is stale.
+    document.dispatchEvent(new Event("visibilitychange"));
+    await vi.waitFor(() => expect(getMe).toHaveBeenCalledTimes(3));
+    await vi.waitFor(() => expect(bell(el)).not.toBeNull());
+    await flush(el);
+    await (bell(el) as AlertsBell).updateComplete;
+    expect(bell(el)!.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+    expect(
+      bell(el)!.shadowRoot!.querySelector("[data-test=alert-handle]")!.hasAttribute("loading"),
+    ).toBe(false);
   });
 
   it("forgets the previous session's alerts on logout", async () => {

@@ -489,7 +489,8 @@ The badge is red when any open alert is an error and amber otherwise. While ther
 the trigger's accessible name includes the count, because the badge has no name of its own. The
 panel lists at most five alerts and, below the drawer breakpoint (`48rem`), spans the screen's width
 less a small gutter. When new alerts arrive while the page is open, a `wt-toast` appears just below the
-banner's bottom edge at the trailing edge, and spans the banner's width below that same breakpoint.
+banner's bottom edge at the trailing edge, and below that same breakpoint spans the banner's width
+less a small gutter on each side.
 
 ### Dashboard sidebar navigation
 

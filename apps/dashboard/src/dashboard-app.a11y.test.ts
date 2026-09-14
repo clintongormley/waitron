@@ -12,6 +12,8 @@ declare module "@vitest/browser/context" {
 }
 import type { DashboardApp } from "./dashboard-app.js";
 import type { AlertsBell } from "./widgets/alerts-bell.js";
+import type { WtToast } from "@waitron/ui";
+import { LiveData } from "@waitron/dashboard-kit";
 import type { DashboardApi, PersonSummary } from "./api/client.js";
 
 /**
@@ -407,6 +409,36 @@ describe.each(["light", "dark"] as const)("dashboard-app a11y (%s theme)", (them
       .shadowRoot!.querySelector("wt-row-actions")!
       .shadowRoot!.querySelector("[popover]")!;
     expect(popup.matches(":popover-open")).toBe(true);
+    await expectNoA11yViolations(host);
+  });
+
+  it("the new-alerts pop-up is accessible while it is open below the banner", async () => {
+    const alert = (id: string) => ({
+      key: `incident:${id}`,
+      kind: "event",
+      code: "payment.offline_forward_declined",
+      params: { amount: "12.50", paymentRef: `pi_${id}` },
+      severity: "error",
+      since: "2026-09-14T12:00:00.000Z",
+      area: "payments",
+    });
+    const liveData = new LiveData();
+    const api = stubApi({
+      liveData,
+      listAlerts: vi
+        .fn()
+        .mockResolvedValueOnce({ visible: true, alerts: [alert("1")] })
+        .mockResolvedValue({ visible: true, alerts: [alert("1"), alert("2")] }),
+    });
+    const { el, host } = await mountWidget<DashboardApp>("dashboard-app", { api }, theme);
+    await flush(el);
+    // The first read never pops up; a second one bringing a new alert does.
+    liveData.invalidate([{ type: "incidents" }]);
+    const toast = () => el.shadowRoot!.querySelector<WtToast>("[data-test=alert-toast]")!;
+    await vi.waitFor(() => expect(toast().open).toBe(true));
+    await toast().updateComplete;
+    // Axe files the pop-up's text contrast as "incomplete" here, because the pop-up sits over the
+    // page; wt-toast's own accessibility test judges its contrast.
     await expectNoA11yViolations(host);
   });
 
