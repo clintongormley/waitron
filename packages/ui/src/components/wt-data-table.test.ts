@@ -104,6 +104,17 @@ test("emits wt-sort-change when a header is clicked", async () => {
   ]);
 });
 
+test("a header click is stopped at the table, so only wt-sort-change reaches the host", async () => {
+  const el = await table();
+  const clicks = vi.fn();
+  const sorts = vi.fn();
+  el.addEventListener("click", clicks);
+  el.addEventListener("wt-sort-change", sorts);
+  el.shadowRoot!.querySelector<HTMLButtonElement>('[data-sort="name"]')!.click();
+  expect(sorts).toHaveBeenCalledOnce();
+  expect(clicks).not.toHaveBeenCalled();
+});
+
 test("descending default sorts the other way", async () => {
   const el = await table({ sortKey: "count", sortDirection: "descending" });
   expect(rowText(el)).toEqual(["Ada10Edit", "Bea2Edit"]); // 10 before 2

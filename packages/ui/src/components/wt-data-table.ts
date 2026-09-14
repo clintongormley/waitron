@@ -548,7 +548,10 @@ export class WtDataTable<Row = unknown> extends LitElement {
                     : html`<button
                         class="sort"
                         data-sort=${column.key}
-                        @click=${() => this.#sort(column)}
+                        @click=${(event: Event) => {
+                          event.stopPropagation();
+                          this.#sort(column);
+                        }}
                       >
                         ${column.label}<span class="indicator" aria-hidden="true"
                           >${
