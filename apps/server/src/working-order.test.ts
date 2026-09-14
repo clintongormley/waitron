@@ -1839,6 +1839,38 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
     });
   });
 
+  it("never falls back to another tenant's default station, even when cfg names its location", async () => {
+    // fireLines trusts cfg; the default-station read must still keep to cfg's tenant.
+    const venue = await setupVenue();
+    const other = await setupVenue();
+    await withTenant(db, other.cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await createStation(tx, other.cfg, { name: "Foreign default", isDefault: true });
+    });
+    await withTenant(db, venue.cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const orderId = randomUUID();
+      await createOpenOrder(tx, venue.cfg, orderId, [line(venue.cafeId)], null);
+      const lines = await tx
+        .select({
+          id: workingOrderLines.id,
+          productId: workingOrderLines.productId,
+          courseId: workingOrderLines.courseId,
+          parentLineId: workingOrderLines.parentLineId,
+          note: workingOrderLines.note,
+          doneness: workingOrderLines.doneness,
+        })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, orderId));
+      const mixed = { ...venue.cfg, locationId: other.cfg.locationId };
+
+      await expect(fireLines(tx, mixed, orderId, lines)).rejects.toMatchObject({
+        code: "station.no_default",
+        params: { locationId: other.cfg.locationId },
+      });
+    });
+  });
+
   it("resolves every fired product's venue-service route in ONE batched call", async () => {
     // Two lines of cafe and one of agua: one call carrying each distinct product once, never a call
     // per line or per product on the shared transaction.
