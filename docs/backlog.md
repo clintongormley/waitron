@@ -830,6 +830,13 @@ ongoing overhaul listed at the top of Track A.
   `Intl.Collator`; lists in a lifecycle order say so; then migrate the screens, including the filter
   dropdowns `wt-data-table` draws in its toolbar, which are raw `<select>`s too. Fix
   `wt-data-table`'s locale-less `localeCompare` at the same time.
+- **Two till dropdowns may show the wrong choice when they first appear** (found 2026-09-14; read,
+  not run). `apps/till/src/screens/till-counter-screen.ts:321` (service zone) and
+  `apps/till/src/widgets/line-extras-editor.ts:95` (doneness) bind only `.value` on a `<select>`
+  whose options come from a `${…}` list, and mark no option selected. The CLAUDE.md §3 `<select>`
+  rule says such a dropdown shows its first option when its first value is another one: a chosen
+  service zone that is not the first zone, or a doneness already set when the picker first renders.
+  **Next action:** reproduce each in a browser test, then mark the chosen option with `.selected`.
 - **`wt-combobox`** (#351, 2026-09-13). It is a searchable dropdown in `packages/ui`: pick one option
   or several (`multiple`), and optionally offer to add what was typed when nothing matches. It landed
   with nothing using it; the category-overhaul branch (2026-09-14) is the first adopter, for the
