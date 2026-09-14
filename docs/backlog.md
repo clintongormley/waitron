@@ -871,8 +871,9 @@ ongoing overhaul listed at the top of Track A.
   arrive together at login (`apps/till/src/till-app.ts`, `listDefaultZoneOffers`), so the fault
   would show whenever the till's starting zone is not the first zone listed. The starting zone is the
   device's row in `device_zone_defaults`, else the zone whose policy has `is_counter_default`; no
-  dashboard screen or route sets either, so only seed data or SQL changes it. `listServiceZones` has
-  no `ORDER BY`, so which zone is "first" is whatever the database returns. **Next action:** a case
+  dashboard screen or route sets either, so only seed data or SQL changes it. `listServiceZones` sorts
+  by `display_order`, then name, and the till drops `table_tab` zones, so "first" is the lowest
+  display order among the rest. **Next action:** a case
   in `till-counter-screen.test.ts` with two zones and the second chosen, asserting on
   `select.selectedOptions[0]`, not `select.value`; then mark the chosen option with `.selected`.
 - **Remove the built-in doneness picker; doneness becomes a modifier the venue adds itself** (owner
