@@ -18,7 +18,7 @@ const LOCATION_A2 = "aaaaaaaa-0000-4000-8000-000000000002";
 const RANDOM_UUID = "99999999-9999-4999-8999-999999999999";
 
 describe("kitchen_courses schema (columns, defaults, course FKs)", () => {
-  const suite = useTemplateDb({ template: "core" });
+  const suite = useTemplateDb({ template: "core", resetPerTest: false });
 
   // Seeded once in beforeAll: a product of tenant A (for the products.course_id FK proof) and a course
   // of tenant A to route (course A).

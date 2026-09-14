@@ -36,7 +36,7 @@ let productA = "";
 let nextOrderNumber = 1;
 
 describe("working_orders state machine (enforce_transition)", () => {
-  const suite = useTemplateDb({ template: "core" });
+  const suite = useTemplateDb({ template: "core", resetPerTest: false });
 
   function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
     return withTransaction(suite.admin, async (tx) => {

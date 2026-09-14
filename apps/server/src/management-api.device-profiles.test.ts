@@ -22,7 +22,7 @@ const PASSWORD = "correct horse"; // ≥ MIN_PASSWORD_LENGTH; the manager's & st
 const MANAGER_EMAIL = "manager@x.com";
 const STAFF_EMAIL = "clerk@x.com";
 
-const suite = useTemplateDb({ template: "manifest" });
+const suite = useTemplateDb({ template: "manifest", resetPerTest: false });
 
 /** A no-op logger: only the HTTP responses and the database state matter here. */
 const noopLog: Logger = () => {};

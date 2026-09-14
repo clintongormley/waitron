@@ -16,7 +16,7 @@ import "./errors.js";
 // app_user, whose UPDATE on `dining_tables` PGlite's superuser connection would hold regardless, so
 // this needs the real cluster the shared container provides; a Docker-absent run fails at the package
 // globalSetup, not here.
-const suite = useTemplateDb({ template: "core" });
+const suite = useTemplateDb({ template: "core", resetPerTest: false });
 
 function asApp<T>(tenantId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> {
   void tenantId;

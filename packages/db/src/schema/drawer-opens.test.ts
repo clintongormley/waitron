@@ -38,7 +38,7 @@ async function rollBackAfter(
 }
 
 describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, composite FKs)", () => {
-  const suite = useTemplateDb({ template: "core" });
+  const suite = useTemplateDb({ template: "core", resetPerTest: false });
 
   beforeAll(async () => {
     await suite.admin

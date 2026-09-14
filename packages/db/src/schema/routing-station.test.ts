@@ -21,7 +21,7 @@ let productA = "";
 let stationA = "";
 
 describe("categories.station_id / products.station_id routing FKs (tenant-consistent, app-writable)", () => {
-  const suite = useTemplateDb({ template: "core" });
+  const suite = useTemplateDb({ template: "core", resetPerTest: false });
 
   beforeAll(async () => {
     const admin = suite.admin;

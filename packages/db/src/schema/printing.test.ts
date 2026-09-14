@@ -22,7 +22,7 @@ const GHOST_LOCATION = "dddddddd-0000-4000-8000-000000000099";
 const TOKEN_HASH = "scrypt$00$00";
 
 describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs, FKs)", () => {
-  const suite = useTemplateDb({ template: "core" });
+  const suite = useTemplateDb({ template: "core", resetPerTest: false });
 
   beforeAll(async () => {
     await suite.admin

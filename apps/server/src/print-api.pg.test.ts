@@ -46,7 +46,7 @@ let tenantA: Tenant;
 let managerCookie: string;
 let staffCookie: string;
 
-const suite = useTemplateDb({ template: "manifest" });
+const suite = useTemplateDb({ template: "manifest", resetPerTest: false });
 
 // Tenants accumulate for the life of the shared clone and `tenants_country_tax_id_key` is unique, so
 // each needs its own NIF — the per-suite counter the sibling real-Postgres suites use.

@@ -23,7 +23,7 @@ const PASSWORD = "correct horse"; // the seeded manager's dashboard password
 const MANAGER_EMAIL = "manager@x.com";
 const BUNDLE_PASS = "recovery pass phrase"; // ≥ MIN_PASSPHRASE_LENGTH
 
-const suite = useTemplateDb({ template: "manifest" });
+const suite = useTemplateDb({ template: "manifest", resetPerTest: false });
 
 let nifCounter = 0;
 function nextNif(): string {

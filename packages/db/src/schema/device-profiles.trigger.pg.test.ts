@@ -13,7 +13,7 @@ import type { LocationId, TenantId } from "@waitron/shared";
 const TOKEN_HASH = "scrypt$00$00";
 
 describe("device_profiles form-factor drift guard (locked while an active device uses it)", () => {
-  const suite = useTemplateDb({ template: "core" });
+  const suite = useTemplateDb({ template: "core", resetPerTest: false });
   let admin: Database;
   let tenantId: TenantId;
   let locationId: LocationId;

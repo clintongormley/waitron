@@ -44,7 +44,7 @@ const BACKUP_KEYS = [
 const KEY_1 = "recovery-key-one-strong";
 const KEY_2 = "recovery-key-two-different";
 
-const suite = useTemplateDb({ template: "manifest" });
+const suite = useTemplateDb({ template: "manifest", resetPerTest: false });
 
 let nifCounter = 0;
 function nextNif(): string {

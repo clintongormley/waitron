@@ -26,7 +26,7 @@ const PASSWORD = "correct horse"; // ≥ MIN_PASSWORD_LENGTH; the seeded manager
 // (per-tenant unique — persons_tenant_email_uq).
 const MANAGER_EMAIL = "manager@x.com";
 
-const suite = useTemplateDb({ template: "manifest" });
+const suite = useTemplateDb({ template: "manifest", resetPerTest: false });
 
 // Tenants accumulate for the life of the shared container and `tenants_country_tax_id_key` is unique,
 // so the provisioned venue needs its own NIF — the same per-suite counter the sibling suites use.

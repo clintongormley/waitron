@@ -44,15 +44,15 @@ import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 // this is an idempotent re-run the app role could not do (it lacks CREATE — boot.test.ts's PROBE_ROLE
 // note). The pull worker is pointed at an UNREACHABLE relay, so it backs off and the box still serves.
 
-const mirror = useTemplateDb({ template: "manifest" });
-const primary = useTemplateDb({ template: "manifest" });
+const mirror = useTemplateDb({ template: "manifest", resetPerTest: false });
+const primary = useTemplateDb({ template: "manifest", resetPerTest: false });
 // A fourth clone for the adoption-pending boot (C6): migrated but with NO identity seeded — it models
 // a mirror that has just adopted and whose native initial copy has not yet brought the tenant rows.
-const adopting = useTemplateDb({ template: "manifest" });
+const adopting = useTemplateDb({ template: "manifest", resetPerTest: false });
 // A third mirror-stamped clone that is NEVER seeded with a `mirror_config` row — the fail-closed
 // control: a box stamped `deployment.mode='mirror'` with no DB connection config must refuse to boot
 // (server.config_invalid), never serve a mirror that can never reach its primary.
-const noConfig = useTemplateDb({ template: "manifest" });
+const noConfig = useTemplateDb({ template: "manifest", resetPerTest: false });
 
 // The till's fiscal identity — the five WAITRON_TILL_*_ID that put boot into TRADING mode. Distinct
 // per field. Seeded on BOTH clones in `beforeAll` (tenant/location/node/till/series) so a successful

@@ -15,7 +15,7 @@ import type { LocationId, TenantId } from "@waitron/shared";
 const TOKEN_HASH = "scrypt$00$00";
 
 describe("devices binding-rule trigger (form factor → station XOR register)", () => {
-  const suite = useTemplateDb({ template: "core" });
+  const suite = useTemplateDb({ template: "core", resetPerTest: false });
   let admin: Database;
   let tenantId: TenantId;
   let locationId: LocationId;

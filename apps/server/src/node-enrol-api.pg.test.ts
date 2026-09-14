@@ -25,7 +25,7 @@ import "./errors.js";
 // the same `useTemplateDb`/`seedTenantWithLocation` shape.
 const noopLog: Logger = () => {};
 
-const suite = useTemplateDb({ template: "manifest" });
+const suite = useTemplateDb({ template: "manifest", resetPerTest: false });
 
 interface Tenant {
   tenantId: string;

@@ -59,7 +59,7 @@ const RING: KeyRing = loadKeyRing({
 // endorsement's signature verifies against the primary's key over canonicalize({nodeId, publicKey}).
 const STANDBY_PUB = generateNodeKeyPair().publicKey;
 
-const suite = useTemplateDb({ template: "manifest" });
+const suite = useTemplateDb({ template: "manifest", resetPerTest: false });
 
 // Tenants accumulate for the life of the shared container and `tenants_country_tax_id_key` is unique,
 // so each provisioned venue needs its own NIF — the per-suite counter the sibling real-Postgres suites use.

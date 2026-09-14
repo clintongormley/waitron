@@ -40,7 +40,7 @@ import "./errors.js";
 // working-order id (unique, so `sales_working_order_id_key` never collides across cases).
 const LOCALE = "es-ES";
 
-const suite = useTemplateDb({ template: "manifest" });
+const suite = useTemplateDb({ template: "manifest", resetPerTest: false });
 
 let backend: FiscalBackend;
 let clock: TrustedClock;

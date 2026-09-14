@@ -14,7 +14,7 @@ import "./errors.js";
 // management_sessions as the app role) and upserts table_service_statuses as that same role — grants
 // a PGlite superuser connection holds unconditionally — so it needs the real cluster the shared
 // container provides; a Docker-absent run fails at the package globalSetup, not here.
-const suite = useTemplateDb({ template: "core_identity" });
+const suite = useTemplateDb({ template: "core_identity", resetPerTest: false });
 
 function asApp<T>(tenantId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> {
   void tenantId;

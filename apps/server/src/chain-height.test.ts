@@ -13,7 +13,7 @@ import { ALL_MODULES } from "./modules.js";
 // Real PostgreSQL retains the app_user read-privilege check.
 const LOCALE = "es-ES";
 
-const suite = useTemplateDb({ template: "manifest" });
+const suite = useTemplateDb({ template: "manifest", resetPerTest: false });
 
 // Tenants accumulate for the life of the shared container and `tenants_country_tax_id_key` is unique,
 // so the provisioned venue needs its own NIF — the same per-suite counter the sibling suites use.

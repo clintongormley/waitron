@@ -11,7 +11,7 @@ import type { TrustedClock } from "@waitron/fiscal";
 import { recordTillSale } from "./till-sale.js";
 
 // PostgreSQL exercises the route as app_user, including its configuration grant.
-const suite = useTemplateDb({ template: "manifest" });
+const suite = useTemplateDb({ template: "manifest", resetPerTest: false });
 let venue: Venue;
 beforeAll(async () => {
   venue = await setupVenue(suite.admin);

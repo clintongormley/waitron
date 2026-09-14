@@ -212,7 +212,7 @@ const KEY_ENV = {
 // per-file `probeRole` + `beforeAll` role creation this suite used before the shared container; the
 // per-DATABASE grants `PROBE_ROLE` needs to re-run migrations are applied to this clone in the
 // `beforeAll` below (they cannot be cluster-wide — they name this database).
-const suite = useTemplateDb({ template: "manifest" });
+const suite = useTemplateDb({ template: "manifest", resetPerTest: false });
 
 let migrationsRoot: string;
 let databaseUrl: string;

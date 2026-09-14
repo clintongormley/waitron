@@ -98,7 +98,7 @@ const KEY_ENV = {
 
 // A clone of the full-manifest template — this suite's own database (each `useTemplateDb` call clones
 // afresh), so the deployment stamp + singleton_role flips it performs are isolated to this file.
-const suite = useTemplateDb({ template: "manifest" });
+const suite = useTemplateDb({ template: "manifest", resetPerTest: false });
 
 let migrationsRoot: string;
 // The app pool the running box uses (`app_login`, an `app_user` member — created cluster-wide by
@@ -389,7 +389,7 @@ describe("promote (real Postgres): local secondary → primary, live", () => {
 // with the cloud's OWN reserved standard series id, and schedules a restart into mode=primary. Real
 // Postgres for the owner-role writes + the reserved-SIF reads (CLAUDE.md §4); a SEPARATE clone so the
 // mirror stamp + the (primary,primary) flip never leak into the local-secondary suite above.
-const mirrorSuite = useTemplateDb({ template: "manifest" });
+const mirrorSuite = useTemplateDb({ template: "manifest", resetPerTest: false });
 
 // The mirror's OWN venue ids, distinct from TILL_ENV so the two clones' seeds never collide. The NODE id
 // is the generated standby's own id (filled in at seed time), and WAITRON_TILL_SERIES_ID boots as the

@@ -117,8 +117,8 @@ const MIRROR_NUMERO_INSTALACION = 7;
 
 // Separate clones: the non-mirror deployment stamps (primary/fenced) must never leak into the mirror
 // clone's (mirror, primary) flip, and vice versa (each `useTemplateDb` call clones the manifest afresh).
-const suite = useTemplateDb({ template: "manifest" });
-const mirrorSuite = useTemplateDb({ template: "manifest" });
+const suite = useTemplateDb({ template: "manifest", resetPerTest: false });
+const mirrorSuite = useTemplateDb({ template: "manifest", resetPerTest: false });
 
 let migrationsRoot: string;
 let appDatabaseUrl: string;

@@ -33,7 +33,7 @@ async function rollBackAfter(
 }
 
 describe("kitchen_stations schema (columns, threshold CHECK, partial unique)", () => {
-  const suite = useTemplateDb({ template: "core" });
+  const suite = useTemplateDb({ template: "core", resetPerTest: false });
 
   beforeAll(async () => {
     await suite.admin.insert(tenants).values([

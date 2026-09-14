@@ -41,8 +41,8 @@ beforeEach(() => {
   vi.mocked(runTunnelClient).mockClear();
 });
 
-const secondary = useTemplateDb({ template: "manifest" });
-const primary = useTemplateDb({ template: "manifest" });
+const secondary = useTemplateDb({ template: "manifest", resetPerTest: false });
+const primary = useTemplateDb({ template: "manifest", resetPerTest: false });
 
 // The till's fiscal identity — the five WAITRON_TILL_*_ID that put boot into TRADING mode (a secondary is
 // a trading boot: it sells, it just files nothing and owns no singletons). Seeded on both clones so

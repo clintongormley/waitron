@@ -20,7 +20,7 @@ import {
 // app_user-authenticated pool, so exercise them through one: `app_login` is a cluster LOGIN role that
 // is a MEMBER of `app_user` (apps/server/src/testing/global-setup.ts), inheriting its grants — the
 // same production shape the sibling real-Postgres suites use.
-const suite = useTemplateDb({ template: "manifest" });
+const suite = useTemplateDb({ template: "manifest", resetPerTest: false });
 
 // One shared tenant for the whole file. The viewer is a fixed-id SINGLETON (its PK is a constant), so
 // it belongs to whichever tenant first seeds it; a fresh tenant per test would make the second test's

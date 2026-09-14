@@ -43,8 +43,8 @@ import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 // non-superuser app/owner roles (grants enforced), and the fence-LSN capture reads `pg_current_wal_lsn()`
 // — none observable under a PGlite superuser (CLAUDE.md §4).
 
-const superseded = useTemplateDb({ template: "manifest" });
-const proceeds = useTemplateDb({ template: "manifest" });
+const superseded = useTemplateDb({ template: "manifest", resetPerTest: false });
+const proceeds = useTemplateDb({ template: "manifest", resetPerTest: false });
 
 // The box's own fiscal identity — the five WAITRON_TILL_*_ID that put boot into TRADING + PRIMARY mode.
 const TILL_ENV = {

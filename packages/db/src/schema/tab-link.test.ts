@@ -31,7 +31,7 @@ async function rollBackAfter(
 }
 
 describe("table↔tab link columns (mutual composite FKs)", () => {
-  const suite = useTemplateDb({ template: "core" });
+  const suite = useTemplateDb({ template: "core", resetPerTest: false });
 
   let nodeA = "";
   let orderSeq = 0;

@@ -40,9 +40,9 @@ const REPLICATION: ReplicationConfig = {
 };
 const PRIMARY_DATABASE = "waitron_pp";
 
-const suite = useTemplateDb({ template: "manifest" });
+const suite = useTemplateDb({ template: "manifest", resetPerTest: false });
 // A second, never-stamped clone for the null-environment branch.
-const unstamped = useTemplateDb({ template: "manifest" });
+const unstamped = useTemplateDb({ template: "manifest", resetPerTest: false });
 
 let nifCounter = 0;
 function nextNif(): string {

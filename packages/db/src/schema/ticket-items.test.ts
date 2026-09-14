@@ -33,7 +33,7 @@ let stationA = "";
 let orderNumberSeq = 0;
 
 describe("ticket_items schema (columns + per-line unique + cascade)", () => {
-  const suite = useTemplateDb({ template: "core" });
+  const suite = useTemplateDb({ template: "core", resetPerTest: false });
 
   beforeAll(async () => {
     const admin = suite.admin;

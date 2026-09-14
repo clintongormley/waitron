@@ -15,7 +15,7 @@ const TENANT_A = "11111111-1111-4111-8111-111111111111";
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 
 describe("floor_zones schema (columns and the dining_tables.zone_id composite FK)", () => {
-  const suite = useTemplateDb({ template: "core" });
+  const suite = useTemplateDb({ template: "core", resetPerTest: false });
 
   beforeAll(async () => {
     await suite.admin

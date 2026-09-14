@@ -62,7 +62,7 @@ describe("order_amendments append helper", () => {
   // A clone of the shared container's `core` template. Docker is required (the package globalSetup
   // fails loudly without it): the concurrency proof below opens distinct backends via
   // `suite.pg.connect()`, which one serialised PGlite backend cannot give.
-  const suite = useTemplateDb({ template: "core" });
+  const suite = useTemplateDb({ template: "core", resetPerTest: false });
 
   // As the connection owner — pure setup: two tenants, each with a location, a till and a node
   // (tenant B exists only to mint `nodeB`, the foreign node id the hash-tamper case swaps in).
