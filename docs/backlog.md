@@ -443,6 +443,21 @@ order line and carried through park and resume, the kitchen screen, the receipt 
 [Design](superpowers/specs/2026-09-12-product-units-design.md),
 [plan](superpowers/plans/2026-09-12-product-units.md).
 
+**Update (2026-09-15) — units abbreviation and screen rebuild.** Every unit now carries a second
+translatable text, its **abbreviation** (a short form such as `kg` or `ml`), alongside its full
+name. The abbreviation is what prints wherever a quantity is shown — so the label frozen onto a
+sold line and printed on the receipt, the kitchen ticket and the till is now the **abbreviation**,
+not the full name the paragraph above describes; the full name shows only in the dashboard and in
+the product-editor dropdown (as `Name (abbr)`). The frozen `unit_name` column is presentation only
+and does not enter the fiscal hash (proven by the huella tests). The units page was rebuilt onto the
+shared table conventions — the Add button sits at the header, the table has its own search and a
+precision filter, row actions are left-aligned, and the last sort and filter are remembered per tab;
+its old "Decimal places" field is now labelled **Precision** and shows the value as the locale's
+decimal marker followed by that many zeroes (`,000` in Spanish, `.000` in English). The seeded
+minority-language unit names and the `each` abbreviation are drafts pending owner confirmation.
+[Design](superpowers/specs/2026-09-14-units-screen-and-abbreviation-design.md),
+[plan](superpowers/plans/2026-09-14-units-screen-and-abbreviation.md).
+
 What it left open:
 
 - **Units still has no written contract, but the reason to write one has passed.** Categories and
@@ -963,7 +978,7 @@ ongoing overhaul listed at the top of Track A.
   options come from a `.map(…)` and marks no option `selected` — the shape that showed "Downstairs
   bar" on the till while it sold from Deli counter, fixed by #365 (CLAUDE.md §3). Found by a text scan, checked by
   hand: `apps/dashboard/src/screens/my-schedule-screen.ts:393`, `:407`, `:459`,
-  `apps/dashboard/src/screens/units-screen.ts:428`, and
+  `apps/dashboard/src/screens/units-screen.ts:456`, and
   `apps/till/src/screens/till-schedule-screen.ts:390`, `:404`, `:457` (plus the doneness picker in
   `apps/till/src/widgets/line-extras-editor.ts`, due for removal below). By reading, every one opens
   on its first option — an empty placeholder or the first absence type — which is what that shape
