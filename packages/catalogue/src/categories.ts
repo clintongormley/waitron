@@ -103,6 +103,17 @@ async function validateImage(
   );
   if (!image.rows.length) throw new AppError("category.image_not_found", {});
 }
+/**
+ * Is the venue-service module's `preparation_routes` table in this database? Routes belong to an
+ * optional module, so both the delete and its preview have to ask before naming the table in raw
+ * SQL. Follows validateImage's precedent for `media_images`.
+ */
+async function preparationRoutesPresent(tx: Transaction): Promise<boolean> {
+  const table = await tx.execute<{ present: boolean }>(
+    sql`select to_regclass('public.preparation_routes') is not null as present`,
+  );
+  return table.rows[0]!.present;
+}
 function validateColor(color: string | null | undefined): void {
   if (color === undefined || color === null) return;
   if (!/^#[0-9a-f]{6}$/.test(color)) throw new AppError("category.color_invalid", {});
@@ -184,11 +195,7 @@ export async function deleteCategory(tx: Transaction, tenantId: string, id: stri
     .set({ parentId: category.parentId })
     .where(and(eq(categoryDetails.tenantId, tenantId), eq(categoryDetails.parentId, id)));
   // 4. drop preparation routes for this category, if the (optional) venue table exists.
-  // Raw SQL and the to_regclass guard follow validateImage's precedent for optional module tables.
-  const routeTable = await tx.execute<{ present: boolean }>(
-    sql`select to_regclass('public.preparation_routes') is not null as present`,
-  );
-  if (routeTable.rows[0]!.present)
+  if (await preparationRoutesPresent(tx))
     await tx.execute(
       sql`delete from preparation_routes where tenant_id = ${tenantId} and category_id = ${id}`,
     );
@@ -233,13 +240,9 @@ export async function categoryDependants(
     )
     .where(and(eq(categoryDetails.tenantId, tenantId), eq(categoryDetails.parentId, id)))
     .orderBy(categories.id);
-  // Routes live in the optional venue-service module; guard the query on the table's presence,
-  // as validateImage does for media_images. Raw SQL joins two other modules' tables by name.
+  // Raw SQL, because this joins two other modules' tables by name.
   const routes: CategoryDependants["routes"] = [];
-  const routeTable = await tx.execute<{ present: boolean }>(
-    sql`select to_regclass('public.preparation_routes') is not null as present`,
-  );
-  if (routeTable.rows[0]!.present) {
+  if (await preparationRoutesPresent(tx)) {
     const routeRows = await tx.execute<{ id: string; station: string | null; zone: string | null }>(
       sql`
       select pr.id,
