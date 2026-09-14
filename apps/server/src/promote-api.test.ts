@@ -37,9 +37,7 @@ vi.mock("@waitron/db", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@waitron/db")>();
   return {
     ...actual,
-    withTransaction: vi.fn(
-      async (_db: unknown, _tenantId: string, cb: (tx: unknown) => Promise<unknown>) => cb({}),
-    ),
+    withTransaction: vi.fn(async (_db: unknown, cb: (tx: unknown) => Promise<unknown>) => cb({})),
     asAppUser: vi.fn(async () => {}),
   };
 });
