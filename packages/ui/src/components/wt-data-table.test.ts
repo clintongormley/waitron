@@ -266,3 +266,33 @@ test("a row whose parent is absent renders at the top level", async () => {
   const row = el.shadowRoot!.querySelector('tbody tr[data-row-key="eggs"]')!;
   expect(row.getAttribute("aria-level")).toBe("1");
 });
+
+// Nesting and selection arrived from two different branches and were merged by hand, so they are
+// checked together as well as apart: a checkbox at every depth, a nested row's own key on the
+// event, and select-all counting the rows a collapsed branch has hidden as not there.
+test("tree mode and selection work together, and collapsing takes rows out of select-all", async () => {
+  const el = await treeTable({ selectable: true, selected: [] });
+  const boxKeys = () =>
+    [...el.shadowRoot!.querySelectorAll<HTMLInputElement>("tbody input[type=checkbox]")].map(
+      (box) => box.dataset.test!.replace("select-", ""),
+    );
+  expect(boxKeys()).toEqual(["food", "break", "eggs", "drinks"]);
+
+  const seen: string[][] = [];
+  el.addEventListener("wt-selection-change", (event) =>
+    seen.push((event as CustomEvent<{ selected: string[] }>).detail.selected),
+  );
+  // "eggs" is two levels down; its checkbox must report its own key, not its ancestor's.
+  el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=select-eggs]")!.click();
+  expect(seen.at(-1)).toEqual(["eggs"]);
+
+  el.selected = [];
+  await el.updateComplete;
+  el.shadowRoot!.querySelector<HTMLButtonElement>(
+    'tbody tr[data-row-key="food"] button.tree-toggle',
+  )!.click();
+  await el.updateComplete;
+  expect(boxKeys()).toEqual(["food", "drinks"]); // break and eggs are hidden, so are their boxes
+  el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=select-all]")!.click();
+  expect([...seen.at(-1)!].sort()).toEqual(["drinks", "food"]);
+});
