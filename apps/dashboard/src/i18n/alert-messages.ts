@@ -1,8 +1,9 @@
 // English and Spanish sentences for every alert code. `{name}` slots are filled from the alert's
 // params. Kept free of imports so the root guard (`scripts/alert-codes.test.ts`) can load it.
 //
-// No sentence promises a later check: the daily payments check looks at each day once, and the
-// fiscal reconciliation sweep has no production caller.
+// No sentence promises a later check by the server: the daily payments check looks at each day once,
+// and the fiscal reconciliation sweep has no production caller. The one retry promised, in
+// `alert.source_unavailable`, is an open dashboard asking for its alerts again every minute.
 
 // An open payment incident swallows later detections for the same till and code, so its figures
 // are from when it was raised.

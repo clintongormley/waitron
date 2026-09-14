@@ -1703,8 +1703,9 @@ declare module "@waitron/shared" {
     // A diagnostics verbosity request named a level outside {debug,info} or a ttl outside its bounds.
     // `reason` is a fixed enum string (never a raw input value) — the redaction discipline holds.
     "diagnostics.invalid_verbosity": { reason: "level" | "ttl" };
-    /** No incident with this id exists in this venue. Also answered for a malformed id and for
-     * another tenant's incident, so the answer never reveals which. */
+    /** No incident with this id exists in this venue. Also answered for a malformed id, for another
+     * tenant's incident, and to a session holding no alert permission even for a real id, so the
+     * answer never reveals which. */
     "alert.not_found": { id: string };
     /** An alert source failed while being read. Its alerts are replaced by this one, under the
      * source's own area and permission. Built as data, never thrown. */

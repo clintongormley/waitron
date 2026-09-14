@@ -18,8 +18,9 @@ no tenant was wholesale abandoned this pass and no Stripe settlement-audit perio
 permanently parked — it is **not** a claim that every individual fiscal record has actually been
 accepted by AEAT. A tenant whose records reach AEAT but are individually rejected (a `certKind`
 provisioned as the wrong kind, say) reads `200` with `lastOkAt` refreshing every pass; that is
-visible only via `recordsHalted`/`incidentsRaised` in the `drain.complete` log line and the
-`incidents` table, deliberately, not through this endpoint — see
+visible only via `recordsHalted`/`incidentsRaised` in the `drain.complete` log line, the
+`incidents` table, and the dashboard's alerts bell and Alerts screen (as `fiscal.registro_rechazado`
+alerts, to anyone holding `fiscal.view`), deliberately, not through this endpoint — see
 ["What `/health` means"](#what-health-means) below for the exact boundary, and why, before treating
 a `503` as noise or its absence as "nothing is wrong."
 

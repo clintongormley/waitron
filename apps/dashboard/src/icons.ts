@@ -17,6 +17,8 @@
  * - grip: the drag handle that reorders a modifier's choices (two columns of dots).
  * - bell: the banner's alerts trigger.
  * - close: wt-toast's dismiss button (wt-toast requires its consuming app to register this).
+ *   Whether bell and close were drawn fresh or adapted from a published glyph is unrecorded: their
+ *   path data first appears in the dashboard alerts plan (Task 11) with no note of its source.
  *
  * Attribution: some of these are adapted from Google's Material Symbols icon set, Copyright
  * Google, licensed under the Apache License, Version 2.0

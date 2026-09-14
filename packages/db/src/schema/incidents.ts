@@ -6,7 +6,8 @@ import { tenants, tills } from "./tenants.js";
 export type IncidentSeverity = "warning" | "error";
 
 /**
- * Fiscal incidents, surfaced to staff and to support.
+ * Incidents: problems recorded as they happen, shown as alerts on the management dashboard to anyone
+ * holding the permission for their area, who can mark them handled there.
  *
  * The only table in this plan that the application role may UPDATE, and only two of its
  * columns — see the migration below, which uses a column-level GRANT. An incident is a record
@@ -35,8 +36,8 @@ export const incidents = pgTable(
     // mode: "string", matching sales.issuedAt/tenders.settledAt/sale_voids.voidedAt: a JS Date
     // normalises through the host timezone the moment anything formats it, and nothing formatted
     // is ever stored. Both columns here are populated by the application (recordIncident's own
-    // detectedAt, and a till acknowledging), never by defaultNow(), so the same discipline
-    // applies.
+    // detectedAt, and markIncidentHandled's acknowledgedAt when a manager marks the alert handled on
+    // the dashboard), never by defaultNow(), so the same discipline applies.
     detectedAt: timestamp("detected_at", { withTimezone: true, mode: "string" }).notNull(),
     acknowledgedAt: timestamp("acknowledged_at", { withTimezone: true, mode: "string" }),
     acknowledgedBy: uuid("acknowledged_by"),

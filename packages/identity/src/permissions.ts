@@ -75,8 +75,9 @@ export const PERMISSIONS = [
   // once shipped.
   "printer.manage",
   // Gates the Payments configuration screen and its server routes (@waitron/payments) — choosing and
-  // setting up the card-payment provider and reader; granted to manager + admin, the same roles as
-  // the other management write gates. Codes/permissions are never renamed once shipped.
+  // setting up the card-payment provider and reader — and seeing and handling `payment.*` dashboard
+  // alerts; granted to manager + admin, the same roles as the other management write gates.
+  // Codes/permissions are never renamed once shipped.
   "payments.manage",
   // Re-emitting stored documents is separately authorized from printer configuration.
   "print.resend",
@@ -93,10 +94,11 @@ export const PERMISSIONS = [
   // Promoting a node to primary (authenticated mirror→primary promotion) — an operator-triggered
   // control action, so admin-only. Not in SUPERVISOR/MANAGER; reaches `admin` via ALL.
   "node.promote",
-  // view recent logs + toggle diagnostic verbosity; manager + admin
+  // view recent logs + toggle diagnostic verbosity, and see and handle dashboard alerts for incident
+  // codes no area claims; manager + admin
   "diagnostics.view",
-  // Seeing tax-filing alerts: rejected or diverging invoice records, chain and clock checks, and
-  // submission delays; manager + admin.
+  // Seeing and handling the tax-filing dashboard alerts: incidents coded `fiscal.`, `chain.` and
+  // `clock.`; manager + admin.
   "fiscal.view",
 ] as const;
 
@@ -193,9 +195,10 @@ export function registerModulePermissions(
 /**
  * The effective permission ids `role` holds — the static catalog plus every module-registered
  * permission, filtered through the SAME `roleHasPermission` ladder. The WHOAMI probe hands this set to
- * the dashboard so it can gate a module's nav/screen client-side; it is a hint for the UI, never a
- * substitute for the server-side `authorizeManager` gate each route still enforces. Depends on the
- * module registry, so it reflects only permissions already folded in by `registerModulePermissions`
+ * the dashboard as a hint for gating a module's nav/screen client-side. The dashboard alerts routes
+ * (apps/server/src/alerts-api.ts) also use it as their server-side gate, because what a session may
+ * see there depends on every permission it holds rather than on one `authorizeManager` check; they
+ * compare the session's tenant with the configured one first. Depends on the module registry, so it reflects only permissions already folded in by `registerModulePermissions`
  * (done once at boot before any request).
  */
 export function permissionsForRole(role: PersonRoleValue): string[] {

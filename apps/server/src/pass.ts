@@ -162,8 +162,10 @@ export async function runPass(deps: PassDeps, now: Date): Promise<PassReport> {
       // landing in `recordsHalted`/`incidentsRaised` on this line, pass after pass, with no
       // corresponding drop in what `envios.pendingCount` reports — an operator grepping
       // `drain.complete` (or the `incidents` table directly) for a duty that never stops halting
-      // records sees exactly that shape. `apps/server/README.md`'s opening claim about what `200`
-      // covers is written to match this, not to claim more than it does.
+      // records sees exactly that shape, and a manager holding `fiscal.view` sees the rejections as
+      // `fiscal.registro_rechazado` alerts in the dashboard bell and Alerts screen.
+      // `apps/server/README.md`'s opening claim about what `200` covers is written to match this, not
+      // to claim more than it does.
       return { nextDueAt: result.nextDueAt, skipped: result.skipped.length, parked: 0 };
     }),
   );

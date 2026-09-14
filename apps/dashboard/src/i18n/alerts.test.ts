@@ -10,7 +10,8 @@ it("registers the dashboard's alert wording on import", () => {
   );
 });
 
-// The clock only raises this for a clock that reads earlier, so the number is always negative.
+// The clock only raises this for a clock that reads earlier, so the number is never positive: a
+// backward step under a second is stored, and shown, as 0.
 it("reads a backwards clock jump correctly with its negative number", () => {
   const params = { wallClockDeltaSeconds: -120, monotonicElapsedSeconds: 0 };
   expect(alertMessage("clock.jump_detected", params, "en")).toBe(
