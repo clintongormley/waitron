@@ -26,7 +26,7 @@ import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
-import { createPrinter } from "@waitron/printing";
+import { createPrinter, updatePrinter } from "@waitron/printing";
 import type { PrintConfig } from "@waitron/printing";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import {
@@ -45,7 +45,7 @@ import type { TillConfig } from "./till-config.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { DRAWER_KICK } from "./receipt-print.js";
-import { bytesInclude, decodeTicket } from "./testing/decode-ticket.js";
+import { bytesInclude, decodeTicket, printedLines } from "./testing/decode-ticket.js";
 
 // REAL Postgres, not PGlite: the manual reprint + drawer-open routes read a GENUINE chained fiscal
 // sale back and enqueue paper through the app role (CLAUDE.md §4 — PGlite runs every connection as a
@@ -972,6 +972,36 @@ describe("payment slip persisted capture facts", () => {
     });
     expect(res.status).toBe(404);
     expect(await printJobsFor(other.cfg)).toEqual([]);
+  });
+  it("lays the payment slip out for the till printer's paper width and character set", async () => {
+    const { cfg, each, operatorId } = await setupVenue();
+    const printerId = await makePrinter(cfg);
+    await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      await updatePrinter(tx, printCfg(cfg), printerId, {
+        paperWidth: "58mm",
+        characterSet: "plain",
+      });
+    });
+    await configureReceipt(cfg, { mode: "never", printerId });
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+    const cookie = await login(app, cfg, operatorId);
+    const id = await ringSale(app, cfg, cookie, each.menuItemId, "card");
+    await suite.admin.execute(
+      sql`update payments set provider = 'sumup', card_scheme = 'VISA', card_last4 = '5838', card_entry_mode = 'contactless', card_auth_code = '328600' where tenant_id = ${cfg.tenantId} and working_order_id = ${id}`,
+    );
+    const res = await app.request(`/api/sales/${id}/payment-slip`, {
+      method: "POST",
+      headers: { cookie },
+    });
+    expect(res.status).toBe(200);
+    const [job] = await printJobsFor(cfg);
+    const payload = new Uint8Array(job!.payload);
+    expect([...payload.subarray(0, 3)]).toEqual([0x1b, 0x40, 0x4a]); // ESC @, then "J": no table selection
+    const lines = printedLines(payload);
+    for (const line of lines) expect(line.length, line).toBeLessThanOrEqual(30);
+    expect(lines.join("\n")).toContain("EUR");
   });
 });
 

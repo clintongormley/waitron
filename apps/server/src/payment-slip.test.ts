@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { formatPaymentSlip } from "./payment-slip.js";
-import { bytesInclude, decodeTicket } from "./testing/decode-ticket.js";
+import { bytesInclude, decodeTicket, printedLines } from "./testing/decode-ticket.js";
 
 const input = {
   issuer: { venueName: "Casa Gormley", nif: "B12345678" },
@@ -12,6 +12,7 @@ const input = {
   charged: "1.50",
   invoiceLocale: "es-ES",
   card: { scheme: "VISA", last4: "5838", entryMode: "contactless" as const, authCode: "328600" },
+  printer: { paperWidth: "80mm", characterSet: "wpc1252" } as const,
 };
 describe("payment slip (pure renderer, no database)", () => {
   it("prints payment identity, grouping and amounts without fiscal identifiers or QR", () => {
@@ -65,4 +66,39 @@ describe("payment slip (pure renderer, no database)", () => {
     if (label) expect(text).toContain(label);
     else expect(text).not.toContain("Entrada");
   });
+});
+
+describe("payment slip printer layout", () => {
+  it("separates each amount from the euro sign with an ASCII space", () => {
+    const bytes = formatPaymentSlip(input);
+    const euro = 0x80; // € in Windows-1252
+    const positions = [...bytes].flatMap((byte, i) => (byte === euro ? [i] : []));
+    expect(positions).toHaveLength(3); // Importe, Propina, Cobrado
+    for (const i of positions) expect(bytes[i - 1]).toBe(0x20);
+  });
+
+  it.each([
+    { paperWidth: "80mm", characterSet: "wpc1252" },
+    { paperWidth: "58mm", characterSet: "pc858" },
+    { paperWidth: "58mm", characterSet: "plain" },
+  ] as const)(
+    "keeps every line within the column count ($paperWidth, $characterSet)",
+    (printer) => {
+      const lines = printedLines(
+        formatPaymentSlip({
+          ...input,
+          issuer: { venueName: "Charcutería y Bodega La Buena Mesa", nif: "B12345678" },
+          orderLabel: "Terraza mesa del fondo",
+          printer,
+        }),
+      );
+      const columns = printer.paperWidth === "58mm" ? 30 : 42;
+      for (const line of lines) expect(line.length, line).toBeLessThanOrEqual(columns);
+      expect(lines).toContain(
+        printer.characterSet === "plain"
+          ? `Cobrado${" ".repeat(columns - 15)}1,50 EUR`
+          : `Cobrado${" ".repeat(columns - 13)}1,50 €`,
+      );
+    },
+  );
 });
