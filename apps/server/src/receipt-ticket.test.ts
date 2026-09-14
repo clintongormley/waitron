@@ -1,10 +1,10 @@
-import { FEED_BEFORE_CUT, esc } from "@waitron/printing";
+import { FEED_BEFORE_CUT, columnsFor, esc } from "@waitron/printing";
 import { compareDecimal, decimal, sumDecimals } from "@waitron/shared";
 import { describe, expect, it } from "vitest";
 
 import { formatReceipt } from "./receipt-ticket.js";
-import type { ReceiptIssuer, ReceiptTrim } from "./receipt-ticket.js";
-import { bytesInclude, decodeTicket } from "./testing/decode-ticket.js";
+import type { ReceiptIssuer, ReceiptPrinterSettings, ReceiptTrim } from "./receipt-ticket.js";
+import { bytesInclude, decodeTicket, printedLines } from "./testing/decode-ticket.js";
 import type { TillSaleResult } from "./till-sale.js";
 
 // `formatReceipt` is a PURE byte producer (design §3b) — no DB, no container, no fiscal state — so
@@ -24,6 +24,17 @@ const CUT_BYTES = [0x1d, 0x56, 0x00];
 const FEED_THEN_CUT = [0x1b, 0x64, FEED_BEFORE_CUT, ...CUT_BYTES];
 /** GS ( k — the lead bytes of the native two-dimensional-symbol (QR) command family (`escpos.ts`). */
 const QR_LEAD_BYTES = Uint8Array.from([0x1d, 0x28, 0x6b]);
+
+const PRINTER_80: ReceiptPrinterSettings = {
+  paperWidth: "80mm",
+  resolution: "180dpi",
+  characterSet: "wpc1252",
+};
+const PRINTER_58: ReceiptPrinterSettings = {
+  paperWidth: "58mm",
+  resolution: "180dpi",
+  characterSet: "pc858",
+};
 
 /**
  * A realistic filed sale: multi-line, two VAT rates, a non-empty cotejo `qr`. The figures are exact
@@ -68,70 +79,80 @@ function lineName(line: TillSaleResult["lines"][number]): string {
 }
 
 describe("formatReceipt — the faithful, legally-complete customer receipt", () => {
-  it("reproduces every mandated art. 7.1 / arts. 20-21 element of a filed receipt", () => {
-    const bytes = formatReceipt({
-      result: FILED_SALE,
-      issuer: ISSUER,
-      receipt: TRIM,
-      invoiceLocale: "es-ES",
-    });
-    const s = decodeTicket(bytes);
+  it.each([PRINTER_80, PRINTER_58])(
+    "reproduces every mandated art. 7.1 / arts. 20-21 element of a filed receipt on $paperWidth paper",
+    (printer) => {
+      const bytes = formatReceipt({
+        result: FILED_SALE,
+        issuer: ISSUER,
+        receipt: TRIM,
+        invoiceLocale: "es-ES",
+        printer,
+      });
+      const s = printedLines(bytes).join("\n");
 
-    // Issuer identity — venue name + NIF (RD 1619/2012 art. 7.1.d).
-    expect(s).toContain(ISSUER.venueName);
-    expect(s).toContain(`NIF: ${ISSUER.nif}`);
+      // Issuer identity — venue name + NIF (RD 1619/2012 art. 7.1.d).
+      expect(s).toContain(ISSUER.venueName);
+      expect(s).toContain(`NIF: ${ISSUER.nif}`);
 
-    // Serie + número (7.1.a).
-    expect(s).toContain(FILED_SALE.invoiceNumber);
+      // Serie + número (7.1.a).
+      expect(s).toContain(FILED_SALE.invoiceNumber);
 
-    // Fecha de expedición (7.1.b): the label plus a year robust across ICU date formats / time zones.
-    expect(s).toContain("Fecha");
-    expect(s).toContain("2026");
+      // Fecha de expedición (7.1.b): the label plus a year robust across ICU date formats / time zones.
+      expect(s).toContain("Fecha");
+      expect(s).toContain("2026");
 
-    // Identification of the goods (7.1.e): one row per filed line, resolved in the invoice locale.
-    for (const line of FILED_SALE.lines) expect(s).toContain(lineName(line));
+      // Identification of the goods (7.1.e): one row per filed line, resolved in the invoice locale.
+      for (const line of FILED_SALE.lines) expect(s).toContain(lineName(line));
 
-    // Tipo(s) impositivo(s) + base imponible per rate, plus the cuota (allowed extra) (7.1.f).
-    for (const v of FILED_SALE.vatBreakdown) {
-      expect(s).toContain(`Base ${v.rate}%`);
-      expect(s).toContain(`IVA ${v.rate}%`);
-    }
+      // Tipo(s) impositivo(s) + base imponible per rate, plus the cuota (allowed extra) (7.1.f).
+      for (const v of FILED_SALE.vatBreakdown) {
+        expect(s).toContain(`Base ${v.rate}%`);
+        expect(s).toContain(`IVA ${v.rate}%`);
+      }
 
-    // Contraprestación total (7.1.g).
-    expect(s).toContain("TOTAL");
+      // Contraprestación total (7.1.g).
+      expect(s).toContain("TOTAL");
 
-    // Allowed operational extras: cash tendered (= total + change) and change.
-    expect(s).toContain("Efectivo");
-    expect(s).toContain("Cambio");
+      // Allowed operational extras: cash tendered (= total + change) and change.
+      expect(s).toContain("Efectivo");
+      expect(s).toContain("Cambio");
 
-    // The Veri*Factu legend — a FIXED legal string, always printed (Orden HAC/1177/2024 art. 20.1.b).
-    expect(s).toContain("VERI*FACTU");
+      // The Veri*Factu legend — a FIXED legal string, always printed (Orden HAC/1177/2024 art. 20.1.b).
+      expect(s).toContain("VERI*FACTU");
 
-    // Amounts render in the invoice locale (es-ES → comma decimals). Assert the digit portions ONLY:
-    // the €-symbol and its NBSP/NNBSP separator do NOT survive the Latin-1 round-trip the decoder does,
-    // and the separator differs between ICU builds — see `formatMoney`'s note.
-    expect(s).toContain("12,10"); // line 1 gross
-    expect(s).toContain("8,80"); // line 2 gross
-    expect(s).toContain("10,00"); // base 21%
-    // IVA 21% cuota — pinned on the SAME rendered line as its label (lines are LF-separated). A bare
-    // `toContain("2,10")` would be satisfied by the "2,10" inside line-1 gross "12,10" (asserted above,
-    // a different/earlier line), so it would pass even with the 21% cuota suppressed; requiring the
-    // label and the amount on one line closes that hole while still failing if the cuota is removed.
-    expect(s).toMatch(/IVA 21%[^\n]*2,10/u); // IVA 21% cuota
-    expect(s).toContain("8,00"); // base 10%
-    expect(s).toContain("0,80"); // IVA 10%
-    expect(s).toContain("20,90"); // TOTAL
-    expect(s).toContain("30,00"); // Efectivo = total + change
-    expect(s).toContain("9,10"); // Cambio
+      // Amounts render in the invoice locale (es-ES → comma decimals). Assert the digit portions ONLY:
+      // the €-symbol and its NBSP/NNBSP separator do NOT survive the Latin-1 round-trip the decoder does,
+      // and the separator differs between ICU builds — see `formatMoney`'s note.
+      expect(s).toContain("12,10"); // line 1 gross
+      expect(s).toContain("8,80"); // line 2 gross
+      expect(s).toContain("10,00"); // base 21%
+      // IVA 21% cuota — pinned on the SAME rendered line as its label (lines are LF-separated). A bare
+      // `toContain("2,10")` would be satisfied by the "2,10" inside line-1 gross "12,10" (asserted above,
+      // a different/earlier line), so it would pass even with the 21% cuota suppressed; requiring the
+      // label and the amount on one line closes that hole while still failing if the cuota is removed.
+      expect(s).toMatch(/IVA 21%[^\n]*2,10/u); // IVA 21% cuota
+      expect(s).toContain("8,00"); // base 10%
+      expect(s).toContain("0,80"); // IVA 10%
+      expect(s).toContain("20,90"); // TOTAL
+      expect(s).toContain("30,00"); // Efectivo = total + change
+      expect(s).toContain("9,10"); // Cambio
 
-    // The QR (§3a, arts. 20-21): the exact native GS ( k byte sequence Task 3's builder emits for this
-    // payload must appear verbatim in the receipt bytes.
-    expect(bytesInclude(bytes, esc().qr(FILED_SALE.qr).bytes())).toBe(true);
-  });
+      // The QR (§3a, arts. 20-21): the exact native GS ( k byte sequence Task 3's builder emits for this
+      // payload must appear verbatim in the receipt bytes.
+      expect(bytesInclude(bytes, esc().qr(FILED_SALE.qr).bytes())).toBe(true);
+    },
+  );
 
   it("emits the mandated elements in the art. 7.1 order", () => {
     const s = decodeTicket(
-      formatReceipt({ result: FILED_SALE, issuer: ISSUER, receipt: TRIM, invoiceLocale: "es-ES" }),
+      formatReceipt({
+        result: FILED_SALE,
+        issuer: ISSUER,
+        receipt: TRIM,
+        invoiceLocale: "es-ES",
+        printer: PRINTER_80,
+      }),
     );
     const order = [
       ISSUER.venueName,
@@ -153,7 +174,13 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
 
   it("renders the non-fiscal header subtitle and footer message when present", () => {
     const s = decodeTicket(
-      formatReceipt({ result: FILED_SALE, issuer: ISSUER, receipt: TRIM, invoiceLocale: "es-ES" }),
+      formatReceipt({
+        result: FILED_SALE,
+        issuer: ISSUER,
+        receipt: TRIM,
+        invoiceLocale: "es-ES",
+        printer: PRINTER_80,
+      }),
     );
     expect(s).toContain(TRIM.headerSubtitle!);
     expect(s).toContain(TRIM.footerMessage!);
@@ -166,6 +193,7 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
         issuer: ISSUER,
         receipt: {},
         invoiceLocale: "es-ES",
+        printer: PRINTER_80,
         simulated: true,
       }),
     );
@@ -176,7 +204,13 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
 
   it("omits the header subtitle and footer message when the trim is empty, keeping the core", () => {
     const s = decodeTicket(
-      formatReceipt({ result: FILED_SALE, issuer: ISSUER, receipt: {}, invoiceLocale: "es-ES" }),
+      formatReceipt({
+        result: FILED_SALE,
+        issuer: ISSUER,
+        receipt: {},
+        invoiceLocale: "es-ES",
+        printer: PRINTER_80,
+      }),
     );
     expect(s).not.toContain(TRIM.headerSubtitle!);
     expect(s).not.toContain(TRIM.footerMessage!);
@@ -192,6 +226,7 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
       issuer: ISSUER,
       receipt: TRIM,
       invoiceLocale: "es-ES",
+      printer: PRINTER_80,
     });
     // No native QR command is emitted (mirrors `qrSvg("") === ""` on the screen)...
     expect(bytesInclude(bytes, QR_LEAD_BYTES)).toBe(false);
@@ -208,7 +243,13 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
       ],
     };
     const s = decodeTicket(
-      formatReceipt({ result, issuer: ISSUER, receipt: {}, invoiceLocale: "es-ES" }),
+      formatReceipt({
+        result,
+        issuer: ISSUER,
+        receipt: {},
+        invoiceLocale: "es-ES",
+        printer: PRINTER_80,
+      }),
     );
     // The es-ES-less line degrades to its only description; the empty-map line prints nothing but does
     // not throw (a catalogue defect must never block the paper — spec §4).
@@ -231,7 +272,13 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
       total: "4.50",
     };
     const text = decodeTicket(
-      formatReceipt({ result, issuer: ISSUER, receipt: {}, invoiceLocale: "es-ES" }),
+      formatReceipt({
+        result,
+        issuer: ISSUER,
+        receipt: {},
+        invoiceLocale: "es-ES",
+        printer: PRINTER_80,
+      }),
     );
     expect(text).toMatch(/0\.375 kg\s+Jamón[^\n]*4,50/u);
   });
@@ -265,7 +312,13 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
       qr: FILED_SALE.qr,
     };
     const s = decodeTicket(
-      formatReceipt({ result: withOptions, issuer: ISSUER, receipt: {}, invoiceLocale: "es-ES" }),
+      formatReceipt({
+        result: withOptions,
+        issuer: ISSUER,
+        receipt: {},
+        invoiceLocale: "es-ES",
+        printer: PRINTER_80,
+      }),
     );
 
     // The dish renders as a normal goods row: quantity, name, its OWN gross (never the dish+options
@@ -325,6 +378,7 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
         issuer: ISSUER,
         receipt: {},
         invoiceLocale: "es-ES",
+        printer: PRINTER_80,
       }),
     );
 
@@ -345,6 +399,7 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
       issuer: ISSUER,
       receipt: TRIM,
       invoiceLocale: "es-ES",
+      printer: PRINTER_80,
     });
     expect([...bytes.slice(-FEED_THEN_CUT.length)]).toEqual(FEED_THEN_CUT);
   });
@@ -357,7 +412,13 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
     // the printed total reads `20,90 €` on any ICU build. Proven by DELETION: drop the `.replace(...)`
     // in `formatMoney` and this test goes RED (`20,90/…` or `20,90 …`).
     const s = decodeTicket(
-      formatReceipt({ result: FILED_SALE, issuer: ISSUER, receipt: TRIM, invoiceLocale: "es-ES" }),
+      formatReceipt({
+        result: FILED_SALE,
+        issuer: ISSUER,
+        receipt: TRIM,
+        invoiceLocale: "es-ES",
+        printer: PRINTER_80,
+      }),
     );
     // No non-break space survives to the decoded text (neither the wide NBSP nor the narrow one — the
     // narrow one is what mangles to `/`, so its raw form is already gone; the wide one decodes 1:1).
@@ -386,6 +447,7 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
       issuer: ISSUER,
       receipt: TRIM,
       invoiceLocale: "es-ES",
+      printer: PRINTER_80,
     });
     const s = decodeTicket(bytes);
     expect(s).toContain("Tarjeta");
@@ -413,6 +475,7 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
       issuer: ISSUER,
       receipt: TRIM,
       invoiceLocale: "es-ES",
+      printer: PRINTER_80,
     });
     const s = decodeTicket(bytes);
     expect(s).not.toContain("MASTERCARD");
@@ -436,6 +499,7 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
       issuer: ISSUER,
       receipt: TRIM,
       invoiceLocale: "es-ES",
+      printer: PRINTER_80,
     });
     const s = decodeTicket(bytes);
     expect(s).toContain("Tarjeta");
@@ -462,6 +526,7 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
         issuer: ISSUER,
         receipt: TRIM,
         invoiceLocale: "es-ES",
+        printer: PRINTER_80,
       }),
     );
     expect(s).toContain("Propina");
@@ -484,6 +549,7 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
         issuer: ISSUER,
         receipt: TRIM,
         invoiceLocale: "es-ES",
+        printer: PRINTER_80,
       }),
     );
     expect(s).not.toContain("Cobrado");
@@ -500,6 +566,7 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
         issuer: ISSUER,
         receipt: TRIM,
         invoiceLocale: "es-ES",
+        printer: PRINTER_80,
       }),
     );
     expect(s).toContain("Tarjeta");
@@ -516,6 +583,7 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
         issuer: ISSUER,
         receipt: TRIM,
         invoiceLocale: "es-ES",
+        printer: PRINTER_80,
       }),
     );
     expect(s).toContain("Ref. 4471");
@@ -528,6 +596,7 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
         issuer: ISSUER,
         receipt: TRIM,
         invoiceLocale: "es-ES",
+        printer: PRINTER_80,
       }),
     );
     expect(s).toContain("Efectivo");
@@ -536,7 +605,13 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
 });
 
 it("adds only the duplicate marker and preserves the order grouping and QR bytes", () => {
-  const input = { result: FILED_SALE, issuer: ISSUER, receipt: TRIM, invoiceLocale: "es-ES" };
+  const input = {
+    result: FILED_SALE,
+    issuer: ISSUER,
+    receipt: TRIM,
+    invoiceLocale: "es-ES",
+    printer: PRINTER_80,
+  };
   const original = formatReceipt(input);
   const duplicate = formatReceipt({ ...input, duplicate: true });
   expect(decodeTicket(original)).toContain("Mesa 6 · Pedido 41");
@@ -554,6 +629,7 @@ it("prints an unpaid invoice without claiming a cash or card payment", () => {
       issuer: ISSUER,
       receipt: TRIM,
       invoiceLocale: "es-ES",
+      printer: PRINTER_80,
     }),
   );
   expect(text).toContain("TOTAL");
@@ -593,7 +669,14 @@ it("prints saved nonprice modifier labels on original and duplicate receipts", (
   };
   for (const duplicate of [false, true]) {
     const paper = decodeTicket(
-      formatReceipt({ result, issuer: ISSUER, receipt: TRIM, invoiceLocale: "es-ES", duplicate }),
+      formatReceipt({
+        result,
+        issuer: ISSUER,
+        receipt: TRIM,
+        invoiceLocale: "es-ES",
+        printer: PRINTER_80,
+        duplicate,
+      }),
     );
     expect(paper).toContain("Mensaje: Happy birthday");
     expect(paper).toContain("Milk: Oat");
@@ -626,11 +709,108 @@ it("leaves a saved negative yes-no answer off the original and the duplicate", (
   };
   for (const duplicate of [false, true]) {
     const paper = decodeTicket(
-      formatReceipt({ result, issuer: ISSUER, receipt: TRIM, invoiceLocale: "es-ES", duplicate }),
+      formatReceipt({
+        result,
+        issuer: ISSUER,
+        receipt: TRIM,
+        invoiceLocale: "es-ES",
+        printer: PRINTER_80,
+        duplicate,
+      }),
     );
     // The text modifier on the same line is the control: snapshot labels do print on this receipt,
     // so the missing "Hielo" is the negative answer being left out, not a receipt printing nothing.
     expect(paper).toContain("Mensaje: Happy birthday");
     expect(paper).not.toContain("Hielo");
   }
+});
+
+describe("formatReceipt — printer layout", () => {
+  const LONG_SALE: TillSaleResult = {
+    ...FILED_SALE,
+    orderLabel: "Terraza mesa del fondo junto a la fuente",
+    total: "13.00",
+    vatBreakdown: [{ rate: "10", base: "11.82", tax: "1.18" }],
+    lines: [
+      {
+        descriptions: { "es-ES": "Tostada con tomate y jamón ibérico de bellota" },
+        quantity: "1",
+        gross: "12.50",
+        parentLineNo: null,
+        modifierSnapshots: [],
+      },
+      {
+        descriptions: { "es-ES": "Aceite de oliva virgen extra de la casa" },
+        quantity: "1",
+        gross: "0.50",
+        parentLineNo: 1,
+      },
+    ],
+    tender: { method: "cash", change: "7.00" },
+  };
+  const LONG_ISSUER: ReceiptIssuer = {
+    venueName: "Charcutería y Bodega La Buena Mesa de Madrid",
+    nif: "B12345678",
+  };
+  const LONG_TRIM: ReceiptTrim = {
+    headerSubtitle: "Calle Mayor 1, 28013 Madrid \u{2014} abierto todos los días",
+    footerMessage:
+      "¡Gracias por su visita! Vuelva pronto\u{2026} \u{201c}La Buena\u{201d} le espera",
+  };
+
+  it.each([
+    PRINTER_80,
+    PRINTER_58,
+    { paperWidth: "58mm", resolution: "203dpi", characterSet: "plain" } as const,
+    { paperWidth: "80mm", resolution: "203dpi", characterSet: "pc858" } as const,
+  ])("keeps every printed line within the column count ($paperWidth, $characterSet)", (printer) => {
+    const lines = printedLines(
+      formatReceipt({
+        result: LONG_SALE,
+        issuer: LONG_ISSUER,
+        receipt: LONG_TRIM,
+        invoiceLocale: "es-ES",
+        printer,
+        simulated: true,
+        duplicate: true,
+      }),
+    );
+    const columns = columnsFor(printer.paperWidth);
+    for (const line of lines) expect(line.length, line).toBeLessThanOrEqual(columns);
+    expect(lines.join("\n")).toContain("VERI*FACTU");
+  });
+
+  it("wraps a long product name under the name and right-aligns its price on the last line", () => {
+    const lines = printedLines(
+      formatReceipt({
+        result: LONG_SALE,
+        issuer: ISSUER,
+        receipt: {},
+        invoiceLocale: "es-ES",
+        printer: PRINTER_58,
+      }),
+    );
+    const first = lines.indexOf("1  Tostada con tomate y jamón");
+    expect(first).toBeGreaterThanOrEqual(0);
+    expect(lines.slice(first, first + 4)).toEqual([
+      "1  Tostada con tomate y jamón",
+      "   ibérico de bellota  12,50 €",
+      "  Aceite de oliva virgen extra",
+      `  de la casa${" ".repeat(12)}0,50 €`,
+    ]);
+  });
+
+  it("measures the euro sign after conversion: EUR takes three columns in plain letters", () => {
+    const lines = printedLines(
+      formatReceipt({
+        result: FILED_SALE,
+        issuer: ISSUER,
+        receipt: {},
+        invoiceLocale: "es-ES",
+        printer: { paperWidth: "58mm", resolution: "180dpi", characterSet: "plain" },
+      }),
+    );
+    expect(lines).toContain(`TOTAL${" ".repeat(16)}20,90 EUR`);
+    expect(lines).toContain(`Base 21%${" ".repeat(13)}10,00 EUR`);
+  });
 });

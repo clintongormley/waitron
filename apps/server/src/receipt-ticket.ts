@@ -42,15 +42,24 @@ import { modifierSnapshotLabels } from "./modifier-snapshot-labels.js";
  * `apps/server` → `apps/till` dependency would be backwards — but they are the same small, pure logic
  * the screen uses, kept in lock-step deliberately.
  *
- * NO emphasis/bold — the `@waitron/printing` builder has no bold/emphasis verb (verified against
- * packages/printing/src/escpos.ts), so the layout leans on plain text plus `feedAndCut`, with
- * `twoColumn` giving a label-left / value-right column feel. Exact column fit and QR
- * millimetres are verified MANUALLY on the real printer (design §5); the guarantee here is only that
- * the bytes are DETERMINISTIC and carry every mandated element, which `receipt-ticket.test.ts` pins.
+ * PRINTER LAYOUT. The receipt takes the printer's paper width, resolution and character set
+ * (design 2026-09-14): text is prepared for the character set, wrapped to the column count, and the QR
+ * is a raster image sized to 30-40 mm. The builder has no bold verb, so the layout is plain text. The
+ * paper itself is verified manually on the real printer; `receipt-ticket.test.ts` pins the bytes.
  */
-import { esc } from "@waitron/printing";
+import {
+  columnsFor,
+  esc,
+  labelAmountLines,
+  prepareText,
+  wrapText,
+  type CharacterSet,
+  type PaperWidth,
+  type Resolution,
+} from "@waitron/printing";
 import { addDecimal, decimal, perDishOptionQuantity } from "@waitron/shared";
 
+import { formatMoney } from "./receipt-money.js";
 import type { TillSaleLine, TillSaleResult } from "./till-sale.js";
 
 /** The receipt issuer's legally-printed identity (RD 1619/2012 art. 7.1.d): venue name + NIF. */
@@ -70,6 +79,13 @@ export interface ReceiptTrim {
   footerMessage?: string;
 }
 
+/** The three printer settings a receipt is laid out for (design 2026-09-14). */
+export interface ReceiptPrinterSettings {
+  paperWidth: PaperWidth;
+  resolution: Resolution;
+  characterSet: CharacterSet;
+}
+
 /** Everything {@link formatReceipt} needs to render one filed sale onto paper. */
 export interface FormatReceiptInput {
   /** The FILED sale to re-render — the authoritative fiscal figures and the goods composition. */
@@ -80,6 +96,8 @@ export interface FormatReceiptInput {
   receipt: ReceiptTrim;
   /** The locale the money, date and product names are FORMATTED in (e.g. "es-ES"). NOT the operator UI. */
   invoiceLocale: string;
+  /** The receipt printer's settings: they set the column count, the QR dot size and the text encoding. */
+  printer: ReceiptPrinterSettings;
   /** Marks a Demo/Prepare transaction without changing any filed fiscal value. */
   simulated?: boolean;
   duplicate?: boolean;
@@ -107,53 +125,8 @@ const LABEL = {
 /** The Veri*Factu legend — a FIXED legal string (Orden HAC/1177/2024 art. 20.1.b). Never translated. */
 const LEGEND = "VERI*FACTU";
 
-/**
- * The multiplication sign prefixed to a per-dish option-quantity badge (`×2`). Chosen to match the
- * receipt's own convention: the ticket already emits a non-ASCII glyph (€, 0xAC) through the ESC/POS
- * builder's Latin-1 encoding, and `×` (U+00D7) is likewise a single Latin-1 byte (0xD7), so it survives
- * the same encode/decode round-trip cleanly. `receipt-ticket.test.ts` pins the rendered badge.
- */
+/** The multiplication sign of a per-dish option-quantity badge (`×2`); `receipt-ticket.test.ts` pins it. */
 const QTY_BADGE = "×";
-
-/**
- * The receipt's character column width, in monospace cells — the common 80mm / Font-A width the deli's
- * `ReceiptPrinter` targets. {@link twoColumn} right-aligns values within it. This is a COSMETIC hint
- * only: exact fit is verified manually on the real printer (design §5), so a label + value that overrun
- * the width simply run together with one space rather than wrapping.
- */
-const RECEIPT_WIDTH = 42;
-
-/**
- * Format a money amount for the paper — the EDGE where a `Decimal` string becomes human-readable text.
- * Ported from `apps/till/src/i18n/format.ts` (deliberately not imported: no `apps/server` → `apps/till`
- * dependency). `Number(value)` is safe only here: at money scale (≤ ~12 integer digits, 2 decimals) the
- * value is well within IEEE-754 double precision, so the display conversion is lossless; it must NOT be
- * used to round or compute.
- *
- * `Intl.NumberFormat("es-ES", …)` places a NON-BREAKING space (U+00A0, or a narrow no-break space
- * U+202F on some ICU builds) between the amount and the €, not an ASCII space. That separator is
- * NORMALISED to an ASCII space here: the ESC/POS builder Latin-1-encodes each character to its low
- * byte, so U+00A0 → 0xA0 and U+202F → 0x2F (a `/`) — the latter printing a customer total as
- * `20,90/€`-garble. The digits and comma are ASCII and always fine; only the separator needed fixing.
- * The `€` glyph itself is left UNTOUCHED (its byte, 0xAC, is a code-page/hardware decision deferred to
- * the failover/hardware pass — design §5). `receipt-ticket.test.ts` pins that the separator is 0x20.
- */
-/**
- * Cache the `Intl.NumberFormat` per locale, mirroring the sibling `apps/till/src/i18n/format.ts`.
- * `formatMoney` runs ~12x per receipt (every line, VAT row and total) - all at the SAME invoice
- * locale - and building a formatter is the expensive part; the instances are immutable and safe to
- * reuse. Keyed by locale (the only thing that varies), so a mixed-locale process stays correct.
- */
-const formatters = new Map<string, Intl.NumberFormat>();
-
-function formatMoney(value: string, locale: string): string {
-  let formatter = formatters.get(locale);
-  if (formatter === undefined) {
-    formatter = new Intl.NumberFormat(locale, { style: "currency", currency: "EUR" });
-    formatters.set(locale, formatter);
-  }
-  return formatter.format(Number(value)).replace(/[\u00a0\u202f]/g, " ");
-}
 
 /**
  * A filed line's goods name in the invoice locale (art. 7.1.e), resolved from the line's snapshotted
@@ -206,130 +179,113 @@ function issueDate(iso: string, locale: string): string {
 }
 
 /**
- * Compose a label-left / value-right column line. The value is right-aligned within {@link
- * RECEIPT_WIDTH}; when the two would overrun the width they simply run together with a single space
- * (`Math.max(1, …)`), never wrapping — the fit is cosmetic and verified on hardware (design §5). The
- * padding math runs on the FORMATTED string at its true Unicode length, so a money value's €/NBSP is
- * measured correctly here even though those bytes do not survive a Latin-1 decode downstream.
- */
-function twoColumn(label: string, value: string): string {
-  const gap = Math.max(1, RECEIPT_WIDTH - label.length - value.length);
-  return label + " ".repeat(gap) + value;
-}
-
-/**
  * Render one filed sale to an ESC/POS payload — the customer's factura simplificada. Pure and total:
  * an empty `lines`/`vatBreakdown` yields a header-and-total ticket rather than throwing, and an empty
- * `result.qr` prints no QR command while still printing the legend (mirroring `qrSvg("") === ""` on the
- * screen, where the legend is unconditional). The element ORDER below mirrors
- * `till-ticket-view.ts:229-318` element for element.
+ * `result.qr` prints no QR while still printing the legend. The element ORDER mirrors
+ * `till-ticket-view.ts` element for element; only the line breaks depend on the printer. Every string
+ * is prepared for the printer's character set before it is measured, so no printed line is longer than
+ * the paper's column count.
  */
 export function formatReceipt({
   result,
   issuer,
   receipt,
   invoiceLocale,
+  printer,
   simulated = false,
   duplicate = false,
 }: FormatReceiptInput): Uint8Array {
   const locale = invoiceLocale;
-  const b = esc().init();
+  const columns = columnsFor(printer.paperWidth);
+  const p = (s: string): string => prepareText(s, printer.characterSet);
+  const b = esc(printer.characterSet).init();
+  const text = (s: string, indent = 0): void => {
+    for (const line of wrapText(p(s), columns, indent)) b.line(line);
+  };
+  const row = (label: string, amount: string, indent = 0): void => {
+    for (const line of labelAmountLines(p(label), p(amount), columns, indent)) b.line(line);
+  };
 
   // The practice warning surrounds the immutable receipt content. It never enters the filed record or
   // its hash, but it must survive when a paper ticket leaves a Demo/Prepare till.
-  if (simulated) b.line("PRUEBA - SIN COBRO REAL").line();
+  if (simulated) {
+    text("PRUEBA - SIN COBRO REAL");
+    b.line();
+  }
 
   // Issuer block — venue name, optional non-fiscal subtitle, NIF (art. 7.1.d).
-  b.line(issuer.venueName);
-  if (receipt.headerSubtitle) b.line(receipt.headerSubtitle);
+  text(issuer.venueName);
+  if (receipt.headerSubtitle) text(receipt.headerSubtitle);
   if (duplicate) b.line("DUPLICADO");
-  b.line(`${LABEL.nif}: ${issuer.nif}`);
+  text(`${LABEL.nif}: ${issuer.nif}`);
   b.line();
 
-  b.line([result.orderLabel, `Pedido ${result.orderNumber}`].filter(Boolean).join(" · "));
+  text([result.orderLabel, `Pedido ${result.orderNumber}`].filter(Boolean).join(" · "));
 
   // Metadata — serie+número (7.1.a) and fecha de expedición (7.1.b).
-  b.line(twoColumn(LABEL.invoice, result.invoiceNumber));
-  b.line(twoColumn(LABEL.date, issueDate(result.issuedAt, locale)));
+  row(LABEL.invoice, result.invoiceNumber);
+  row(LABEL.date, issueDate(result.issuedAt, locale));
   b.line();
 
-  // Goods identification (7.1.e) — the FILED composition: quantity, name (invoice locale), per-line
-  // gross. This is `result.lines`, never a client basket, so the printed list cannot diverge from the
-  // invoice. Ordering modifiers (Task 8): the lines are GROUPED so each selected option prints INDENTED
-  // beneath its dish at its own delta (0,00 for a free option), rather than flat as a peer line. The
-  // grouping only re-orders the already-filed lines — every line still prints at its filed gross, so the
-  // list reconciles with `result.total` exactly as before.
+  // Goods identification (7.1.e) — the FILED composition, grouped so each option prints indented beneath
+  // its dish at its own delta. A dish name's continuation lines start under the name, not the quantity.
   for (const { dish, options } of groupByParent(result.lines)) {
     const unit = dish.unitName == null ? "" : ` ${lineName(dish.unitName, locale)}`;
-    b.line(
-      twoColumn(
-        `${dish.quantity}${unit}  ${lineName(dish.descriptions, locale)}`,
-        formatMoney(dish.gross, locale),
-      ),
+    const quantity = p(`${dish.quantity}${unit}  `);
+    row(
+      `${quantity}${lineName(dish.descriptions, locale)}`,
+      formatMoney(dish.gross, locale),
+      quantity.length,
     );
     for (const label of modifierSnapshotLabels(dish.modifierSnapshots ?? [], locale)) {
-      b.line(`  ${label}`);
+      text(`  ${label}`, 2);
     }
     for (const option of options) {
-      // Indented, and WITHOUT a leading quantity prefix — an option is priced per dish, so repeating the
-      // dish's own count as a prefix reads as noise. The gross is the delta this option added.
-      //
-      // Per-option quantity (landed feature): the PER-DISH count is recovered from the filed COMBINED
-      // child quantity (see perDishOptionQuantity). We APPEND a "×N" badge to the option's NAME only when
-      // that count exceeds 1; the common one-per-dish case shows no badge and is byte-identical to before.
-      // The gross is left as the filed delta, unchanged by the badge.
+      // No quantity prefix: an option is priced per dish. A "×N" badge shows a per-dish count above 1.
       const perDish = perDishOptionQuantity(option.quantity, dish.quantity);
       const name = lineName(option.descriptions, locale);
       const label = perDish > 1 ? `  ${name} ${QTY_BADGE}${perDish}` : `  ${name}`;
-      b.line(twoColumn(label, formatMoney(option.gross, locale)));
+      row(label, formatMoney(option.gross, locale), 2);
     }
   }
   b.line();
 
   // VAT breakdown (7.1.f) — base imponible + cuota per tipo impositivo.
   for (const v of result.vatBreakdown) {
-    b.line(twoColumn(`${LABEL.base} ${v.rate}%`, formatMoney(v.base, locale)));
-    b.line(twoColumn(`${LABEL.vat} ${v.rate}%`, formatMoney(v.tax, locale)));
+    row(`${LABEL.base} ${v.rate}%`, formatMoney(v.base, locale));
+    row(`${LABEL.vat} ${v.rate}%`, formatMoney(v.tax, locale));
   }
   b.line();
 
   // Contraprestación total (7.1.g).
-  b.line(twoColumn(LABEL.total, formatMoney(result.total, locale)));
+  row(LABEL.total, formatMoney(result.total, locale));
   b.line();
 
-  // Allowed operational extras — the tender block. Cash: cash tendered (= total + change) and change.
-  // Card identity belongs on the payment slip; amounts and the manual terminal reference stay here.
+  // Allowed operational extras — the tender block. Card identity belongs on the payment slip.
   const t = result.tender;
   if (t.method === "cash") {
-    b.line(
-      twoColumn(
-        LABEL.cash,
-        formatMoney(addDecimal(decimal(result.total), decimal(t.change)), locale),
-      ),
-    );
-    b.line(twoColumn(LABEL.change, formatMoney(t.change, locale)));
+    row(LABEL.cash, formatMoney(addDecimal(decimal(result.total), decimal(t.change)), locale));
+    row(LABEL.change, formatMoney(t.change, locale));
   } else if (t.method === "card") {
     b.line("Tarjeta");
-    if (t.reference !== null) b.line(`Ref. ${t.reference}`);
-    // String compare: `tenders.tip_amount` is `numeric(12,2)`, always canonical "0.00"/"0.50" — a
-    // Decimal compare here would test object identity and always be true.
+    if (t.reference !== null) text(`Ref. ${t.reference}`);
+    // String compare: `tenders.tip_amount` is `numeric(12,2)`, always canonical "0.00"/"0.50".
     if (t.tip !== "0.00") {
-      b.line(twoColumn(LABEL.tip, formatMoney(t.tip, locale)));
-      b.line(twoColumn(LABEL.charged, formatMoney(t.charged, locale)));
+      row(LABEL.tip, formatMoney(t.tip, locale));
+      row(LABEL.charged, formatMoney(t.charged, locale));
     }
   }
   b.line();
 
   // The QR (arts. 20-21). A sale's cotejo URL can legitimately be "" (the fiscal backend minted none),
-  // and a QR of nothing is not a scannable code — so print no QR command then, exactly as the screen
-  // renders no QR while still printing the legend below.
+  // and a QR of nothing is not a scannable code, so print no QR then while still printing the legend.
   if (result.qr !== "") b.qr(result.qr).line();
 
   // The VERI*FACTU legend — printed UNCONDITIONALLY in Veri*Factu mode (art. 20.1.b).
   b.line(LEGEND);
 
   // Non-fiscal footer trim, under the legend.
-  if (receipt.footerMessage) b.line(receipt.footerMessage);
+  if (receipt.footerMessage) text(receipt.footerMessage);
 
   return b.feedAndCut().bytes();
 }
