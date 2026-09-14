@@ -143,9 +143,20 @@ git commit -s -m "Move every call site off till.configure onto the new permissio
 **Interfaces:**
 
 - Consumes: the migrated tree from Task 2.
-- Produces: `till.configure` absent from the `Permission` union and from all source.
+- Produces: `till.configure` absent from the `Permission` union and from every permission VALUE in source.
 
-- [ ] **Step 1: Write the retired-name guard** at `scripts/till-configure-retired.test.ts`. It reads source text (say so in a comment — it is weaker than a type check, which is the whole reason it exists) and fails if the retired literal appears in any non-test source under `packages/` or `apps/`:
+> **Controller ruling (2026-09-14, recorded in the ledger):** the guard greps the QUOTED value form
+> `"till.configure"` — the form that actually gates a route (`authorizeManager`, `roleHasPermission`,
+> `requiredPermission`, `CARD_REQUIRED_PERMISSION`) — not the bare word. Task 2 left ~20 comment/prose
+> mentions of `` `till.configure` `` in files it did not functionally touch (dashboard client/screens,
+> `apps/server/src/kitchen.ts`, till floor screens, provisioning). Rewriting those risks a false claim
+> (CLAUDE.md §1) where a comment describes "a config management session" rather than one new
+> permission, and is the broad sweep the repo discourages ("thin on touch, don't sweep"). A comment
+> cannot gate a route, so it is a doc nit, not an access risk. The exception: the comments in
+> `packages/identity/src/permissions.ts` itself, which this task edits anyway — thin those (Step 3),
+> which also clears Task 1's deferred minor.
+
+- [ ] **Step 1: Write the retired-name guard** at `scripts/till-configure-retired.test.ts`. It reads source text (say so in a comment — it is weaker than a type check, which is the whole reason it exists) and fails if the retired permission VALUE (`"till.configure"`, double-quoted) appears in any non-test source under `packages/` or `apps/`:
 
 ```ts
 import { execFileSync } from "node:child_process";
@@ -153,12 +164,15 @@ import { describe, expect, it } from "vitest";
 
 // Reads TEXT, not types: the permission is passed as `Permission | (string & {})`, so a stray
 // `"till.configure"` on a missed route compiles clean. This guard is the safety net the typechecker
-// cannot be — it greps the source. A `git grep` miss (a name built from pieces at runtime) escapes it.
+// cannot be — it greps the source for the QUOTED value form, the shape a live gate uses. It does NOT
+// police bare-word/backtick mentions in comments (a comment cannot gate a route); those are stale doc
+// thinned on touch. A value built from pieces at runtime would also escape it.
 describe("till.configure is retired", () => {
-  it("appears in no production source under packages/ or apps/", () => {
+  it("appears as a permission value in no production source under packages/ or apps/", () => {
     let out = "";
     try {
-      out = execFileSync("git", ["grep", "-l", "till.configure", "--", "packages", "apps"], {
+      // -F fixed string, the double-quoted literal — the value form, never the comment form.
+      out = execFileSync("git", ["grep", "-lF", '"till.configure"', "--", "packages", "apps"], {
         encoding: "utf8",
       });
     } catch {
@@ -175,9 +189,9 @@ describe("till.configure is retired", () => {
 - [ ] **Step 2: Run the guard and watch it fail**
 
 Run: `pnpm vitest run scripts/till-configure-retired.test.ts`
-Expected: FAIL — `packages/identity/src/permissions.ts` still contains the catalogue entry.
+Expected: FAIL — `packages/identity/src/permissions.ts` still contains the quoted catalogue entries (`"till.configure"` in `PERMISSIONS` and in the `MANAGER` set).
 
-- [ ] **Step 3: Remove `till.configure`** from the `PERMISSIONS` array and the `MANAGER` set in `packages/identity/src/permissions.ts`, and delete or rewrite the doc comment that described it. Delete the old `till.configure` parity test in `permissions.test.ts` (the Task 1 test covers the replacements).
+- [ ] **Step 3: Remove `till.configure`** from the `PERMISSIONS` array and the `MANAGER` set in `packages/identity/src/permissions.ts`, and remove the doc comment that described it. Delete the old `till.configure` parity test in `permissions.test.ts` (the Task 1 test covers the replacements). **Also thin the three new permissions' comments** added in Task 1: drop the "that replace till.configure (spec 2026-09-14)" migration clause so each comment states only what the permission guards (the invariant), not the history — this clears Task 1's deferred minor and is why this task, which edits the file, owns it. Leave the other comment-only mentions elsewhere in the tree alone (controller ruling above).
 
 - [ ] **Step 4: Run the guard and the identity tests**
 
