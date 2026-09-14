@@ -42,6 +42,12 @@
 
 **Packages with NO migration set that still write tenant columns into core-owned tables** (they are fixed in Task B8, the core-set task, because that is where those columns are dropped): `layouts` (writes `tenant_receipts`, `tenant_themes`, `canvases`, `device_profiles`), `reporting` (writes `daily_close_chain`). Task B0 confirms this list.
 
+**Packages with NO migration set that consume tenant SEMANTICS** (found by the B0 census, 2026-09-14 — they own no column but must be converted): `payments-stripe` and `payments-sumup` (a `requireOwnTenant` runtime guard, a `tenantId` in provider `opts`/`deps`/`params`, and credential reads whose AAD is keyed by tenant — Tasks B-PAY); `reporting` (11 raw-SQL tenant filters + `input.tenantId` shape fields — its filters go in Task A5, its inserts and shape fields in Task B8); the credentials API itself (Task B2, below).
+
+**Raw-SQL tenant filters are a distinct category from drizzle `eq()` filters.** The B0 census counts ~134 `where tenant_id = ${…}` filters inside `sql\`…\`` templates (workforce, server, catalogue, fiscal-verifactu, reporting, venue-service, provisioning, core, printing, media). Task A2 removes drizzle `eq()` filters; **Task A5** removes these raw-SQL ones. Both are behaviour-neutral under one tenant and safe while the columns exist, but a raw-SQL removal is not caught by the typechecker — its safety net is the package suite, so A5 runs each touched package's tests.
+
+**SECURITY-SENSITIVE — the credential seal.** `tenantId` is the additional-authenticated-data (AAD) that binds a sealed credential's ciphertext, via `aadFor(tenantId, purpose)` (`packages/credentials/src/cipher.ts:23`), used by both `seal` and `open` (`packages/credentials/src/store.ts:68,132`). Task B2 changes the AAD to `purpose` alone and must change `seal` and `open` together, or every decrypt fails. Safe pre-production (no stored credentials to re-seal), but it is a change to how secrets are sealed: Task B2 gets the run-it check (a real seal→open round-trip on the new AAD) and a careful review.
+
 ---
 
 ## Phase A — Remove the read-side filters and the tenant-free renames (workspace stays green throughout)
@@ -170,7 +176,17 @@ insert shape fields stay until Phase B/C.
 - [ ] **Step 2: Classify each file.** Whole file is a cross-tenant probe (e.g. `packages/db/src/schema/locations-default-catalogue.test.ts`, `packages/bookings/src/bookings-tenant.pg.test.ts`) → delete the file. A two-tenant *case* inside an otherwise-relevant suite → delete only those `it(...)` blocks and their second-tenant fixture. Never rewrite a two-tenant assertion into a one-tenant one (it would assert nothing — spec §Tests).
 - [ ] **Step 3: Delete accordingly.** `pnpm --filter @waitron/db test:coverage && pnpm --filter @waitron/bookings test:coverage` → PASS. If deleting a whole file drops a package below its coverage threshold, it also covered single-tenant behaviour — restore it and delete only the two-tenant cases.
 - [ ] **Step 4: Commit** (`-s`) listing every file deleted vs cases-removed.
-- [ ] **Step 5: Phase A gate.** `pnpm -r typecheck && pnpm format:check && pnpm lint` → PASS. The workspace is fully green: every tenant *filter* gone, every tenant *column* and *shape field* still present.
+
+### Task A5: Remove the raw-SQL tenant filters
+
+**Files:** every production file with a `where tenant_id = ${…}` (or `and … tenant_id = ${…}`) inside a `sql\`…\`` template — ~134 sites (`grep -rn 'tenant_id = ' packages apps --include='*.ts' | grep -v test | grep '\${'`), heaviest in `workforce`, `apps/server`, `catalogue`, `fiscal-verifactu`, `reporting`.
+
+**Interfaces:** Consumes: nothing. Produces: no raw-SQL query filters on `tenant_id`. Shape fields (`input.tenantId`, `cfg.tenantId`) stay — Phase B removes them with the inserts.
+
+- [ ] **Step 1: Remove each raw-SQL filter.** Delete the `tenant_id = ${x}` predicate. If it was the whole `WHERE`, drop the `where`; if one `AND` arm, keep the rest. **Care, because the typechecker cannot catch a mistake here:** a filter inside a correlated subquery, an `INSERT … WHERE NOT EXISTS`, a `DELETE`/`UPDATE`, or an `ON CONFLICT … WHERE` must keep the SQL valid — read the emitted statement, do not pattern-delete. A by-id read keeps its `id = ${id}` predicate. Behaviour is unchanged under one tenant.
+- [ ] **Step 2: Run the touched packages' suites** — at minimum `pnpm --filter @waitron/workforce test:coverage && pnpm --filter server test:coverage && pnpm --filter @waitron/catalogue test:coverage && pnpm --filter @waitron/fiscal-verifactu test:coverage && pnpm --filter @waitron/reporting test:coverage` (real-PG ones with `TESTCONTAINERS_RYUK_DISABLED=true`). These suites are the only safety net — a broken raw-SQL edit surfaces here, not at typecheck.
+- [ ] **Step 3: Commit** (`-s`): `Remove the raw-SQL tenant filters`
+- [ ] **Step 4: Phase A gate.** `pnpm -r typecheck && pnpm format:check && pnpm lint` → PASS. The workspace is fully green: every tenant *filter* (drizzle and raw-SQL) gone, every tenant *column* and *shape field* still present.
 
 ---
 
@@ -200,11 +216,30 @@ One migration touching `tenant_id` (`scheduled_runs`); no composite FKs beyond t
 
 - [ ] Steps 1–7. Commit: `Drop tenant_id from the scheduler set`
 
-### Task B2: `credentials` (`tenant_credentials`)
+### Task B2: `credentials` (`tenant_credentials`) — column, PK, and the seal AAD (SECURITY-SENSITIVE)
 
 PK changes from `(tenant_id, purpose)` to `(purpose)`. Stays classified `local`. Keep the `iv`/`auth_tag` length CHECKs. Rewrite `credentials/store.ts:149` upsert target. Grant suite passes as `app_user`.
 
-- [ ] Steps 1–7. Verify the new PK is `(purpose)`, regenerated not hand-edited. Commit: `Drop tenant_id from the credentials vault`
+**This task also changes how secrets are sealed** — do it carefully and as one coherent change:
+- `aadFor(tenantId, purpose)` (`packages/credentials/src/cipher.ts:23`) becomes `aadFor(purpose)` returning `Buffer.from(purpose)` (drop the `${tenantId}\0` prefix). `seal` and `open` both call it, so the change is symmetric by construction — but a partial edit (one call site missed) makes every decrypt fail, so verify both.
+- `CredentialRef` and `putCredential`'s params drop `tenantId` (`store.ts:32,127`); `getCredential`/`tryGetCredential`/`putCredential` and the `credentials.decrypt_failed` error payload (`errors.ts:52`) drop it too.
+- Every consumer of the credential API drops `tenantId` from its ref: `credentials/src/cli.ts:147`, and (in Tasks B-PAY) `payments-stripe` and `payments-sumup`. Because the API signature changes, those consumers will not typecheck until B-PAY — do B2 and B-PAY back-to-back, same implementer.
+
+- [ ] Steps 1–7, plus: verify `aadFor` changed in both `seal` and `open` paths; the new PK is `(purpose)`, regenerated not hand-edited.
+- [ ] **Run-it check (security):** a real seal→open round-trip on the new AAD — `putCredential` a value, `getCredential` it back, assert equality; and assert an `open` with a mismatched purpose still fails (the AAD still binds purpose). This is in `credentials`' own suite; run it as `app_user`.
+- [ ] Commit: `Drop tenant_id from the credentials vault and its seal AAD`
+
+### Tasks B-PAY: `payments-stripe` and `payments-sumup` (no migration set — tenant semantics only)
+
+Neither owns a table. Both take a `tenantId` in provider `opts`/`deps`/`params`, guard it, and read tenant-keyed credentials. Convert both (one task each, or one combined — they are near-identical shapes):
+- Delete the `requireOwnTenant(supplied)` method and its call sites (`payments-stripe/src/{device-provider,provider}.ts:110,88`) — a guard comparing the caller's tenant to the provider's own is vacuous with one tenant.
+- Drop `tenantId` from provider `opts`/`deps`/`params` types and every use (`device-provider.ts`, `provider.ts`, `hosted-provider.ts`, `card-provider.ts`, `reverse.ts` for stripe; `card-provider.ts`, `provider.ts` for sumup), and from the `getCredential({ tenantId, purpose })` refs (now `{ purpose }`, per B2).
+- `assertKeyEnvironment`/`secretKeyFromSealed` (`card-provider.ts:62,82`) drop the `tenantId` parameter — it fed only the error payload, not the environment check, so removing it changes no logic.
+- `withTenant(db, tenantId, fn)` → `withTransaction(db, fn)` (already renamed in A1; here the `tenantId` argument's source is removed).
+
+- [ ] Convert `payments-stripe`; run `pnpm --filter @waitron/payments-stripe test:coverage`.
+- [ ] Convert `payments-sumup`; run `pnpm --filter @waitron/payments-sumup test:coverage`.
+- [ ] Commit(s) (`-s`): `Drop the tenant from the Stripe/SumUp providers`
 
 ### Task B3: `workforce-es` (`convenio_config`) + `workforce`
 
@@ -366,7 +401,7 @@ By now no `.tenantId` field survives, so every `TenantId` usage is either the br
 
 ## Self-Review
 
-**Spec coverage:** Schema drop → B1–B9. `tenants` one-row `id=1` (spec updated to match this sibling-precedent shape) → B8 Step 1. `deriveTenantId` deletion + applyVenue refusal → B8 Steps 2–3. `withTenant`→`withTransaction` → A1. Env var + live-updates + authorizeManager → A3. Query filters → A2. Two-tenant tests deleted not rewritten → A4. Insert/upsert/shape-field writers → per-set mechanism steps 4 + B8 Step 5. `TenantId` brand → C1. Fiscal hash untouched, verified by running → B9 Step 3. Replication/classification guards green → B9 Step 5. New guard (reads text, gap stated) → C2. Rules + prose sweep → C3. Fixtures → mechanism step 5 + B8 Step 5. Full ceremony + run-it brief → C4. Cross-package writers with no migration set (layouts, reporting) → B8. All covered.
+**Spec coverage:** Schema drop → B1–B9. `tenants` one-row `id=1` (spec updated to match this sibling-precedent shape) → B8 Step 1. `deriveTenantId` deletion + applyVenue refusal → B8 Steps 2–3. `withTenant`→`withTransaction` → A1. Env var + live-updates + authorizeManager → A3. Drizzle query filters → A2; raw-SQL query filters (~134) → A5. Two-tenant tests deleted not rewritten → A4. Insert/upsert/shape-field writers → per-set mechanism steps 4 + B8 Step 5. Credential seal AAD keyed by tenant (security-sensitive) → B2. Consumer packages with no migration set: `payments-stripe`/`payments-sumup` → B-PAY; `reporting` filters → A5, its inserts/shape fields → B8; `layouts`, `reporting` writers → B8. `TenantId` brand → C1. Fiscal hash untouched, verified by running → B9 Step 3. Replication/classification guards green → B9 Step 5. New guard (reads text, gap stated) → C2. Rules + prose sweep → C3. Fixtures → mechanism step 5 + B8 Step 5. Full ceremony + run-it brief → C4. All covered.
 
 **Placeholder scan:** none. The per-set SQL is generated by `drizzle-kit generate` with explicit inspect-and-hand-rewrite steps — the repo's real workflow, not a placeholder (186 FK rewrites cannot be hand-authored correctly in a plan, and snapshots are never hand-edited).
 
