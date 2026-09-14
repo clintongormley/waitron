@@ -49,6 +49,13 @@ describe("roleHasPermission", () => {
       expect(roleHasPermission("supervisor", p)).toBe(false);
     }
   });
+  it("grants fiscal.view to manager and admin only", () => {
+    expect(PERMISSIONS).toContain("fiscal.view");
+    expect(roleHasPermission("manager", "fiscal.view")).toBe(true);
+    expect(roleHasPermission("admin", "fiscal.view")).toBe(true);
+    expect(roleHasPermission("supervisor", "fiscal.view")).toBe(false);
+    expect(roleHasPermission("staff", "fiscal.view")).toBe(false);
+  });
   it("grants schedule.manage to manager and admin only (shift-planning slice 1)", () => {
     // A domain-named scheduling permission (roster authoring), granted to exactly the roles that hold
     // person.manage — manager and admin — and NEVER to staff or supervisor, so the roster write gate

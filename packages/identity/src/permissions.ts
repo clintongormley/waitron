@@ -95,6 +95,9 @@ export const PERMISSIONS = [
   "node.promote",
   // view recent logs + toggle diagnostic verbosity; manager + admin
   "diagnostics.view",
+  // Seeing tax-filing alerts: rejected or diverging invoice records, chain and clock checks, and
+  // submission delays; manager + admin.
+  "fiscal.view",
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -131,6 +134,7 @@ const MANAGER: ReadonlySet<Permission> = new Set([
   "payments.manage",
   "print.resend",
   "diagnostics.view",
+  "fiscal.view",
 ]);
 const ALL: ReadonlySet<Permission> = new Set(PERMISSIONS);
 
