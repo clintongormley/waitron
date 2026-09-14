@@ -309,9 +309,9 @@ export async function replaceProductCategories(
       primary = current.primaryCategoryId;
     else primary = null;
   }
+  // Covers a primary sent with an EMPTY set too: nothing is in an empty array, so the `includes`
+  // check below is what rejects that case.
   if (primary !== null && !input.categoryIds.includes(primary))
-    throw new AppError("category.membership_invalid", {});
-  if (input.categoryIds.length === 0 && primary !== null)
     throw new AppError("category.membership_invalid", {});
   await tx
     .delete(productCategories)
