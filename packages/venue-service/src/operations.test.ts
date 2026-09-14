@@ -858,6 +858,32 @@ describe("resolvePreparationRoutes", () => {
     });
   });
 
+  it("matches a product id however the caller spells it, keyed by the caller's spelling", async () => {
+    const { tenantId, cfg, zoneId } = await seedRoutingVenue();
+    await scoped(tenantId, async (tx) => {
+      const grill = await insertStation(tx, tenantId, cfg.locationId, "Grill");
+      const menu = await createCatalogue(tx, tenantId, { name: "Spelling" });
+      const routed = await productWithCategory(tx, tenantId, menu.id, "Routed");
+      const unrouted = await productWithCategory(tx, tenantId, menu.id, "Unrouted");
+      await createPreparationRoute(tx, cfg, { productId: routed.id, target: station(grill) });
+      const upper = routed.id.toUpperCase();
+      const braced = `{${routed.id.replaceAll("-", "")}}`;
+
+      await expect(resolvePreparationRoutes(tx, cfg, zoneId, [upper])).resolves.toEqual(
+        new Map([[upper, station(grill)]]),
+      );
+      await expect(resolvePreparationRoutes(tx, cfg, zoneId, [upper, braced])).resolves.toEqual(
+        new Map([[upper, station(grill)]]),
+      );
+      await expect(
+        rejection(resolvePreparationRoutes(tx, cfg, zoneId, [unrouted.id.toUpperCase()])),
+      ).resolves.toEqual({
+        code: "route.missing",
+        params: { zoneId, productId: unrouted.id.toUpperCase() },
+      });
+    });
+  });
+
   it("throws the first failing product's coded error in input order", async () => {
     const { tenantId, cfg, zoneId } = await seedRoutingVenue();
     await scoped(tenantId, async (tx) => {
@@ -914,10 +940,12 @@ describe("resolvePreparationRoutes", () => {
         menu.id,
         "Station elsewhere",
       );
-      // Both rows are refused by createPreparationRoute, so they are written directly.
-      await tx.execute(sql`
-        insert into preparation_routes (tenant_id, location_id, category_id, station_id)
-        values (${tenantId}, ${otherLocationId}, ${routedElsewhere.categoryId}, ${elsewhere})`);
+      await createPreparationRoute(
+        tx,
+        { tenantId, locationId: brandLocationId(otherLocationId) },
+        { categoryId: routedElsewhere.categoryId, target: station(elsewhere) },
+      );
+      // createPreparationRoute refuses a route to another location's station, so it is written directly.
       await tx.execute(sql`
         insert into preparation_routes (tenant_id, location_id, product_id, station_id)
         values (${tenantId}, ${cfg.locationId}, ${stationElsewhere.id}, ${elsewhere})`);

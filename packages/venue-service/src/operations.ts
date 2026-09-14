@@ -1079,6 +1079,12 @@ export async function deletePreparationRoute(
 
 type PreparationRouteOutcome = PreparationRoute | AppError;
 
+/** PostgreSQL's uuid input accepts upper case, braces and missing hyphens, so ids a caller passes
+ *  are compared with the ids a query returns in this one spelling. */
+function canonicalUuid(id: string): string {
+  return id.toLowerCase().replace(/[{}-]/g, "");
+}
+
 /** Most specific first: zone+product, zone+category, venue+product, venue+category. Within one
  *  location and zone, the partial unique indexes on `preparation_routes` allow at most one row per
  *  rank for a product, so ranks never tie. */
@@ -1095,7 +1101,12 @@ async function resolvePreparationRouteOutcomes(
   zoneId: string,
   productIds: readonly string[],
 ): Promise<Map<string, PreparationRouteOutcome>> {
-  const ids = [...new Set(productIds)];
+  const spellingByUuid = new Map<string, string>();
+  for (const id of productIds) {
+    const uuid = canonicalUuid(id);
+    if (!spellingByUuid.has(uuid)) spellingByUuid.set(uuid, id);
+  }
+  const ids = [...spellingByUuid.values()];
   const outcomes = new Map<string, PreparationRouteOutcome>();
   if (ids.length === 0) return outcomes;
   await resolveZoneContext(tx, cfg, zoneId);
@@ -1103,7 +1114,7 @@ async function resolvePreparationRouteOutcomes(
     .select({ id: products.id, categoryId: products.categoryId })
     .from(products)
     .where(and(inArray(products.id, ids), eq(products.tenantId, cfg.tenantId)));
-  const categoryById = new Map(productRows.map((row) => [row.id, row.categoryId]));
+  const categoryById = new Map(productRows.map((row) => [canonicalUuid(row.id), row.categoryId]));
   const categoryIds = [
     ...new Set(productRows.flatMap((row) => (row.categoryId === null ? [] : [row.categoryId]))),
   ];
@@ -1137,7 +1148,7 @@ async function resolvePreparationRouteOutcomes(
     // Exactly one of productId and categoryId is set on every route row.
     const [index, key] =
       route.productId !== null
-        ? [routesByProduct, route.productId]
+        ? [routesByProduct, canonicalUuid(route.productId)]
         : [routesByCategory, route.categoryId!];
     const listed = index.get(key);
     if (listed === undefined) index.set(key, [route]);
@@ -1145,10 +1156,11 @@ async function resolvePreparationRouteOutcomes(
   }
   const winners = new Map<string, RouteRow>();
   for (const id of ids) {
-    if (!categoryById.has(id)) continue;
-    const categoryId = categoryById.get(id) ?? null;
+    const uuid = canonicalUuid(id);
+    if (!categoryById.has(uuid)) continue;
+    const categoryId = categoryById.get(uuid) ?? null;
     const candidates = [
-      ...(routesByProduct.get(id) ?? []),
+      ...(routesByProduct.get(uuid) ?? []),
       ...(categoryId === null ? [] : (routesByCategory.get(categoryId) ?? [])),
     ];
     const winner = candidates.reduce<RouteRow | undefined>(
@@ -1184,7 +1196,7 @@ async function resolvePreparationRouteOutcomes(
 
   for (const id of ids) {
     const winner = winners.get(id);
-    if (!categoryById.has(id)) {
+    if (!categoryById.has(canonicalUuid(id))) {
       outcomes.set(id, new AppError("route.subject_not_found", { subject: "product", id }));
     } else if (winner === undefined) {
       outcomes.set(id, new AppError("route.missing", { zoneId, productId: id }));
