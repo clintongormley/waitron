@@ -344,7 +344,28 @@ What it left open:
   That first sweep missed one instance in the same file — the products modal's "no other categories"
   dash — because the test covering it asked only whether a `.muted` node existed, which was true in the
   wrong shadow root too; the final review found it, and the test now reads the painted colour back.
-  The same bug was found already live on `main`, unrelated to this branch, in `apps/dashboard/src/widgets/product-list.ts` — product thumbnails render at full natural size and allergen badges as unstyled text. A structural guard comparing each screen's `static styles` class selectors against classes used inside `wt-data-table` callbacks looks feasible and would catch this whole class of bug.
+- **The Products list has the same styling bug, and nobody has fixed it.** #353's QA saw it on the
+  real page, in code that branch did not touch (`apps/dashboard/src/widgets/product-list.ts`): product
+  thumbnails render at their full natural size and allergen badges as unstyled text. It was reported,
+  not re-checked, when this row was written. **Next action:** open the Products list in both themes,
+  confirm it, and move those cell styles onto `part=` attributes the way the categories screen now
+  does, with a test that reads a painted size or colour back rather than asking whether a class exists.
+- **Nothing stops the next screen making the same mistake.** A check that compares the class names a
+  screen's own stylesheet styles against the class names it puts inside `wt-data-table` cell callbacks
+  looks feasible and would catch this whole kind of bug; nobody has tried to write it.
+
+**Categories screen rebuilt — LANDED #353 (2026-09-14).** The `/manage/categories` page is now a
+table you can switch between a tree (children nested under their parent, collapsible) and a flat
+list, with a name filter that keeps a match's parents visible. A category can have a colour, picked
+from a palette or chosen freely, shown as a square beside its name and as a coloured tag
+(`wt-lozenge`) on a product's other categories. Each category opens a window listing its products,
+and you can add many products at once from a checkbox list. Two behaviour changes came with it: a
+product's reporting category is now optional, and deleting a category shows what it will change and
+then goes ahead instead of refusing (both described in the #340 row above, which was updated in the
+same change). What it left open is recorded in the #340 list above — the colour shown nowhere else,
+the legacy product-patch path, the missing module seat for delete dependants, and the table styling
+bug. [Design](superpowers/specs/2026-09-13-categories-screen-design.md),
+[plan](superpowers/plans/2026-09-13-categories-screen.md).
 
 **Product modifiers — LANDED #341 (2026-09-13).** Modifiers are now written once and attached to as
 many products as you like, instead of being retyped per product. There are four kinds: free text (a
