@@ -3174,9 +3174,10 @@ export class DashboardApi {
       body: JSON.stringify({ passphrase }),
     });
     if (!response.ok) {
-      // This binary path decodes its own errors, so it mirrors the shared request helper exactly: the
-      // untrusted body is parsed only when it is an object (a vanished route answers text/plain, and
-      // the literal `null` parses cleanly), `code` is read only when it is a string, and the answered
+      // This binary path decodes its own errors, mirroring the shared request helper's code/status
+      // handling (it does not carry `params` — the export's callers never read it): the untrusted
+      // body is parsed only when it is an object (a vanished route answers text/plain, and the
+      // literal `null` parses cleanly), `code` is read only when it is a string, and the answered
       // HTTP `status` rides along — so a caught export rejection is the same `{ code, status }` shape
       // every dashboard consumer already branches on.
       const parsed: unknown = await response.json().catch(() => undefined);
