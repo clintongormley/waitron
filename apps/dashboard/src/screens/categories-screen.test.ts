@@ -235,8 +235,18 @@ it("opens the products modal from the name and lists members with lozenges", asy
   const lozenges = [...products.shadowRoot!.querySelectorAll("wt-lozenge")];
   expect(lozenges.some((lozenge) => lozenge.textContent?.trim() === "Drinks")).toBe(true);
   // "Napkin" has no membership beyond the reporting category "Food", so its Other categories
-  // cell falls back to the muted dash rather than an empty lozenge list.
-  expect(products.shadowRoot!.querySelector(".muted")).not.toBeNull();
+  // cell falls back to the muted dash rather than an empty lozenge list. This cell is handed to
+  // wt-data-table as a callback like the name cell, so it lands in the TABLE's shadow root: read
+  // the painted colour back, because presence alone passed while the dash rendered unmuted.
+  const dash = products.shadowRoot!.querySelector<HTMLElement>('[part~="muted"]');
+  expect(dash).not.toBeNull();
+  expect(dash!.textContent!.trim()).toBe("—");
+  const mutedToken = getComputedStyle(el).getPropertyValue("--wt-color-text-muted").trim();
+  expect(getComputedStyle(dash!).color).toBe(hexToRgb(mutedToken));
+  // A control in the other direction: a cell that is NOT muted paints the ordinary text colour, so
+  // the assertion above is reading the muting and not simply the inherited default.
+  const plain = products.shadowRoot!.querySelector<HTMLElement>("td")!;
+  expect(getComputedStyle(plain).color).not.toBe(hexToRgb(mutedToken));
 });
 
 it("adds products via the checkbox table in one call", async () => {
@@ -589,6 +599,23 @@ it("renders each name with its colour square, sized and bordered from tokens", a
 
 // The placeholder above and a real image are different elements under different rules, so the
 // styling has to be proven separately for each. The src 404s here; only the box is under test.
+// The stored colour is interpolated into an inline style attribute, so the screen checks it rather
+// than trusting it — the same guard wt-lozenge applies. An unusable value draws the empty swatch.
+it("draws the empty swatch for a colour that is not #rrggbb", async () => {
+  const fx = apiFixture();
+  fx.api.listCategories.mockResolvedValue([{ ...food, color: "red; background-image: url(x)" }]);
+  const { el } = await mountWidget<CategoriesScreen>("dashboard-categories-screen", {
+    api: fx.client,
+  });
+  const table = el.shadowRoot!.querySelector("wt-data-table")!;
+  await vi.waitFor(() => expect(table.rows.length).toBe(1));
+  await table.updateComplete;
+  const swatch = table.shadowRoot!.querySelector<HTMLElement>('[part~="swatch"]')!;
+  expect(swatch.getAttribute("part")).toContain("swatch-none");
+  expect(swatch.getAttribute("style")).toBeNull();
+  expect(getComputedStyle(swatch).backgroundImage).toBe("none");
+});
+
 it("sizes a category's thumbnail image from tokens", async () => {
   const fx = apiFixture();
   fx.api.listCategories.mockResolvedValue([{ ...food, image: "cheese.png" }]);

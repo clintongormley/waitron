@@ -334,6 +334,9 @@ What it left open:
   rendered with no size, colour, or dimming despite passing all automated tests (which only checked DOM
   attribute/class presence, never computed style or layout). The fix used an existing correct pattern
   already deployed in `printers-screen.ts`: `part=` attributes plus `wt-data-table::part(...)` selectors.
+  That first sweep missed one instance in the same file — the products modal's "no other categories"
+  dash — because the test covering it asked only whether a `.muted` node existed, which was true in the
+  wrong shadow root too; the final review found it, and the test now reads the painted colour back.
   The same bug was found already live on `main`, unrelated to this branch, in `apps/dashboard/src/widgets/product-list.ts` — product thumbnails render at full natural size and allergen badges as unstyled text. A structural guard comparing each screen's `static styles` class selectors against classes used inside `wt-data-table` callbacks looks feasible and would catch this whole class of bug.
 
 **Product modifiers — LANDED #341 (2026-09-13).** Modifiers are now written once and attached to as

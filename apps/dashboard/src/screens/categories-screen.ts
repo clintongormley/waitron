@@ -1,7 +1,13 @@
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, selectStyles, setContentLanguages, type DataTableColumn } from "@waitron/ui";
+import {
+  baseStyles,
+  isHexColor,
+  selectStyles,
+  setContentLanguages,
+  type DataTableColumn,
+} from "@waitron/ui";
 import { resolveEnabledContentText, type ContentLanguages } from "@waitron/shared";
 import { DashboardQueries } from "../api/query-controller.js";
 import type {
@@ -64,9 +70,6 @@ export class CategoriesScreen extends LitElement {
       .danger {
         color: var(--wt-color-danger);
       }
-      .muted {
-        color: var(--wt-color-text-muted);
-      }
       a {
         color: var(--wt-color-primary);
       }
@@ -102,6 +105,10 @@ export class CategoriesScreen extends LitElement {
       wt-data-table::part(name) {
         overflow-wrap: anywhere;
         text-align: start;
+      }
+      /* The products modal's "no other categories" dash, also cell markup handed to a table. */
+      wt-data-table::part(muted) {
+        color: var(--wt-color-text-muted);
       }
       /* Marks a tree-mode ancestor kept only to show a matching descendant's path — see the
          filtering block in render(). The colour has to reach the <button> inside wt-button's OWN
@@ -353,8 +360,11 @@ export class CategoriesScreen extends LitElement {
   }
   #rowParent = (category: CategorySummary): string | null => category.parentId;
   // `part=` rather than `class=` throughout this cell: see the ::part() block in static styles.
+  /** The colour goes into an inline `style`, so it is checked here rather than trusted: anything
+   * that is not a lower-case `#rrggbb` draws the empty swatch, exactly as a category with no colour
+   * does. `wt-lozenge` guards its own colour the same way. */
   #swatch(color: string | null) {
-    return color
+    return color !== null && isHexColor(color)
       ? html`<span part="swatch" style=${`background:${color}`} aria-hidden="true"></span>`
       : html`<span part="swatch swatch-none" aria-hidden="true"></span>`;
   }
@@ -453,7 +463,7 @@ export class CategoriesScreen extends LitElement {
       .filter((category): category is CategorySummary => category !== undefined);
     return others.length
       ? others.map((category) => this.#lozenge(category))
-      : html`<span class="muted" aria-hidden="true">—</span>`;
+      : html`<span part="muted" aria-hidden="true">—</span>`;
   }
   #nameSortValue(product: Product): string {
     return this.#text(product.descriptions);
