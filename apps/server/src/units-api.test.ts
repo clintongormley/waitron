@@ -58,38 +58,96 @@ describe("unit management routes", () => {
     const created = await send("POST", "/management-api/units", {
       name: { en: "portion" },
       precision: 2,
+      abbreviation: { en: "pt" },
     });
     expect(created.status).toBe(201);
     const unit = (await created.json()) as {
       id: string;
       name: Record<string, string>;
       precision: number;
+      abbreviation: Record<string, string>;
     };
-    expect(unit).toEqual({ id: expect.any(String), name: { en: "portion" }, precision: 2 });
+    expect(unit).toEqual({
+      id: expect.any(String),
+      name: { en: "portion" },
+      precision: 2,
+      abbreviation: { en: "pt" },
+    });
     expect(await (await send("GET", "/management-api/units")).json()).toEqual([unit]);
 
     const updated = await send("PATCH", `/management-api/units/${unit.id}`, {
       name: { en: "serving" },
       precision: 1,
+      abbreviation: { en: "sv" },
     });
     expect(updated.status).toBe(200);
-    expect(await updated.json()).toEqual({ ...unit, name: { en: "serving" }, precision: 1 });
+    expect(await updated.json()).toEqual({
+      ...unit,
+      name: { en: "serving" },
+      precision: 1,
+      abbreviation: { en: "sv" },
+    });
 
     const unchanged = await send("PATCH", `/management-api/units/${unit.id}`, {});
     expect(unchanged.status).toBe(200);
-    expect(await unchanged.json()).toEqual({ ...unit, name: { en: "serving" }, precision: 1 });
+    expect(await unchanged.json()).toEqual({
+      ...unit,
+      name: { en: "serving" },
+      precision: 1,
+      abbreviation: { en: "sv" },
+    });
     expect((await send("DELETE", `/management-api/units/${unit.id}`)).status).toBe(204);
   });
 
+  it("rejects a create with no abbreviation object", async () => {
+    const response = await send("POST", "/management-api/units", {
+      name: { en: "Litre" },
+      precision: 3,
+    });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "abbreviation" } },
+    });
+  });
+
+  it("accepts and returns the abbreviation", async () => {
+    const response = await send("POST", "/management-api/units", {
+      name: { en: "Litre" },
+      precision: 3,
+      abbreviation: { en: "l" },
+    });
+    expect(response.status).toBe(201);
+    expect((await response.json()).abbreviation).toEqual({ en: "l" });
+  });
+
   it.each([
-    [{ name: { en: "cup" }, precision: 4 }, "unit.precision_invalid"],
-    [{ name: { fr: "tasse" }, precision: 0 }, "content.translation_required"],
-    [{ name: "cup", precision: 0 }, "management.request_invalid"],
-    [{ name: { en: "cup" }, precision: "0" }, "management.request_invalid"],
+    [{ name: { en: "cup" }, precision: 4, abbreviation: { en: "c" } }, "unit.precision_invalid"],
+    [
+      { name: { fr: "tasse" }, precision: 0, abbreviation: { en: "c" } },
+      "content.translation_required",
+    ],
+    [{ name: "cup", precision: 0, abbreviation: { en: "c" } }, "management.request_invalid"],
+    [
+      { name: { en: "cup" }, precision: "0", abbreviation: { en: "c" } },
+      "management.request_invalid",
+    ],
+    [{ name: { en: "cup" }, precision: 0, abbreviation: "c" }, "management.request_invalid"],
   ] as const)("rejects invalid create body %j", async (body, code) => {
     const response = await send("POST", "/management-api/units", body);
     expect(response.status).toBe(400);
     expect(await response.json()).toMatchObject({ error: { code } });
+  });
+
+  it("reports the abbreviation field when the abbreviation shape is wrong", async () => {
+    const response = await send("POST", "/management-api/units", {
+      name: { en: "cup" },
+      precision: 0,
+      abbreviation: "c",
+    });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "abbreviation" } },
+    });
   });
 
   it("requires a session", async () => {
@@ -99,10 +157,18 @@ describe("unit management routes", () => {
 
   it("reassigns selected products to another unit and returns the shrunk list", async () => {
     const from = (await (
-      await send("POST", "/management-api/units", { name: { en: "each" }, precision: 0 })
+      await send("POST", "/management-api/units", {
+        name: { en: "each" },
+        precision: 0,
+        abbreviation: { en: "ea" },
+      })
     ).json()) as { id: string };
     const to = (await (
-      await send("POST", "/management-api/units", { name: { en: "kg" }, precision: 3 })
+      await send("POST", "/management-api/units", {
+        name: { en: "kg" },
+        precision: 3,
+        abbreviation: { en: "kg" },
+      })
     ).json()) as { id: string };
 
     const [a, b] = await withTenant(suite.db, tenantId, async (tx) => {
@@ -132,7 +198,11 @@ describe("unit management routes", () => {
 
   it("rejects a reassign with a malformed body", async () => {
     const unit = (await (
-      await send("POST", "/management-api/units", { name: { en: "each" }, precision: 0 })
+      await send("POST", "/management-api/units", {
+        name: { en: "each" },
+        precision: 0,
+        abbreviation: { en: "ea" },
+      })
     ).json()) as { id: string };
     const response = await send("POST", `/management-api/units/${unit.id}/products/reassign`, {
       productIds: "nope",
@@ -146,8 +216,8 @@ describe("unit management routes", () => {
     const other = await withTenant(suite.db, otherTenantId, async (tx) => {
       await asAppUser(tx);
       const unit = await tx.execute<{ id: string }>(sql`
-        insert into units (tenant_id, name, precision)
-        values (${otherTenantId}, '{"en":"foreign"}'::jsonb, 0) returning id`);
+        insert into units (tenant_id, name, abbreviation, precision)
+        values (${otherTenantId}, '{"en":"foreign"}'::jsonb, '{"en":"f"}'::jsonb, 0) returning id`);
       const person = await tx.execute<{ id: string }>(sql`
         insert into persons (tenant_id, display_name, pin_hash, role)
         values (${otherTenantId}, 'Other manager', ${hashPin("5678")}, 'manager') returning id`);
