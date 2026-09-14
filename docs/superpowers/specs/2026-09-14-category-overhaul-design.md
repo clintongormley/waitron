@@ -2,6 +2,36 @@
 
 Status: approved for planning (owner, 2026-09-14)
 
+> **Note (2026-09-14, after two review fix rounds).** The text below is the design as approved. The
+> built branch differs from it in these places; the code and the pointers named here decide.
+>
+> - **A1, toolbar wrap.** There is no phone breakpoint. The search box's flex basis is eight tap
+>   targets (`calc(var(--wt-tap-min) * 8)`); when it and the dropdowns cannot share a line at that
+>   width, the dropdowns wrap below and the search box takes its line alone. A media or container
+>   query cannot read a `--wt-*` token. See the comment on `.table-search` in
+>   `packages/ui/src/components/wt-data-table.ts` and design-system.md → "Remembered, searchable,
+>   filterable tables".
+> - **A2 and A3, stored sort.** A stored sort column is used only if a current column can sort by
+>   it, and its direction only together with that column; otherwise the consumer's `sortKey` and
+>   `sortDirection` stand (not "unsorted", when the consumer passes a `sortKey`).
+> - **A3, when the view is restored.** Not on `connectedCallback`: the table reads storage once it
+>   has columns, whenever `viewKey` or `columns` change (`willUpdate`).
+> - **A3, stale filter values.** A filter choice, stored or picked, is checked each time the columns
+>   change, not only at restore. One whose column offers options that do not include it is cleared,
+>   and the stored view is saved without it. One whose column is not rendered, has no `filter`, or
+>   has an empty option list is kept but hides no rows, stays in storage, and is checked when the
+>   column next offers options — so the Parent filter survives the tree view, which has no Parent
+>   column. See design-system.md (same section) and docs/developers/product-categories.md.
+> - **A4, the cell's second argument** is required, not optional:
+>   `cell: (row: Row, context: { ancestorOnly: boolean }) => unknown`. A one-argument cell function
+>   is still accepted by TypeScript; a function requiring a third parameter is refused. See the note
+>   in the plan's Task 3.
+> - **Strings.** `categories.filter_parent_all` is "All parents" / "Todas las categorías
+>   superiores" and `categories.filter_reporting_all` is "All reporting categories" / "Todas las
+>   categorías de informes", matching the other screens' filters. The header button uses
+>   `categories.add` ("Add category" / "Añadir categoría"). See
+>   `apps/dashboard/src/i18n/strings.ts`.
+
 The categories screen and its dialogs get a consistent, filterable, sortable layout, and the two
 capabilities that make that possible — a search-and-filter toolbar, and a remembered view — move
 into the `wt-data-table` primitive so every table across the dashboard can reuse them. Along the way

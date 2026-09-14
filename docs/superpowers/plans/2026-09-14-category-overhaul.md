@@ -430,7 +430,7 @@ export interface DataTableColumn<Row> {
 }
 ```
 
-> **Note (2026-09-14, review fix round):** the "every existing 1-arg column definition stays assignable" half of the comment above did not hold — a function taking one argument is assignable to a type whose second parameter is required, and only a function wanting a third argument is refused (checked with `tsc --strict`). Once the table's own calls all passed the context, the parameter was made required and the comment deleted.
+> **Note (2026-09-14, review fix round):** the "every existing 1-arg column definition stays assignable" half of the comment above did not hold as a reason for making the parameter optional: a one-argument function is assignable to the cell type with the second parameter required too. Once the table's own calls all passed the context, the parameter was made required and the comment deleted. What was checked, with TypeScript 5.9.3, against a copy of the final `cell` signature (`(row: Row, context: { ancestorOnly: boolean }) => unknown`): `packages/ui/node_modules/.bin/tsc --noEmit --strict cell-arity-probe.ts` accepted cell functions taking no parameters, one, two, and two plus an optional third, and refused only the one requiring a third parameter (`TS2322 … Target signature provides too few arguments. Expected 3 or more, but got 2.`).
 
 Filter selections keyed by column key ("" = all):
 
@@ -772,6 +772,8 @@ protected override updated(changed: PropertyValues<this>): void {
 
 with `#restored = false;` as a field. (If `wt-data-table` already has an `updated`, extend it; it does not today — confirm before adding.)
 
+> **Note (2026-09-14, second review fix round):** the final restore rule differs from this task. There is no `connectedCallback` or `updated` override: `willUpdate` reads storage once the table has columns, whenever `viewKey` or `columns` change. A stored `sortDirection` is adopted only together with an accepted `sortKey`. Filter choices, stored or picked, are checked each time the columns change: one whose column offers options that exclude it is cleared and the view saved again; one whose column is absent, has no `filter`, or has no options yet is kept, hides no rows and stays in storage until the column offers options. See `#restoreView` and `#judgeFilters` in `packages/ui/src/components/wt-data-table.ts` and design-system.md → "Remembered, searchable, filterable tables".
+
 Persist on change. Add a writer and call it wherever sort or filter selections change:
 
 ```ts
@@ -899,7 +901,11 @@ Add to both blocks (English shown; add the Spanish equivalents alongside, matchi
 "categories.combobox_no_results": "No results",
 ```
 
+> **Note (2026-09-14, review fix round):** the two filter catch-all strings shipped as "All parents" and "All reporting categories", matching how the other screens word their filters, not "Any parent" / "Any reporting category".
+
 Spanish: "Editar categorías del producto", "¿Eliminar {name}?", "Cualquier categoría superior", "Cualquier categoría de informes", "Ninguna categoría coincide con tu búsqueda.", "Ningún producto coincide con tu búsqueda.", "Seleccionar todos los productos", "Categorías", "Elige categorías", "Buscar", "Sin resultados".
+
+> **Note (2026-09-14, review fix round):** the Spanish filter catch-alls shipped as "Todas las categorías superiores" and "Todas las categorías de informes", not the "Cualquier …" wording above.
 
 - [ ] **Step 3: Remove the retired keys**
 
@@ -949,6 +955,8 @@ it("shows an Add category button and two labelled view-mode buttons in the heade
 });
 ```
 
+> **Note (2026-09-14, review fix round):** the shipped test and button use `categories.add` ("Add category" / "Añadir categoría"), not `categories.create`.
+
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run: `pnpm --filter @waitron/dashboard test categories-screen.test.ts`
@@ -977,6 +985,8 @@ In `render()`, replace the heading block. Put the title, the two mode buttons, a
   </div>
 </div>
 ```
+
+> **Note (2026-09-14, review fix round):** the shipped header button reads `t("categories.add")` ("Add category"), not `categories.create`.
 
 Add a `.header-actions` style (`display:flex; gap:var(--wt-space-3); align-items:center;`). Remove the old round-button import usage if `wt-icon`'s only use was the plus (check other uses before dropping the import).
 
