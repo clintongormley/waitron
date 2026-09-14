@@ -77,7 +77,8 @@ export const printers = pgTable(
     pollTokenHash: text("poll_token_hash"),
     // What the printer prints (Slice B routing). DEFAULT 'station' so an existing printer stays inert.
     ticketScope: printTicketScope("ticket_scope").notNull().default("station"),
-    // Layout settings (design 2026-09-14). Defaults match the TM-T88III: 80mm, 180 dpi, table 16.
+    // Layout settings (design 2026-09-14). Defaults match the TM-T88III: 80mm, 180 dpi, character
+    // table 16 (WPC1252).
     paperWidth: printPaperWidth("paper_width").notNull().default("80mm"),
     resolution: printResolution("resolution").notNull().default("180dpi"),
     characterSet: printCharacterSet("character_set").notNull().default("wpc1252"),

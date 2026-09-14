@@ -92,10 +92,12 @@ export const QR_QUIET_ZONE = 4;
 
 /**
  * Dots per QR square for a code `squares` wide (without its border) on a `dpi` printer whose images
- * must fit `safeWidthDots`. Picks the dot size closest to 35 mm (the target), and the smaller on a
- * tie. When a fit is in range 30–40 mm (Orden HAC/1177/2024 art. 21.1), prefers sizes within range,
- * otherwise returns the fitting size nearest 35 mm. When nothing fits, returns 1: it never throws,
- * because the receipt is built inside the sale's transaction.
+ * must fit `safeWidthDots`. Tries every dot size that fits and keeps whichever prints closest to
+ * 35 mm (the target of the legal 30–40 mm band, Orden HAC/1177/2024 art. 21.1), the smaller size on a
+ * tie. There is no separate step that prefers an in-range size over an out-of-range one — minimising
+ * distance to 35 mm already picks an in-range size whenever one fits, because every in-range size is
+ * closer to 35 mm than any out-of-range one. When nothing fits, returns 1: it never throws, because
+ * the receipt is built inside the sale's transaction.
  */
 export function chooseQrDots(squares: number, dpi: number, safeWidthDots: number): number {
   let best: { dots: number; distance: number } | undefined;

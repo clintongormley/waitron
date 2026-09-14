@@ -54,12 +54,9 @@ const QR_EC_LEVEL: Readonly<Record<"L" | "M" | "Q" | "H", number>> = {
 };
 
 /**
- * Default QR module size in printer dots. At ~203 dpi (≈ 8 dots/mm) a Veri*Factu cotejo-URL QR
- * encodes to roughly version 6–9 (41–53 modules per side) at EC level M, so 6 dots/module prints a
- * symbol of 41 × 6 / 8 ≈ 30.8 mm … 53 × 6 / 8 ≈ 39.8 mm — inside the mandated 30–40 mm band (Orden
- * HAC/1177/2024 art. 21.1). The EXACT printed size depends on the QR version (content length) and is
- * verified MANUALLY on the real printer (design §5); the byte tests pin only the deterministic
- * command bytes, not the millimetres.
+ * Default dots per QR square for the built-in `qr()` command and `qrRaster()`. The receipt no longer
+ * uses either default: its QR is a raster whose dot size `layout.ts` `chooseQrDots` picks from the
+ * printer's configured resolution (180 or 203 dpi) for the legal 30-40 mm.
  */
 const QR_DEFAULT_MODULE_SIZE = 6;
 
@@ -141,10 +138,10 @@ export class EscBuilder {
    * raster fallback). Emits, in the order the printer requires: select model 2, set module size, set
    * error-correction level, store the data, print the symbol.
    *
-   * `text` is stored verbatim as its Latin-1 bytes — the same single-byte convention {@link text}
-   * uses — which is exactly right for the ASCII Veri*Factu cotejo URL. Default EC level M is mandated
-   * for that fiscal QR (Orden HAC/1177/2024 art. 21.1); `moduleSize` defaults per
-   * {@link QR_DEFAULT_MODULE_SIZE}.
+   * `text` is stored verbatim as its Latin-1 bytes, always — unlike {@link text}, which switches to
+   * the builder's selected character set once one is set. Latin-1 is exactly right for the ASCII
+   * Veri*Factu cotejo URL this command still encodes. Default EC level M is mandated for that fiscal
+   * QR (Orden HAC/1177/2024 art. 21.1); `moduleSize` defaults per {@link QR_DEFAULT_MODULE_SIZE}.
    *
    * Byte layout verified against the Epson ESC/POS TM-printer reference (GS ( k Functions 165/167/
    * 169/180/181, https://download4.epson.biz/sec_pubs/pos/reference_en/escpos/gs_lparen_lk_fn180.html
@@ -191,8 +188,9 @@ export class EscBuilder {
    * Raster fallback for printers whose firmware lacks the native `GS ( k` QR engine: packs an
    * ALREADY-COMPUTED square boolean module matrix (`true` = dark module) into a `GS v 0` raster
    * bit-image. It performs NO QR encoding — the caller supplies the matrix — so `@waitron/printing`
-   * keeps its dependency-free "pure byte assembler" shape (no `qrcode` library). Not wired to a
-   * consumer in this slice; `formatReceipt` uses the native {@link qr}.
+   * keeps its dependency-free "pure byte assembler" shape (no `qrcode` library). The receipt and the
+   * setup test page print their QR codes through it (design 2026-09-14); the matrix comes from
+   * `apps/server`'s `qrModules`.
    *
    * `GS v 0 m xL xH yL yH d1…dk` (lead bytes 0x1D 0x76 0x30): m=0 (normal); xL/xH = bytes per row =
    * ceil(pixelWidth / 8); yL/yH = pixel height. Each module expands to `moduleSize`×`moduleSize`

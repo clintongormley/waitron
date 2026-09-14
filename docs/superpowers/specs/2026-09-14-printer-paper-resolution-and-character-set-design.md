@@ -67,7 +67,7 @@ a PostgreSQL enum following the existing `ticket_scope` pattern:
 | Column              | Enum                  | Values                        | Default   |
 | ------------------- | --------------------- | ----------------------------- | --------- |
 | `paper_width`       | `print_paper_width`   | `58mm`, `80mm`                | `80mm`    |
-| `print_resolution`  | `print_resolution`    | `180dpi`, `203dpi`            | `180dpi`  |
+| `resolution`        | `print_resolution`    | `180dpi`, `203dpi`            | `180dpi`  |
 | `character_set`     | `print_character_set` | `wpc1252`, `pc858`, `plain`   | `wpc1252` |
 
 The defaults match the owner's TM-T88III: 80mm, 180 dpi, and a manual that lists "Page 16 (WPC1252)".

@@ -240,6 +240,18 @@ was kept, but it is not here: the database-test rules went to [testing-guide.md]
 and the package-boundary and vocabulary rules to [conventions-data.md](conventions-data.md), each
 under the same provenance note.
 
+## Printed documents take the printer's own layout settings
+
+A printed document never hard-codes a paper width, a QR size or a text encoding: it reads them from
+the printer it is printing to (`paperWidth`, `resolution`, `characterSet` on `printers`). Text is
+passed through `prepareText` before it is measured, and through `wrapText`/`labelAmountLines` before
+it is printed, so a string is never counted in one character set and printed in another. The fiscal
+QR is a raster image, its dot size chosen per receipt by `chooseQrDots` for the legal 30-40mm size —
+never the printer's own built-in QR command, which cannot be sized this way. A test reads a payload's
+printed text with `printedLines` (`apps/server/src/testing/decode-ticket.ts`), which fails the test
+on an unsupported byte instead of silently stopping partway and hiding the rest of the ticket. Design:
+`docs/superpowers/specs/2026-09-14-printer-paper-resolution-and-character-set-design.md`.
+
 ## Resolve live content and receipt snapshots separately
 
 Live catalogue text uses enabled content languages and their configured default. Stored order and
