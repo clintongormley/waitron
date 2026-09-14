@@ -135,15 +135,16 @@ container; parsing-only probes are fine on the host.
 
 **Logical replication tests**
 
-## A widened subscription drops publisher writes committed before its apply worker restarts
+## A widened subscription can drop publisher writes committed before its apply worker restarts
 
-`ALTER SUBSCRIPTION … SET PUBLICATION` returns as soon as the subscriber's catalogue commits; the
-running apply worker takes the new list only when it restarts. A publisher write committed in that
+`ALTER SUBSCRIPTION … SET PUBLICATION` returns before the subscriber's running apply worker restarts
+(measured: it returned while that worker was paused and could not restart). Read in the source, not
+tested: the worker takes the new list only when it restarts. A publisher write committed in that
 window was lost, not delayed, so a longer poll cannot help. Wait for an apply worker whose
 `pg_stat_activity.backend_start` is later than a `clock_timestamp()` read taken on the subscriber
 before the ALTER, then write. `setPublicationsAndAwaitRestart` in
 `apps/server/src/replication-arc.e2e.test.ts` does this; step (4) of that file failed once on CI
-(#356) without it, its 45 s poll ending on `'Renamed pre-fence'`.
+(#356) without it, its 45 s poll ending on `'Renamed pre-fence'`; fixed in #361.
 
 Receipt, 2026-09-14, PostgreSQL 18.6 (`postgres:18-alpine`), from a throwaway probe on
 `startTwoNodeCluster` (superuser connections, one table in each of two publications, subscription
@@ -166,7 +167,7 @@ created on both then narrowed; deleted afterwards):
   the start-time wait passed in 2 / 2.
 - Narrowing never let a later write through: 0 of over 1,000 unpaused, 0 / 10 paused.
 - A `SET PUBLICATION` to the list the subscription already had did not restart the worker in 5 / 5
-  tries over 5 s, so a restart wait after a no-op ALTER times out.
+  tries, each over 5 s, so a restart wait after a no-op ALTER times out.
 
 Read in the PostgreSQL source (REL_18_STABLE), not tested: `LogicalRepApplyLoop` in `worker.c` handles
 a queued keepalive, calling `send_feedback` with the received position (reported as flushed when

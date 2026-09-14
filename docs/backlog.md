@@ -1142,10 +1142,10 @@ image constraints under *Detail → Box image*.
   correct the comment either way.
 - **`replication-arc`'s isolation was reverted** (vitest `projects` are incompatible with `--shard`);
   if it flakes on `test-server` it needs a `--shard`-compatible isolation. The step (4) flake seen on
-  2026-09-14 was not an isolation problem: it was a race, fixed on
-  `fix/replication-arc-widen-race` by waiting for the subscriber's apply worker to restart after the
-  widen (receipt in [testing-guide.md](developers/testing-guide.md)). Isolation remains a guess for
-  any other flake in that file.
+  2026-09-14 matches a race instead (forcing that race reproduced the same symptom), fixed in #361 by
+  waiting for the subscriber's apply worker to restart after the widen (receipt in
+  [testing-guide.md](developers/testing-guide.md)). Isolation remains a guess for any other flake in
+  that file.
 - **Job-sharding levers:** `--shard` splits by FILE COUNT; bump `shard: [1..N]` and the denominator
   together with N at or below the file count; `mutation-verifactu` is the next critical-path
   candidate; rebalance `LIGHT_A/B_PACKAGES` when one light shard dominates.

@@ -127,13 +127,14 @@ function fenceDoc(term: number, aNodeId: string, bNodeId: string): SignedMembers
   return { body: { term, nodes }, signerNodeId: bNodeId, signature: "sig", endorsements: [] };
 }
 
-/** Set a subscription's publications and wait for an apply worker that started after the ALTER.
+/** Set a subscription's publications and wait for an apply worker that started after a clock reading
+ * taken just before the ALTER.
  * The ALTER returns before the running worker restarts. A publisher write committed in that window was
  * lost, not delayed: in the probe behind testing-guide.md, with the worker paused across the ALTER and a
  * write, the slot's confirmed position passed the write and it was still absent after a later ledger row
  * had arrived (10 / 10); here, the same pause left the rename absent for the whole 45 s poll (2 / 2 runs).
- * An unchanged list did not restart the worker in 5 / 5 probe tries over 5 s, so this wait then times
- * out. */
+ * An unchanged list did not restart the worker in 5 / 5 probe tries, each over 5 s, so this wait then
+ * times out. */
 async function setPublicationsAndAwaitRestart(
   node: BootstrappedNode,
   subscription: string,
@@ -159,7 +160,9 @@ async function setPublicationsAndAwaitRestart(
   );
   const since = rows[0]!.now;
   await setSubscriptionPublications(node.ownerDb, subscription, publications);
-  // A worker that started after the ALTER read the new list when it started.
+  // Started after a reading taken just before the ALTER, not after the ALTER itself: a worker that
+  // restarted for some other reason in that gap would also pass. One that started after the ALTER read
+  // the new list when it started.
   await expect
     .poll(() => applyWorkerStartedAfter(since), {
       timeout: 30_000,
@@ -609,8 +612,8 @@ describe("native-replication arc — Case 2: the fence→promote→return→wipe
     // prove state FLOWS AGAIN with a fresh streamed rename: with state subscribed, it reaches B. This
     // shows the narrowing was what withheld the state change, not some other block. (Failing case of the
     // control, in one of two places: a widen that leaves the list unchanged starts no new worker (5 / 5
-    // probe tries over 5 s), so it fails the wait in `setPublicationsAndAwaitRestart`; one that changes
-    // the list but still omits state fails the rename poll below.)
+    // probe tries, each over 5 s), so it fails the wait in `setPublicationsAndAwaitRestart`; one that
+    // changes the list but still omits state fails the rename poll below.)
     await setPublicationsAndAwaitRestart(nodeB, SUB_B, PUBS);
     await nodeA.ownerDb.execute(
       sql`update locations set name = 'Renamed after widen' where id = ${designated.locationId}`,
