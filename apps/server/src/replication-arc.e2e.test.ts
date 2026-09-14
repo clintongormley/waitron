@@ -127,6 +127,50 @@ function fenceDoc(term: number, aNodeId: string, bNodeId: string): SignedMembers
   return { body: { term, nodes }, signerNodeId: bNodeId, signature: "sig", endorsements: [] };
 }
 
+/** Set a subscription's publications and wait until its apply worker has restarted under the new list.
+ * The ALTER returns before the running worker restarts, and a publisher write committed in that window
+ * can be lost for good, not delayed: with the worker paused across the ALTER and a write, the slot's
+ * confirmed position passed the write and it never arrived (10 / 10). Write only after this resolves. An
+ * unchanged list never restarts the worker, so this wait then fails rather than passing on the old one. */
+async function setPublicationsAndAwaitRestart(
+  node: BootstrappedNode,
+  subscription: string,
+  publications: readonly string[],
+): Promise<void> {
+  const applyWorker = async (since: string | null) => {
+    const { rows } = await node.superuserDb.execute<{ pid: number; fresh: boolean }>(sql`
+      select s.pid, coalesce(a.backend_start > ${since}::timestamptz, false) as fresh
+      from pg_stat_subscription s
+      join pg_stat_activity a on a.pid = s.pid
+      where s.subname = ${subscription} and s.worker_type = 'apply'`);
+    return rows[0] ?? null;
+  };
+  await expect
+    .poll(async () => (await applyWorker(null)) !== null, {
+      timeout: 30_000,
+      message: `no running apply worker for ${subscription} before SET PUBLICATION`,
+    })
+    .toBe(true);
+  const before = (await applyWorker(null))!.pid;
+  const { rows } = await node.superuserDb.execute<{ now: string }>(
+    sql`select clock_timestamp()::text as now`,
+  );
+  const since = rows[0]!.now;
+  await setSubscriptionPublications(node.ownerDb, subscription, publications);
+  await expect
+    .poll(
+      async () => {
+        const worker = await applyWorker(since);
+        return worker !== null && worker.pid !== before && worker.fresh;
+      },
+      {
+        timeout: 30_000,
+        message: `apply worker for ${subscription} did not restart after SET PUBLICATION`,
+      },
+    )
+    .toBe(true);
+}
+
 /** Create the `app_login` LOGIN fixture that inherits `app_user` — the migrator holds ADMIN OPTION on
  * `app_user` (it created it, probe A) so it can grant the membership; the two-node cluster has no
  * global-setup to create it. Idempotent (roles are cluster-global). */
@@ -567,8 +611,10 @@ describe("native-replication arc — Case 2: the fence→promote→return→wipe
     // so nothing re-copies it (probe C); it returns only on a full re-copy (the re-adopt in step 6). So
     // prove state FLOWS AGAIN with a fresh streamed rename: with state subscribed, it reaches B. This
     // shows the narrowing was what withheld the state change, not some other block. (Failing case of the
-    // control: even a fresh rename stays withheld — the widen changed nothing.)
-    await setSubscriptionPublications(nodeB.ownerDb, SUB_B, PUBS);
+    // control, in one of two places: a widen that leaves the list unchanged fails the restart wait in
+    // `setPublicationsAndAwaitRestart`; one that changes the list but still omits state fails the rename
+    // poll below.)
+    await setPublicationsAndAwaitRestart(nodeB, SUB_B, PUBS);
     await nodeA.ownerDb.execute(
       sql`update locations set name = 'Renamed after widen' where id = ${designated.locationId}`,
     );
