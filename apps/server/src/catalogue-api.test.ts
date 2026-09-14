@@ -2100,9 +2100,9 @@ describe("mountCatalogueApi — attaching option groups to products", () => {
     const path = `/management-api/modifiers/${group.id}/dependants`;
     expect((await send(app, "GET", path, { cookie: null })).status).toBe(401);
     expect((await send(app, "GET", path, { cookie: staffCookie })).status).toBe(403);
-    expect(
-      (await send(app, "GET", "/management-api/modifiers/not-a-uuid/dependants")).status,
-    ).toBe(400);
+    expect((await send(app, "GET", "/management-api/modifiers/not-a-uuid/dependants")).status).toBe(
+      400,
+    );
     const absent = await send(
       app,
       "GET",

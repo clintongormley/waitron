@@ -1,13 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { expect, it } from "vitest";
-import {
-  asAppUser,
-  optionGroups,
-  withTenant,
-  type Database,
-  type Transaction,
-} from "@waitron/db";
+import { asAppUser, optionGroups, withTenant, type Database, type Transaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import type { TenantId } from "@waitron/shared";
 import { seedLegacySellingUnits, seedVenue } from "../test/fixtures.js";
