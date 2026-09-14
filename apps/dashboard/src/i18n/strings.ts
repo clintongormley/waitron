@@ -66,11 +66,11 @@ export const en = {
   "categories.expand": "Expand",
 
   "modifiers.in_use.product":
-    "A product uses this modifier. Make it unavailable, or detach it from products before changing its type.",
+    "A product uses this modifier. Detach it from the product before changing its type.",
   "modifiers.in_use.menu":
-    "A published menu uses this modifier. Make it unavailable, or remove its menu publications before changing its type.",
+    "A published menu uses this modifier. Remove it from the menu before changing its type.",
   "modifiers.in_use.order":
-    "A saved order uses this modifier. Make it unavailable to stop new selections; the saved order keeps its details.",
+    "A saved order uses this modifier. The saved order keeps its details; finish or void it before changing the type.",
   "modifiers.in_use.choice":
     "A menu or saved order uses a choice you removed. Keep the choice and make it unavailable instead.",
 
@@ -115,13 +115,9 @@ export const en = {
   "modifiers.effects": "Allergens and dietary effects",
   "modifiers.add_allergen": "Add allergen",
   "modifiers.remove_allergen": "Remove allergen from dish",
-  "modifiers.contains": "Contains",
-  "modifiers.may_contain": "May contain",
   "modifiers.add_food": "Adds to dish",
   "modifiers.remove_food": "Removes from dish",
-  "modifiers.dietary_reviewed": "Dietary effect reviewed",
   "modifiers.invalidates_dietary": "No longer suitable for",
-  "modifiers.choose": "Choose…",
   "modifiers.vat": "Tax for the addition",
   "modifiers.inherit_vat": "Same tax as the product",
   "modifiers.text_help": "Optional text, up to 500 characters at the till.",
@@ -1290,11 +1286,11 @@ export const es: Record<StringKey, string> = {
   "categories.expand": "Expandir",
 
   "modifiers.in_use.product":
-    "Un producto usa este modificador. Márcalo como no disponible o desvincúlalo de los productos antes de cambiar su tipo.",
+    "Un producto usa este modificador. Desvincúlalo del producto antes de cambiar su tipo.",
   "modifiers.in_use.menu":
-    "Un menú publicado usa este modificador. Márcalo como no disponible o retíralo de los menús antes de cambiar su tipo.",
+    "Un menú publicado usa este modificador. Retíralo del menú antes de cambiar su tipo.",
   "modifiers.in_use.order":
-    "Un pedido guardado usa este modificador. Márcalo como no disponible para impedir nuevas selecciones; el pedido guardado conserva sus datos.",
+    "Un pedido guardado usa este modificador. El pedido guardado conserva sus datos; termínalo o anúlalo antes de cambiar el tipo.",
   "modifiers.in_use.choice":
     "Un menú o pedido guardado usa una opción que has eliminado. Conserva la opción y márcala como no disponible.",
 
@@ -1340,13 +1336,9 @@ export const es: Record<StringKey, string> = {
   "modifiers.effects": "Alérgenos y efectos dietéticos",
   "modifiers.add_allergen": "Añadir alérgeno",
   "modifiers.remove_allergen": "Eliminar alérgeno del plato",
-  "modifiers.contains": "Contiene",
-  "modifiers.may_contain": "Puede contener",
   "modifiers.add_food": "Añade al plato",
   "modifiers.remove_food": "Elimina del plato",
-  "modifiers.dietary_reviewed": "Efecto dietético revisado",
   "modifiers.invalidates_dietary": "Deja de ser apto para",
-  "modifiers.choose": "Elige…",
   "modifiers.vat": "Impuesto del suplemento",
   "modifiers.inherit_vat": "Mismo impuesto que el producto",
   "modifiers.text_help": "Texto opcional, hasta 500 caracteres en la caja.",

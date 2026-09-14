@@ -175,7 +175,9 @@ it("writes an added allergen as contains and a non-null dietary effect", async (
 it("renders no presence select and no reviewed switch", async () => {
   const el = await mountChoice({ kind: "extras" });
   expect(el.shadowRoot!.querySelector('[name^="presence-"]')).toBeNull();
-  expect(el.shadowRoot!.textContent).not.toContain(t("modifiers.dietary_reviewed"));
+  // The reviewed switch used to render as a wt-switch named "dietary-reviewed"; assert its absence
+  // structurally so this fails if the control ever comes back, not on a removed string key.
+  expect(el.shadowRoot!.querySelector('wt-switch[name="dietary-reviewed"]')).toBeNull();
 });
 
 it("emits an options choice with only its shared fields", async () => {
