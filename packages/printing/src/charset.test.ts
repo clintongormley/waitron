@@ -100,7 +100,7 @@ describe("prepareText / encodeText", () => {
   });
 
   it("normalises decomposed input before measuring", () => {
-    expect(prepareText("Café", "pc858")).toBe("Café");
+    expect(prepareText("Cafe\u{0301}", "pc858")).toBe("Caf\u{e9}");
   });
 
   it("gives one byte per prepared character in every set", () => {
