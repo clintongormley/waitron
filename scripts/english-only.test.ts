@@ -28,6 +28,7 @@ import {
   SELF,
   SPANISH_WORDS,
   findSpanish,
+  isFidelityExempt,
   readSource,
   sourceFilesIn,
 } from "../packages/db/src/english-only.js";
@@ -243,25 +244,23 @@ describe("configuration", () => {
   });
 
   it("exempts ONLY the exact fidelity basename, not a differently-prefixed file ending in the same suffix", () => {
-    // Control (§4): the exemption matched by `endsWith`, so any file whose path merely ENDS with
-    // `replication-fidelity.pg.test.ts` — a different suite that happens to share the suffix — was
-    // wrongly dropped from the scan too. It now matches the exact basename, so this decoy is scanned
-    // like any other source and its Spanish is caught. Against the old `endsWith` the decoy is
-    // exempted and this assertion fails.
-    const decoy = join(
-      PACKAGES_ROOT,
-      "replication-tests",
-      "src",
-      "other-replication-fidelity.pg.test.ts",
+    // Control (§4): the exemption is by exact BASENAME, not `endsWith`, so a differently-prefixed file
+    // that merely ENDS with `replication-fidelity.pg.test.ts` — a different suite sharing the suffix —
+    // is NOT dropped from the scan. Proven on the exemption predicate directly, with no file written
+    // into the real `replication-tests/src`: that directory is read whole, in parallel, by the other
+    // repo-level tree scanners (module-seams and its siblings), and a transient control file there
+    // raced them into an ENOENT. Against the old `endsWith` match the decoy would be exempt and the
+    // second assertion would be true.
+    expect(isFidelityExempt("replication-tests", "replication-fidelity.pg.test.ts")).toBe(true);
+    expect(isFidelityExempt("replication-tests", "other-replication-fidelity.pg.test.ts")).toBe(
+      false,
     );
-    writeFileSync(decoy, "export const nombre = 1;\n");
-    try {
-      const files = sourceFilesIn("replication-tests");
-      expect(files).toContain(decoy);
-      expect(findSpanish(readSource(decoy), FORBIDDEN).map((v) => v.word)).toContain("nombre");
-    } finally {
-      rmSync(decoy, { force: true });
-    }
+    // The exemption is scoped to replication-tests; the same basename in another package is not exempt.
+    expect(isFidelityExempt("db", "replication-fidelity.pg.test.ts")).toBe(false);
+    // And a scanned decoy's Spanish really is caught, so "not exempt" means "flagged".
+    expect(findSpanish("export const nombre = 1;\n", FORBIDDEN).map((v) => v.word)).toContain(
+      "nombre",
+    );
   });
 
   it("would flag the fidelity suite's fiscal Spanish if scanned, so the pass is the exemption", () => {
@@ -279,21 +278,31 @@ describe("configuration", () => {
   });
 
   it("catches a Spanish word in a NON-exempt replication-tests file (the package is really scanned)", () => {
-    // Control: write a non-exempt source file with a Spanish word into the real package, then build
-    // the guard's ACTUAL scanned set the way the tree scan does — `GENERIC_PACKAGES.flatMap(...)` —
-    // and prove the file is both discovered and flagged. Going through GENERIC_PACKAGES (not
-    // `sourceFilesIn("replication-tests")` directly) is what makes this fail if `replication-tests`
-    // is removed from that list: then the scan never visits the package and the word goes unseen
-    // (§4, prove a guard by control).
-    const control = join(PACKAGES_ROOT, "replication-tests", "src", "__english-only-control__.ts");
-    writeFileSync(control, "export const nombre = 1;\n");
+    // Control (§4): a non-exempt source file in replication-tests would be discovered by the scan and
+    // its Spanish flagged. Proven WITHOUT writing into the real `replication-tests/src` — that
+    // directory is read whole, in parallel, by the other repo-level tree scanners (module-seams and
+    // siblings), and a transient control file there raced them into an ENOENT. The three facts that
+    // together establish the claim, each deterministic:
+    //   (1) replication-tests is in the scan set, so the tree scan visits it — remove it from
+    //       GENERIC_PACKAGES and this line fails, exactly the removal the old control guarded against;
+    expect(GENERIC_PACKAGES).toContain("replication-tests");
+    //   (2) an ordinary control basename is NOT dropped there by the fidelity exemption;
+    expect(isFidelityExempt("replication-tests", "__english-only-control__.ts")).toBe(false);
+    //   (3) sourceFilesIn really discovers a non-exempt `.ts` file and findSpanish flags its Spanish —
+    //       exercised on a temp dir OUTSIDE packages/, driven by a relative package path the same way
+    //       the screenshot-directory test above drives the scanner.
+    const fixture = mkdtempSync(join(tmpdir(), "waitron-vocabulary-"));
     try {
-      const scanned = GENERIC_PACKAGES.flatMap((name) => sourceFilesIn(name));
-      expect(scanned).toContain(control);
-      const violations = scanned.flatMap((file) => findSpanish(readSource(file), FORBIDDEN));
+      const source = join(fixture, "src");
+      mkdirSync(source, { recursive: true });
+      const control = join(source, "__english-only-control__.ts");
+      writeFileSync(control, "export const nombre = 1;\n");
+      const files = sourceFilesIn(relative(PACKAGES_ROOT, fixture));
+      expect(files).toContain(control);
+      const violations = files.flatMap((file) => findSpanish(readSource(file), FORBIDDEN));
       expect(violations.map((v) => v.word)).toContain("nombre");
     } finally {
-      rmSync(control, { force: true });
+      rmSync(fixture, { recursive: true, force: true });
     }
   });
 

@@ -327,6 +327,20 @@ export function findSpanish(source: string, words: ReadonlySet<string>): Violati
  * `shared` arrive in later tasks, and this guard must be in place before them
  * rather than retrofitted after the first Spanish name has already landed.
  */
+/**
+ * Whether a directory entry is dropped by the fiscal-fidelity exemption: only within
+ * `replication-tests`, and only when the entry's exact BASENAME is a fidelity fixture — a
+ * differently-prefixed file that merely ends in the same string (`other-replication-fidelity.pg.test.ts`)
+ * is NOT exempt (see `FISCAL_FIDELITY_FIXTURES`' doc comment). Exported so the guard's suite can prove
+ * that discrimination directly, without writing a decoy file into `replication-tests/src` — a
+ * directory the repo-level tree scanners (module-seams and siblings) read whole and in parallel,
+ * where a transient file raced them into an ENOENT.
+ */
+export function isFidelityExempt(packageName: string, entry: string): boolean {
+  if (packageName !== "replication-tests") return false;
+  return FISCAL_FIDELITY_FIXTURES.some((name) => basename(entry) === name);
+}
+
 export function sourceFilesIn(packageName: string): string[] {
   const root = join(PACKAGES_ROOT, packageName, "src");
   if (!existsSync(root)) return [];
@@ -335,15 +349,11 @@ export function sourceFilesIn(packageName: string): string[] {
   // that one file is dropped — a differently-prefixed file ending in the same string is not (see
   // FISCAL_FIDELITY_FIXTURES' doc comment). SELF and I18N_CATALOGUES stay `endsWith`: SELF names
   // whole basenames that are unique tree-wide, and I18N_CATALOGUES is a deliberate path SUFFIX.
-  const fidelityExempt =
-    packageName === "replication-tests"
-      ? (entry: string) => FISCAL_FIDELITY_FIXTURES.some((name) => basename(entry) === name)
-      : () => false;
   return readdirSync(root, { recursive: true, encoding: "utf8" })
     .filter((entry) => entry.endsWith(".ts"))
     .filter((entry) => !SELF.some((name) => entry.endsWith(name)))
     .filter((entry) => !I18N_CATALOGUES.some((suffix) => entry.endsWith(suffix)))
-    .filter((entry) => !fidelityExempt(entry))
+    .filter((entry) => !isFidelityExempt(packageName, entry))
     .filter((entry) => !(productionOnly && entry.endsWith(".test.ts")))
     .map((entry) => join(root, entry))
     .filter((entry) => statSync(entry).isFile())
