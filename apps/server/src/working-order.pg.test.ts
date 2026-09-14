@@ -67,8 +67,10 @@ import "./errors.js";
 // THROWS its `dockerRequired` message rather than skipping when Docker is absent, so a vanished suite
 // fails loudly instead of reporting a green that proves nothing.
 const LOCALE = "es-ES";
+// A filed line freezes the unit's ABBREVIATION as its printed label, not the unit's name — so the
+// legacy `each` unit files as its short form (`ea`/`ud`/`u`), matching `seedLegacySellingUnits`.
 const EACH_UNIT_SNAPSHOT = {
-  unitName: { en: "each", es: "unidad", ca: "unitat", gl: "unidade", eu: "unitatea" },
+  unitName: { en: "ea", es: "ud", ca: "u", gl: "u", eu: "u" },
   unitPrecision: 0,
 } as const;
 
@@ -249,6 +251,27 @@ async function filedSaleTotal(workingOrderId: string): Promise<string> {
     select total from sales where working_order_id = ${workingOrderId}
   `);
   return rows[0]!.total;
+}
+
+/**
+ * The frozen printed unit label on this order's filed line, read straight from the persisted tables
+ * as the owner: the working-order line where the add-time freeze writes it, and the sale line the
+ * filing copies it onto. The witness that the freeze puts the unit's ABBREVIATION (its short form),
+ * not the unit's full name, onto a filed line.
+ */
+async function frozenUnitLabels(
+  workingOrderId: string,
+): Promise<{ workingOrderLine: Record<string, string>; saleLine: Record<string, string> }> {
+  const orderLine = await suite.admin.execute<{ unit_name: Record<string, string> }>(sql`
+    select unit_name from working_order_lines where working_order_id = ${workingOrderId}`);
+  const saleLine = await suite.admin.execute<{ unit_name: Record<string, string> }>(sql`
+    select sl.unit_name from sale_lines sl
+    join sales s on s.id = sl.sale_id
+    where s.working_order_id = ${workingOrderId}`);
+  return {
+    workingOrderLine: orderLine.rows[0]!.unit_name,
+    saleLine: saleLine.rows[0]!.unit_name,
+  };
 }
 
 /** How many chained `registros_facturacion` rows exist for this working order's sale (superuser read). */
@@ -1519,6 +1542,35 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
     expect(await registroCount(id)).toBe(1);
     // Pay + issue are the same instant, so nothing is ever owed.
     expect(await outstandingFor(cfg)).toEqual([]);
+  });
+
+  // The unit-abbreviation freeze, end to end. The café sits on the legacy `each` unit, whose NAME
+  // ("each"/"unidad"/…) and ABBREVIATION ("ea"/"ud"/…) differ (`seedLegacySellingUnits`), so a filed
+  // line can only carry one of them — and the printed label is the abbreviation. Reads the persisted
+  // `working_order_lines` (where the add-time freeze writes it) and `sale_lines` (where filing copies
+  // it) directly, as the owner.
+  it("freezes the unit's abbreviation, not its name, onto the filed line", async () => {
+    const { cfg, cafe } = await modeVenue("prepay");
+    const id = randomUUID();
+
+    await payWorkingOrder({ db: suite.admin, backend, clock }, cfg, {
+      id,
+      lines: [{ productId: cafe.id, quantity: "1" }],
+      tender: { method: "cash", amount: "1.50" },
+    });
+
+    const abbreviation = { en: "ea", es: "ud", ca: "u", gl: "u", eu: "u" };
+    const labels = await frozenUnitLabels(id);
+    expect(labels.workingOrderLine).toEqual(abbreviation);
+    expect(labels.saleLine).toEqual(abbreviation);
+    // Read the LIVE unit name back and confirm the frozen label is not it — the short form was
+    // frozen, not the name. Read from the DB rather than restated so this cannot go stale if the
+    // provisioning seed's names change.
+    const { rows: unitRows } = await suite.admin.execute<{ name: Record<string, string> }>(sql`
+      select name from units where tenant_id = ${cfg.tenantId} and seed_key = 'each'`);
+    const liveName = unitRows[0]!.name;
+    expect(liveName.en.toLowerCase()).toBe("each");
+    expect(labels.saleLine).not.toEqual(liveName);
   });
 
   // MODE I (invoice_first): at PLACE issue a DEFERRED (unpaid) chained invoice, open → placed, and it

@@ -225,6 +225,7 @@ export const saleLines = pgTable(
       .$type<ModifierSnapshot[]>()
       .notNull()
       .default([]),
+    // Holds the printed unit label (the unit's abbreviation), frozen at add-time — presentation only, not part of the fiscal hash.
     unitName: jsonb("unit_name").$type<Record<string, string>>(),
     unitPrecision: integer("unit_precision"),
     quantity: numeric("quantity", { precision: 12, scale: 3 }).notNull(),
