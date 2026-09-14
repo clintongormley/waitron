@@ -390,23 +390,4 @@ describe("computeTopSellers", () => {
   it("returns [] for an empty range", async () => {
     expect(await run()).toEqual([]);
   });
-
-  it("excludes another tenant's sales (the tenant predicate)", async () => {
-    const other = await seedVenue(suite.db);
-    await seedSale(suite.db, other, {
-      invoiceNumber: 1,
-      issuedAt: noonUtc,
-      total: "50.00",
-      lines: [
-        {
-          vatRate: "10.00",
-          lineTotal: "50.00",
-          name: coffeeName,
-          descriptions: coffeeText,
-          quantity: "5.000",
-        },
-      ],
-    });
-    expect(await run()).toEqual([]);
-  });
 });

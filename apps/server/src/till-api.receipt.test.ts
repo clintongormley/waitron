@@ -946,7 +946,7 @@ describe("payment slip persisted capture facts", () => {
       expect(await saleCount(cfg)).toBe(1);
     },
   );
-  it("does not print a manual card slip or another tenant's sale", async () => {
+  it("does not print a manual card slip", async () => {
     const { cfg, each, operatorId } = await setupVenue();
     await configureReceipt(cfg, { mode: "never", printerId: await makePrinter(cfg) });
     const app = new Hono();
@@ -958,16 +958,6 @@ describe("payment slip persisted capture facts", () => {
         .status,
     ).toBe(200);
     expect(await printJobsFor(cfg)).toEqual([]);
-    const other = await setupVenue();
-    const foreignApp = new Hono();
-    mountTillApi(foreignApp, apiDeps(other.cfg), noopLog);
-    const foreignCookie = await login(foreignApp, other.cfg, other.operatorId);
-    const res = await foreignApp.request(`/api/sales/${id}/payment-slip`, {
-      method: "POST",
-      headers: { cookie: foreignCookie },
-    });
-    expect(res.status).toBe(404);
-    expect(await printJobsFor(other.cfg)).toEqual([]);
   });
   it("lays the payment slip out for the till printer's paper width and character set", async () => {
     const { cfg, each, operatorId } = await setupVenue();

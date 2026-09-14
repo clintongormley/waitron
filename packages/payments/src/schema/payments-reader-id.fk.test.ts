@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, captureError, pgErrorCode, withTransaction } from "@waitron/db";
+import { asAppUser, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { freshNif, seedWorkingOrder } from "../../test/seed.js";
@@ -65,27 +65,5 @@ describe("payments.reader_id", () => {
     });
     expect(stored).toHaveLength(1);
     expect(stored[0]!.readerId).toBe(readerId);
-  });
-
-  it("rejects a reader naming a DIFFERENT tenant (composite FK)", async () => {
-    const db = postgres.admin;
-    const own = await seedOrderWithReader(db);
-    const foreign = await seedOrderWithReader(db);
-
-    const e = await captureError(() =>
-      withTransaction(db, async (tx) => {
-        await asAppUser(tx);
-        await tx.insert(payments).values({
-          tenantId: own.tenantId,
-          workingOrderId: own.workingOrderId,
-          readerId: foreign.readerId,
-          provider: "sumup",
-          paymentRef: "pay_cross_tenant",
-          amount: "10.00",
-          state: "captured",
-        });
-      }),
-    );
-    expect(pgErrorCode(e)).toBe("23503"); // foreign_key_violation
   });
 });

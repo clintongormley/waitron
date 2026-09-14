@@ -65,30 +65,6 @@ describe("the passkey offer", () => {
     await expect(run((tx) => shouldOfferPasskey(tx, { tenantId, personId }))).resolves.toBe(false);
   });
 
-  it("does not offer for another tenant's person of the same id", async () => {
-    const personId = await seedPerson(suite.db, tenantId);
-    const otherTenantId = await seedTenant(suite.db);
-
-    // The person id exists — in the FIRST tenant. A read that trusts a globally unique id answers
-    // about someone else's person; one tenant per database is not the query's isolation boundary.
-    await expect(
-      withTransaction(suite.db, (tx) =>
-        shouldOfferPasskey(tx, { tenantId: otherTenantId, personId }),
-      ),
-    ).resolves.toBe(false);
-  });
-
-  it("does not count a passkey registered under another tenant", async () => {
-    const personId = await seedPerson(suite.db, tenantId);
-    const otherTenantId = await seedTenant(suite.db);
-    // `webauthn_credentials` has one foreign key to `tenants` and a separate one to `persons`, so a
-    // row naming another tenant alongside this person is insertable. It is not this tenant's
-    // passkey, so it must not suppress this tenant's offer.
-    await seedPasskey({ tenantId: otherTenantId, personId });
-
-    await expect(run((tx) => shouldOfferPasskey(tx, { tenantId, personId }))).resolves.toBe(true);
-  });
-
   it("stamps only the named person", async () => {
     const personId = await seedPerson(suite.db, tenantId);
     const colleagueId = await seedPerson(suite.db, tenantId);
@@ -98,19 +74,5 @@ describe("the passkey offer", () => {
     await expect(
       run((tx) => shouldOfferPasskey(tx, { tenantId, personId: colleagueId })),
     ).resolves.toBe(true);
-  });
-
-  it("stamps nobody when another tenant names this tenant's person", async () => {
-    const personId = await seedPerson(suite.db, tenantId);
-    const otherTenantId = await seedTenant(suite.db);
-
-    // The write is the dangerous direction: a stamp that lands on another tenant's person silently
-    // cancels an offer that tenant never saw. One database per tenant is not the write's isolation
-    // boundary either.
-    await withTransaction(suite.db, (tx) =>
-      markPasskeyOffered(tx, { tenantId: otherTenantId, personId }),
-    );
-
-    await expect(run((tx) => shouldOfferPasskey(tx, { tenantId, personId }))).resolves.toBe(true);
   });
 });

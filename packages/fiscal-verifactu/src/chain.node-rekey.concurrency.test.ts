@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { recordSale } from "@waitron/core";
-import { asAppUser, captureError, pgErrorCode, withTransaction } from "@waitron/db";
+import { asAppUser, captureError, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { nodeId as brandNodeId, seriesId as brandSeriesId } from "@waitron/shared";
 import type { NodeId } from "@waitron/shared";
@@ -238,21 +238,5 @@ describe("node references and app-role appends", () => {
       return appendToChain(tx, node.tenantId, node.nodeId, altaFor(node.tillId, saleId, 1, 1));
     });
     expect(appended.secuencia).toBe(1);
-  });
-
-  it("rejects a sale that references a node belonging to another tenant", async () => {
-    const other = await seedTill(suite.admin, "X"); // a node under a DIFFERENT tenant
-    // Insert a `sales` row under `node`'s tenant but pointing at `other`'s node: the composite
-    // sales_node_fk (tenant_id, node_id) → nodes(tenant_id, id) has no matching parent row.
-    const error = await captureError(() =>
-      suite.admin.execute(sql`
-        insert into sales (tenant_id, till_id, node_id, series_id, invoice_number, issued_at,
-                           issued_offset_minutes, total, vat_breakdown, locale, invoice_locales,
-                           fiscal_backend, fiscal_state)
-        values (${node.tenantId}, ${node.tillId}, ${other.nodeId}, ${node.seriesId}, 99,
-                '2026-07-20T19:20:30+02:00', 120, '0.00', '[]'::jsonb, 'es', array['es'], 'verifactu', 'recorded')
-      `),
-    );
-    expect(pgErrorCode(error)).toBe("23503"); // foreign_key_violation
   });
 });

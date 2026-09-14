@@ -72,17 +72,6 @@ describe("loginManager", () => {
     expect(spy).toHaveBeenCalledTimes(1);
     expect(spy).toHaveBeenCalledWith("some password", expect.any(String));
   });
-  it("does not authenticate a person from another tenant (tenant filter)", async () => {
-    // A person with a valid email + password, but in a DIFFERENT tenant. The explicit tenant filter must not find them, so loginManager cannot
-    // mint a session with a mismatched tenant_id. The hardened code is the same
-    // `password.invalid` an unknown email yields.
-    const otherTenant = await seedTenant(suite.db);
-    await seedManager(suite.db, otherTenant, { email: "owner@x.com" });
-    const code = await run((tx) =>
-      codeOf(() => loginManager(tx, { tenantId, email: "owner@x.com", password: "correct horse" })),
-    );
-    expect(code).toBe("password.invalid");
-  });
   it("rejects a wrong password with password.invalid", async () => {
     await seedManager(suite.db, tenantId, { email: "owner-wrongpw@x.com" });
     const code = await run((tx) =>

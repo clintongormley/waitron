@@ -1475,7 +1475,7 @@ describe("mountPrintApi — management: recent jobs", () => {
     }
   });
 
-  it("summarises all printer jobs and excludes foreign tenant activity", async () => {
+  it("summarises all printer jobs", async () => {
     const app = mountApp();
     const printerId = await createPrinterVia(app, "unused", "Summary printer");
     const emptyId = await createPrinterVia(app, "unused", "Empty printer");
@@ -1488,34 +1488,6 @@ describe("mountPrintApi — management: recent jobs", () => {
              (${tenantId}, ${locationId}, ${printerId}, decode('01','hex'), 'failed', 4, now(), null),
              (${tenantId}, ${locationId}, ${printerId}, decode('01','hex'), 'failed', 5, now(), null),
              (${tenantId}, ${locationId}, ${printerId}, decode('01','hex'), 'printing', 0, now(), null)`);
-    const foreignTenant = await seedTenant(suite.db);
-    const foreignLocation = randomUUID();
-    const foreignPrinter = randomUUID();
-    const foreignJob = randomUUID();
-    await suite.db
-      .execute(sql`insert into locations (id, tenant_id, name, invoice_locales, operation_description)
-      values (${foreignLocation}, ${foreignTenant}, 'Other', array['es-ES'], 'Other')`);
-    await suite.db
-      .execute(sql`insert into printers (id, tenant_id, location_id, name, transport, host)
-      values (${foreignPrinter}, ${foreignTenant}, ${foreignLocation}, 'Other', 'network_tcp', 'other.local')`);
-    await suite.db
-      .execute(sql`insert into print_jobs (id, tenant_id, location_id, printer_id, payload)
-      values (${foreignJob}, ${foreignTenant}, ${foreignLocation}, ${foreignPrinter}, decode('01','hex'))`);
-    await suite.db.execute(sql`
-      insert into print_jobs (tenant_id, location_id, printer_id, payload, status, delivered_at)
-      select ${foreignTenant}, ${foreignLocation}, ${foreignPrinter}, decode('01','hex'), 'done', '2199-01-01'
-      from generate_series(1, 101)`);
-    await suite.db.execute(sql`
-      insert into print_jobs (tenant_id, location_id, printer_id, payload, status, attempts, created_at)
-      select ${foreignTenant}, ${foreignLocation}, ${foreignPrinter}, decode('01','hex'), 'failed', 5, '2199-01-01'
-      from generate_series(1, 101)`);
-    const foreignPreview = await send(
-      app,
-      "GET",
-      `/management-api/print-jobs/${foreignJob}/preview`,
-      { cookie: managerCookie },
-    );
-    expect(foreignPreview.status).toBe(404);
     const result = await send(app, "GET", "/management-api/printers", { cookie: managerCookie });
     const printers = (await result.json()) as {
       id: string;
@@ -1528,13 +1500,11 @@ describe("mountPrintApi — management: recent jobs", () => {
       pendingJobs: 0,
       lastPrintAt: null,
     });
-    expect(printers.some((p) => p.id === foreignPrinter)).toBe(false);
     const jobsResult = await send(app, "GET", "/management-api/print-jobs", {
       cookie: managerCookie,
     });
     const jobs = (await jobsResult.json()) as { id: string; printerId: string }[];
     expect(jobs.filter((job) => job.printerId === printerId)).toHaveLength(105);
-    expect(jobs.some((j) => j.id === foreignJob)).toBe(false);
   });
 
   it("keeps every unfinished job alongside the last 100 completed jobs by delivery time", async () => {

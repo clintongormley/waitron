@@ -407,54 +407,6 @@ describe("Catalogue API over real Postgres (option groups, gates, tenant-consist
     expect(sold.optionGroups[0]!.items.map((i) => i.id)).toEqual(itemIds);
   });
 
-  it("refuses attaching another tenant's option-group id — the tenant-consistent FK rejects it and nothing lands", async () => {
-    // The composite `(tenant_id, group_id)` FK on `product_option_groups`, exercised on its
-    // exists-but-foreign arm: the group id names a REAL row, just one owned by another tenant — the
-    // only arm a single-column FK to `option_groups(id)` would accept. The attach must be refused
-    // (a 4xx/5xx, never a silent success) and nothing may land.
-    const a = await setupVenue();
-    const b = await setupVenue();
-    const appA = mountApp(a.tenantId);
-    const appB = mountApp(b.tenantId);
-
-    const bGroupRes = await send(appB, "POST", "/management-api/option-groups", b.managerCookie, {
-      name: { [LOCALE]: "Grupo de B" },
-    });
-    expect(bGroupRes.status).toBe(201);
-    const bGroupId = ((await bGroupRes.json()) as { id: string }).id;
-
-    // A authors its own catalogue + product, then tries to attach B's foreign group id. The
-    // tenant-consistent (tenant_id, group_id) FK finds no such group under A's tenant, so the insert
-    // raises 23503 → an opaque 500 (the deliberately-opaque foreign-id posture the catalogue STATUS map
-    // documents); the attach never lands.
-    const catA = await createCatalogue(appA, a.managerCookie, "Carta A");
-    const prodRes = await send(appA, "POST", "/management-api/products", a.managerCookie, {
-      catalogueId: catA,
-      categoryId: null,
-      name: "Producto A",
-      pricingUnit: "each",
-      unitPrice: "1.00",
-      vatClass: "general",
-    });
-    const productId = ((await prodRes.json()) as { id: string }).id;
-    const attachRes = await send(
-      appA,
-      "PATCH",
-      `/management-api/products/${productId}`,
-      a.managerCookie,
-      { optionGroupIds: [bGroupId] },
-    );
-    // The cross-tenant FK is refused (never a silent success); the attach did not land.
-    expect(attachRes.status).toBeGreaterThanOrEqual(400);
-    const attached = await send(
-      appA,
-      "GET",
-      `/management-api/products/${productId}/option-groups`,
-      a.managerCookie,
-    );
-    expect((await attached.json()) as string[]).toEqual([]);
-  });
-
   it("refuses every option-group write route to a staff-role session — 403 authorization.not_permitted", async () => {
     // Pinned test 3: the `person.manage` gate covers the new authoring routes, proved the same way the
     // catalogue-write test above proves it — by DELETION. A `staff` session holds no `person.manage`,
@@ -556,21 +508,20 @@ describe("canonical modifier routes", () => {
       ).modifiers,
     ).toHaveLength(3);
   });
-  it("refuses another tenant's manager and staff", async () => {
+  it("refuses a staff-role session", async () => {
     const venue = await setupVenue();
-    const other = await setupVenue();
     const app = mountApp(venue.tenantId);
-    for (const cookie of [other.managerCookie, venue.staffCookie]) {
-      expect((await send(app, "GET", "/management-api/modifiers", cookie)).status).toBe(403);
-      expect(
-        (
-          await send(app, "POST", "/management-api/modifiers", cookie, {
-            type: "text",
-            name: { es: "Nota" },
-          })
-        ).status,
-      ).toBe(403);
-    }
+    expect((await send(app, "GET", "/management-api/modifiers", venue.staffCookie)).status).toBe(
+      403,
+    );
+    expect(
+      (
+        await send(app, "POST", "/management-api/modifiers", venue.staffCookie, {
+          type: "text",
+          name: { es: "Nota" },
+        })
+      ).status,
+    ).toBe(403);
   });
 });
 

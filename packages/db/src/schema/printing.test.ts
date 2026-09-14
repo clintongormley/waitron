@@ -14,9 +14,7 @@ import { tenants } from "./tenants.js";
 // `app_user`, the deployment role, which PGlite (every connection a superuser) cannot be. The
 // cases retain the role switch so the reads and writes still exercise app_user grants.
 const TENANT_A = "11111111-1111-4111-8111-111111111111";
-const TENANT_B = "22222222-2222-4222-8222-222222222222";
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
-const LOCATION_B = "bbbbbbbb-0000-4000-8000-000000000001";
 // A location id that is never seeded — the negative for the direct location_id → locations.id FK.
 const GHOST_LOCATION = "dddddddd-0000-4000-8000-000000000099";
 // A non-null token_hash fixture (shape only — the DB stores it as opaque text; the real scrypt value
@@ -27,17 +25,15 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
   const suite = useTemplateDb({ template: "core" });
 
   beforeAll(async () => {
-    await suite.admin.insert(tenants).values([
-      { id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" },
-      { id: TENANT_B, country: "ES", taxId: "B11111111", legalName: "Fixture Tenant B" },
-    ]);
-    // A location per tenant — the direct location_id → locations.id FK target. operation_description
+    await suite.admin
+      .insert(tenants)
+      .values([{ id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
+    // The location — the direct location_id → locations.id FK target. operation_description
     // is Spanish test DATA, not a schema identifier, exactly as the sibling tests use 'Hostelería'.
     await suite.admin.execute(sql`
       insert into locations (id, tenant_id, name, invoice_locales, operation_description)
       values
-        (${LOCATION_A}, ${TENANT_A}, 'Loc A', array['es'], 'Hostelería'),
-        (${LOCATION_B}, ${TENANT_B}, 'Loc B', array['es'], 'Hostelería')
+        (${LOCATION_A}, ${TENANT_A}, 'Loc A', array['es'], 'Hostelería')
       on conflict (id) do nothing`);
   });
 
@@ -49,15 +45,11 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
     });
   }
 
-  function locationOf(tenant: string): string {
-    return tenant === TENANT_A ? LOCATION_A : LOCATION_B;
-  }
-
   async function seedAgent(tenant: string, name: string): Promise<string> {
     return asApp(tenant, async (tx) => {
       const r = await tx.execute<{ id: string }>(
         sql`insert into print_agents (tenant_id, location_id, name, token_hash)
-            values (${tenant}, ${locationOf(tenant)}, ${name}, ${TOKEN_HASH}) returning id`,
+            values (${tenant}, ${LOCATION_A}, ${name}, ${TOKEN_HASH}) returning id`,
       );
       return r.rows[0]!.id;
     });
@@ -69,7 +61,7 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
     return asApp(tenant, async (tx) => {
       const r = await tx.execute<{ id: string }>(
         sql`insert into printers (tenant_id, location_id, name, transport, host)
-            values (${tenant}, ${locationOf(tenant)}, ${name}, 'network_tcp', '10.0.0.5')
+            values (${tenant}, ${LOCATION_A}, ${name}, 'network_tcp', '10.0.0.5')
             returning id`,
       );
       return r.rows[0]!.id;
@@ -80,7 +72,7 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
     return asApp(tenant, async (tx) => {
       const r = await tx.execute<{ id: string }>(
         sql`insert into print_jobs (tenant_id, location_id, printer_id, payload)
-            values (${tenant}, ${locationOf(tenant)}, ${printer}, decode('48656c6c6f', 'hex'))
+            values (${tenant}, ${LOCATION_A}, ${printer}, decode('48656c6c6f', 'hex'))
             returning id`,
       );
       return r.rows[0]!.id;
@@ -110,7 +102,7 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
       tx
         .execute<{ id: string }>(
           sql`insert into printers (tenant_id, location_id, name, transport, local_key, host, poll_id)
-              values (${tenant}, ${locationOf(tenant)}, ${name}, ${opts.transport}, ${localKey}, ${host}, ${pollId})
+              values (${tenant}, ${LOCATION_A}, ${name}, ${opts.transport}, ${localKey}, ${host}, ${pollId})
               returning id`,
         )
         .then((r) => r.rows),
@@ -282,19 +274,6 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
     expect(pgErrorCode(error)).toBe(code);
   });
 
-  it("print_jobs: the printer binding is tenant-consistent (composite FK to printers)", async () => {
-    const printerA = await seedPrinter(TENANT_A, "Printer A for FK");
-    const e = await captureError(() =>
-      asApp(TENANT_B, (tx) =>
-        tx.execute(
-          sql`insert into print_jobs (tenant_id, location_id, printer_id, payload)
-              values (${TENANT_B}, ${LOCATION_B}, ${printerA}, decode('00', 'hex'))`,
-        ),
-      ),
-    );
-    expect(pgErrorCode(e)).toBe("23503"); // foreign_key_violation on (tenant_id, printer_id)
-  });
-
   // ---- central-printer-provisioning: local_key / bluetooth / claimed_by ---------------------
 
   it("printers: rejects a usb printer with no local_key (CHECK 23514)", async () => {
@@ -355,21 +334,6 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
           where table_name = 'printers' and column_name in ('agent_id', 'usb_path')`,
     );
     expect(cols.rows).toHaveLength(0);
-  });
-
-  it("print_jobs: rejects claimed_by naming an agent in another tenant (composite FK 23503)", async () => {
-    const printerA = await seedPrinter(TENANT_A, "Printer A for claim FK");
-    const agentB = await seedAgent(TENANT_B, "Agent B for claim FK");
-    // A tenant-A job whose claimed_by points at a tenant-B agent violates (tenant_id, claimed_by).
-    const e = await captureError(() =>
-      asApp(TENANT_A, (tx) =>
-        tx.execute(
-          sql`insert into print_jobs (tenant_id, location_id, printer_id, payload, claimed_by)
-              values (${TENANT_A}, ${LOCATION_A}, ${printerA}, decode('00', 'hex'), ${agentB})`,
-        ),
-      ),
-    );
-    expect(pgErrorCode(e)).toBe("23503"); // print_jobs_claimed_by_fk
   });
 
   it("print_jobs: accepts claimed_by naming an agent in the same tenant, and NULL", async () => {

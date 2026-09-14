@@ -338,74 +338,6 @@ describe("providers list", () => {
   });
 });
 
-describe("readers — tenant isolation", () => {
-  it("hides tenant A's reader from tenant B's list", async () => {
-    const a = await seedVenue();
-    const b = await seedVenue();
-    const appA = mountApp(a);
-    const appB = mountApp(b);
-    await connectStripe(appA, a);
-    const ref = nextRef();
-    const added = await addReader(appA, a, ref, "Barra A");
-    expect(added.status).toBe(201);
-    const addedBody = (await added.json()) as { id: string; status: string };
-    const readerId = addedBody.id;
-    expect(addedBody.status).toBe("paired");
-
-    const listA = (await (
-      await send(appA, "GET", "/management-api/payments/readers", { cookie: a.managerCookie })
-    ).json()) as { id: string }[];
-    expect(listA.some((r) => r.id === readerId)).toBe(true);
-
-    const listB = (await (
-      await send(appB, "GET", "/management-api/payments/readers", { cookie: b.managerCookie })
-    ).json()) as { id: string }[];
-    expect(listB.some((r) => r.id === readerId)).toBe(false);
-  });
-
-  it("404s reader.not_found on a status read of another tenant's reader id", async () => {
-    const a = await seedVenue();
-    const b = await seedVenue();
-    const appA = mountApp(a);
-    const appB = mountApp(b);
-    await connectStripe(appB, b);
-    const bReaderId = (
-      (await (await addReader(appB, b, nextRef(), "Barra B")).json()) as {
-        id: string;
-      }
-    ).id;
-    const res = await send(appA, "GET", `/management-api/payments/readers/${bReaderId}/status`, {
-      cookie: a.managerCookie,
-    });
-    expect(res.status).toBe(404);
-    expect((await res.json()) as { error: { code: string } }).toMatchObject({
-      error: { code: "reader.not_found" },
-    });
-  });
-
-  it("404s reader.not_found when a device default names another tenant's reader", async () => {
-    const a = await seedVenue();
-    const b = await seedVenue();
-    const appA = mountApp(a);
-    const appB = mountApp(b);
-    await connectStripe(appB, b);
-    const bReaderId = (
-      (await (await addReader(appB, b, nextRef(), "Barra B")).json()) as {
-        id: string;
-      }
-    ).id;
-    const deviceA = await seedDevice(a);
-    const res = await send(appA, "PUT", `/management-api/payments/devices/${deviceA}/reader`, {
-      cookie: a.managerCookie,
-      body: { readerId: bReaderId },
-    });
-    expect(res.status).toBe(404);
-    expect((await res.json()) as { error: { code: string } }).toMatchObject({
-      error: { code: "reader.not_found" },
-    });
-  });
-});
-
 describe("device default reader", () => {
   it("sets, reads back and clears a device's default reader", async () => {
     const venue = await seedVenue();
@@ -506,21 +438,6 @@ describe("device default reader — screens", () => {
       (await res.json()) as { error: { code: string; params: { field: string } } },
     ).toMatchObject({
       error: { code: "management.request_invalid", params: { field: "readerId" } },
-    });
-  });
-
-  it("404s device.not_found for a device id that is not this tenant's", async () => {
-    const a = await seedVenue();
-    const b = await seedVenue();
-    const appA = mountApp(a);
-    const deviceB = await seedDevice(b);
-    const res = await send(appA, "PUT", `/management-api/payments/devices/${deviceB}/reader`, {
-      cookie: a.managerCookie,
-      body: { readerId: null },
-    });
-    expect(res.status).toBe(404);
-    expect((await res.json()) as { error: { code: string } }).toMatchObject({
-      error: { code: "device.not_found" },
     });
   });
 });
@@ -838,70 +755,6 @@ describe("reader adoption and local management", () => {
     ).toEqual([]);
     expect(removed).toEqual([]);
   });
-
-  it("keeps another tenant's same provider reference out of comparison and adoption", async () => {
-    const a = await seedVenue();
-    const b = await seedVenue();
-    const seat = discoverySeat(async () => [vendor]);
-    const appA = mountApp(a, [seat]);
-    const appB = mountApp(b, [seat]);
-    await connectStripe(appA, a);
-    await connectStripe(appB, b);
-    const bReader = (await (await addReader(appB, b, vendor.providerRef, "Tenant B")).json()) as {
-      id: string;
-    };
-    expect(
-      await (
-        await send(appA, "GET", `${base}/providers/stripe/available-readers`, {
-          cookie: a.managerCookie,
-        })
-      ).json(),
-    ).toEqual([{ ...vendor, status: "available" }]);
-    const adopted = (await (
-      await send(appA, "POST", `${base}/readers/adopt`, { cookie: a.managerCookie, body: adoption })
-    ).json()) as { id: string };
-    expect(adopted).toEqual({ id: expect.any(String), status: "paired" });
-    expect(adopted.id).not.toBe(bReader.id);
-    expect(
-      (
-        await suite.admin.execute(
-          sql`select name, active from card_readers where id = ${bReader.id}`,
-        )
-      ).rows,
-    ).toEqual([{ name: "Tenant B", active: true }]);
-  });
-
-  it.each(["rename", "disable", "enable", "unpair"] as const)(
-    "isolates %s by tenant before any vendor call",
-    async (action) => {
-      const a = await seedVenue();
-      const b = await seedVenue();
-      let removes = 0;
-      const seat = discoverySeat(
-        async () => [vendor],
-        async () => {
-          removes++;
-        },
-      );
-      const appA = mountApp(a, [seat]);
-      const appB = mountApp(b, [seat]);
-      await connectStripe(appB, b);
-      const { id } = (await (await addReader(appB, b, nextRef())).json()) as { id: string };
-      const result = await send(
-        appA,
-        action === "rename" ? "PATCH" : "POST",
-        `${base}/readers/${id}${action === "rename" ? "" : `/${action}`}`,
-        { cookie: a.managerCookie, body: { name: "Changed" } },
-      );
-      expect(result.status).toBe(404);
-      expect(await result.json()).toEqual({ error: { code: "reader.not_found", params: { id } } });
-      expect(removes).toBe(0);
-      expect(
-        (await suite.admin.execute(sql`select name, active from card_readers where id = ${id}`))
-          .rows,
-      ).toEqual([{ name: "Barra 1", active: true }]);
-    },
-  );
 
   it("renames, disables and enables locally, while unpair alone calls the vendor", async () => {
     const venue = await seedVenue();

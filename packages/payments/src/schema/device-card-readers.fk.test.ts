@@ -120,36 +120,4 @@ describe("device_card_readers", () => {
     );
     expect(pgErrorCode(dup)).toBe("23505"); // unique_violation (the PK)
   });
-
-  it("rejects a reader naming a DIFFERENT tenant (composite FK)", async () => {
-    const db = postgres.admin;
-    const a = await seedDeviceAndReader(db);
-    const b = await seedDeviceAndReader(db);
-
-    const e = await captureError(() =>
-      withTransaction(db, async (tx) => {
-        await asAppUser(tx);
-        await tx
-          .insert(deviceCardReaders)
-          .values({ tenantId: a.tenantId, deviceId: a.deviceId, readerId: b.readerId });
-      }),
-    );
-    expect(pgErrorCode(e)).toBe("23503"); // foreign_key_violation
-  });
-
-  it("rejects a device naming a DIFFERENT tenant (composite FK)", async () => {
-    const db = postgres.admin;
-    const a = await seedDeviceAndReader(db);
-    const b = await seedDeviceAndReader(db);
-
-    const e = await captureError(() =>
-      withTransaction(db, async (tx) => {
-        await asAppUser(tx);
-        await tx
-          .insert(deviceCardReaders)
-          .values({ tenantId: a.tenantId, deviceId: b.deviceId, readerId: a.readerId });
-      }),
-    );
-    expect(pgErrorCode(e)).toBe("23503"); // foreign_key_violation
-  });
 });

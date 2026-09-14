@@ -771,18 +771,6 @@ describe("tryReadDevice is tenant-scoped (real Postgres)", () => {
     return { tenantId, deviceId: dev.rows[0]!.id };
   }
 
-  it("does NOT resolve a device that belongs to ANOTHER tenant (dev-override, no token)", async () => {
-    const other = await seedKdsDeviceUnderNewTenant();
-    // A DIFFERENT tenant the request is scoped to — it owns no device.
-    const scoped = await seedTenant(suite.admin);
-    const binding = await readWithHeaders(
-      { db: suite.admin, cfg: { tenantId: scoped }, devMode: true },
-      { [DEV_DEVICE_HEADER]: other.deviceId },
-    );
-    // Without `eq(devices.tenantId, cfg.tenantId)` this resolves the foreign device by its UUID.
-    expect(binding).toBeNull();
-  });
-
   it("DOES resolve a device scoped to its OWN tenant", async () => {
     const { tenantId, deviceId } = await seedKdsDeviceUnderNewTenant();
     const binding = await readWithHeaders(

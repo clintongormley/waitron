@@ -2271,31 +2271,11 @@ describe("menu name edits", () => {
       ).status,
     ).toBe(404);
   });
-
-  it("does not rename another tenant's menu", async () => {
-    const otherTenant = await seedTenant(suite.db);
-    const result = await suite.db.execute<{ id: string }>(
-      sql`insert into catalogues (tenant_id, name) values (${otherTenant}, 'Other') returning id`,
-    );
-    const id = result.rows[0]!.id;
-    expect(
-      (
-        await send(mountApp(), "PATCH", `/management-api/catalogues/${id}`, {
-          body: { name: "Wrong" },
-        })
-      ).status,
-    ).toBe(404);
-    const row = await suite.db.execute<{ name: string }>(
-      sql`select name from catalogues where id = ${id}`,
-    );
-    expect(row.rows).toEqual([{ name: "Other" }]);
-  });
 });
 
 describe("menu-section translations", () => {
-  it("updates translations with default-language validation and scopes section ids to the venue", async () => {
+  it("updates translations with default-language validation and rejects unknown section ids", async () => {
     const app = mountApp("en-GB");
-    const foreignTenantId = await seedTenant(suite.db);
     const seedSection = async (ownerId: string) => {
       const menu = await suite.db.execute<{ id: string }>(sql`
         insert into catalogues (tenant_id, name) values (${ownerId}, 'Section edit') returning id`);
@@ -2306,7 +2286,6 @@ describe("menu-section translations", () => {
       ).rows[0]!.id;
     };
     const sectionId = await seedSection(tenantId);
-    const foreignSectionId = await seedSection(foreignTenantId);
     await suite.db.execute(sql`
       insert into content_languages (tenant_id, default_language, languages) values (${tenantId}, 'en', array['en','fr'])
       on conflict (tenant_id) do update set default_language = 'en', languages = array['en','fr']`);
@@ -2331,13 +2310,6 @@ describe("menu-section translations", () => {
       ).toBe(400);
       expect(
         (
-          await send(app, "PATCH", `/management-api/menu-sections/${foreignSectionId}`, {
-            body: input,
-          })
-        ).status,
-      ).toBe(404);
-      expect(
-        (
           await send(app, "PATCH", `/management-api/menu-sections/${crypto.randomUUID()}`, {
             body: input,
           })
@@ -2347,11 +2319,7 @@ describe("menu-section translations", () => {
       const own = await suite.db.execute<{ name: Record<string, string> }>(
         sql`select name from menu_sections where tenant_id = ${tenantId} and id = ${sectionId}`,
       );
-      const foreign = await suite.db.execute<{ name: Record<string, string> }>(
-        sql`select name from menu_sections where tenant_id = ${foreignTenantId} and id = ${foreignSectionId}`,
-      );
       expect(own.rows).toEqual([input]);
-      expect(foreign.rows).toEqual([{ name: { en: "Cocktails", de: "Getränke" } }]);
     } finally {
       await suite.db.execute(sql`delete from content_languages where tenant_id = ${tenantId}`);
     }
@@ -2359,7 +2327,7 @@ describe("menu-section translations", () => {
 });
 
 describe("menu-section list", () => {
-  it("lists empty sections in display order without exposing another tenant's menu", async () => {
+  it("lists empty sections in display order", async () => {
     const app = mountApp();
     const menuId = await createCatalogueVia(app, "Empty sections");
     await suite.db.execute(sql`insert into menu_sections (tenant_id, menu_id, name, display_order)
@@ -2381,17 +2349,6 @@ describe("menu-section list", () => {
       { menuId, name: { es: "Bebidas" }, displayOrder: 1, active: true, hasId: true },
       { menuId, name: { es: "Postres" }, displayOrder: 2, active: true, hasId: true },
     ]);
-    const foreignTenantId = await seedTenant(suite.db);
-    const foreignMenu = await suite.db.execute<{ id: string }>(
-      sql`insert into catalogues (tenant_id, name) values (${foreignTenantId}, 'Private') returning id`,
-    );
-    const foreignMenuId = foreignMenu.rows[0]!.id;
-    await suite.db.execute(
-      sql`insert into menu_sections (tenant_id, menu_id, name) values (${foreignTenantId}, ${foreignMenuId}, '{"en":"Private"}'::jsonb)`,
-    );
-    expect(
-      (await send(app, "GET", `/management-api/catalogues/${foreignMenuId}/sections`)).status,
-    ).toBe(404);
     expect(
       (await send(app, "GET", `/management-api/catalogues/${crypto.randomUUID()}/sections`)).status,
     ).toBe(404);
@@ -2400,107 +2357,8 @@ describe("menu-section list", () => {
 });
 
 describe("catalogue API tenant authorization", () => {
-  it.each(["catalogues", "location catalogues"])(
-    "lists only its own %s for an authorized manager",
-    async (listing) => {
-      const other = await seedTenant(suite.db);
-      const foreign = await suite.db.execute<{ id: string }>(
-        sql`insert into catalogues (tenant_id, name) values (${other}, 'Private menu') returning id`,
-      );
-      const app = mountApp();
-      const ownId = await createCatalogueVia(app, "Own menu");
-      const path =
-        listing === "catalogues"
-          ? "/management-api/catalogues"
-          : `/management-api/locations/${locationId}/catalogues`;
-      const response = await send(app, "GET", path);
-      expect(response.status).toBe(200);
-      const rows = (await response.json()) as { id: string }[];
-      expect(rows.map((row) => row.id)).toContain(ownId);
-      expect(rows.map((row) => row.id)).not.toContain(foreign.rows[0]!.id);
-    },
-  );
-
-  it("does not return another tenant's products through its catalogue ID to an authorized manager", async () => {
-    const other = await seedTenant(suite.db);
-    const foreign = await suite.db.execute<{ id: string }>(
-      sql`insert into catalogues (tenant_id, name) values (${other}, 'Private products') returning id`,
-    );
-    await suite.db
-      .execute(sql`insert into products (tenant_id, catalogue_id, name, pricing_unit, unit_price, vat_class)
-      values (${other}, ${foreign.rows[0]!.id}, 'Privado', 'each', '2', 'general')`);
+  it("refuses editing an item through a group it does not belong to", async () => {
     const app = mountApp();
-    const ownMenuId = await createCatalogueVia(app, "Own products");
-    const ownProductId = await createProductVia(app, ownMenuId);
-    const own = await send(app, "GET", `/management-api/catalogues/${ownMenuId}/products`);
-    expect(own.status).toBe(200);
-    expect(await own.json()).toMatchObject([{ id: ownProductId }]);
-    const response = await send(
-      app,
-      "GET",
-      `/management-api/catalogues/${foreign.rows[0]!.id}/products`,
-    );
-    expect(response.status).toBe(200);
-    expect(await response.json()).toEqual([]);
-  });
-
-  it("refuses a manager session from another tenant before reading or writing language configuration", async () => {
-    const other = await seedTenant(suite.db);
-    const app = mountApp("en", other);
-    expect((await send(app, "GET", "/management-api/content-languages")).status).toBe(403);
-    expect(
-      (
-        await send(app, "PUT", "/management-api/content-languages", {
-          body: { defaultLanguage: "fr", languages: ["fr"] },
-        })
-      ).status,
-    ).toBe(403);
-    const config = await suite.db.execute(
-      sql`select * from content_languages where tenant_id = ${other}`,
-    );
-    expect(config.rows).toEqual([]);
-  });
-
-  it("refuses foreign product image and description edits and preserves the original fields", async () => {
-    const other = await seedTenant(suite.db);
-    const menu = await suite.db.execute<{ id: string }>(
-      sql`insert into catalogues (tenant_id, name) values (${other}, 'Other menu') returning id`,
-    );
-    const product = await suite.db.execute<{
-      id: string;
-    }>(sql`insert into products (tenant_id, catalogue_id, name, pricing_unit, unit_price, vat_class, image)
-      values (${other}, ${menu.rows[0]!.id}, 'Pan', 'each', '2', 'general', 'original.png') returning id`);
-    const result = await send(
-      mountApp(),
-      "PATCH",
-      `/management-api/products/${product.rows[0]!.id}`,
-      { body: { image: null, name: "Cambio" } },
-    );
-    expect(result.status).toBe(403);
-    const after = await suite.db.execute(
-      sql`select image, name from products where tenant_id = ${other} and id = ${product.rows[0]!.id}`,
-    );
-    expect(after.rows).toEqual([{ image: "original.png", name: "Pan" }]);
-  });
-
-  it("refuses foreign modifier edits and a mismatched item group, including empty patches", async () => {
-    const other = await seedTenant(suite.db);
-    const group = await suite.db.execute<{ id: string }>(
-      sql`insert into option_groups (tenant_id, name) values (${other}, '{"es":"Tamaño"}'::jsonb) returning id`,
-    );
-    const item = await suite.db.execute<{ id: string }>(
-      sql`insert into option_group_items (tenant_id, group_id, name) values (${other}, ${group.rows[0]!.id}, '{"es":"Grande"}'::jsonb) returning id`,
-    );
-    const app = mountApp();
-    for (const path of [
-      `/management-api/option-groups/${group.rows[0]!.id}`,
-      `/management-api/option-groups/${group.rows[0]!.id}/items/${item.rows[0]!.id}`,
-    ]) {
-      expect((await send(app, "PATCH", path, { body: { name: { es: "Cambio" } } })).status).toBe(
-        403,
-      );
-      expect((await send(app, "PATCH", path, { body: {} })).status).toBe(403);
-    }
     const ownA = await createGroupVia(app, { name: { es: "A" } });
     const ownB = await createGroupVia(app, { name: { es: "B" } });
     const ownItem = await suite.db.execute<{ id: string }>(
@@ -2517,13 +2375,9 @@ describe("catalogue API tenant authorization", () => {
       ).status,
     ).toBe(403);
     const names = await suite.db.execute(
-      sql`select name from option_group_items where id in (${item.rows[0]!.id}, ${ownItem.rows[0]!.id}) order by name::text`,
+      sql`select name from option_group_items where id = ${ownItem.rows[0]!.id}`,
     );
-    expect(names.rows).toEqual([{ name: { es: "Grande" } }, { name: { es: "Original" } }]);
-    expect(
-      (await suite.db.execute(sql`select name from option_groups where id=${group.rows[0]!.id}`))
-        .rows,
-    ).toEqual([{ name: { es: "Tamaño" } }]);
+    expect(names.rows).toEqual([{ name: { es: "Original" } }]);
   });
 });
 

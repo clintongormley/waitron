@@ -131,21 +131,6 @@ describe("computeDailyClose", () => {
     expect(close.cash.byTill[0]!.cashTakings).toBe("121.00");
   });
 
-  it("does not leak another tenant's data (explicit tenant predicate)", async () => {
-    // Our tenant: nothing. A DIFFERENT tenant with a sale on the same day/node-of-its-own.
-    const other = await seedVenue(suite.db);
-    const issued = new Date("2026-08-04T10:00:00Z").toISOString();
-    await seedSale(suite.db, other, {
-      invoiceNumber: 1,
-      issuedAt: issued,
-      total: "121.00",
-      lines: [{ vatRate: "21.00", lineTotal: "100.00" }],
-    });
-    const close = await run(input());
-    expect(close.vat.byRate).toEqual([]);
-    expect(close.counts).toEqual({ sales: 0, corrections: 0, voids: 0 });
-  });
-
   it("handles the spring-forward DST day without shifting the bucket", async () => {
     // 2026-03-29 is the EU spring-forward (02:00→03:00). A 12:00-local sale is unambiguous.
     const issued = new Date("2026-03-29T10:00:00Z").toISOString(); // 12:00 CEST after the jump

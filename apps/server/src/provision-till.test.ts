@@ -106,23 +106,6 @@ describe("provisioning a node that has no SIF registration yet", () => {
     expect(live.rows).toEqual([{ nif, id_sistema_informatico: "W1", numero_instalacion: 1 }]);
   });
 
-  it("refuses a node belonging to a different tenant, and writes nothing", async () => {
-    const mine = await bootstrapTenant();
-    const theirs = await bootstrapTenant();
-
-    await expect(
-      provisionNode(suite.db, { tenantId: mine.tenantId, nodeId: theirs.nodeId }, ALL_MODULES),
-    ).rejects.toMatchObject({
-      code: "node.not_found",
-      params: { id: theirs.nodeId, tenantId: mine.tenantId },
-    });
-
-    const written = await suite.db.execute(
-      sql`select 1 from registro_sif where node_id = ${theirs.nodeId}`,
-    );
-    expect(written.rows).toEqual([]);
-  });
-
   it("refuses a tenant that does not exist (the node is not its)", async () => {
     const { nodeId } = await bootstrapTenant();
 

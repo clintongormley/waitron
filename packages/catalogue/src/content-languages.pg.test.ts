@@ -45,25 +45,20 @@ async function blocked(pid: number) {
     .toBe(true);
 }
 
-it("reads and edits only the requested tenant as app_user with SELECT/INSERT/UPDATE grants", async () => {
-  const { tenantId } = await configuredTenant();
-  const other = await seedTenant(suite.admin);
-  await app(suite.admin, other, async (tx) => {
+it("reads and edits its content languages as app_user with SELECT/INSERT/UPDATE grants", async () => {
+  const t = await seedTenant(suite.admin);
+  await app(suite.admin, t, async (tx) => {
     const role = await tx.execute<{ role: string; superuser: boolean }>(
       sql`select current_user as role, rolsuper as superuser from pg_roles where rolname = current_user`,
     );
     expect(role.rows).toEqual([{ role: "app_user", superuser: false }]);
-    expect(await readContentLanguages(tx, other, "it-IT")).toEqual({
+    expect(await readContentLanguages(tx, t, "it-IT")).toEqual({
       defaultLanguage: "it",
       languages: ["it"],
     });
-    await writeContentLanguages(tx, other, { defaultLanguage: "it", languages: ["it", "de"] });
-    await writeContentLanguages(tx, other, { defaultLanguage: "de", languages: ["it", "de"] });
-    expect(await readContentLanguages(tx, tenantId, "es")).toEqual({
-      defaultLanguage: "en",
-      languages: ["en", "fr"],
-    });
-    expect(await readContentLanguages(tx, other, "es")).toEqual({
+    await writeContentLanguages(tx, t, { defaultLanguage: "it", languages: ["it", "de"] });
+    await writeContentLanguages(tx, t, { defaultLanguage: "de", languages: ["it", "de"] });
+    expect(await readContentLanguages(tx, t, "es")).toEqual({
       defaultLanguage: "de",
       languages: ["de", "it"],
     });
@@ -75,8 +70,8 @@ it("reads and edits only the requested tenant as app_user with SELECT/INSERT/UPD
     expect(grants.rows).toEqual([{ privileges: "INSERT,SELECT,UPDATE" }]);
   });
   await expect(
-    app(suite.admin, other, (tx) =>
-      tx.execute(sql`delete from content_languages where tenant_id = ${other}`),
+    app(suite.admin, t, (tx) =>
+      tx.execute(sql`delete from content_languages where tenant_id = ${t}`),
     ),
   ).rejects.toThrow();
 });

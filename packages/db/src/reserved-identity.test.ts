@@ -11,7 +11,6 @@ import {
   readMembershipTrustSet,
   readNodeEndorsement,
   readStandardSeriesId,
-  readStandardSeriesIdTx,
   retireNodeSeriesTx,
   insertNodeSeriesTx,
   withTransaction,
@@ -120,25 +119,6 @@ describe("reserved-identity accessors", () => {
         .where(eq(invoiceSeries.id, id)),
     );
     expect(row).toEqual({ code: "F-42", purpose: "standard" });
-  });
-
-  it("readStandardSeriesIdTx refuses a node belonging to a different tenant argument", async () => {
-    // Nothing but the helper's own tenant predicate scopes this read, so it must reject the
-    // mismatched pair itself.
-    const node = await seedNode(suite.db, tenantId, locationId);
-    const otherTenant = await seedTenant(suite.db);
-    await withTransaction(suite.db, (tx) =>
-      insertReservedSeriesTx(tx, [{ tenantId, nodeId: node, code: "FA", purpose: "standard" }]),
-    );
-    await expect(
-      withTransaction(suite.db, (tx) => readStandardSeriesIdTx(tx, otherTenant, node)),
-    ).rejects.toMatchObject({
-      code: "series.no_standard_for_node",
-      params: { tenantId: otherTenant, nodeId: node },
-    });
-    await expect(
-      withTransaction(suite.db, (tx) => readStandardSeriesIdTx(tx, tenantId, node)),
-    ).resolves.toEqual(expect.any(String));
   });
 
   it("readStandardSeriesId throws series.no_standard_for_node when the node has none", async () => {

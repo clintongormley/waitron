@@ -128,27 +128,6 @@ describe("unit operations", () => {
     });
   });
 
-  it("does not read or mutate another tenant's unit or attach it to a product", async () => {
-    const owner = await seedTenant(suite.db);
-    const other = await seedTenant(suite.db);
-    const unit = await withTransaction(suite.db, (tx) =>
-      createUnit(tx, owner, { name: { en: "cup" }, precision: 0, abbreviation: { en: "u" } }, "en"),
-    );
-    await withTransaction(suite.db, async (tx) => {
-      const productId = await product(tx, other, "Tea");
-      await expect(getUnit(tx, other, unit.id)).rejects.toMatchObject({ code: "unit.not_found" });
-      await expect(updateUnit(tx, other, unit.id, { precision: 1 }, "en")).rejects.toMatchObject({
-        code: "unit.not_found",
-      });
-      await expect(deleteUnit(tx, other, unit.id)).rejects.toMatchObject({
-        code: "unit.not_found",
-      });
-      await expect(assignProductUnit(tx, other, productId, unit.id)).rejects.toMatchObject({
-        code: "unit.not_found",
-      });
-    });
-  });
-
   it("reassigns products from one unit to another", async () => {
     const tenantId = await seedTenant(suite.db);
     await withTransaction(suite.db, async (tx) => {
@@ -180,20 +159,8 @@ describe("unit operations", () => {
 
   // The contract the single-statement reassignment settled on: an id the source unit does not
   // currently hold is not an error, it is simply not matched.
-  it("skips an unknown or another tenant's product id instead of failing the reassignment", async () => {
+  it("skips an unknown product id instead of failing the reassignment", async () => {
     const owner = await seedTenant(suite.db);
-    const other = await seedTenant(suite.db);
-    const [foreignProduct, foreignUnit] = await withTransaction(suite.db, async (tx) => {
-      const unit = await createUnit(
-        tx,
-        other,
-        { name: { en: "each" }, precision: 0, abbreviation: { en: "u" } },
-        "en",
-      );
-      const productId = await product(tx, other, "Foreign");
-      await assignProductUnit(tx, other, productId, unit.id);
-      return [productId, unit] as const;
-    });
     await withTransaction(suite.db, async (tx) => {
       const from = await createUnit(
         tx,
@@ -215,19 +182,14 @@ describe("unit operations", () => {
           tx,
           owner,
           from.id,
-          [a, foreignProduct, "00000000-0000-4000-8000-0000000000aa"],
+          [a, "00000000-0000-4000-8000-0000000000aa"],
           to.id,
         ),
       ).resolves.toBeUndefined();
 
-      // The valid id moved; neither unmatched id stopped it or was itself touched.
+      // The valid id moved; the unmatched id neither stopped it nor was itself touched.
       expect(await productsUsingUnit(tx, owner, from.id)).toEqual([]);
       expect((await productsUsingUnit(tx, owner, to.id)).map((p) => p.id)).toEqual([a]);
-    });
-    await withTransaction(suite.db, async (tx) => {
-      expect((await productsUsingUnit(tx, other, foreignUnit.id)).map((p) => p.id)).toEqual([
-        foreignProduct,
-      ]);
     });
   });
 

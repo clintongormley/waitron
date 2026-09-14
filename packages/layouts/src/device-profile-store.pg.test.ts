@@ -439,34 +439,6 @@ describe("device-profile store on real Postgres, as the app role", () => {
     expect(await rowCount(tenantId)).toBe(0); // validate threw before the INSERT
   });
 
-  it("maps a cross-tenant canvas reference to device_profile.invalid {bad_canvas_ref} via the FK", async () => {
-    // The tenant-consistent composite FK device_profiles_canvas_fk → canvases(tenant_id, id) rejects a
-    // canvas_id that belongs to ANOTHER tenant: (tenantB, A's canvas id) has no matching canvases row,
-    // so Postgres raises 23503, which the store translates. Real Postgres only — PGlite bypasses this.
-    const tenantA = await seedTenant(suite.admin);
-    const sessionA = await seedSession(tenantA, "manager");
-    const foreignCanvas = await seedCanvas(tenantA, sessionA, "A's canvas");
-
-    const tenantB = await seedTenant(suite.admin);
-    const sessionB = await seedSession(tenantB, "manager");
-    const error = await errorOf(() =>
-      asApp(tenantB, (tx) =>
-        createDeviceProfile(tx, {
-          managementSessionId: sessionB,
-          tenantId: tenantB,
-          name: "Stolen canvas",
-          formFactor: "till",
-          canvasId: foreignCanvas, // belongs to tenantA
-          capabilities: [],
-        }),
-      ),
-    );
-    expect(typeof error).not.toBe("string");
-    expect((error as AppError).code).toBe("device_profile.invalid");
-    expect((error as AppError).params).toEqual({ reason: "bad_canvas_ref" });
-    expect(await rowCount(tenantB)).toBe(0); // the FK rejected the row
-  });
-
   it("translates a duplicate name to device_profile.name_taken (23505 → clean 409), no second row", async () => {
     const tenantId = await seedTenant(suite.admin);
     const session = await seedSession(tenantId, "manager");

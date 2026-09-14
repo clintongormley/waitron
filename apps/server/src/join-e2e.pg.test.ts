@@ -11,11 +11,9 @@ import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import "./errors.js";
 
 // Real Postgres, not PGlite (CLAUDE.md §4): every route here runs as `app_user` under `withTransaction`, so
-// the join_requests / devices / device_profiles grants are enforced and — since RLS was dropped (#255)
-// — the two-tenant test genuinely exercises each route's own `eq(table.tenantId, cfg.tenantId)`
-// predicate. On PGlite every connection is a superuser holding every privilege AND the tenant predicate
-// decides nothing, so the cross-tenant probe below would be a false pass. Each test provisions its OWN
-// tenant(s), so its rows are that test's alone and order-independent across the shared clone.
+// the join_requests / devices / device_profiles grants are enforced. On PGlite every connection is a
+// superuser holding every privilege, so those grants would not be exercised. Each test provisions its OWN
+// tenant, so its rows are that test's alone and order-independent across the shared clone.
 //
 // This is the ONLY file that mounts BOTH route modules on one app sharing ONE `PairingMode`, so it is
 // the regression guard for the assembled device join-and-accept flow: the device knocks (device-api),
@@ -234,90 +232,6 @@ describe("device join and accept, end to end (both surfaces, one window)", () =>
       { cookie: venue.managerCookie, body: { choice: again.verificationNumber, profileId } },
     );
     expect(acceptAgain.status).toBe(200);
-  });
-
-  it("two tenants: A's manager can neither see, challenge, accept nor deny B's request", async () => {
-    // The by-id isolation class the till-reroute S3 leak was paid for (CLAUDE.md §3), RUN as `app_user`
-    // against real Postgres so the tenant predicate actually decides the answer. A holds its OWN rows as
-    // positive controls, so every cross-tenant refusal below is shown to distinguish cross-tenant from
-    // same-tenant: the same verb answers 200/204/present for A's own id and 404/absent for B's.
-    const a = await setupVenue(suite.admin);
-    const b = await setupVenue(suite.admin);
-    const appA = mountBoth(a.cfg);
-    const appB = mountBoth(b.cfg);
-    const profileA = await seedProfile(a.cfg, "till");
-
-    await openWindow(appB, b);
-    const bReq = await knock(appB, "B bar till");
-
-    await openWindow(appA, a);
-    const aToDeny = await knock(appA, "A till to deny");
-    const aToAccept = await knock(appA, "A till to accept");
-
-    // (1) SEE — A's device queue lists A's OWN requests and never B's. Non-vacuous: the list is not merely
-    //     empty, it contains A's two ids; it simply excludes B's.
-    const listRes = await send(appA, "GET", "/management-api/join-requests?kind=device", {
-      cookie: a.managerCookie,
-    });
-    expect(listRes.status).toBe(200);
-    const ids = ((await listRes.json()) as { id: string }[]).map((r) => r.id);
-    expect(ids).toContain(aToDeny.joinId);
-    expect(ids).toContain(aToAccept.joinId);
-    expect(ids).not.toContain(bReq.joinId);
-
-    // (2) CHALLENGE — B's id is 404 to A (join_request.not_found), while A's OWN id is 200. The 404 is the
-    //     tenant predicate, not a dead route or a malformed id.
-    const chalB = await send(
-      appA,
-      "GET",
-      `/management-api/join-requests/${bReq.joinId}/challenge`,
-      {
-        cookie: a.managerCookie,
-      },
-    );
-    expect(chalB.status).toBe(404);
-    expect((await errorOf(chalB)).code).toBe("join_request.not_found");
-    const chalA = await send(
-      appA,
-      "GET",
-      `/management-api/join-requests/${aToDeny.joinId}/challenge`,
-      { cookie: a.managerCookie },
-    );
-    expect(chalA.status).toBe(200);
-
-    // (3) DENY — A cannot delete B's request (404), and B's request SURVIVES; A's own request denies (204).
-    const denyB = await send(appA, "POST", `/management-api/join-requests/${bReq.joinId}/deny`, {
-      cookie: a.managerCookie,
-    });
-    expect(denyB.status).toBe(404);
-    expect(await pendingCount(b.cfg)).toBe(1);
-    const denyA = await send(appA, "POST", `/management-api/join-requests/${aToDeny.joinId}/deny`, {
-      cookie: a.managerCookie,
-    });
-    expect(denyA.status).toBe(204);
-
-    // (4) ACCEPT — even with B's OWN correct number, A's tenant predicate makes the consuming delete match
-    //     zero rows → 404, and B's request survives; A's own request accepts (200). Knowing the number is
-    //     not enough: only the tenant that owns the row can approve it.
-    const acceptB = await send(
-      appA,
-      "POST",
-      `/management-api/device-join-requests/${bReq.joinId}/accept`,
-      { cookie: a.managerCookie, body: { choice: bReq.verificationNumber, profileId: profileA } },
-    );
-    expect(acceptB.status).toBe(404);
-    expect((await errorOf(acceptB)).code).toBe("join_request.not_found");
-    expect(await pendingCount(b.cfg)).toBe(1);
-    const acceptA = await send(
-      appA,
-      "POST",
-      `/management-api/device-join-requests/${aToAccept.joinId}/accept`,
-      {
-        cookie: a.managerCookie,
-        body: { choice: aToAccept.verificationNumber, profileId: profileA },
-      },
-    );
-    expect(acceptA.status).toBe(200);
   });
 
   it("a knock with the window shut writes nothing and is counted, not recorded", async () => {

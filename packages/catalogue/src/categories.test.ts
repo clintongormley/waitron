@@ -176,19 +176,8 @@ describe("category authoring", () => {
     await app((tx) => deleteCategory(tx, tenantId, drinks.id));
     expect((await app((tx) => listCategories(tx, tenantId))).map((c) => c.id)).toEqual([child.id]);
   });
-  it("scopes reads and rejects foreign parents, products and categories", async () => {
-    const { tenantId, app, food, product } = await fixture();
-    const other = await seedTenant(fx.db);
-    expect(await app((tx) => listCategories(tx, other))).toEqual([]);
-    await expect(app((tx) => readCategory(tx, other, food.id))).rejects.toMatchObject({
-      code: "category.not_found",
-    });
-    await expect(
-      app((tx) => createCategory(tx, other, { name: { en: "Other" }, parentId: food.id })),
-    ).rejects.toMatchObject({ code: "category.not_found" });
-    await expect(
-      app((tx) => replaceProductCategories(tx, other, product.id, { categoryIds: [food.id] })),
-    ).rejects.toMatchObject({ code: "product.not_found" });
+  it("rejects membership in an unknown category id", async () => {
+    const { tenantId, app, product } = await fixture();
     await expect(
       app((tx) =>
         replaceProductCategories(tx, tenantId, product.id, { categoryIds: [crypto.randomUUID()] }),

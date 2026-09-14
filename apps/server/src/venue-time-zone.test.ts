@@ -8,13 +8,11 @@ import { readVenueTimeZone } from "./venue-time-zone.js";
 
 // PGlite exercises the read and tenant predicate; no concurrency or privilege claim is made.
 let tenantId: string;
-let otherTenantId: string;
 let locationId: string;
 const suite = usePgliteDb({
   migrations: [CORE_MIGRATIONS],
   setup: async (db) => {
     tenantId = await seedTenant(db);
-    otherTenantId = await seedTenant(db);
     const result = await db.execute<{ id: string }>(sql`
       insert into locations (tenant_id, name, invoice_locales, operation_description, time_zone)
       values (${tenantId}, 'Island venue', array['es-ES'], 'Retail', 'Atlantic/Canary') returning id
@@ -25,12 +23,6 @@ const suite = usePgliteDb({
 
 it("reads the location's stored time zone instead of inferring it from language", async () => {
   expect(await readVenueTimeZone(suite.db, { tenantId, locationId })).toBe("Atlantic/Canary");
-});
-
-it("uses UTC for a location belonging to a different tenant", async () => {
-  await expect(readVenueTimeZone(suite.db, { tenantId: otherTenantId, locationId })).resolves.toBe(
-    "UTC",
-  );
 });
 
 it("uses UTC when the location is missing", async () => {

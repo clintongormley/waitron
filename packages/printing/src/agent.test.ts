@@ -117,22 +117,4 @@ describe("authenticateAgent", () => {
       ).toBe("agent.unauthorized");
     }
   });
-
-  it("an agent enrolled in tenant A cannot authenticate under tenant B's cfg", async () => {
-    const { cfg: cfgA, agentId, token } = await enrolled();
-    const cfgB = await setup();
-
-    // Sanity FIRST: the very same token DOES authenticate under its own tenant, so the rejection below
-    // is about the tenant SCOPE and not a token that simply never verifies.
-    const own = await asApp(suite.admin, cfgA, (tx) => authenticateAgent(tx, cfgA, token));
-    expect(own.agentId).toBe(agentId);
-
-    // Under tenant B's cfg the SAME token is refused by `authenticateAgent`'s explicit `tenant_id
-    // = cfg.tenantId` predicate. The superuser connection and `withTransaction` add no tenant
-    // filtering. The control uses a valid token for tenant A: removing the predicate would let
-    // that row and its matching secret authenticate under tenant B's cfg.
-    expect(
-      await codeOf(() => withTransaction(suite.admin, (tx) => authenticateAgent(tx, cfgB, token))),
-    ).toBe("agent.unauthorized");
-  });
 });

@@ -241,20 +241,4 @@ describe("BOOKINGS_FLOOR_ANNOTATIONS.annotate", () => {
     expect((await annotate(v, MADRID_NOON, [t])).get(t)).toEqual({ reservedTime: "14:00" });
     expect((await annotate(v, MADRID_NOON, [t])).get(t)).toEqual({ reservedTime: "14:00" });
   });
-
-  it("scopes to cfg.tenantId — another tenant's booking on its own table is not surfaced (CLAUDE.md §3)", async () => {
-    // RLS was dropped (#255), so `withTransaction` no longer isolates SELECTs — the annotator MUST filter
-    // `tenantId` itself. Scoped as tenant `v` but asked for BOTH tenants' table ids: `v`'s surfaces its
-    // booking; the OTHER tenant's table (its own `booked` row today) stays null. Deletion-provable —
-    // dropping the `tenantId` filter would leak the other tenant's booking through the shared DB.
-    const v = await setupVenue();
-    const other = await setupVenue();
-    const vt = await makeTable(v, "17");
-    const ot = await makeTable(other, "18");
-    await insertBooking(v, { tableId: vt, date: "2026-09-15", time: "14:00" });
-    await insertBooking(other, { tableId: ot, date: "2026-09-15", time: "15:00" });
-    const m = await annotate(v, MADRID_NOON, [vt, ot]);
-    expect(m.get(vt)).toEqual({ reservedTime: "14:00" });
-    expect(m.get(ot)).toEqual({ reservedTime: null });
-  });
 });

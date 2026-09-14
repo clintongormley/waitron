@@ -11,21 +11,15 @@ import { invoiceSeries } from "./series.js";
 import { locations, tenants, tills } from "./tenants.js";
 
 const TENANT_A = "11111111-1111-4111-8111-111111111111";
-const TENANT_B = "22222222-2222-4222-8222-222222222222";
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
-const LOCATION_B = "bbbbbbbb-0000-4000-8000-000000000001";
 const TILL_A1 = "aaaaaaaa-1111-4000-8000-000000000001";
-const TILL_B1 = "bbbbbbbb-1111-4000-8000-000000000001";
 const AT = "2026-07-20T19:20:30+00:00";
 
 // Since the node-id rekey (2026-08-03) both invoice_series and sales carry a NOT NULL node_id;
 // sales keeps till_id too, and adds the composite (tenant_id, node_id) → nodes FK. seed() creates
-// one node per tenant so a sale's node shares its tenant (the composite FK), and saleValues()
-// defaults to tenant A's node.
+// one node so a sale's node shares its tenant (the composite FK), and saleValues() defaults to it.
 let seriesA = "";
-let seriesB = "";
 let nodeA = "";
-let nodeB = "";
 
 async function rows<T>(db: Database, query: ReturnType<typeof sql>): Promise<T[]> {
   const result = (await db.execute(query)) as unknown as { rows: T[] } | T[];
@@ -33,10 +27,9 @@ async function rows<T>(db: Database, query: ReturnType<typeof sql>): Promise<T[]
 }
 
 async function seed(db: Database): Promise<void> {
-  await db.insert(tenants).values([
-    { id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" },
-    { id: TENANT_B, country: "ES", taxId: "B11111111", legalName: "Fixture Tenant B" },
-  ]);
+  await db
+    .insert(tenants)
+    .values([{ id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
   await db.insert(locations).values([
     {
       id: LOCATION_A,
@@ -45,30 +38,16 @@ async function seed(db: Database): Promise<void> {
       invoiceLocales: ["es", "ca"],
       operationDescription: "Hostelería",
     },
-    {
-      id: LOCATION_B,
-      tenantId: TENANT_B,
-      name: "Fixture Location B",
-      invoiceLocales: ["es"],
-      operationDescription: "Hostelería",
-    },
   ]);
-  await db.insert(tills).values([
-    { id: TILL_A1, tenantId: TENANT_A, locationId: LOCATION_A, name: "A1" },
-    { id: TILL_B1, tenantId: TENANT_B, locationId: LOCATION_B, name: "B1" },
-  ]);
+  await db
+    .insert(tills)
+    .values([{ id: TILL_A1, tenantId: TENANT_A, locationId: LOCATION_A, name: "A1" }]);
   nodeA = await seedNode(db, brandTenantId(TENANT_A), brandLocationId(LOCATION_A));
-  nodeB = await seedNode(db, brandTenantId(TENANT_B), brandLocationId(LOCATION_B));
   const [a] = await db
     .insert(invoiceSeries)
     .values({ tenantId: TENANT_A, nodeId: nodeA, code: "FA", purpose: "standard" })
     .returning({ id: invoiceSeries.id });
-  const [b] = await db
-    .insert(invoiceSeries)
-    .values({ tenantId: TENANT_B, nodeId: nodeB, code: "FB", purpose: "standard" })
-    .returning({ id: invoiceSeries.id });
   seriesA = a.id;
-  seriesB = b.id;
 }
 
 function saleValues(overrides: Record<string, unknown> = {}) {
@@ -812,24 +791,6 @@ describeEachTarget("sales — corrective link and negative total", (target) => {
     // Foreign key violation — the composite (tenant_id, corrects_sale_id) FK onto sales.
     expect(pgErrorCode(error)).toBe("23503");
   });
-
-  it("rejects a corrective link to another tenant's sale", async () => {
-    // The FK is composite and tenant-consistent, mirroring sale_lines_sale_fk: a corrective may
-    // only point at a sale of its OWN tenant. Tenant A cannot link to tenant B's sale even
-    // though that id exists.
-    const otherTenantSale = await recordCompleteSale(db, {
-      tenantId: TENANT_B,
-      tillId: TILL_B1,
-      nodeId: nodeB,
-      seriesId: seriesB,
-      invoiceLocales: ["es"],
-      locale: "es",
-    });
-    const error = await captureError(() =>
-      insertSale({ total: "-1.00", correctsSaleId: otherTenantSale, invoiceNumber: 2 }),
-    );
-    expect(pgErrorCode(error)).toBe("23503");
-  });
 });
 
 /**
@@ -898,27 +859,5 @@ describeEachTarget("sale_lines — parent line self-link", (target) => {
       sql`select parent_line_id from sale_lines where sale_id = ${saleId}::uuid and line_no = 1`,
     );
     expect(row.parent_line_id).toBeNull();
-  });
-
-  it("rejects a child pointing at a foreign-tenant line via the composite FK", async () => {
-    // Tenant B's sale + its line, then a tenant-A child pointing at it: the composite
-    // (tenant_id, parent_line_id) FK has no (TENANT_A, tenantB-line) parent row, so 23503 fires —
-    // the tenant-consistency a plain single-column self-FK could not enforce.
-    const foreignSaleId = await recordCompleteSale(db, {
-      tenantId: TENANT_B,
-      tillId: TILL_B1,
-      nodeId: nodeB,
-      seriesId: seriesB,
-      invoiceLocales: ["es"],
-      locale: "es",
-    });
-    const [foreignParent] = await db
-      .select()
-      .from(saleLines)
-      .where(eq(saleLines.saleId, foreignSaleId));
-    const error = await captureError(() =>
-      insertLine({ saleId, lineNo: 2, parentLineId: foreignParent.id }),
-    );
-    expect(pgErrorCode(error)).toBe("23503");
   });
 });

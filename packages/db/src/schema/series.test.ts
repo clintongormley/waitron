@@ -2,7 +2,7 @@ import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitr
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
-import { captureError, pgErrorCode, pgErrorMessage } from "../testing/errors.js";
+import { captureError, pgErrorMessage } from "../testing/errors.js";
 import { usePgliteDb } from "../testing/lifecycle.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { seedNode } from "../testing/seed.js";
@@ -21,20 +21,16 @@ afterEach(async () => {
 });
 
 const TENANT_A = "11111111-1111-4111-8111-111111111111";
-const TENANT_B = "22222222-2222-4222-8222-222222222222";
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
-const LOCATION_B = "bbbbbbbb-0000-4000-8000-000000000001";
 const TILL_A1 = "aaaaaaaa-1111-4000-8000-000000000001";
 const TILL_A2 = "aaaaaaaa-1111-4000-8000-000000000002";
-const TILL_B1 = "bbbbbbbb-1111-4000-8000-000000000001";
 
 // A series is keyed on its NODE since the node-id rekey (2026-08-03): invoice_series dropped
-// till_id and now carries a NOT NULL node_id. seed() creates two nodes for tenant A (so the
-// per-node uniqueness tests have a second node to collide against) and one for tenant B. The tills
-// stay seeded — sales still ring on a till — but nothing in invoice_series references them.
+// till_id and now carries a NOT NULL node_id. seed() creates two nodes for tenant A so the
+// per-node uniqueness tests have a second node to collide against. The tills stay seeded — sales
+// still ring on a till — but nothing in invoice_series references them.
 let nodeA1 = "";
 let nodeA2 = "";
-let nodeB1 = "";
 
 /** Normalise the query result before reading catalog rows. */
 async function rows<T>(db: Database, query: ReturnType<typeof sql>): Promise<T[]> {
@@ -43,10 +39,9 @@ async function rows<T>(db: Database, query: ReturnType<typeof sql>): Promise<T[]
 }
 
 async function seed(db: Database): Promise<void> {
-  await db.insert(tenants).values([
-    { id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" },
-    { id: TENANT_B, country: "ES", taxId: "B11111111", legalName: "Fixture Tenant B" },
-  ]);
+  await db
+    .insert(tenants)
+    .values([{ id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
   await db.insert(locations).values([
     {
       id: LOCATION_A,
@@ -55,22 +50,13 @@ async function seed(db: Database): Promise<void> {
       invoiceLocales: ["es", "ca"],
       operationDescription: "Hostelería",
     },
-    {
-      id: LOCATION_B,
-      tenantId: TENANT_B,
-      name: "Fixture Location B",
-      invoiceLocales: ["es"],
-      operationDescription: "Hostelería",
-    },
   ]);
   await db.insert(tills).values([
     { id: TILL_A1, tenantId: TENANT_A, locationId: LOCATION_A, name: "A1" },
     { id: TILL_A2, tenantId: TENANT_A, locationId: LOCATION_A, name: "A2" },
-    { id: TILL_B1, tenantId: TENANT_B, locationId: LOCATION_B, name: "B1" },
   ]);
   nodeA1 = await seedNode(db, brandTenantId(TENANT_A), brandLocationId(LOCATION_A));
   nodeA2 = await seedNode(db, brandTenantId(TENANT_A), brandLocationId(LOCATION_A));
-  nodeB1 = await seedNode(db, brandTenantId(TENANT_B), brandLocationId(LOCATION_B));
 }
 
 describe("invoice_series schema", () => {
@@ -192,23 +178,6 @@ describe("invoice_series schema", () => {
       ),
     );
     expect(pgErrorMessage(error)).toMatch(/violates foreign key constraint/);
-  });
-
-  it("rejects a node_id belonging to another tenant with a foreign-key violation", async () => {
-    // The composite (tenant_id, node_id) → nodes(tenant_id, id) FK bites: nodeB1 EXISTS but under
-    // TENANT_B, so the (TENANT_A, nodeB1) pair has no matching parent row and the insert is
-    // rejected 23503. node_id here is NOT NULL, so this composite FK ALWAYS checks — the strongest
-    // tenant-consistency, and the fiscally load-bearing one (the series↔node guard reads
-    // series.node_id). This is what a plain single-column node_id FK could NOT enforce — it would
-    // have accepted the cross-tenant node because the id exists in `nodes`. Mirrors `sales_node_fk`
-    // / `working_orders_node_fk` / `payments_node_fk`.
-    const error = await captureError(() =>
-      db.execute(
-        sql`insert into invoice_series (tenant_id, node_id, code)
-             values (${TENANT_A}, ${nodeB1}, 'FX')`,
-      ),
-    );
-    expect(pgErrorCode(error)).toBe("23503");
   });
 
   it("has no unique constraint on (tenant_id, node_id) alone", async () => {

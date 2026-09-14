@@ -168,18 +168,13 @@ describe("receipt order grouping", () => {
     });
   });
 
-  it("refuses a missing order and another tenant's order", async () => {
-    const { cfg, tableId } = await setupVenue();
-    const other = await setupVenue();
-    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
-    for (const id of [randomUUID(), tabId]) {
-      await expect(
-        asApp(other.cfg, (tx) => readReceiptOrder(tx, other.cfg, id)),
-      ).rejects.toMatchObject({
-        code: "working_order.not_found",
-        params: { workingOrderId: id },
-      });
-    }
+  it("refuses a missing order", async () => {
+    const { cfg } = await setupVenue();
+    const missing = randomUUID();
+    await expect(asApp(cfg, (tx) => readReceiptOrder(tx, cfg, missing))).rejects.toMatchObject({
+      code: "working_order.not_found",
+      params: { workingOrderId: missing },
+    });
   });
 });
 

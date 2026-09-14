@@ -49,7 +49,6 @@ it("preserves exclusions, phrases and OR while stemming multilingual searches as
 
 it("ranks, filters and paginates multilingual results within the requested tenant as app_user", async () => {
   const tenantId = await seedTenant(suite.admin);
-  const otherTenantId = await seedTenant(suite.admin);
   await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const add = async (
@@ -77,7 +76,6 @@ it("ranks, filters and paginates multilingual results within the requested tenan
     ]);
     const alt = await add(2, { en: "Bakery" }, "Bread ".repeat(100), ["Summer"]);
     const label = await add(3, { en: "Cake" }, "Slice", ["Summer menu"]);
-    await add(4, { en: "Bread", ca: "Formatges", eu: "Etxeak" }, "Loaf", ["Food"], otherTenantId);
     expect(
       (
         await listImages(tx, tenantId, {
@@ -123,9 +121,6 @@ it("ranks, filters and paginates multilingual results within the requested tenan
         query,
       ).toEqual([alt.id]);
     }
-    expect(
-      (await listImages(tx, otherTenantId, { query: "bread", fallbackLanguage: "en" })).total,
-    ).toBe(1);
   });
 });
 

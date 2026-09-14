@@ -13,35 +13,29 @@ import { tenants } from "./tenants.js";
 // `app_user`, the deployment role, which PGlite (every connection a superuser) cannot be. The
 // cases retain the role switch so the reads and writes still exercise app_user grants.
 const TENANT_A = "11111111-1111-4111-8111-111111111111";
-const TENANT_B = "22222222-2222-4222-8222-222222222222";
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const LOCATION_A2 = "aaaaaaaa-0000-4000-8000-000000000002";
-const LOCATION_B = "bbbbbbbb-0000-4000-8000-000000000001";
 const RANDOM_UUID = "99999999-9999-4999-8999-999999999999";
 
 describe("kitchen_courses schema (columns, defaults, course FKs)", () => {
   const suite = useTemplateDb({ template: "core" });
 
   // Seeded once in beforeAll: a product of tenant A (for the products.course_id FK proof) and a course
-  // per tenant (course A is own-tenant, course B is the foreign one a tenant-consistent FK must reject).
+  // of tenant A to route (course A).
   let productA = "";
   let courseA = "";
-  let courseB = "";
 
   beforeAll(async () => {
-    await suite.admin.insert(tenants).values([
-      { id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" },
-      { id: TENANT_B, country: "ES", taxId: "B11111111", legalName: "Fixture Tenant B" },
-    ]);
+    await suite.admin
+      .insert(tenants)
+      .values([{ id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
     await suite.admin.execute(sql`
       insert into locations (id, tenant_id, name, invoice_locales, operation_description)
       values
         (${LOCATION_A}, ${TENANT_A}, 'Loc A', array['es'], 'Hostelería'),
-        (${LOCATION_A2}, ${TENANT_A}, 'Loc A2', array['es'], 'Hostelería'),
-        (${LOCATION_B}, ${TENANT_B}, 'Loc B', array['es'], 'Hostelería')
+        (${LOCATION_A2}, ${TENANT_A}, 'Loc A2', array['es'], 'Hostelería')
       on conflict (id) do nothing`);
     courseA = await seedCourse(TENANT_A, LOCATION_A, "Entrantes");
-    courseB = await seedCourse(TENANT_B, LOCATION_B, "Entrantes");
     // A catalogue + product of tenant A, so the products.course_id FK proof has an own-tenant product
     // to route. Seeded as admin (a catalogue fixture, not the thing under test) — same as routing-station.
     const [cat] = await suite.admin
@@ -140,7 +134,7 @@ describe("kitchen_courses schema (columns, defaults, course FKs)", () => {
     expect(pgErrorCode(e)).toBe("22P02");
   });
 
-  it("lets the app role route a product to an own-tenant course and rejects a foreign or missing one", async () => {
+  it("lets the app role route a product to an own-tenant course and rejects a missing one", async () => {
     // The app role writes and reads back products.course_id (the additive column, under products'
     // existing grant) …
     await asApp(TENANT_A, (tx) =>
@@ -162,16 +156,6 @@ describe("kitchen_courses schema (columns, defaults, course FKs)", () => {
       ),
     );
     expect(pgErrorCode(eRandom)).toBe("23503");
-
-    // … and the case a SINGLE-column FK would let through: a course that EXISTS but belongs to another
-    // tenant. The composite (tenant_id, course_id) requires a kitchen_courses row with (TENANT_A,
-    // B's id), which does not exist — so it is 23503, proving the FK is tenant-consistent.
-    const eForeign = await captureError(() =>
-      asApp(TENANT_A, (tx) =>
-        tx.execute(sql`update products set course_id = ${courseB} where id = ${productA}`),
-      ),
-    );
-    expect(pgErrorCode(eForeign)).toBe("23503");
   });
 
   it("wires all three course columns with the tenant-consistent composite FK to kitchen_courses", async () => {

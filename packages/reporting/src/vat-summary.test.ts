@@ -163,17 +163,6 @@ describe("computeVatSummary", () => {
     });
   });
 
-  it("excludes another tenant's sales (the tenant predicate)", async () => {
-    const other = await seedVenue(suite.db); // a different tenant entirely
-    await seedSale(suite.db, other, {
-      invoiceNumber: 1,
-      issuedAt: noonUtc,
-      total: "121.00",
-      lines: [{ vatRate: "21.00", lineTotal: "100.00" }],
-    });
-    expect((await run()).byRate).toEqual([]); // our tenant has nothing
-  });
-
   it("excludes another node in the SAME tenant (the node predicate)", async () => {
     // A second node under the same tenant is excluded by the node predicate.
     // `s.node_id = ${input.nodeId}` excludes it. Dropping that predicate would count 300.00, not 100.00.

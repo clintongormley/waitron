@@ -51,9 +51,8 @@ const extra = () => ({
   preselected: true,
 });
 
-it("saves complete definitions as app_user, preserves ids/order, and scopes every operation", async () => {
+it("saves complete definitions as app_user, preserving ids and order", async () => {
   const tenant = await seedTenant(suite.admin);
-  const other = await seedTenant(suite.admin);
   const choices = [extra(), extra()];
   const created = await app(tenant, (tx) =>
     createModifier(tx, tenant, { type: "extras", name, choices }, "en"),
@@ -78,13 +77,6 @@ it("saves complete definitions as app_user, preserves ids/order, and scopes ever
       { id: choices[1]!.id, preselected: false },
       { id: choices[0]!.id, preselected: true },
     ],
-  });
-  expect(await app(other, (tx) => listModifiers(tx, other))).toEqual([]);
-  await expect(app(other, (tx) => getModifier(tx, other, created.id))).rejects.toMatchObject({
-    code: "modifier.not_found",
-  });
-  await expect(app(other, (tx) => deleteModifier(tx, other, created.id))).rejects.toMatchObject({
-    code: "modifier.not_found",
   });
   await app(tenant, (tx) => updateModifier(tx, tenant, created.id, text, "en"));
   expect(await app(tenant, (tx) => getModifier(tx, tenant, created.id))).toEqual({

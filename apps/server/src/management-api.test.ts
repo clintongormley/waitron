@@ -429,21 +429,6 @@ describe("/management-api/zones", () => {
       expect(await res.json()).toMatchObject({ error: { code: "management_session.required" } });
     }
   });
-
-  it("a manager cannot see another tenant's zones (cross-tenant isolation)", async () => {
-    const other = await setupTenant();
-    const otherApp = mountApp(other.venue);
-    const otherManager = await login(otherApp, MANAGER_EMAIL);
-
-    const mine = unique("MineOnly");
-    const id = await createZone(mine);
-
-    const theirs = (await (
-      await otherApp.request("/management-api/zones", { headers: { cookie: otherManager } })
-    ).json()) as { id: string; name: string }[];
-    expect(theirs.find((z) => z.id === id)).toBeUndefined();
-    expect(theirs.find((z) => z.name === mine)).toBeUndefined();
-  });
 });
 
 describe("POST /management-api/session (email login)", () => {

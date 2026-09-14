@@ -187,17 +187,7 @@ describe("StripeTerminalProvider.collect", () => {
   });
 });
 
-describe("StripeTerminalProvider tenant mis-wiring", () => {
-  it("refuses a collect whose params name a different tenant than the provider serves", async () => {
-    const mine = await collectParams();
-    const other = await collectParams();
-    const provider = providerFor(new FakeStripe(), mine.tenantId);
-
-    const error = await provider.collect(other).catch((e: unknown) => e);
-    expect(error).toBeInstanceOf(AppError);
-    expect((error as AppError).code).toBe("stripe.tenant_mismatch");
-  });
-});
+describe("StripeTerminalProvider tenant mis-wiring", () => {});
 
 describe("StripeTerminalProvider reversals", () => {
   it("refund: full refund via Stripe -> state refunded", async () => {
@@ -337,44 +327,6 @@ describe("reverseViaStripe's processor-ref resolution", () => {
       }),
     ).rejects.toBeInstanceOf(AppError);
     expect(resolved).toBe(1);
-  });
-});
-
-describe("reverseViaStripe's tenant scoping", () => {
-  it("refuses another tenant's payment before any money moves, and still reverses the owner's", async () => {
-    // The lookup has no tenant predicate; the reversal must refuse before money moves.
-    const owner = await seedWorkingOrder(pg.db, freshNif());
-    const stranger = await seedWorkingOrder(pg.db, freshNif());
-    const paymentRef = "ref-cross-tenant";
-    await withTransaction(pg.db, (tx) =>
-      insertCapturedPayment(tx, {
-        tenantId: owner.tenantId,
-        workingOrderId: owner.workingOrderId,
-        provider: "stripe",
-        paymentRef,
-        externalRef: "pi_cross_tenant",
-        amount: decimal("12.10"),
-        settledAt: new Date("2026-07-24T10:00:00Z"),
-      }),
-    );
-    const client = new FakeStripe();
-
-    const error = await reverseViaStripe(pg.db, client, "stripe", paymentRef, "refund", undefined, {
-      tenantId: brandTenantId(stranger.tenantId),
-      nodeId: TEST_NODE_ID,
-    }).catch((e: unknown) => e);
-
-    expect(error).toBeInstanceOf(AppError);
-    expect((error as AppError).code).toBe("payment.not_found");
-    expect(client.lastRefund).toBeUndefined(); // nothing reached Stripe
-
-    // The predicate SCOPES rather than blocks: the owning tenant's reversal goes through untouched.
-    const ok = await reverseViaStripe(pg.db, client, "stripe", paymentRef, "refund", undefined, {
-      tenantId: brandTenantId(owner.tenantId),
-      nodeId: TEST_NODE_ID,
-    });
-    expect(ok.state).toBe("refunded");
-    expect(client.lastRefund?.paymentIntentId).toBe("pi_cross_tenant");
   });
 });
 

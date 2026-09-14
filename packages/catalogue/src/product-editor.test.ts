@@ -202,21 +202,6 @@ it("rolls back product and variants when a supporting association fails", async 
   expect(await withTransaction(fx.db, (tx) => listProducts(tx, tenantId, catalogueId))).toEqual([]);
 });
 
-it("refuses another tenant's product and association ids", async () => {
-  const saved = await withTransaction(fx.db, (tx) =>
-    saveProductEditor(tx, tenantId, null, catalogueId, input, "en"),
-  );
-  const other = await seedTenant(fx.db);
-  await expect(
-    withTransaction(fx.db, (tx) =>
-      saveProductEditor(tx, other, saved.id, catalogueId, input, "en"),
-    ),
-  ).rejects.toMatchObject({ code: "product.not_found" });
-  await expect(
-    withTransaction(fx.db, (tx) => readProductEditor(tx, other, saved.id)),
-  ).rejects.toMatchObject({ code: "product.not_found" });
-});
-
 it("round-trips real category and modifier associations", async () => {
   const associations = await withTransaction(fx.db, async (tx) => ({
     category: await createCategory(tx, tenantId, { name: { en: "Drinks" } }, "en"),

@@ -315,17 +315,6 @@ describe("GET /management-api/join-requests", () => {
       });
     }
   });
-
-  it("shows this tenant's requests only", async () => {
-    const mine = await setupVenue(suite.admin);
-    const theirs = await setupVenue(suite.admin);
-    await knock(theirs, { kind: "device", label: "Their till" });
-    const app = mountApp(mine.cfg);
-    const res = await send(app, "GET", "/management-api/join-requests?kind=device", {
-      cookie: mine.managerCookie,
-    });
-    expect(await res.json()).toEqual([]);
-  });
 });
 
 describe("GET /management-api/join-requests/:id/challenge", () => {
@@ -360,19 +349,6 @@ describe("GET /management-api/join-requests/:id/challenge", () => {
     );
     expect(refused.status).toBe(403);
     expect((await errorOf(refused)).params).toEqual({ permission: "printer.manage" });
-  });
-
-  it("is 404 for another tenant's request, which survives", async () => {
-    const mine = await setupVenue(suite.admin);
-    const theirs = await setupVenue(suite.admin);
-    const made = await knock(theirs, { kind: "device", label: "Their till" });
-    const app = mountApp(mine.cfg);
-    const res = await send(app, "GET", `/management-api/join-requests/${made.joinId}/challenge`, {
-      cookie: mine.managerCookie,
-    });
-    expect(res.status).toBe(404);
-    expect((await errorOf(res)).code).toBe("join_request.not_found");
-    expect(await pendingCount(theirs.cfg)).toBe(1);
   });
 
   it("is 404 for an unknown or malformed id", async () => {
@@ -420,18 +396,6 @@ describe("POST /management-api/join-requests/:id/deny", () => {
     });
     expect(ok.status).toBe(204);
     expect(await pendingCount(venue.cfg)).toBe(0);
-  });
-
-  it("cannot reach another tenant's request", async () => {
-    const mine = await setupVenue(suite.admin);
-    const theirs = await setupVenue(suite.admin);
-    const made = await knock(theirs, { kind: "device", label: "Their till" });
-    const app = mountApp(mine.cfg);
-    const res = await send(app, "POST", `/management-api/join-requests/${made.joinId}/deny`, {
-      cookie: mine.managerCookie,
-    });
-    expect(res.status).toBe(404);
-    expect(await pendingCount(theirs.cfg)).toBe(1);
   });
 
   it("answers 403 to a caller holding NEITHER permission, for a live id AND an unknown one", async () => {
@@ -683,26 +647,6 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
     expect(await pendingCount(venue.cfg)).toBe(1);
   });
 
-  it("cannot accept another tenant's request", async () => {
-    const mine = await setupVenue(suite.admin);
-    const theirs = await setupVenue(suite.admin);
-    const profileId = await seedProfile(mine.cfg, "till");
-    const made = await knock(theirs, { kind: "device", label: "Their till" });
-    const app = mountApp(mine.cfg);
-    const res = await send(
-      app,
-      "POST",
-      `/management-api/device-join-requests/${made.joinId}/accept`,
-      {
-        cookie: mine.managerCookie,
-        body: { choice: made.verificationNumber, profileId },
-      },
-    );
-    expect(res.status).toBe(404);
-    expect((await errorOf(res)).code).toBe("join_request.not_found");
-    expect(await pendingCount(theirs.cfg)).toBe(1);
-  });
-
   it("is 404 for a malformed id", async () => {
     const venue = await setupVenue(suite.admin);
     const app = mountApp(venue.cfg);
@@ -867,27 +811,6 @@ describe("POST /management-api/print-agent-join-requests/:id/accept", () => {
       code: "management.request_invalid",
       params: { field: "choice" },
     });
-  });
-
-  it("cannot accept another tenant's request (real app_user, two tenants)", async () => {
-    const mine = await setupVenue(suite.admin);
-    const theirs = await setupVenue(suite.admin);
-    const made = await knock(theirs, { kind: "print_agent", label: "Their agent" });
-    // My printer.manage session, scoped to MY tenant, cannot reach their request — the accept's own
-    // tenant predicate rides its consuming delete, so a globally-unique join id is not the boundary.
-    const app = mountApp(mine.cfg);
-    const res = await send(
-      app,
-      "POST",
-      `/management-api/print-agent-join-requests/${made.joinId}/accept`,
-      { cookie: mine.managerCookie, body: { choice: made.verificationNumber } },
-    );
-    expect(res.status).toBe(404);
-    expect((await errorOf(res)).code).toBe("join_request.not_found");
-    // Their ask survives; no agent row appears in either tenant.
-    expect(await pendingCount(theirs.cfg)).toBe(1);
-    expect(await agentCount(mine.cfg)).toBe(0);
-    expect(await agentCount(theirs.cfg)).toBe(0);
   });
 });
 

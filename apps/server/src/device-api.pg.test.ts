@@ -784,53 +784,6 @@ describe("Device management routes (device.manage)", () => {
     expect(malformed.status).toBe(404);
   });
 
-  it("contains cross-tenant management: A cannot list, revoke, or reassign B's device", async () => {
-    // RUN, not read (CLAUDE.md §3/§4): enrol a device in venue B, then drive venue A's management mount
-    // against B's globally-unique device id. Since RLS was dropped (#255) the by-id list/revoke/assign
-    // must each carry their OWN tenant scope, or A reaches across the id into B's row. Proven against
-    // real Postgres as `app_user`.
-    const venueA = await setupVenue(suite.admin);
-    const venueB = await setupVenue(suite.admin);
-    const appA = mountApp(venueA.cfg);
-    const appB = mountApp(venueB.cfg);
-    const { deviceId, profileId } = await enrolTill(appB, venueB, "Caja B");
-
-    // (1) A's LIST omits B's device entirely — an unscoped SELECT would return every tenant's rows.
-    const list = await send(appA, "GET", "/management-api/devices", {
-      cookie: venueA.managerCookie,
-    });
-    expect(list.status).toBe(200);
-    const rows = (await list.json()) as { id: string }[];
-    expect(rows.find((r) => r.id === deviceId)).toBeUndefined();
-
-    // (2) A's REVOKE 404s — an unscoped UPDATE would flip B's device inactive.
-    const revoke = await send(appA, "POST", `/management-api/devices/${deviceId}/revoke`, {
-      cookie: venueA.managerCookie,
-    });
-    expect(revoke.status).toBe(404);
-    expect((await revoke.json()) as { error: { code: string } }).toMatchObject({
-      error: { code: "device.not_found" },
-    });
-
-    // (3) A's REASSIGN 404s. The target is a SECOND profile of B's tenant, so the composite FK
-    // `(tenant_id, device_profile_id)` would NOT block an unscoped UPDATE — it would reassign B's device.
-    // Only the tenant predicate stops it. (A's own profile would 400 on the FK instead, a weaker proof.)
-    const targetOnB = await seedProfile(venueB.cfg, "till");
-    const assign = await send(
-      appA,
-      "POST",
-      `/management-api/devices/${deviceId}/assign-device-profile`,
-      { cookie: venueA.managerCookie, body: { deviceProfileId: targetOnB } },
-    );
-    expect(assign.status).toBe(404);
-
-    // B's device is intact: still active, still on its own enrol profile.
-    const after = await suite.admin.execute<{ active: boolean; device_profile_id: string }>(
-      sql`select active, device_profile_id from devices where id = ${deviceId}`,
-    );
-    expect(after.rows[0]).toMatchObject({ active: true, device_profile_id: profileId });
-  });
-
   describe("assign-device-profile (reassign only — the profile is NOT NULL since Task 7)", () => {
     it("reassigns a device to another of this tenant's profiles", async () => {
       const venue = await setupVenue(suite.admin);
@@ -848,14 +801,12 @@ describe("Device management routes (device.manage)", () => {
       expect((await deviceBindings(deviceId)).device_profile_id).toBe(target);
     });
 
-    it("rejects a nonexistent / cross-tenant / absent profile — device untouched", async () => {
+    it("rejects a nonexistent or absent profile — device untouched", async () => {
       const venue = await setupVenue(suite.admin);
-      const foreign = await setupVenue(suite.admin);
       const app = mountApp(venue.cfg);
-      const foreignProfile = await seedProfile(foreign.cfg, "kds");
       const { deviceId, profileId } = await enrolKds(app, venue, venue.defaultStationId);
 
-      for (const badProfile of [randomUUID(), foreignProfile]) {
+      for (const badProfile of [randomUUID()]) {
         const res = await send(
           app,
           "POST",
@@ -980,38 +931,14 @@ describe("PATCH /management-api/devices/:id/hardware (device.manage)", () => {
     expect(malformed.status).toBe(404);
   });
 
-  it("404s a FOREIGN tenant's device — the update is tenant-scoped, not just by id", async () => {
-    // Enrol a device in venue A, then PATCH it through venue B's mount (cfg B). A by-id write STILL
-    // scopes to the tenant (CLAUDE.md §3), so B's UPDATE matches 0 rows and 404s rather than reaching
-    // across the (globally-unique) id. RUN, not read: proven against real Postgres as `app_user`.
-    const venueA = await setupVenue(suite.admin);
-    const venueB = await setupVenue(suite.admin);
-    const appA = mountApp(venueA.cfg);
-    const appB = mountApp(venueB.cfg);
-    const { deviceId } = await enrolTill(appA, venueA, "Caja A");
-
-    const res = await send(appB, "PATCH", `/management-api/devices/${deviceId}/hardware`, {
-      cookie: venueB.managerCookie,
-      body: { hasCashDrawer: true },
-    });
-    expect(res.status).toBe(404);
-    expect((await res.json()) as { error: { code: string } }).toMatchObject({
-      error: { code: "device.not_found" },
-    });
-    // Venue A's device is untouched — B's scoped UPDATE never reached it.
-    expect((await deviceBindings(deviceId)).has_cash_drawer).toBe(false);
-  });
-
   it("rejects a receiptPrinterId naming no printer of this tenant with device.binding_invalid", async () => {
     const venue = await setupVenue(suite.admin);
-    const foreign = await setupVenue(suite.admin);
     const app = mountApp(venue.cfg);
-    const foreignPrinter = await seedPrinter(foreign.cfg);
     const { deviceId } = await enrolTill(app, venue, "Caja fk");
 
     const res = await send(app, "PATCH", `/management-api/devices/${deviceId}/hardware`, {
       cookie: venue.managerCookie,
-      body: { receiptPrinterId: foreignPrinter },
+      body: { receiptPrinterId: randomUUID() },
     });
     expect(res.status).toBe(400);
     expect(

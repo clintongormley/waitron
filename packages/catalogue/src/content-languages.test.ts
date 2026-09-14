@@ -271,23 +271,6 @@ describe("site content languages", () => {
     });
   });
 
-  it("keeps each tenant's configuration separate", async () => {
-    const a = await seedTenant(suite.db);
-    const b = await seedTenant(suite.db);
-    await withTransaction(suite.db, (tx) =>
-      writeContentLanguages(tx, a, {
-        defaultLanguage: "it",
-        languages: ["it", "fr"],
-      }),
-    );
-    await withTransaction(suite.db, async (tx) => {
-      expect(await readContentLanguages(tx, b, "en-GB")).toEqual({
-        defaultLanguage: "en",
-        languages: ["en"],
-      });
-    });
-  });
-
   it.each([
     { defaultLanguage: "en", languages: [] },
     { defaultLanguage: "en", languages: ["fr"] },

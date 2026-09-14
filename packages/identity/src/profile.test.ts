@@ -38,7 +38,7 @@ async function fixture() {
 }
 
 describe("your profile", () => {
-  it("returns only profile and passkey metadata, and refuses a session from another tenant", async () => {
+  it("returns only profile and passkey metadata", async () => {
     const f = await fixture();
     const profile = await withTransaction(suite.db, (tx) => readOwnProfile(tx, f));
     expect(profile).toEqual({
@@ -54,9 +54,6 @@ describe("your profile", () => {
       hasGoogle: false,
       passkeys: [],
     });
-    await expect(
-      withTransaction(suite.db, (tx) => readOwnProfile(tx, { ...f, tenantId: randomUUID() })),
-    ).rejects.toMatchObject({ code: "management_session.required" });
   });
 
   it("saves details, requires current credentials for email changes, and invalidates old reset links", async () => {

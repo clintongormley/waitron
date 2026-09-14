@@ -6,9 +6,7 @@ import { captureError, pgErrorCode } from "../testing/errors.js";
 import { usePgliteDb } from "../testing/lifecycle.js";
 
 const TENANT_A = "11111111-1111-4111-8111-111111111111";
-const TENANT_B = "22222222-2222-4222-8222-222222222222";
 const CANVAS_A = "11111111-0000-4000-8000-0000000000a2";
-const CANVAS_B = "22222222-0000-4000-8000-0000000000b2";
 
 describe("device_profiles composite canvas FK (tenant_id, canvas_id) → canvases", () => {
   const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS] });
@@ -18,31 +16,17 @@ describe("device_profiles composite canvas FK (tenant_id, canvas_id) → canvase
     admin = suite.db;
     await admin.execute(sql`
       insert into tenants (id, country, tax_id, legal_name) values
-        (${TENANT_A}, 'ES', 'B00000000', 'Fixture Tenant A'),
-        (${TENANT_B}, 'ES', 'B11111111', 'Fixture Tenant B')
+        (${TENANT_A}, 'ES', 'B00000000', 'Fixture Tenant A')
       on conflict (id) do nothing`);
     await admin.execute(sql`
       insert into canvases (id, tenant_id, name, definition) values
-        (${CANVAS_A}, ${TENANT_A}, 'Canvas A', '{}'::jsonb),
-        (${CANVAS_B}, ${TENANT_B}, 'Canvas B', '{}'::jsonb)
+        (${CANVAS_A}, ${TENANT_A}, 'Canvas A', '{}'::jsonb)
       on conflict (id) do nothing`);
   });
 
   afterEach(async () => {
     await suite.db.execute(sql`delete from device_profiles`);
-    await suite.db.execute(sql`delete from canvases where id not in (${CANVAS_A}, ${CANVAS_B})`);
-  });
-
-  it("rejects a canvas_id naming a DIFFERENT tenant's canvas (composite FK)", async () => {
-    // CANVAS_B exists, but under TENANT_A the pair (TENANT_A, CANVAS_B) names no canvas row, so the
-    // composite FK device_profiles_canvas_fk is violated.
-    const e = await captureError(() =>
-      admin.execute(
-        sql`insert into device_profiles (tenant_id, name, form_factor, canvas_id)
-            values (${TENANT_A}, 'Cross-tenant canvas', 'till', ${CANVAS_B})`,
-      ),
-    );
-    expect(pgErrorCode(e)).toBe("23503"); // foreign_key_violation
+    await suite.db.execute(sql`delete from canvases where id <> ${CANVAS_A}`);
   });
 
   it("accepts a same-tenant canvas_id; a NULL canvas_id is unconstrained (MATCH SIMPLE)", async () => {

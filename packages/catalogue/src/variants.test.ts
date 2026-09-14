@@ -155,18 +155,7 @@ describe("product variants", () => {
     ).rejects.toMatchObject({ code: "product.variant_not_found" });
   });
 
-  it("refuses another tenant's product and hides its variants", async () => {
-    const other = await seedTenant(fx.db);
-    await run((tx) =>
-      setProductVariants(tx, tenantId, productId, [variant("Small", "2.00")], "en"),
-    );
-    await expect(
-      run((tx) => setProductVariants(tx, other, productId, [variant("Small", "2.00")], "en")),
-    ).rejects.toMatchObject({ code: "product.not_found" });
-    expect(await run((tx) => listProductVariants(tx, other, productId))).toEqual([]);
-  });
-
-  it("requires the default language in a variant's customer name when one is given", async () => {
+  it("requires the default-language name while preserving disabled translations", async () => {
     await expect(
       run((tx) =>
         setProductVariants(

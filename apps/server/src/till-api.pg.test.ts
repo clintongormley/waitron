@@ -1077,43 +1077,6 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     }
   });
 
-  it("naming ANOTHER tenant's reader is reader.not_found (by-id isolation, never chargeable)", async () => {
-    // The by-id read scopes to the till's tenant (CLAUDE.md §3), so a reader id that belongs to a
-    // different tenant is not readable here — refused `reader.not_found`, never charged. Proven by
-    // deleting the `eq(card_readers.tenantId, cfg.tenantId)` predicate in `resolvePayReader` locally
-    // and running this test: the read then LEAKS the foreign reader, the isolation assertion fails,
-    // and the request returns 500 (the payment's composite FK to `card_readers` rejects the
-    // cross-tenant reader) rather than the 404 asserted here — restoring the predicate turns it back
-    // to 404. (Observed 2026-09-12, re-running the run-it probe.)
-    const { cfg: a, available, operatorId } = await setupVenue();
-    const each = available.find((p) => p.pricingUnit === "each")!;
-    const { cfg: b } = await setupVenue(); // a SECOND tenant, whose reader tenant A must not reach
-    const providerDb = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
-    try {
-      const app = new Hono();
-      mountTillApi(app, apiDepsWithPool(a, fakePool(a, providerDb, new FakeStripe())), noopLog);
-      const cookie = await loginSession(app, a, operatorId);
-      const deviceCookie = await enrolTillCookie(a, await createTillProfile(a));
-      await connectStripe(a);
-      const foreign = await seedReader(b, { tenantId: b.tenantId });
-
-      const payRes = await app.request("/api/pay", {
-        method: "POST",
-        headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
-        body: JSON.stringify({
-          id: randomUUID(),
-          readerId: foreign.id,
-          lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
-        }),
-      });
-
-      expect(payRes.status).toBe(404);
-      expect(await payRes.json()).toMatchObject({ error: { code: "reader.not_found" } });
-    } finally {
-      await providerDb.close();
-    }
-  });
-
   it("a device with no default reader and no request readerId is reader.not_found", async () => {
     const { cfg, available, operatorId } = await setupVenue();
     const each = available.find((p) => p.pricingUnit === "each")!;

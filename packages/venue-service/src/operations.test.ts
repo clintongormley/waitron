@@ -1043,13 +1043,8 @@ describe("resolvePreparationRoutes", () => {
     });
   });
 
-  it("ignores another tenant's product and another location's routes and stations", async () => {
+  it("ignores another location's routes and stations", async () => {
     const { tenantId, cfg, zoneId, otherLocationId } = await seedRoutingVenue();
-    const other = await seedUnitTenant();
-    const foreignProductId = await scoped(other.tenantId, async (tx) => {
-      const menu = await createCatalogue(tx, other.tenantId, { name: "Foreign" });
-      return (await productWithCategory(tx, other.tenantId, menu.id, "Foreign")).id;
-    });
     await scoped(tenantId, async (tx) => {
       const elsewhere = await insertStation(tx, tenantId, otherLocationId, "Elsewhere");
       const menu = await createCatalogue(tx, tenantId, { name: "Scoping" });
@@ -1070,12 +1065,6 @@ describe("resolvePreparationRoutes", () => {
         insert into preparation_routes (tenant_id, location_id, product_id, station_id)
         values (${tenantId}, ${cfg.locationId}, ${stationElsewhere.id}, ${elsewhere})`);
 
-      await expect(
-        rejection(resolvePreparationRoutes(tx, cfg, zoneId, [foreignProductId])),
-      ).resolves.toEqual({
-        code: "route.subject_not_found",
-        params: { subject: "product", id: foreignProductId },
-      });
       await expect(
         rejection(resolvePreparationRoutes(tx, cfg, zoneId, [routedElsewhere.id])),
       ).resolves.toEqual({

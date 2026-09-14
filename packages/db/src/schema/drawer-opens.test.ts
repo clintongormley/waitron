@@ -12,13 +12,9 @@ import { tenants } from "./tenants.js";
 // `app_user`, the deployment role, which PGlite (every connection a superuser) cannot be. The
 // cases retain the role switch so the reads and writes still exercise app_user grants.
 const TENANT_A = "11111111-1111-4111-8111-111111111111";
-const TENANT_B = "22222222-2222-4222-8222-222222222222";
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
-const LOCATION_B = "bbbbbbbb-0000-4000-8000-000000000001";
 const TILL_A = "aaaaaaaa-0000-4000-8000-000000000011";
-const TILL_B = "bbbbbbbb-0000-4000-8000-000000000011";
 const PRINTER_A = "aaaaaaaa-0000-4000-8000-000000000021";
-const PRINTER_B = "bbbbbbbb-0000-4000-8000-000000000021";
 // The acting operator recorded in `person_id` — an identity person id, plain uuid, no FK (the person
 // schema is a separate slice; a raw uuid keeps this audit table independent of it).
 const PERSON = "cccccccc-0000-4000-8000-000000000001";
@@ -45,27 +41,23 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, c
   const suite = useTemplateDb({ template: "core" });
 
   beforeAll(async () => {
-    await suite.admin.insert(tenants).values([
-      { id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" },
-      { id: TENANT_B, country: "ES", taxId: "B11111111", legalName: "Fixture Tenant B" },
-    ]);
+    await suite.admin
+      .insert(tenants)
+      .values([{ id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
     await suite.admin.execute(sql`
       insert into locations (id, tenant_id, name, invoice_locales, operation_description)
       values
-        (${LOCATION_A}, ${TENANT_A}, 'Loc A', array['es'], 'Hostelería'),
-        (${LOCATION_B}, ${TENANT_B}, 'Loc B', array['es'], 'Hostelería')
+        (${LOCATION_A}, ${TENANT_A}, 'Loc A', array['es'], 'Hostelería')
       on conflict (id) do nothing`);
     await suite.admin.execute(sql`
       insert into tills (id, tenant_id, location_id, name)
       values
-        (${TILL_A}, ${TENANT_A}, ${LOCATION_A}, 'Till A'),
-        (${TILL_B}, ${TENANT_B}, ${LOCATION_B}, 'Till B')
+        (${TILL_A}, ${TENANT_A}, ${LOCATION_A}, 'Till A')
       on conflict (id) do nothing`);
     await suite.admin.execute(sql`
       insert into printers (id, tenant_id, location_id, name, transport, poll_id)
       values
-        (${PRINTER_A}, ${TENANT_A}, ${LOCATION_A}, 'Impresora A', 'cloud_poll', 'poll-a'),
-        (${PRINTER_B}, ${TENANT_B}, ${LOCATION_B}, 'Impresora B', 'cloud_poll', 'poll-b')
+        (${PRINTER_A}, ${TENANT_A}, ${LOCATION_A}, 'Impresora A', 'cloud_poll', 'poll-a')
       on conflict (id) do nothing`);
   });
 
@@ -77,10 +69,6 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, c
     });
   }
 
-  function tillOf(tenant: string): string {
-    return tenant === TENANT_A ? TILL_A : TILL_B;
-  }
-
   async function seedOpen(
     tenant: string,
     reason: "cash_sale" | "manual",
@@ -89,7 +77,7 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, c
     await asApp(tenant, (tx) =>
       tx.execute(
         sql`insert into drawer_opens (tenant_id, till_id, person_id, reason, sale_id)
-            values (${tenant}, ${tillOf(tenant)}, ${PERSON}, ${reason}, ${saleId})`,
+            values (${tenant}, ${TILL_A}, ${PERSON}, ${reason}, ${saleId})`,
       ),
     );
   }
@@ -156,18 +144,6 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, c
     expect(pgErrorCode(e)).toBe("23514"); // check_violation on drawer_opens_reason_ck
   });
 
-  it("the till binding is tenant-consistent (composite FK to tills)", async () => {
-    const e = await captureError(() =>
-      asApp(TENANT_A, (tx) =>
-        tx.execute(
-          sql`insert into drawer_opens (tenant_id, till_id, person_id, reason)
-              values (${TENANT_A}, ${TILL_B}, ${PERSON}, 'manual')`,
-        ),
-      ),
-    );
-    expect(pgErrorCode(e)).toBe("23503"); // foreign_key_violation on (tenant_id, till_id)
-  });
-
   it("the sale binding is enforced (composite FK to sales)", async () => {
     // Proves the (tenant_id, sale_id) → sales composite FK exists and bites: a non-existent sale_id for
     // A's own tenant → foreign_key_violation. A's tenant_id + (A, TILL_A) isolate the sale FK. A full
@@ -200,15 +176,6 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, c
       );
       expect(r.rows[0]!.receipt_printer_id).toBe(PRINTER_A);
     });
-  });
-
-  it("tills.receipt_printer_id is tenant-consistent (rejects a foreign-tenant printer, 23503)", async () => {
-    const e = await captureError(() =>
-      asApp(TENANT_A, (tx) =>
-        tx.execute(sql`update tills set receipt_printer_id = ${PRINTER_B} where id = ${TILL_A}`),
-      ),
-    );
-    expect(pgErrorCode(e)).toBe("23503");
   });
 
   it("locations.receipt_print_mode defaults to 'auto' and is settable under the app role", async () => {

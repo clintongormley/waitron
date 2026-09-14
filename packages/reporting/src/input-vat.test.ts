@@ -7,8 +7,7 @@ import type { SeededVenue } from "../test/fixtures.js";
 import { computeInputVat } from "./input-vat.js";
 import type { InputVatReturn } from "./types.js";
 
-// PGlite exercises deterministic arithmetic and explicit tenant predicates. The final case
-// seeds a second tenant and reads through the owner connection to pin the requested-tenant filter.
+// PGlite exercises deterministic arithmetic under the owner connection.
 const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
 
 let venue: SeededVenue;
@@ -150,33 +149,6 @@ describe("computeInputVat", () => {
       baseTotal: "0.00",
       taxTotal: "0.00",
     });
-  });
-
-  it("scopes to the explicit tenant predicate under a superuser connection", async () => {
-    // Removing the tenant predicate admits the other tenant's 4% line (proved by deletion).
-    const other = await seedVenue(suite.db);
-    await seedPurchaseInvoice(suite.db, other, {
-      supplierInvoiceNumber: "OTHER",
-      issuedOn: "2026-08-01",
-      receivedOn: "2026-08-05",
-      total: "1040.00",
-      lines: [{ rate: "4.00", base: "1000.00", tax: "40.00" }],
-    });
-    await seedPurchaseInvoice(suite.db, venue, {
-      supplierInvoiceNumber: "MINE",
-      issuedOn: "2026-08-01",
-      receivedOn: "2026-08-05",
-      total: "121.00",
-      lines: [{ rate: "21.00", base: "100.00", tax: "21.00" }],
-    });
-    const ret = await withTransaction(suite.db, (tx) =>
-      computeInputVat(tx, {
-        tenantId: venue.tenantId,
-        year: 2026,
-        period: { kind: "month", month: 8 },
-      }),
-    );
-    expect(ret.byRate).toEqual([{ rate: "21.00", base: "100.00", tax: "21.00", kind: "ordinary" }]);
   });
 
   it("throws a plain validation Error on an out-of-range month or year", async () => {

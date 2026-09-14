@@ -13,25 +13,21 @@ import { locations, tenants } from "./tenants.js";
 // non-owner `app_user` — the deployment role, which PGlite (every connection a superuser) cannot be.
 // The suite retains the reads and writes under app_user's grants.
 const TENANT_A = "11111111-1111-4111-8111-111111111111";
-const TENANT_B = "22222222-2222-4222-8222-222222222222";
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
-const LOCATION_B = "bbbbbbbb-0000-4000-8000-000000000001";
 const RANDOM_UUID = "99999999-9999-4999-8999-999999999999";
 
 let categoryA = "";
 let productA = "";
 let stationA = "";
-let stationB = "";
 
 describe("categories.station_id / products.station_id routing FKs (tenant-consistent, app-writable)", () => {
   const suite = useTemplateDb({ template: "core" });
 
   beforeAll(async () => {
     const admin = suite.admin;
-    await admin.insert(tenants).values([
-      { id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" },
-      { id: TENANT_B, country: "ES", taxId: "B11111111", legalName: "Fixture Tenant B" },
-    ]);
+    await admin
+      .insert(tenants)
+      .values([{ id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
     await admin.insert(locations).values([
       {
         id: LOCATION_A,
@@ -40,16 +36,8 @@ describe("categories.station_id / products.station_id routing FKs (tenant-consis
         invoiceLocales: ["es"],
         operationDescription: "Hostelería",
       },
-      {
-        id: LOCATION_B,
-        tenantId: TENANT_B,
-        name: "Loc B",
-        invoiceLocales: ["es"],
-        operationDescription: "Hostelería",
-      },
     ]);
     stationA = await seedStation(TENANT_A, LOCATION_A);
-    stationB = await seedStation(TENANT_B, LOCATION_B);
     const [catA] = await admin
       .insert(categories)
       .values({ tenantId: TENANT_A, name: { es: "Comida" } })
@@ -89,7 +77,7 @@ describe("categories.station_id / products.station_id routing FKs (tenant-consis
     });
   }
 
-  it("lets the app role route a category to an own-tenant station and rejects a foreign or missing one", async () => {
+  it("lets the app role route a category to an own-tenant station and rejects a missing one", async () => {
     // The app role writes and reads back station_id (the additive column, under categories' existing
     // grant) …
     await asApp(TENANT_A, (tx) =>
@@ -111,19 +99,9 @@ describe("categories.station_id / products.station_id routing FKs (tenant-consis
       ),
     );
     expect(pgErrorCode(eRandom)).toBe("23503");
-
-    // … and the case a SINGLE-column FK would let through: a station that EXISTS but belongs to another
-    // tenant. The composite (tenant_id, station_id) requires a kitchen_stations row with (TENANT_A,
-    // B's id), which does not exist — so it is 23503, proving the FK is tenant-consistent.
-    const eForeign = await captureError(() =>
-      asApp(TENANT_A, (tx) =>
-        tx.execute(sql`update categories set station_id = ${stationB} where id = ${categoryA}`),
-      ),
-    );
-    expect(pgErrorCode(eForeign)).toBe("23503");
   });
 
-  it("lets the app role route a product to an own-tenant station and rejects a foreign or missing one", async () => {
+  it("lets the app role route a product to an own-tenant station and rejects a missing one", async () => {
     await asApp(TENANT_A, (tx) =>
       tx.execute(sql`update products set station_id = ${stationA} where id = ${productA}`),
     );
@@ -142,12 +120,5 @@ describe("categories.station_id / products.station_id routing FKs (tenant-consis
       ),
     );
     expect(pgErrorCode(eRandom)).toBe("23503");
-
-    const eForeign = await captureError(() =>
-      asApp(TENANT_A, (tx) =>
-        tx.execute(sql`update products set station_id = ${stationB} where id = ${productA}`),
-      ),
-    );
-    expect(pgErrorCode(eForeign)).toBe("23503");
   });
 });

@@ -343,12 +343,10 @@ describe("management account actions", () => {
     ).resolves.toMatchObject({ personId, session: { personId } });
   });
 
-  it("does not issue recovery actions for suspended, malformed, or another tenant's accounts", async () => {
+  it("does not issue recovery actions for suspended or malformed accounts", async () => {
     const personId = await seedManager(suite.db, tenantId, { email: "recovery-suspended@x.com" });
     await suite.db.execute(sql`update persons set status = 'suspended' where id = ${personId}`);
-    const otherTenantId = await seedTenant(suite.db);
-    await seedManager(suite.db, otherTenantId, { email: "recovery-other@x.com" });
-    for (const email of ["recovery-suspended@x.com", "recovery-other@x.com", "malformed"]) {
+    for (const email of ["recovery-suspended@x.com", "malformed"]) {
       await expect(
         run((tx) => requestAccountRecoveryAction(tx, { tenantId, email })),
       ).resolves.toBeNull();

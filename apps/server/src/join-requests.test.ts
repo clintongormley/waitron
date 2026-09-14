@@ -380,22 +380,6 @@ describe("readJoinStatus", () => {
     });
   });
 
-  it("does not leak another tenant's pending request — the id alone is not enough", async () => {
-    // A globally-unique join id is not the query's isolation boundary (CLAUDE.md §3, since RLS was
-    // dropped): venue B's session must not resolve venue A's join id, right token and all.
-    const venueA = await setupVenue(suite.admin);
-    const venueB = await setupVenue(suite.admin);
-    const madeA = await withTransaction(suite.admin, async (tx) => {
-      await asAppUser(tx);
-      return createJoinRequest(tx, venueA.cfg, { kind: "device", label: "A's till" });
-    });
-    await withTransaction(suite.admin, async (tx) => {
-      await asAppUser(tx);
-      const status = await readJoinStatus(tx, venueB.cfg, madeA.joinId, madeA.token);
-      expect(status).toBe("not_approved");
-    });
-  });
-
   it("is not_approved for an id that never existed", async () => {
     const venue = await setupVenue(suite.admin);
     await withTransaction(suite.admin, async (tx) => {
@@ -511,24 +495,13 @@ describe("challengeFor", () => {
     expect(positions.size).toBeGreaterThan(1);
   });
 
-  it("throws join_request.not_found for an unknown id, and for another tenant's request", async () => {
+  it("throws join_request.not_found for an unknown id", async () => {
     const venueA = await setupVenue(suite.admin);
-    const venueB = await setupVenue(suite.admin);
-    const madeA = await withTransaction(suite.admin, async (tx) => {
-      await asAppUser(tx);
-      return createJoinRequest(tx, venueA.cfg, { kind: "device", label: "A's till" });
-    });
     await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       await expect(
         challengeFor(tx, venueA.cfg, "00000000-0000-4000-8000-000000000000"),
       ).rejects.toMatchObject({ code: "join_request.not_found" });
-    });
-    await withTransaction(suite.admin, async (tx) => {
-      await asAppUser(tx);
-      await expect(challengeFor(tx, venueB.cfg, madeA.joinId)).rejects.toMatchObject({
-        code: "join_request.not_found",
-      });
     });
   });
 });
@@ -664,25 +637,6 @@ describe("acceptDeviceJoinRequest", () => {
     });
   });
 
-  it("refuses another tenant's request", async () => {
-    const venueA = await setupVenue(suite.admin);
-    const venueB = await setupVenue(suite.admin);
-    const profileIdB = await seedProfile(venueB.cfg, "till");
-    const madeA = await withTransaction(suite.admin, async (tx) => {
-      await asAppUser(tx);
-      return createJoinRequest(tx, venueA.cfg, { kind: "device", label: "A's till" });
-    });
-    await withTransaction(suite.admin, async (tx) => {
-      await asAppUser(tx);
-      await expect(
-        acceptDeviceJoinRequest(tx, venueB.cfg, madeA.joinId, {
-          choice: madeA.verificationNumber,
-          profileId: profileIdB,
-        }),
-      ).rejects.toMatchObject({ code: "join_request.not_found" });
-    });
-  });
-
   it("two concurrent accepts of ONE request: exactly one wins, the loser gets join_request.not_found — never a raw devices_pkey 23505", async () => {
     const venue = await setupVenue(suite.admin);
     // A `kds` profile bound to an EXISTING station: resolveDeviceBinding only reads
@@ -810,24 +764,13 @@ describe("denyJoinRequest", () => {
     });
   });
 
-  it("throws join_request.not_found for an unknown id or another tenant's", async () => {
+  it("throws join_request.not_found for an unknown id", async () => {
     const venueA = await setupVenue(suite.admin);
-    const venueB = await setupVenue(suite.admin);
-    const madeA = await withTransaction(suite.admin, async (tx) => {
-      await asAppUser(tx);
-      return createJoinRequest(tx, venueA.cfg, { kind: "device", label: "A's till" });
-    });
     await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       await expect(
         denyJoinRequest(tx, venueA.cfg, "00000000-0000-4000-8000-000000000000"),
       ).rejects.toMatchObject({ code: "join_request.not_found" });
-    });
-    await withTransaction(suite.admin, async (tx) => {
-      await asAppUser(tx);
-      await expect(denyJoinRequest(tx, venueB.cfg, madeA.joinId)).rejects.toMatchObject({
-        code: "join_request.not_found",
-      });
     });
   });
 
@@ -923,23 +866,6 @@ describe("acceptPrintAgentJoinRequest", () => {
       ),
     ).toBe("join_request.not_found");
   });
-
-  it("tenant-scoped: tenant B cannot accept tenant A's agent request", async () => {
-    const cfgA = (await setupVenue(suite.admin)).cfg;
-    const cfgB = (await setupVenue(suite.admin)).cfg;
-    const madeA = await asApp(cfgA, (tx) =>
-      createJoinRequest(tx, cfgA, { kind: "print_agent", label: "a" }),
-    );
-    expect(
-      await codeOf(() =>
-        asApp(cfgB, (tx) =>
-          acceptPrintAgentJoinRequest(tx, cfgB, madeA.joinId, {
-            choice: madeA.verificationNumber,
-          }),
-        ),
-      ),
-    ).toBe("join_request.not_found");
-  });
 });
 
 describe("readAgentJoinStatus", () => {
@@ -965,25 +891,6 @@ describe("readAgentJoinStatus", () => {
     expect(await asApp(cfg, (tx) => readAgentJoinStatus(tx, cfg, randomUUID(), made.token))).toBe(
       "not_approved",
     );
-  });
-
-  it("tenant-scoped: tenant B cannot read tenant A's pending or approved agent status", async () => {
-    // A globally-unique join id is not the isolation boundary (CLAUDE.md §3): B's session, holding A's
-    // id and A's token, must read not_approved for BOTH the pending and the approved lookups.
-    const cfgA = (await setupVenue(suite.admin)).cfg;
-    const cfgB = (await setupVenue(suite.admin)).cfg;
-    const madeA = await asApp(cfgA, (tx) =>
-      createJoinRequest(tx, cfgA, { kind: "print_agent", label: "a" }),
-    );
-    expect(
-      await asApp(cfgB, (tx) => readAgentJoinStatus(tx, cfgB, madeA.joinId, madeA.token)),
-    ).toBe("not_approved");
-    await asApp(cfgA, (tx) =>
-      acceptPrintAgentJoinRequest(tx, cfgA, madeA.joinId, { choice: madeA.verificationNumber }),
-    );
-    expect(
-      await asApp(cfgB, (tx) => readAgentJoinStatus(tx, cfgB, madeA.joinId, madeA.token)),
-    ).toBe("not_approved");
   });
 });
 

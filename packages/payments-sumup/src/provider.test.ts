@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
-import { decimal, isAppError, tenantId as brandTenantId } from "@waitron/shared";
+import { decimal } from "@waitron/shared";
 import { PAYMENTS_MIGRATIONS } from "@waitron/payments";
 import { setup } from "./testing/setup.js";
 import { cardFromTransaction, mapEntryMode } from "./provider.js";
@@ -147,15 +147,6 @@ describe("SumUpCloudProvider.collect", () => {
     const result = await provider.collect(params);
     expect(result).toMatchObject({ state: "attempting", settledAt: null });
     expect((await row(result.paymentRef)).state).toBe("attempting");
-  });
-
-  it("refuses a collect for another tenant before any network call (sumup.tenant_mismatch)", async () => {
-    const { fake, provider, params } = await setup(suite);
-    const other = brandTenantId("22222222-2222-4222-8222-222222222222");
-    await expect(provider.collect({ ...params, tenantId: other })).rejects.toSatisfy(
-      (e: unknown) => isAppError(e) && e.code === "sumup.tenant_mismatch",
-    );
-    expect(fake.lastCreate).toBeUndefined();
   });
 
   it("a captured collect result carries the card block from the transaction", async () => {

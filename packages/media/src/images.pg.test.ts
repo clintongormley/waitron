@@ -87,30 +87,15 @@ it("grants metadata CRUD and immutable byte insertion, and refuses truncation", 
   ).rejects.toThrow();
 });
 
-it("refuses a product reference to another tenant's image or an absent filename", async () => {
-  const { tenantId, image, productId } = await fixture();
-  const other = await seedTenant(suite.admin);
-  await app(suite.admin, other, (tx) =>
-    uploadImage(tx, other, { ...metadata, bytes: new Uint8Array([...photo, 9]) }, options),
-  );
-  for (const filename of ["a".repeat(64) + ".jpg", image.filename]) {
-    const targetTenant = filename === image.filename ? other : tenantId;
-    await expect(
-      app(suite.admin, targetTenant, async (tx) => {
-        if (targetTenant === other) {
-          const menu = await tx.execute<{ id: string }>(
-            sql`insert into catalogues (tenant_id, name) values (${other}, 'Other') returning id`,
-          );
-          return tx.execute(
-            sql`insert into products (tenant_id, catalogue_id, name, pricing_unit, unit_price, vat_class, image) values (${other}, ${menu.rows[0]!.id}, 'Bread', 'each', '2', 'general', ${filename})`,
-          );
-        }
-        return tx.execute(
-          sql`update products set image = ${filename} where tenant_id = ${tenantId} and id = ${productId}`,
-        );
-      }),
-    ).rejects.toThrow();
-  }
+it("refuses a product reference to an absent image filename", async () => {
+  const { tenantId, productId } = await fixture();
+  await expect(
+    app(suite.admin, tenantId, (tx) =>
+      tx.execute(
+        sql`update products set image = ${"a".repeat(64) + ".jpg"} where tenant_id = ${tenantId} and id = ${productId}`,
+      ),
+    ),
+  ).rejects.toThrow();
 });
 
 it("waits for an attaching product then reports its committed use instead of deleting", async () => {

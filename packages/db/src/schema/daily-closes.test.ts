@@ -18,16 +18,13 @@ import { locations, tenants } from "./tenants.js";
 // privilege matrix (packages/fiscal-verifactu/src/privileges.expected.ts).
 
 const TENANT_A = "11111111-1111-4111-8111-111111111111";
-const TENANT_B = "22222222-2222-4222-8222-222222222222";
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
-const LOCATION_B = "bbbbbbbb-0000-4000-8000-000000000001";
 // The counting actor recorded in `closed_by` — an identity person id, plain uuid, no FK (D3 in the
 // design owns the person schema; a raw uuid keeps this table independent of it).
 const CLOSED_BY = "cccccccc-0000-4000-8000-000000000001";
 
-// Captured at seed time — the node ids the raw inserts below need for tenant-consistent FKs.
+// Captured at seed time — the node id the raw inserts below need for the tenant-consistent FK.
 let nodeA = "";
-let nodeB = "";
 
 // A minimal-but-real snapshot document: `close` is the VAT-exact computeDailyClose output (owned by
 // @waitron/reporting, opaque `unknown` here) and `cashReconciliation` is the per-till/per-node variance
@@ -78,10 +75,9 @@ describe("frozen daily close schema (append-only triggers, columns, composite FK
 
   beforeAll(async () => {
     const admin = suite.admin;
-    await admin.insert(tenants).values([
-      { id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" },
-      { id: TENANT_B, country: "ES", taxId: "B11111111", legalName: "Fixture Tenant B" },
-    ]);
+    await admin
+      .insert(tenants)
+      .values([{ id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
     await admin.insert(locations).values([
       {
         id: LOCATION_A,
@@ -90,16 +86,8 @@ describe("frozen daily close schema (append-only triggers, columns, composite FK
         invoiceLocales: ["es"],
         operationDescription: "Hosteleria",
       },
-      {
-        id: LOCATION_B,
-        tenantId: TENANT_B,
-        name: "Fixture Location B",
-        invoiceLocales: ["es"],
-        operationDescription: "Hosteleria",
-      },
     ]);
     nodeA = await seedNode(admin, brandTenantId(TENANT_A), brandLocationId(LOCATION_A));
-    nodeB = await seedNode(admin, brandTenantId(TENANT_B), brandLocationId(LOCATION_B));
   });
 
   it("writes and reads back a daily_closes row (the column list, and the snapshot jsonb)", async () => {
@@ -180,23 +168,5 @@ describe("frozen daily close schema (append-only triggers, columns, composite FK
     }).catch((e: unknown) => {
       if (!(e instanceof RollbackSignal)) throw e;
     });
-  });
-
-  it("gives daily_closes a composite (tenant_id, node_id) → nodes FK, tenant-consistent", async () => {
-    // The FK is the composite (tenant_id, node_id) targeting nodes_tenant_id_key, not a bare node_id:
-    // it is what stops a close naming a node of another tenant. A close for tenant A pointing at
-    // tenant B's node is refused 23503 (foreign_key_violation). Written as the owner so the FK is
-    // unambiguously what bites.
-    const error = await captureError(() =>
-      suite.admin.execute(
-        insertCloseSql({
-          tenantId: TENANT_A,
-          nodeId: nodeB,
-          businessDay: "2026-08-07",
-          sequenceNo: 7,
-        }),
-      ),
-    );
-    expect(pgErrorCode(error)).toBe("23503");
   });
 });

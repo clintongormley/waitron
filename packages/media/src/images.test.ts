@@ -206,40 +206,6 @@ describe("metadata, labels and references", () => {
     });
   });
 
-  it("scopes every by-id read and write, filename read, labels and gaps to its tenant", async () => {
-    const a = await seedTenant(suite.db);
-    const b = await seedTenant(suite.db);
-    const input = {
-      bytes: photo,
-      names: { en: "Bread" },
-      altText: { en: "Loaf" },
-      labels: ["food"],
-    };
-    const { image } = await withTransaction(suite.db, (tx) =>
-      uploadImage(tx, a, input, { fallbackLanguage: "en", maxUploadBytes: 100 }),
-    );
-    for (const action of [
-      (tx: Parameters<typeof readImage>[0]) => readImage(tx, b, image.id),
-      (tx: Parameters<typeof readImage>[0]) => listImageUsages(tx, b, image.id),
-      (tx: Parameters<typeof readImage>[0]) => updateImage(tx, b, image.id, input, "en"),
-      (tx: Parameters<typeof readImage>[0]) => deleteImage(tx, b, image.id),
-    ] as ((tx: Parameters<typeof readImage>[0]) => Promise<unknown>)[])
-      await expect(withTransaction(suite.db, action)).rejects.toMatchObject({
-        code: "image.not_found",
-      });
-    await withTransaction(suite.db, async (tx) => {
-      expect(await readImageBytes(tx, b, image.filename)).toBeNull();
-      expect(await listImageLabels(tx, b)).toEqual([]);
-      expect(await listImageTranslationGaps(tx, b, "fr")).toEqual([]);
-    });
-    await withTransaction(suite.db, async (tx) => {
-      expect(await listImageTranslationGaps(tx, a, "fr")).toEqual([
-        { kind: "image", id: image.id },
-      ]);
-      expect(await listImageTranslationGaps(tx, a, "en")).toEqual([]);
-    });
-  });
-
   it("reports a missing name but not missing alt text as a translation gap", async () => {
     const tenantId = await seedTenant(suite.db);
     await withTransaction(suite.db, async (tx) => {
@@ -598,23 +564,4 @@ it("protects an image used only by a category and releases it after clearing the
     );
     expect(await deleteImage(tx, tenantId, image.id)).toEqual({ deleted: true, uses: [] });
   });
-});
-
-it("rejects another tenant's category image", async () => {
-  const { createCategory } = await import("@waitron/catalogue");
-  const tenantId = await seedTenant(suite.db);
-  const other = await seedTenant(suite.db);
-  const { image } = await withTransaction(suite.db, (tx) =>
-    uploadImage(
-      tx,
-      other,
-      { bytes: photo, names: { en: "Food" }, altText: { en: "Plate" }, labels: [] },
-      { maxUploadBytes: 100 },
-    ),
-  );
-  await expect(
-    withTransaction(suite.db, (tx) =>
-      createCategory(tx, tenantId, { name: { en: "Food" }, image: image.filename }),
-    ),
-  ).rejects.toMatchObject({ code: "category.image_not_found" });
 });

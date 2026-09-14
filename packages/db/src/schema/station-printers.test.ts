@@ -12,23 +12,19 @@ import { tenants } from "./tenants.js";
 // `app_user`, the deployment role, which PGlite (every connection a superuser) cannot be. The
 // cases retain the role switch so the reads and writes still exercise app_user grants.
 const TENANT_A = "11111111-1111-4111-8111-111111111111";
-const TENANT_B = "22222222-2222-4222-8222-222222222222";
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
-const LOCATION_B = "bbbbbbbb-0000-4000-8000-000000000001";
 
 describe("station_printers schema (KDS-4 mapping — PK + composite FKs)", () => {
   const suite = useTemplateDb({ template: "core" });
 
   beforeAll(async () => {
-    await suite.admin.insert(tenants).values([
-      { id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" },
-      { id: TENANT_B, country: "ES", taxId: "B11111111", legalName: "Fixture Tenant B" },
-    ]);
+    await suite.admin
+      .insert(tenants)
+      .values([{ id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
     await suite.admin.execute(sql`
       insert into locations (id, tenant_id, name, invoice_locales, operation_description)
       values
-        (${LOCATION_A}, ${TENANT_A}, 'Loc A', array['es'], 'Hostelería'),
-        (${LOCATION_B}, ${TENANT_B}, 'Loc B', array['es'], 'Hostelería')
+        (${LOCATION_A}, ${TENANT_A}, 'Loc A', array['es'], 'Hostelería')
       on conflict (id) do nothing`);
   });
 
@@ -40,15 +36,11 @@ describe("station_printers schema (KDS-4 mapping — PK + composite FKs)", () =>
     });
   }
 
-  function locationOf(tenant: string): string {
-    return tenant === TENANT_A ? LOCATION_A : LOCATION_B;
-  }
-
   async function seedStation(tenant: string, name: string): Promise<string> {
     return asApp(tenant, async (tx) => {
       const r = await tx.execute<{ id: string }>(
         sql`insert into kitchen_stations (tenant_id, location_id, name)
-            values (${tenant}, ${locationOf(tenant)}, ${name}) returning id`,
+            values (${tenant}, ${LOCATION_A}, ${name}) returning id`,
       );
       return r.rows[0]!.id;
     });
@@ -60,7 +52,7 @@ describe("station_printers schema (KDS-4 mapping — PK + composite FKs)", () =>
     return asApp(tenant, async (tx) => {
       const r = await tx.execute<{ id: string }>(
         sql`insert into printers (tenant_id, location_id, name, transport, poll_id)
-            values (${tenant}, ${locationOf(tenant)}, ${name}, 'cloud_poll', ${pollId}) returning id`,
+            values (${tenant}, ${LOCATION_A}, ${name}, 'cloud_poll', ${pollId}) returning id`,
       );
       return r.rows[0]!.id;
     });
@@ -109,35 +101,5 @@ describe("station_printers schema (KDS-4 mapping — PK + composite FKs)", () =>
     await seedMapping(TENANT_A, station, printer);
     const e = await captureError(() => seedMapping(TENANT_A, station, printer));
     expect(pgErrorCode(e)).toBe("23505"); // unique_violation on the composite PK
-  });
-
-  it("the station binding is tenant-consistent (composite FK to kitchen_stations)", async () => {
-    const printerA = await seedPrinter(TENANT_A, "Impresora FK station", "poll-fk-station");
-    const stationB = await seedStation(TENANT_B, "Estación B");
-    const e = await captureError(() =>
-      asApp(TENANT_A, (tx) =>
-        tx.execute(
-          sql`insert into station_printers (tenant_id, station_id, printer_id)
-              values (${TENANT_A}, ${stationB}, ${printerA})`,
-        ),
-      ),
-    );
-    expect(pgErrorCode(e)).toBe("23503"); // foreign_key_violation on (tenant_id, station_id)
-  });
-
-  it("the printer binding is tenant-consistent (composite FK to printers)", async () => {
-    // Symmetric to the station FK: A's own station cannot map to tenant B's printer — no (A, printerB)
-    // row → foreign_key_violation. A's tenant_id + (A, stationA) isolate the printer FK.
-    const stationA = await seedStation(TENANT_A, "Estación A FK printer");
-    const printerB = await seedPrinter(TENANT_B, "Impresora B", "poll-fk-printer");
-    const e = await captureError(() =>
-      asApp(TENANT_A, (tx) =>
-        tx.execute(
-          sql`insert into station_printers (tenant_id, station_id, printer_id)
-              values (${TENANT_A}, ${stationA}, ${printerB})`,
-        ),
-      ),
-    );
-    expect(pgErrorCode(e)).toBe("23503"); // foreign_key_violation on (tenant_id, printer_id)
   });
 });

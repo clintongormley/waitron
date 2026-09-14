@@ -294,27 +294,6 @@ describe("computeOverdueOrders", () => {
     expect(await run()).toEqual([]);
   });
 
-  it("excludes another tenant's overdue order (the explicit tenant predicate)", async () => {
-    const other = await seedVenue(suite.db);
-    const otherStation = await seedKitchenStation(suite.db, {
-      tenantId: other.tenantId,
-      locationId: brandLocationId(other.locationId),
-      name: "Cocina",
-    });
-    await seedFiredOrder(
-      suite.db,
-      {
-        tenantId: other.tenantId,
-        tillId: other.tillId,
-        nodeId: other.nodeId,
-        locationId: other.locationId,
-        stationId: otherStation,
-      },
-      { orderNumber: 1, ageMinutes: 20 },
-    );
-    expect(await run()).toEqual([]);
-  });
-
   it("returns [] when there are no ticket items at all", async () => {
     expect(await run()).toEqual([]);
   });

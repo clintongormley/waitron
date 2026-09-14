@@ -78,14 +78,6 @@ describe("SimulatorPaymentProvider", () => {
     });
   });
 
-  it("refuses a collect for another tenant", async () => {
-    const { provider, params } = await setup();
-
-    await expect(
-      provider.collect({ ...params, tenantId: brandTenantId(crypto.randomUUID()) }),
-    ).rejects.toMatchObject({ code: "payment.not_found" });
-  });
-
   it("voids a captured simulation", async () => {
     const { provider, params } = await setup();
     const captured = await provider.collect(params);

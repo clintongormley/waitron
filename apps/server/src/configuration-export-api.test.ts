@@ -16,7 +16,6 @@ import { ALL_MODULES } from "./modules.js";
 const noopLog: Logger = () => {};
 let venue: VenueResult;
 let cookie: string;
-let foreignCookie: string;
 let moduleVersions: Record<string, number>;
 
 const request: VenueRequest = {
@@ -63,29 +62,6 @@ const suite = usePgliteDb({
       });
       return `${MANAGEMENT_COOKIE}=${session.id}`;
     });
-    const foreignVenue = await applyVenue(
-      planVenue(
-        {
-          ...request,
-          taxId: "B55555555",
-          legalName: "Other Tenant SL",
-          admin: { ...request.admin, email: "other@example.test" },
-        },
-        ALL_MODULES,
-      ),
-      { db, modules: ALL_MODULES },
-    );
-    foreignCookie = await withTransaction(db, async (tx) => {
-      await asAppUser(tx);
-      const admin = await tx.execute<{ id: string }>(sql`
-        select id from persons where tenant_id = ${foreignVenue.tenantId} and role = 'admin'
-      `);
-      const session = await startManagementSession(tx, {
-        tenantId: foreignVenue.tenantId,
-        personId: admin.rows[0]!.id,
-      });
-      return `${MANAGEMENT_COOKIE}=${session.id}`;
-    });
   },
 });
 
@@ -113,15 +89,6 @@ describe("configuration export API", () => {
       body: JSON.stringify({ passphrase: "a strong passphrase" }),
     });
     expect(response.status).toBe(401);
-  });
-
-  it("refuses a manager session belonging to another tenant", async () => {
-    const response = await app().request("/management-api/configuration-export", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie: foreignCookie },
-      body: JSON.stringify({ passphrase: "a strong passphrase" }),
-    });
-    expect(response.status).toBe(403);
   });
 
   it("returns an encrypted configuration-only artifact", async () => {

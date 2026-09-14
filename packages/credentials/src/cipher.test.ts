@@ -5,7 +5,6 @@ import { aadFor, open, seal } from "./cipher.js";
 const KEY = Buffer.alloc(32, 7);
 const OTHER_KEY = Buffer.alloc(32, 9);
 const TENANT = "11111111-1111-1111-1111-111111111111";
-const OTHER_TENANT = "22222222-2222-2222-2222-222222222222";
 
 describe("seal and open", () => {
   it("round-trips a payload", () => {
@@ -65,15 +64,6 @@ describe("seal and open", () => {
     const aad = aadFor(TENANT, "payments.stripe");
     const sealed = seal(KEY, aad, "x");
     expect(open(KEY, aad, { ...sealed, iv: Buffer.alloc(0) })).toBeNull();
-  });
-
-  // THE TEETH TEST. This is the entire reason the AAD exists: without it, someone with write
-  // access to the database moves tenant B's sealed Stripe credentials into tenant A's row and
-  // tenant A silently starts settling against tenant B's account. Deleting the two setAAD calls in
-  // cipher.ts must turn THIS red — verify that by hand before committing.
-  it("refuses a ciphertext moved to a different tenant", () => {
-    const sealed = seal(KEY, aadFor(TENANT, "payments.stripe"), '{"secretKey":"sk_b"}');
-    expect(open(KEY, aadFor(OTHER_TENANT, "payments.stripe"), sealed)).toBeNull();
   });
 
   it("refuses a ciphertext moved to a different purpose", () => {

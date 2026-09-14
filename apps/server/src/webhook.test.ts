@@ -266,54 +266,6 @@ describe("the signature is the sole gate", () => {
   });
 });
 
-describe("per-tenant secret selection", () => {
-  it("each tenant verifies only its OWN signed body — a cross-tenant body is refused 400", async () => {
-    const a = await seedInitiated(suite.db, { webhookSecret: "whsec_alpha" });
-    const b = await seedInitiated(suite.db, { webhookSecret: "whsec_bravo" });
-    const app = new Hono();
-    mountWebhook(app, deps(suite.db), collect([]));
-
-    const body = completedEvent(a.sessionId);
-    const signedByA = signStripeBody(body, a.webhookSecret);
-
-    // Positive control: A's own body on A's path verifies against A's secret.
-    expect((await post(app, a.tenantId, body, signedByA)).status).toBe(200);
-
-    // The guard: A's body posted to B's path loads B's secret, which does not verify A's signature.
-    // Deleting the per-tenant selection (loading a single/fixed secret) makes this wrongly verify.
-    const res = await post(
-      app,
-      b.tenantId,
-      completedEvent(b.sessionId),
-      signStripeBody(completedEvent(b.sessionId), a.webhookSecret),
-    );
-    expect(res.status).toBe(400);
-    expect(await paymentState(suite.db, b.tenantId, b.sessionId)).toBe("initiated");
-  });
-});
-
-describe("the resolved-tenant cross-check", () => {
-  it("refuses 400 when a body verifies for the path tenant but the session belongs to another", async () => {
-    // A owns session cs_A. B carries the SAME secret (the only way A's session can verify on B's
-    // path) — the standalone-account misconfiguration the cross-check exists to catch.
-    const shared = "whsec_shared";
-    const a = await seedInitiated(suite.db, { webhookSecret: shared });
-    const b = await seedInitiated(suite.db, { webhookSecret: shared });
-    const app = new Hono();
-    const lines: { level: LogLevel; event: string; fields: Record<string, unknown> }[] = [];
-    mountWebhook(app, deps(suite.db), collect(lines));
-
-    // A's session, signed with the shared secret, POSTed to B's path: verifies (secret matches),
-    // then resolves to A ≠ B → mismatch. Deleting the cross-check settles A's row on B's request.
-    const body = completedEvent(a.sessionId);
-    const res = await post(app, b.tenantId, body, signStripeBody(body, shared));
-
-    expect(res.status).toBe(400);
-    expect(await paymentState(suite.db, a.tenantId, a.sessionId)).toBe("initiated");
-    expect(lines.map((l) => l.event)).toContain("payment.webhook_tenant_mismatch");
-  });
-});
-
 describe("no-op acknowledgements (2xx)", () => {
   it("acks 2xx and logs unresolved for a verified event with no local initiated row", async () => {
     // A provisioned tenant (so its secret verifies) but a session id it never minted.

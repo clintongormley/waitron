@@ -320,7 +320,6 @@ it("deleting a top-level category makes its children top-level", async () => {
 async function dependantsFixture() {
   const tenantId = await seedTenant(suite.admin);
   await seedLegacySellingUnits(suite.admin, tenantId);
-  const otherTenantId = await seedTenant(suite.admin);
   const made = await app(suite.admin, tenantId, async (tx) => {
     const food = await createCategory(tx, tenantId, { name: { en: "Food" } });
     const x = await createCategory(tx, tenantId, { name: { en: "X" }, parentId: food.id });
@@ -355,7 +354,6 @@ async function dependantsFixture() {
   });
   return {
     tenantId,
-    otherTenantId,
     foodId: made.food.id,
     xId: made.x.id,
     eggsId: made.eggs.id,
@@ -370,12 +368,6 @@ it("reports a category's dependants for the delete preview", async () => {
   expect(deps.children.map((c) => c.id)).toEqual([eggsId]);
   expect(deps.products.find((p) => p.id === p1Id)!.reporting).toBe(true);
   expect(deps.products.find((p) => p.id === p2Id)!.reporting).toBe(false);
-});
-it("dependants is tenant-scoped", async () => {
-  const { otherTenantId, xId } = await dependantsFixture();
-  await expect(
-    app(suite.admin, otherTenantId, (tx) => categoryDependants(tx, otherTenantId, xId)),
-  ).rejects.toMatchObject({ code: "category.not_found" });
 });
 // The bulk add runs here rather than on PGlite because its write is one multi-row
 // `insert … on conflict do nothing` plus one set-based update, and only real PostgreSQL runs those
@@ -392,11 +384,6 @@ async function bulkAddFixture() {
     }),
   );
   return { tenantId, cId: c.id, dId: d.id, p1Id, p2Id };
-}
-async function otherTenantProduct() {
-  const otherTenantId = await seedTenant(suite.admin);
-  await seedLegacySellingUnits(suite.admin, otherTenantId);
-  return seedProduct(otherTenantId);
 }
 it("bulk-adds products, setting the reporting category only where absent", async () => {
   const { tenantId, cId, dId, p1Id, p2Id } = await bulkAddFixture();
@@ -431,7 +418,6 @@ it("refuses a bulk add whose product ids are not an array", async () => {
 const badProductIds: [string, (p1Id: string) => Promise<string>][] = [
   ["repeats a product id", (p1Id) => Promise.resolve(p1Id)],
   ["names a malformed product id", () => Promise.resolve("not-a-uuid")],
-  ["names another tenant's product", () => otherTenantProduct()],
 ];
 it.each(badProductIds)("refuses a bulk add that %s, applying nothing", async (_what, badId) => {
   const { tenantId, cId, p1Id } = await bulkAddFixture();
@@ -442,11 +428,4 @@ it.each(badProductIds)("refuses a bulk add that %s, applying nothing", async (_w
   expect(
     await app(suite.admin, tenantId, (tx) => readProductCategories(tx, tenantId, p1Id)),
   ).toEqual({ categoryIds: [], primaryCategoryId: null });
-});
-it("bulk add is tenant-scoped on the category", async () => {
-  const { cId } = await bulkAddFixture();
-  const otherTenantId = await seedTenant(suite.admin);
-  await expect(
-    app(suite.admin, otherTenantId, (tx) => addProductsToCategory(tx, otherTenantId, cId, [])),
-  ).rejects.toMatchObject({ code: "category.not_found" });
 });

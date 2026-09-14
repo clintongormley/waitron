@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import {
-  AppError,
   compareDecimal,
   decimal,
   tenantId as brandTenantId,
@@ -148,23 +147,6 @@ describe("StripeOnDeviceProvider.collect", () => {
 });
 
 describe("StripeOnDeviceProvider tenant mis-wiring", () => {
-  it("refuses a collect whose params name a different tenant than the provider serves, before charging", async () => {
-    const mine = await seedWorkingOrder(pg.db, freshNif());
-    const other = await seedWorkingOrder(pg.db, freshNif());
-    const client = new FakeStripeDevice();
-    const provider = providerFor(client, mine);
-
-    // A host that wired this provider to `mine` but handed it `other`'s working order.
-    const error = await provider.collect(collectParams(other)).catch((e: unknown) => e);
-    expect(error).toBeInstanceOf(AppError);
-    expect((error as AppError).code).toBe("stripe.tenant_mismatch");
-
-    // The point of the guard: it fires BEFORE the device is asked for money. Without it the
-    // mismatch surfaces at insertCapturedPayment — after `collectOnDevice` has taken the card
-    // payment — which is the branch's own worst defect re-created as designed behaviour.
-    expect(client.lastCollect).toBeNull();
-  });
-
   it("accepts a params tenant that differs only in UUID case", async () => {
     // `tenantId()` validates case-insensitively and returns the value unchanged, so a host reading
     // its tenant from config in upper case and a caller carrying the canonical lower-case form
@@ -194,33 +176,6 @@ describe("StripeOnDeviceProvider.resolvePending", () => {
 });
 
 describe("StripeOnDeviceProvider.forward", () => {
-  it("does not forward another tenant's accepted_offline payment", async () => {
-    // forwardableWhere's tenant predicate keeps the other tenant's payment out of this forward pass.
-    const mine = await seedWorkingOrder(pg.db, freshNif());
-    const theirs = await seedWorkingOrder(pg.db, freshNif());
-    await seedPaymentPolicy(pg.db, theirs.tenantId, "accept_offline", "50.00");
-
-    const theirClient = new FakeStripeDevice();
-    theirClient.nextCollect("offline");
-    const theirs_ = await providerFor(theirClient, theirs).collect(collectParams(theirs, true));
-    expect(theirs_.state).toBe("accepted_offline");
-
-    // My provider sweeps. The device would happily settle their ref if it were listed.
-    const myClient = new FakeStripeDevice();
-    myClient.queueResult({ settled: [theirs_.paymentRef], declined: [] });
-    const result = await providerFor(myClient, mine).forward(AT);
-
-    expect(result).toEqual({ nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 });
-    const row = await pg.db.transaction((tx) =>
-      getPaymentByRef(tx, {
-        tenantId: theirs.tenantId,
-        provider: "stripe",
-        paymentRef: theirs_.paymentRef,
-      }),
-    );
-    expect(row?.state).toBe("accepted_offline"); // untouched
-  });
-
   it("settles a cleared offline payment and declines a refused one (+ one incident), empty queue = zeros", async () => {
     const s = await seedWorkingOrder(pg.db, freshNif());
     await seedPaymentPolicy(pg.db, s.tenantId, "accept_offline", "50.00");

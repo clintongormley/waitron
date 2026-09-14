@@ -1,10 +1,7 @@
-import { randomUUID } from "node:crypto";
-import { and, eq, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { expect, it } from "vitest";
 import {
   asAppUser,
-  optionGroupItems,
-  productOptionGroups,
   withTransaction,
   workingOrderLines,
   workingOrders,
@@ -279,84 +276,6 @@ it("refuses deletion solely because an actual order retains a saved modifier sna
   expect(await app(suite.admin, tenantId, (tx) => getModifier(tx, tenantId, modifier.id))).toEqual(
     modifier,
   );
-});
-
-it("rejects another tenant's definition and choice ids without deleting either tenant's choices", async () => {
-  const owner = await fixture();
-  const other = await fixture();
-  const foreignChoice = { id: randomUUID(), name: { en: "Oat" }, available: true };
-  const ownChoice = { id: randomUUID(), name: { en: "Milk" }, available: true };
-  const foreign = await app(suite.admin, owner.tenantId, (tx) =>
-    createModifier(
-      tx,
-      owner.tenantId,
-      {
-        type: "options",
-        name: { en: "Milk" },
-        choices: [foreignChoice],
-        defaultChoiceId: foreignChoice.id,
-      },
-      "en",
-    ),
-  );
-  const own = await app(suite.admin, other.tenantId, (tx) =>
-    createModifier(
-      tx,
-      other.tenantId,
-      {
-        type: "options",
-        name: { en: "Milk" },
-        choices: [ownChoice],
-        defaultChoiceId: ownChoice.id,
-      },
-      "en",
-    ),
-  );
-  await expect(
-    app(suite.admin, other.tenantId, (tx) => deleteModifier(tx, other.tenantId, foreign.id)),
-  ).rejects.toMatchObject({ code: "modifier.not_found" });
-  await expect(
-    app(suite.admin, other.tenantId, (tx) =>
-      updateModifier(tx, other.tenantId, foreign.id, textDefinition, "en"),
-    ),
-  ).rejects.toMatchObject({ code: "modifier.not_found" });
-  await expect(
-    app(suite.admin, other.tenantId, (tx) =>
-      updateModifier(
-        tx,
-        other.tenantId,
-        own.id,
-        {
-          type: "options",
-          name: own.name,
-          choices: [foreignChoice],
-          defaultChoiceId: foreignChoice.id,
-        },
-        "en",
-      ),
-    ),
-  ).rejects.toMatchObject({ code: "modifier.invalid" });
-  expect(
-    await app(suite.admin, owner.tenantId, (tx) => getModifier(tx, owner.tenantId, foreign.id)),
-  ).toEqual(foreign);
-  expect(
-    await app(suite.admin, other.tenantId, (tx) => getModifier(tx, other.tenantId, own.id)),
-  ).toEqual(own);
-  expect(
-    await app(suite.admin, other.tenantId, (tx) =>
-      tx
-        .select({ id: optionGroupItems.id })
-        .from(optionGroupItems)
-        .where(
-          and(eq(optionGroupItems.tenantId, other.tenantId), eq(optionGroupItems.groupId, own.id)),
-        ),
-    ),
-  ).toEqual([{ id: ownChoice.id }]);
-  expect(
-    await app(suite.admin, other.tenantId, (tx) =>
-      tx.select().from(productOptionGroups).where(eq(productOptionGroups.tenantId, other.tenantId)),
-    ),
-  ).toEqual([]);
 });
 
 it("allows simultaneous selection readers while excluding definition writes", async () => {

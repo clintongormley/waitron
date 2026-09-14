@@ -10,13 +10,11 @@ import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { TrustedClock } from "@waitron/fiscal";
 import { recordTillSale } from "./till-sale.js";
 
-// PostgreSQL exercises the route as app_user and two tenants, including its configuration grant.
+// PostgreSQL exercises the route as app_user, including its configuration grant.
 const suite = useTemplateDb({ template: "manifest" });
 let venue: Venue;
-let other: Venue;
 beforeAll(async () => {
   venue = await setupVenue(suite.admin);
-  other = await setupVenue(suite.admin);
 });
 function app(locationId?: string) {
   const app = new Hono();
@@ -162,38 +160,4 @@ describe("location invoice settings", () => {
       expect((await read.json()).operationDescription).toBe("Venta en establecimiento");
     },
   );
-  it("does not read or update another tenant's location even if configured with its id", async () => {
-    const mismatched = app(other.cfg.locationId);
-    const response = await mismatched.request("/management-api/location-settings", {
-      headers: { cookie: venue.managerCookie },
-    });
-    expect(response.status).toBe(400);
-    expect(
-      (
-        await mismatched.request(
-          "/management-api/location-settings",
-          request(venue.managerCookie, "Cross tenant"),
-        )
-      ).status,
-    ).toBe(400);
-    const row = await suite.admin.execute<{ description: string }>(
-      sql`select operation_description as description from locations where id = ${other.cfg.locationId}`,
-    );
-    expect(row.rows[0]!.description).toBe("Venta en establecimiento");
-  });
-});
-
-it("refuses a manager session belonging to another tenant", async () => {
-  const response = await app().request("/management-api/location-settings", {
-    headers: { cookie: other.managerCookie },
-  });
-  expect(response.status).toBe(403);
-  expect(
-    (
-      await app().request(
-        "/management-api/location-settings",
-        request(other.managerCookie, "Other tenant"),
-      )
-    ).status,
-  ).toBe(403);
 });

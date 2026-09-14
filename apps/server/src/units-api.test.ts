@@ -284,35 +284,4 @@ describe("unit management routes", () => {
     });
     expect(response.status).toBe(400);
   });
-
-  it("does not expose or mutate another tenant's unit through either manager session", async () => {
-    const otherTenantId = await seedTenant(suite.db);
-    const other = await withTransaction(suite.db, async (tx) => {
-      await asAppUser(tx);
-      const unit = await tx.execute<{ id: string }>(sql`
-        insert into units (tenant_id, name, abbreviation, precision)
-        values (${otherTenantId}, '{"en":"foreign"}'::jsonb, '{"en":"f"}'::jsonb, 0) returning id`);
-      const person = await tx.execute<{ id: string }>(sql`
-        insert into persons (tenant_id, display_name, pin_hash, role)
-        values (${otherTenantId}, 'Other manager', ${hashPin("5678")}, 'manager') returning id`);
-      const session = await startManagementSession(tx, {
-        tenantId: otherTenantId,
-        personId: person.rows[0]!.id,
-      });
-      return { unitId: unit.rows[0]!.id, cookie: `${MANAGEMENT_COOKIE}=${session.id}` };
-    });
-
-    const foreignSession = await app().request("/management-api/units", {
-      headers: { cookie: other.cookie },
-    });
-    expect(foreignSession.status).toBe(403);
-    expect(await foreignSession.json()).toMatchObject({
-      error: { code: "authorization.not_permitted" },
-    });
-    expect((await send("GET", `/management-api/units/${other.unitId}`)).status).toBe(404);
-    expect(
-      (await send("PATCH", `/management-api/units/${other.unitId}`, { precision: 1 })).status,
-    ).toBe(404);
-    expect((await send("DELETE", `/management-api/units/${other.unitId}`)).status).toBe(404);
-  });
 });

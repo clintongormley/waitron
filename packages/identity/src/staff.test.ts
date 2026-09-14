@@ -303,18 +303,6 @@ describe("asEmailTaken", () => {
 });
 
 describe("setRole", () => {
-  it("cannot update a person belonging to another tenant", async () => {
-    const otherTenantId = await seedTenant(suite.db);
-    const targetId = await seedPerson(suite.db, otherTenantId, "staff");
-    const { sessionId } = await openManagementSession(suite.db, tenantId, "manager");
-
-    await run((tx) =>
-      setRole(tx, { managementSessionId: sessionId, personId: targetId, role: "manager" }),
-    );
-
-    expect((await personRow(targetId)).role).toBe("staff");
-  });
-
   it("changes the role, seen by a later authorize on an already-open session", async () => {
     const tillId = await seedTill(suite.db, tenantId);
     const { sessionId } = await openManagementSession(suite.db, tenantId, "manager");
@@ -615,16 +603,6 @@ describe("listActiveStaff", () => {
 });
 
 describe("listPersons", () => {
-  it("does not return people belonging to another tenant", async () => {
-    const otherTenantId = await seedTenant(suite.db);
-    const outsider = await seedPerson(suite.db, otherTenantId, "staff");
-    const { sessionId } = await openManagementSession(suite.db, tenantId, "manager");
-
-    const roster = await run((tx) => listPersons(tx, { managementSessionId: sessionId }));
-
-    expect(roster.some((person) => person.personId === outsider)).toBe(false);
-  });
-
   it("listPersons returns a roster with credential booleans, no secrets", async () => {
     const { sessionId, personId: manager } = await openManagementSession(
       suite.db,

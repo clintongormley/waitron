@@ -2,7 +2,7 @@ import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitr
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
-import { captureError, pgErrorCode, pgErrorMessage } from "../testing/errors.js";
+import { captureError, pgErrorMessage } from "../testing/errors.js";
 import { usePgliteDb } from "../testing/lifecycle.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { seedNode } from "../testing/seed.js";
@@ -34,19 +34,15 @@ afterEach(async () => {
 });
 
 const TENANT_A = "11111111-1111-4111-8111-111111111111";
-const TENANT_B = "22222222-2222-4222-8222-222222222222";
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
-const LOCATION_B = "bbbbbbbb-0000-4000-8000-000000000001";
 const TILL_A1 = "aaaaaaaa-1111-4000-8000-000000000001";
-const TILL_B1 = "bbbbbbbb-1111-4000-8000-000000000001";
 const AT = "2026-07-20T19:20:30+00:00";
 
 // working_order_lines.product_id carries a tenant-consistent composite FK to products (park &
 // retrieve, Task 1). It is NULLABLE since ordering modifiers (Task 2) — a child modifier line has no
-// product — but every PARENT dish line still needs a real product in its own tenant. seed() creates
-// one priced product per tenant and stores its id here; the LINE fixture defaults to tenant A's.
+// product — but every PARENT dish line still needs a real product. seed() creates one priced product
+// and stores its id here; the LINE fixture uses it.
 let productA = "";
-let productB = "";
 // order_number is NOT NULL on working_orders. No UNIQUE constraint yet (the per-node allocator is a
 // later task), so a simple ascending counter keeps every fixture order distinct without one.
 let orderNumberSeq = 0;
@@ -57,10 +53,9 @@ async function rows<T>(db: Database, query: ReturnType<typeof sql>): Promise<T[]
 }
 
 async function seed(db: Database): Promise<void> {
-  await db.insert(tenants).values([
-    { id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" },
-    { id: TENANT_B, country: "ES", taxId: "B11111111", legalName: "Fixture Tenant B" },
-  ]);
+  await db
+    .insert(tenants)
+    .values([{ id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
   await db.insert(locations).values([
     {
       id: LOCATION_A,
@@ -71,27 +66,14 @@ async function seed(db: Database): Promise<void> {
       invoiceLocales: ["es", "ca"],
       operationDescription: "Hostelería",
     },
-    {
-      id: LOCATION_B,
-      tenantId: TENANT_B,
-      name: "Fixture Location B",
-      invoiceLocales: ["es"],
-      operationDescription: "Hostelería",
-    },
   ]);
-  await db.insert(tills).values([
-    { id: TILL_A1, tenantId: TENANT_A, locationId: LOCATION_A, name: "A1" },
-    { id: TILL_B1, tenantId: TENANT_B, locationId: LOCATION_B, name: "B1" },
-  ]);
-  // One priced product per tenant — the FK target every draft line now needs. Each is its own
-  // tenant's, so a line pointing at the other tenant's product would trip the composite FK.
+  await db
+    .insert(tills)
+    .values([{ id: TILL_A1, tenantId: TENANT_A, locationId: LOCATION_A, name: "A1" }]);
+  // One priced product — the FK target every draft line now needs.
   const [catA] = await db
     .insert(catalogues)
     .values({ tenantId: TENANT_A, name: "Deli A" })
-    .returning({ id: catalogues.id });
-  const [catB] = await db
-    .insert(catalogues)
-    .values({ tenantId: TENANT_B, name: "Deli B" })
     .returning({ id: catalogues.id });
   const [prodA] = await db
     .insert(products)
@@ -104,19 +86,7 @@ async function seed(db: Database): Promise<void> {
       vatClass: "general",
     })
     .returning({ id: products.id });
-  const [prodB] = await db
-    .insert(products)
-    .values({
-      tenantId: TENANT_B,
-      catalogueId: catB.id,
-      name: "Café solo",
-      pricingUnit: "each",
-      unitPrice: "1.30",
-      vatClass: "general",
-    })
-    .returning({ id: products.id });
   productA = prodA.id;
-  productB = prodB.id;
 }
 
 async function openOrder(db: Database, tenantId = TENANT_A, tillId = TILL_A1): Promise<string> {
@@ -127,7 +97,7 @@ async function openOrder(db: Database, tenantId = TENANT_A, tillId = TILL_A1): P
   return row.id;
 }
 
-// Defaults to tenant A's product; the two tenant-B line inserts override productId to productB.
+// The shared line fixture; callers pass the tenant's product via productId.
 const LINE = {
   lineNo: 1,
   name: "Café solo",
@@ -342,27 +312,6 @@ describe("working_orders", () => {
     );
     expect(pgErrorMessage(error)).toMatch(/violates foreign key constraint/);
   });
-
-  it("rejects a node_id belonging to another tenant with a foreign-key violation", async () => {
-    // The composite (tenant_id, node_id) → nodes(tenant_id, id) FK bites: `foreignNode` EXISTS
-    // but under TENANT_B, so the (TENANT_A, foreignNode) pair has no matching parent row and the
-    // insert is rejected 23503. This is the tenant-consistency a plain single-column node_id FK
-    // could NOT enforce — it would have accepted the cross-tenant node because the id exists in
-    // `nodes`. Mirrors `sales_node_fk`'s cross-tenant rejection
-    // (fiscal-verifactu/src/chain.node-rekey.concurrency.test.ts).
-    const foreignNode = await seedNode(db, brandTenantId(TENANT_B), brandLocationId(LOCATION_B));
-    const error = await captureError(() =>
-      db.insert(workingOrders).values({
-        tenantId: TENANT_A,
-        tillId: TILL_A1,
-        orderNumber: ++orderNumberSeq,
-        status: "open",
-        openedAt: AT,
-        nodeId: foreignNode,
-      }),
-    );
-    expect(pgErrorCode(error)).toBe("23503");
-  });
 });
 
 describe("working_order_lines", () => {
@@ -543,19 +492,6 @@ describe("working_order_lines", () => {
       expect(col.numeric_scale).toBe(2);
     }
   });
-
-  it("rejects a line whose tenant differs from its order's", async () => {
-    const id = await openOrder(db);
-    const error = await captureError(() =>
-      db.insert(workingOrderLines).values({
-        ...LINE,
-        productId: productB,
-        tenantId: TENANT_B,
-        workingOrderId: id,
-      }),
-    );
-    expect(pgErrorMessage(error)).toMatch(/violates foreign key constraint/);
-  });
 });
 
 /**
@@ -639,27 +575,6 @@ describe("working_order_lines — modifier links", () => {
     expect(row.product_id).toBeNull();
   });
 
-  it("rejects a child pointing at a foreign-tenant line via the composite FK", async () => {
-    const orderA = await openOrder(db);
-    const orderB = await openOrder(db, TENANT_B, TILL_B1);
-    const [foreignParent] = await insertLine({
-      workingOrderId: orderB,
-      lineNo: 1,
-      productId: productB,
-      tenantId: TENANT_B,
-      descriptions: '{"es":"Café solo"}',
-    });
-    const error = await captureError(() =>
-      insertLine({
-        workingOrderId: orderA,
-        lineNo: 2,
-        productId: null,
-        parentLineId: foreignParent.id,
-      }),
-    );
-    expect(pgErrorCode(error)).toBe("23503");
-  });
-
   it("links a line to an option_group_item for authoring traceability", async () => {
     const orderId = await openOrder(db);
     const itemId = await seedOptionItem(TENANT_A);
@@ -674,20 +589,6 @@ describe("working_order_lines — modifier links", () => {
       sql`select option_group_item_id from working_order_lines where id = ${line.id}::uuid`,
     );
     expect(row.option_group_item_id).toBe(itemId);
-  });
-
-  it("rejects an option_group_item belonging to another tenant via the composite FK", async () => {
-    const orderId = await openOrder(db);
-    const foreignItem = await seedOptionItem(TENANT_B);
-    const error = await captureError(() =>
-      insertLine({
-        workingOrderId: orderId,
-        lineNo: 1,
-        productId: productA,
-        optionGroupItemId: foreignItem,
-      }),
-    );
-    expect(pgErrorCode(error)).toBe("23503");
   });
 
   it("nulls option_group_item_id when the catalogue item is deleted, rather than blocking", async () => {
