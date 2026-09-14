@@ -37,6 +37,11 @@ export const GENERIC_PACKAGES = [
   "print-agent",
   "diagnostics",
   "sync-enrolment",
+  // The real-database replication suites, which depend on no package (see workspace-cycles). Their
+  // test files are the whole package, so they are scanned like any other src (unlike provisioning's
+  // production-only skip); the one file that chains genuine Spanish fiscal records is exempted by
+  // name in FISCAL_FIDELITY_FIXTURES below.
+  "replication-tests",
   "composition",
   "fiscal-none",
   "provisioning",
@@ -67,6 +72,21 @@ export const GENERIC_PACKAGES = [
  * the Spanish fiscal schema, then delete this set (design §6 step 5).
  */
 export const PRODUCTION_ONLY: ReadonlySet<string> = new Set(["provisioning"]);
+
+/**
+ * Individual test files excluded by exact name because their Spanish is genuine fiscal DATA, not
+ * fixture sloppiness — a NARROWER exemption than `PRODUCTION_ONLY`, which skips a whole package's
+ * test files. `replication-tests`' fidelity suite writes real `registros_facturacion` / `cadenas`
+ * rows and asserts they replicate byte-for-byte, so it names the unrenameable Spanish fiscal tables
+ * and columns (`registro_sif`, `envios`, `ultima_huella`, `importe_total`) throughout; anglicising
+ * them would break the SQL. Its three sibling suites in the same package carry no Spanish and stay in
+ * scope, so this is by-name, not by-package.
+ *
+ * Kept SEPARATE from `SELF` on purpose: `SELF` excludes files that exist to ENUMERATE forbidden
+ * vocabulary in plain text (the wordlist itself), which this suite is not — folding it into `SELF`
+ * would falsify that doc comment (§1).
+ */
+export const FISCAL_FIDELITY_FIXTURES = ["replication-fidelity.pg.test.ts"] as const;
 
 // -----------------------------------------------------------------------------------------------
 // Decision record: apps/* is OUT OF SCOPE for this guard. Prose, not another `as const` array,
@@ -310,6 +330,7 @@ export function sourceFilesIn(packageName: string): string[] {
     .filter((entry) => entry.endsWith(".ts"))
     .filter((entry) => !SELF.some((name) => entry.endsWith(name)))
     .filter((entry) => !I18N_CATALOGUES.some((suffix) => entry.endsWith(suffix)))
+    .filter((entry) => !FISCAL_FIDELITY_FIXTURES.some((name) => entry.endsWith(name)))
     .filter((entry) => !(productionOnly && entry.endsWith(".test.ts")))
     .map((entry) => join(root, entry))
     .filter((entry) => statSync(entry).isFile())

@@ -64,11 +64,11 @@ it passes, fails again when `@waitron/provisioning` is added back to `sync`'s `d
 The guard reads each member's `package.json` rather than asking pnpm for its graph, and counts every
 dependency whose name is another workspace member.
 
-The English-only vocabulary guard (`scripts/english-only.test.ts`) does not scan
-`packages/replication-tests`, although it scanned the three suites while they lived in `sync`. The
-fidelity suite chains real Spanish fiscal records, and the guard's only exemption skips a package's
-test files — which in this package is every file, so exempting it scans nothing and fails the guard's
-own "discovers source files" check.
+The English-only vocabulary guard (`scripts/english-only.test.ts`) scans `packages/replication-tests`
+like any other generic package. Its fidelity suite chains real Spanish fiscal records, so that one
+file is exempted by exact name (`FISCAL_FIDELITY_FIXTURES` in `packages/db/src/english-only.ts`) — a
+narrower exemption than provisioning's whole-package test skip; the package's three other suites carry
+no Spanish and are scanned normally.
 
 ## A command name is declared under `waitron.commands`, never `bin`
 

@@ -21,6 +21,7 @@ import { join, relative } from "node:path";
 import { describe, expect, it } from "vitest";
 import { ALL_MODULES } from "../packages/composition/src/index.js";
 import {
+  FISCAL_FIDELITY_FIXTURES,
   GENERIC_PACKAGES,
   I18N_CATALOGUES,
   PACKAGES_ROOT,
@@ -123,6 +124,7 @@ describe("configuration", () => {
       "print-agent",
       "diagnostics",
       "sync-enrolment",
+      "replication-tests",
       "composition",
       "fiscal-none",
       "provisioning",
@@ -223,6 +225,54 @@ describe("configuration", () => {
     expect(findSpanish("const nombreLector = 1;", FORBIDDEN).map((v) => v.word)).toEqual([
       "nombre",
     ]);
+  });
+
+  it("exempts only the fiscal-fidelity suite by exact name, keeping its three siblings in scope", () => {
+    // A by-NAME exemption, narrower than provisioning's whole-package test skip: the fidelity suite
+    // is the only replication-tests file that names Spanish fiscal tables, so only it is dropped.
+    expect([...FISCAL_FIDELITY_FIXTURES]).toEqual(["replication-fidelity.pg.test.ts"]);
+    const names = sourceFilesIn("replication-tests").map((file) => file.split("/").pop());
+    expect(names).not.toContain("replication-fidelity.pg.test.ts");
+    expect(names).toEqual(
+      expect.arrayContaining([
+        "replication-over-tunnel.pg.test.ts",
+        "replication-provision.pg.test.ts",
+        "replication-subscribe.pg.test.ts",
+      ]),
+    );
+  });
+
+  it("would flag the fidelity suite's fiscal Spanish if scanned, so the pass is the exemption", () => {
+    // Prove-by-construction, mirroring the catalogue test above: the fidelity suite really does carry
+    // forbidden vocabulary (`registros_facturacion`, `cadenas`, `huella`, …), so its absence from the
+    // tree scan is DUE TO the exclusion, not because the words slipped the assembled forbidden set.
+    const fidelity = join(
+      PACKAGES_ROOT,
+      "replication-tests",
+      "src",
+      "replication-fidelity.pg.test.ts",
+    );
+    expect(existsSync(fidelity)).toBe(true);
+    expect(findSpanish(readSource(fidelity), FORBIDDEN).length).toBeGreaterThan(0);
+  });
+
+  it("catches a Spanish word in a NON-exempt replication-tests file (the package is really scanned)", () => {
+    // Control: write a non-exempt source file with a Spanish word into the real package, then build
+    // the guard's ACTUAL scanned set the way the tree scan does — `GENERIC_PACKAGES.flatMap(...)` —
+    // and prove the file is both discovered and flagged. Going through GENERIC_PACKAGES (not
+    // `sourceFilesIn("replication-tests")` directly) is what makes this fail if `replication-tests`
+    // is removed from that list: then the scan never visits the package and the word goes unseen
+    // (§4, prove a guard by control).
+    const control = join(PACKAGES_ROOT, "replication-tests", "src", "__english-only-control__.ts");
+    writeFileSync(control, "export const nombre = 1;\n");
+    try {
+      const scanned = GENERIC_PACKAGES.flatMap((name) => sourceFilesIn(name));
+      expect(scanned).toContain(control);
+      const violations = scanned.flatMap((file) => findSpanish(readSource(file), FORBIDDEN));
+      expect(violations.map((v) => v.word)).toContain("nombre");
+    } finally {
+      rmSync(control, { force: true });
+    }
   });
 
   it("cannot reach this suite, so it needs no exemption", () => {

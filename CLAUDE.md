@@ -229,8 +229,7 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   reserved for facts about the process itself. Every file that throws a code imports its registry.
 - **Spanish domain terms are deliberate, and a module declares its own.** One declaring home per word;
   a fiscal term never goes in the base list. Guard: `scripts/english-only.test.ts`. `apps/*` is out of
-  scope by a recorded decision, so Spanish identifiers in app UI code are caught only by review;
-  `packages/replication-tests` is unscanned too.
+  scope by a recorded decision, so Spanish identifiers in app UI code are caught only by review.
 - **The composition list lives in `@waitron/composition`, and it is the only place that names every
   module.** Generic code reaches the regime through the descriptor's `provisioning` and `fiscal`
   seats. The boundary is the swappable SLOT, not "any module". Guard: `scripts/module-seams.test.ts`
