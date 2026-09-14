@@ -1,10 +1,10 @@
 # Product categories
 
 You can organize a product under several categories without counting its sales twice. One assigned
-category is primary. Its name becomes the reporting label on new order lines, and its existing
-preparation route remains the category route used by the kitchen. Other memberships and parent
-categories do not add destinations or inherit routes. Product and service-zone route precedence
-still applies.
+category may be marked primary. When one is set, its name becomes the reporting label on new order
+lines, and its existing preparation route remains the category route used by the kitchen — see
+below for what a product with no primary records instead. Other memberships and parent categories
+do not add destinations or inherit routes. Product and service-zone route precedence still applies.
 
 You manage categories at `/manage/categories`. Open a category to see its directly assigned
 products. A child's products do not count towards its parent. Create and edit forms let you translate

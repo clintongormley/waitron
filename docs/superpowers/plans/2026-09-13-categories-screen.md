@@ -1294,6 +1294,8 @@ if (body.color !== undefined) {
 ```
 
 - **Do NOT touch the PUT membership screen.** It already accepts a null/absent `primaryCategoryId` (it only rejects a present, non-null, non-uuid value); the "primary required" rule lived only in `replaceProductCategories`, which Task 6 relaxed. This task only adds a test proving a null primary now succeeds end to end.
+
+  > **Corrected 2026-09-14 (final review).** "The 'primary required' rule lived only in `replaceProductCategories`" repeats the claim already corrected under Global Constraints above — `category.primary_required` is also still thrown by a legacy path in `packages/catalogue/src/operations.ts`. See that correction for the detail; this task's own scope (the PUT route this bullet describes) is unaffected either way.
 - Add the two routes beside the sibling category routes, in their exact style:
 
 ```ts

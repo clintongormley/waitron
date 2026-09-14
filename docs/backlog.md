@@ -272,9 +272,9 @@ What that leaves open:
   crosses them proves less than it looks. That is a different rule and wants its own line.
 
 **Product categories — LANDED #340 (2026-09-13).** A product can now belong to several categories
-without its sales being counted twice. One membership is the primary one: its name is the label
-written onto new order lines, and its existing preparation route is the one the kitchen sees. The
-other memberships and any parent categories add no destinations and no routes. Categories get their
+without its sales being counted twice. At most one membership is primary: when one is set, its name
+is the label written onto new order lines, and its existing preparation route is the one the kitchen
+sees. The other memberships and any parent categories add no destinations and no routes. Categories get their
 own dashboard page at `/manage/categories`, where you can translate a category's name, give it a
 picture from the shared library, put it under a parent (not itself and not one of its own
 descendants), and see the products assigned directly to it — a child's products do not count towards
