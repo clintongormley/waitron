@@ -1168,6 +1168,7 @@ export async function fireLines(
     .from(kitchenStations)
     .where(
       and(
+        eq(kitchenStations.tenantId, cfg.tenantId),
         eq(kitchenStations.locationId, cfg.locationId),
         eq(kitchenStations.isDefault, true),
         eq(kitchenStations.active, true),
@@ -1191,7 +1192,7 @@ export async function fireLines(
       categories,
       and(eq(categories.tenantId, products.tenantId), eq(categories.id, products.categoryId)),
     )
-    .where(inArray(products.id, productIds));
+    .where(and(eq(products.tenantId, cfg.tenantId), inArray(products.id, productIds)));
   const routeByProduct = new Map(routes.map((route) => [route.productId, route]));
 
   // --- KDS-2 hold-and-fire (§3c): snapshot each line's course + decide fired-vs-held ---
@@ -1223,7 +1224,9 @@ export async function fireLines(
         eq(ticketItems.workingOrderId, orderId),
       ),
     )
-    .where(eq(kitchenCourses.locationId, cfg.locationId))
+    .where(
+      and(eq(kitchenCourses.tenantId, cfg.tenantId), eq(kitchenCourses.locationId, cfg.locationId)),
+    )
     .groupBy(kitchenCourses.id, kitchenCourses.displayOrder);
 
   // Courses with an EXISTING fired item — a new item of one joins the already-cooking course and fires.

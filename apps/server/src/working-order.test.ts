@@ -1806,6 +1806,39 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
     });
   });
 
+  it("never routes a line by another tenant's product, even when handed its id", async () => {
+    // Production callers read product ids from working_order_lines, whose foreign key keeps them in the
+    // tenant; this hands fireLines a foreign id directly to check its own products read.
+    const venue = await setupVenue();
+    const other = await setupVenue();
+    const foreignProductId = await withTenant(db, other.cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const foreignBar = await createStation(tx, other.cfg, { name: "Foreign bar" });
+      return makeProduct(tx, other.cfg, other.catalogueId, { stationId: foreignBar.id });
+    });
+    await withTenant(db, venue.cfg.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const cocina = await createStation(tx, venue.cfg, { name: "Cocina", isDefault: true });
+      const orderId = randomUUID();
+      await createOpenOrder(tx, venue.cfg, orderId, [line(venue.cafeId)], null);
+      const [orderLine] = await tx
+        .select({
+          id: workingOrderLines.id,
+          courseId: workingOrderLines.courseId,
+          parentLineId: workingOrderLines.parentLineId,
+          note: workingOrderLines.note,
+          doneness: workingOrderLines.doneness,
+        })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, orderId));
+
+      await fireLines(tx, venue.cfg, orderId, [{ ...orderLine!, productId: foreignProductId }]);
+
+      const items = await ticketItemsFor(tx, orderId);
+      expect(items.map((item) => item.stationId)).toEqual([cocina.id]);
+    });
+  });
+
   it("resolves every fired product's venue-service route in ONE batched call", async () => {
     // Two lines of cafe and one of agua: one call carrying each distinct product once, never a call
     // per line or per product on the shared transaction.
