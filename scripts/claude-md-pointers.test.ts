@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -9,10 +9,12 @@ import { describe, expect, it } from "vitest";
  * every session, so a paragraph there is paid for on every turn of every session, while a paragraph
  * in a topic file is paid for only when somebody opens it.
  *
- * Two ways the split rots, both guarded here. A pointer can go stale — a renamed or deleted file
- * leaves a reader directed at nothing, which is worse than the long file it replaced, because a rule
- * whose receipt cannot be found reads as unsupported. And the file can grow back, one "while I'm
- * here" paragraph at a time, until it is 70KB again.
+ * The split rots when a pointer goes stale — a renamed or deleted file leaves a reader directed at
+ * nothing, which is worse than the long file it replaced, because a rule whose receipt cannot be
+ * found reads as unsupported. That is what this guard catches. The file's SIZE is deliberately not
+ * gated (owner, 2026-09-14): it is a keep-an-eye-on-over-time concern tracked in docs/backlog.md, not
+ * a build-failing stop. If CLAUDE.md balloons, move receipts into the topic files and leave the rule
+ * behind.
  *
  * Root project, same reasoning as scripts/journal-monotonic.test.ts: it reads the repository root, so
  * a package-resident copy would only run when its own package happened to be in scope.
@@ -35,13 +37,6 @@ const TOPIC_FILES = [
   "docs/developers/design-system.md",
   "docs/developers/writing-claims.md",
 ];
-
-/**
- * The ceiling is a budget, not a measurement of what the file should be — it sits deliberately above
- * today's size so an ordinary new rule lands without ceremony. Hitting it means the receipts have
- * crept back in: move them to the matching docs/developers/ file and leave the rule behind.
- */
-const MAX_BYTES = 46_000;
 
 /**
  * Only paths rooted at a real top-level directory are checked. A backtick also holds commands,
@@ -145,15 +140,5 @@ describe("CLAUDE.md pointers", () => {
       expect(markdown, `CLAUDE.md no longer points at ${file}`).toContain(file);
       expect(existsSync(join(ROOT, file)), `${file} is missing`).toBe(true);
     }
-  });
-
-  it("stays within its context budget", () => {
-    const bytes = statSync(CLAUDE_MD).size;
-    expect(
-      bytes,
-      `CLAUDE.md is ${bytes} bytes, over the ${MAX_BYTES} budget. It is loaded into every session, ` +
-        `so move the receipts — the mechanism, the measurement, the incident — into the matching ` +
-        `docs/developers/ file and leave the rule and its pointer here.`,
-    ).toBeLessThanOrEqual(MAX_BYTES);
   });
 });
