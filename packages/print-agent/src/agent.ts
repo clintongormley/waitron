@@ -285,6 +285,17 @@ export function createAgent(opts: AgentOptions): Agent {
         });
       }
     }
+    // Classified after the merge, so a probe target the scan also found keeps its mark and each host
+    // is asked once per pull. A failure reports the devices unmarked and never stops the pull.
+    if (host.markPagePrinters && scanned.some((device) => device.transport === "network_tcp")) {
+      try {
+        scanned = await host.markPagePrinters(scanned);
+      } catch (error) {
+        host.log.warn("office-printer check failed", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
     const hostname = host.hostname?.();
     const pulled = await client.pullJobs(current, token, {
       visible,

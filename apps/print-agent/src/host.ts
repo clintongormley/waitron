@@ -1,4 +1,5 @@
 import { hostname } from "node:os";
+import { type MediaQuery, createPagePrinterMarker, queryMediaSupported } from "./ipp-probe.js";
 import { probeNetwork } from "./tcp-probe.js";
 import {
   BluetoothTransport,
@@ -33,6 +34,10 @@ export interface ContainerHostOptions {
   /** The device seam — USB/network/Bluetooth discovery, pairing and resolution. Defaults to the real
    * Linux implementation reading `/sys` and `/dev`; injected in tests so the host stays hermetic. */
   devices?: LinuxDevices;
+  /** The IPP paper-size query behind `markPagePrinters`; defaults to the live query. */
+  mediaQuery?: MediaQuery;
+  /** Injected in tests; defaults to `Date.now`. */
+  now?: () => number;
 }
 
 /** The name a config gets when neither env nor the saved file names one — env pins only the url. */
@@ -59,6 +64,7 @@ export function createContainerHost(opts: ContainerHostOptions): Host {
     bluetooth: new BluetoothTransport(),
   });
   const devices = opts.devices ?? createLinuxDevices();
+  const now = opts.now ?? (() => Date.now());
   return {
     hostname,
     config: async (): Promise<AgentConfig | null> => {
@@ -79,15 +85,19 @@ export function createContainerHost(opts: ContainerHostOptions): Host {
     saveToken: (token) => opts.state.writeToken(token),
     transport,
     fetch: opts.fetch ?? fetch,
-    now: () => Date.now(),
+    now,
     sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
     log: structuredLog(opts.log ?? console),
     status: opts.onStatus,
+    probeNetwork,
+    markPagePrinters: createPagePrinterMarker({
+      query: opts.mediaQuery ?? queryMediaSupported,
+      now,
+    }),
     // The device seam (design §7) — the real Linux USB/network/Bluetooth implementation, or an
     // injected fake in tests. Its four methods ARE the host's.
     visibleDevices: devices.visibleDevices,
     scan: devices.scan,
-    probeNetwork,
     pair: devices.pair,
     resolve: devices.resolve,
   };

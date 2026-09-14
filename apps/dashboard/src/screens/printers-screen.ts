@@ -82,6 +82,15 @@ export class PrintersScreen extends LitElement {
         max-width: min(28vw, 24dvh);
         overflow-wrap: anywhere;
       }
+      wt-data-table::part(discovered-page-printer),
+      wt-data-table::part(page-printer-hint) {
+        color: var(--wt-color-text-muted);
+      }
+      wt-data-table::part(page-printer-hint) {
+        display: block;
+        max-width: min(28vw, 24dvh);
+        font-size: var(--wt-font-size-sm);
+      }
       wt-modal.add-hardware {
         --wt-dialog-max-width: min(90vw, 48rem);
         --wt-modal-aspect-ratio: 1.2;
@@ -266,7 +275,8 @@ export class PrintersScreen extends LitElement {
   @state() private probeHost = "";
   @state() private probePort = "9100";
   @state() private probeErrors: Record<string, string> = {};
-  @state() private probeStatus: "idle" | "pending" | "found" | "missing" | "registered" = "idle";
+  @state() private probeStatus:
+    "idle" | "pending" | "found" | "missing" | "registered" | "page_printer" = "idle";
   #probeTarget: PrinterAddressProbe | undefined;
   @state() private scanningAgents = false;
   #agentTimer?: ReturnType<typeof setInterval>;
@@ -602,7 +612,12 @@ export class PrintersScreen extends LitElement {
           device.port === target.port &&
           Date.parse(device.lastSeenAt) >= target.requestedAt,
       );
-      if (match) this.probeStatus = this.#canAdd(match) ? "found" : "registered";
+      if (match)
+        this.probeStatus = !this.#canAdd(match)
+          ? "registered"
+          : this.#unsupportedPagePrinter(match)
+            ? "page_printer"
+            : "found";
     }
   }
 
@@ -699,6 +714,11 @@ export class PrintersScreen extends LitElement {
 
   #disabledPrinter(device: DiscoveredPrinter): Printer | undefined {
     return this.printers.find((printer) => printer.id === device.printerId && !printer.active);
+  }
+
+  /** An office printer that is not a disabled registration: a retained registration stays re-addable. */
+  #unsupportedPagePrinter(device: DiscoveredPrinter): boolean {
+    return device.pagePrinter === true && this.#disabledPrinter(device) === undefined;
   }
 
   #canAdd(device: DiscoveredPrinter): boolean {
@@ -1500,7 +1520,14 @@ export class PrintersScreen extends LitElement {
         key: "name",
         label: t("printers.name"),
         cell: (d) =>
-          html`<div part="discovered-details" data-test=${`discovered-row-${this.#deviceKey(d)}`}>
+          html`<div
+            part=${
+              this.#unsupportedPagePrinter(d)
+                ? "discovered-details discovered-page-printer"
+                : "discovered-details"
+            }
+            data-test=${`discovered-row-${this.#deviceKey(d)}`}
+          >
             <strong>${this.#discoveredLabel(d)}</strong>
             <div part="printer-meta">
               <div>${transportName(d.transport)}</div>
@@ -1514,13 +1541,17 @@ export class PrintersScreen extends LitElement {
         key: "add",
         label: t("printers.actions"),
         cell: (d) =>
-          html`<wt-button
-            variant="primary"
-            data-test=${`register-${this.#deviceKey(d)}`}
-            ?disabled=${this.submitting}
-            @click=${() => void this.#registerDiscovered(d)}
-            >${this.#disabledPrinter(d) ? t("printers.add_again") : t("action.add")}</wt-button
-          >`,
+          this.#unsupportedPagePrinter(d)
+            ? html`<span part="page-printer-hint" data-test=${`page-printer-${this.#deviceKey(d)}`}
+                >${t("printers.page_printer_hint")}</span
+              >`
+            : html`<wt-button
+                variant="primary"
+                data-test=${`register-${this.#deviceKey(d)}`}
+                ?disabled=${this.submitting}
+                @click=${() => void this.#registerDiscovered(d)}
+                >${this.#disabledPrinter(d) ? t("printers.add_again") : t("action.add")}</wt-button
+              >`,
       },
     ];
     return html`<wt-modal
@@ -1592,6 +1623,7 @@ export class PrintersScreen extends LitElement {
                       found: "printers.probe_found",
                       missing: "printers.probe_missing",
                       registered: "printers.probe_registered",
+                      page_printer: "printers.probe_page_printer",
                     } as const
                   )[this.probeStatus],
                 )

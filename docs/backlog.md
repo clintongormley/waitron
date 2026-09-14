@@ -681,19 +681,45 @@ The original walkthrough is retained under *Detail → Setup wizard*.
 
 ### A3. Printers from the dashboard
 
+**Office printers greyed out in the scan — LANDED #359 (2026-09-14).**
+Office laser printers also accept raw print jobs on port 9100, so the scan and the address check
+listed them like receipt printers. Once per job pull, the agent now asks every network printer it
+reports for its paper sizes, using a read-only IPP Get-Printer-Attributes query on port 631
+(remembered per printer for 30 seconds). A reply listing A4 or US letter marks it an office printer:
+the Add printer dialog greys it out with an explanation and no Add button, unless it matches a
+disabled registration, which keeps Add again. No answer, a late answer or an unreadable reply leaves
+the printer addable as before.
+
+- **Proven on one office printer only.** The owner's HP Color LaserJet MFP M181fw's real reply is a
+  test fixture, and the live query marked it from a Mac on the owner's network; the Epson (port 631
+  closed) stayed unmarked. It has not run from the box's container, and no receipt printer that
+  answers IPP has been captured, so "A4 or letter means office printer" is a heuristic with one
+  data point.
+- **A printer reported by its `.local` name may stay addable.** From a Mac, resolving the HP's
+  `.local` name took 5 seconds, past the 1.5-second limit, so it was left unmarked. Not tried from
+  the box's container, where the lookup may fail outright; either way the printer stays addable.
+- **A typed address now receives one HTTP request on port 631** after its connection check succeeds.
+  The 2026-09-12 address-check design allowed any unicast address (public, loopback, link-local)
+  because the check sent nothing; that reasoning no longer covers the follow-up query.
+- **One failed query can flip a marked printer back to addable** until the next query 30 seconds
+  later, because the server keeps only each agent's latest report — unless another agent reporting
+  the same address has marked it. Accepted as the fail-open cost.
+
 **Check a known address — LANDED #335 (2026-09-12).** The Add printer dialog now takes an IP
 address and port and asks the approved print agents to try it, so a printer the two discovery passes
 cannot see (they do not cross a subnet) can still be added, including reactivating a disabled one.
-The check opens a TCP connection and sends no bytes; the server keeps at most eight targets for
-30 seconds and each agent works out the remaining time against its own clock.
+The check opens a TCP connection and sends no bytes; an address that answers is then asked for its
+paper sizes on port 631 (see _Office printers greyed out_ above). The server keeps at most eight
+targets for 30 seconds and each agent works out the remaining time against its own clock.
 [Design](superpowers/specs/2026-09-12-printer-address-probe-design.md) ·
 [Validation](superpowers/plans/2026-09-12-printer-address-probe.md).
 
 - **Nobody has yet typed a real printer's address into it.** Everything proven so far is loopback
-  sockets and browser tests. The owner's home is the case that motivated it — the box sits on
-  192.168.10.x and both printers on 192.168.20.x, so the port-9100 sweep lists neither — and it is
-  the first thing to try: add the Epson TM-T88III at 192.168.20.247:9100 from the dashboard and
-  print to it.
+  sockets and browser tests. The owner's home is the case that motivated it: the box sits on
+  192.168.10.x and the HP LaserJet on 192.168.20.x, which the port-9100 sweep cannot reach. On
+  2026-09-14 the Epson TM-T88III was found at 192.168.10.81, the box's own subnet. The first things
+  to try on the box: add the Epson at `192.168.10.81:9100` (the sweep should also list it) and print
+  to it; then type the HP's `192.168.20.56:9100`, which should come back as an office printer.
 - **No promise about how long a check takes end to end.** The dialog polls and reports a fresh
   result, but nothing bounds the round trip from pressing the button to an answer; the agent only
   picks the request up on its next job pull.
@@ -710,6 +736,11 @@ The check opens a TCP connection and sends no bytes; the server keeps at most ei
   printers through the existing `paired()` seam. Prereq: the box's Bluetooth radio path is
   hardware-unconfirmed.
 - **The virtual PDF printer**, and a `print_jobs` retention sweep — nothing deletes a job today.
+- **Printing A4 invoices on an office printer** (owner, 2026-09-14): a separate design, not started.
+  It reverses the 2026-09-09 provisioning design's "raw ESC/POS only" decision and needs an A4
+  invoice layout, a way to send a PDF to the printer over IPP (the standard office printing protocol,
+  port 631; the owner's HP accepts PDF directly) and rules for which documents go to which printer.
+  It would share the PDF rendering with the virtual PDF printer above.
 - Read-back gaps: the per-till printer picker is not location-filtered; the print-mode and
   `drawer_open_policy` toggles are set-only (the latter gates cash access); the Impresoras editor
   leaves agent and transport re-binding read-only though the API accepts it.
@@ -1028,7 +1059,9 @@ image constraints under *Detail → Box image*.
 ### B6. The print-agent process
 
 - **A sweep in flight keeps connecting after the discovery window closes** (189 of 253 connects on
-  #313 started after expiry). Pass the deadline through `Host.scan`.
+  #313 started after expiry). Pass the deadline through `Host.scan`. The office-printer paper-size
+  queries that follow the scan have no deadline either: at most eight at a time, each up to
+  1.5 seconds, and the job pull waits for them, so printing is delayed while they run.
 - Retry spacing is the agent's batch interval rather than a per-job backoff, so a flapping printer
   burns `MAX_DELIVERY_ATTEMPTS` at loop speed — needs a next-attempt column.
 - **Cross-box print-agent TLS** — an agent trusts only its local box CA, so a mirror's agent cannot

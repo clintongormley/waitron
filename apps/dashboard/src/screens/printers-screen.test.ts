@@ -900,6 +900,43 @@ describe("printers-screen", () => {
     expect(text(el, "[data-test=probe-status]")).toContain(t("printers.probe_registered"));
   });
 
+  it("explains that a checked address is an office printer instead of reporting it found", async () => {
+    const requestedAt = Date.now();
+    const device: DiscoveredPrinter = {
+      agentId: "a1",
+      agentName: "Kitchen agent",
+      transport: "network_tcp",
+      host: "192.168.20.56",
+      port: 9100,
+      name: "HP LaserJet",
+      pagePrinter: true,
+      alreadyRegistered: false,
+      printerId: null,
+      lastSeenAt: new Date(requestedAt).toISOString(),
+    };
+    const probePrinterAddress = vi.fn().mockResolvedValue({
+      host: device.host,
+      port: device.port,
+      requestedAt,
+      expiresAt: requestedAt + 30000,
+    });
+    const api = stubApi({ probePrinterAddress });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    q(el, "[data-test=open-add-printer]")!.click();
+    await flush(el);
+    typeField(el, "[data-test=probe-host]", "192.168.20.56");
+    typeField(el, "[data-test=probe-port]", "9100");
+    (api.listDiscoveredPrinters as ReturnType<typeof vi.fn>).mockResolvedValue([device]);
+    q(el, "[data-test=probe-printer]")!.click();
+    await flush(el);
+    // Fails if #setDiscovered still maps an addable office printer to "found".
+    const status = text(el, "[data-test=probe-status]");
+    expect(status).toBe(t("printers.probe_page_printer"));
+    expect(status).not.toContain(t("printers.probe_found"));
+    expect(q(el, "[data-test='register-192.168.20.56:9100']")).toBeNull();
+  });
+
   it("explains invalid address and port fields instead of disabling Check address", async () => {
     const probePrinterAddress = vi.fn();
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
@@ -1118,6 +1155,51 @@ describe("printers-screen", () => {
       }
     },
   );
+
+  it("keeps Add again for a disabled registration even when the agent marks it an office printer", async () => {
+    const row = { ...printers[0]!, active: false };
+    const target = {
+      host: row.host!,
+      port: row.port!,
+      requestedAt: Date.now(),
+      expiresAt: Date.now() + 30000,
+    };
+    const device: DiscoveredPrinter = {
+      ...discoveredNetwork[0]!,
+      host: target.host,
+      port: target.port,
+      pagePrinter: true,
+      lastSeenAt: new Date(target.requestedAt).toISOString(),
+      alreadyRegistered: true,
+      printerId: row.id,
+    };
+    const api = stubApi({
+      listPrinters: vi.fn().mockResolvedValue([row]),
+      listDiscoveredPrinters: vi.fn().mockResolvedValue([device]),
+      probePrinterAddress: vi.fn().mockResolvedValue(target),
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    await openDiscovery(el);
+    const key = `${target.host}:${target.port}`;
+    // The retained registration stays re-addable (conventions-ui.md): no office-printer treatment.
+    expect(q(el, `[data-test='page-printer-${key}']`)).toBeNull();
+    expect(q(el, `[data-test='discovered-row-${key}']`)!.getAttribute("part")).toBe(
+      "discovered-details",
+    );
+    expect(text(el, `[data-test='discovered-row-${key}']`)).toContain(t("printers.add_again_hint"));
+    q(el, "[data-test=probe-host]")!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: target.host } }),
+    );
+    q(el, "[data-test=probe-printer]")!.click();
+    await flush(el);
+    expect(text(el, "[data-test=probe-status]")).toContain(t("printers.probe_found"));
+    const add = q(el, `[data-test='register-${key}']`);
+    expect(add!.textContent).toContain(t("printers.add_again"));
+    add!.click();
+    await flush(el);
+    expect(api.updatePrinter).toHaveBeenCalledWith(row.id, { active: true });
+  });
 
   it("shows a refresh error without claiming the address failed to respond", async () => {
     const api = stubApi({
@@ -1350,6 +1432,50 @@ describe("printers-screen", () => {
       transport: "usb",
       localKey: "SN-1",
     });
+  });
+
+  it("greys out a discovered office printer with an explanation and no Add, beside a receipt printer that keeps its Add", async () => {
+    const office: DiscoveredPrinter = {
+      agentId: "a1",
+      agentName: "Cocina agent",
+      transport: "network_tcp",
+      host: "10.0.0.56",
+      port: 9100,
+      make: "HP",
+      model: "LaserJet Pro M404",
+      name: "HP LaserJet",
+      pagePrinter: true,
+      alreadyRegistered: false,
+      printerId: null,
+      lastSeenAt: "2023-11-14T22:13:20.000Z",
+    };
+    const api = stubApi({
+      listDiscoveredPrinters: vi.fn().mockResolvedValue([...discoveredNetwork, office]),
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    await openDiscovery(el);
+
+    // Fails if the receipt-printer path learns to hide or disable ordinary devices.
+    const receiptAdd = q(el, "[data-test='register-10.0.0.77:9100']");
+    expect(receiptAdd).not.toBeNull();
+    expect(receiptAdd!.hasAttribute("disabled")).toBe(false);
+    expect(q(el, "[data-test='page-printer-10.0.0.77:9100']")).toBeNull();
+
+    // Fails if #renderNewPrinter filters office printers out of the table instead of greying them.
+    const officeRow = q(el, "[data-test='discovered-row-10.0.0.56:9100']");
+    expect(officeRow).not.toBeNull();
+    // Fails if the Add button is still rendered for a pagePrinter device.
+    expect(q(el, "[data-test='register-10.0.0.56:9100']")).toBeNull();
+    // Fails if the explanation is not rendered beside the device.
+    expect(text(el, "[data-test='page-printer-10.0.0.56:9100']")).toBe(
+      t("printers.page_printer_hint"),
+    );
+    // Fails if the muted styling is dropped or applied through a class a table cell cannot see.
+    const muted = getComputedStyle(officeRow!).color;
+    expect(muted).not.toBe(
+      getComputedStyle(q(el, "[data-test='discovered-row-10.0.0.77:9100']")!).color,
+    );
   });
 
   it("hides active registered USB devices and shows their seen-status on the printer", async () => {
