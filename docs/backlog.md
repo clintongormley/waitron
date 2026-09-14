@@ -681,7 +681,7 @@ The original walkthrough is retained under *Detail → Setup wizard*.
 
 ### A3. Printers from the dashboard
 
-**Office printers greyed out in the scan — branch `feat/page-printers-greyed-in-scan` (2026-09-14).**
+**Office printers greyed out in the scan — LANDED #359 (2026-09-14).**
 Office laser printers also accept raw print jobs on port 9100, so the scan and the address check
 listed them like receipt printers. Once per job pull, the agent now asks every network printer it
 reports for its paper sizes, using a read-only IPP Get-Printer-Attributes query on port 631
