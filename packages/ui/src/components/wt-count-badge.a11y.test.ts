@@ -6,6 +6,8 @@ import "./wt-count-badge.js";
 
 afterEach(cleanup);
 
+// Two-digit counts throughout: axe files the contrast of one-character text as "incomplete"
+// (shortTextContent), so a single digit could never report a violation.
 describe.each(["light", "dark"] as const)("wt-count-badge a11y (%s theme)", (theme) => {
   test.each(["neutral", "warning", "error"] as const)("a %s badge", async (tone) => {
     await mountThemed(`<wt-count-badge count="12" tone="${tone}"></wt-count-badge>`, theme);

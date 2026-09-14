@@ -78,15 +78,18 @@ export class WtRowActions extends LitElement {
     else this.show();
   }
 
-  /** Opens the menu. Positioned synchronously so its first paint is already in place. */
+  /** Opens the menu. Positioned synchronously so its first paint is already in place. Does nothing
+   * before the first render or while the host is off the page, where a popover cannot open. */
   show(): void {
-    if (this.popup.matches(":popover-open")) return;
-    this.popup.showPopover();
+    const popup = this.popup as HTMLElement | null;
+    if (popup === null || !this.isConnected || popup.matches(":popover-open")) return;
+    popup.showPopover();
     this.positionPopup();
   }
 
   hide(): void {
-    if (this.popup.matches(":popover-open")) this.popup.hidePopover();
+    const popup = this.popup as HTMLElement | null;
+    if (popup?.matches(":popover-open")) popup.hidePopover();
   }
 
   private positionPopup(): void {

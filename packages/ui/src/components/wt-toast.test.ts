@@ -191,3 +191,9 @@ test("an error toast marks its edge with the danger token", async () => {
   host.style.setProperty("--wt-color-danger", "rgb(1, 2, 3)");
   expect(getComputedStyle(part(el, ".toast")!).borderInlineStartColor).toBe("rgb(1, 2, 3)");
 });
+
+test("an info toast marks its edge with the primary token", async () => {
+  const el = await mount('<wt-toast open message="Hi"></wt-toast>');
+  host.style.setProperty("--wt-color-primary", "rgb(4, 5, 6)");
+  expect(getComputedStyle(part(el, ".toast")!).borderInlineStartColor).toBe("rgb(4, 5, 6)");
+});

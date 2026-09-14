@@ -305,16 +305,39 @@ test("puts a badge-slotted element inside the trigger button", async () => {
   expect(slot.assignedElements().map((e) => e.textContent)).toEqual(["3"]);
 });
 
-test("show() opens the popup and hide() closes it", async () => {
+test("show() opens the popup under its trigger and hide() closes it", async () => {
+  const el = (await mount(
+    '<wt-row-actions label="Alerts" align="end"><wt-button>See all</wt-button></wt-row-actions>',
+  )) as WtRowActions;
+  // Room on both sides, so the trailing-edge alignment is observed rather than clamped.
+  el.style.marginInlineStart = "300px";
+  const popup = el.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+  el.show();
+  expect(popup.matches(":popover-open")).toBe(true);
+  // Only a popup measured while open has a width to subtract from the trigger's right edge.
+  const anchor = el.shadowRoot!.querySelector("button")!.getBoundingClientRect();
+  const bounds = popup.getBoundingClientRect();
+  expect(bounds.top).toBeCloseTo(anchor.bottom, 0);
+  expect(bounds.right).toBeCloseTo(anchor.right, 0);
+  el.hide();
+  expect(popup.matches(":popover-open")).toBe(false);
+});
+
+test("show() and hide() do nothing before the first render", () => {
+  const el = document.createElement("wt-row-actions");
+  expect(() => el.show()).not.toThrow();
+  expect(() => el.hide()).not.toThrow();
+});
+
+test("show() does nothing once the menu has been removed from the page", async () => {
   const el = (await mount(
     '<wt-row-actions label="Alerts"><wt-button>See all</wt-button></wt-row-actions>',
   )) as WtRowActions;
   const popup = el.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
-  el.show();
-  expect(popup.matches(":popover-open")).toBe(true);
-  expect(popup.style.top).not.toBe("");
-  el.hide();
+  el.remove();
+  expect(() => el.show()).not.toThrow();
   expect(popup.matches(":popover-open")).toBe(false);
+  expect(() => el.hide()).not.toThrow();
 });
 
 test("a consumer can size the popup through its part", async () => {
