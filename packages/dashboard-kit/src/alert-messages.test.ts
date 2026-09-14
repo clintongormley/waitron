@@ -2,24 +2,24 @@ import { describe, expect, it } from "vitest";
 import { alertMessage, hasAlertMessage, registerAlertMessages } from "./alert-messages.js";
 
 registerAlertMessages({
-  "test.rejected": {
-    en: "Rejected: {mensaje} (code {codigo})",
-    es: "Rechazado: {mensaje} (código {codigo})",
-  },
   // Placeholder non-English text: dashboard-kit's tests are scanned by the english-only guard.
+  "test.rejected": {
+    en: "Rejected: {reason} (code {errorCode})",
+    es: "ES rejected: {reason} (ES code {errorCode})",
+  },
   "test.count": { en: "{count} payments", es: "{count} ES" },
 });
 
 describe("alertMessage", () => {
   it("fills params into the locale's sentence, stripping the region", () => {
-    expect(alertMessage("test.rejected", { mensaje: "NIF", codigo: 4102 }, "es-ES")).toBe(
-      "Rechazado: NIF (código 4102)",
+    expect(alertMessage("test.rejected", { reason: "Tax id", errorCode: 4102 }, "es-ES")).toBe(
+      "ES rejected: Tax id (ES code 4102)",
     );
     expect(alertMessage("test.count", { count: 3 }, "en-GB")).toBe("3 payments");
   });
 
   it("shows a dash for a null or missing param", () => {
-    expect(alertMessage("test.rejected", { mensaje: null }, "en")).toBe("Rejected: — (code —)");
+    expect(alertMessage("test.rejected", { reason: null }, "en")).toBe("Rejected: — (code —)");
   });
 
   it("writes a structured param as JSON", () => {
