@@ -649,8 +649,15 @@ test("drops a stored filter value the column no longer offers, or that is not a 
     "test.stale",
     JSON.stringify({ filters: { status: "deleted", name: "Ada Active", gone: "x" } }),
   );
-  const stale = await tableS({ viewKey: "test.stale", searchable: true, columns: withStatus });
+  const stale = await tableS({
+    viewKey: "test.stale",
+    searchable: true,
+    columns: [{ ...withStatus[0]!, sortValue: (r: RowS) => r.name }, withStatus[1]!],
+  });
   expect(rowKeysS(stale)).toEqual(["1", "2"]);
+  stale.shadowRoot!.querySelector<HTMLButtonElement>('button[data-sort="name"]')!.click();
+  await stale.updateComplete;
+  expect(JSON.parse(sessionStorage.getItem("test.stale")!).filters).toEqual({});
   cleanup();
   sessionStorage.setItem("test.numeric", JSON.stringify({ filters: { status: 1 } }));
   const numeric = await tableS({ viewKey: "test.numeric", searchable: true, columns: withStatus });
