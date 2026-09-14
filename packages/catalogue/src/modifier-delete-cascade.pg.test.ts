@@ -18,8 +18,8 @@ import {
 
 // A real backend is used for the RESTRICT→CASCADE control described at the delete below: before
 // migration 0012 this same delete threw a foreign-key RESTRICT violation, watched red on a real
-// container. The CASCADE fires regardless of the deleter's role, so this does NOT require the table
-// owner — the run-it review deleted as app_user and the cascade still fired.
+// container. The delete runs as app_user (the deployment role), exactly as production's
+// deleteModifier does — no owner privilege is needed, so this proves the app_user cascade itself.
 const suite = useTemplateDb({ template: "core" });
 
 function app<T>(
@@ -88,12 +88,13 @@ it("cascades an option_groups delete through the published menu link rows", asyn
   expect(linksBefore).toHaveLength(1);
   expect(optionsBefore).toHaveLength(1);
 
-  // Delete the option group directly as the table owner (bypassing the application's in-use guard).
+  // Delete the option group as app_user (the deployment role), the same path production's
+  // deleteModifier takes, and directly — bypassing only the application's in-use guard, not the role.
   // Before migration 0012 both menu foreign keys were RESTRICT: this same delete threw SQLSTATE
   // 23001 (foreign-key RESTRICT violation), watched red on 2026-09-14 before the flip. That red run
   // is the control — it proves the delete reaches the constraint rather than a no-op.
-  await suite.admin.execute(
-    sql`delete from option_groups where tenant_id = ${tenantId} and id = ${groupId}`,
+  await app(suite.admin, tenantId, (tx) =>
+    tx.execute(sql`delete from option_groups where tenant_id = ${tenantId} and id = ${groupId}`),
   );
 
   const groupsAfter = await suite.admin
