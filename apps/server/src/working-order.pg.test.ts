@@ -2669,6 +2669,7 @@ describe("cross-tenant isolation — a ticket-prep verb never advances another t
   it("bumpCourseReady with a FOREIGN tenant's order+course ids leaves that tenant's items unchanged", async () => {
     const { cfg: tenantA } = await setupVenue();
     const { cfg: tenantB, cafe: cafeB } = await modeVenue("prepay");
+    expect(tenantB.tenantId).not.toBe(tenantA.tenantId);
 
     // Route B's café to a course so its fired item carries a non-null course_id (bumpCourseReady
     // filters on course_id, and `course_id = NULL` never matches — an unrouted item would make the
@@ -2701,6 +2702,7 @@ describe("cross-tenant isolation — a ticket-prep verb never advances another t
   it("advanceTicket with a FOREIGN tenant's order+station ids leaves that tenant's items unchanged", async () => {
     const { cfg: tenantA } = await setupVenue();
     const { cfg: tenantB, cafe: cafeB } = await modeVenue("ticket_then_pay");
+    expect(tenantB.tenantId).not.toBe(tenantA.tenantId);
 
     const bOrderId = randomUUID();
     await parkOrder({ db: suite.admin }, tenantB, {
@@ -2727,6 +2729,7 @@ describe("cross-tenant isolation — a ticket-prep verb never advances another t
   it("advanceTicketItem against a FOREIGN tenant's item id throws invalid_transition — never advances it", async () => {
     const { cfg: tenantA } = await setupVenue();
     const { cfg: tenantB, cafe: cafeB } = await modeVenue("prepay");
+    expect(tenantB.tenantId).not.toBe(tenantA.tenantId);
 
     const bOrderId = randomUUID();
     await payWorkingOrder(
