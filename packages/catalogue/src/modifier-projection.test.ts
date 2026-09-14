@@ -204,7 +204,6 @@ it("projects only published available choices, clears excluded defaults, and kee
       { ...options, choices: [], defaultChoiceId: null },
       {
         ...extras,
-        available: false,
         choices: [
           {
             id: extraId,
