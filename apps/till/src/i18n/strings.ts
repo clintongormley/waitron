@@ -412,7 +412,7 @@ export const en = {
   "table.split_modifier_error": "Dishes with options must be moved in full",
   // Errors
   "pin.invalid": "Wrong PIN, try again",
-  "person.suspended": "Account suspended, ask a manager",
+  "person.suspended": "This account is disabled — ask a manager",
   "sale.error": "Could not complete the sale, try again",
   // A PERMANENT refusal, unlike `sale.error` above: the sale breaks a rule of the tax filing itself,
   // so the same basket will be refused however many times it is rung up. Retrying is the one piece
@@ -745,7 +745,7 @@ export const es: Record<StringKey, string> = {
   "table.split_options_together": "Los platos con opciones deben moverse completos",
   "table.split_modifier_error": "Los platos con opciones deben moverse completos",
   "pin.invalid": "PIN incorrecto, inténtalo de nuevo",
-  "person.suspended": "Cuenta suspendida, avisa a un responsable",
+  "person.suspended": "Esta cuenta está desactivada. Avisa a un responsable",
   "sale.error": "No se pudo completar la venta, inténtalo de nuevo",
   "sale.refused":
     "Esta venta no se puede registrar en Hacienda. La caja no ha registrado nada y reintentar no servirá de nada: hay que corregir los datos de facturación del local, así que avisa a quien configuró esta caja. Si ya has cobrado con tarjeta en el datáfono, devuelve el importe ahí.",

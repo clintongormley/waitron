@@ -51,3 +51,18 @@ describe("the permanent-refusal messages", () => {
     expect(catalogues["en-GB"]?.["place.refused"]).not.toBe(catalogues["en-GB"]?.["sale.refused"]);
   });
 });
+
+describe("the suspended-account message matches the dashboard's wording", () => {
+  // Same person, same refusal, same words on either screen (owner decision — align to the dashboard's
+  // existing choice, not a new one). The dashboard's copy lives in apps/dashboard/src/i18n/codes.ts
+  // under `person.suspended`; the till renders its OWN catalogue string via `t("person.suspended")` on
+  // the lock screen, so the two drift silently unless something pins them equal.
+  it("uses the dashboard's English and Spanish text", () => {
+    expect(catalogues["en-GB"]?.["person.suspended"]).toBe(
+      "This account is disabled — ask a manager",
+    );
+    expect(catalogues["es-ES"]?.["person.suspended"]).toBe(
+      "Esta cuenta está desactivada. Avisa a un responsable",
+    );
+  });
+});
