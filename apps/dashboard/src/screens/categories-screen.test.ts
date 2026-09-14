@@ -404,10 +404,15 @@ it("clears a failed delete preview when the dialog is reopened", async () => {
   expect(modal.querySelector('[data-test="dependants-error"]')).toBeNull();
 });
 
-// Reopening the SAME category's delete dialog while its first preview fetch is still in flight
-// must not let that stale fetch's outcome apply once it finally settles — comparing the category
-// id alone cannot tell a superseded request from the current one, since both share the same id.
-it("ignores a stale preview response from the same category's earlier open", async () => {
+// Two in-flight preview fetches for the SAME category — from clicking delete on the same row
+// twice in a row — must not let the older one's outcome apply once it finally settles: comparing
+// the category id alone cannot tell a superseded request from the current one, since both share
+// the same id. (Reproducing this via a real close-then-reopen click sequence instead is flaky:
+// wt-modal's `.open` change cascades into a native <dialog>-driven `wt-close` event that can land
+// on a later task than any fixed wait accounts for. Opening the same row twice needs no close at
+// all — `#openDelete` has no guard against being called while already open — so the only thing
+// under test is the generation guard itself, not modal-closing timing.)
+it("ignores a stale preview response from an earlier open of the same category", async () => {
   const fx = apiFixture();
   let resolveFirst!: (value: CategoryDependants) => void;
   let rejectSecond!: (error: Error) => void;
@@ -428,26 +433,20 @@ it("ignores a stale preview response from the same category's earlier open", asy
   };
   openDelete(); // first open of "food" — its fetch never resolves yet
   await el.updateComplete;
+  openDelete(); // open the SAME category again, without closing — a second, fresh fetch starts
+  await el.updateComplete;
   const modal = [...el.shadowRoot!.querySelectorAll("wt-modal")].find((modal) => modal.open)!;
-  modal.querySelector<HTMLElementTagNameMap["wt-button"]>('wt-button[slot="cancel"]')!.click();
-  // The cancel click closes the dialog directly, which also flips wt-modal's `.open` property,
-  // triggering the native <dialog>'s own "close" event, which bubbles back as `wt-close` and calls
-  // the same close handler again — a second, cascaded update whose native event can land on a
-  // later task than `updateComplete` flushes. Give it a real macrotask to land before reopening,
-  // or the second open below can race a still-in-flight close and have it wipe the new state.
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  await el.updateComplete;
-  openDelete(); // reopen the SAME category — a fresh fetch starts
-  await el.updateComplete;
   rejectSecond(new Error("offline")); // the fresh (current) request fails
-  await vi.waitFor(async () => {
-    await el.updateComplete;
-    expect(modal.querySelector('[data-test="dependants-error"]')).not.toBeNull();
-  });
+  await vi.waitFor(() =>
+    expect(modal.querySelector('[data-test="dependants-error"]')).not.toBeNull(),
+  );
   resolveFirst({ products: [], children: [], parentId: null, routes: [] }); // the stale one lands late
-  // The stale success races the error paint on its own microtask; give it a real macrotask so a
-  // wrongly-applied resolution has landed before asserting it was ignored, not just "not yet seen".
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  // A resolved promise's continuation, and the Lit update it triggers, are both microtask work —
+  // unlike the flaky close/reopen version of this test, nothing here crosses a native-event
+  // macrotask boundary, so `updateComplete` genuinely settles the outcome rather than merely
+  // proving it hadn't landed YET. Await it twice: once for the fetch's own `.then`, once for the
+  // state change it makes to actually paint.
+  await el.updateComplete;
   await el.updateComplete;
   // The stale success must not clear the warning or enable Delete.
   expect(modal.querySelector('[data-test="dependants-error"]')).not.toBeNull();
