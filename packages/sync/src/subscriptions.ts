@@ -109,7 +109,10 @@ export async function dropSubscription(db: Database, name: string): Promise<void
   await db.execute(sql.raw(dropSubscriptionStatement(name)));
 }
 /** Narrow (or widen) which publications a subscription names — the drain-window
- * `SET PUBLICATION waitron_<env>_ledger` in spec §4.2, built here and called in step 4. */
+ * `SET PUBLICATION waitron_<env>_ledger` in spec §4.2, built here and called in step 4.
+ * The running apply worker takes the new list only after it restarts, so on a widen a publisher write
+ * committed before that restart is not applied (docs/developers/testing-guide.md, "A widened
+ * subscription drops publisher writes committed before its apply worker restarts"). */
 export async function setSubscriptionPublications(
   db: Database,
   name: string,
