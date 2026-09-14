@@ -80,6 +80,33 @@ test("sorts numbers numerically", async () => {
   expect(rowText(el)).toEqual(["Bea2Edit", "Ada10Edit"]);
 });
 
+test("applies the sortKey and sortDirection defaults on first render", async () => {
+  const el = await table({ sortKey: "name", sortDirection: "ascending" });
+  expect(rowText(el)).toEqual(["Ada10Edit", "Bea2Edit"]); // Ada before Bea
+});
+
+test("emits wt-sort-change when a header is clicked", async () => {
+  const el = await table();
+  const events: { sortKey: string | null; sortDirection: string }[] = [];
+  el.addEventListener("wt-sort-change", (e) =>
+    events.push((e as CustomEvent).detail),
+  );
+  el.shadowRoot!.querySelector<HTMLButtonElement>('button[data-sort="name"]')!.click();
+  await el.updateComplete;
+  expect(events).toEqual([{ sortKey: "name", sortDirection: "ascending" }]);
+  el.shadowRoot!.querySelector<HTMLButtonElement>('button[data-sort="name"]')!.click();
+  await el.updateComplete;
+  expect(events).toEqual([
+    { sortKey: "name", sortDirection: "ascending" },
+    { sortKey: "name", sortDirection: "descending" },
+  ]);
+});
+
+test("descending default sorts the other way", async () => {
+  const el = await table({ sortKey: "count", sortDirection: "descending" });
+  expect(rowText(el)).toEqual(["Ada10Edit", "Bea2Edit"]); // 10 before 2
+});
+
 test("renders loading, error and empty states supplied by the consumer", async () => {
   const loading = await table({ loading: true, loadingMessage: "Loading users" });
   expect(loading.shadowRoot!.querySelector('[role="status"]')!.textContent).toContain(

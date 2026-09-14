@@ -163,8 +163,8 @@ export class WtDataTable<Row = unknown> extends LitElement {
   @property({ attribute: false }) selectionLabel: (row: Row) => string = () => "Select row";
   @property() selectAllLabel = "Select all";
 
-  @state() private sortKey: string | null = null;
-  @state() private sortDirection: SortDirection = "ascending";
+  @property() sortKey: string | null = null;
+  @property() sortDirection: SortDirection = "ascending";
   @state() private collapsed = new Set<string>();
 
   #emitSelection(next: string[]): void {
@@ -199,10 +199,17 @@ export class WtDataTable<Row = unknown> extends LitElement {
     if (column.sortValue === undefined) return;
     if (this.sortKey === column.key) {
       this.sortDirection = this.sortDirection === "ascending" ? "descending" : "ascending";
-      return;
+    } else {
+      this.sortKey = column.key;
+      this.sortDirection = "ascending";
     }
-    this.sortKey = column.key;
-    this.sortDirection = "ascending";
+    this.dispatchEvent(
+      new CustomEvent("wt-sort-change", {
+        detail: { sortKey: this.sortKey, sortDirection: this.sortDirection },
+        bubbles: true,
+        composed: true,
+      }),
+    );
   }
 
   /**
