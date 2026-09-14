@@ -56,7 +56,10 @@ describe("the suspended-account message matches the dashboard's wording", () => 
   // Same person, same refusal, same words on either screen (owner decision — align to the dashboard's
   // existing choice, not a new one). The dashboard's copy lives in apps/dashboard/src/i18n/codes.ts
   // under `person.suspended`; the till renders its OWN catalogue string via `t("person.suspended")` on
-  // the lock screen, so the two drift silently unless something pins them equal.
+  // the lock screen. This test pins the till catalogue to a HARDCODED copy of the dashboard's words, so
+  // it catches only a TILL-side edit that drifts from them. It does NOT read codes.ts, so a change to
+  // the dashboard's own wording would leave this green and silently reintroduce the drift — this
+  // string is the anchor, and the two are kept equal only as long as the dashboard side is not moved.
   it("uses the dashboard's English and Spanish text", () => {
     expect(catalogues["en-GB"]?.["person.suspended"]).toBe(
       "This account is disabled — ask a manager",
