@@ -768,6 +768,17 @@ targets for 30 seconds and each agent works out the remaining time against its o
   run. The name-constrained CA does NOT protect a personal Android phone (measured 2026-09-08); BYOD
   Android either accepts broad trust in the box CA or uses the public-certificate path — an owner
   call before go-live.
+- **The till's "This device hasn't trusted the till yet" page has never been seen on a real
+  device.** `isTrustBroken` (`apps/till/src/trust-check.ts`) reads a `SecurityError` from
+  registering the non-existent `/sw-probe.js` as "certificate not trusted". That signal is still a
+  belief, never checked on a device that clicked past the browser's warning. Since #364
+  (2026-09-14) it runs only on pages served over HTTPS: on the plain-HTTP dev server Chromium also
+  throws a `SecurityError` for the HTML answer, so every dev till load showed that page. Two gaps
+  remain. The signal is trustworthy only while the server answers the probe with 404, which the
+  box's `mountSpa` does. And no test covers the HTTPS default: a default of `"http:"` would pass
+  every test, because a browser test page cannot be served over HTTPS. **Next action:** during the
+  on-device trust rows above, click past the certificate warning on one device and confirm the page
+  appears.
 - **Location-consistency guard** — nothing enforces that a sale-capable device's register lives in
   the box's configured location, so a mis-provisioned device could stamp a fiscal record with a
   different site. Guard at enrol or first sale.
