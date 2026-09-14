@@ -1094,7 +1094,7 @@ function routeRank(route: { zoneId: string | null; productId: string | null }): 
 }
 
 /** Resolve each distinct product in `productIds` to its route or its coded error, in input order,
- *  in at most four reads whatever the number of products. A missing zone still throws. */
+ *  in at most three reads whatever the number of products. A missing zone still throws. */
 async function resolvePreparationRouteOutcomes(
   tx: Transaction,
   cfg: VenueScope,
@@ -1125,8 +1125,17 @@ async function resolvePreparationRouteOutcomes(
       categoryId: preparationRoutes.categoryId,
       stationId: preparationRoutes.stationId,
       noPreparation: preparationRoutes.noPreparation,
+      stationActive: kitchenStations.active,
     })
     .from(preparationRoutes)
+    .leftJoin(
+      kitchenStations,
+      and(
+        eq(kitchenStations.tenantId, cfg.tenantId),
+        eq(kitchenStations.id, preparationRoutes.stationId),
+        eq(kitchenStations.locationId, cfg.locationId),
+      ),
+    )
     .where(
       and(
         eq(preparationRoutes.tenantId, cfg.tenantId),
@@ -1170,30 +1179,6 @@ async function resolvePreparationRouteOutcomes(
     if (winner !== undefined) winners.set(id, winner);
   }
 
-  const stationIds = [
-    ...new Set(
-      [...winners.values()].flatMap((route) => (route.noPreparation ? [] : [route.stationId!])),
-    ),
-  ];
-  const activeStations =
-    stationIds.length === 0
-      ? new Set<string>()
-      : new Set(
-          (
-            await tx
-              .select({ id: kitchenStations.id })
-              .from(kitchenStations)
-              .where(
-                and(
-                  inArray(kitchenStations.id, stationIds),
-                  eq(kitchenStations.tenantId, cfg.tenantId),
-                  eq(kitchenStations.locationId, cfg.locationId),
-                  eq(kitchenStations.active, true),
-                ),
-              )
-          ).map((row) => row.id),
-        );
-
   for (const id of ids) {
     const winner = winners.get(id);
     if (!categoryById.has(canonicalUuid(id))) {
@@ -1203,10 +1188,11 @@ async function resolvePreparationRouteOutcomes(
     } else if (winner.noPreparation) {
       outcomes.set(id, { kind: "no_preparation" });
     } else {
+      // A station in another location joins as null, and reads as inactive here.
       const stationId = winner.stationId!;
       outcomes.set(
         id,
-        activeStations.has(stationId)
+        winner.stationActive === true
           ? { kind: "station", stationId }
           : new AppError("route.station_inactive", { stationId }),
       );

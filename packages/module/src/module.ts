@@ -173,8 +173,9 @@ export interface VenueServiceContribution {
     cfg: { tenantId: TenantId; locationId: LocationId },
     zoneId: string,
   ): Promise<OrderServiceContext>;
-  /** Resolves every product in one batch; throws the first failing product's coded error in input
-   *  order. An empty list returns an empty map without querying. */
+  /** Resolves every product in one batch. An unknown zone throws `service_zone.not_found` before any
+   *  product error; otherwise throws the first failing product's coded error in input order. An empty
+   *  list returns an empty map without querying. */
   resolvePreparationRoutes(
     tx: Transaction,
     cfg: { tenantId: TenantId; locationId: LocationId },

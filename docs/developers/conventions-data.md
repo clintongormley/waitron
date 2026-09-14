@@ -141,7 +141,7 @@ and one tenant-scoped batch of product variants before its in-memory line loop. 
 `working-order.test.ts` probe spies on both contribution methods: one `listZoneOffers` call and no
 per-line `resolveZoneOffer` calls for a repeated-offer basket. Kitchen routing follows the same
 rule: `fireLines` makes one `resolvePreparationRoutes` call per fire, which answers for every product
-with at most four reads; `working-order.test.ts` checks the single call and
+with at most three reads; `working-order.test.ts` checks the single call and
 `packages/venue-service/src/operations.test.ts` checks the read count for one product and for five.
 
 **Grants and roles**

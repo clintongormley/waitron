@@ -1207,7 +1207,7 @@ export async function fireLines(
 
   // Aggregate existing items per venue course: anyFired lets later rounds join food
   // already cooking, and itemCount includes prior rounds when choosing the earliest
-  // course. The join matches tenant ids and the course list is location-scoped.
+  // course. The join matches tenant ids and the course list is tenant- and location-scoped.
   const courseRows = await tx
     .select({
       id: kitchenCourses.id,

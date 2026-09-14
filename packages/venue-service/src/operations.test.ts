@@ -968,7 +968,7 @@ describe("resolvePreparationRoutes", () => {
     });
   });
 
-  it("issues the same four queries for one product as for five", async () => {
+  it("issues the same three queries for one product as for five", async () => {
     const { tenantId, cfg, zoneId } = await seedRoutingVenue();
     await scoped(tenantId, async (tx) => {
       const menu = await createCatalogue(tx, tenantId, { name: "Counting" });
@@ -988,13 +988,13 @@ describe("resolvePreparationRoutes", () => {
       await expect(resolvePreparationRoutes(tx, cfg, zoneId, [productIds[0]!])).resolves.toEqual(
         new Map([[productIds[0]!, expected.get(productIds[0]!)]]),
       );
-      expect(prepared).toHaveBeenCalledTimes(4);
+      expect(prepared).toHaveBeenCalledTimes(3);
 
       prepared.mockClear();
       await expect(resolvePreparationRoutes(tx, cfg, zoneId, productIds)).resolves.toEqual(
         expected,
       );
-      expect(prepared).toHaveBeenCalledTimes(4);
+      expect(prepared).toHaveBeenCalledTimes(3);
     });
   });
 
@@ -1004,6 +1004,12 @@ describe("resolvePreparationRoutes", () => {
       const prepared = vi.spyOn(tx._.session, "prepareQuery");
       await expect(resolvePreparationRoutes(tx, cfg, UNKNOWN_ID, [])).resolves.toEqual(new Map());
       expect(prepared).not.toHaveBeenCalled();
+
+      // Control: the spy does see this function's queries, so the zero above is not a blind seam.
+      await expect(
+        rejection(resolvePreparationRoutes(tx, cfg, UNKNOWN_ID, [UNKNOWN_ID])),
+      ).resolves.toEqual({ code: "service_zone.not_found", params: { zoneId: UNKNOWN_ID } });
+      expect(prepared).toHaveBeenCalledTimes(1);
     });
   });
 
