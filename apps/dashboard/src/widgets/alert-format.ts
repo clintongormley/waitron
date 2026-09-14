@@ -1,6 +1,6 @@
 import { t as tKit } from "@waitron/dashboard-kit";
 import { currentLocale, t } from "../i18n/t.js";
-import type { AlertView } from "../api/client.js";
+import type { AlertView, DashboardApi } from "../api/client.js";
 
 const INCIDENT_PREFIX = "incident:";
 
@@ -8,6 +8,30 @@ export function incidentIdOf(alert: Pick<AlertView, "key" | "kind">): string | n
   return alert.kind === "event" && alert.key.startsWith(INCIDENT_PREFIX)
     ? alert.key.slice(INCIDENT_PREFIX.length)
     : null;
+}
+
+/** The screen a "Go to" action opens. Only an ongoing alert names the screen that fixes it; an event
+ * is marked handled instead. */
+export function screenTargetOf(
+  alert: Pick<AlertView, "kind" | "screen">,
+  canOpen: (screen: string) => boolean,
+): string | null {
+  return alert.kind === "ongoing" && alert.screen !== undefined && canOpen(alert.screen)
+    ? alert.screen
+    : null;
+}
+
+/** Marks an incident handled, then refreshes every query reading incidents unless the caller has
+ * moved on. Invalidates rather than re-watching: while another observer (the bell or the Alerts
+ * screen) holds the same query, its shared entry survives a release un-dirtied, so a re-watch is
+ * handed the cached value. */
+export async function markAlertHandled(
+  api: Pick<DashboardApi, "markIncidentHandled" | "liveData">,
+  incidentId: string,
+  stillCurrent: () => boolean = () => true,
+): Promise<void> {
+  await api.markIncidentHandled(incidentId);
+  if (stillCurrent()) api.liveData.invalidate([{ type: "incidents" }]);
 }
 
 export function areaLabel(area: string): string {

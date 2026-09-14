@@ -15,6 +15,8 @@ import {
   formatAlertTime,
   goToLabel,
   incidentIdOf,
+  markAlertHandled,
+  screenTargetOf,
   severityLabel,
 } from "../widgets/alert-format.js";
 
@@ -123,16 +125,12 @@ export class AlertsScreen extends LitElement {
     this.busyKey = alert.key;
     this.actionError = null;
     try {
-      await this.api.markIncidentHandled(incidentId);
+      await markAlertHandled(this.api, incidentId);
     } catch (error) {
       this.actionError = codeOf(error);
-      return;
     } finally {
       this.busyKey = null;
     }
-    // Invalidate rather than re-watch: while another observer (such as the banner bell) holds the same
-    // query, its shared entry survives a release un-dirtied, so a re-watch is handed the cached value.
-    this.api.liveData.invalidate([{ type: "incidents" }]);
   }
 
   #goTo(event: MouseEvent, screen: string): void {
@@ -169,8 +167,8 @@ export class AlertsScreen extends LitElement {
               @click=${() => void this.#handle(a, incidentId)}
               >${t("alerts.mark_handled")}</wt-button
             >`;
-          if (a.screen !== undefined && this.canOpen(a.screen)) {
-            const screen = a.screen;
+          const screen = screenTargetOf(a, this.canOpen);
+          if (screen !== null) {
             return html`<wt-button
               size="sm"
               variant="secondary"

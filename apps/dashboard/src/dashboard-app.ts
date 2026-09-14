@@ -68,6 +68,7 @@ import "./widgets/alerts-bell.js";
 import type { AlertsBell } from "./widgets/alerts-bell.js";
 import { alertMessage } from "./i18n/alerts.js";
 import { AlertArrivals } from "./state/alert-arrivals.js";
+import { markAlertHandled } from "./widgets/alert-format.js";
 import type { AlertView, AlertsResponse, DashboardApi, PersonRole } from "./api/client.js";
 import {
   consumeGoogleLoginPreference,
@@ -952,16 +953,12 @@ export class DashboardApp extends LitElement {
     this.alertBusyKey = event.detail.key;
     this.alertError = null;
     try {
-      await this.api.markIncidentHandled(event.detail.incidentId);
+      await markAlertHandled(this.api, event.detail.incidentId, current);
     } catch (error) {
       if (current()) this.alertError = codeOf(error);
-      return;
     } finally {
       if (current()) this.alertBusyKey = null;
     }
-    // Invalidate rather than re-watch: the Alerts screen may observe the same query, and a shared
-    // cache entry survives one side releasing it.
-    if (current()) this.api.liveData.invalidate([{ type: "incidents" }]);
   }
 
   #canOpenScreen = (screen: string): boolean => this.#permittedScreen(screen) === screen;

@@ -13,6 +13,7 @@ import {
   formatAlertTime,
   goToLabel,
   incidentIdOf,
+  screenTargetOf,
   severityLabel,
 } from "./alert-format.js";
 
@@ -120,10 +121,7 @@ export class AlertsBell extends LitElement {
 
   #item(alert: AlertView): TemplateResult {
     const incidentId = incidentIdOf(alert);
-    const screen =
-      alert.kind === "ongoing" && alert.screen !== undefined && this.canOpen(alert.screen)
-        ? alert.screen
-        : null;
+    const screen = screenTargetOf(alert, this.canOpen);
     const when = formatAlertTime(alert.since);
     return html`<li data-severity=${alert.severity} data-test="alert-item">
       <span>${alertMessage(alert.code, alert.params)}</span>
