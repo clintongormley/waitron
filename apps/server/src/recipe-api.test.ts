@@ -69,7 +69,7 @@ const suite = usePgliteDb({
       const unit = await createUnit(
         tx,
         brandTenantId(tenantId),
-        { name: { es: "unidad" }, precision: 0 },
+        { name: { es: "unidad" }, precision: 0, abbreviation: { es: "ud" } },
         "es",
       );
       const product = await createProduct(tx, brandTenantId(tenantId), {

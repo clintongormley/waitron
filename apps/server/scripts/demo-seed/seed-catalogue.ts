@@ -161,7 +161,11 @@ export async function seedCatalogues(
               await createUnit(
                 tx,
                 tenantId,
-                { name: product.unit.name, precision: product.unit.precision },
+                {
+                  name: product.unit.name,
+                  precision: product.unit.precision,
+                  abbreviation: product.unit.abbreviation,
+                },
                 locale,
               )
             ).id

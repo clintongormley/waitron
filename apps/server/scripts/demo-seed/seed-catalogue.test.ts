@@ -121,8 +121,9 @@ describe("seedCatalogues", () => {
       const { rows: customUnit } = await tx.execute<{
         precision: number;
         name: Record<string, string>;
+        abbreviation: Record<string, string>;
       }>(sql`
-        select u.precision, u.name from units u
+        select u.precision, u.name, u.abbreviation from units u
         join product_units pu on pu.unit_id = u.id and pu.tenant_id = u.tenant_id
         join products p on p.id = pu.product_id and p.tenant_id = pu.tenant_id
         where p.descriptions->>'en' = 'Mixed salad'`);
@@ -185,7 +186,13 @@ describe("seedCatalogues", () => {
         menu_variant_prices: ["1.75", "2.60"],
       },
     ]);
-    expect(res.customUnit).toEqual([{ precision: 2, name: { en: "serving", es: "ración" } }]);
+    expect(res.customUnit).toEqual([
+      {
+        precision: 2,
+        name: { en: "serving", es: "ración" },
+        abbreviation: { en: "srv", es: "rac" },
+      },
+    ]);
 
     // The returned map covers every seeded product and points at a real created id.
     expect(res.out.productsByImage.size).toBe(res.products.length);
