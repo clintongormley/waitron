@@ -134,8 +134,8 @@ export const en = {
   "modifiers.removes_allergens": "Removes allergens",
   "modifiers.dietary_removed": "No longer suitable for",
   "modifiers.unlimited": "No limit",
-  "common.yes": "Yes",
-  "common.no": "No",
+  "modifiers.yes": "Yes",
+  "modifiers.no": "No",
 
   "nav.location_settings": "Location invoices",
   "location_settings.title": "Location invoices",
@@ -1352,8 +1352,8 @@ export const es: Record<StringKey, string> = {
   "modifiers.removes_allergens": "Elimina alérgenos",
   "modifiers.dietary_removed": "Ya no apto para",
   "modifiers.unlimited": "Sin límite",
-  "common.yes": "Sí",
-  "common.no": "No",
+  "modifiers.yes": "Sí",
+  "modifiers.no": "No",
 
   "nav.location_settings": "Facturación del local",
   "location_settings.title": "Facturación del local",

@@ -249,7 +249,7 @@ export class ModifiersScreen extends LitElement {
                 : nothing
             }
             <td>${choice.available ? t("modifiers.available") : t("modifiers.unavailable")}</td>
-            <td>${preset ? t("common.yes") : nothing}</td>
+            <td>${preset ? t("modifiers.yes") : nothing}</td>
           </tr>`;
         })}
       </tbody>
@@ -263,7 +263,7 @@ export class ModifiersScreen extends LitElement {
         modifier.type === "yes-no"
           ? html`<p>
                 ${t("modifiers.default_value")}:
-                ${modifier.defaultValue ? t("common.yes") : t("common.no")}
+                ${modifier.defaultValue ? t("modifiers.yes") : t("modifiers.no")}
               </p>
               <p>
                 ${t("modifiers.available")}:
@@ -274,7 +274,8 @@ export class ModifiersScreen extends LitElement {
       ${
         modifier.type === "extras"
           ? html`<p>
-                ${t("modifiers.required")}: ${modifier.required ? t("common.yes") : t("common.no")}
+                ${t("modifiers.required")}:
+                ${modifier.required ? t("modifiers.yes") : t("modifiers.no")}
               </p>
               <p>
                 ${t("modifiers.max_total")}:

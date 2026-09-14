@@ -276,6 +276,7 @@ const extrasModifier: Modifier = {
       preselected: false,
       vatClass: null,
       addAllergens: { gluten: { presence: "contains" } },
+      removeAllergens: ["milk"],
       dietaryEffect: { invalidates: ["vegan"] },
     },
     {
@@ -323,9 +324,19 @@ it("shows a choice's allergen and dietary summary only when present", async () =
   const first = el.shadowRoot!.querySelector('[data-test="summary-c1"]')!;
   expect(first.textContent).toContain(t("modifiers.adds_allergens"));
   expect(first.textContent).toContain(allergenName("gluten"));
+  expect(first.textContent).toContain(t("modifiers.removes_allergens"));
+  expect(first.textContent).toContain(allergenName("milk"));
   expect(first.textContent).toContain(t("modifiers.dietary_removed"));
   expect(first.textContent).toContain(t("editor.diet.vegan"));
   const second = el.shadowRoot!.querySelector('[data-test="summary-c2"]')!;
   expect(second.textContent!.trim()).toBe("");
   expect(second.querySelector("div")).toBeNull();
+});
+it("clears the details modal when the dialog dismisses itself", async () => {
+  const el = await mount(api({ listModifiers: vi.fn().mockResolvedValue([extrasModifier]) }));
+  const modal = await openDetails(el, extrasModifier);
+  expect(modal.open).toBe(true);
+  modal.dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
+  await el.updateComplete;
+  expect(modal.open).toBe(false);
 });
