@@ -75,7 +75,11 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     listStations: vi.fn().mockResolvedValue(stations),
     listCourses: vi.fn().mockResolvedValue(courses),
     listOptionGroups: vi.fn().mockResolvedValue(optionGroups),
-    listUnits: vi.fn().mockResolvedValue([{ id: "u1", name: { es: "unidad" }, precision: 0 }]),
+    listUnits: vi
+      .fn()
+      .mockResolvedValue([
+        { id: "u1", name: { es: "unidad" }, abbreviation: { es: "u" }, precision: 0 },
+      ]),
     listModifiers: vi
       .fn()
       .mockResolvedValue([

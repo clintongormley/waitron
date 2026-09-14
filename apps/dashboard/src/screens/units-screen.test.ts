@@ -1,17 +1,33 @@
 import { LiveData } from "@waitron/dashboard-kit";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DashboardApi, ProductUsingUnit, Unit } from "../api/client.js";
 import { codeMessage } from "../i18n/codes.js";
-import { t } from "../i18n/t.js";
+import { setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import type { UnitsScreen } from "./units-screen.js";
 import "./units-screen.js";
 
 afterEach(cleanupWidgets);
+// The table remembers its sort and precision filter in sessionStorage under waitron.units.table; a
+// value left by an earlier test would make the first-visit assertions order-dependent.
+beforeEach(() => sessionStorage.clear());
+// Some tests pin the reader locale so the precision marker or a translated string can be asserted;
+// restore the file's default (es-ES) afterwards so later tests are unaffected.
+afterEach(() => setLocale("es-ES"));
 
 const units: Unit[] = [
-  { id: "u1", name: { es: "unidad", en: "each" }, precision: 0 },
-  { id: "u2", name: { es: "kilogramo", en: "kilogram" }, precision: 3 },
+  {
+    id: "u1",
+    name: { es: "unidad", en: "each" },
+    abbreviation: { es: "ud", en: "ea" },
+    precision: 0,
+  },
+  {
+    id: "u2",
+    name: { es: "kilogramo", en: "kilogram" },
+    abbreviation: { es: "kg", en: "kg" },
+    precision: 3,
+  },
 ];
 
 function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
@@ -27,7 +43,12 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     getContentLanguages: vi
       .fn()
       .mockResolvedValue({ defaultLanguage: "es", languages: ["es", "en"] }),
-    createUnit: vi.fn().mockResolvedValue({ id: "u3", name: { es: "caja" }, precision: 0 }),
+    createUnit: vi.fn().mockResolvedValue({
+      id: "u3",
+      name: { es: "caja" },
+      abbreviation: { es: "cj" },
+      precision: 0,
+    }),
     updateUnit: vi.fn().mockResolvedValue(units[0]),
     deleteUnit: vi.fn().mockResolvedValue(undefined),
     reassignProductsUnit: vi.fn().mockResolvedValue([]),
@@ -68,17 +89,137 @@ async function mount(api = stubApi()): Promise<UnitsScreen> {
   return el;
 }
 
+/** Mount the screen over a specific unit list (the initial load reads listUnits). */
+async function mountWith(list: Unit[]): Promise<UnitsScreen> {
+  return mount(stubApi({ listUnits: vi.fn().mockResolvedValue(list) }));
+}
+
+/** Type into the table's own search box (it lives in wt-data-table's shadow root now). */
+async function typeTableSearch(el: UnitsScreen, value: string): Promise<void> {
+  const table = el.shadowRoot!.querySelector("wt-data-table")!;
+  await table.updateComplete;
+  const search = table.shadowRoot!.querySelector<HTMLInputElement>(".table-search")!;
+  search.value = value;
+  search.dispatchEvent(new Event("input"));
+  await el.updateComplete;
+  await table.updateComplete;
+}
+
+/** The keys of the rows the units table currently renders (after any search or filter). */
+function listedKeys(el: UnitsScreen): string[] {
+  return [
+    ...el
+      .shadowRoot!.querySelector("wt-data-table")!
+      .shadowRoot!.querySelectorAll("tr[data-row-key]"),
+  ].map((row) => row.getAttribute("data-row-key")!);
+}
+
+/** The rendered text of a unit's precision cell (column order: name, abbreviation, precision). */
+function precisionCellText(el: UnitsScreen, id: string): string {
+  const row = el
+    .shadowRoot!.querySelector("wt-data-table")!
+    .shadowRoot!.querySelector(`tr[data-row-key="${id}"]`)!;
+  return row.querySelectorAll("td")[2]!.textContent!.trim();
+}
+
 describe("units-screen", () => {
-  it("lists localized units and filters them", async () => {
+  it("lists localized units and searches them by name and abbreviation", async () => {
+    setLocale("es-ES");
     const el = await mount();
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
     expect(table.shadowRoot!.querySelector('[data-row-key="u1"]')).toBeTruthy();
     expect(table.shadowRoot!.textContent).toContain("kilogramo");
-    el.shadowRoot!.querySelector("[data-test=search]")!.dispatchEvent(
-      new CustomEvent("wt-change", { detail: { value: "kilo" }, bubbles: true, composed: true }),
-    );
+    await typeTableSearch(el, "kilo");
+    expect(listedKeys(el)).toEqual(["u2"]);
+    // The abbreviation is searchable too: "ud" is only unidad's abbreviation.
+    await typeTableSearch(el, "ud");
+    expect(listedKeys(el)).toEqual(["u1"]);
+  });
+
+  it("puts the create button in the header, not a toolbar", async () => {
+    const el = await mount();
+    const create = el.shadowRoot!.querySelector("[data-test=create]")!;
+    expect(create.closest(".header-actions")).not.toBeNull();
+    expect(create.closest(".heading")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector(".toolbar")).toBeNull();
+  });
+
+  it("makes the units table searchable", async () => {
+    const el = await mount();
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    expect(table.searchable).toBe(true);
+    await table.updateComplete;
+    expect(table.shadowRoot!.querySelector(".table-search")).not.toBeNull();
+  });
+
+  it("shows a unit's abbreviation in its own column", async () => {
+    setLocale("es-ES");
+    const el = await mount();
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    expect(table.shadowRoot!.textContent).toContain(t("units.abbreviation"));
+    expect(table.shadowRoot!.textContent).toContain("kg");
+  });
+
+  it("renders precision as the locale decimal marker plus zeroes", async () => {
+    const litre: Unit = { id: "u", name: { es: "Litro" }, abbreviation: { es: "l" }, precision: 3 };
+    setLocale("es-ES");
+    expect(precisionCellText(await mountWith([litre]), "u")).toBe(",000");
+    cleanupWidgets();
+    setLocale("en-GB");
+    expect(precisionCellText(await mountWith([{ ...litre }]), "u")).toBe(".000");
+    cleanupWidgets();
+    expect(precisionCellText(await mountWith([{ ...litre, precision: 0 }]), "u")).toBe("0");
+  });
+
+  it("narrows the list with the precision filter, labelled with the marker", async () => {
+    setLocale("es-ES");
+    const el = await mount();
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    const filter = table.shadowRoot!.querySelector<HTMLSelectElement>(
+      'select[data-filter="precision"]',
+    )!;
+    const optionLabels = [...filter.querySelectorAll("option")].map((o) => o.textContent!.trim());
+    expect(optionLabels).toEqual([t("units.filter_precision_all"), "0", ",000"]);
+    filter.value = "3";
+    filter.dispatchEvent(new Event("change"));
     await el.updateComplete;
-    expect((table.rows as readonly Unit[]).map((unit) => unit.id)).toEqual(["u2"]);
+    await table.updateComplete;
+    expect(listedKeys(el)).toEqual(["u2"]);
+  });
+
+  it("sorts by name ascending on first visit", async () => {
+    setLocale("es-ES");
+    const el = await mount();
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    expect(table.sortKey).toBe("name");
+    expect(table.sortDirection).toBe("ascending");
+    // es content: "kilogramo" sorts before "unidad".
+    expect(listedKeys(el)).toEqual(["u2", "u1"]);
+  });
+
+  it("restores a stored sort and precision filter from sessionStorage", async () => {
+    setLocale("es-ES");
+    sessionStorage.setItem(
+      "waitron.units.table",
+      JSON.stringify({ sortKey: "name", sortDirection: "descending", filters: { precision: "3" } }),
+    );
+    const el = await mount();
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    expect(table.sortDirection).toBe("descending");
+    // The stored precision filter keeps only the precision-3 unit.
+    expect(listedKeys(el)).toEqual(["u2"]);
+  });
+
+  it("left-aligns the row-action buttons", async () => {
+    const el = await mount();
+    const menu = el
+      .shadowRoot!.querySelector("wt-data-table")!
+      .shadowRoot!.querySelector("wt-row-actions")!;
+    const buttons = [...menu.querySelectorAll("wt-button")];
+    expect(buttons.length).toBeGreaterThan(0);
+    for (const button of buttons) expect(button.getAttribute("align")).toBe("start");
   });
 
   it("blocks duplicate submissions and closes after a successful create", async () => {
@@ -99,7 +240,7 @@ describe("units-screen", () => {
     form.dispatchEvent(submit);
     form.dispatchEvent(submit);
     expect(api.createUnit).toHaveBeenCalledTimes(1);
-    resolveCreate({ id: "u3", name: { es: "caja" }, precision: 0 });
+    resolveCreate({ id: "u3", name: { es: "caja" }, abbreviation: { es: "cj" }, precision: 0 });
     await flush(el);
     expect(form.open).toBe(false);
   });
@@ -363,9 +504,11 @@ describe("units-screen", () => {
 
   it("restores focus to the row menu when the in-use modal is cancelled", async () => {
     const el = await mount(inUseApi());
+    // The modal opens from u1's row, so focus must return to u1's menu — found by row key, since
+    // the table now sorts by name and u1 is not necessarily the first row.
     const menu = el
       .shadowRoot!.querySelector("wt-data-table")!
-      .shadowRoot!.querySelector("wt-row-actions")!;
+      .shadowRoot!.querySelector<HTMLElement>('tr[data-row-key="u1"] wt-row-actions')!;
     const trigger = menu.shadowRoot!.querySelector<HTMLButtonElement>("button")!;
     trigger.focus();
     const dialog = await openInUseModal(el);

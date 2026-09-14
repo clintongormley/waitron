@@ -8,9 +8,14 @@ import "./units-screen.js";
 afterEach(cleanupWidgets);
 
 function api(): DashboardApi {
-  const listUnits = vi
-    .fn()
-    .mockResolvedValue([{ id: "u1", name: { es: "unidad", en: "each" }, precision: 0 }]);
+  const listUnits = vi.fn().mockResolvedValue([
+    {
+      id: "u1",
+      name: { es: "unidad", en: "each" },
+      abbreviation: { es: "ud", en: "ea" },
+      precision: 0,
+    },
+  ]);
   const getContentLanguages = vi
     .fn()
     .mockResolvedValue({ defaultLanguage: "es", languages: ["es", "en"] });
