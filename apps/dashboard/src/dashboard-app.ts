@@ -853,7 +853,10 @@ export class DashboardApp extends LitElement {
   }
 
   #watchAlerts(): void {
-    if (this.sessionRole === undefined || this.sessionRole === "staff") return;
+    if (this.sessionRole === "staff") {
+      this.#clearAlerts();
+      return;
+    }
     void this.#alertQueries
       .watch("listAlerts", [], (response) => this.#applyAlerts(response))
       .catch(() => undefined);
@@ -893,19 +896,23 @@ export class DashboardApp extends LitElement {
 
   async #onAlertHandle(event: CustomEvent<{ incidentId: string; key: string }>): Promise<void> {
     event.stopPropagation();
+    // A request can outlive its session: an expired session is reported, and the shell returns to
+    // login, before the request's own promise rejects.
+    const generation = this.sessionGeneration;
+    const current = () => this.isConnected && generation === this.sessionGeneration;
     this.alertBusyKey = event.detail.key;
     this.alertError = null;
     try {
       await this.api.markIncidentHandled(event.detail.incidentId);
     } catch (error) {
-      if (this.isConnected) this.alertError = codeOf(error);
+      if (current()) this.alertError = codeOf(error);
       return;
     } finally {
-      if (this.isConnected) this.alertBusyKey = null;
+      if (current()) this.alertBusyKey = null;
     }
     // Invalidate rather than re-watch: the Alerts screen may observe the same query, and a shared
     // cache entry survives one side releasing it.
-    if (this.isConnected) this.api.liveData.invalidate([{ type: "incidents" }]);
+    if (current()) this.api.liveData.invalidate([{ type: "incidents" }]);
   }
 
   #canOpenScreen = (screen: string): boolean => this.#permittedScreen(screen) === screen;
@@ -928,9 +935,7 @@ export class DashboardApp extends LitElement {
     const bell = this.renderRoot.querySelector<AlertsBell>("dashboard-alerts-bell");
     if (bell === null) return;
     bell.open();
-    const menu = bell.shadowRoot?.querySelector<HTMLElement>("wt-row-actions");
-    const first = menu?.querySelector<HTMLElement>("wt-button:not([disabled])");
-    (first ?? menu)?.focus();
+    bell.focusPanel();
   }
 
   #onToastClose(event: Event): void {

@@ -104,6 +104,20 @@ describe("dashboard-alerts-bell", () => {
     expect(popup(el).matches(":popover-open")).toBe(false);
   });
 
+  it("focusPanel moves keyboard focus to the panel's first button", async () => {
+    const { el } = await mountWidget<AlertsBell>("dashboard-alerts-bell", { alerts: [event("1")] });
+    el.open();
+    el.focusPanel();
+    expect(el.shadowRoot!.activeElement).toBe(q(el, "[data-test=alert-handle]"));
+  });
+
+  it("focusPanel reaches See all when no alert has a button", async () => {
+    const { el } = await mountWidget<AlertsBell>("dashboard-alerts-bell", { alerts: [] });
+    el.open();
+    el.focusPanel();
+    expect(el.shadowRoot!.activeElement).toBe(q(el, "[data-test=alerts-see-all]"));
+  });
+
   it("shows a generic sentence and the raw code for an alert with no wording", async () => {
     setLocale("en-GB");
     const { el } = await mountWidget<AlertsBell>("dashboard-alerts-bell", {

@@ -92,6 +92,11 @@ export class AlertsBell extends LitElement {
     this.#menu()?.show();
   }
 
+  /** Focuses the panel's first button. See all is always rendered, so there is always one. */
+  focusPanel(): void {
+    this.#menu()?.querySelector<HTMLElement>("wt-button:not([disabled])")?.focus();
+  }
+
   #emit(name: string, detail: object): void {
     this.dispatchEvent(new CustomEvent(name, { bubbles: true, composed: true, detail }));
   }

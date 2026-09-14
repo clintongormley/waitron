@@ -54,6 +54,7 @@ import { currentLocale, setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 import { LiveData, type DashboardRequest } from "@waitron/dashboard-kit";
 import type { WtToast } from "@waitron/ui";
+import type { AlertsBell } from "./widgets/alerts-bell.js";
 import type { AlertView, DashboardApi, PersonSummary } from "./api/client.js";
 
 /** A stub of the module request primitive: every module screen reads through it on connect. Resolves an
@@ -3364,18 +3365,24 @@ describe("alerts in the shell", () => {
       .mockRejectedValue({ code: "server.internal" });
     const api = alertsApi({ listAlerts, liveData });
     const record = vi.spyOn(diag, "record");
-    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request: stubRequest });
-    await flush(el);
-    liveData.invalidate([{ type: "incidents" }]);
-    await vi.waitFor(() =>
-      expect(record).toHaveBeenCalledWith("warn", "alerts.load_failed", {
-        code: "server.internal",
-      }),
-    );
-    await flush(el);
-    expect(countOf(el)).toBe(1);
-    expect(toast(el).open).toBe(false);
-    record.mockRestore();
+    try {
+      const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+        api,
+        request: stubRequest,
+      });
+      await flush(el);
+      liveData.invalidate([{ type: "incidents" }]);
+      await vi.waitFor(() =>
+        expect(record).toHaveBeenCalledWith("warn", "alerts.load_failed", {
+          code: "server.internal",
+        }),
+      );
+      await flush(el);
+      expect(countOf(el)).toBe(1);
+      expect(toast(el).open).toBe(false);
+    } finally {
+      record.mockRestore();
+    }
   });
 
   it("pops up a new alert, and opens the panel when the pop-up is pressed", async () => {
@@ -3416,18 +3423,17 @@ describe("alerts in the shell", () => {
     const api = alertsApi({ listAlerts, liveData });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request: stubRequest });
     await flush(el);
-    toast(el).duration = 1000;
     liveData.invalidate([{ type: "incidents" }]);
     await vi.waitFor(() => expect(toast(el).open).toBe(true));
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    await flush(el);
+    // wt-toast never calls show() on itself, and an equal message changes none of its properties,
+    // so show() is the only thing that restarts its countdown (proven in wt-toast.test.ts).
+    const show = vi.spyOn(toast(el), "show");
     liveData.invalidate([{ type: "incidents" }]);
     await vi.waitFor(() => expect(listAlerts).toHaveBeenCalledTimes(3));
     await flush(el);
     expect(toast(el).message).toBe("2 new alerts");
-    // Past the first countdown's end: only a restarted countdown keeps it open.
-    await new Promise((resolve) => setTimeout(resolve, 700));
-    expect(toast(el).open).toBe(true);
-    await vi.waitFor(() => expect(toast(el).open).toBe(false), { timeout: 2000 });
+    expect(show).toHaveBeenCalled();
   });
 
   it("moves focus into the panel when the pop-up is pressed", async () => {
@@ -3578,6 +3584,103 @@ describe("alerts in the shell", () => {
     await flush(el);
     expect(el.shadowRoot!.querySelector("dashboard-alerts-screen")).toBeNull();
     expect(api.listAlerts).not.toHaveBeenCalled();
+  });
+
+  it("does not carry a Mark handled failure from an ended session onto the next one", async () => {
+    let fail!: (error: unknown) => void;
+    const api = alertsApi({
+      listAlerts: vi.fn().mockResolvedValue({ visible: true, alerts: [alert("7")] }),
+      markIncidentHandled: vi.fn().mockReturnValue(
+        new Promise((_resolve, reject) => {
+          fail = reject;
+        }),
+      ),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request: stubRequest });
+    await flush(el);
+    bell(el)!.shadowRoot!.querySelector<HTMLElement>("[data-test=alert-handle]")!.click();
+    // main.ts reports an expired session before the request's promise rejects.
+    window.dispatchEvent(
+      new CustomEvent("waitron-session-invalid", {
+        detail: { code: "management_session.required" },
+      }),
+    );
+    await flush(el);
+    fail({ code: "management_session.required" });
+    await flush(el);
+    el.shadowRoot!.querySelector("dashboard-login-screen")!.dispatchEvent(
+      new CustomEvent("logged-in", { bubbles: true, composed: true, detail: {} }),
+    );
+    await vi.waitFor(() => expect(bell(el)).not.toBeNull());
+    await flush(el);
+    expect(bell(el)!.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+  });
+
+  it("clears the pop-up, the bell's error and a pending Mark handled on logout", async () => {
+    const liveData = new LiveData();
+    let current = [alert("1")];
+    const api = alertsApi({
+      liveData,
+      listAlerts: vi.fn(async () => ({ visible: true, alerts: current })),
+      markIncidentHandled: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "alert.not_found" })
+        .mockReturnValue(new Promise(() => undefined)),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request: stubRequest });
+    const logOutAndIn = async () => {
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=logout]")!.click();
+      await flush(el);
+      el.shadowRoot!.querySelector("dashboard-login-screen")!.dispatchEvent(
+        new CustomEvent("logged-in", { bubbles: true, composed: true, detail: {} }),
+      );
+      await vi.waitFor(() => expect(bell(el)).not.toBeNull());
+      await flush(el);
+      await (bell(el) as AlertsBell).updateComplete;
+    };
+    const handle = () =>
+      bell(el)!.shadowRoot!.querySelector<HTMLElement>("[data-test=alert-handle]")!;
+    await flush(el);
+    current = [alert("1"), alert("2")];
+    liveData.invalidate([{ type: "incidents" }]);
+    await vi.waitFor(() => expect(toast(el).open).toBe(true));
+    handle().click();
+    await vi.waitFor(() =>
+      expect(bell(el)!.shadowRoot!.querySelector("[role=alert]")).not.toBeNull(),
+    );
+
+    await logOutAndIn();
+    expect(toast(el).open).toBe(false);
+    expect(bell(el)!.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+
+    handle().click();
+    await vi.waitFor(() => expect(handle().hasAttribute("loading")).toBe(true));
+    await logOutAndIn();
+    expect(handle().hasAttribute("loading")).toBe(false);
+  });
+
+  it("removes the bell when a re-check finds the session is now staff", async () => {
+    const getMe = vi
+      .fn()
+      .mockResolvedValueOnce({ ...meResponse, sessionDefault: "en-GB" })
+      .mockResolvedValue({
+        ...meResponse,
+        sessionDefault: "en-GB",
+        role: "staff",
+        permissions: [],
+      });
+    const api = alertsApi({
+      getMe,
+      listAlerts: vi.fn().mockResolvedValue({ visible: true, alerts: [alert("1")] }),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request: stubRequest });
+    await flush(el);
+    expect(bell(el)).not.toBeNull();
+    document.dispatchEvent(new Event("visibilitychange"));
+    await vi.waitFor(() => expect(getMe).toHaveBeenCalledTimes(2));
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("dashboard-my-schedule-screen")).not.toBeNull();
+    expect(bell(el)).toBeNull();
   });
 
   it("forgets the previous session's alerts on logout", async () => {
