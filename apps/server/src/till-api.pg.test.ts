@@ -475,6 +475,26 @@ beforeAll(() => {
   });
 });
 
+describe("POST /api/session (PIN login body handling)", () => {
+  it("an empty (unparseable) request body is a clean 401 person.not_found, never an opaque 500", async () => {
+    const { cfg } = await setupVenue();
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+
+    // An empty POST body is invalid JSON: a bare `c.req.json()` throws a SyntaxError that escapes to
+    // the error boundary as `server.internal` (500). Reading it through `readJsonBody` coerces it to
+    // `{}`, so the route's own `personId` validation refuses it with `person.not_found` (401) — the
+    // same code+status a well-formed-but-unknown id gets — instead of a 500.
+    const res = await app.request("/api/session", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "",
+    });
+    expect(res.status).toBe(401);
+    expect(await res.json()).toMatchObject({ error: { code: "person.not_found" } });
+  });
+});
+
 describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
   it("logs in, rings a cash sale, returns the ticket, and writes a chained fiscal record", async () => {
     const { cfg, available, operatorId } = await setupVenue();

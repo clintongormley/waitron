@@ -327,6 +327,22 @@ describe("POST /api/tabs/:id/split", () => {
       error: { code: "management.request_invalid", params: { field: "body" } },
     });
   });
+
+  it("400 management.request_invalid for an empty (unparseable) body, not an opaque 500", async () => {
+    const { app, tabA, cookie } = await setupTabApp();
+    // Unlike a literal `null` body (which parses), an empty body is invalid JSON: a bare
+    // `c.req.json()` throws a SyntaxError that escaped to an opaque 500. The route now routes that
+    // SyntaxError to the SAME body-shape refusal (field "body") a null body already gets.
+    const res = await app.request(`/api/tabs/${tabA}/split`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: "",
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "body" } },
+    });
+  });
 });
 
 describe("POST /api/tabs/:id/unjoin", () => {
@@ -468,6 +484,21 @@ describe("POST /api/tabs/:id/unjoin", () => {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
       body: "null",
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "body" } },
+    });
+  });
+
+  it("400 management.request_invalid for an empty (unparseable) body, not an opaque 500", async () => {
+    const { app, tabA, cookie } = await setupJoinedApp();
+    // An empty body is invalid JSON: the SyntaxError a bare `c.req.json()` throws escaped to an
+    // opaque 500. The route now routes it to the SAME field "body" refusal a null body gets.
+    const res = await app.request(`/api/tabs/${tabA}/unjoin`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: "",
     });
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({
