@@ -10,5 +10,14 @@ export { recordSubstitution } from "./record-substitution.js";
 export type { RecordSubstitutionInput } from "./record-substitution.js";
 export { listOutstandingSales } from "./list-outstanding-sales.js";
 export type { OutstandingSale } from "./list-outstanding-sales.js";
-export { openIncidents, recordIncident, recordIncidentOnce } from "./incidents.js";
+export {
+  findIncident,
+  listHandledIncidents,
+  listOpenIncidents,
+  markIncidentHandled,
+  openIncidents,
+  recordIncident,
+  recordIncidentOnce,
+} from "./incidents.js";
+export type { TenantIncident } from "./incidents.js";
 export type { Incident, IncidentSeverity, RecordIncidentInput } from "./incidents.js";

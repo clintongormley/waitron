@@ -44,6 +44,8 @@ export const incidents = pgTable(
   (t) => [
     // The till UI's query is "what is open on this till, newest first".
     index("incidents_till_open_idx").on(t.tillId, t.detectedAt),
+    // The dashboard's Handled tab: incidents handled since a date, most recent first.
+    index("incidents_handled_idx").on(t.acknowledgedAt),
     // A CHECK rather than a pgEnum, matching invoice_series.purpose's own precedent: `severity`
     // is a small, closed vocabulary and a CHECK is a one-line migration to widen, where an enum
     // needs ALTER TYPE.
