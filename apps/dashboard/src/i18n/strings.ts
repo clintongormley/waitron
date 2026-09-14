@@ -448,6 +448,8 @@ export const en = {
   "units.edit": "Edit unit",
   "units.name": "Name",
   "units.name_required": "Enter the unit name in the default language.",
+  "units.abbreviation": "Abbreviation",
+  "units.abbreviation_required": "Enter the unit abbreviation in the default language.",
   "units.precision": "Decimal places",
   "units.precision_help": "Choose 0, 1, 2 or 3 decimal places.",
   "units.precision_invalid": "Choose a whole number from 0 to 3.",
@@ -1663,6 +1665,9 @@ export const es: Record<StringKey, string> = {
   "units.edit": "Editar unidad",
   "units.name": "Nombre",
   "units.name_required": "Introduce el nombre de la unidad en el idioma predeterminado.",
+  "units.abbreviation": "Abreviatura",
+  "units.abbreviation_required":
+    "Introduce la abreviatura de la unidad en el idioma predeterminado.",
   "units.precision": "Decimales",
   "units.precision_help": "Elige 0, 1, 2 o 3 decimales.",
   "units.precision_invalid": "Elige un número entero entre 0 y 3.",
