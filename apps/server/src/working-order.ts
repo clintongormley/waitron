@@ -1258,10 +1258,8 @@ export async function fireLines(
     Awaited<ReturnType<typeof VENUE_SERVICE.resolvePreparationRoute>>
   >();
   if (serviceContext !== null) {
-    const routedProductIds = [
-      ...new Set(lines.map((line) => line.productId).filter((id): id is string => id !== null)),
-    ];
-    for (const productId of routedProductIds) {
+    // Same distinct-product set as `productIds` above — both derived from these parent `lines`.
+    for (const productId of productIds) {
       serviceRouteByProduct.set(
         productId,
         await VENUE_SERVICE.resolvePreparationRoute(tx, cfg, serviceContext.zoneId, productId),

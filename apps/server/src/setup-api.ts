@@ -590,6 +590,9 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     return runProvision(c, log, async () => {
       try {
         if (deps.runFiscalTest === undefined) return directError(c, log, "setup.not_ready", 503);
+        // Read defensively via `readRawJsonBody` (see the provision route below for the full why): a
+        // malformed/empty/`null` body becomes `null` → refused as field "body", not a 500; any other
+        // failure rethrows so the error boundary still surfaces it as a real 500.
         const parsed = await readRawJsonBody<unknown>(c);
         const payload = parseProvisionPayload(
           parsed,
