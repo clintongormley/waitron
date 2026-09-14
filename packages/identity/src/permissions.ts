@@ -13,12 +13,14 @@ export const PERMISSIONS = [
   // Assigning or removing the admin role changes who can control every permission. Admin only.
   "person.admin",
   // Authoring what appears on a screen or receipt (till layout + receipt trim); granted to manager +
-  // admin.
+  // admin. Gates the @waitron/layouts canvas/theme/receipt/device-profile stores and their layout
+  // routes in apps/server management-api.
   "layout.configure",
-  // Configuring the physical venue, including the floor plan; granted to manager + admin.
+  // Configuring the physical venue, including the floor plan; granted to manager + admin. Gates the
+  // apps/server venue/floor/table/service-status/location routes and the till floor editor.
   "venue.configure",
   // Box lifecycle: backups, recovery bundle, config export, retire, box status; granted to manager +
-  // admin.
+  // admin. Gates the apps/server box-lifecycle routes for each.
   "system.manage",
   // Authoring the weekly roster (draft → warn → publish) from the management dashboard
   // (@waitron/workforce). A domain-named SCHEDULING permission, distinct from staff admin
