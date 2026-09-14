@@ -33,7 +33,8 @@ void bootTill();
 // Gate the whole till boot on a click-through trust check (spec §3.3, nice-to-have). The browser's own
 // certificate interstitial fires before this runs on an untrusted origin, so the plain-HTTP landing
 // page is the load-bearing surface; this only catches a user who already clicked past that warning.
-// On a trusted origin (the normal case) trust is not broken and the till mounts unchanged.
+// On a trusted origin (the normal case), or any page not served over HTTPS such as the dev till,
+// trust is not broken and the till mounts unchanged.
 async function bootTill(): Promise<void> {
   if (await isTrustBroken()) {
     render(trustInstructions(), app);
