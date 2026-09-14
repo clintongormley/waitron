@@ -665,7 +665,7 @@ git commit -s -m "Add printer layout: columns, wrapping and label-with-amount ro
 
 **Interfaces produced:** `QR_QUIET_ZONE = 4`; `chooseQrDots(squares, dpi, safeWidthDots): number` (never throws; 1 when nothing fits); `withQuietZone(modules, quiet): boolean[][]`.
 
-**Recorded deferral (ruling H):** the spec asks the receipt to log a warning when no dot size is legal. No logger is reachable in `apps/server/src/receipt-print.ts` without widening signatures outside that file (its functions take `(tx, cfg, …)` and the file imports no logger), so the warning is deferred. The sweep below (37–77 squares) and `qr-link-range.test.ts` (Task 10, real links 41–69 squares) show the fallback is unreachable for any link `validate.ts` accepts. Task 21 records the deferral in the backlog.
+**Recorded deferral (ruling H):** the spec asks the receipt to log a warning when no dot size is legal. No logger is reachable in `apps/server/src/receipt-print.ts` without widening signatures outside that file (its functions take `(tx, cfg, …)` and the file imports no logger), so the warning is deferred. The sweep below (37–77 squares) and `qr-link-range.test.ts` (Task 10, real links 41–73 squares) show the fallback is unreachable for any link `validate.ts` accepts. Task 21 records the deferral in the backlog.
 
 - [ ] **Step 1: Write the failing tests** — change the import in `layout.test.ts` to
 
@@ -3837,7 +3837,7 @@ git commit -s -m "Document printer layout settings and clear the stale dpi comme
 **Spec coverage.**
 - Settings, defaults and grants: Task 7. API and config transfer: Tasks 8–9 (the transfer test is proven by a temporary `omit` edit because the code already copies every column).
 - Layout mapping, wrapping with a caller-chosen indent, label-with-amount: Task 3. The "€ counts as three in plain letters" rule: Tasks 2, 12, 14.
-- QR as a raster at level M, per-receipt dot size, blank border, no throw: Tasks 4, 10, 13. The spec's "every grid size a valid link can produce" test: Task 4's 37–77 sweep plus Task 10's `qr-link-range.test.ts` (41–69 through `buildAltaRecord` + `validate`). The spec's "decodes back to the sale's link with the qrcode library" is replaced by the reconstruction check plus the independent format-information reader (ruling D); `qrcode` cannot decode.
+- QR as a raster at level M, per-receipt dot size, blank border, no throw: Tasks 4, 10, 13. The spec's "every grid size a valid link can produce" test: Task 4's 37–77 sweep plus Task 10's `qr-link-range.test.ts` (41–73 through `buildAltaRecord` + `validate`). The spec's "decodes back to the sale's link with the qrcode library" is replaced by the reconstruction check plus the independent format-information reader (ruling D); `qrcode` cannot decode.
 - Character sets, fallbacks and the € space fix: Tasks 1, 2, 5, 10, 14.
 - Receipt, payment slip, kitchen ticket, correction slip: Tasks 12–15. Test page and the row's Test print button: Task 16. Preview decoder, route and widget: Tasks 11, 17, 18. Dialog and questions: Tasks 19–20. Documentation: Task 21.
 - Recorded departures: the dialog follows the dashboard language (ruling I); the missing-dot-size warning is deferred (ruling H); the preview's QR text readout is dropped (ruling C); the B/D sample border is 3 squares, not a 21-dot trim.

@@ -4,8 +4,9 @@ import { qrModules } from "./qr-matrix.js";
 
 /**
  * Read the error-correction level from a matrix's format information (ISO/IEC 18004 §7.9): 15 bits
- * stored twice beside the top-left finder pattern, masked with 101010000010010, whose top two bits are
- * the level (01 = L, 00 = M, 11 = Q, 10 = H) and whose last ten are a BCH check. Independent of the
+ * stored twice — once as an L-shape beside the top-left finder pattern, and again split between the
+ * top-right and bottom-left finder patterns — masked with 101010000010010, whose top two bits are the
+ * level (01 = L, 00 = M, 11 = Q, 10 = H) and whose last ten are a BCH check. Independent of the
  * encoder: it only reads the dark and light modules.
  */
 function formatInfoLevel(m: readonly (readonly boolean[])[]): "L" | "M" | "Q" | "H" {
@@ -49,7 +50,7 @@ describe("qrModules", () => {
     expect(formatInfoLevel(qrModules("Waitron 30-40 mm", { version: 9 }))).toBe("M");
   });
 
-  it("reads a different level from a level-L code (negative control for the reader)", () => {
+  it("reads back levels L, Q and H from library-encoded codes (negative controls for the reader)", () => {
     expect(formatInfoLevel(libraryMatrix(LINK, "L"))).toBe("L");
     expect(formatInfoLevel(libraryMatrix(LINK, "Q"))).toBe("Q");
     expect(formatInfoLevel(libraryMatrix(LINK, "H"))).toBe("H");
