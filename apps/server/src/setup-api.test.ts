@@ -635,6 +635,53 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
     },
   );
 
+  // A malformed or empty POST body must surface as the clean "body" request-shape refusal (400), never
+  // as an opaque 500. `c.req.json()` THROWS a `SyntaxError` on both, so the parse is read through
+  // `readRawJsonBody`, which maps that (and a literal JSON `null`) to `null`; `parseProvisionPayload`
+  // then refuses `null` as field "body". This pins that refusal for both body-reading routes so the
+  // narrow parse can never silently regress to a 500.
+  it.each([
+    { route: "/setup-api/provision", label: "provision" },
+    { route: "/setup-api/fiscal-test", label: "fiscal-test" },
+  ])("refuses a malformed body to $label with a 400, not a 500", async ({ route }) => {
+    const app = new Hono();
+    const { deps, provision } = makeDeps();
+    mountSetup(app, deps, noopLog);
+
+    const res = await app.request(route, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{ not json",
+    });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      error: { code: "setup.request_invalid", params: { field: "body" } },
+    });
+    expect(provision).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { route: "/setup-api/provision", label: "provision" },
+    { route: "/setup-api/fiscal-test", label: "fiscal-test" },
+  ])("refuses an empty body to $label with a 400, not a 500", async ({ route }) => {
+    const app = new Hono();
+    const { deps, provision } = makeDeps();
+    mountSetup(app, deps, noopLog);
+
+    const res = await app.request(route, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "",
+    });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      error: { code: "setup.request_invalid", params: { field: "body" } },
+    });
+    expect(provision).not.toHaveBeenCalled();
+  });
+
   it("trims a padded real name rather than storing the padding", async () => {
     const app = new Hono();
     const { deps, provisionRequests } = makeDeps();

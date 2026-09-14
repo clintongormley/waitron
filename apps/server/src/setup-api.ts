@@ -19,7 +19,7 @@ import type { ProvisionRequest } from "./provision.js";
 import type { AdoptCredential, AdoptRequest } from "./adopt.js";
 import type { TradingConfig } from "./trading-config.js";
 import { createErrorBoundary } from "@waitron/server-kit";
-import { readJsonBody } from "@waitron/server-kit";
+import { readJsonBody, readRawJsonBody } from "@waitron/server-kit";
 import { resolveLoginLocale } from "./login-locale.js";
 import { assertSafePrimaryUrl } from "./primary-url.js";
 import { mountSpa } from "./spa-api.js";
@@ -590,7 +590,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     return runProvision(c, log, async () => {
       try {
         if (deps.runFiscalTest === undefined) return directError(c, log, "setup.not_ready", 503);
-        const parsed = await c.req.json().catch(() => null);
+        const parsed = await readRawJsonBody<unknown>(c);
         const payload = parseProvisionPayload(
           parsed,
           deps.devMode === true,
@@ -668,9 +668,11 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
       .digest("hex");
     const execute = async (operation?: ActiveSetupOperation): Promise<Response> => {
       try {
-        // Parse defensively: `c.req.json()` throws on a malformed body and returns `null` for a
-        // literal JSON `null` — both are a bad request, not a 500.
-        const parsed: unknown = await c.req.json().catch(() => null);
+        // Read defensively via `readRawJsonBody`: it maps an empty or malformed body (a `SyntaxError`)
+        // and a literal JSON `null` to `null` — both a bad request, refused as field "body" below, not a
+        // 500 — while RETHROWING any other failure (e.g. a "body already used" double-read) so the error
+        // boundary still surfaces that as a real 500 instead of masking it as a client 4xx.
+        const parsed: unknown = await readRawJsonBody<unknown>(c);
         const payload = parseProvisionPayload(
           parsed,
           deps.devMode === true,
