@@ -48,7 +48,7 @@ afterAll(async () => {
 });
 
 /** Insert a manager (with a dashboard login email) into a seeded tenant so the box-status route's
- * `authorizeManager("till.configure")` gate resolves — `app_user` holds INSERT on `persons`. */
+ * `authorizeManager("system.manage")` gate resolves — `app_user` holds INSERT on `persons`. */
 async function seedManager(tenantId: string): Promise<void> {
   await withTenant(suite.admin, tenantId, async (tx) => {
     await asAppUser(tx);

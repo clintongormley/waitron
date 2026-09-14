@@ -38,14 +38,16 @@ describe("roleHasPermission", () => {
   it("gives an admin every permission", () => {
     for (const p of PERMISSIONS) expect(roleHasPermission("admin", p)).toBe(true);
   });
-  it("grants till.configure to manager and admin only (design D9)", () => {
-    // A domain-named config permission (layout/receipt authoring), granted to exactly the roles that
-    // hold person.manage — manager and admin — and NEVER to staff or supervisor, so the layout/receipt
-    // write gate matches the staff-admin gate.
-    expect(roleHasPermission("manager", "till.configure")).toBe(true);
-    expect(roleHasPermission("admin", "till.configure")).toBe(true);
-    expect(roleHasPermission("staff", "till.configure")).toBe(false);
-    expect(roleHasPermission("supervisor", "till.configure")).toBe(false);
+  it("grants layout.configure, venue.configure and system.manage to manager and admin only", () => {
+    // Each is held by exactly manager and admin — and never by staff or supervisor — so the
+    // layout/venue/system write gates match the staff-admin gate.
+    for (const p of ["layout.configure", "venue.configure", "system.manage"] as const) {
+      expect(PERMISSIONS).toContain(p);
+      expect(roleHasPermission("manager", p)).toBe(true);
+      expect(roleHasPermission("admin", p)).toBe(true);
+      expect(roleHasPermission("staff", p)).toBe(false);
+      expect(roleHasPermission("supervisor", p)).toBe(false);
+    }
   });
   it("grants schedule.manage to manager and admin only (shift-planning slice 1)", () => {
     // A domain-named scheduling permission (roster authoring), granted to exactly the roles that hold

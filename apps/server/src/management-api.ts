@@ -487,7 +487,7 @@ function requireVenueCfg(deps: ManagementApiDeps): TillConfig {
 /**
  * The one authorize gate every floor-zone + table config route (FP-1) runs its DB work through: open a
  * tenant-scoped transaction as the app role, confirm the caller's management session carries
- * `till.configure`, then run `fn`. Extracted verbatim from the eight zone/table routes so the gate is
+ * `venue.configure`, then run `fn`. Extracted verbatim from the eight zone/table routes so the gate is
  * applied identically and in exactly one place (the `gated` seam `catalogue-api.ts` uses). The route's
  * own `requireManagementSession` (→ 401) still runs FIRST, BEFORE this — this helper only carries the
  * `withTenant` + `asAppUser` + `authorizeManager` block that followed it. `cfg` is the venue config the
@@ -502,7 +502,7 @@ function withVenueAuth<T>(
 ): Promise<T> {
   return withTenant(deps.db, cfg.tenantId, async (tx) => {
     await asAppUser(tx);
-    await authorizeManager(tx, { managementSessionId: sessionId, permission: "till.configure" });
+    await authorizeManager(tx, { managementSessionId: sessionId, permission: "venue.configure" });
     return fn(tx);
   });
 }
@@ -1262,7 +1262,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
 
   // Read the tenant's authored receipt trim, or the built-in default (`getReceipt` returns
   // DEFAULT_RECEIPT `{}` on absence — SP-B4, from its own `tenant_receipts` row). Gated on
-  // `till.configure` via the explicit `authorizeManager`, NOT merely on holding a session —
+  // `layout.configure` via the explicit `authorizeManager`, NOT merely on holding a session —
   // `getReceipt` itself does NOT authorize (it is shared with the
   // unauthenticated till boot read), so this route carries its own gate. Proven by deletion in
   // `management-api.pg.test.ts`: dropping this `authorizeManager` call flips the staff-role case from
@@ -1274,7 +1274,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         await asAppUser(tx);
         await authorizeManager(tx, {
           managementSessionId: sessionId,
-          permission: "till.configure",
+          permission: "layout.configure",
         });
         return getReceipt(tx, deps.cfg.tenantId);
       });
@@ -1284,7 +1284,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
 
   // Author (full replacement) the tenant's receipt trim, into its own `tenant_receipts` row (SP-B4).
   // Same gating + body-screen shape as `PUT /management-api/theme`: `putReceipt` enforces
-  // `till.configure` and validates the receipt (400 `receipt.invalid`); the body-shape screen refuses a
+  // `layout.configure` and validates the receipt (400 `receipt.invalid`); the body-shape screen refuses a
   // non-object body or an absent `receipt` key as `management.request_invalid` naming the FIELD.
   app.put("/management-api/receipt", (c) =>
     run(c, log, async () => {
@@ -1317,14 +1317,14 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   // (`requireManagementSession` first, 401 before any DB work) and every DB touch runs
   // `withTenant` + `asAppUser`, in this database; the canvas/theme stores explicitly filter or
   // key rows by tenant id. The READS (`GET /canvases`, `/canvases/:id`, `/theme`) carry their own
-  // explicit `authorizeManager(..., "till.configure")` — `listCanvases`/`getCanvas`/
+  // explicit `authorizeManager(..., "layout.configure")` — `listCanvases`/`getCanvas`/
   // `getTenantTheme` do NOT self-authorize (mirroring `GET /management-api/receipt`) — while the
   // WRITES delegate the gate to the store fns
   // (`createCanvas`/`updateCanvas`/`deleteCanvas`/`putTenantTheme`, covered by the store suites).
   // A malformed body field is refused as `management.request_invalid` naming the FIELD before the
   // store call, the receipt/theme shape.
 
-  // The tenant's canvases, for the editor list. Gated on `till.configure` via the explicit
+  // The tenant's canvases, for the editor list. Gated on `layout.configure` via the explicit
   // `authorizeManager` (the read fns do not gate). Returns `{ canvases: [{id,name,definition}] }`.
   app.get("/management-api/canvases", (c) =>
     run(c, log, async () => {
@@ -1333,7 +1333,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         await asAppUser(tx);
         await authorizeManager(tx, {
           managementSessionId: sessionId,
-          permission: "till.configure",
+          permission: "layout.configure",
         });
         return listCanvases(tx, deps.cfg.tenantId);
       });
@@ -1342,7 +1342,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   );
 
   // One canvas by id, or 404 `canvas.not_found`. `:id` screened by `requireCanvasId` (malformed →
-  // the same 404). Gated on `till.configure` via the explicit `authorizeManager`.
+  // the same 404). Gated on `layout.configure` via the explicit `authorizeManager`.
   app.get("/management-api/canvases/:id", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1351,7 +1351,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         await asAppUser(tx);
         await authorizeManager(tx, {
           managementSessionId: sessionId,
-          permission: "till.configure",
+          permission: "layout.configure",
         });
         return getCanvas(tx, deps.cfg.tenantId, id);
       });
@@ -1362,7 +1362,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
 
   // Create a canvas. Body { name, definition }; a non-object body or a non-string `name` or an absent
   // `definition` → `management.request_invalid` naming the FIELD; `createCanvas` then enforces
-  // `till.configure`, validates the definition (400 `canvas.invalid`) and translates a duplicate name
+  // `layout.configure`, validates the definition (400 `canvas.invalid`) and translates a duplicate name
   // to 409 `canvas.name_taken`. Returns the new id at 201, matching every other create route.
   app.post("/management-api/canvases", (c) =>
     run(c, log, async () => {
@@ -1395,7 +1395,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   );
 
   // Replace a canvas's name + definition. Same body-screen as POST; `updateCanvas` enforces
-  // `till.configure`, validates (400 `canvas.invalid`) and maps a duplicate name to 409. An absent id
+  // `layout.configure`, validates (400 `canvas.invalid`) and maps a duplicate name to 409. An absent id
   // (matched zero rows via `.returning`) → 404 `canvas.not_found`, the by-id config-CRUD idiom the
   // sibling zone/table/status verbs use — so a PUT to a since-deleted canvas is a 404, not a masked
   // "saved" 204. → 204 on success.
@@ -1428,7 +1428,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // Delete a canvas. `:id` screened by `requireCanvasId`; `deleteCanvas` enforces `till.configure`.
+  // Delete a canvas. `:id` screened by `requireCanvasId`; `deleteCanvas` enforces `layout.configure`.
   // An absent id (matched zero rows via `.returning`) → 404 `canvas.not_found`, mirroring the
   // deactivate* sibling verbs. → 204 on success.
   app.delete("/management-api/canvases/:id", (c) =>
@@ -1449,7 +1449,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
 
   // The tenant's authored theme override, or `{ theme: null }` when it has never picked one
   // (`getTenantTheme` returns undefined → JSON null; the client falls back to the design-system
-  // defaults). Gated on `till.configure` via the explicit `authorizeManager` (the read fn does not gate).
+  // defaults). Gated on `layout.configure` via the explicit `authorizeManager` (the read fn does not gate).
   app.get("/management-api/theme", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1457,7 +1457,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         await asAppUser(tx);
         await authorizeManager(tx, {
           managementSessionId: sessionId,
-          permission: "till.configure",
+          permission: "layout.configure",
         });
         return getTenantTheme(tx, deps.cfg.tenantId);
       });
@@ -1467,7 +1467,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
 
   // Author (create or replace) the tenant's base theme. Body { theme }; a non-object body or an absent
   // `theme` key → `management.request_invalid` naming the FIELD; `putTenantTheme` then enforces
-  // `till.configure` and validates the override (400 `theme.invalid`, fail-closed on an un-allowlisted
+  // `layout.configure` and validates the override (400 `theme.invalid`, fail-closed on an un-allowlisted
   // token) before the upsert. The body is coerced to `{}` by `readJsonBody` so a `null`/malformed body
   // hits the same field screen rather than TypeError-ing → 500. → 204.
   app.put("/management-api/theme", (c) =>
@@ -1497,7 +1497,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   // routes are gated (`requireManagementSession` first, 401 before any DB work) and every DB
   // touch runs `withTenant` + `asAppUser`, in this database; the device-profile store explicitly
   // filters rows by tenant id. The READS (`GET /device-profiles`, `/device-profiles/:id`) carry
-  // their own explicit `authorizeManager(..., "till.configure")` —
+  // their own explicit `authorizeManager(..., "layout.configure")` —
   // `listDeviceProfiles`/`getDeviceProfile` do NOT self-authorize (the canvas-read shape) — while
   // the WRITES delegate the gate to the store fns (`createDeviceProfile`/`updateDeviceProfile`/
   // `deleteDeviceProfile`, covered by the store suite). A malformed body field is refused as
@@ -1505,7 +1505,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   // unknown capability / bad canvas reference to `device_profile.invalid` (400), a duplicate name
   // to `device_profile.name_taken` (409), and an absent id to `device_profile.not_found` (404).
 
-  // The tenant's device profiles, for the editor list. Gated on `till.configure` via the explicit
+  // The tenant's device profiles, for the editor list. Gated on `layout.configure` via the explicit
   // `authorizeManager` (the read fn does not gate). Returns `{ deviceProfiles: [{id,name,canvasId,capabilities}] }`.
   app.get("/management-api/device-profiles", (c) =>
     run(c, log, async () => {
@@ -1514,7 +1514,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         await asAppUser(tx);
         await authorizeManager(tx, {
           managementSessionId: sessionId,
-          permission: "till.configure",
+          permission: "layout.configure",
         });
         return listDeviceProfiles(tx, deps.cfg.tenantId);
       });
@@ -1523,7 +1523,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   );
 
   // One device profile by id, or 404 `device_profile.not_found`. `:id` screened by
-  // `requireDeviceProfileId` (malformed → the same 404). Gated on `till.configure` via the explicit
+  // `requireDeviceProfileId` (malformed → the same 404). Gated on `layout.configure` via the explicit
   // `authorizeManager`.
   app.get("/management-api/device-profiles/:id", (c) =>
     run(c, log, async () => {
@@ -1533,7 +1533,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         await asAppUser(tx);
         await authorizeManager(tx, {
           managementSessionId: sessionId,
-          permission: "till.configure",
+          permission: "layout.configure",
         });
         return getDeviceProfile(tx, deps.cfg.tenantId, id);
       });
@@ -1544,7 +1544,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
 
   // Create a device profile. Body { name, canvasId?, capabilities }; a non-object body, a non-string
   // `name`, an absent `capabilities`, or a `canvasId` that is present but not a UUID string →
-  // `management.request_invalid` naming the FIELD; `createDeviceProfile` then enforces `till.configure`,
+  // `management.request_invalid` naming the FIELD; `createDeviceProfile` then enforces `layout.configure`,
   // validates the capability set (400 `device_profile.invalid` {bad_capabilities}), maps a bad canvas
   // reference to 400 `device_profile.invalid` {bad_canvas_ref} and a duplicate name to 409
   // `device_profile.name_taken`. Returns the stored row at 201.
@@ -1602,7 +1602,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   );
 
   // Replace a device profile's name, canvas reference and capabilities. Same body-screen as POST;
-  // `updateDeviceProfile` enforces `till.configure`, validates (400 `device_profile.invalid`), maps a
+  // `updateDeviceProfile` enforces `layout.configure`, validates (400 `device_profile.invalid`), maps a
   // duplicate name to 409 and an absent id (matched zero rows via `.returning`) to 404
   // `device_profile.not_found` — so a PUT to a since-deleted profile is a 404, not a masked "saved".
   // Returns the stored row at 200.
@@ -1656,7 +1656,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   );
 
   // Delete a device profile. `:id` screened by `requireDeviceProfileId`; `deleteDeviceProfile` enforces
-  // `till.configure`. An absent id (matched zero rows via `.returning`) → 404 `device_profile.not_found`,
+  // `layout.configure`. An absent id (matched zero rows via `.returning`) → 404 `device_profile.not_found`,
   // mirroring `deleteCanvas`. → 204 on success.
   app.delete("/management-api/device-profiles/:id", (c) =>
     run(c, log, async () => {
@@ -1678,7 +1678,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   // The deployment holds one tenant per database. The dashboard's service-status
   // editor surface (design §3a), mirroring the layout/receipt routes above. All four are gated
   // (`requireManagementSession` first, 401 before any DB work); each verb's own
-  // `authorizeManager(..., "till.configure")` enforces the write gate in this database.
+  // `authorizeManager(..., "venue.configure")` enforces the write gate in this database.
 
   // Create a status. Body { label, color, displayOrder? }; a bad shape → management.request_invalid
   // naming the FIELD; a duplicate label → status.label_taken (409); a bad color → request_invalid.
@@ -1715,7 +1715,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // The whole status set (active + inactive), for the editor. Gated on till.configure via listStatuses.
+  // The whole status set (active + inactive), for the editor. Gated on venue.configure via listStatuses.
   app.get("/management-api/service-statuses", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1818,7 +1818,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   // The dashboard "Sala" config screen (design §3d): CRUD the venue's floor zones and — as thin
   // wrappers over TS-1's table verbs — its dining tables. All eight routes are gated exactly like the
   // layout `GET` above: `requireManagementSession` first (401 before any DB work), then each route calls
-  // `authorizeManager(…, "till.configure")` EXPLICITLY inside `withTenant` + `asAppUser` (unlike the
+  // `authorizeManager(…, "venue.configure")` EXPLICITLY inside `withTenant` + `asAppUser` (unlike the
   // status verbs, the zone/table verbs do NOT authorize themselves — they take a plain venue `cfg` — so
   // the gate lives at the route, the layout-`GET` shape). The verbs are location-scoped, so each reads
   // the venue's config via `requireVenueCfg`. Body-shape screens mirror the service-status routes above.
@@ -1848,7 +1848,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // The venue's ACTIVE zones, by display order, for the editor. Gated on till.configure.
+  // The venue's ACTIVE zones, by display order, for the editor. Gated on venue.configure.
   app.get("/management-api/zones", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1948,7 +1948,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // The venue's ACTIVE tables, by label (thin wrapper over TS-1's `listTables`). Gated on till.configure.
+  // The venue's ACTIVE tables, by label (thin wrapper over TS-1's `listTables`). Gated on venue.configure.
   app.get("/management-api/tables", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -2014,7 +2014,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   // The dashboard "Sala" editor's place / un-place actions (design §placement): thin wrappers over Task
   // 2's `setTablePlacement` / `clearPlacement`. Same gating and mapping as the FP-1 zone/table routes
   // above — `requireManagementSession` first (401 before any DB work), then `withVenueAuth` runs the verb
-  // under `withTenant` + `asAppUser` + `authorizeManager(…, "till.configure")`, so a staff session is
+  // under `withTenant` + `asAppUser` + `authorizeManager(…, "venue.configure")`, so a staff session is
   // refused 403 before any write (proven by dropping the authorize in `withVenueAuth`, the deletion-proof
   // the test names). `requireTableId` screens `:id` (malformed → table.not_found, not an opaque 22P02
   // 500); the verbs own the placement VALUE validation (`placement.invalid`) and the live-table /
@@ -2087,7 +2087,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   // The dashboard "Cocina" config screen: CRUD the venue's kitchen stations, pick the default, route
   // categories/products to a station, and set the whole-ticket `bump_mode`. All gated exactly like the
   // FP-1 zone/table routes above — `requireManagementSession` first (401 before any DB work), then
-  // `withVenueAuth` runs the verb under `withTenant` + `asAppUser` + `authorizeManager(…, "till.configure")`,
+  // `withVenueAuth` runs the verb under `withTenant` + `asAppUser` + `authorizeManager(…, "venue.configure")`,
   // so a staff session is refused 403 before any write (proven by dropping the authorize in `withVenueAuth`,
   // the deletion-proof the tests name). The verbs are location-scoped, so each reads the venue's config via
   // `requireVenueCfg`. Body-shape screens mirror the service-status / zone routes above.
@@ -2128,7 +2128,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   );
 
   // The venue's ACTIVE stations, by display order then name (the picker's own read shape). Gated on
-  // till.configure.
+  // venue.configure.
   app.get("/management-api/stations", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -2324,7 +2324,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   // The dashboard "Cursos" panel: CRUD the venue's coursing sequence, route a product to its default
   // course, and read/write the fire-control setting. All gated exactly like the KDS-1 station routes above
   // — `requireManagementSession` first (401 before any DB work), then `withVenueAuth` runs the verb under
-  // `withTenant` + `asAppUser` + `authorizeManager(…, "till.configure")`, so a staff session is refused 403
+  // `withTenant` + `asAppUser` + `authorizeManager(…, "venue.configure")`, so a staff session is refused 403
   // before any write (proven by dropping the authorize in `withVenueAuth`, the deletion-proof the tests
   // name). The verbs are location-scoped, so each reads the venue's config via `requireVenueCfg`.
   // Body-shape screens mirror the station / service-status routes above.
@@ -2353,7 +2353,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // The venue's ACTIVE courses, by display order then name (the coursing SEQUENCE). Gated on till.configure.
+  // The venue's ACTIVE courses, by display order then name (the coursing SEQUENCE). Gated on venue.configure.
   app.get("/management-api/courses", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -2444,7 +2444,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   );
 
   // Read the venue's fire-control setting (spec §3a: read AND written with the other venue config, for the
-  // dashboard's toggle). Gated on till.configure. Returns { mode: "waiter" | "kitchen" | "expo" }.
+  // dashboard's toggle). Gated on venue.configure. Returns { mode: "waiter" | "kitchen" | "expo" }.
   app.get("/management-api/fire-control", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);

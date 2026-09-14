@@ -201,10 +201,10 @@ export interface StaffMember {
 
 /**
  * `POST /api/session` success — who is now logged in, plus the SERVER-COMPUTED `canConfigureTill`
- * capability (`roleHasPermission(role, "till.configure")`, resolved server-side from the session's
+ * capability (`roleHasPermission(role, "venue.configure")`, resolved server-side from the session's
  * role). The till reads it to gate manager-only affordances (FP-2's on-till "Editar plano") without
  * mirroring the role→permission map on the client, where it would silently drift from `permissions.ts`.
- * Convenience only — the on-till placement route re-checks `till.configure` server-side
+ * Convenience only — the on-till placement route re-checks `venue.configure` server-side
  * (`apps/server/src/till-api.ts`), so a tampered client value grants nothing.
  */
 export interface SessionResult {
@@ -2090,7 +2090,7 @@ export class TillApi {
 
   /**
    * Place (or re-place) a table on the FP-2 spatial floor plan → `PUT /api/tables/:tableId/placement`
-   * (Task 4's ON-TILL route, gated by the operator's OWN `till.configure` role — NOT the management-api
+   * (Task 4's ON-TILL route, gated by the operator's OWN `venue.configure` role — NOT the management-api
    * route). Writes the four placement columns + the target zone; the server re-checks the manager gate
    * (client hiding is convenience only) and re-validates the values (`placement.invalid` /
    * `zone.not_found` / `table.not_found` surface as a rejected `{ code }`). The route answers an empty

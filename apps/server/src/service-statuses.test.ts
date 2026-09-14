@@ -39,7 +39,7 @@ async function codeOf(fn: () => Promise<unknown>): Promise<string> {
   return isAppError(error) ? error.code : `NON-APP-ERROR: ${String(error)}`;
 }
 
-describe("service-status config CRUD (till.configure)", () => {
+describe("service-status config CRUD (venue.configure)", () => {
   let tenantId: string;
   let managerSession: string;
   beforeAll(async () => {
@@ -178,7 +178,7 @@ describe("service-status config CRUD (till.configure)", () => {
     ).toBe("management.request_invalid");
   });
 
-  it("gates every verb on till.configure — a staff-role session is refused (authorization.not_permitted)", async () => {
+  it("gates every verb on venue.configure — a staff-role session is refused (authorization.not_permitted)", async () => {
     const staffSession = await seedSession(tenantId, "staff");
     expect(
       await codeOf(() =>

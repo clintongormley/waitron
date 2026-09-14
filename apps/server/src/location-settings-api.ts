@@ -33,10 +33,10 @@ export function mountLocationSettingsApi(
       await asAppUser(tx);
       const authorization = await authorizeManager(tx, {
         managementSessionId: sessionId,
-        permission: "till.configure",
+        permission: "venue.configure",
       });
       if (authorization.tenantId !== deps.cfg.tenantId)
-        throw new AppError("authorization.not_permitted", { permission: "till.configure" });
+        throw new AppError("authorization.not_permitted", { permission: "venue.configure" });
       return fn(tx);
     });
   app.get("/management-api/location-settings", (c) =>

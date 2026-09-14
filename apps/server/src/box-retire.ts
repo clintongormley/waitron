@@ -36,7 +36,7 @@ export type BoxRetireDeps = {
  * The AppError codes this route can surface, and their HTTP status. `requireManagementSession` throws
  * `management_session.required` (401); `authorizeManager` re-resolves the session
  * (`management_session.required`/`.expired` → 401, `person.suspended` → 403) and refuses a role without
- * `till.configure` with `authorization.not_permitted` (403). `retireSelf`'s ordered refusals are
+ * `system.manage` with `authorization.not_permitted` (403). `retireSelf`'s ordered refusals are
  * client-visible conflicts with the node's current membership standing, so each maps to 409 — an
  * UNMAPPED AppError would fall through to the boundary's 400 default, which is the wrong shape for a
  * "your node is not in a retirable state" answer. `node.retire_carrier_changed` is likewise a 409: the
@@ -60,7 +60,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
  * Registers `POST /api/box/retire` on the shared trading app — the management action a fully-drained
  * fenced node self-evicts with (retire/evict R3). Gated exactly like `GET /api/box/status`:
  * `requireManagementSession` → 401 before any DB work, then `withTenant` + `asAppUser` +
- * `authorizeManager("till.configure")` for the manager check (a `manager`-role person holds it), then
+ * `authorizeManager("system.manage")` for the manager check (a `manager`-role person holds it), then
  * `retireSelf` runs on the app pool. `retireSelf` owns all retire SEMANTICS — the four ordered refusals,
  * idempotency, the abort-before-write mint; this route is only the auth + status-mapping glue.
  *
@@ -77,7 +77,7 @@ export function mountBoxRetireApi(app: Hono, deps: BoxRetireDeps, log: Logger): 
         await asAppUser(tx);
         await authorizeManager(tx, {
           managementSessionId: sessionId,
-          permission: "till.configure",
+          permission: "system.manage",
         });
       });
       const result = await retireSelf({

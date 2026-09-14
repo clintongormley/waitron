@@ -188,7 +188,7 @@ function fromCurrent(
 
 /**
  * Mount the authenticated backup admin routes. Every route runs the SAME management gate first
- * (`requireManagementSession` → 401, then `authorizeManager("till.configure")` under
+ * (`requireManagementSession` → 401, then `authorizeManager("system.manage")` under
  * `withTenant`+`asAppUser` → 403), mirroring `recovery-bundle-api.ts`. The write routes (`apply`,
  * `rotate`) additionally run `guardWritable` — refuse if the ENV owns the config (409) or this node is
  * not the primary (409) — BEFORE any file write, then dry-validate the exact record they will write
@@ -203,7 +203,7 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
     const sessionId = requireManagementSession(c); // throws 401 if absent/forged
     await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
       await asAppUser(tx);
-      await authorizeManager(tx, { managementSessionId: sessionId, permission: "till.configure" });
+      await authorizeManager(tx, { managementSessionId: sessionId, permission: "system.manage" });
     });
   };
 

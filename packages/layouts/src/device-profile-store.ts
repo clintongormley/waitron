@@ -22,7 +22,7 @@ import { validateCapabilities, validateInactivityTimeout } from "./device-profil
  * `device-profile-store.pg.test.ts` (real Postgres, as a non-superuser `app_user` member — PGlite
  * holds every grant, CLAUDE.md §4).
  *
- * The writers run, in order: (1) `authorizeManager(..., "till.configure")` — the write gate, before
+ * The writers run, in order: (1) `authorizeManager(..., "layout.configure")` — the write gate, before
  * any DB write, proven by-deletion in the suite; (2) `validateCapabilities` — fail-closed on an
  * unknown capability flag (throws `device_profile.invalid` {reason: "bad_capabilities"} before the
  * write, since capabilities drive the /api/pay + /api/drawer firewall); (3) the drizzle write, whose
@@ -152,7 +152,7 @@ export async function getDeviceProfile(
 }
 
 /** Create a device profile for the tenant, returning the stored row. Manager/admin only
- * (`till.configure`). */
+ * (`layout.configure`). */
 export async function createDeviceProfile(
   tx: Transaction,
   input: {
@@ -169,7 +169,7 @@ export async function createDeviceProfile(
 ): Promise<DeviceProfileRow> {
   await authorizeManager(tx, {
     managementSessionId: input.managementSessionId,
-    permission: "till.configure",
+    permission: "layout.configure",
   });
   const capabilities = validateCapabilities(input.capabilities);
   const inactivityTimeoutSeconds = validateInactivityTimeout(
@@ -196,7 +196,7 @@ export async function createDeviceProfile(
 
 /**
  * Replace a profile's name, canvas reference and capabilities in place, returning the stored row.
- * Manager/admin only (`till.configure`). An absent id (or another tenant's row, excluded by the tenant predicate) throws
+ * Manager/admin only (`layout.configure`). An absent id (or another tenant's row, excluded by the tenant predicate) throws
  * `device_profile.not_found` — the by-id config-CRUD idiom `updateCanvas` uses, read back via
  * `.returning({ id })` so a PUT that matched zero rows is a 404, never a masked "saved" 204. A name
  * collision throws `device_profile.name_taken`, a bad canvas reference `device_profile.invalid`
@@ -219,7 +219,7 @@ export async function updateDeviceProfile(
 ): Promise<DeviceProfileRow> {
   await authorizeManager(tx, {
     managementSessionId: input.managementSessionId,
-    permission: "till.configure",
+    permission: "layout.configure",
   });
   const capabilities = validateCapabilities(input.capabilities);
   const inactivityTimeoutSeconds = validateInactivityTimeout(
@@ -251,7 +251,7 @@ export async function updateDeviceProfile(
 }
 
 /**
- * Delete a device profile. Manager/admin only (`till.configure`). An absent id (or another tenant's
+ * Delete a device profile. Manager/admin only (`layout.configure`). An absent id (or another tenant's
  * row, excluded by the tenant predicate) throws `device_profile.not_found`, read back via `.returning({ id })` — the same
  * by-id config-CRUD idiom `deleteCanvas` uses, so a DELETE that matched zero rows is a 404 rather than
  * a silent success. A device still referencing the profile (the composite FK, ON DELETE RESTRICT)
@@ -265,7 +265,7 @@ export async function deleteDeviceProfile(
 ): Promise<void> {
   await authorizeManager(tx, {
     managementSessionId: input.managementSessionId,
-    permission: "till.configure",
+    permission: "layout.configure",
   });
   let deleted: { id: string }[];
   try {

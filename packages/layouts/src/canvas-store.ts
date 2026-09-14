@@ -22,7 +22,7 @@ import { validateCanvas } from "./validate-canvas.js";
  * `canvas-store.pg.test.ts` (real Postgres, as a non-superuser `app_user` member — PGlite holds
  * every grant, CLAUDE.md §4). Mirrors the other stores in this package (`theme-store.ts`, `receipt-store.ts`).
  *
- * The writers run, in order: (1) `authorizeManager(..., "till.configure")` — the write gate, before
+ * The writers run, in order: (1) `authorizeManager(..., "layout.configure")` — the write gate, before
  * any DB write, proven by-deletion in the suite; (2) `validateCanvas` — fail-closed on an invalid
  * `definition` (throws `canvas.invalid` before the write); (3) the drizzle write, whose 23505 on the
  * per-tenant name unique is translated to `canvas.name_taken` (see `translateWriteError`). `deleteCanvas`
@@ -105,14 +105,14 @@ export async function getCanvas(
   return { id: row.id, name: row.name, definition: row.definition as CanvasDef };
 }
 
-/** Create a canvas for the tenant, returning its generated id. Manager/admin only (`till.configure`). */
+/** Create a canvas for the tenant, returning its generated id. Manager/admin only (`layout.configure`). */
 export async function createCanvas(
   tx: Transaction,
   input: { managementSessionId: string; tenantId: string; name: string; definition: unknown },
 ): Promise<{ id: string }> {
   await authorizeManager(tx, {
     managementSessionId: input.managementSessionId,
-    permission: "till.configure",
+    permission: "layout.configure",
   });
   const definition = validateCanvas(input.definition);
   try {
@@ -127,7 +127,7 @@ export async function createCanvas(
 }
 
 /**
- * Replace a canvas's name + definition in place. Manager/admin only (`till.configure`). An absent id
+ * Replace a canvas's name + definition in place. Manager/admin only (`layout.configure`). An absent id
  * (or another tenant's row, excluded by the tenant predicate) throws `canvas.not_found` — the by-id config-CRUD idiom the
  * direct siblings on this same management surface use (`updateZone`/`updateTable`/`updateStatus` in
  * `apps/server/src/tables.ts`), read back via `.returning({ id })` so a PUT that matched zero rows is
@@ -146,7 +146,7 @@ export async function updateCanvas(
 ): Promise<void> {
   await authorizeManager(tx, {
     managementSessionId: input.managementSessionId,
-    permission: "till.configure",
+    permission: "layout.configure",
   });
   const definition = validateCanvas(input.definition);
   let updated: { id: string }[];
@@ -165,7 +165,7 @@ export async function updateCanvas(
 }
 
 /**
- * Delete a canvas. Manager/admin only (`till.configure`). No definition to validate. An absent id (or
+ * Delete a canvas. Manager/admin only (`layout.configure`). No definition to validate. An absent id (or
  * another tenant's row, excluded by the tenant predicate) throws `canvas.not_found`, read back via `.returning({ id })` —
  * the same by-id config-CRUD idiom `deactivateZone`/`deactivateTable`/`deactivateStatus` (`tables.ts`)
  * use, so a DELETE that matched zero rows is a 404 rather than a silent success. A device profile still
@@ -179,7 +179,7 @@ export async function deleteCanvas(
 ): Promise<void> {
   await authorizeManager(tx, {
     managementSessionId: input.managementSessionId,
-    permission: "till.configure",
+    permission: "layout.configure",
   });
   let deleted: { id: string }[];
   try {

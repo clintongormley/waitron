@@ -36,7 +36,7 @@ describe("card-contract mirror", () => {
     expect(CARD_REQUIRED_CAPABILITY["product-grid"]).toBeUndefined();
   });
   it("mirrors the required permission per card", () => {
-    expect(CARD_REQUIRED_PERMISSION["table-layout-editor"]).toBe("till.configure");
+    expect(CARD_REQUIRED_PERMISSION["table-layout-editor"]).toBe("venue.configure");
     expect(CARD_REQUIRED_PERMISSION["floor-plan"]).toBeUndefined();
   });
 });

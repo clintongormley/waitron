@@ -90,7 +90,7 @@ describe("tenant theme store on real Postgres, as the app role", () => {
   });
 
   it("refuses a put from a staff-role session — the authorizeManager gate (differential)", async () => {
-    // The by-deletion proof: staff holds no till.configure, so authorizeManager throws
+    // The by-deletion proof: staff holds no layout.configure, so authorizeManager throws
     // authorization.not_permitted BEFORE any write. Deleting the authorizeManager call from
     // putTenantTheme makes this succeed → codeOf returns "did not throw…" and a row lands, failing both
     // assertions.

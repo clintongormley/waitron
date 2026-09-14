@@ -46,14 +46,14 @@ export function mountConfigurationExportApi(
         await asAppUser(tx);
         const authorization = await authorizeManager(tx, {
           managementSessionId: sessionId,
-          permission: "till.configure",
+          permission: "system.manage",
         });
         const tenantMember = await tx.execute(sql`
           select 1 from persons
           where tenant_id = ${deps.cfg.tenantId} and id = ${authorization.authorizedBy}
         `);
         if (tenantMember.rows.length === 0) {
-          throw new AppError("authorization.not_permitted", { permission: "till.configure" });
+          throw new AppError("authorization.not_permitted", { permission: "system.manage" });
         }
         return buildConfigurationBundle(
           tx,

@@ -407,7 +407,7 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
     });
     expect(res.status).toBe(200);
     // The response carries the server-computed `canConfigureTill` capability so the till can gate
-    // manager-only affordances client-side; Ana is `staff`, who does NOT hold `till.configure`, so it is
+    // manager-only affordances client-side; Ana is `staff`, who does NOT hold `venue.configure`, so it is
     // false. The on-till placement route (Task 4) still re-checks the gate server-side. `locale` is the
     // operator's own UI-language preference (`persons.locale`, via the session) — Ana has none, so null.
     expect(await res.json()).toEqual({
@@ -439,7 +439,7 @@ describe("POST /api/session (log in) + DELETE /api/session (log out)", () => {
     // Seed + log in a manager to prove `canConfigureTill` reflects the person's ACTUAL role, not a
     // hardcoded value — a mutant that hardcoded `false` (or dropped the field) fails here, while the
     // staff case above (canConfigureTill: false) kills a mutant that hardcoded `true`. A manager holds
-    // `till.configure`. Cleaned up so the roster's exact ordering assertions elsewhere stay untouched.
+    // `venue.configure`. Cleaned up so the roster's exact ordering assertions elsewhere stay untouched.
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
     const mgr = await suite.db.execute<{ id: string }>(sql`
@@ -2740,9 +2740,9 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
   });
 });
 
-describe("PUT + DELETE /api/tables/:id/placement — the on-till authorize(till.configure) gate (FP-2, Task 4)", () => {
+describe("PUT + DELETE /api/tables/:id/placement — the on-till authorize(venue.configure) gate (FP-2, Task 4)", () => {
   // PGlite, like the rest of this suite. The novel thing under test is the FIRST on-till
-  // `authorize(till.configure)` hop: the route resolves the SESSION operator's OWN role and
+  // `authorize(venue.configure)` hop: the route resolves the SESSION operator's OWN role and
   // refuses a write the role cannot make (no supervisor override this slice — manager-on-till
   // only). That gate is `authorize` reading `persons.role` for the open session and asking
   // `roleHasPermission` — a query plus a JS lookup whose 204-vs-403 outcome is IDENTICAL on
@@ -2754,7 +2754,7 @@ describe("PUT + DELETE /api/tables/:id/placement — the on-till authorize(till.
   // — the choice §4 asks to state.
 
   // A live zone every placement body points at, and the two operators the gate distinguishes: a MANAGER
-  // (role `manager`, which holds `till.configure`) and a STAFF operator (Ana, role `staff`, which does
+  // (role `manager`, which holds `venue.configure`) and a STAFF operator (Ana, role `staff`, which does
   // NOT — reused from setup rather than re-seeded). Both are GENUINE `persons.role` values logged in
   // through the real `loginWithPin` path; the role is never faked.
   let managerCookie: string;
@@ -2777,7 +2777,7 @@ describe("PUT + DELETE /api/tables/:id/placement — the on-till authorize(till.
       });
     });
     managerCookie = `${SESSION_COOKIE}=${managerSession.id}`;
-    // Ana (role `staff`) is the STAFF operator — no `till.configure`. Reusing the setup fixture keeps
+    // Ana (role `staff`) is the STAFF operator — no `venue.configure`. Reusing the setup fixture keeps
     // the roster's `[abel, ana]` invariant untouched (no extra staff person seeded).
     staffCookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
 
@@ -2832,7 +2832,7 @@ describe("PUT + DELETE /api/tables/:id/placement — the on-till authorize(till.
     mountTillApi(app, deps(suite.db), collect([]));
     const tableId = await makeTable(app);
 
-    // Manager holds `till.configure`: `authorize` passes, the placement is written, the route answers 204.
+    // Manager holds `venue.configure`: `authorize` passes, the placement is written, the route answers 204.
     const ok = await app.request(`/api/tables/${tableId}/placement`, {
       method: "PUT",
       headers: { "content-type": "application/json", cookie: managerCookie },
@@ -2849,7 +2849,7 @@ describe("PUT + DELETE /api/tables/:id/placement — the on-till authorize(till.
       zone_id: zoneId,
     });
 
-    // Staff holds no `till.configure` and sends no override: `authorize` throws
+    // Staff holds no `venue.configure` and sends no override: `authorize` throws
     // `authorization.not_permitted`, which the till STATUS map answers 403. (Removing the `authorize`
     // call flips this case to a 204 — the gate deletion-proof this task runs.)
     const forbidden = await app.request(`/api/tables/${tableId}/placement`, {
@@ -2859,7 +2859,7 @@ describe("PUT + DELETE /api/tables/:id/placement — the on-till authorize(till.
     });
     expect(forbidden.status).toBe(403);
     expect(await forbidden.json()).toMatchObject({
-      error: { code: "authorization.not_permitted", params: { permission: "till.configure" } },
+      error: { code: "authorization.not_permitted", params: { permission: "venue.configure" } },
     });
   });
 

@@ -121,7 +121,7 @@ export const CARD_CONTRACTS: Record<CardType, CardContractMirror> = {
   "table-layout-editor": {
     defaultColSpan: 24,
     defaultRowSpan: 12,
-    requiredPermission: "till.configure",
+    requiredPermission: "venue.configure",
     visibilityStates: [],
     saleCritical: false,
     configFields: [],

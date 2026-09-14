@@ -733,7 +733,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       // would silently drift from `permissions.ts`). Convenience only: every server gate re-derives the
       // role from the session and re-checks the permission via `authorize` (e.g. the placement route
       // below), so a tampered client value grants nothing.
-      const canConfigureTill = roleHasPermission(session.role, "till.configure");
+      const canConfigureTill = roleHasPermission(session.role, "venue.configure");
       // `locale` is the operator's OWN UI-language preference (`persons.locale`, carried on the session
       // by `loginWithPin` — Task 3), or null when they have set none. The till app defaults to the
       // venue locale (`GET /api/till`'s `locale`) until login, then switches to this per-user value.
@@ -1682,7 +1682,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // that printer's kick — deli-hardware §6).
   //
   // This is the FIRST till route to parse a supervisor OVERRIDE and call `authorize()` WITH one (FP-2
-  // already calls `authorize(…"till.configure")` at the table-placement routes, but with NO override —
+  // already calls `authorize(…"venue.configure")` at the table-placement routes, but with NO override —
   // it is the reusable OVERRIDE hop that is new here). The per-location `drawer_open_policy` decides:
   //   • `open`  → any logged-in operator opens directly; `authorizedBy = personId`, `viaOverride = false`.
   //   • `gated` → `authorize(tx, { sessionId, permission: "cash.drawer", override })`, satisfied by the
@@ -2161,10 +2161,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   );
 
   // Place a table on the FP-2 spatial floor plan (design §placement) — the FIRST on-till
-  // `authorize(till.configure)` gate. Unlike every sibling above, `requireSession` is not the whole
+  // `authorize(venue.configure)` gate. Unlike every sibling above, `requireSession` is not the whole
   // guard: the session only IDENTIFIES the operator, and the write is a manager-level venue-config
   // action. So this route pulls `sessionId` out of the session (the sale routes ignore it) and, inside
-  // the tenant/app_user transaction, calls `authorize(tx, { sessionId, permission: "till.configure" })`
+  // the tenant/app_user transaction, calls `authorize(tx, { sessionId, permission: "venue.configure" })`
   // — which resolves the OPERATOR's OWN role and throws `authorization.not_permitted` (→ 403) when it
   // lacks the permission. NO supervisor `override` is parsed this slice (manager-on-till only, spec
   // §3c): a staff/supervisor operator is simply refused. The gate runs BEFORE `setTablePlacement`, so a
@@ -2216,7 +2216,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const shape = body.shape as FloorTableShape;
       await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
-        await authorize(tx, { sessionId, permission: "till.configure" });
+        await authorize(tx, { sessionId, permission: "venue.configure" });
         await setTablePlacement(tx, deps.cfg, id, { zoneId, posX, posY, shape, rotation });
       });
       return c.body(null, 204);
@@ -2224,7 +2224,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   );
 
   // Un-place a table (NULL the four placement columns, leave zone_id as-is — an FP-1 assignment).
-  // Mirrors the PUT's gate exactly: the operator's OWN `till.configure` via `authorize` (no override),
+  // Mirrors the PUT's gate exactly: the operator's OWN `venue.configure` via `authorize` (no override),
   // BEFORE `clearPlacement`, so a staff operator is 403 and writes nothing. Malformed :id → table.not_found
   // (the isUuid screen, never a 22P02 500); an absent row → table.not_found (the verb's row-count check).
   // Returns 204.
@@ -2235,7 +2235,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       if (!isUuid(id)) throw new AppError("table.not_found", { tableId: id });
       await withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
         await asAppUser(tx);
-        await authorize(tx, { sessionId, permission: "till.configure" });
+        await authorize(tx, { sessionId, permission: "venue.configure" });
         await clearPlacement(tx, deps.cfg, id);
       });
       return c.body(null, 204);

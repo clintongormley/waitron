@@ -448,16 +448,16 @@ function validateStatusColor(color: string): string {
 }
 
 /**
- * The `till.configure` gate the four status config-CRUD verbs share (design §3a): manager/admin only
+ * The `venue.configure` gate the four status config-CRUD verbs share (design §3a): manager/admin only
  * (the #81 venue-config permission — reused, not renamed), run BEFORE any DB write, proven by-deletion
  * in the suite. Extracted so the one gate is stated once across create/list/update/deactivate.
  */
 async function requireConfigure(tx: Transaction, managementSessionId: string): Promise<void> {
-  await authorizeManager(tx, { managementSessionId, permission: "till.configure" });
+  await authorizeManager(tx, { managementSessionId, permission: "venue.configure" });
 }
 
 /**
- * Create a service status in the tenant's configured set. Manager/admin only (`till.configure`, the
+ * Create a service status in the tenant's configured set. Manager/admin only (`venue.configure`, the
  * #81 venue-config permission — reused, not renamed): the authorize gate runs BEFORE any DB write,
  * proven by-deletion in the suite. A duplicate `(tenant, label)` collides on
  * `table_service_statuses_tenant_label_key` and is surfaced as `status.label_taken`.
@@ -527,7 +527,7 @@ export async function listServiceStatuses(tx: Transaction): Promise<ServiceStatu
 /**
  * The deployment holds one tenant per database. The tenant's WHOLE status set — active AND
  * inactive, ordered by `display_order` then `label` — so the editor can reactivate a deactivated
- * one. Manager/admin only (`till.configure`), gated here rather than at the route so the verb is
+ * one. Manager/admin only (`venue.configure`), gated here rather than at the route so the verb is
  * safe from any caller. The read is unfiltered.
  */
 export async function listStatuses(
@@ -550,7 +550,7 @@ export async function listStatuses(
 
 /**
  * Edit a status's `label`/`color`/`displayOrder`/`active` (any subset). Manager/admin only
- * (`till.configure`). An absent id throws `status.not_found`; a label collision throws
+ * (`venue.configure`). An absent id throws `status.not_found`; a label collision throws
  * `status.label_taken`; a malformed color throws `management.request_invalid`. Reactivation is
  * `updateStatus({ active: true })`.
  */
@@ -612,7 +612,7 @@ export async function deactivateStatus(
 /**
  * Set (or clear, with `null`) a table's single manual status (design §3b) — an OPERATIONAL verb a
  * logged-in operator uses the way they ring a sale, so it is gated by the operator SESSION at the
- * route (`requireSession`, Task 8), NOT by `till.configure`. Validates the table is active (an
+ * route (`requireSession`, Task 8), NOT by `venue.configure`. Validates the table is active (an
  * absent or deactivated table → `table.not_found`, design §3b) and, when `statusId` is non-null,
  * that the status is real (`status.not_found`) and `active` (`status.inactive`). Runs on the
  * CALLER's transaction under its tenant/app_user scope. The status is occupancy-INDEPENDENT: a
