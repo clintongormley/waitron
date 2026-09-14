@@ -216,9 +216,9 @@ export async function findIncident(
 }
 
 /**
- * Marks an open incident handled. An already-handled incident keeps its first handler and time, so
- * two people handling at once both succeed. Handling frees the `incidents_open_dedup` key: a
- * producer that detects the same condition again records a new incident.
+ * Marks an open incident handled. Marking an already-handled incident changes nothing, so it keeps
+ * its first handler and time. Handling frees the `incidents_open_dedup` key: a producer that detects
+ * the same condition again records a new incident.
  */
 export async function markIncidentHandled(
   tx: Transaction,

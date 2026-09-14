@@ -768,6 +768,18 @@ describe("tenant incident reads", () => {
     await mark(tillId, new Date("2026-03-10T10:00:00Z"));
     await mark(secondTill.tillId, new Date("2026-03-12T10:00:00Z"));
     await mark(thirdTill.tillId, new Date("2026-02-01T10:00:00Z"));
+    const other = await seedTenant(suite.db);
+    await raise(other.tenantId, other.tillId, BASE);
+    await withTenant(suite.db, other.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const [theirs] = await listOpenIncidents(tx, other.tenantId);
+      await markIncidentHandled(tx, {
+        tenantId: other.tenantId,
+        id: theirs!.id,
+        personId: person,
+        handledAt: new Date("2026-03-11T10:00:00Z"),
+      });
+    });
     const rows = await asApp((tx) =>
       listHandledIncidents(tx, tenantId, new Date("2026-03-01T00:00:00Z")),
     );
