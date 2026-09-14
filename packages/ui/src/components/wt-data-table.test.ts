@@ -401,12 +401,12 @@ test("searchable renders a search box that narrows rows", async () => {
 });
 
 test("the search box shows its label as the placeholder unless a placeholder is given", async () => {
-  const el = await table({ searchable: true, searchLabel: "Buscar productos" });
+  const el = await table({ searchable: true, searchLabel: "Search products" });
   const input = el.shadowRoot!.querySelector<HTMLInputElement>(".table-search")!;
-  expect(input.placeholder).toBe("Buscar productos");
-  el.searchPlaceholder = "Nombre o código";
+  expect(input.placeholder).toBe("Search products");
+  el.searchPlaceholder = "Name or code";
   await el.updateComplete;
-  expect(input.placeholder).toBe("Nombre o código");
+  expect(input.placeholder).toBe("Name or code");
 });
 
 test("no toolbar is rendered when there is neither a search box nor a filter", async () => {
