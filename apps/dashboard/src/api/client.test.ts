@@ -2894,6 +2894,7 @@ describe("DashboardApi — option groups + product attach (Task 11/12)", () => {
     const api = new DashboardApi("", fetchImpl);
     await expect(api.createOptionGroup({ name: {}, minSelect: 2, maxSelect: 1 })).rejects.toEqual({
       code: "options.group_invalid",
+      status: 400,
     });
   });
 
