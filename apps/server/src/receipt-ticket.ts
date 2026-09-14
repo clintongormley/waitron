@@ -48,10 +48,15 @@ import { modifierSnapshotLabels } from "./modifier-snapshot-labels.js";
  * paper itself is verified manually on the real printer; `receipt-ticket.test.ts` pins the bytes.
  */
 import {
+  QR_QUIET_ZONE,
+  chooseQrDots,
   columnsFor,
+  dpiValue,
   esc,
   labelAmountLines,
   prepareText,
+  safeWidthDots,
+  withQuietZone,
   wrapText,
   type CharacterSet,
   type PaperWidth,
@@ -59,6 +64,7 @@ import {
 } from "@waitron/printing";
 import { addDecimal, decimal, perDishOptionQuantity } from "@waitron/shared";
 
+import { qrModules } from "./qr-matrix.js";
 import { formatMoney } from "./receipt-money.js";
 import type { TillSaleLine, TillSaleResult } from "./till-sale.js";
 
@@ -281,9 +287,17 @@ export function formatReceipt({
   }
   b.line();
 
-  // The QR (arts. 20-21). A sale's cotejo URL can legitimately be "" (the fiscal backend minted none),
-  // and a QR of nothing is not a scannable code, so print no QR then while still printing the legend.
-  if (result.qr !== "") b.qr(result.qr).line();
+  // The QR (arts. 20-21), printed as an image Waitron builds, sized for this printer (30-40 mm). A sale's
+  // cotejo URL can legitimately be "" (the fiscal backend minted none): then no QR, but still the legend.
+  if (result.qr !== "") {
+    const matrix = qrModules(result.qr);
+    const dots = chooseQrDots(
+      matrix.length,
+      dpiValue(printer.resolution),
+      safeWidthDots(printer.paperWidth),
+    );
+    b.qrRaster(withQuietZone(matrix, QR_QUIET_ZONE), { moduleSize: dots }).line();
+  }
 
   // The VERI*FACTU legend — printed UNCONDITIONALLY in Veri*Factu mode (art. 20.1.b).
   b.line(LEGEND);

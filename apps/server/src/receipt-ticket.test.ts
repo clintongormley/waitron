@@ -1,9 +1,10 @@
-import { FEED_BEFORE_CUT, columnsFor, esc } from "@waitron/printing";
+import { FEED_BEFORE_CUT, columnsFor, esc, withQuietZone } from "@waitron/printing";
 import { compareDecimal, decimal, sumDecimals } from "@waitron/shared";
 import { describe, expect, it } from "vitest";
 
 import { formatReceipt } from "./receipt-ticket.js";
 import type { ReceiptIssuer, ReceiptPrinterSettings, ReceiptTrim } from "./receipt-ticket.js";
+import { qrModules } from "./qr-matrix.js";
 import { bytesInclude, decodeTicket, printedLines } from "./testing/decode-ticket.js";
 import type { TillSaleResult } from "./till-sale.js";
 
@@ -28,6 +29,8 @@ const CUT_BYTES = [0x1d, 0x56, 0x00];
 const FEED_THEN_CUT = [0x1b, 0x64, FEED_BEFORE_CUT, ...CUT_BYTES];
 /** GS ( k — the lead bytes of the native two-dimensional-symbol (QR) command family (`escpos.ts`). */
 const QR_LEAD_BYTES = Uint8Array.from([0x1d, 0x28, 0x6b]);
+/** GS v 0 with m = 0 — the lead bytes of a raster image (`escpos.ts` `qrRaster`). */
+const RASTER_LEAD_BYTES = Uint8Array.from([0x1d, 0x76, 0x30, 0x00]);
 
 const PRINTER_80: ReceiptPrinterSettings = {
   paperWidth: "80mm",
@@ -143,9 +146,16 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
       expect(s).toContain("30,00"); // Efectivo = total + change
       expect(s).toContain("9,10"); // Cambio
 
-      // The QR (§3a, arts. 20-21): the exact native GS ( k byte sequence Task 3's builder emits for this
-      // payload must appear verbatim in the receipt bytes.
-      expect(bytesInclude(bytes, esc().qr(FILED_SALE.qr).bytes())).toBe(true);
+      // The QR (arts. 20-21): the raster image of the sale's link, with its 4-square border, at 6 dots
+      // per square (this 41-square link at 180 dpi) must appear verbatim in the receipt bytes.
+      expect(
+        bytesInclude(
+          bytes,
+          esc()
+            .qrRaster(withQuietZone(qrModules(FILED_SALE.qr), 4), { moduleSize: 6 })
+            .bytes(),
+        ),
+      ).toBe(true);
     },
   );
 
@@ -233,7 +243,8 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
       invoiceLocale: "es-ES",
       printer: PRINTER_80,
     });
-    // No native QR command is emitted (mirrors `qrSvg("") === ""` on the screen)...
+    // No QR image or native QR command is emitted (mirrors `qrSvg("") === ""` on the screen)...
+    expect(bytesInclude(bytes, RASTER_LEAD_BYTES)).toBe(false);
     expect(bytesInclude(bytes, QR_LEAD_BYTES)).toBe(false);
     // ...but the legend is unconditional in Veri*Factu mode (art. 20.1.b).
     expect(decodeTicket(bytes)).toContain("VERI*FACTU");
@@ -938,4 +949,38 @@ describe("formatReceipt — printer layout", () => {
     expect(lines).toContain(`TOTAL${" ".repeat(16)}20,90 EUR`);
     expect(lines).toContain(`Base 21%${" ".repeat(13)}10,00 EUR`);
   });
+
+  it.each([
+    ["180dpi", 6, 294, 37],
+    ["203dpi", 7, 343, 43],
+  ] as const)(
+    "prints the QR as a %s raster image of the sale's link, 30-40 mm, with no native QR command",
+    (resolution, dots, heightDots, widthBytes) => {
+      for (const paperWidth of ["58mm", "80mm"] as const) {
+        const bytes = formatReceipt({
+          result: FILED_SALE,
+          issuer: ISSUER,
+          receipt: {},
+          invoiceLocale: "es-ES",
+          printer: { paperWidth, resolution, characterSet: "wpc1252" },
+        });
+        expect(bytesInclude(bytes, QR_LEAD_BYTES)).toBe(false);
+        const at = bytes.findIndex((_, i) => RASTER_LEAD_BYTES.every((v, j) => bytes[i + j] === v));
+        expect(at).toBeGreaterThan(0);
+        // GS v 0 m xL xH yL yH: x is bytes per row, y is the height in dots.
+        expect(bytes[at + 4]! + 256 * bytes[at + 5]!).toBe(widthBytes);
+        expect(bytes[at + 6]! + 256 * bytes[at + 7]!).toBe(heightDots);
+        const squares = qrModules(FILED_SALE.qr).length;
+        expect(squares).toBe(41);
+        expect(heightDots).toBe((squares + 8) * dots);
+        const mm = (squares * dots * 25.4) / (resolution === "203dpi" ? 203 : 180);
+        expect(mm).toBeGreaterThanOrEqual(30);
+        expect(mm).toBeLessThanOrEqual(40);
+        const image = esc()
+          .qrRaster(withQuietZone(qrModules(FILED_SALE.qr), 4), { moduleSize: dots })
+          .bytes();
+        expect(bytesInclude(bytes, image)).toBe(true);
+      }
+    },
+  );
 });
