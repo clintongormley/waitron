@@ -113,6 +113,8 @@ const FALLBACK: Readonly<Record<string, string>> = {
   "\u{2026}": "...",
   º: "o",
   ª: "a",
+  "×": "x",
+  "·": "-",
   "\u{a0}": " ",
   "\u{202f}": " ",
 };

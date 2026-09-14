@@ -8,9 +8,13 @@ import { bytesInclude, decodeTicket, printedLines } from "./testing/decode-ticke
 import type { TillSaleResult } from "./till-sale.js";
 
 // `formatReceipt` is a PURE byte producer (design §3b) — no DB, no container, no fiscal state — so
-// these are ordinary unit tests. We decode the ESC/POS payload back to its Latin-1 text (the encoding
-// `escpos.ts` uses, pinned in `escpos.test.ts`) via the shared `decodeTicket` helper to assert the
-// human-readable content, and inspect the raw bytes for the native QR command and the tail cut.
+// these are ordinary unit tests. The suite reads a payload's text two ways: `printedLines`
+// (`decode-ticket.ts`, via `previewPrintJob`) decodes each byte through the character-set TABLE the
+// job selects, so accented text and the € symbol come back as themselves — the printer-layout tests
+// use it; `decodeTicket` decodes byte-exact Latin-1 (each byte to its own code point), for the
+// byte-level separator and round-trip assertions. Raw bytes are inspected for the native QR command
+// and the tail cut. The builder no longer uses one blanket Latin-1 encoding — it selects a code table
+// per character set (`charset.ts`, pinned in `charset.test.ts`).
 //
 // This is the LOAD-BEARING test of the slice (spec §4/§7): the printed paper is a factura simplificada,
 // a legal document, so the completeness test proves the paper carries EVERY mandated art. 7.1 /
@@ -122,8 +126,9 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
       expect(s).toContain("VERI*FACTU");
 
       // Amounts render in the invoice locale (es-ES → comma decimals). Assert the digit portions ONLY:
-      // the €-symbol and its NBSP/NNBSP separator do NOT survive the Latin-1 round-trip the decoder does,
-      // and the separator differs between ICU builds — see `formatMoney`'s note.
+      // `s` here is the table-aware `printedLines` read, in which the € glyph's rendering varies by
+      // character set (it prints as "EUR" in the plain set) and the amount/€ separator differs between
+      // ICU builds — so pinning the digits keeps these assertions set-independent. See `formatMoney`.
       expect(s).toContain("12,10"); // line 1 gross
       expect(s).toContain("8,80"); // line 2 gross
       expect(s).toContain("10,00"); // base 21%
@@ -406,11 +411,15 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
 
   it("normalises the amount/€ separator to an ASCII space (0x20), not NBSP/NNBSP", () => {
     // `Intl.NumberFormat("es-ES", …)` separates the amount and the € with a NON-BREAKING space —
-    // U+00A0, or a narrow no-break space U+202F on some ICU builds. The Latin-1 ESC/POS encoder maps
-    // each character to its low byte, so U+00A0 → 0xA0 and U+202F → 0x2F (a `/`), the latter printing a
-    // customer total as `20,90/€`-garble. `formatMoney` normalises that separator to an ASCII space, so
-    // the printed total reads `20,90 €` on any ICU build. Proven by DELETION: drop the `.replace(...)`
-    // in `formatMoney` and this test goes RED (`20,90/…` or `20,90 …`).
+    // U+00A0 (this ICU build) or a narrow no-break space U+202F on some builds. This printer's wpc1252
+    // code table (PRINTER_80) can itself encode U+00A0 (byte 0xA0), so `prepareText` does NOT drop it —
+    // without help it would reach the paper as a non-break space. `formatMoney` rewrites that separator
+    // to an ASCII 0x20 first, so the printed total reads `20,90 €` on every ICU build and every set.
+    // Proven by DELETION (ran 2026-09-14): comment out the `.replace(...)` in `formatMoney` and the
+    // `not.toMatch` no-break-space assertion below goes RED under wpc1252, because the U+00A0 the
+    // formatter emitted survives the byte-exact `decodeTicket` read as U+00A0. (The old `U+202F → 0x2F`
+    // `/`-garble was the retired blanket-Latin-1 encoder; no code table encodes U+202F, so it now falls
+    // back to a space before any byte is written — it can no longer reach the paper as `/`.)
     const s = decodeTicket(
       formatReceipt({
         result: FILED_SALE,
@@ -420,8 +429,8 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
         printer: PRINTER_80,
       }),
     );
-    // No non-break space survives to the decoded text (neither the wide NBSP nor the narrow one — the
-    // narrow one is what mangles to `/`, so its raw form is already gone; the wide one decodes 1:1).
+    // No non-break space survives to the decoded text (neither U+00A0 nor U+202F): the byte-exact
+    // decode reads byte 0xA0 back as U+00A0, so a separator left in place by `formatMoney` is caught.
     expect(s).not.toMatch(/[\u00a0\u202f]/u);
     // The character right after the TOTAL amount is a plain ASCII space (0x20), never `/` or U+00A0.
     const idx = s.indexOf("20,90");
@@ -798,6 +807,122 @@ describe("formatReceipt — printer layout", () => {
       "  Aceite de oliva virgen extra",
       `  de la casa${" ".repeat(12)}0,50 €`,
     ]);
+  });
+
+  it("wraps a long modifier label, keeping every continuation line indented by two", () => {
+    // A nonprice modifier label longer than 30 columns must wrap AND keep its 2-space indent on every
+    // continuation line — the option lines sit under the dish, not flush against the paper's left edge.
+    const result: TillSaleResult = {
+      ...FILED_SALE,
+      total: "10.00",
+      vatBreakdown: [{ rate: "10", base: "9.09", tax: "0.91" }],
+      lines: [
+        {
+          descriptions: { "es-ES": "Cafe" },
+          quantity: "1",
+          gross: "10.00",
+          parentLineNo: null,
+          modifierSnapshots: [
+            {
+              modifierId: "nota",
+              name: { "es-ES": "Nota" },
+              type: "text",
+              text: "sin cebolla y con mucho tomate natural bien picado",
+            },
+          ],
+        },
+      ],
+      tender: { method: "cash", change: "0.00" },
+    };
+    const lines = printedLines(
+      formatReceipt({
+        result,
+        issuer: ISSUER,
+        receipt: {},
+        invoiceLocale: "es-ES",
+        printer: PRINTER_58,
+      }),
+    );
+    const first = lines.indexOf("  Nota: sin cebolla y con");
+    expect(first).toBeGreaterThanOrEqual(0);
+    expect(lines.slice(first, first + 3)).toEqual([
+      "  Nota: sin cebolla y con",
+      "  mucho tomate natural bien",
+      "  picado",
+    ]);
+  });
+
+  it("wraps a long manual card reference at 30 columns", () => {
+    // `Ref. <reference>` longer than the 30-column paper must wrap onto continuation lines rather than
+    // print a single over-width line.
+    const result: TillSaleResult = {
+      ...FILED_SALE,
+      total: "10.00",
+      vatBreakdown: [{ rate: "10", base: "9.09", tax: "0.91" }],
+      lines: [
+        { descriptions: { "es-ES": "Cafe" }, quantity: "1", gross: "10.00", parentLineNo: null },
+      ],
+      tender: {
+        method: "card",
+        charged: "10.00",
+        tip: "0.00",
+        reference: "AUTORIZACION 123456 TERMINAL 0042 LOTE 17",
+      },
+    };
+    const lines = printedLines(
+      formatReceipt({
+        result,
+        issuer: ISSUER,
+        receipt: {},
+        invoiceLocale: "es-ES",
+        printer: PRINTER_58,
+      }),
+    );
+    for (const line of lines) expect(line.length, line).toBeLessThanOrEqual(30);
+    const first = lines.indexOf("Ref. AUTORIZACION 123456");
+    expect(first).toBeGreaterThanOrEqual(0);
+    expect(lines.slice(first, first + 2)).toEqual([
+      "Ref. AUTORIZACION 123456",
+      "TERMINAL 0042 LOTE 17",
+    ]);
+  });
+
+  it("wraps a long unit name at a small continuation indent, not one glyph per line", () => {
+    // A quantity+unit prefix wider than half the paper must NOT drag the product name's continuation
+    // indent out to the edge, or the name wraps a single glyph per line (an unreadable column).
+    const result: TillSaleResult = {
+      ...FILED_SALE,
+      total: "9.99",
+      vatBreakdown: [{ rate: "10", base: "9.08", tax: "0.91" }],
+      lines: [
+        {
+          descriptions: { "es-ES": "Queso manchego curado en aceite" },
+          quantity: "123456.789",
+          gross: "9.99",
+          unitName: { "es-ES": "kilogramos-de-queso-manchego-curado" },
+          unitPrecision: 3,
+          parentLineNo: null,
+        },
+      ],
+      tender: { method: "cash", change: "0.00" },
+    };
+    const lines = printedLines(
+      formatReceipt({
+        result,
+        issuer: ISSUER,
+        receipt: {},
+        invoiceLocale: "es-ES",
+        printer: PRINTER_58,
+      }),
+    );
+    // No printed line exceeds the 30-column paper (global width invariant).
+    for (const line of lines) expect(line.length, line).toBeLessThanOrEqual(30);
+    // The name must NOT wrap one glyph per line: no line is an indent followed by a single character.
+    expect(lines.filter((l) => /^ +\S$/u.test(l))).toEqual([]);
+    // The name's continuation lines exist, stay at the 2-space cap, and each carries a real word.
+    const cont = lines.filter((l) => /^ {2}\S/u.test(l) && /[a-z]/u.test(l));
+    expect(cont.length).toBeGreaterThan(0);
+    for (const l of cont) expect(l.trimStart().length, l).toBeGreaterThan(2);
   });
 
   it("measures the euro sign after conversion: EUR takes three columns in plain letters", () => {

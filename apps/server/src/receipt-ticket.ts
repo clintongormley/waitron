@@ -232,10 +232,14 @@ export function formatReceipt({
   for (const { dish, options } of groupByParent(result.lines)) {
     const unit = dish.unitName == null ? "" : ` ${lineName(dish.unitName, locale)}`;
     const quantity = p(`${dish.quantity}${unit}  `);
+    // The name's continuation lines normally start under the name (indent = the quantity prefix width).
+    // Cap that at 2 when the prefix is wider than half the paper: past there `wrapText`'s remaining room
+    // shrinks to a few columns and the name wraps one glyph per line.
+    const nameIndent = quantity.length > columns / 2 ? 2 : quantity.length;
     row(
       `${quantity}${lineName(dish.descriptions, locale)}`,
       formatMoney(dish.gross, locale),
-      quantity.length,
+      nameIndent,
     );
     for (const label of modifierSnapshotLabels(dish.modifierSnapshots ?? [], locale)) {
       text(`  ${label}`, 2);

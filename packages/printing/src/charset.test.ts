@@ -73,6 +73,18 @@ describe("prepareText / encodeText", () => {
     expect(prepareText("Café jamón Ñ ¿ ¡ ç € año", "plain")).toBe("Cafe jamon N ? ! c EUR ano");
   });
 
+  it("falls the × badge and · separator back to ASCII only where the set lacks them", () => {
+    // The receipt emits × (U+00D7, the per-dish option badge) and · (U+00B7, the order-label
+    // separator). wpc1252 and pc858 encode both natively, so `prepareText` keeps the glyph there; the
+    // plain set cannot, so it takes the ASCII fallback rather than `?`.
+    expect(prepareText("×", "wpc1252")).toBe("×");
+    expect(prepareText("·", "wpc1252")).toBe("·");
+    expect(prepareText("×", "pc858")).toBe("×");
+    expect(prepareText("·", "pc858")).toBe("·");
+    expect(prepareText("×", "plain")).toBe("x");
+    expect(prepareText("·", "plain")).toBe("-");
+  });
+
   it("round-trips the test page sample through each real set", () => {
     for (const cs of ["wpc1252", "pc858"] as const) {
       const sample = "1: Café jamón Ñ ¿¡ ç ü 5 €";
