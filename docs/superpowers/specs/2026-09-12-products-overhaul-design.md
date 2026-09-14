@@ -51,6 +51,16 @@ the venue's intended real products before live use.
   you can change it. Keep existing single-category routing as an interim behavior; extra memberships
   and parentage do not introduce new destinations or inherited routing. Multiple-destination routing
   is explicitly deferred, not settled by choosing a reporting category.
+
+  > **Corrected 2026-09-14 (final review).** Two parts of this proposal were retired by the
+  > Categories screen work, and the bullet is left as the original proposal rather than the shipped
+  > behaviour. Deletion is no longer refused: it is confirmed, shows what depends on the category,
+  > and then goes ahead — removing product memberships, clearing the reporting category from any
+  > product using it, moving direct children up to the deleted category's own parent, and dropping
+  > its preparation routes. And a product's Reporting Category is now optional, so a product may
+  > hold memberships with none marked. The current source of truth is
+  > `docs/developers/product-categories.md`.
+
 - Assumption: options select exactly one choice, with an optional default. Yes/no selects one of two translated
   labels and defaults to No. Text is optional, limited to 500 characters, and has no price.
 - Confirmed: “No tax” is the existing zero-rate class, shown as an applicable entry in the tax

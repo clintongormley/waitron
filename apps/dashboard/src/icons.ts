@@ -11,7 +11,9 @@
  * - gear: the Settings nav group's header icon. Generated (not hand-plotted) — an 8-tooth ring
  *   computed with trigonometry at 16x16, verified by rendering it large before use.
  * - person: the banner's account-menu trigger (head + shoulders bust).
- * - plus: the Modifiers list's round "new modifier" button (a centred cross).
+ * - plus: an add or create action trigger (two crossing filled rectangles forming a plus sign,
+ *   centered) — the Modifiers list's round "new modifier" button, and Categories' round "create
+ *   category" button.
  * - grip: the drag handle that reorders a modifier's choices (two columns of dots).
  *
  * Attribution: some of these are adapted from Google's Material Symbols icon set, Copyright
@@ -26,7 +28,6 @@ export const DASHBOARD_ICONS: Record<string, string> = {
   gear: "M12.77,5.07 L15.03,6.43 L15.03,9.57 L12.77,10.93L13.45,9.31 L14.08,11.86 L11.86,14.08 L9.31,13.45L10.93,12.77 L9.57,15.03 L6.43,15.03 L5.07,12.77L6.69,13.45 L4.14,14.08 L1.92,11.86 L2.55,9.31L3.23,10.93 L0.97,9.57 L0.97,6.43 L3.23,5.07L2.55,6.69 L1.92,4.14 L4.14,1.92 L6.69,2.55L5.07,3.23 L6.43,0.97 L9.57,0.97 L10.93,3.23L9.31,2.55 L11.86,1.92 L14.08,4.14 L13.45,6.69 Z M5.6,8 a2.4,2.4 0 1,0 4.8,0 a2.4,2.4 0 1,0 -4.8,0",
   person:
     "M8,8c1.47,0 2.67,-1.19 2.67,-2.67s-1.19,-2.67 -2.67,-2.67-2.67,1.19 -2.67,2.67 1.19,2.67 2.67,2.67zm0,1.33c-1.78,0 -5.33,0.89 -5.33,2.67v1.33h10.67v-1.33c0,-1.77 -3.55,-2.67 -5.33,-2.67z",
-  // plus: the Modifiers list's round "new modifier" button (a centred cross).
   plus: "M7.25 2.5H8.75V7.25H13.5V8.75H8.75V13.5H7.25V8.75H2.5V7.25H7.25Z",
   // grip: the drag handle that reorders a modifier's choices (two columns of dots).
   grip: "M6 3.5a1.1 1.1 0 1 1-2.2 0a1.1 1.1 0 0 1 2.2 0M12.2 3.5a1.1 1.1 0 1 1-2.2 0a1.1 1.1 0 0 1 2.2 0M6 8a1.1 1.1 0 1 1-2.2 0a1.1 1.1 0 0 1 2.2 0M12.2 8a1.1 1.1 0 1 1-2.2 0a1.1 1.1 0 0 1 2.2 0M6 12.5a1.1 1.1 0 1 1-2.2 0a1.1 1.1 0 0 1 2.2 0M12.2 12.5a1.1 1.1 0 1 1-2.2 0a1.1 1.1 0 0 1 2.2 0",

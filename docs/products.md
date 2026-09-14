@@ -17,9 +17,12 @@ name. If you leave it blank, the kitchen uses the product name.
 
 ## Organise the product without changing its route
 
-A product can appear in several categories. Choose one of them as its **Reporting Category**. That
-category supplies the single category recorded for reporting, so the same sale is not counted once
-for every category membership.
+A product can appear in several categories. You may choose one of them as its **Reporting
+Category**, which supplies the single category recorded for reporting, so the same sale is not
+counted once for every category membership. A product left without a Reporting Category records no
+reporting label at all on its new order lines, and none of its memberships contributes a kitchen
+route on its own — the category route is simply absent rather than falling back to any one
+membership.
 
 Extra category memberships help people find and organise the product. They do not create extra
 kitchen destinations. Once the product exists, use its station and course fields to keep the

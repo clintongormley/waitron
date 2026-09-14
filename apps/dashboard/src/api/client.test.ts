@@ -526,6 +526,34 @@ describe("DashboardApi", () => {
     ]);
   });
 
+  it("getCategoryDependants GETs the dependants for the delete confirmation", async () => {
+    const dependants = {
+      products: [{ id: "p1", name: { es: "Croquetas" }, reporting: true }],
+      children: [{ id: "cat2", name: { es: "Postres" } }],
+      parentId: "cat0",
+      routes: [{ id: "r1", station: "bar", zone: null }],
+    };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(dependants));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.getCategoryDependants("cat1")).toEqual(dependants);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/categories/cat1/dependants", {
+      method: "GET",
+      credentials: "include",
+    });
+  });
+
+  it("addProductsToCategory POSTs the product ids to the category's products route", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.addProductsToCategory("cat1", ["p1", "p2"])).resolves.toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/categories/cat1/products", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ productIds: ["p1", "p2"] }),
+    });
+  });
+
   it("uses the canonical unit collection and item routes", async () => {
     const unit = { id: "u1", name: { en: "portion" }, precision: 2 };
     const fetchImpl = vi

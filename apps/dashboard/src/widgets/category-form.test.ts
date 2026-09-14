@@ -9,12 +9,14 @@ const food: CategorySummary = {
   name: { en: "Food", fr: "Cuisine" },
   parentId: null,
   image: null,
+  color: null,
 };
 const child: CategorySummary = {
   id: "child",
   name: { en: "Sandwiches" },
   parentId: "food",
   image: null,
+  color: null,
 };
 it("renders translated fields and excludes self and descendants from parent choices", async () => {
   const { el } = await mountWidget<CategoryForm>("dashboard-category-form", {
@@ -65,7 +67,7 @@ it("retains the draft during lookup refreshes, validates and emits the reusable 
     .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }));
   expect(count).toBe(1);
   expect(submitted).toEqual({
-    value: { name: { en: "Breakfast", fr: "" }, image: null, parentId: null },
+    value: { name: { en: "Breakfast", fr: "" }, image: null, parentId: null, color: null },
   });
 });
 it("uses the existing image picker and preserves disabled translations in an edit", async () => {
@@ -87,8 +89,56 @@ it("uses the existing image picker and preserves disabled translations in an edi
   await el.updateComplete;
   el.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!.click();
   expect((await saved).detail).toEqual({
-    value: { name: food.name, image: "photo.jpg", parentId: null },
+    value: { name: food.name, image: "photo.jpg", parentId: null, color: null },
   });
+});
+
+it("submits the chosen colour", async () => {
+  const { el } = await mountWidget<CategoryForm>("dashboard-category-form", {
+    open: true,
+    locales: ["en"],
+    value: food,
+  });
+  const saved = new Promise<CustomEvent>((resolve) =>
+    el.addEventListener("wt-submit", (event) => resolve(event as CustomEvent), { once: true }),
+  );
+  el.shadowRoot!.querySelector<HTMLElement>('[data-color="#b12525"]')!.click();
+  await el.updateComplete;
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!.click();
+  expect((await saved).detail.value.color).toBe("#b12525");
+});
+
+it("edits from an existing colour and can clear it", async () => {
+  const coloredFood: CategorySummary = { ...food, color: "#256bb1" };
+  const { el } = await mountWidget<CategoryForm>("dashboard-category-form", {
+    open: true,
+    locales: ["en"],
+    value: coloredFood,
+  });
+  const saved = new Promise<CustomEvent>((resolve) =>
+    el.addEventListener("wt-submit", (event) => resolve(event as CustomEvent), { once: true }),
+  );
+  el.shadowRoot!.querySelector<HTMLElement>('[data-color=""]')!.click();
+  await el.updateComplete;
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!.click();
+  expect((await saved).detail.value.color).toBeNull();
+});
+
+it("submits a custom colour picked via the native colour input", async () => {
+  const { el } = await mountWidget<CategoryForm>("dashboard-category-form", {
+    open: true,
+    locales: ["en"],
+    value: food,
+  });
+  const saved = new Promise<CustomEvent>((resolve) =>
+    el.addEventListener("wt-submit", (event) => resolve(event as CustomEvent), { once: true }),
+  );
+  const input = el.shadowRoot!.querySelector<HTMLInputElement>('input[type="color"]')!;
+  input.value = "#123456";
+  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  await el.updateComplete;
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!.click();
+  expect((await saved).detail.value.color).toBe("#123456");
 });
 
 it("creates inside a host draft, selects the saved category and leaves the draft intact", async () => {

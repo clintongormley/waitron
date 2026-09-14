@@ -248,10 +248,10 @@ export class ProductEditor extends LitElement {
         errors[`variant-${index}-price`] = t("editor.price_invalid");
     }
     if (
-      this.draft.categoryIds.length &&
-      !this.draft.categoryIds.includes(this.draft.primaryCategoryId ?? "")
+      this.draft.primaryCategoryId !== null &&
+      !this.draft.categoryIds.includes(this.draft.primaryCategoryId)
     )
-      errors.primary = t("editor.reporting_category_required");
+      errors.primary = t("editor.reporting_category_invalid");
     this.errors = errors;
     if (Object.keys(errors).length) return;
     this.submitted = true;
@@ -426,10 +426,9 @@ export class ProductEditor extends LitElement {
         ${
           kind === "category" && selected.length
             ? html`<label
-                  >${t("editor.reporting_category")} *<select
+                  >${t("editor.reporting_category")}<select
                     name="reporting-category"
                     .value=${this.draft.primaryCategoryId ?? ""}
-                    aria-required="true"
                     aria-invalid=${this.error("primary") ? "true" : "false"}
                     aria-describedby="primary-error"
                     @change=${(event: Event) => {

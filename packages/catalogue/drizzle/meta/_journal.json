@@ -78,6 +78,13 @@
       "when": 1789323924885,
       "tag": "0010_product_units_primary_key",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1789346217002,
+      "tag": "0011_category_colour",
+      "breakpoints": true
     }
   ]
 }

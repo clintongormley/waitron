@@ -195,6 +195,29 @@ async function createCatalogueVia(app: Hono, name: string): Promise<string> {
   return ((await res.json()) as { id: string }).id;
 }
 
+async function createCategoryVia(app: Hono, name: Record<string, string>): Promise<string> {
+  const res = await send(app, "POST", "/management-api/categories", { body: { name } });
+  expect(res.status).toBe(201);
+  return ((await res.json()) as { id: string }).id;
+}
+
+/** A named product with no reporting category and no memberships, in a catalogue of its own. */
+async function createNamedProductVia(app: Hono, name: string): Promise<string> {
+  const catalogueId = await createCatalogueVia(app, `Catalogue for ${name}`);
+  const res = await send(app, "POST", "/management-api/products", {
+    body: {
+      catalogueId,
+      categoryId: null,
+      descriptions: { es: name },
+      pricingUnit: "each",
+      unitPrice: "1.00",
+      vatClass: "general",
+    },
+  });
+  expect(res.status).toBe(201);
+  return ((await res.json()) as { id: string }).id;
+}
+
 describe("mountCatalogueApi — catalogues", () => {
   it("POST /management-api/catalogues creates one (201)", async () => {
     const res = await send(mountApp(), "POST", "/management-api/catalogues", {
@@ -434,6 +457,162 @@ describe("mountCatalogueApi — categories", () => {
     expect(res.status).toBe(200);
     const rows = (await res.json()) as { name: Record<string, string> }[];
     expect(rows.some((r) => r.name.es === "Postres")).toBe(true);
+  });
+
+  it("creates and repaints a category with a colour", async () => {
+    const app = mountApp();
+    const created = await send(app, "POST", "/management-api/categories", {
+      body: { name: { es: "Picante" }, color: "#b12525" },
+    });
+    expect(created.status).toBe(201);
+    const category = (await created.json()) as { id: string; color: string | null };
+    expect(category.color).toBe("#b12525");
+    const repainted = await send(app, "PATCH", `/management-api/categories/${category.id}`, {
+      body: { color: "#0a0a0a" },
+    });
+    expect(repainted.status).toBe(200);
+    expect(((await repainted.json()) as { color: string | null }).color).toBe("#0a0a0a");
+    const cleared = await send(app, "PATCH", `/management-api/categories/${category.id}`, {
+      body: { color: null },
+    });
+    expect(((await cleared.json()) as { color: string | null }).color).toBeNull();
+  });
+
+  // A colour the operation refuses is a CLIENT fault: `category.color_invalid` at 400, not the
+  // opaque 500 an unmapped code would take. A non-string never reaches the operation — the body
+  // screen refuses it as `management.request_invalid` naming the field, as `image` is screened.
+  it.each([
+    ["red", "category.color_invalid"],
+    ["#B12525", "category.color_invalid"],
+    ["#b125", "category.color_invalid"],
+    [42, "management.request_invalid"],
+  ])("rejects the colour %j with %s (400)", async (color, code) => {
+    const res = await send(mountApp(), "POST", "/management-api/categories", {
+      body: { name: { es: "Picante" }, color },
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: { code } });
+  });
+
+  it("returns a category's dependants for the delete confirmation", async () => {
+    const app = mountApp();
+    const parent = await createCategoryVia(app, { es: "Bebidas" });
+    const child = await send(app, "POST", "/management-api/categories", {
+      body: { name: { es: "Vinos" }, parentId: parent },
+    });
+    const childId = ((await child.json()) as { id: string }).id;
+    const productId = await createNamedProductVia(app, "Rioja");
+    expect(
+      (
+        await send(app, "PUT", `/management-api/products/${productId}/categories`, {
+          body: { categoryIds: [parent] },
+        })
+      ).status,
+    ).toBe(200);
+
+    const res = await send(app, "GET", `/management-api/categories/${parent}/dependants`);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      products: [{ id: productId, name: { es: "Rioja" }, reporting: true }],
+      children: [{ id: childId, name: { es: "Vinos" } }],
+      parentId: null,
+      // The venue-service module is not migrated in this suite, so the optional route table is
+      // absent and the read's `to_regclass` guard answers with an empty list rather than a 500.
+      routes: [],
+    });
+  });
+
+  it("gates the dependants read and refuses a foreign or malformed id", async () => {
+    const app = mountApp();
+    const id = await createCategoryVia(app, { es: "Bebidas" });
+    const path = `/management-api/categories/${id}/dependants`;
+    expect((await send(app, "GET", path, { cookie: null })).status).toBe(401);
+    expect((await send(app, "GET", path, { cookie: staffCookie })).status).toBe(403);
+    expect(
+      (await send(app, "GET", "/management-api/categories/not-a-uuid/dependants")).status,
+    ).toBe(400);
+    const absent = await send(
+      app,
+      "GET",
+      "/management-api/categories/11111111-1111-4111-8111-111111111111/dependants",
+    );
+    expect(absent.status).toBe(404);
+    expect(await absent.json()).toMatchObject({ error: { code: "category.not_found" } });
+  });
+
+  it("bulk-adds products to a category in one write", async () => {
+    const app = mountApp();
+    const id = await createCategoryVia(app, { es: "Tapas" });
+    const first = await createNamedProductVia(app, "Croquetas");
+    const second = await createNamedProductVia(app, "Boquerones");
+
+    const res = await send(app, "POST", `/management-api/categories/${id}/products`, {
+      body: { productIds: [first, second] },
+    });
+    expect(res.status).toBe(204);
+    expect(
+      (
+        (await (await send(app, "GET", `/management-api/categories/${id}/products`)).json()) as {
+          id: string;
+        }[]
+      ).map((p) => p.id),
+    ).toEqual([first, second].sort());
+    // Neither product had a reporting category, so the bulk add gave each one this category.
+    expect(
+      await (await send(app, "GET", `/management-api/products/${first}/categories`)).json(),
+    ).toEqual({ categoryIds: [id], primaryCategoryId: id });
+  });
+
+  it("screens the bulk-add body and gates the write", async () => {
+    const app = mountApp();
+    const id = await createCategoryVia(app, { es: "Tapas" });
+    const path = `/management-api/categories/${id}/products`;
+    const productId = await createNamedProductVia(app, "Croquetas");
+    // An empty selection is a legitimate no-op the screen lets through, not a 400.
+    expect((await send(app, "POST", path, { body: { productIds: [] } })).status).toBe(204);
+    for (const productIds of [undefined, "nope", [7]]) {
+      const res = await send(app, "POST", path, { body: { productIds } });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field: "productIds" } },
+      });
+    }
+    // A well-formed-but-unknown id is the operation's refusal; a malformed one never reaches it.
+    const malformed = await send(app, "POST", path, { body: { productIds: ["not-a-uuid"] } });
+    expect(malformed.status).toBe(400);
+    expect(await malformed.json()).toMatchObject({ error: { code: "shared.invalid_id" } });
+    const unknown = await send(app, "POST", path, {
+      body: { productIds: ["11111111-1111-4111-8111-111111111111"] },
+    });
+    expect(unknown.status).toBe(400);
+    expect(await unknown.json()).toMatchObject({ error: { code: "category.membership_invalid" } });
+    expect(
+      (await send(app, "POST", path, { body: { productIds: [productId] }, cookie: staffCookie }))
+        .status,
+    ).toBe(403);
+    expect(
+      (await send(app, "POST", path, { body: { productIds: [productId] }, cookie: null })).status,
+    ).toBe(401);
+  });
+
+  it("accepts a null reporting category on the membership PUT", async () => {
+    const app = mountApp();
+    const food = await createCategoryVia(app, { es: "Comida" });
+    const drinks = await createCategoryVia(app, { es: "Bebidas" });
+    const productId = await createNamedProductVia(app, "Vermut");
+    const path = `/management-api/products/${productId}/categories`;
+    const res = await send(app, "PUT", path, {
+      body: { categoryIds: [food, drinks], primaryCategoryId: null },
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      categoryIds: [food, drinks].sort(),
+      primaryCategoryId: null,
+    });
+    expect(await (await send(app, "GET", path)).json()).toEqual({
+      categoryIds: [food, drinks].sort(),
+      primaryCategoryId: null,
+    });
   });
 });
 
@@ -2186,6 +2365,7 @@ it("authors translated hierarchy and shares full membership replacement through 
     name: { en: "Food", fr: "Cuisine" },
     parentId: null,
     image: null,
+    color: null,
   });
   expect((await send(app, "PATCH", path, { body: { parentId: category.id } })).status).toBe(400);
   const catalogueId = await createCatalogueVia(app, "Membership menu");
@@ -2210,13 +2390,18 @@ it("authors translated hierarchy and shares full membership replacement through 
       (p) => p.id,
     ),
   ).toEqual([product.id]);
-  expect((await send(app, "DELETE", path)).status).toBe(409);
+  // Deleting a category that still has a member product CASCADES rather than refusing: the
+  // membership goes with it and the product survives, having lost its reporting category.
+  expect((await send(app, "DELETE", path)).status).toBe(204);
+  expect(await (await send(app, "GET", memberships)).json()).toEqual({
+    categoryIds: [],
+    primaryCategoryId: null,
+  });
   expect(
     (await send(app, "PUT", memberships, { body: { categoryIds: [] }, cookie: staffCookie }))
       .status,
   ).toBe(403);
   expect((await send(app, "GET", path, { cookie: null })).status).toBe(401);
   expect((await send(app, "PUT", memberships, { body: { categoryIds: [] } })).status).toBe(200);
-  expect((await send(app, "DELETE", path)).status).toBe(204);
   expect((await send(app, "GET", path)).status).toBe(404);
 });

@@ -2,19 +2,20 @@ import { sql } from "drizzle-orm";
 import { expect, it } from "vitest";
 import {
   CATALOGUE_MIGRATIONS,
+  categoryDependants,
   createCatalogue,
   createCategory,
   createProduct,
   createUnit,
   deleteCategory,
-  replaceProductCategories,
+  readCategory,
 } from "@waitron/catalogue";
 import { asAppUser, CORE_MIGRATIONS, withTenant } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import type { LocationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
-import { createPreparationRoute, deletePreparationRoute } from "./operations.js";
+import { configureZone, createDepartment, createPreparationRoute } from "./operations.js";
 
 const suite = usePgliteDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
@@ -29,31 +30,28 @@ async function venue() {
   return { tenantId, locationId: location.rows[0]!.id as LocationId };
 }
 
-it("refuses to delete a category referenced only by a preparation route", async () => {
+it("deleting a category removes its preparation routes and the category", async () => {
   const { tenantId, locationId } = await venue();
   await withTenant(suite.db, tenantId, async (tx) => {
     await asAppUser(tx);
     const category = await createCategory(tx, tenantId, { name: { en: "Drinks" } });
-    const routeId = await createPreparationRoute(
+    await createPreparationRoute(
       tx,
       { tenantId, locationId },
-      {
-        categoryId: category.id,
-        target: { kind: "no_preparation" },
-      },
+      { categoryId: category.id, target: { kind: "no_preparation" } },
     );
-
-    await expect(deleteCategory(tx, tenantId, category.id)).rejects.toMatchObject({
-      code: "category.in_use",
-      params: { children: 0, products: 0, routes: 1 },
-    });
-
-    await deletePreparationRoute(tx, { tenantId, locationId }, routeId);
     await expect(deleteCategory(tx, tenantId, category.id)).resolves.toBeUndefined();
+    const routes = await tx.execute(
+      sql`select 1 from preparation_routes where tenant_id = ${tenantId} and category_id = ${category.id}`,
+    );
+    expect(routes.rows).toHaveLength(0);
+    await expect(readCategory(tx, tenantId, category.id)).rejects.toMatchObject({
+      code: "category.not_found",
+    });
   });
 });
 
-it("allows deletion after memberships clear even when an open order keeps the copied category label", async () => {
+it("an open order keeps its copied category label after the category is deleted", async () => {
   const { tenantId, locationId } = await venue();
   await withTenant(suite.db, tenantId, async (tx) => {
     await asAppUser(tx);
@@ -72,7 +70,6 @@ it("allows deletion after memberships clear even when an open order keeps the co
       unitPrice: "2.00",
       vatClass: "general",
     });
-    await replaceProductCategories(tx, tenantId, product.id, { categoryIds: [] });
     const order = await tx.execute<{ id: string }>(sql`
       insert into working_orders (tenant_id, till_id, order_number, label)
       values (${tenantId}, ${till.rows[0]!.id}, 1, 'Historical') returning id
@@ -92,5 +89,56 @@ it("allows deletion after memberships clear even when an open order keeps the co
         and working_order_id = ${order.rows[0]!.id}
     `);
     expect(snapshot.rows).toEqual([{ category: "Bakery" }]);
+  });
+});
+
+it("dependants lists a category's preparation routes with station and zone names", async () => {
+  const { tenantId, locationId } = await venue();
+  await withTenant(suite.db, tenantId, async (tx) => {
+    await asAppUser(tx);
+    const category = await createCategory(tx, tenantId, { name: { en: "Grill" } });
+    const zone = await tx.execute<{ id: string }>(sql`
+      insert into floor_zones (tenant_id, location_id, name)
+      values (${tenantId}, ${locationId}, 'Terrace') returning id`);
+    const station = await tx.execute<{ id: string }>(sql`
+      insert into kitchen_stations (tenant_id, location_id, name)
+      values (${tenantId}, ${locationId}, 'Plancha') returning id`);
+    // A route may carry a zone, and a zoned route requires the zone to be a configured service zone.
+    const department = await createDepartment(
+      tx,
+      { tenantId, locationId },
+      { name: "Restaurant", defaultServiceMode: "table_tab" },
+    );
+    await configureZone(
+      tx,
+      { tenantId, locationId },
+      { zoneId: zone.rows[0]!.id, departmentId: department.id },
+    );
+    const routeId = await createPreparationRoute(
+      tx,
+      { tenantId, locationId },
+      {
+        categoryId: category.id,
+        zoneId: zone.rows[0]!.id,
+        target: { kind: "station", stationId: station.rows[0]!.id },
+      },
+    );
+    const deps = await categoryDependants(tx, tenantId, category.id);
+    expect(deps.routes).toEqual([{ id: routeId, station: "Plancha", zone: "Terrace" }]);
+  });
+});
+
+it("dependants reports a no-preparation route with a null station", async () => {
+  const { tenantId, locationId } = await venue();
+  await withTenant(suite.db, tenantId, async (tx) => {
+    await asAppUser(tx);
+    const category = await createCategory(tx, tenantId, { name: { en: "Drinks" } });
+    const routeId = await createPreparationRoute(
+      tx,
+      { tenantId, locationId },
+      { categoryId: category.id, target: { kind: "no_preparation" } },
+    );
+    const deps = await categoryDependants(tx, tenantId, category.id);
+    expect(deps.routes).toEqual([{ id: routeId, station: null, zone: null }]);
   });
 });

@@ -1,6 +1,6 @@
 import { categories, products, type Transaction } from "@waitron/db";
-import { AppError, FALLBACK_LOCALE } from "@waitron/shared";
-import { and, eq, sql } from "drizzle-orm";
+import { AppError, FALLBACK_LOCALE, isUuid } from "@waitron/shared";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { categoryDetails, productCategories } from "./schema/categories.js";
 import { validateContentTranslations } from "./content-languages.js";
@@ -10,11 +10,13 @@ export interface Category {
   id: string;
   name: Record<string, string>;
   image: string | null;
+  color: string | null;
   parentId: string | null;
 }
 export interface CategoryInput {
   name: Record<string, string>;
   image?: string | null;
+  color?: string | null;
   parentId?: string | null;
 }
 export interface ProductCategoryMembership {
@@ -29,6 +31,7 @@ const columns = {
   id: categories.id,
   name: categories.name,
   image: categoryDetails.image,
+  color: categoryDetails.color,
   parentId: categoryDetails.parentId,
 };
 
@@ -100,6 +103,21 @@ async function validateImage(
   );
   if (!image.rows.length) throw new AppError("category.image_not_found", {});
 }
+/**
+ * Is the venue-service module's `preparation_routes` table in this database? Routes belong to an
+ * optional module, so both the delete and its preview have to ask before naming the table in raw
+ * SQL. Follows validateImage's precedent for `media_images`.
+ */
+async function preparationRoutesPresent(tx: Transaction): Promise<boolean> {
+  const table = await tx.execute<{ present: boolean }>(
+    sql`select to_regclass('public.preparation_routes') is not null as present`,
+  );
+  return table.rows[0]!.present;
+}
+function validateColor(color: string | null | undefined): void {
+  if (color === undefined || color === null) return;
+  if (!/^#[0-9a-f]{6}$/.test(color)) throw new AppError("category.color_invalid", {});
+}
 export async function createCategory(
   tx: Transaction,
   tenantId: string,
@@ -107,6 +125,7 @@ export async function createCategory(
   fallbackLanguage: string = FALLBACK_LOCALE,
 ): Promise<Category> {
   await validateContentTranslations(tx, tenantId, input.name, fallbackLanguage);
+  validateColor(input.color);
   await lockCategories(tx, tenantId);
   const id = crypto.randomUUID();
   await validateParent(tx, tenantId, id, input.parentId ?? null);
@@ -117,6 +136,7 @@ export async function createCategory(
     categoryId: id,
     parentId: input.parentId ?? null,
     image: input.image ?? null,
+    color: input.color ?? null,
   });
   return readCategory(tx, tenantId, id);
 }
@@ -134,48 +154,114 @@ export async function updateCategory(
   const current = await readCategory(tx, tenantId, id);
   const parentId = patch.parentId === undefined ? current.parentId : patch.parentId;
   const image = patch.image === undefined ? current.image : patch.image;
+  const color = patch.color === undefined ? current.color : patch.color;
   await validateParent(tx, tenantId, id, parentId);
   await validateImage(tx, tenantId, image);
+  validateColor(color);
   await tx
     .update(categories)
     .set({ name: patch.name ?? current.name, updatedAt: sql`now()` })
     .where(and(eq(categories.tenantId, tenantId), eq(categories.id, id)));
   await tx
     .insert(categoryDetails)
-    .values({ tenantId, categoryId: id, parentId, image })
+    .values({ tenantId, categoryId: id, parentId, image, color })
     .onConflictDoUpdate({
       target: [categoryDetails.tenantId, categoryDetails.categoryId],
-      set: { parentId, image },
+      set: { parentId, image, color },
     });
   return readCategory(tx, tenantId, id);
 }
 export async function deleteCategory(tx: Transaction, tenantId: string, id: string): Promise<void> {
   await lockCategories(tx, tenantId);
-  await readCategory(tx, tenantId, id);
-  // Lock the identity too: route inserts hold its FK's KEY SHARE lock.
+  const category = await readCategory(tx, tenantId, id); // 404s a foreign/absent id, tenant-scoped
+  // Lock the identity: route inserts hold its FK's KEY SHARE lock.
   await tx
     .select({ id: categories.id })
     .from(categories)
     .where(and(eq(categories.tenantId, tenantId), eq(categories.id, id)))
     .for("update");
-  const result = await tx.execute<{ children: number; products: number; routes: number }>(sql`
-    select (select count(*)::int from category_details where tenant_id = ${tenantId} and parent_id = ${id}) as children,
-    (select count(*)::int from product_categories where tenant_id = ${tenantId} and category_id = ${id}) as products,
-    0 as routes`);
-  const dependencies = result.rows[0]!;
-  // Venue service is optional; catalogue must also work without its route table.
-  const routeTable = await tx.execute<{ present: boolean }>(
-    sql`select to_regclass('public.preparation_routes') is not null as present`,
-  );
-  if (routeTable.rows[0]!.present)
-    dependencies.routes = (
-      await tx.execute<{ count: number }>(
-        sql`select count(*)::int as count from preparation_routes where tenant_id = ${tenantId} and category_id = ${id}`,
-      )
-    ).rows[0]!.count;
-  if (dependencies.children || dependencies.products || dependencies.routes)
-    throw new AppError("category.in_use", dependencies);
+  // 1. memberships
+  await tx
+    .delete(productCategories)
+    .where(and(eq(productCategories.tenantId, tenantId), eq(productCategories.categoryId, id)));
+  // 2. clear reporting category where it was this one
+  await tx
+    .update(products)
+    .set({ categoryId: null, updatedAt: sql`now()` })
+    .where(and(eq(products.tenantId, tenantId), eq(products.categoryId, id)));
+  // 3. reparent direct children to this category's own parent (clears the RESTRICT parent FK)
+  await tx
+    .update(categoryDetails)
+    .set({ parentId: category.parentId })
+    .where(and(eq(categoryDetails.tenantId, tenantId), eq(categoryDetails.parentId, id)));
+  // 4. drop preparation routes for this category, if the (optional) venue table exists.
+  if (await preparationRoutesPresent(tx))
+    await tx.execute(
+      sql`delete from preparation_routes where tenant_id = ${tenantId} and category_id = ${id}`,
+    );
+  // 5. the category row (category_details cascades via its FK)
   await tx.delete(categories).where(and(eq(categories.tenantId, tenantId), eq(categories.id, id)));
+}
+export interface CategoryDependants {
+  products: { id: string; name: Record<string, string>; reporting: boolean }[];
+  children: { id: string; name: Record<string, string> }[];
+  parentId: string | null;
+  routes: { id: string; station: string | null; zone: string | null }[];
+}
+/** What deleting a category would touch — the preview behind the delete confirmation. */
+export async function categoryDependants(
+  tx: Transaction,
+  tenantId: string,
+  id: string,
+): Promise<CategoryDependants> {
+  const category = await readCategory(tx, tenantId, id); // 404s a foreign/absent id, tenant-scoped
+  const productRows = await tx
+    .select({ id: products.id, name: products.descriptions, primary: products.categoryId })
+    .from(products)
+    .innerJoin(
+      productCategories,
+      and(
+        eq(productCategories.tenantId, products.tenantId),
+        eq(productCategories.productId, products.id),
+        eq(productCategories.categoryId, id),
+      ),
+    )
+    .where(eq(products.tenantId, tenantId))
+    .orderBy(products.id);
+  const childRows = await tx
+    .select({ id: categories.id, name: categories.name })
+    .from(categoryDetails)
+    .innerJoin(
+      categories,
+      and(
+        eq(categories.tenantId, categoryDetails.tenantId),
+        eq(categories.id, categoryDetails.categoryId),
+      ),
+    )
+    .where(and(eq(categoryDetails.tenantId, tenantId), eq(categoryDetails.parentId, id)))
+    .orderBy(categories.id);
+  // Raw SQL, because this joins two other modules' tables by name.
+  const routes: CategoryDependants["routes"] = [];
+  if (await preparationRoutesPresent(tx)) {
+    const routeRows = await tx.execute<{ id: string; station: string | null; zone: string | null }>(
+      sql`
+      select pr.id,
+             case when pr.no_preparation then null else ks.name end as station,
+             fz.name as zone
+      from preparation_routes pr
+      left join kitchen_stations ks on ks.tenant_id = pr.tenant_id and ks.id = pr.station_id
+      left join floor_zones fz on fz.tenant_id = pr.tenant_id and fz.id = pr.zone_id
+      where pr.tenant_id = ${tenantId} and pr.category_id = ${id}
+      order by pr.id`,
+    );
+    routes.push(...routeRows.rows);
+  }
+  return {
+    products: productRows.map((p) => ({ id: p.id, name: p.name, reporting: p.primary === id })),
+    children: childRows,
+    parentId: category.parentId,
+    routes,
+  };
 }
 export async function readProductCategories(
   tx: Transaction,
@@ -216,19 +302,19 @@ export async function replaceProductCategories(
   )
     throw new AppError("category.membership_invalid", {});
   for (const id of input.categoryIds) await readCategory(tx, tenantId, id);
+  // A reporting category is optional. When omitted, keep a surviving current one, fall back to the
+  // first submitted id only when there was none, and otherwise leave it cleared.
   let primary = input.primaryCategoryId;
   if (primary === undefined) {
     if (!input.categoryIds.length) primary = null;
     else if (current.primaryCategoryId === null) primary = input.categoryIds[0]!;
     else if (input.categoryIds.includes(current.primaryCategoryId))
       primary = current.primaryCategoryId;
-    else throw new AppError("category.primary_required", {});
+    else primary = null;
   }
-  if (
-    input.categoryIds.length
-      ? primary === null || !input.categoryIds.includes(primary)
-      : primary !== null
-  )
+  // Covers a primary sent with an EMPTY set too: nothing is in an empty array, so the `includes`
+  // check below is what rejects that case.
+  if (primary !== null && !input.categoryIds.includes(primary))
     throw new AppError("category.membership_invalid", {});
   await tx
     .delete(productCategories)
@@ -244,6 +330,46 @@ export async function replaceProductCategories(
     .set({ categoryId: primary, updatedAt: sql`now()` })
     .where(and(eq(products.tenantId, tenantId), eq(products.id, productId)));
   return { categoryIds: [...input.categoryIds].sort(), primaryCategoryId: primary };
+}
+/**
+ * Add many products to one category. A product with no reporting category gets this one; a product
+ * that already has one keeps it. Resubmitting a product that is already a member is safe — it never
+ * fails and never duplicates the membership — but it is not a no-op: the reporting category is
+ * chosen from the product's own current value, not from whether the membership is new, so an
+ * existing member that still has no reporting category is given this one. Only an existing member
+ * that already has a reporting category comes out unchanged.
+ */
+export async function addProductsToCategory(
+  tx: Transaction,
+  tenantId: string,
+  categoryId: string,
+  productIds: string[],
+): Promise<void> {
+  await lockCategories(tx, tenantId);
+  await readCategory(tx, tenantId, categoryId); // 404s a foreign/absent category, tenant-scoped
+  // A coerced non-array, or a malformed id reaching a uuid column, would otherwise surface as a
+  // TypeError or a 22P02 — neither of which a route can serve as anything but a 500.
+  if (!Array.isArray(productIds) || productIds.some((id) => !isUuid(id)))
+    throw new AppError("category.membership_invalid", {});
+  if (productIds.length === 0) return;
+  // Resolve the whole selection in one tenant-scoped read, so an unknown, foreign or repeated id is
+  // refused before anything is written rather than part-way through a loop: a repeat leaves the
+  // count short exactly as an absent id does.
+  const found = await tx
+    .select({ id: products.id, primaryCategoryId: products.categoryId })
+    .from(products)
+    .where(and(eq(products.tenantId, tenantId), inArray(products.id, productIds)));
+  if (found.length !== productIds.length) throw new AppError("category.membership_invalid", {});
+  await tx
+    .insert(productCategories)
+    .values(productIds.map((productId) => ({ tenantId, productId, categoryId })))
+    .onConflictDoNothing();
+  const needReporting = found.filter((p) => p.primaryCategoryId === null).map((p) => p.id);
+  if (needReporting.length)
+    await tx
+      .update(products)
+      .set({ categoryId, updatedAt: sql`now()` })
+      .where(and(eq(products.tenantId, tenantId), inArray(products.id, needReporting)));
 }
 export async function listCategoryProducts(tx: Transaction, tenantId: string, categoryId: string) {
   await readCategory(tx, tenantId, categoryId);

@@ -1355,6 +1355,17 @@ export async function updateProduct(
     patch;
   if (categoryId !== undefined) {
     // Choosing a primary retains other memberships; clearing is allowed only for the final membership.
+    //
+    // This branch KEEPS the old coupling between the reporting category and membership on purpose,
+    // and is the only write path that still does. Clearing here refuses outright when the product
+    // has more than one membership (`category.primary_required`), and when it is allowed it clears
+    // every membership with it. `replaceProductCategories` — what the membership picker and the
+    // product editor call — treats the two independently: a product may hold memberships with no
+    // reporting category. The relaxed behaviour is not extended to this path because no first-party
+    // caller sends `categoryId` in a product patch any more (the single-select `product-form.ts` is
+    // the only thing that ever did, and nothing mounts it), so changing it would alter a legacy
+    // route's contract with nothing to gain. `docs/developers/product-categories.md` says which
+    // path is which; `docs/backlog.md` carries removing this one when a client needs it relaxed.
     await lockCategories(tx, tenantId);
     const current = await readProductCategories(tx, tenantId, id);
     if (categoryId === null && current.categoryIds.length > 1)

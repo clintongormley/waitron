@@ -192,6 +192,11 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   or passkey enrolment to choose the public screen. A modal passkey prompt requires an explicit
   action: navigation, refresh, logout and session expiry never open one. Save the authenticated email
   and the successful method only with Remember selected, never in tab storage.
+- **Markup a screen hands to `wt-data-table` as a cell is styled with `part=`/`::part()`, never a CSS
+  class.** The cell's nodes live in the TABLE's shadow root, so the screen's own class rules reach
+  nothing and the element renders unstyled while every attribute assertion still passes. Cost: the
+  categories screen's colour swatches, thumbnails and ancestor-row muting never rendered at all,
+  through review and a green suite. See [design-system.md](docs/developers/design-system.md).
 - **Every colour, spacing, radius and font reads a `--wt-*` token.** No hex, no named colours, no
   `rem`/`em`. Guard: `packages/ui/src/no-hardcoded-chrome.test.ts`, which scans `packages/ui`
   components; [design-system.md](docs/developers/design-system.md) states the rule for any component

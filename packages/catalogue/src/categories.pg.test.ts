@@ -10,6 +10,8 @@ import {
   readCategory,
   replaceProductCategories,
   readProductCategories,
+  categoryDependants,
+  addProductsToCategory,
 } from "./categories.js";
 import { writeContentLanguages } from "./content-languages.js";
 import { createCatalogue, createProduct } from "./operations.js";
@@ -147,17 +149,19 @@ it.each(["attach", "delete"] as const)(
       winner === "attach" ? remove : attach,
     );
     expect(result[0]!.status).toBe("fulfilled");
-    expect(result[1]).toMatchObject({
-      status: "rejected",
-      reason: { code: winner === "attach" ? "category.in_use" : "category.not_found" },
-    });
+    if (winner === "attach")
+      // The delete serializes behind the attach, then cascades the just-added membership away.
+      expect(result[1]).toMatchObject({ status: "fulfilled" });
+    // The attach serializes behind the delete and cannot reference the gone category.
+    else
+      expect(result[1]).toMatchObject({
+        status: "rejected",
+        reason: { code: "category.not_found" },
+      });
+    // Either ordering leaves no membership pointing at the deleted category.
     expect(
       await app(suite.admin, tenantId, (tx) => readProductCategories(tx, tenantId, product.id)),
-    ).toEqual(
-      winner === "attach"
-        ? { categoryIds: [a.id], primaryCategoryId: a.id }
-        : { categoryIds: [], primaryCategoryId: null },
-    );
+    ).toEqual({ categoryIds: [], primaryCategoryId: null });
   },
 );
 
@@ -199,3 +203,248 @@ it.each(["category", "language"] as const)(
     });
   },
 );
+it("stores and validates a category colour", async () => {
+  const tenantId = await seedTenant(suite.admin);
+  await seedLegacySellingUnits(suite.admin, tenantId);
+  const made = await app(suite.admin, tenantId, (tx) =>
+    createCategory(tx, tenantId, { name: { en: "Hot" }, color: "#b12525" }),
+  );
+  expect(made.color).toBe("#b12525");
+  const cleared = await app(suite.admin, tenantId, (tx) =>
+    updateCategory(tx, tenantId, made.id, { color: null }),
+  );
+  expect(cleared.color).toBeNull();
+  await expect(
+    app(suite.admin, tenantId, (tx) =>
+      createCategory(tx, tenantId, { name: { en: "Bad" }, color: "#FFF" }),
+    ),
+  ).rejects.toMatchObject({ code: "category.color_invalid" });
+});
+const seedProduct = (tenantId: Awaited<ReturnType<typeof seedTenant>>) =>
+  app(suite.admin, tenantId, async (tx) => {
+    const menu = await createCatalogue(tx, tenantId, { name: "Menu" });
+    return (
+      await createProduct(tx, tenantId, {
+        catalogueId: menu.id,
+        categoryId: null,
+        descriptions: { en: "P" },
+        pricingUnit: "each",
+        unitPrice: "1",
+        vatClass: "general",
+      })
+    ).id;
+  });
+it("allows memberships with no reporting category", async () => {
+  const { tenantId, a, b } = await fixture();
+  const productId = await seedProduct(tenantId);
+  const saved = await app(suite.admin, tenantId, (tx) =>
+    replaceProductCategories(tx, tenantId, productId, {
+      categoryIds: [a.id, b.id],
+      primaryCategoryId: null,
+    }),
+  );
+  expect(saved.primaryCategoryId).toBeNull();
+  expect(saved.categoryIds).toEqual([a.id, b.id].sort());
+});
+it("clears reporting category when the current one is removed and none is chosen", async () => {
+  const { tenantId, a, b } = await fixture();
+  const productId = await seedProduct(tenantId);
+  await app(suite.admin, tenantId, (tx) =>
+    replaceProductCategories(tx, tenantId, productId, {
+      categoryIds: [a.id, b.id],
+      primaryCategoryId: a.id,
+    }),
+  );
+  const saved = await app(suite.admin, tenantId, (tx) =>
+    replaceProductCategories(tx, tenantId, productId, { categoryIds: [b.id] }),
+  );
+  expect(saved.primaryCategoryId).toBeNull();
+  expect(saved.categoryIds).toEqual([b.id]);
+});
+it("deleting a category unassigns products and clears their reporting category", async () => {
+  const { tenantId, a, b } = await fixture();
+  const product1 = await seedProduct(tenantId);
+  const product2 = await seedProduct(tenantId);
+  await app(suite.admin, tenantId, async (tx) => {
+    // product1: primary A, also a member of B; product2: only A.
+    await replaceProductCategories(tx, tenantId, product1, {
+      categoryIds: [a.id, b.id],
+      primaryCategoryId: a.id,
+    });
+    await replaceProductCategories(tx, tenantId, product2, {
+      categoryIds: [a.id],
+      primaryCategoryId: a.id,
+    });
+    await deleteCategory(tx, tenantId, a.id);
+    // A's memberships are gone; product1 keeps B but loses its A reporting category.
+    expect(await readProductCategories(tx, tenantId, product1)).toEqual({
+      categoryIds: [b.id],
+      primaryCategoryId: null,
+    });
+    expect(await readProductCategories(tx, tenantId, product2)).toEqual({
+      categoryIds: [],
+      primaryCategoryId: null,
+    });
+  });
+});
+it("deleting a category reparents its children to its parent", async () => {
+  const tenantId = await seedTenant(suite.admin);
+  await app(suite.admin, tenantId, async (tx) => {
+    const food = await createCategory(tx, tenantId, { name: { en: "Food" } });
+    const breakfast = await createCategory(tx, tenantId, {
+      name: { en: "Breakfast" },
+      parentId: food.id,
+    });
+    const eggs = await createCategory(tx, tenantId, {
+      name: { en: "Eggs" },
+      parentId: breakfast.id,
+    });
+    await deleteCategory(tx, tenantId, breakfast.id);
+    expect((await readCategory(tx, tenantId, eggs.id)).parentId).toBe(food.id);
+  });
+});
+it("deleting a top-level category makes its children top-level", async () => {
+  const tenantId = await seedTenant(suite.admin);
+  await app(suite.admin, tenantId, async (tx) => {
+    const breakfast = await createCategory(tx, tenantId, { name: { en: "Breakfast" } });
+    const eggs = await createCategory(tx, tenantId, {
+      name: { en: "Eggs" },
+      parentId: breakfast.id,
+    });
+    await deleteCategory(tx, tenantId, breakfast.id);
+    expect((await readCategory(tx, tenantId, eggs.id)).parentId).toBeNull();
+  });
+});
+async function dependantsFixture() {
+  const tenantId = await seedTenant(suite.admin);
+  await seedLegacySellingUnits(suite.admin, tenantId);
+  const otherTenantId = await seedTenant(suite.admin);
+  const made = await app(suite.admin, tenantId, async (tx) => {
+    const food = await createCategory(tx, tenantId, { name: { en: "Food" } });
+    const x = await createCategory(tx, tenantId, { name: { en: "X" }, parentId: food.id });
+    const eggs = await createCategory(tx, tenantId, { name: { en: "Eggs" }, parentId: x.id });
+    const menu = await createCatalogue(tx, tenantId, { name: "Menu" });
+    const p1 = await createProduct(tx, tenantId, {
+      catalogueId: menu.id,
+      categoryId: null,
+      descriptions: { en: "P1" },
+      pricingUnit: "each",
+      unitPrice: "1",
+      vatClass: "general",
+    });
+    const p2 = await createProduct(tx, tenantId, {
+      catalogueId: menu.id,
+      categoryId: null,
+      descriptions: { en: "P2" },
+      pricingUnit: "each",
+      unitPrice: "1",
+      vatClass: "general",
+    });
+    // p1's reporting category is X (also a member); p2 is a member of X with no reporting category.
+    await replaceProductCategories(tx, tenantId, p1.id, {
+      categoryIds: [x.id],
+      primaryCategoryId: x.id,
+    });
+    await replaceProductCategories(tx, tenantId, p2.id, {
+      categoryIds: [x.id],
+      primaryCategoryId: null,
+    });
+    return { food, x, eggs, p1, p2 };
+  });
+  return {
+    tenantId,
+    otherTenantId,
+    foodId: made.food.id,
+    xId: made.x.id,
+    eggsId: made.eggs.id,
+    p1Id: made.p1.id,
+    p2Id: made.p2.id,
+  };
+}
+it("reports a category's dependants for the delete preview", async () => {
+  const { tenantId, foodId, xId, eggsId, p1Id, p2Id } = await dependantsFixture();
+  const deps = await app(suite.admin, tenantId, (tx) => categoryDependants(tx, tenantId, xId));
+  expect(deps.parentId).toBe(foodId);
+  expect(deps.children.map((c) => c.id)).toEqual([eggsId]);
+  expect(deps.products.find((p) => p.id === p1Id)!.reporting).toBe(true);
+  expect(deps.products.find((p) => p.id === p2Id)!.reporting).toBe(false);
+});
+it("dependants is tenant-scoped", async () => {
+  const { otherTenantId, xId } = await dependantsFixture();
+  await expect(
+    app(suite.admin, otherTenantId, (tx) => categoryDependants(tx, otherTenantId, xId)),
+  ).rejects.toMatchObject({ code: "category.not_found" });
+});
+// The bulk add runs here rather than on PGlite because its write is one multi-row
+// `insert … on conflict do nothing` plus one set-based update, and only real PostgreSQL runs those
+// under the non-superuser `app_user` role that production uses.
+async function bulkAddFixture() {
+  const { tenantId, a: c, b: d } = await fixture();
+  const p1Id = await seedProduct(tenantId);
+  const p2Id = await seedProduct(tenantId);
+  // p2 starts as a member of D with D as its reporting category; p1 has neither.
+  await app(suite.admin, tenantId, (tx) =>
+    replaceProductCategories(tx, tenantId, p2Id, {
+      categoryIds: [d.id],
+      primaryCategoryId: d.id,
+    }),
+  );
+  return { tenantId, cId: c.id, dId: d.id, p1Id, p2Id };
+}
+async function otherTenantProduct() {
+  const otherTenantId = await seedTenant(suite.admin);
+  await seedLegacySellingUnits(suite.admin, otherTenantId);
+  return seedProduct(otherTenantId);
+}
+it("bulk-adds products, setting the reporting category only where absent", async () => {
+  const { tenantId, cId, dId, p1Id, p2Id } = await bulkAddFixture();
+  await app(suite.admin, tenantId, (tx) => addProductsToCategory(tx, tenantId, cId, [p1Id, p2Id]));
+  expect(
+    await app(suite.admin, tenantId, (tx) => readProductCategories(tx, tenantId, p1Id)),
+  ).toEqual({ categoryIds: [cId], primaryCategoryId: cId });
+  expect(
+    await app(suite.admin, tenantId, (tx) => readProductCategories(tx, tenantId, p2Id)),
+  ).toEqual({ categoryIds: [cId, dId].sort(), primaryCategoryId: dId });
+});
+it("a repeated bulk add and an empty list change nothing", async () => {
+  const { tenantId, cId, dId, p2Id } = await bulkAddFixture();
+  await app(suite.admin, tenantId, async (tx) => {
+    await addProductsToCategory(tx, tenantId, cId, [p2Id]);
+    await addProductsToCategory(tx, tenantId, cId, [p2Id]);
+    await addProductsToCategory(tx, tenantId, cId, []);
+  });
+  expect(
+    await app(suite.admin, tenantId, (tx) => readProductCategories(tx, tenantId, p2Id)),
+  ).toEqual({ categoryIds: [cId, dId].sort(), primaryCategoryId: dId });
+});
+it("refuses a bulk add whose product ids are not an array", async () => {
+  const { tenantId, cId } = await bulkAddFixture();
+  await expect(
+    app(suite.admin, tenantId, (tx) =>
+      // A request body coerced to a bare string: the type says string[], the wire does not.
+      addProductsToCategory(tx, tenantId, cId, "not-a-list" as unknown as string[]),
+    ),
+  ).rejects.toMatchObject({ code: "category.membership_invalid" });
+});
+const badProductIds: [string, (p1Id: string) => Promise<string>][] = [
+  ["repeats a product id", (p1Id) => Promise.resolve(p1Id)],
+  ["names a malformed product id", () => Promise.resolve("not-a-uuid")],
+  ["names another tenant's product", () => otherTenantProduct()],
+];
+it.each(badProductIds)("refuses a bulk add that %s, applying nothing", async (_what, badId) => {
+  const { tenantId, cId, p1Id } = await bulkAddFixture();
+  const bad = await badId(p1Id);
+  await expect(
+    app(suite.admin, tenantId, (tx) => addProductsToCategory(tx, tenantId, cId, [p1Id, bad])),
+  ).rejects.toMatchObject({ code: "category.membership_invalid" });
+  expect(
+    await app(suite.admin, tenantId, (tx) => readProductCategories(tx, tenantId, p1Id)),
+  ).toEqual({ categoryIds: [], primaryCategoryId: null });
+});
+it("bulk add is tenant-scoped on the category", async () => {
+  const { cId } = await bulkAddFixture();
+  const otherTenantId = await seedTenant(suite.admin);
+  await expect(
+    app(suite.admin, otherTenantId, (tx) => addProductsToCategory(tx, otherTenantId, cId, [])),
+  ).rejects.toMatchObject({ code: "category.not_found" });
+});

@@ -19,7 +19,7 @@ const catalogues: CatalogueSummary[] = [
   { id: "cat-b", name: "Bebidas", active: true, version: 1 },
 ];
 const categories: CategorySummary[] = [
-  { id: "c1", name: { es: "Entrantes" }, image: null, parentId: null },
+  { id: "c1", name: { es: "Entrantes" }, image: null, color: null, parentId: null },
 ];
 const units: Unit[] = [{ id: "u1", name: { es: "unidad" }, precision: 0 }];
 const modifiers: Modifier[] = [{ id: "m1", type: "text", name: { es: "Nota" }, available: true }];
@@ -239,5 +239,25 @@ describe("catalogue-screen", () => {
     resolve(value);
     await flush(el);
     expect(editor(el).open).toBe(false);
+  });
+
+  it("opens the product named in the address", async () => {
+    history.replaceState(null, "", "/manage/catalogue/product/p1");
+    const api = stubApi();
+    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    await flush(el);
+    expect((el as unknown as { editorOpen: boolean }).editorOpen).toBe(true);
+  });
+
+  it("ignores an unknown product id", async () => {
+    history.replaceState(
+      null,
+      "",
+      "/manage/catalogue/product/00000000-0000-4000-8000-000000000000",
+    );
+    const api = stubApi();
+    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    await flush(el);
+    expect((el as unknown as { editorOpen: boolean }).editorOpen).toBe(false);
   });
 });

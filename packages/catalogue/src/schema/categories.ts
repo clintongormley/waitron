@@ -8,6 +8,7 @@ export const categoryDetails = pgTable(
     categoryId: uuid("category_id").notNull(),
     parentId: uuid("parent_id"),
     image: text("image"),
+    color: text("color"),
   },
   (t) => [
     primaryKey({ columns: [t.tenantId, t.categoryId] }),

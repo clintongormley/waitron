@@ -9,8 +9,12 @@ declare module "@waitron/shared" {
     "category.not_found": { categoryId: string };
     "category.parent_cycle": Record<string, never>;
     "category.image_not_found": Record<string, never>;
+    /** A category colour is neither null nor a lower-case `#rrggbb` string. */
+    "category.color_invalid": Record<string, never>;
     "category.membership_invalid": Record<string, never>;
     "category.primary_required": Record<string, never>;
+    /** Nothing throws this any more: deleting a category cascades instead of being refused. Kept
+     * registered because a shipped code is never removed, only left unthrown. */
     "category.in_use": { children: number; products: number; routes: number };
     "modifier.invalid": { field: string };
     "modifier.not_found": { modifierId: string };

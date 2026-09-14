@@ -272,14 +272,16 @@ What that leaves open:
   crosses them proves less than it looks. That is a different rule and wants its own line.
 
 **Product categories — LANDED #340 (2026-09-13).** A product can now belong to several categories
-without its sales being counted twice. One membership is the primary one: its name is the label
-written onto new order lines, and its existing preparation route is the one the kitchen sees. The
-other memberships and any parent categories add no destinations and no routes. Categories get their
+without its sales being counted twice. At most one membership is primary: when one is set, its name
+is the label written onto new order lines, and its existing preparation route is the one the kitchen
+sees. The other memberships and any parent categories add no destinations and no routes. Categories get their
 own dashboard page at `/manage/categories`, where you can translate a category's name, give it a
 picture from the shared library, put it under a parent (not itself and not one of its own
 descendants), and see the products assigned directly to it — a child's products do not count towards
-its parent. Deleting a category is refused while children, products or preparation routes still point
-at it, and the refusal tells you how many of each. Labels already written onto past orders stay
+its parent. Deleting a category is confirmed and then goes ahead rather than refused: the confirmation
+first lists what will change — the products losing that membership (and any that lose their
+reporting category with it), the child categories moving up to the deleted category's own parent,
+and the kitchen preparation routes being dropped. Labels already written onto past orders stay
 readable and never block a deletion. Under the hood the single stored category name became translated
 JSON in the existing core row, and the new hierarchy, picture and membership tables belong to the
 catalogue module. [Design](superpowers/specs/2026-09-12-product-categories-design.md),
@@ -318,6 +320,31 @@ What it left open:
 - **Routing from category memberships is still not designed** — that item is unchanged and sits under
   A9 below. This merge kept the existing single-route behaviour on purpose; choosing the primary
   category as the reporting label does not decide anything about the later routing design.
+- **A category's colour is stored but shown nowhere outside the categories screen.** Nothing on the
+  till, in menus or in reports reads it yet. The colour is data a future consumer can follow; nobody
+  has decided whether or how one should.
+- **One legacy write path still ties the reporting category to membership.** Sending
+  `categoryId: null` in a product patch (`updateProduct` in `packages/catalogue/src/operations.ts`)
+  refuses with `category.primary_required` when the product has more than one membership, and
+  otherwise clears every membership along with the reporting category — the coupling
+  `replaceProductCategories` dropped. Left alone on purpose: nothing first-party sends `categoryId` in
+  a product patch any more. **Next action:** remove the coupling if and when a real client needs the
+  relaxed behaviour on that route, rather than pre-emptively changing a legacy contract.
+- **No "category dependants" seat exists on the module contract.** The delete-preview route
+  (`GET .../:id/dependants`) is core-catalogue-specific; a module that wants its own kind of
+  dependant (beyond products, child categories and preparation routes) has nowhere to plug in one.
+- **A shadow-root styling bug affects `wt-data-table` cells throughout the dashboard.** During QA, a
+  real rendering issue was found and fixed in `apps/dashboard/src/screens/categories-screen.ts`: custom
+  markup (a colour swatch, a thumbnail, a muted-row style) inside a `cell:` callback was styled by CSS
+  rules in the consuming screen's own stylesheet, but Lit mounts that markup one shadow-root layer
+  deeper, inside `wt-data-table`'s own shadow root, where those styles could never reach it. Elements
+  rendered with no size, colour, or dimming despite passing all automated tests (which only checked DOM
+  attribute/class presence, never computed style or layout). The fix used an existing correct pattern
+  already deployed in `printers-screen.ts`: `part=` attributes plus `wt-data-table::part(...)` selectors.
+  That first sweep missed one instance in the same file — the products modal's "no other categories"
+  dash — because the test covering it asked only whether a `.muted` node existed, which was true in the
+  wrong shadow root too; the final review found it, and the test now reads the painted colour back.
+  The same bug was found already live on `main`, unrelated to this branch, in `apps/dashboard/src/widgets/product-list.ts` — product thumbnails render at full natural size and allergen badges as unstyled text. A structural guard comparing each screen's `static styles` class selectors against classes used inside `wt-data-table` callbacks looks feasible and would catch this whole class of bug.
 
 **Product modifiers — LANDED #341 (2026-09-13).** Modifiers are now written once and attached to as
 many products as you like, instead of being retyped per product. There are four kinds: free text (a
@@ -437,7 +464,7 @@ What it left open:
 **The integrated product editor — LANDED #345 (2026-09-13), and the overhaul is complete.** The
 dashboard now has one Products list and one editor, replacing the old combined catalogue screen. A
 product carries a translated name and optional description, a separate kitchen name, an image, a tax
-choice, its selling unit, its categories with one marked as the Reporting Category, its ordered
+choice, its selling unit, its categories with at most one marked as the Reporting Category, its ordered
 reusable modifiers, direct allergen and dietary declarations, and ordered variants — Small and Large,
 each with its own price. One transaction saves the whole thing. You can create a unit, a category or a
 modifier without leaving the product you are editing: the draft survives cancelling the nested form, a
