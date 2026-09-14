@@ -864,18 +864,19 @@ ongoing overhaul listed at the top of Track A.
   `Intl.Collator`; lists in a lifecycle order say so; then migrate the screens, including the filter
   dropdowns `wt-data-table` draws in its toolbar, which are raw `<select>`s too. Fix
   `wt-data-table`'s locale-less `localeCompare` at the same time.
-- **The counter till's service zone dropdown may show the wrong zone when it first appears** (found
-  2026-09-14; read, not run). `apps/till/src/screens/till-counter-screen.ts:321` binds only `.value`
-  on a `<select>` whose options come from a `${…}` list, and marks no option selected. The CLAUDE.md
-  §3 `<select>` rule says such a dropdown shows its first option. The zones and the chosen zone
-  arrive together at login (`apps/till/src/till-app.ts`, `listDefaultZoneOffers`), so the fault
-  would show whenever the till's starting zone is not the first zone listed. The starting zone is the
-  device's row in `device_zone_defaults`, else the zone whose policy has `is_counter_default`; no
-  dashboard screen or route sets either, so only seed data or SQL changes it. `listServiceZones` sorts
-  by `display_order`, then name, and the till drops `table_tab` zones, so "first" is the lowest
-  display order among the rest. **Next action:** a case
-  in `till-counter-screen.test.ts` with two zones and the second chosen, asserting on
-  `select.selectedOptions[0]`, not `select.value`; then mark the chosen option with `.selected`.
+- **Seven dropdowns still bind `.value` alone over options from a list, but none is known to show
+  the wrong choice today** (2026-09-14; read, not run). Each binds `.value` on a `<select>` whose
+  options come from a `.map(…)` and marks no option `selected` — the shape that showed "Downstairs
+  bar" on the till while it sold from Deli counter (CLAUDE.md §3). Found by a text scan, checked by
+  hand: `apps/dashboard/src/screens/my-schedule-screen.ts:393`, `:407`, `:459`,
+  `apps/dashboard/src/screens/units-screen.ts:428`, and
+  `apps/till/src/screens/till-schedule-screen.ts:390`, `:404`, `:457` (plus the doneness picker in
+  `apps/till/src/widgets/line-extras-editor.ts`, due for removal below). By reading, every one opens
+  on its first option — an empty placeholder or the first absence type — which is what that shape
+  shows anyway, so the fault stays hidden until one opens with another value. **Next action:** when
+  one of them is next touched, mark its options `.selected` the way
+  `apps/till/src/screens/till-counter-screen.ts` now does, with a test that opens it on a non-first
+  choice and reads `select.selectedOptions[0]`.
 - **Remove the built-in doneness picker; doneness becomes a modifier the venue adds itself** (owner
   decision 2026-09-14). The built-in picker is unreachable today: the till shows it only when
   `products.diet.contains` includes `meat` (`isMeatProduct` in
