@@ -4,7 +4,11 @@ import { cleanup, mount } from "../test-helpers.js";
 import type { DataTableColumn, WtDataTable } from "./wt-data-table.js";
 import "./wt-data-table.js";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+  sessionStorage.clear();
+});
 
 type Row = { id: string; name: string; count: number };
 
@@ -457,6 +461,11 @@ const withStatus: DataTableColumn<RowS>[] = [
     },
   },
 ];
+function rowKeysS(el: WtDataTable<RowS>): (string | null)[] {
+  return [...el.shadowRoot!.querySelectorAll("tbody tr")].map((r) =>
+    r.getAttribute("data-row-key"),
+  );
+}
 function rowTextS(el: WtDataTable<RowS>): string[] {
   return [...el.shadowRoot!.querySelectorAll("tbody tr")].map((r) => r.textContent!.trim());
 }
@@ -504,12 +513,65 @@ test("a column with no filter contributes no dropdown", async () => {
 test("restores a stored sort and filter from session storage under viewKey", async () => {
   sessionStorage.setItem(
     "test.table",
-    JSON.stringify({ sortKey: "count", sortDirection: "descending", filters: {} }),
+    JSON.stringify({ sortKey: "name", sortDirection: "descending", filters: { status: "off" } }),
   );
-  const el = await table({ viewKey: "test.table", searchable: true });
-  expect(el.sortKey).toBe("count");
+  const el = await tableS({
+    viewKey: "test.table",
+    searchable: true,
+    columns: [{ ...withStatus[0]!, sortValue: (r: RowS) => r.name }, withStatus[1]!],
+  });
+  expect(el.sortKey).toBe("name");
   expect(el.sortDirection).toBe("descending");
-  sessionStorage.clear();
+  expect(rowKeysS(el)).toEqual(["2"]);
+});
+
+test("drops a stored filter value the column no longer offers, or that is not a string", async () => {
+  sessionStorage.setItem(
+    "test.stale",
+    JSON.stringify({ filters: { status: "deleted", name: "Ada Active", gone: "x" } }),
+  );
+  const stale = await tableS({ viewKey: "test.stale", searchable: true, columns: withStatus });
+  expect(rowKeysS(stale)).toEqual(["1", "2"]);
+  cleanup();
+  sessionStorage.setItem("test.numeric", JSON.stringify({ filters: { status: 1 } }));
+  const numeric = await tableS({ viewKey: "test.numeric", searchable: true, columns: withStatus });
+  expect(rowKeysS(numeric)).toEqual(["1", "2"]);
+});
+
+test("restores the view once columns arrive after the viewKey", async () => {
+  sessionStorage.setItem(
+    "test.delayed",
+    JSON.stringify({ sortKey: "name", sortDirection: "ascending" }),
+  );
+  const el = (await mount(
+    '<wt-data-table aria-label="Users"></wt-data-table>',
+  )) as WtDataTable<Row>;
+  el.viewKey = "test.delayed";
+  await el.updateComplete;
+  Object.assign(el, { rows, columns, rowKey: (r: Row) => r.id });
+  await el.updateComplete;
+  expect(el.sortKey).toBe("name");
+  expect(rowText(el)).toEqual(["Ada10Edit", "Bea2Edit"]);
+});
+
+// A consumer may build filter options from data it has not loaded yet, so a stored value waits
+// until its column offers any options and is judged against that first non-empty list.
+test("a stored filter waits for its column's options to load before it is kept or dropped", async () => {
+  sessionStorage.setItem("test.loading", JSON.stringify({ filters: { status: "off" } }));
+  const unloaded: DataTableColumn<RowS>[] = [
+    withStatus[0]!,
+    { ...withStatus[1]!, filter: { ...withStatus[1]!.filter!, options: [] } },
+  ];
+  const el = await tableS({
+    viewKey: "test.loading",
+    searchable: true,
+    columns: unloaded,
+    rows: [],
+  });
+  el.columns = withStatus;
+  el.rows = rowsS;
+  await el.updateComplete;
+  expect(rowKeysS(el)).toEqual(["2"]);
 });
 
 test("writes sort changes back to session storage", async () => {
@@ -517,7 +579,6 @@ test("writes sort changes back to session storage", async () => {
   el.shadowRoot!.querySelector<HTMLButtonElement>('button[data-sort="name"]')!.click();
   await el.updateComplete;
   expect(JSON.parse(sessionStorage.getItem("test.table2")!).sortKey).toBe("name");
-  sessionStorage.clear();
 });
 
 test("ignores a stored sort column that no longer exists", async () => {
@@ -527,7 +588,6 @@ test("ignores a stored sort column that no longer exists", async () => {
   );
   const el = await table({ viewKey: "test.table3", sortKey: "name", sortDirection: "ascending" });
   expect(el.sortKey).toBe("name"); // fell back to the default, not "gone"
-  sessionStorage.clear();
 });
 
 test("never stores search text, even alongside a real write", async () => {
@@ -541,20 +601,18 @@ test("never stores search text, even alongside a real write", async () => {
   const stored = JSON.parse(sessionStorage.getItem("test.table4")!);
   expect(stored.sortKey).toBe("name");
   expect(stored.search).toBeUndefined();
-  sessionStorage.clear();
 });
 
 test("a throwing getItem does not break the table", async () => {
-  const spy = vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+  vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
     throw new Error("blocked");
   });
   const el = await table({ viewKey: "test.table5" });
   expect(el.shadowRoot!.querySelector("table")).not.toBeNull();
-  spy.mockRestore();
 });
 
 test("a throwing setItem does not break the table", async () => {
-  const spy = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+  vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
     throw new Error("blocked");
   });
   const el = await table({ viewKey: "test.table6", searchable: true });
@@ -562,6 +620,4 @@ test("a throwing setItem does not break the table", async () => {
   await el.updateComplete;
   expect(el.sortKey).toBe("name");
   expect(rowText(el)).toEqual(["Ada10Edit", "Bea2Edit"]);
-  spy.mockRestore();
-  sessionStorage.clear();
 });

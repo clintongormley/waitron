@@ -224,6 +224,8 @@ export class WtDataTable<Row = unknown> extends LitElement {
   @state() private filterSelections: Record<string, string> = {};
   @state() private collapsed = new Set<string>();
   #restored = false;
+  /** Stored filter values not yet judged, because their column has no options to judge them by. */
+  #pendingFilters: Record<string, unknown> = {};
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -231,41 +233,63 @@ export class WtDataTable<Row = unknown> extends LitElement {
   }
 
   protected override willUpdate(changed: PropertyValues<this>): void {
-    if (changed.has("viewKey") || (changed.has("columns") && this.viewKey && !this.#restored)) {
-      this.#restoreView();
-      this.#restored = true;
+    if (changed.has("viewKey")) {
+      this.#restored = false;
+      this.#pendingFilters = {};
     }
+    if (changed.has("viewKey") || changed.has("columns")) this.#restoreView();
   }
 
-  // columns may be assigned after connectedCallback, so the restore re-runs once they arrive.
+  /** Reads the stored view once there are columns to check it against. A stored sort column is
+   * adopted only if a current column can sort by it; each stored filter waits in #pendingFilters
+   * until #adoptPendingFilters can judge it. */
   #restoreView(): void {
-    if (!this.viewKey) return;
-    let raw: string | null;
-    try {
-      raw = sessionStorage.getItem(this.viewKey);
-    } catch {
-      return; // storage blocked; defaults stand
+    if (!this.viewKey || this.columns.length === 0) return;
+    if (!this.#restored) {
+      this.#restored = true;
+      let raw: string | null;
+      try {
+        raw = sessionStorage.getItem(this.viewKey);
+      } catch {
+        return; // storage blocked; defaults stand
+      }
+      if (!raw) return;
+      try {
+        const parsed = JSON.parse(raw) as {
+          sortKey?: unknown;
+          sortDirection?: unknown;
+          filters?: unknown;
+        };
+        if (
+          typeof parsed.sortKey === "string" &&
+          this.columns.some((c) => c.key === parsed.sortKey && c.sortValue !== undefined)
+        )
+          this.sortKey = parsed.sortKey;
+        if (parsed.sortDirection === "ascending" || parsed.sortDirection === "descending")
+          this.sortDirection = parsed.sortDirection;
+        if (parsed.filters && typeof parsed.filters === "object")
+          this.#pendingFilters = { ...(parsed.filters as Record<string, unknown>) };
+      } catch {
+        // A malformed store is ignored, exactly like a first visit.
+      }
     }
-    if (!raw) return;
-    try {
-      const parsed = JSON.parse(raw) as {
-        sortKey?: string | null;
-        sortDirection?: SortDirection;
-        filters?: Record<string, string>;
-      };
-      // Only adopt a stored sort column the current columns still offer as sortable.
-      if (
-        typeof parsed.sortKey === "string" &&
-        this.columns.some((c) => c.key === parsed.sortKey && c.sortValue !== undefined)
-      )
-        this.sortKey = parsed.sortKey;
-      if (parsed.sortDirection === "ascending" || parsed.sortDirection === "descending")
-        this.sortDirection = parsed.sortDirection;
-      if (parsed.filters && typeof parsed.filters === "object")
-        this.filterSelections = { ...parsed.filters };
-    } catch {
-      // A malformed store is ignored, exactly like a first visit.
+    this.#adoptPendingFilters();
+  }
+
+  /** A stored filter value is applied only if it equals one of its column's current option values;
+   * anything else, including a value for a column without a filter, is dropped. A value whose
+   * column has no options yet stays pending and is judged against the first non-empty list. */
+  #adoptPendingFilters(): void {
+    const adopted: Record<string, string> = {};
+    for (const [key, value] of Object.entries(this.#pendingFilters)) {
+      const filter = this.columns.find((column) => column.key === key)?.filter;
+      if (filter && filter.options.length === 0) continue;
+      delete this.#pendingFilters[key];
+      if (filter && filter.options.some((option) => option.value === value))
+        adopted[key] = value as string;
     }
+    if (Object.keys(adopted).length > 0)
+      this.filterSelections = { ...this.filterSelections, ...adopted };
   }
 
   #persistView(): void {
