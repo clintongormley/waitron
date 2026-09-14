@@ -610,7 +610,6 @@ export class WtDataTable<Row = unknown> extends LitElement {
                       class="table-filter"
                       data-filter=${column.key}
                       aria-label=${column.filter.label}
-                      .value=${this.filterSelections[column.key] ?? ""}
                       @change=${(event: Event) => {
                         this.filterSelections = {
                           ...this.filterSelections,
@@ -619,9 +618,17 @@ export class WtDataTable<Row = unknown> extends LitElement {
                         this.#persistView();
                       }}
                     >
-                      <option value="">${column.filter.allLabel}</option>
+                      <option value="" .selected=${!this.filterSelections[column.key]}>
+                        ${column.filter.allLabel}
+                      </option>
                       ${column.filter.options.map(
-                        (option) => html`<option value=${option.value}>${option.label}</option>`,
+                        (option) =>
+                          html`<option
+                            value=${option.value}
+                            .selected=${this.filterSelections[column.key] === option.value}
+                          >
+                            ${option.label}
+                          </option>`,
                       )}
                     </select>`
                   : nothing,

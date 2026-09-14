@@ -525,6 +525,15 @@ test("restores a stored sort and filter from session storage under viewKey", asy
   expect(rowKeysS(el)).toEqual(["2"]);
 });
 
+test("a restored filter's dropdown shows the restored choice", async () => {
+  sessionStorage.setItem("test.shown", JSON.stringify({ filters: { status: "off" } }));
+  const el = await tableS({ viewKey: "test.shown", searchable: true, columns: withStatus });
+  expect(rowKeysS(el)).toEqual(["2"]);
+  expect(
+    el.shadowRoot!.querySelector<HTMLSelectElement>('select[data-filter="status"]')!.value,
+  ).toBe("off");
+});
+
 test("drops a stored filter value the column no longer offers, or that is not a string", async () => {
   sessionStorage.setItem(
     "test.stale",
