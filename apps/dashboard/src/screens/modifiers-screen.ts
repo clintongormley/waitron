@@ -10,12 +10,14 @@ import { resolveEnabledContentText, type ContentLanguages } from "@waitron/share
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-dialog.js";
+import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "../widgets/modifier-form.js";
-import type { DashboardApi, Modifier, ModifierInput } from "../api/client.js";
+import type { DashboardApi, Modifier, ModifierChoice, ModifierInput } from "../api/client.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import { currentLocale, t } from "../i18n/t.js";
+import { allergenName, vatClassName } from "../i18n/domain.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 
 @customElement("dashboard-modifiers-screen")
@@ -53,7 +55,7 @@ export class ModifiersScreen extends LitElement {
   @state() private busy = false;
   @state() private fieldErrors: Record<string, string> = {};
   @state() private deleting: Modifier | null = null;
-  // Task 10 fleshes out the details modal that this drives; for now it only records the selection.
+  // The modifier whose read-only details modal is open, or null when it is closed.
   @state() private detailing: Modifier | null = null;
   readonly #queries = new DashboardQueries(
     this,
@@ -89,7 +91,6 @@ export class ModifiersScreen extends LitElement {
     this.fieldErrors = {};
     this.open = true;
   }
-  // Stub for Task 10 — opening the read-only details modal. For now it only records the selection.
   #openDetails(modifier: Modifier): void {
     this.detailing = modifier;
   }
@@ -166,10 +167,142 @@ export class ModifiersScreen extends LitElement {
   #name(modifier: Modifier): string {
     return resolveEnabledContentText(modifier.name, currentLocale(), currentContentLanguages());
   }
+  #choiceName(choice: ModifierChoice): string {
+    return resolveEnabledContentText(choice.name, currentLocale(), currentContentLanguages());
+  }
+  // The allergen and dietary effect lines for one choice, each shown only when the choice sets it —
+  // the owner wants this information present only when a choice actually carries it.
+  #choiceSummary(choice: ModifierChoice) {
+    const adds = Object.keys(choice.addAllergens ?? {});
+    const removes = choice.removeAllergens ?? [];
+    const diet = choice.dietaryEffect?.invalidates ?? [];
+    return html`${
+      adds.length
+        ? html`<div>
+            ${t("modifiers.adds_allergens")}: ${adds.map((code) => allergenName(code)).join(", ")}
+          </div>`
+        : nothing
+    }${
+      removes.length
+        ? html`<div>
+            ${t("modifiers.removes_allergens")}:
+            ${removes.map((code) => allergenName(code)).join(", ")}
+          </div>`
+        : nothing
+    }${
+      diet.length
+        ? html`<div>
+            ${t("modifiers.dietary_removed")}:
+            ${diet.map((label) => t(`editor.diet.${label}`)).join(", ")}
+          </div>`
+        : nothing
+    }`;
+  }
+  // The read-only names of a modifier across the enabled content languages: the resolved default name
+  // as a heading, then any other enabled language that carries its own name.
+  #detailsNames(modifier: Modifier) {
+    const { defaultLanguage, languages } = currentContentLanguages();
+    const others = languages.filter(
+      (language) => language !== defaultLanguage && modifier.name[language],
+    );
+    return html`<p><strong>${this.#name(modifier)}</strong></p>
+      ${others.map(
+        (language) => html`<p>${language.toUpperCase()}: ${modifier.name[language]}</p>`,
+      )}`;
+  }
+  #choicesTable(modifier: Modifier & { type: "extras" | "options" }) {
+    const extras = modifier.type === "extras";
+    return html`<table>
+      <thead>
+        <tr>
+          <th scope="col">${t("modifiers.name")}</th>
+          ${
+            extras
+              ? html`<th scope="col">${t("modifiers.price")}</th>
+                  <th scope="col">${t("modifiers.vat")}</th>`
+              : nothing
+          }
+          <th scope="col">${t("modifiers.available")}</th>
+          <th scope="col">${extras ? t("modifiers.preselected") : t("modifiers.default")}</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${modifier.choices.map((choice) => {
+          const preset = extras
+            ? "preselected" in choice && choice.preselected
+            : modifier.defaultChoiceId === choice.id;
+          return html`<tr data-test=${`choice-row-${choice.id}`}>
+            <td>
+              <div>${this.#choiceName(choice)}</div>
+              <div data-test=${`summary-${choice.id}`}>${this.#choiceSummary(choice)}</div>
+            </td>
+            ${
+              extras
+                ? html`<td>${"priceDelta" in choice ? choice.priceDelta : ""}</td>
+                    <td>
+                      ${
+                        "vatClass" in choice && choice.vatClass
+                          ? vatClassName(choice.vatClass)
+                          : t("modifiers.inherit_vat")
+                      }
+                    </td>`
+                : nothing
+            }
+            <td>${choice.available ? t("modifiers.available") : t("modifiers.unavailable")}</td>
+            <td>${preset ? t("common.yes") : nothing}</td>
+          </tr>`;
+        })}
+      </tbody>
+    </table>`;
+  }
+  #detailsBody(modifier: Modifier) {
+    return html`${this.#detailsNames(modifier)}
+      <p>${t("modifiers.type")}: ${t(`modifiers.${modifier.type}`)}</p>
+      ${modifier.type === "text" ? html`<p>${t("modifiers.text_help")}</p>` : nothing}
+      ${
+        modifier.type === "yes-no"
+          ? html`<p>
+                ${t("modifiers.default_value")}:
+                ${modifier.defaultValue ? t("common.yes") : t("common.no")}
+              </p>
+              <p>
+                ${t("modifiers.available")}:
+                ${modifier.available ? t("modifiers.available") : t("modifiers.unavailable")}
+              </p>`
+          : nothing
+      }
+      ${
+        modifier.type === "extras"
+          ? html`<p>
+                ${t("modifiers.required")}: ${modifier.required ? t("common.yes") : t("common.no")}
+              </p>
+              <p>
+                ${t("modifiers.max_total")}:
+                ${
+                  modifier.maxTotalQuantity === null
+                    ? t("modifiers.unlimited")
+                    : String(modifier.maxTotalQuantity)
+                }
+              </p>
+              ${this.#choicesTable(modifier)}`
+          : nothing
+      }
+      ${
+        modifier.type === "options"
+          ? html`<p>
+                ${t("modifiers.default_choice")}:
+                ${(() => {
+                  const chosen = modifier.choices.find(
+                    (choice) => choice.id === modifier.defaultChoiceId,
+                  );
+                  return chosen ? this.#choiceName(chosen) : t("modifiers.no_default");
+                })()}
+              </p>
+              ${this.#choicesTable(modifier)}`
+          : nothing
+      }`;
+  }
   override render() {
-    // The selected modifier is recorded now; Task 10's details modal reads it. Referenced here so
-    // the field is not write-only before that modal exists.
-    void this.detailing;
     const columns: DataTableColumn<Modifier>[] = [
       {
         key: "name",
@@ -308,6 +441,35 @@ export class ModifiersScreen extends LitElement {
             >${t("action.delete")}</wt-button
           ></wt-form-actions
         ></wt-dialog
+      >
+      <wt-modal
+        data-test="details-modal"
+        .open=${this.detailing !== null}
+        heading=${t("modifiers.details")}
+        @wt-close=${() => {
+          this.detailing = null;
+        }}
+        >${this.detailing ? this.#detailsBody(this.detailing) : nothing}<wt-form-actions
+          slot="footer"
+          ><wt-button
+            slot="cancel"
+            data-test="details-close"
+            variant="secondary"
+            @click=${() => {
+              this.detailing = null;
+            }}
+            >${t("action.close")}</wt-button
+          ><wt-button
+            data-test="details-edit"
+            variant="primary"
+            @click=${() => {
+              const modifier = this.detailing;
+              this.detailing = null;
+              if (modifier) this.#edit(modifier);
+            }}
+            >${t("action.edit")}</wt-button
+          ></wt-form-actions
+        ></wt-modal
       >`;
   }
 }

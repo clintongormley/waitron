@@ -5,6 +5,7 @@ import { ModifiersScreen } from "./modifiers-screen.js";
 import type { DashboardApi, Modifier } from "../api/client.js";
 import type { ModifierForm } from "../widgets/modifier-form.js";
 import { t } from "../i18n/t.js";
+import { allergenName } from "../i18n/domain.js";
 import { codeMessage } from "../i18n/codes.js";
 afterEach(cleanupWidgets);
 const modifier: Modifier = { id: "m", type: "text", name: { es: "Nota" }, available: true };
@@ -257,4 +258,74 @@ it("identifies a retained-order dependency and offers deactivation", async () =>
       t("modifiers.in_use.order"),
     ),
   );
+});
+const extrasModifier: Modifier = {
+  id: "x",
+  type: "extras",
+  name: { es: "Toppings" },
+  available: true,
+  required: false,
+  maxTotalQuantity: null,
+  choices: [
+    {
+      id: "c1",
+      name: { es: "Cheese" },
+      available: true,
+      priceDelta: "1.50",
+      maxQuantity: 1,
+      preselected: false,
+      vatClass: null,
+      addAllergens: { gluten: { presence: "contains" } },
+      dietaryEffect: { invalidates: ["vegan"] },
+    },
+    {
+      id: "c2",
+      name: { es: "Ham" },
+      available: true,
+      priceDelta: "2.00",
+      maxQuantity: 1,
+      preselected: false,
+      vatClass: null,
+      dietaryEffect: { invalidates: [] },
+    },
+  ],
+};
+async function openDetails(el: ModifiersScreen, modifier: Modifier) {
+  const table = el.shadowRoot!.querySelector("wt-data-table")!;
+  await table.updateComplete;
+  table.shadowRoot!.querySelector<HTMLElement>(`[data-test="open-${modifier.id}"]`)!.click();
+  await el.updateComplete;
+  return el.shadowRoot!.querySelector('[data-test="details-modal"]')! as unknown as HTMLElement & {
+    open: boolean;
+  };
+}
+it("opens a modifier's details from its name and hands off to Edit", async () => {
+  const el = await mount(api({ listModifiers: vi.fn().mockResolvedValue([extrasModifier]) }));
+  const modal = await openDetails(el, extrasModifier);
+  expect(modal.open).toBe(true);
+  expect(modal.textContent).toContain("Cheese");
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="details-edit"]')!.click();
+  await el.updateComplete;
+  expect(modal.open).toBe(false);
+  expect(el.shadowRoot!.querySelector<ModifierForm>("dashboard-modifier-form")!.open).toBe(true);
+});
+it("dismisses the details modal with Close", async () => {
+  const el = await mount(api({ listModifiers: vi.fn().mockResolvedValue([extrasModifier]) }));
+  const modal = await openDetails(el, extrasModifier);
+  expect(modal.open).toBe(true);
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="details-close"]')!.click();
+  await el.updateComplete;
+  expect(modal.open).toBe(false);
+});
+it("shows a choice's allergen and dietary summary only when present", async () => {
+  const el = await mount(api({ listModifiers: vi.fn().mockResolvedValue([extrasModifier]) }));
+  await openDetails(el, extrasModifier);
+  const first = el.shadowRoot!.querySelector('[data-test="summary-c1"]')!;
+  expect(first.textContent).toContain(t("modifiers.adds_allergens"));
+  expect(first.textContent).toContain(allergenName("gluten"));
+  expect(first.textContent).toContain(t("modifiers.dietary_removed"));
+  expect(first.textContent).toContain(t("editor.diet.vegan"));
+  const second = el.shadowRoot!.querySelector('[data-test="summary-c2"]')!;
+  expect(second.textContent!.trim()).toBe("");
+  expect(second.querySelector("div")).toBeNull();
 });
