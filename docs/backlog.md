@@ -328,7 +328,7 @@ What it left open:
   `categories.add_selected` in `apps/dashboard/src/i18n/strings.ts`), so one product or child reads
   "Al eliminarla se quitará de 1 productos", "Sus 1 categorías hijas se moverán …" or "Añadir 1
   productos", and the English is just as wrong. The plural sentences predate #362; the three
-  `delete_warning_*` keys are the delete-confirmation strings after `fix/categories-ui-polish`
+  `delete_warning_*` keys are the delete-confirmation strings after #366
   consolidated the old `delete_products`/`delete_children_*` lines into one warning (the plural bug
   came along unchanged). **Next action:** give each a one-item form, or use a plural-aware formatter
   if the dashboard adopts one.
