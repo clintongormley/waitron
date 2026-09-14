@@ -47,6 +47,18 @@ describe("roleHasPermission", () => {
     expect(roleHasPermission("staff", "till.configure")).toBe(false);
     expect(roleHasPermission("supervisor", "till.configure")).toBe(false);
   });
+  it("grants layout.configure, venue.configure and system.manage to manager and admin only", () => {
+    // The three permissions that replace till.configure (spec 2026-09-14). Each is held by exactly the
+    // roles that held till.configure — manager and admin — and never by staff or supervisor, so no
+    // role's access moves when the call sites migrate.
+    for (const p of ["layout.configure", "venue.configure", "system.manage"] as const) {
+      expect(PERMISSIONS).toContain(p);
+      expect(roleHasPermission("manager", p)).toBe(true);
+      expect(roleHasPermission("admin", p)).toBe(true);
+      expect(roleHasPermission("staff", p)).toBe(false);
+      expect(roleHasPermission("supervisor", p)).toBe(false);
+    }
+  });
   it("grants schedule.manage to manager and admin only (shift-planning slice 1)", () => {
     // A domain-named scheduling permission (roster authoring), granted to exactly the roles that hold
     // person.manage — manager and admin — and NEVER to staff or supervisor, so the roster write gate

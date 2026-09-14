@@ -16,6 +16,15 @@ export const PERMISSIONS = [
   // CONFIG permission, distinct from staff admin (person.manage); granted to manager + admin, the
   // same roles as person.manage (design D9).
   "till.configure",
+  // Authoring what appears on a screen or receipt (till layout + receipt trim). One of the three
+  // domain-named permissions that replace till.configure (spec 2026-09-14); granted to manager + admin.
+  "layout.configure",
+  // Configuring the physical venue, including the floor plan. One of the three domain-named permissions
+  // that replace till.configure (spec 2026-09-14); granted to manager + admin.
+  "venue.configure",
+  // Box lifecycle: backups, recovery bundle, config export, retire, box status. One of the three
+  // domain-named permissions that replace till.configure (spec 2026-09-14); granted to manager + admin.
+  "system.manage",
   // Authoring the weekly roster (draft → warn → publish) from the management dashboard
   // (@waitron/workforce). A domain-named SCHEDULING permission, distinct from staff admin
   // (person.manage) and till config (till.configure); granted to manager + admin. Later slices add
@@ -112,6 +121,9 @@ const MANAGER: ReadonlySet<Permission> = new Set([
   ...SUPERVISOR,
   "person.manage",
   "till.configure",
+  "layout.configure",
+  "venue.configure",
+  "system.manage",
   "schedule.manage",
   "swap.approve",
   "absence.decide",
