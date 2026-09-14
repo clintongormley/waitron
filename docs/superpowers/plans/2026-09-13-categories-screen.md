@@ -1779,28 +1779,30 @@ git commit -s -m "Add the products modal, checkbox add, and delete preview to ca
 
 ---
 
-## Task 17: Confirm the catalogue `?product=` deep link
+## Task 17: Confirm the catalogue product deep link
 
 **Files:**
 - Test only (add to): `apps/dashboard/src/screens/catalogue-screen.test.ts`
 
-**This feature already exists — do NOT reimplement it.** `catalogue-screen.ts` already opens `?product=<id>` through `UrlStateController`: `#linkedProduct`, the `#url` callback that reads the `product` param and calls `#openLinkedProduct()`, `await this.#openLinkedProduct()` after products load, `#openProduct` and `#openLinkedProduct` both guarding an unknown id, and `#closeEditor` clearing the param via `this.#url.write({ product: null }, true)`. This task only proves it with a test if one is missing, and confirms it interoperates with the delete-modal links from Task 16 (which navigate to `/manage/catalogue?product=<id>`).
+**This feature already exists — do NOT reimplement it.** `catalogue-screen.ts` already opens a linked product through `UrlStateController`: `#linkedProduct`, the `#url` callback that reads the `product` value and calls `#openLinkedProduct()`, `await this.#openLinkedProduct()` after products load, `#openProduct` and `#openLinkedProduct` both guarding an unknown id, and `#closeEditor` clearing it via `this.#url.write({ product: null }, true)`.
+
+**Corrected 2026-09-13, during Task 16's review:** an earlier version of this task said the URL shape is a query string, `/manage/catalogue?product=<id>`. That was wrong, proven empirically (mounting the real screen with both shapes in headless Chromium): `UrlStateController` (`packages/ui/src/url-state.ts`) reads and writes `location.pathname` only, never `location.search`. Per `dashboardPath` (`apps/dashboard/src/navigation.ts`: `catalogue: { view: "view", product: "product" }`, `basePath: "/manage"`), the real shape is the PATH-segment form `/manage/catalogue/product/<id>`. Task 16's delete-modal product links already use this correct form. This task's tests must use it too.
 
 - [ ] **Step 1: Check for an existing test**
 
-Run: `grep -n "product=" apps/dashboard/src/screens/catalogue-screen.test.ts`. If the open-from-address and unknown-id cases are already covered, this task is a no-op beyond confirming they pass — skip to Step 4.
+Run: `grep -n "catalogue/product" apps/dashboard/src/screens/catalogue-screen.test.ts`. If the open-from-address and unknown-id cases are already covered (using the path-segment shape), this task is a no-op beyond confirming they pass — skip to Step 4.
 
 - [ ] **Step 2: Add the tests if absent**
 
 ```ts
 it("opens the product named in the address", async () => {
-  history.replaceState(null, "", "/manage/catalogue?product=<seeded-id>"); // use the fixture's real id
+  history.replaceState(null, "", `/manage/catalogue/product/<seeded-id>`); // use the fixture's real id
   const el = await mountCatalogue(); // mirror the file's existing mount + api stub
   await el.updateComplete;
   expect((el as unknown as { editorOpen: boolean }).editorOpen).toBe(true);
 });
 it("ignores an unknown product id", async () => {
-  history.replaceState(null, "", "/manage/catalogue?product=00000000-0000-4000-8000-000000000000");
+  history.replaceState(null, "", "/manage/catalogue/product/00000000-0000-4000-8000-000000000000");
   const el = await mountCatalogue();
   await el.updateComplete;
   expect((el as unknown as { editorOpen: boolean }).editorOpen).toBe(false);
