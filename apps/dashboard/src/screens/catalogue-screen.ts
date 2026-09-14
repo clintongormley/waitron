@@ -377,7 +377,7 @@ export class CatalogueScreen extends LitElement {
       <dashboard-category-form
         .open=${this.#child.kind === "category"}
         .busy=${this.#child.busy}
-        .locales=${locales}
+        .languages=${this.contentLanguages ?? { defaultLanguage: "en", languages: ["en"] }}
         .categories=${this.categories}
         .api=${this.api}
         @wt-submit=${this.#submitCategory}

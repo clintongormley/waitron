@@ -516,7 +516,7 @@ it("does not search disabled translations that are absent from the displayed cat
 });
 
 it.each([
-  ["category.parent_cycle", "parent", "select[name=category-parent]"],
+  ["category.parent_cycle", "parent", "wt-combobox[name=category-parent]"],
   ["category.image_not_found", "image", "dashboard-image-upload"],
   ["category.color_invalid", "color", "input[type=color]"],
 ])(
@@ -536,9 +536,18 @@ it.each([
     );
     await vi.waitFor(() => expect(form.fieldErrors[field]).toBeTruthy());
     await form.updateComplete;
-    const input = form.shadowRoot!.querySelector(selector)!;
-    const errorId = input.getAttribute("aria-describedby")!;
-    expect(form.shadowRoot!.getElementById(errorId)!.textContent).toBe(form.fieldErrors[field]);
+    const control = form.shadowRoot!.querySelector(selector)!;
+    // The parent field is a wt-combobox, which renders its own error inside its shadow root; the
+    // other two keep their describedby error span in the form's shadow root.
+    if (control.tagName.toLowerCase() === "wt-combobox") {
+      const combo = control as HTMLElementTagNameMap["wt-combobox"];
+      await combo.updateComplete;
+      const errorId = combo.shadowRoot!.querySelector(".trigger")!.getAttribute("aria-describedby")!;
+      expect(combo.shadowRoot!.getElementById(errorId)!.textContent).toBe(form.fieldErrors[field]);
+    } else {
+      const errorId = control.getAttribute("aria-describedby")!;
+      expect(form.shadowRoot!.getElementById(errorId)!.textContent).toBe(form.fieldErrors[field]);
+    }
     expect(form.shadowRoot!.querySelector("wt-form-error-summary")!.errors).toContain(
       form.fieldErrors[field],
     );

@@ -2,8 +2,10 @@ import { userEvent } from "@vitest/browser/context";
 import { afterEach, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { CategoryForm } from "./category-form.js";
+import { setLocale } from "../i18n/t.js";
 import type { CategoryInput, CategorySummary } from "../api/client.js";
 afterEach(cleanupWidgets);
+afterEach(() => setLocale("es-ES"));
 const food: CategorySummary = {
   id: "food",
   name: { en: "Food", fr: "Cuisine" },
@@ -21,22 +23,43 @@ const child: CategorySummary = {
 it("renders translated fields and excludes self and descendants from parent choices", async () => {
   const { el } = await mountWidget<CategoryForm>("dashboard-category-form", {
     open: true,
-    locales: ["en", "fr"],
+    languages: { defaultLanguage: "en", languages: ["en", "fr"] },
     value: food,
     categories: [food, child],
   });
   expect(el.shadowRoot!.querySelector('[name="category-name-en"]')).not.toBeNull();
   expect(el.shadowRoot!.querySelector('[name="category-name-fr"]')).not.toBeNull();
-  expect(
-    [...el.shadowRoot!.querySelectorAll('select[name="category-parent"] option')].map(
-      (o) => (o as HTMLOptionElement).value,
-    ),
-  ).toEqual([""]);
+  const combo = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+    'wt-combobox[name="category-parent"]',
+  )!;
+  expect(combo.options.map((o) => o.value)).toEqual([""]);
+});
+it("shows parent names in the reader's language, not the default content language", async () => {
+  setLocale("en-GB"); // reader English; venue default is Spanish
+  const parent: CategorySummary = {
+    id: "p",
+    name: { es: "Bebidas", en: "Drinks" },
+    image: null,
+    color: null,
+    parentId: null,
+  };
+  const el = await mountWidget<CategoryForm>("dashboard-category-form", {
+    open: true,
+    languages: { defaultLanguage: "es", languages: ["es", "en"] },
+    categories: [parent],
+    value: null,
+  });
+  const combo = el.el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+    'wt-combobox[name="category-parent"]',
+  )!;
+  const labels = combo.options.map((o) => o.label);
+  expect(labels).toContain("Drinks");
+  expect(labels).not.toContain("Bebidas");
 });
 it("retains the draft during lookup refreshes, validates and emits the reusable submit contract once", async () => {
   const { el, host } = await mountWidget<CategoryForm>("dashboard-category-form", {
     open: true,
-    locales: ["en", "fr"],
+    languages: { defaultLanguage: "en", languages: ["en", "fr"] },
     categories: [food, child],
   });
   let submitted: { value: CategoryInput } | undefined;
@@ -73,7 +96,7 @@ it("retains the draft during lookup refreshes, validates and emits the reusable 
 it("uses the existing image picker and preserves disabled translations in an edit", async () => {
   const { el } = await mountWidget<CategoryForm>("dashboard-category-form", {
     open: true,
-    locales: ["en"],
+    languages: { defaultLanguage: "en", languages: ["en"] },
     value: food,
   });
   const saved = new Promise<CustomEvent>((resolve) =>
@@ -96,7 +119,7 @@ it("uses the existing image picker and preserves disabled translations in an edi
 it("submits the chosen colour", async () => {
   const { el } = await mountWidget<CategoryForm>("dashboard-category-form", {
     open: true,
-    locales: ["en"],
+    languages: { defaultLanguage: "en", languages: ["en"] },
     value: food,
   });
   const saved = new Promise<CustomEvent>((resolve) =>
@@ -112,7 +135,7 @@ it("edits from an existing colour and can clear it", async () => {
   const coloredFood: CategorySummary = { ...food, color: "#256bb1" };
   const { el } = await mountWidget<CategoryForm>("dashboard-category-form", {
     open: true,
-    locales: ["en"],
+    languages: { defaultLanguage: "en", languages: ["en"] },
     value: coloredFood,
   });
   const saved = new Promise<CustomEvent>((resolve) =>
@@ -127,7 +150,7 @@ it("edits from an existing colour and can clear it", async () => {
 it("submits a custom colour picked via the native colour input", async () => {
   const { el } = await mountWidget<CategoryForm>("dashboard-category-form", {
     open: true,
-    locales: ["en"],
+    languages: { defaultLanguage: "en", languages: ["en"] },
     value: food,
   });
   const saved = new Promise<CustomEvent>((resolve) =>
@@ -144,7 +167,7 @@ it("submits a custom colour picked via the native colour input", async () => {
 it("creates inside a host draft, selects the saved category and leaves the draft intact", async () => {
   const { el, host } = await mountWidget<CategoryForm>("dashboard-category-form", {
     open: true,
-    locales: ["en"],
+    languages: { defaultLanguage: "en", languages: ["en"] },
     categories: [food],
   });
   const draft = document.createElement("input");
@@ -183,7 +206,7 @@ it("creates inside a host draft, selects the saved category and leaves the draft
 it("emits cancellation across the host boundary when Escape closes the modal", async () => {
   const { el, host } = await mountWidget<CategoryForm>("dashboard-category-form", {
     open: true,
-    locales: ["en"],
+    languages: { defaultLanguage: "en", languages: ["en"] },
   });
   let detail: unknown;
   host.addEventListener("wt-cancel", (event) => {
@@ -201,7 +224,7 @@ it("keeps the editor open when Escape is pressed during a save", async () => {
   const { el } = await mountWidget<CategoryForm>("dashboard-category-form", {
     open: true,
     busy: true,
-    locales: ["en"],
+    languages: { defaultLanguage: "en", languages: ["en"] },
     value: food,
   });
   const modal = el.shadowRoot!.querySelector("wt-modal")!;

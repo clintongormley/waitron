@@ -1,17 +1,18 @@
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, selectStyles, submitOnEnter, CATEGORY_PALETTE } from "@waitron/ui";
+import { baseStyles, submitOnEnter, CATEGORY_PALETTE } from "@waitron/ui";
 import { resolveEnabledContentText, type ContentLanguages } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-form-error-summary.js";
+import "@waitron/ui/src/components/wt-combobox.js";
 import "./image-upload.js";
 import type { ImageUploader } from "./image-upload.js";
 import type { CategoryInput, CategorySummary } from "../api/client.js";
-import { t } from "../i18n/t.js";
+import { t, currentLocale } from "../i18n/t.js";
 
 export function categoryPath(
   category: CategorySummary,
@@ -40,7 +41,6 @@ export class CategoryForm extends LitElement {
 
   static override styles = [
     baseStyles,
-    selectStyles,
     css`
       .fields {
         display: grid;
@@ -106,7 +106,10 @@ export class CategoryForm extends LitElement {
   ];
   @property({ type: Boolean }) open = false;
   @property({ type: Boolean }) busy = false;
-  @property({ attribute: false }) locales: readonly string[] = [];
+  @property({ attribute: false }) languages: ContentLanguages = {
+    defaultLanguage: "en",
+    languages: ["en"],
+  };
   @property({ attribute: false }) value: CategorySummary | null = null;
   @property({ attribute: false }) categories: readonly CategorySummary[] = [];
   @property({ attribute: false }) api?: ImageUploader;
@@ -124,7 +127,7 @@ export class CategoryForm extends LitElement {
         this.value?.id !== (changes.get("value") as CategorySummary | null | undefined)?.id)
     ) {
       this.names = { ...this.value?.name };
-      for (const locale of this.locales) this.names[locale] ??= "";
+      for (const locale of this.languages.languages) this.names[locale] ??= "";
       this.parentId = this.value?.parentId ?? null;
       this.image = this.value?.image ?? null;
       this.color = this.value?.color ?? null;
@@ -142,7 +145,7 @@ export class CategoryForm extends LitElement {
   #submit(event: Event): void {
     event.stopPropagation();
     if (this.busy || this.pickerOpen) return;
-    const language = this.locales[0];
+    const language = this.languages.languages[0];
     if (!language || !this.names[language]?.trim()) {
       this.validation = { [`name-${language ?? ""}`]: t("categories.name_required") };
       return;
@@ -192,12 +195,12 @@ export class CategoryForm extends LitElement {
           heading=${t("form.error_heading")}
           .errors=${Object.values(errors)}
         ></wt-form-error-summary>
-        ${this.locales.map(
+        ${this.languages.languages.map(
           (locale) =>
             html`<wt-input
               name=${`category-name-${locale}`}
               label=${`${t("categories.name")} (${locale})`}
-              .required=${locale === this.locales[0]}
+              .required=${locale === this.languages.languages[0]}
               .disabled=${this.busy}
               .value=${this.names[locale] ?? ""}
               .error=${errors[`name-${locale}`] ?? ""}
@@ -208,23 +211,26 @@ export class CategoryForm extends LitElement {
               }}
             ></wt-input>`,
         )}
-        <label
-          >${t("categories.parent")}<select
-            name="category-parent"
-            aria-invalid=${errors.parent ? "true" : "false"}
-            aria-describedby="category-parent-error"
-            .disabled=${this.busy}
-            @change=${(event: Event) => {
-              event.stopPropagation();
-              this.parentId = (event.target as HTMLSelectElement).value || null;
-            }}
-          >
-            <option value="" .selected=${this.parentId === null}>
-              ${t("categories.no_parent")}
-            </option>
-            ${this.#parents().map((category) => html`<option value=${category.id} .selected=${category.id === this.parentId}>${categoryPath(category, this.categories, this.locales[0] ?? "en")}</option>`)}</select
-          ><span class="field-error" id="category-parent-error">${errors.parent ?? ""}</span></label
-        >
+        <wt-combobox
+          name="category-parent"
+          label=${t("categories.parent")}
+          .disabled=${this.busy}
+          .options=${[
+            { value: "", label: t("categories.no_parent") },
+            ...this.#parents().map((category) => ({
+              value: category.id,
+              label: categoryPath(category, this.categories, currentLocale(), this.languages),
+            })),
+          ]}
+          .value=${this.parentId ?? ""}
+          .error=${errors.parent ?? ""}
+          searchPlaceholder=${t("categories.combobox_search")}
+          noResultsLabel=${t("categories.combobox_no_results")}
+          @wt-change=${(event: CustomEvent<{ value: string }>) => {
+            event.stopPropagation();
+            this.parentId = event.detail.value || null;
+          }}
+        ></wt-combobox>
         <fieldset class="color">
           <legend>${t("categories.color")}</legend>
           <div class="swatches" role="radiogroup" aria-label=${t("categories.color")}>

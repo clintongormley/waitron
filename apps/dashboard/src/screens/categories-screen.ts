@@ -828,7 +828,7 @@ export class CategoriesScreen extends LitElement {
       <dashboard-category-form
         .open=${this.editorOpen}
         .busy=${this.busy}
-        .locales=${this.languages.languages}
+        .languages=${this.languages}
         .value=${this.edited}
         .categories=${this.categories}
         .api=${this.api}
