@@ -107,7 +107,7 @@ export const QUERY_DEPENDENCIES = {
   getEmailInbox: ["email_inbox"],
   getBackupStatus: ["backup_status"],
   listAlerts: ["incidents"],
-  listHandledAlerts: ["incidents"],
+  listHandledAlerts: ["incidents", "persons"],
 } as const;
 
 export type DashboardQueryName = keyof typeof QUERY_DEPENDENCIES;

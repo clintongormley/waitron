@@ -89,6 +89,23 @@ describe("dashboard-alerts-screen", () => {
     expect(text).toContain("Marta");
   });
 
+  it("refreshes who handled an alert when a person changes", async () => {
+    const renamed: AlertView = { ...handled, handledBy: "Marta Ruiz" };
+    const api = stubApi({
+      listHandledAlerts: vi
+        .fn()
+        .mockResolvedValueOnce({ visible: true, alerts: [handled] })
+        .mockResolvedValue({ visible: true, alerts: [renamed] }),
+    });
+    const { el } = await mountWidget<AlertsScreen>("dashboard-alerts-screen", { api });
+    await flush(el);
+    expect(rows(el, "handled-alerts-table")[0]!.textContent).toContain("Marta");
+    api.liveData.invalidate([{ type: "persons", id: "p1" }]);
+    await vi.waitFor(() =>
+      expect(rows(el, "handled-alerts-table")[0]!.textContent).toContain("Marta Ruiz"),
+    );
+  });
+
   it("opens on the Handled tab from the URL", async () => {
     history.replaceState(null, "", "/manage/alerts/view/handled");
     const { el } = await mountWidget<AlertsScreen>("dashboard-alerts-screen", { api: stubApi() });

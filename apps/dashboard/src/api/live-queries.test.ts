@@ -24,6 +24,7 @@ it.each([
   ["getPlannedVsActual", ["location", "2026-09-01", "2026-09-11"], "roster_versions"],
   ["listAlerts", [], "incidents"],
   ["listHandledAlerts", [], "incidents"],
+  ["listHandledAlerts", [], "persons"],
 ] as const)(
   "refreshes %s when its contributing %s query changes through %s",
   async (name, args, type) => {
