@@ -639,22 +639,16 @@ it.each([
 );
 
 it("shows an Add category button and two labelled view-mode buttons in the header", async () => {
-  // The default test locale is Spanish (es-ES); pin English so the mode labels can be asserted
-  // against their exact English wording. Restored below so the file's other tests keep their default.
-  setLocale("en");
-  try {
-    const { el } = await mount();
-    const add = el.shadowRoot!.querySelector('[data-test="create-category"]')!;
-    expect(add.textContent).toContain(t("categories.create"));
-    expect(el.shadowRoot!.querySelector('[data-test="mode-tree"]')!.textContent).toContain(
-      "Tree view",
-    );
-    expect(el.shadowRoot!.querySelector('[data-test="mode-flat"]')!.textContent).toContain(
-      "Flat view",
-    );
-  } finally {
-    setLocale("es-ES");
-  }
+  setLocale("en-GB");
+  const { el } = await mount();
+  const add = el.shadowRoot!.querySelector('[data-test="create-category"]')!;
+  expect(add.textContent!.trim()).toBe("Add category");
+  expect(el.shadowRoot!.querySelector('[data-test="mode-tree"]')!.textContent).toContain(
+    "Tree view",
+  );
+  expect(el.shadowRoot!.querySelector('[data-test="mode-flat"]')!.textContent).toContain(
+    "Flat view",
+  );
 });
 
 it("opens the editor from the labelled create button by the heading", async () => {
@@ -662,7 +656,7 @@ it("opens the editor from the labelled create button by the heading", async () =
   const add = el.shadowRoot!.querySelector<HTMLElement>('[data-test="create-category"]')!;
   // The create control is now a labelled text button, not the icon-only round one it replaced.
   expect(add.getAttribute("shape")).not.toBe("round");
-  expect(add.textContent).toContain(t("categories.create"));
+  expect(add.textContent).toContain(t("categories.add"));
   add.click();
   await el.updateComplete;
   expect(el.shadowRoot!.querySelector("dashboard-category-form")!.open).toBe(true);

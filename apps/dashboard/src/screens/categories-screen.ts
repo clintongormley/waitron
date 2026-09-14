@@ -664,7 +664,7 @@ export class CategoriesScreen extends LitElement {
             >
           </div>
           <wt-button data-test="create-category" variant="primary" @click=${() => this.#edit(null)}
-            >${t("categories.create")}</wt-button
+            >${t("categories.add")}</wt-button
           >
         </div>
       </div>

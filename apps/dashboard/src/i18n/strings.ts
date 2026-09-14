@@ -17,6 +17,7 @@
 export const en = {
   "categories.actions": "Actions",
   "nav.categories": "Categories",
+  "categories.add": "Add category",
   "categories.create": "Create category",
   "categories.edit": "Edit category",
   "categories.name": "Name",
@@ -1205,6 +1206,7 @@ export type StringKey = keyof typeof en;
 export const es: Record<StringKey, string> = {
   "categories.actions": "Acciones",
   "nav.categories": "Categorías",
+  "categories.add": "Añadir categoría",
   "categories.create": "Crear categoría",
   "categories.edit": "Editar categoría",
   "categories.name": "Nombre",
