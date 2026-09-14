@@ -7,6 +7,7 @@ export interface DataTableColumn<Row> {
   label: string;
   cell: (row: Row) => unknown;
   sortValue?: (row: Row) => string | number | null | undefined;
+  searchValue?: (row: Row) => string;
   align?: "start" | "end";
 }
 
@@ -113,6 +114,25 @@ export class WtDataTable<Row = unknown> extends LitElement {
         color: var(--wt-color-danger);
       }
 
+      .table-toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--wt-space-3);
+        margin-bottom: var(--wt-space-3);
+      }
+
+      .table-search {
+        flex: 1 1 min(100%, var(--wt-space-6));
+        min-height: var(--wt-tap-min);
+        padding: var(--wt-space-2) var(--wt-space-3);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-full);
+        background: var(--wt-color-bg);
+        color: var(--wt-color-text);
+        font: inherit;
+      }
+
       .tree-toggle {
         width: var(--wt-tap-min);
         height: var(--wt-tap-min);
@@ -165,6 +185,13 @@ export class WtDataTable<Row = unknown> extends LitElement {
 
   @property() sortKey: string | null = null;
   @property() sortDirection: SortDirection = "ascending";
+  /** When set, a search box is drawn above the table and only rows whose text contains the typed
+   * term are shown. Which text a row exposes is each column's searchValue, or its sortValue. */
+  @property({ type: Boolean }) searchable = false;
+  @property() searchLabel = "Search";
+  @property() searchPlaceholder = "Search";
+  @property() noMatchesMessage = "No matches";
+  @state() private searchText = "";
   @state() private collapsed = new Set<string>();
 
   #emitSelection(next: string[]): void {
@@ -243,24 +270,51 @@ export class WtDataTable<Row = unknown> extends LitElement {
       .map(({ row }) => row);
   }
 
-  #sortedRows(): Row[] {
+  /** The text a row exposes to the search box: every column's searchValue, or its sortValue as a
+   * fallback, joined so a term can match any column. */
+  #searchHaystack(row: Row): string {
+    return this.columns
+      .map((column) =>
+        column.searchValue
+          ? column.searchValue(row)
+          : column.sortValue
+            ? String(column.sortValue(row) ?? "")
+            : "",
+      )
+      .join(" ")
+      .toLocaleLowerCase();
+  }
+
+  #passesSearch(row: Row): boolean {
+    const term = this.searchText.trim().toLocaleLowerCase();
+    return term === "" || this.#searchHaystack(row).includes(term);
+  }
+
+  /** The rows left after the toolbar (search now; filters in Task 3). The single choke point every
+   * render path funnels through, so flat and tree mode narrow identically. */
+  #visibleRows(): readonly Row[] {
+    if (!this.searchable) return this.rows;
+    return this.rows.filter((row) => this.#passesSearch(row));
+  }
+
+  #sortedRows(rows: readonly Row[]): Row[] {
     const column = this.columns.find(
       (candidate) => candidate.key === this.sortKey && candidate.sortValue !== undefined,
     );
     const indexOf = new Map<Row, number>();
-    this.rows.forEach((row, index) => indexOf.set(row, index));
-    return this.#sortByColumn(this.rows, column, indexOf);
+    rows.forEach((row, index) => indexOf.set(row, index));
+    return this.#sortByColumn(rows, column, indexOf);
   }
 
-  #treeRows(): { row: Row; key: string; depth: number; hasChildren: boolean }[] {
+  #treeRows(rows: readonly Row[]): { row: Row; key: string; depth: number; hasChildren: boolean }[] {
     const keyOf = (row: Row, i: number) => this.rowKey(row, i);
     const parentOf = this.rowParent!;
     const indexOf = new Map<Row, number>();
-    this.rows.forEach((r, i) => indexOf.set(r, i));
-    const present = new Set(this.rows.map((r) => keyOf(r, indexOf.get(r)!)));
+    rows.forEach((r, i) => indexOf.set(r, i));
+    const present = new Set(rows.map((r) => keyOf(r, indexOf.get(r)!)));
     // group children by parent key ("" = top level, including orphans whose parent is absent)
     const childrenByParent = new Map<string, Row[]>();
-    for (const row of this.rows) {
+    for (const row of rows) {
       const p = parentOf(row);
       const bucket = p !== null && present.has(p) ? p : "";
       (childrenByParent.get(bucket) ?? childrenByParent.set(bucket, []).get(bucket)!).push(row);
@@ -381,20 +435,41 @@ export class WtDataTable<Row = unknown> extends LitElement {
     </td>`;
   }
 
+  #renderToolbar() {
+    if (!this.searchable) return nothing;
+    return html`<div class="table-toolbar">
+      <input
+        class="table-search"
+        type="search"
+        autocomplete="off"
+        aria-label=${this.searchLabel}
+        placeholder=${this.searchPlaceholder}
+        .value=${this.searchText}
+        @input=${(event: Event) => {
+          this.searchText = (event.target as HTMLInputElement).value;
+        }}
+      />
+    </div>`;
+  }
+
   override render() {
     if (this.loading) return html`<p class="message" role="status">${this.loadingMessage}</p>`;
     if (this.errorMessage !== "")
       return html`<p class="message error" role="alert">${this.errorMessage}</p>`;
+    const visible = this.#visibleRows();
     if (this.rows.length === 0)
-      return html`<p class="message" role="status">${this.emptyMessage}</p>`;
+      return html`${this.#renderToolbar()}<p class="message" role="status">${this.emptyMessage}</p>`;
+    if (visible.length === 0)
+      return html`${this.#renderToolbar()}<p class="message" role="status">${this.noMatchesMessage}</p>`;
 
     const label = this.ariaLabel || undefined;
     const isTree = this.rowParent !== undefined;
 
     if (!isTree) {
-      const sorted = this.#sortedRows();
+      const sorted = this.#sortedRows(visible);
       const visibleKeys = sorted.map((row, index) => this.rowKey(row, index));
       return html`
+        ${this.#renderToolbar()}
         <div class="scroll" tabindex="0" role="region" aria-label=${label ?? nothing}>
           <table>
             ${this.#renderHead(visibleKeys)}
@@ -418,9 +493,10 @@ export class WtDataTable<Row = unknown> extends LitElement {
       `;
     }
 
-    const entries = this.#treeRows();
+    const entries = this.#treeRows(visible);
     const visibleKeys = entries.map((e) => e.key);
     return html`
+      ${this.#renderToolbar()}
       <div class="scroll" tabindex="0" role="region" aria-label=${label ?? nothing}>
         <table role="treegrid">
           ${this.#renderHead(visibleKeys)}

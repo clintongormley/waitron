@@ -323,3 +323,46 @@ test("tree mode and selection work together, and collapsing takes rows out of se
   el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=select-all]")!.click();
   expect([...seen.at(-1)!].sort()).toEqual(["drinks", "food"]);
 });
+
+test("searchable renders a search box that narrows rows", async () => {
+  const el = await table({
+    searchable: true,
+    searchLabel: "Search users",
+    columns: [
+      {
+        key: "name",
+        label: "Name",
+        cell: (r: Row) => r.name,
+        sortValue: (r: Row) => r.name,
+        searchValue: (r: Row) => r.name,
+      },
+      { key: "count", label: "Count", cell: (r: Row) => r.count },
+    ],
+  });
+  const input = el.shadowRoot!.querySelector<HTMLInputElement>(".table-search")!;
+  expect(input.getAttribute("aria-label")).toBe("Search users");
+  input.value = "ad";
+  input.dispatchEvent(new Event("input"));
+  await el.updateComplete;
+  expect(rowText(el)).toEqual(["Ada10"]);
+});
+
+test("no toolbar is rendered when searchable is off", async () => {
+  const el = await table();
+  expect(el.shadowRoot!.querySelector(".table-toolbar")).toBeNull();
+});
+
+test("noMatchesMessage shows when a search excludes every row", async () => {
+  const el = await table({
+    searchable: true,
+    noMatchesMessage: "Nothing matches",
+    columns: [
+      { key: "name", label: "Name", cell: (r: Row) => r.name, searchValue: (r: Row) => r.name },
+    ],
+  });
+  const input = el.shadowRoot!.querySelector<HTMLInputElement>(".table-search")!;
+  input.value = "zzz";
+  input.dispatchEvent(new Event("input"));
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector(".message")!.textContent).toContain("Nothing matches");
+});
