@@ -1170,11 +1170,17 @@ turns out to need a design moves to its track.
 
 **Correctness:**
 
-1. **A concurrent-corrective race in `settleSale` is untranslated** — a raw `P0001` from the coverage
+1. **Two order verbs still read `working_orders` by id alone** (found 2026-09-14 while scoping
+   `placeOrder`/`sendToPrep`, which now check the tenant). `cancelPlacedOrder` locks and updates by id
+   (`apps/server/src/working-order.ts` `:3514`, `:3523`); `markCollected` reads and updates by id
+   (`:3600`, `:3624`) and reads `ticket_items` by order id (`:3614`). `readLockedLines` (`:682`) takes
+   no `cfg`; its `till-sale.ts` callers were not checked. Same class as the by-id rule in `CLAUDE.md`
+   §3: write the two-tenant probe first, record what it does, then scope.
+2. **A concurrent-corrective race in `settleSale` is untranslated** — a raw `P0001` from the coverage
    trigger with no `sale.*` code. Give the trigger a SQLSTATE and translate it when reachable.
-2. **Location-scope the by-id verb family together** (`getHeldOrder`/`updateHeldOrder`/
+3. **Location-scope the by-id verb family together** (`getHeldOrder`/`updateHeldOrder`/
    `abandonHeldOrder`, `updateTable`/`deactivateTable`/`openTab`) when multi-location lands.
-3. **Nothing stops two queries being started at once on one transaction.** The rule and its receipt
+4. **Nothing stops two queries being started at once on one transaction.** The rule and its receipt
    are in `docs/developers/conventions-data.md` under "Multi-table writes share ONE transaction"; no
    test or lint rule enforces it. A guard could fail a test whenever a query is issued on a
    transaction while another is still running. A search of non-test `apps/server/src` and
