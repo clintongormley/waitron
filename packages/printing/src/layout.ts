@@ -85,3 +85,49 @@ export function labelAmountLines(
   for (const part of wrapText(amount, columns)) lines.push(part.padStart(columns));
   return lines;
 }
+
+const QR_MIN_MM = 30;
+const QR_MAX_MM = 40;
+const QR_TARGET_MM = 35;
+/** The QR standard's blank border, in squares per side, counted when fitting the paper. */
+export const QR_QUIET_ZONE = 4;
+
+/**
+ * Dots per QR square for a code `squares` wide (without its border) on a `dpi` printer whose images
+ * must fit `safeWidthDots`. Picks the whole number that keeps the printed code within 30-40 mm
+ * (Orden HAC/1177/2024 art. 21.1) and the bordered image within the paper, closest to 35 mm, the
+ * smaller on a tie. When no size is within 30-40 mm it returns the fitting size closest to 35 mm, and
+ * 1 when nothing fits at all: it never throws, because the receipt is built inside the sale's
+ * transaction.
+ */
+export function chooseQrDots(squares: number, dpi: number, safeWidthDots: number): number {
+  let best: { dots: number; inRange: boolean; distance: number } | undefined;
+  for (let dots = 1; (squares + 2 * QR_QUIET_ZONE) * dots <= safeWidthDots; dots++) {
+    const mm = (squares * dots * 25.4) / dpi;
+    const inRange = mm >= QR_MIN_MM && mm <= QR_MAX_MM;
+    const distance = Math.abs(mm - QR_TARGET_MM);
+    if (
+      best === undefined ||
+      (inRange && !best.inRange) ||
+      (inRange === best.inRange && distance < best.distance)
+    ) {
+      best = { dots, inRange, distance };
+    }
+  }
+  return best?.dots ?? 1;
+}
+
+/** A new square matrix with `quiet` light modules added on every side. */
+export function withQuietZone(
+  modules: readonly (readonly boolean[])[],
+  quiet: number,
+): boolean[][] {
+  const side = modules.length + 2 * quiet;
+  const blank = (): boolean[] => new Array<boolean>(side).fill(false);
+  const margin = new Array<boolean>(quiet).fill(false);
+  return [
+    ...Array.from({ length: quiet }, blank),
+    ...modules.map((row) => [...margin, ...row, ...margin]),
+    ...Array.from({ length: quiet }, blank),
+  ];
+}

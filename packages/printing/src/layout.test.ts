@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { columnsFor, dpiValue, labelAmountLines, safeWidthDots, wrapText } from "./layout.js";
+import {
+  chooseQrDots,
+  columnsFor,
+  dpiValue,
+  labelAmountLines,
+  safeWidthDots,
+  withQuietZone,
+  wrapText,
+} from "./layout.js";
 
 describe("settings mapping", () => {
   it("maps paper width to columns and dots, resolution to dpi", () => {
@@ -120,5 +128,71 @@ describe("labelAmountLines", () => {
 
   it("right-aligns an amount with an empty label", () => {
     expect(labelAmountLines("", "1,00 €", 10)).toEqual(["    1,00 €"]);
+  });
+});
+
+const mm = (squares: number, dots: number, dpi: number): number => (squares * dots * 25.4) / dpi;
+
+describe("chooseQrDots", () => {
+  it("chooses the dot size closest to 35 mm within 30-40 mm (measured cases)", () => {
+    expect(chooseQrDots(41, 180, 504)).toBe(6); // 34.7 mm
+    expect(chooseQrDots(41, 203, 504)).toBe(7); // 35.9 mm
+    expect(chooseQrDots(45, 180, 504)).toBe(6); // 38.1 mm (5 dots: 31.75, further from 35)
+    expect(chooseQrDots(45, 203, 504)).toBe(6); // 33.8 mm
+    expect(chooseQrDots(49, 180, 504)).toBe(5); // 34.6 mm (6 dots: 41.5, over 40)
+    expect(chooseQrDots(49, 203, 504)).toBe(6); // 36.8 mm
+    expect(chooseQrDots(53, 203, 504)).toBe(5); // 33.2 mm (6 dots: 39.8, further from 35)
+    expect(chooseQrDots(65, 180, 360)).toBe(4); // 36.7 mm; 5 dots would be 365 dots wide
+  });
+
+  it("keeps every grid size 37-77 within 30-40 mm at both resolutions and both widths", () => {
+    for (let squares = 37; squares <= 77; squares++) {
+      for (const dpi of [180, 203]) {
+        for (const width of [360, 504]) {
+          const dots = chooseQrDots(squares, dpi, width);
+          const label = `${squares} squares, ${dpi} dpi, ${width} dots`;
+          expect(mm(squares, dots, dpi), label).toBeGreaterThanOrEqual(30);
+          expect(mm(squares, dots, dpi), label).toBeLessThanOrEqual(40);
+          expect((squares + 8) * dots, label).toBeLessThanOrEqual(width);
+          for (let other = 1; (squares + 8) * other <= width; other++) {
+            const size = mm(squares, other, dpi);
+            if (size >= 30 && size <= 40) {
+              expect(Math.abs(size - 35), label).toBeGreaterThanOrEqual(
+                Math.abs(mm(squares, dots, dpi) - 35) - 1e-9,
+              );
+            }
+          }
+        }
+      }
+    }
+  });
+
+  it("takes the smaller dot size on a tie", () => {
+    // 50 squares at 127 dpi: 3 dots = 30 mm and 4 dots = 40 mm, both 5 mm from 35.
+    expect(chooseQrDots(50, 127, 504)).toBe(3);
+  });
+
+  it("falls back without throwing when no size is legal", () => {
+    expect(chooseQrDots(177, 180, 360)).toBe(1); // 25 mm, the only size that fits
+    expect(chooseQrDots(400, 180, 360)).toBe(1); // nothing fits
+  });
+});
+
+describe("withQuietZone", () => {
+  it("pads a matrix with light modules on every side", () => {
+    expect(
+      withQuietZone(
+        [
+          [true, false],
+          [false, true],
+        ],
+        1,
+      ),
+    ).toEqual([
+      [false, false, false, false],
+      [false, true, false, false],
+      [false, false, true, false],
+      [false, false, false, false],
+    ]);
   });
 });
