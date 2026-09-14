@@ -25,6 +25,13 @@ export const printTransport = pgEnum("print_transport", [
  */
 export const printTicketScope = pgEnum("print_ticket_scope", ["station", "order"]);
 
+/** The paper roll's width: 30 columns of text on 58mm, 42 on 80mm (design 2026-09-14). */
+export const printPaperWidth = pgEnum("print_paper_width", ["58mm", "80mm"]);
+/** The print head's dot density; it sets the QR dot size for the legal 30-40 mm. */
+export const printResolution = pgEnum("print_resolution", ["180dpi", "203dpi"]);
+/** The character table the printer is switched to, so accents and the euro sign print correctly. */
+export const printCharacterSet = pgEnum("print_character_set", ["wpc1252", "pc858", "plain"]);
+
 /**
  * A managed PRINTER (§2b) — central config, distributed execution. All config lives centrally (the one
  * Impresoras dashboard); the actual printing runs on the local `print_agents` agent that serves it.
@@ -70,6 +77,10 @@ export const printers = pgTable(
     pollTokenHash: text("poll_token_hash"),
     // What the printer prints (Slice B routing). DEFAULT 'station' so an existing printer stays inert.
     ticketScope: printTicketScope("ticket_scope").notNull().default("station"),
+    // Layout settings (design 2026-09-14). Defaults match the TM-T88III: 80mm, 180 dpi, table 16.
+    paperWidth: printPaperWidth("paper_width").notNull().default("80mm"),
+    resolution: printResolution("resolution").notNull().default("180dpi"),
+    characterSet: printCharacterSet("character_set").notNull().default("wpc1252"),
     // Deactivate via active := false, never a hard delete (print_jobs reference it).
     active: boolean("active").notNull().default(true),
   },
