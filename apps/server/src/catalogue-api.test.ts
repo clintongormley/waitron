@@ -2065,6 +2065,52 @@ describe("mountCatalogueApi — attaching option groups to products", () => {
       error: { code: "shared.invalid_id" },
     });
   });
+
+  it("returns a modifier's dependants for the delete confirmation", async () => {
+    const app = mountApp();
+    const catalogueId = await createCatalogueVia(app, "Menú con modificador");
+    const group = await createGroupVia(app, { name: { es: "Punto" } });
+    const createRes = await send(app, "POST", "/management-api/products", {
+      body: {
+        catalogueId,
+        categoryId: null,
+        descriptions: { es: "Entrecot" },
+        pricingUnit: "each",
+        unitPrice: "18.00",
+        vatClass: "general",
+        optionGroupIds: [group.id],
+      },
+    });
+    expect(createRes.status).toBe(201);
+    const productId = ((await createRes.json()) as { id: string }).id;
+
+    const res = await send(app, "GET", `/management-api/modifiers/${group.id}/dependants`);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { dependants: unknown };
+    expect(body.dependants).toMatchObject({
+      products: [{ id: productId, name: { es: "Entrecot" } }],
+      menus: [],
+      orders: 0,
+    });
+  });
+
+  it("gates the modifier dependants read and refuses a foreign or malformed id", async () => {
+    const app = mountApp();
+    const group = await createGroupVia(app, { name: { es: "Punto" } });
+    const path = `/management-api/modifiers/${group.id}/dependants`;
+    expect((await send(app, "GET", path, { cookie: null })).status).toBe(401);
+    expect((await send(app, "GET", path, { cookie: staffCookie })).status).toBe(403);
+    expect(
+      (await send(app, "GET", "/management-api/modifiers/not-a-uuid/dependants")).status,
+    ).toBe(400);
+    const absent = await send(
+      app,
+      "GET",
+      "/management-api/modifiers/11111111-1111-4111-8111-111111111111/dependants",
+    );
+    expect(absent.status).toBe(404);
+    expect(await absent.json()).toMatchObject({ error: { code: "modifier.not_found" } });
+  });
 });
 
 describe("menu name edits", () => {

@@ -4,6 +4,7 @@ import {
   deleteModifier,
   getModifier,
   listModifiers,
+  modifierDependants,
 } from "@waitron/catalogue";
 import { tenantId as brandTenantId } from "@waitron/shared";
 import "./errors.js";
@@ -402,6 +403,16 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const id = requireUuidParam(c.req.param("id"), "ModifierId");
       await gated(requireManagementSession(c), (tx) => deleteModifier(tx, tenantId, id));
       return c.json({ ok: true });
+    }),
+  );
+  // What deleting this modifier would touch — the preview the dashboard's delete confirmation reads.
+  app.get("/management-api/modifiers/:id/dependants", (c) =>
+    run(c, log, async () => {
+      const id = requireUuidParam(c.req.param("id"), "ModifierId");
+      const dependants = await gated(requireManagementSession(c), (tx) =>
+        modifierDependants(tx, tenantId, id),
+      );
+      return c.json({ dependants });
     }),
   );
 
