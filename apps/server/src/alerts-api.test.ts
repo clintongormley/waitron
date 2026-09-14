@@ -132,6 +132,7 @@ describe("alert routes", () => {
     const v = await seedVenue();
     await raise(v, "payment.offline_forward_declined");
     const res = await get(appFor(v), "/management-api/alerts", v.supervisor);
+    expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ visible: false, alerts: [] });
   });
 
@@ -140,7 +141,35 @@ describe("alert routes", () => {
     const b = await seedVenue();
     await raise(a, "payment.offline_forward_declined");
     const res = await get(appFor(a), "/management-api/alerts", b.manager);
+    expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ visible: false, alerts: [] });
+  });
+
+  it("answers not visible and empty to another tenant's manager asking for handled alerts", async () => {
+    const a = await seedVenue();
+    const b = await seedVenue();
+    const id = await raise(a, "payment.offline_forward_declined");
+    const app = appFor(a);
+    expect(
+      (await post(app, `/management-api/alerts/incidents/${id}/handled`, a.manager)).status,
+    ).toBe(204);
+    const res = await get(app, "/management-api/alerts/handled", b.manager);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ visible: false, alerts: [] });
+  });
+
+  it("refuses another tenant's manager to handle this tenant's incident, leaving it open", async () => {
+    const a = await seedVenue();
+    const b = await seedVenue();
+    const id = await raise(a, "payment.offline_forward_declined");
+    const res = await post(appFor(a), `/management-api/alerts/incidents/${id}/handled`, b.manager);
+    expect(res.status).toBe(404);
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe("alert.not_found");
+    const stillOpen = await withTenant(db, a.tenantId, async (tx) => {
+      await asAppUser(tx);
+      return listOpenIncidents(tx, a.tenantId);
+    });
+    expect(stillOpen.map((i) => i.id)).toEqual([id]);
   });
 
   it("marks an incident handled; it moves from open to handled with who and when", async () => {
