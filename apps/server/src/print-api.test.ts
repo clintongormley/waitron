@@ -2,7 +2,14 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, asAppUser, joinRequests, printAgents, withTenant } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  asAppUser,
+  joinRequests,
+  printAgents,
+  printJobs,
+  withTenant,
+} from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, hashPin, startManagementSession } from "@waitron/identity";
@@ -14,9 +21,11 @@ import {
   seriesId as brandSeriesId,
   tenantId as brandTenantId,
   tillId as brandTillId,
+  type SupportedLocale,
 } from "@waitron/shared";
 import type { Logger } from "./logger.js";
 import { mountPrintApi } from "./print-api.js";
+import { formatTestPage } from "./test-page.js";
 import { acceptPrintAgentJoinRequest } from "./join-requests.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
@@ -110,7 +119,13 @@ const suite = usePgliteDb({
 /** Mount the print API. The pairing window is OPEN by default so `joinAndAccept`'s knock is admitted;
  *  `pairingOpen: false` proves the shut-window refusal. `readMembership` returns the fixture above so
  *  the pull route can echo `servers`. */
-function mountApp(opts: { pairingOpen?: boolean; enrolRateLimiter?: EnrolRateLimiter } = {}): Hono {
+function mountApp(
+  opts: {
+    pairingOpen?: boolean;
+    enrolRateLimiter?: EnrolRateLimiter;
+    venueLocale?: SupportedLocale;
+  } = {},
+): Hono {
   const app = new Hono();
   const pairingMode = createPairingMode();
   if (opts.pairingOpen ?? true) pairingMode.open();
@@ -122,6 +137,7 @@ function mountApp(opts: { pairingOpen?: boolean; enrolRateLimiter?: EnrolRateLim
       pairingMode,
       readMembership: async () => MEMBERSHIP,
       enrolRateLimiter: opts.enrolRateLimiter,
+      venueLocale: opts.venueLocale ?? "es-ES",
     },
     noopLog,
   );
@@ -1326,6 +1342,26 @@ describe("mountPrintApi — management: test-print", () => {
     });
     expect(malformed.status).toBe(400);
   });
+
+  it.each(["es-ES", "en-GB"] as const)(
+    "queues the setup test page in the venue language (%s)",
+    async (venueLocale) => {
+      const app = mountApp({ venueLocale });
+      const printerId = await createNetworkPrinter(app, "10.0.0.41", 9100, `Prueba ${venueLocale}`);
+      const res = await send(app, "POST", `/management-api/printers/${printerId}/test-print`, {
+        cookie: managerCookie,
+      });
+      expect(res.status).toBe(202);
+      const { jobId } = (await res.json()) as { jobId: string };
+      const [job] = await suite.db
+        .select({ payload: printJobs.payload })
+        .from(printJobs)
+        .where(eq(printJobs.id, jobId));
+      expect([...new Uint8Array(job!.payload)]).toEqual([
+        ...formatTestPage({ locale: venueLocale }),
+      ]);
+    },
+  );
 });
 
 describe("mountPrintApi — management: recent jobs", () => {
