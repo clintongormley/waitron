@@ -343,6 +343,31 @@ export class WtDataTable<Row = unknown> extends LitElement {
     return this.#sortByColumn(rows, column, indexOf);
   }
 
+  /** In tree mode a matching row's ancestors must stay so it is not shown as a false top-level row.
+   * Returns the rows to render plus the set of keys present only as an ancestor of a match. */
+  #treeVisible(): { rows: readonly Row[]; ancestorOnly: ReadonlySet<string> } {
+    const parentOf = this.rowParent!;
+    const indexOf = new Map<Row, number>();
+    this.rows.forEach((row, i) => indexOf.set(row, i));
+    const keyOf = (row: Row) => this.rowKey(row, indexOf.get(row)!);
+    const matched = new Set(this.#visibleRows().map(keyOf));
+    const included = new Set(matched);
+    for (const row of this.rows) {
+      if (!matched.has(keyOf(row))) continue;
+      const visited = new Set<string>();
+      let current: Row | undefined = row;
+      let parentKey = current ? parentOf(current) : null;
+      while (parentKey && !visited.has(parentKey)) {
+        visited.add(parentKey);
+        included.add(parentKey);
+        current = this.rows.find((r) => keyOf(r) === parentKey);
+        parentKey = current ? parentOf(current) : null;
+      }
+    }
+    const ancestorOnly = new Set([...included].filter((key) => !matched.has(key)));
+    return { rows: this.rows.filter((row) => included.has(keyOf(row))), ancestorOnly };
+  }
+
   #treeRows(rows: readonly Row[]): { row: Row; key: string; depth: number; hasChildren: boolean }[] {
     const keyOf = (row: Row, i: number) => this.rowKey(row, i);
     const parentOf = this.rowParent!;
@@ -523,11 +548,15 @@ export class WtDataTable<Row = unknown> extends LitElement {
     const visible = this.#visibleRows();
     if (this.rows.length === 0)
       return html`${this.#renderToolbar()}<p class="message" role="status">${this.emptyMessage}</p>`;
-    if (visible.length === 0)
-      return html`${this.#renderToolbar()}<p class="message" role="status">${this.noMatchesMessage}</p>`;
 
     const label = this.ariaLabel || undefined;
     const isTree = this.rowParent !== undefined;
+    // In tree mode kept ancestors keep a deep match on screen, so "no matches" counts the rows the
+    // tree actually renders, not just the ones that matched.
+    const treeVisible = isTree ? this.#treeVisible() : undefined;
+    const renderedCount = isTree ? treeVisible!.rows.length : visible.length;
+    if (renderedCount === 0)
+      return html`${this.#renderToolbar()}<p class="message" role="status">${this.noMatchesMessage}</p>`;
 
     if (!isTree) {
       const sorted = this.#sortedRows(visible);
@@ -545,7 +574,9 @@ export class WtDataTable<Row = unknown> extends LitElement {
                     ${this.#renderSelectCell(key, row, false)}
                     ${this.columns.map(
                       (column) => html`
-                        <td data-align=${column.align ?? "start"}>${column.cell(row)}</td>
+                        <td data-align=${column.align ?? "start"}>
+                          ${column.cell(row, { ancestorOnly: false })}
+                        </td>
                       `,
                     )}
                   </tr>
@@ -557,7 +588,8 @@ export class WtDataTable<Row = unknown> extends LitElement {
       `;
     }
 
-    const entries = this.#treeRows(visible);
+    const { rows: treeRows, ancestorOnly } = treeVisible!;
+    const entries = this.#treeRows(treeRows);
     const visibleKeys = entries.map((e) => e.key);
     return html`
       ${this.#renderToolbar()}
@@ -567,6 +599,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
           <tbody role="rowgroup">
             ${entries.map(({ row, key, depth, hasChildren }) => {
               const expanded = !this.collapsed.has(key);
+              const cellContext = { ancestorOnly: ancestorOnly.has(key) };
               return html`<tr
                 data-row-key=${key}
                 role="row"
@@ -594,9 +627,9 @@ export class WtDataTable<Row = unknown> extends LitElement {
                                     </button>`
                                   : html`<span class="tree-spacer"></span>`
                               }
-                              ${column.cell(row)}
+                              ${column.cell(row, cellContext)}
                             </span>`
-                          : column.cell(row)
+                          : column.cell(row, cellContext)
                       }
                     </td>`,
                 )}

@@ -324,6 +324,43 @@ test("tree mode and selection work together, and collapsing takes rows out of se
   expect([...seen.at(-1)!].sort()).toEqual(["drinks", "food"]);
 });
 
+test("a filtered tree keeps a match's ancestor chain and marks it ancestor-only", async () => {
+  const treeRows: TreeRow[] = [
+    { id: "food", parent: null, name: "Food" },
+    { id: "break", parent: "food", name: "Breakfast" },
+    { id: "eggs", parent: "break", name: "Eggs" },
+  ];
+  const seen: Record<string, boolean> = {};
+  const el = (await mount('<wt-data-table aria-label="Cats"></wt-data-table>')) as WtDataTable<TreeRow>;
+  Object.assign(el, {
+    rows: treeRows,
+    rowKey: (r: TreeRow) => r.id,
+    rowParent: (r: TreeRow) => r.parent,
+    searchable: true,
+    columns: [
+      {
+        key: "name",
+        label: "Name",
+        searchValue: (r: TreeRow) => r.name,
+        cell: (r: TreeRow, ctx: { ancestorOnly: boolean }) => {
+          seen[r.id] = ctx.ancestorOnly;
+          return r.name;
+        },
+      },
+    ],
+  });
+  await el.updateComplete;
+  const input = el.shadowRoot!.querySelector<HTMLInputElement>(".table-search")!;
+  input.value = "eggs";
+  input.dispatchEvent(new Event("input"));
+  await el.updateComplete;
+  // Eggs matches; Food and Breakfast are kept only to hold Eggs' place.
+  expect(Object.keys(seen).sort()).toEqual(["break", "eggs", "food"]);
+  expect(seen.eggs).toBe(false);
+  expect(seen.food).toBe(true);
+  expect(seen.break).toBe(true);
+});
+
 test("searchable renders a search box that narrows rows", async () => {
   const el = await table({
     searchable: true,
