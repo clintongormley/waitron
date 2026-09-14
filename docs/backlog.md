@@ -841,9 +841,9 @@ ongoing overhaul listed at the top of Track A.
   count instead). **Undecided:** how it relates to the `wt-select` row above. The combobox does not
   sort its options, and neither its design nor that row mentions the other, so decide whether
   `wt-select` becomes a non-searchable mode of the combobox or stays a separate element before
-  building either. The category-overhaul branch adopted the combobox without settling this, so the
-  question is still open for the owner. **Next action:** the owner decides it before `wt-select` or
-  any further combobox adoption is built.
+  building either. The category-overhaul branch adopted the combobox for the pickers above without
+  answering the `wt-select` question, which is still open for the owner. **Next action:** the owner
+  answers the `wt-select` question.
 - **Shared database-backed table paging, search and sorting** (owner decision 2026-09-12; users
   first). 50 per page with a server-enforced maximum; search and sort over the whole dataset; debounce,
   reset on filter change, ignore superseded responses, keep passive live refreshes. Deliberately kept
