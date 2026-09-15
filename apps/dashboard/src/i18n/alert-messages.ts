@@ -23,8 +23,8 @@ export const ALERT_MESSAGES: Readonly<
     es: "Una de las comprobaciones de Waitron no se ha podido ejecutar. Lo volverá a intentar en un minuto.",
   },
   "backup.destination_overdue": {
-    en: "Backups to “{destination}” are overdue — the last good backup is older than expected. Check the destination on the Backups page.",
-    es: "Las copias de seguridad en «{destination}» están atrasadas: la última correcta es más antigua de lo esperado. Revisa el destino en la página de Copias.",
+    en: "Backups to “{destination}” are overdue — no recent good backup. Check the destination on the Backups page.",
+    es: "Las copias de seguridad en «{destination}» están atrasadas: no hay ninguna correcta reciente. Revisa el destino en la página de Copias.",
   },
   "backup.destination_failed": {
     en: "The last backup to “{destination}” failed. Open the Backups page to retry.",

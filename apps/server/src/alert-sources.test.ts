@@ -36,6 +36,7 @@ describe("backupAlertSource", () => {
     const alerts = await src({ configured: false }, { failed: new Map() }).read(ctx);
     expect(alerts.map((a) => a.code)).toEqual(["backup.disabled"]);
     expect(alerts[0].severity).toBe("warning");
+    expect(alerts[0].screen).toBe("backup");
   });
 
   it("raises destination_overdue for a stale destination, with the last good backup as since", async () => {

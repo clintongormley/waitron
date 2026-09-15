@@ -19,7 +19,7 @@ import type { TtlCache } from "./ttl-cache.js";
 import "./errors.js";
 
 /** The dashboard screen a backup alert links to. */
-export const BACKUP_STALE_SCREEN = "backup";
+export const BACKUP_SCREEN = "backup";
 
 /**
  * The last backup outcome per destination, in memory. A destination with an entry here failed its
@@ -70,6 +70,7 @@ export function backupAlertSource(deps: {
             params: {},
             severity: "warning",
             since: null,
+            screen: BACKUP_SCREEN,
           },
         ];
       }
@@ -82,7 +83,7 @@ export function backupAlertSource(deps: {
             params: { destination: d.id },
             severity: "error",
             since: d.lastBackupAt,
-            screen: BACKUP_STALE_SCREEN,
+            screen: BACKUP_SCREEN,
           });
         }
         const failed = deps.outcomes.failed.get(d.id);
@@ -93,7 +94,7 @@ export function backupAlertSource(deps: {
             params: { destination: d.id },
             severity: "warning",
             since: failed.at,
-            screen: BACKUP_STALE_SCREEN,
+            screen: BACKUP_SCREEN,
           });
         }
       }
@@ -165,9 +166,9 @@ export function printingAlertSource(): AlertSource {
           ),
         );
       for (const a of agents) {
-        // Key on the agent id, not the display name: names are not unique, and two agents sharing one
-        // would collide to a single alert (the dashboard dedups new-arrival pop-ups by key). The human
-        // name still travels in params for the wording.
+        // Key on the agent id, not the display name: each active agent needs its own distinct alert
+        // key, and the display name is not unique across agents. The human name still travels in
+        // params for the wording.
         alerts.push({
           key: `agent.silent:${a.id}`,
           code: "agent.silent",
@@ -236,6 +237,10 @@ export const BATTERY_ERROR = 10;
  * raises nothing. Each reader's reading comes through `cache` keyed on the reader id, so an open
  * dashboard asking every minute does not hammer the provider — a reading is reused for the cache's
  * TTL (five minutes at boot). Reads `card_readers` directly, the same table the payments API owns.
+ * This server-owned source reads a payments-module table, and on a node without that module it
+ * degrades gracefully: the `payments.manage` permission gates it, and a missing table surfaces as a
+ * single `alert.source_unavailable:card_reader` via the per-source savepoint — the same shape as the
+ * printing source.
  */
 export function batteryAlertSource(deps: {
   providers: readonly CardProviderContribution[];
