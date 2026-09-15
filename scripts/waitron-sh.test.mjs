@@ -75,7 +75,9 @@ case "$1" in
   compose)
     case "$args" in
       *" pull "*|*" pull")
-        # Real compose exits 0 on a failed pull when given this flag (probed on Compose v5.1.0).
+        # Mimics real compose, which exits 0 on a failed pull when given --ignore-pull-failures
+        # (probed on Compose v5.1.0). install no longer passes the flag, so re-adding it makes the
+        # pull-failure test fail here.
         case "$args" in *--ignore-pull-failures*) exit 0 ;; esac
         [ "${pullErr}" = "1" ] && exit 1 ;;
       *" ps "*|*" ps") echo "${dockerPs}" ;;
@@ -158,8 +160,8 @@ describe("waitron.sh install (published main) when the pull fails", () => {
     const sb = sandbox({ pullFail: true });
     const r = run(sb, ["install"]);
     expect(r.status).not.toBe(0);
-    expect(r.stderr).toContain("could not pull the Waitron images");
-    expect(r.stderr).toContain("registry");
+    expect(r.stderr).toContain("could not pull the box's images");
+    expect(r.stderr).toContain("registries");
     expect(r.stderr).toContain("architecture");
     const calls = readFileSync(sb.log, "utf8");
     expect(calls).toMatch(/docker compose .*pull/);

@@ -40,8 +40,9 @@ export const SHUTDOWN_DEADLINE_MS = 8000;
  *
  * `exit` runs from the write's completion callback, never straight after it: on a pipe (Docker,
  * systemd) `process.stdout.write` is asynchronous and exiting immediately truncates the one line
- * explaining the failure. The deadline still exits if that write never completes. The log carries `codeOf`'s classification rather than the caught value —
- * a `pg` pool `end()` rejection can embed the connection string it was built from.
+ * explaining the failure. The deadline still exits if that write never completes. The log carries
+ * `codeOf`'s classification rather than the caught value — a `pg` pool `end()` rejection can embed
+ * the connection string it was built from.
  *
  * A THIRD signal, of either name, is not caught by anything here: both `once` listeners have
  * already fired and removed themselves, so it falls through to Node's default action and kills the

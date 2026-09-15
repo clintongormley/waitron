@@ -229,10 +229,13 @@ export interface StartedServer {
 
 /**
  * The mode-specific half of `close()` (see `makeStartedServer`): how to stop this boot's background
- * work and which connection pools to drain. Trading mode fills both in — abort the main loop, the
- * outbound tunnel and the backup sweep, then close the app, replication and backup-manifest pools.
- * Setup mode's `stopWork` is a no-op (a setup box runs no background loop) and its `closePools`
- * drains only the app pool.
+ * work and which connection pools to drain. `closePools` closes, through `closeAll`, every pool its
+ * mode opened: setup — the app pool and the provisioning owner pool; adoption-pending and trading —
+ * the app pool and the replication pool. Every close is attempted and the first failure is
+ * rethrown, so `close()` rejects and the signal handler logs `server.shutdown_failed`. Setup's
+ * `stopWork` is a no-op; adoption-pending's aborts the adoption worker; trading's stops the main
+ * loop, the live change listener, the outbound tunnel and the backup sweep — and there
+ * `backupSupervisor.stop()` also closes the backup read pool, swallowing a failure to close it.
  */
 interface BootTeardown {
   stopWork: () => Promise<void>;
@@ -638,12 +641,13 @@ export function startLandingListener(
 }
 
 /**
- * The `StartedServer` BOTH modes return, with the shared `close()` sequence written once. `close()`
- * is idempotent and always drains the connection pools, whatever the teardown does first — the
- * mode-specific parts arrive as `teardown` (a `BootTeardown`): `stopWork` stops any background work
- * and awaits it (the loop plus the outbound tunnel and backup sweep in trading mode; a no-op in
- * setup mode), then `closePools` releases the pools (app + replication + the backup manifest pool in
- * trading mode; the app pool alone in setup mode). `mdns` is the shared mDNS responder both modes start in the prefix; `close()` stops it
+ * The `StartedServer` every mode returns, with the shared `close()` sequence written once. `close()`
+ * is idempotent. The mode-specific parts arrive as `teardown` (a `BootTeardown`): `stopWork` stops
+ * any background work and awaits it; then, after the listeners close and in a `finally` so a
+ * listener failure still reaches it, `closePools` closes every pool the mode opened (setup: app +
+ * provisioning owner; adoption-pending and trading: app + replication). A pool that fails to close
+ * rejects `close()` only after every pool has been attempted, and `server.stopped` is then not
+ * logged. `mdns` is the shared mDNS responder every mode starts in the prefix; `close()` stops it
  * FIRST — the box is going down, so it must stop advertising `waitron.local` before anything else.
  */
 function makeStartedServer(

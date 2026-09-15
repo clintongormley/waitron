@@ -164,7 +164,10 @@ declare module "@waitron/shared" {
     /**
      * Shutdown did not finish within the deadline, so the process is exiting anyway (a box's restart
      * mechanism is SIGTERM → shutdown → exit → Docker restarts it, so a shutdown that never finishes
-     * is a box that never comes back). Logged only, on the way out; carries just the deadline.
+     * is a box that never comes back). Logged only, on the way out; carries just the deadline. Not
+     * logged when `close()` has already rejected: that shutdown exits 1 under
+     * `server.shutdown_failed`, and the deadline only guarantees the exit if that line's write never
+     * completes.
      */
     "server.shutdown_timeout": { deadlineMs: number };
     /**

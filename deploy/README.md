@@ -27,8 +27,9 @@ sudo bash waitron.sh install
 on anything else it says so and exits 2), enables the daemon at boot, fetches `compose.yml` and
 `.env.example` from the ref you are installing — overwriting any local copy of those two files, and
 printing a line to say so, because the compose file and the image running against it must always come
-from the same commit — generates the box's `POSTGRES_PASSWORD` into `.env` the first time, pulls the
-published image (stopping with an error if the pull fails), and starts the containers. It is
+from the same commit — generates the box's `POSTGRES_PASSWORD` into `.env` the first time, pulls all of
+the box's images — the two Waitron images from GHCR and the database and mail-catcher images from
+Docker Hub — stopping with an error if any of them fails to download, and starts the containers. It is
 non-interactive and idempotent: running it again later (to update, say) does nothing destructive,
 and in particular it never mints a second
 `POSTGRES_PASSWORD` — the cluster keeps the first one, so a regenerated `.env` would lock the app out

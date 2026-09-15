@@ -129,7 +129,7 @@ select_image() {
     env_unset WAITRON_IMAGE
     env_unset WAITRON_PRINT_AGENT_IMAGE
     docker compose -f "$WAITRON_DIR/compose.yml" pull \
-      || die "could not pull the Waitron images: check the network and that the image registry is reachable, or whether an image is published for this machine's architecture ($(uname -m))"
+      || die "could not pull the box's images: check the network and that the image registries (GHCR, Docker Hub) are reachable, or whether an image is published for this machine's architecture ($(uname -m))"
   else
     local safe tag agent_tag
     safe="$(printf '%s' "$ref" | tr -c 'A-Za-z0-9._-' '-')"; safe="${safe:0:100}"
