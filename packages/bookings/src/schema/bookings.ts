@@ -10,12 +10,11 @@ import {
   text,
   time,
   timestamp,
-  unique,
   uuid,
 } from "drizzle-orm/pg-core";
 // The FK targets are core tables — this module's schema points INTO core (a clean leaf), so they
 // import from @waitron/db rather than a sibling file.
-import { locations, tenants } from "@waitron/db";
+import { locations } from "@waitron/db";
 
 /**
  * The lifecycle of a staff-entered reservation (design §1). `booked` on creation; `seated` when the
@@ -38,10 +37,9 @@ export const bookingStatus = pgEnum("booking_status", [
  * misrender, so this cannot repeat #52; the one place "now" matters (the reserved-on-floor imminence
  * read, FP-1) computes the venue wall-clock from `locations.time_zone` at read time.
  *
- * `table_id` (optional table assignment) and `tab_id` (set on seat) are BARE uuid columns: their
- * tenant-consistent COMPOSITE FKs — (tenant_id, table_id) → dining_tables(tenant_id, id) and
- * (tenant_id, tab_id) → working_orders(tenant_id, id) — are hand-written in the paired --custom
- * migration, because drizzle-kit models no composite FK and those targets are TS-1 tables.
+ * `table_id` (optional table assignment) and `tab_id` (set on seat) are BARE uuid columns: their FKs,
+ * table_id → dining_tables(id) and tab_id → working_orders(id), are hand-written in the custom
+ * migrations rather than declared here.
  *
  * `created_by` is the identity person who took the booking — a plain uuid with NO FK, the same
  * `drawer_opens.person_id` / `daily_closes.closed_by` / `sales.operator_id` seam: the person/identity
@@ -52,7 +50,6 @@ export const bookings = pgTable(
   "bookings",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    tenantId: uuid("tenant_id").notNull(),
     /** The workplace the reservation is for. */
     locationId: uuid("location_id").notNull(),
     // Venue-local wall-clock date + time (§2b) — plain `date`/`time`, NOT an instant.
@@ -64,11 +61,11 @@ export const bookings = pgTable(
     // Free-text contact (design §0) — no customer/CRM entity exists. Both nullable.
     contactPhone: text("contact_phone"),
     notes: text("notes"),
-    // Optional table assignment (TS-1). BARE column — its (tenant_id, table_id) → dining_tables
-    // composite FK is hand-written in the custom migration. MATCH SIMPLE skips the check while NULL.
+    // Optional table assignment (TS-1). BARE column — its FK to dining_tables is hand-written in the
+    // custom migration, and skips the check while NULL.
     tableId: uuid("table_id"),
-    // Set on seat: the tab opened for the arriving party (TS-1). BARE column — its
-    // (tenant_id, tab_id) → working_orders composite FK is hand-written in the custom migration.
+    // Set on seat: the tab opened for the arriving party (TS-1). BARE column — its FK to
+    // working_orders is hand-written in the custom migration.
     tabId: uuid("tab_id"),
     status: bookingStatus("status").notNull().default("booked"),
     // The identity person who took the booking. Plain uuid, NO FK — the drawer_opens.person_id seam.
@@ -80,28 +77,18 @@ export const bookings = pgTable(
   (t) => [
     // The array `foreignKey({...})` form, not `.references(() => …)`, for the coverage reason
     // shifts.ts documents (no uncovered arrow function). restrict — a booking must never orphan its
-    // tenant or location.
-    foreignKey({
-      columns: [t.tenantId],
-      foreignColumns: [tenants.id],
-      name: "bookings_tenant_fk",
-    }).onDelete("restrict"),
+    // location.
     foreignKey({
       columns: [t.locationId],
       foreignColumns: [locations.id],
       name: "bookings_location_fk",
     }).onDelete("restrict"),
-    // Composite (tenant_id, id) UNIQUE — the house pattern for a composite-FK target (a later slice
-    // may point a tenant-consistent FK at a booking).
-    unique("bookings_tenant_id_key").on(t.tenantId, t.id),
     // The day-list scan: the location's bookings for a given date.
-    index("bookings_tenant_location_date_idx").on(t.tenantId, t.locationId, t.bookingDate),
-    // The reserved-on-floor lateral join (working-order.ts nextReservation) filters on
-    // (tenant_id, table_id, status, booking_date) then orders/ranges on booking_time — matched left to
-    // right by this index. Without it that per-table subquery re-scans the whole day's bookings
-    // (bookings_tenant_location_date_idx has no table_id prefix), O(tables × bookings-that-day).
-    index("bookings_tenant_table_status_date_time_idx").on(
-      t.tenantId,
+    index("bookings_location_date_idx").on(t.locationId, t.bookingDate),
+    // The reserved-on-floor read filters on (table_id, status, booking_date) then orders/ranges on
+    // booking_time — matched left to right by this index. Without it the read re-scans the whole day's
+    // bookings (bookings_location_date_idx has no table_id prefix), O(tables × bookings-that-day).
+    index("bookings_table_status_date_time_idx").on(
       t.tableId,
       t.status,
       t.bookingDate,

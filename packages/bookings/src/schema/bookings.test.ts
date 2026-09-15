@@ -1,10 +1,11 @@
 import { sql } from "drizzle-orm";
 import { getTableConfig } from "drizzle-orm/pg-core";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import {
   asAppUser,
   captureError,
   pgErrorCode,
+  pgErrorMessage,
   tenants,
   withTransaction,
   type Transaction,
@@ -13,20 +14,26 @@ import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { bookings } from "./bookings.js";
 
 // The Drizzle table definition itself (the `(t) => [...]` extraConfig): evaluated in JS, so it does not
-// need the container. Pins the two SINGLE-column FKs drizzle-kit emits (the composites are hand-written
-// in the custom migration, so they are NOT on the drizzle object), the composite-FK-target unique, the
-// two indexes and the party-size check — the shapes the migration proofs assert at the SQL level.
+// need the container. Pins the single FK drizzle-kit emits (the table and tab FKs are hand-written in
+// the custom migrations, so they are NOT on the drizzle object), the two indexes and the party-size
+// check — the shapes the migration proofs assert at the SQL level.
 describe("the bookings Drizzle table config", () => {
-  it("declares the two single-column FKs, the composite unique, two indexes and the party-size check", () => {
+  it("declares the location FK, two indexes, no unique key and the party-size check", () => {
     const config = getTableConfig(bookings);
-    expect(config.foreignKeys.map((fk) => fk.getName()).sort()).toEqual([
-      "bookings_location_fk",
-      "bookings_tenant_fk",
-    ]);
-    expect(config.uniqueConstraints.map((u) => u.name)).toEqual(["bookings_tenant_id_key"]);
-    expect(config.indexes.map((i) => i.config.name).sort()).toEqual([
-      "bookings_tenant_location_date_idx",
-      "bookings_tenant_table_status_date_time_idx",
+    expect(config.columns.map((c) => c.name)).not.toContain("tenant_id");
+    expect(config.foreignKeys.map((fk) => fk.getName())).toEqual(["bookings_location_fk"]);
+    expect(config.uniqueConstraints).toEqual([]);
+    expect(
+      config.indexes.map((i) => [
+        i.config.name,
+        i.config.columns.map((c) => ("name" in c ? c.name : "")),
+      ]),
+    ).toEqual([
+      ["bookings_location_date_idx", ["location_id", "booking_date"]],
+      [
+        "bookings_table_status_date_time_idx",
+        ["table_id", "status", "booking_date", "booking_time"],
+      ],
     ]);
     expect(config.checks.map((c) => c.name)).toEqual(["bookings_party_size_ck"]);
   });
@@ -34,60 +41,43 @@ describe("the bookings Drizzle table config", () => {
 
 // Real Postgres (a whole-manifest template clone), not PGlite: every write below runs as the non-owner
 // `app_user`, the deployment role, which PGlite (every connection a superuser) cannot be. The
-// cases retain the role switch so the reads and writes still exercise app_user grants. The `manifest`
-// template (not [core, bookings]) is the shared ordered set — bookings FKs into core.
-const TENANT_A = "11111111-1111-4111-8111-111111111111";
-const TENANT_B = "22222222-2222-4222-8222-222222222222";
-const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
-const LOCATION_B = "bbbbbbbb-0000-4000-8000-000000000001";
-// A dining_tables row per tenant — the composite-FK target for bookings.(tenant_id, table_id).
-const TABLE_A = "aaaaaaaa-0000-4000-8000-000000000009";
-const TABLE_B = "bbbbbbbb-0000-4000-8000-000000000009";
+// `manifest` template (not [core, bookings]) is the shared ordered set — bookings FKs into core.
+const TENANT = "11111111-1111-4111-8111-111111111111";
+const LOCATION = "aaaaaaaa-0000-4000-8000-000000000001";
+// A dining_tables row — the target of bookings.table_id.
+const TABLE = "aaaaaaaa-0000-4000-8000-000000000009";
 // The identity person recorded in created_by — a plain uuid, no FK (the drawer_opens.person_id seam).
 const CREATED_BY = "cccccccc-0000-4000-8000-000000000001";
 
-describe("bookings schema (staff reservations — columns, CHECK, composite FKs)", () => {
+describe("bookings schema (staff reservations — columns, CHECK, FKs)", () => {
   const suite = useTemplateDb({ template: "manifest" });
 
-  beforeAll(async () => {
-    await suite.admin.insert(tenants).values([
-      { id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" },
-      { id: TENANT_B, country: "ES", taxId: "B11111111", legalName: "Fixture Tenant B" },
-    ]);
+  // beforeEach, not beforeAll: the helper empties every table after each test.
+  beforeEach(async () => {
+    // The core parents still carry their own tenant column, so they are seeded with one.
+    await suite.admin
+      .insert(tenants)
+      .values({ id: TENANT, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant" });
     await suite.admin.execute(sql`
       insert into locations (id, tenant_id, name, invoice_locales, operation_description)
-      values
-        (${LOCATION_A}, ${TENANT_A}, 'Loc A', array['es'], 'Hostelería'),
-        (${LOCATION_B}, ${TENANT_B}, 'Loc B', array['es'], 'Hostelería')
-      on conflict (id) do nothing`);
-    // A dining_table per tenant — the (tenant_id, table_id) composite-FK target. Seeded as admin.
+      values (${LOCATION}, ${TENANT}, 'Loc A', array['es'], 'Hostelería')`);
     await suite.admin.execute(sql`
       insert into dining_tables (id, tenant_id, location_id, label)
-      values
-        (${TABLE_A}, ${TENANT_A}, ${LOCATION_A}, 'A1'),
-        (${TABLE_B}, ${TENANT_B}, ${LOCATION_B}, 'B1')
-      on conflict (id) do nothing`);
+      values (${TABLE}, ${TENANT}, ${LOCATION}, 'A1')`);
   });
 
-  function asApp<T>(tenant: string, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-    void tenant;
+  function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
     return withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return fn(tx);
     });
   }
 
-  // Insert a booking under the app role, scoped to `tenant` — the path the real routes take.
-  async function seedBooking(
-    tenant: string,
-    location: string,
-    time: string,
-    extra: Record<string, unknown> = {},
-  ): Promise<string> {
-    return asApp(tenant, async (tx) => {
+  // Insert a booking under the app role — the path the real routes take.
+  async function seedBooking(time: string, extra: Record<string, unknown> = {}): Promise<string> {
+    return asApp(async (tx) => {
       const cols: Record<string, unknown> = {
-        tenant_id: tenant,
-        location_id: location,
+        location_id: LOCATION,
         booking_date: "2026-09-01",
         booking_time: time,
         party_size: 2,
@@ -110,17 +100,18 @@ describe("bookings schema (staff reservations — columns, CHECK, composite FKs)
   }
 
   it("exposes every column through the Drizzle export, with the status default", async () => {
-    const id = await seedBooking(TENANT_A, LOCATION_A, "20:00");
+    const id = await seedBooking("20:00", { table_id: TABLE });
     // Read back through the Drizzle `bookings` export (not raw SQL) — exercises the produced table
     // export, its column mapping, the `status` default and `booking_time`'s rendering.
-    const [row] = await asApp(TENANT_A, (tx) =>
+    const [row] = await asApp((tx) =>
       tx
         .select()
         .from(bookings)
         .where(sql`id = ${id}`),
     );
-    expect(row!.tenantId).toBe(TENANT_A);
-    expect(row!.locationId).toBe(LOCATION_A);
+    expect(row).not.toHaveProperty("tenantId");
+    expect(row!.locationId).toBe(LOCATION);
+    expect(row!.tableId).toBe(TABLE);
     expect(row!.bookingDate).toBe("2026-09-01");
     expect(row!.bookingTime).toBe("20:00:00");
     expect(row!.partySize).toBe(2);
@@ -129,10 +120,8 @@ describe("bookings schema (staff reservations — columns, CHECK, composite FKs)
     expect(row!.createdBy).toBe(CREATED_BY);
     // A booking is edited and moved through its lifecycle: move it to a terminal state and read the
     // change back, so the mapping covers a written value as well as a default.
-    await asApp(TENANT_A, (tx) =>
-      tx.execute(sql`update bookings set status = 'cancelled' where id = ${id}`),
-    );
-    const after = await asApp(TENANT_A, (tx) =>
+    await asApp((tx) => tx.execute(sql`update bookings set status = 'cancelled' where id = ${id}`));
+    const after = await asApp((tx) =>
       tx
         .execute<{ status: string }>(sql`select status from bookings where id = ${id}`)
         .then((r) => r.rows[0]!.status),
@@ -141,28 +130,31 @@ describe("bookings schema (staff reservations — columns, CHECK, composite FKs)
   });
 
   it("rejects a non-positive party_size (CHECK party_size > 0)", async () => {
-    const e = await captureError(() =>
-      seedBooking(TENANT_A, LOCATION_A, "22:00", { party_size: 0 }),
-    );
+    const e = await captureError(() => seedBooking("22:00", { party_size: 0 }));
     expect(pgErrorCode(e)).toBe("23514"); // check_violation on bookings_party_size_ck
   });
 
-  it("the table binding is tenant-consistent (composite FK to dining_tables)", async () => {
+  it("refuses a table_id with no dining_tables row (bookings_table_fk)", async () => {
     const e = await captureError(() =>
-      seedBooking(TENANT_A, LOCATION_A, "19:00", { table_id: TABLE_B }),
+      seedBooking("19:00", { table_id: "bbbbbbbb-0000-4000-8000-000000000009" }),
     );
-    expect(pgErrorCode(e)).toBe("23503"); // foreign_key_violation on (tenant_id, table_id)
+    expect(pgErrorCode(e)).toBe("23503"); // foreign_key_violation
+    expect(pgErrorMessage(e)).toMatch(/bookings_table_fk/);
   });
 
-  it("the tab binding has a composite FK (a non-existent tab_id is rejected)", async () => {
-    // Proves bookings_tab_fk fires: a tab_id with no matching working_orders(tenant_id, id) row →
-    // foreign_key_violation. Cross-tenant seeding of a working_order (which needs a till + node) is
-    // exercised in the TS-1/server suites; here a non-existent tab is enough to prove the constraint.
+  it("refuses a tab_id with no working_orders row (bookings_tab_fk)", async () => {
     const e = await captureError(() =>
-      seedBooking(TENANT_A, LOCATION_A, "18:00", {
-        tab_id: "dddddddd-0000-4000-8000-000000000001",
-      }),
+      seedBooking("18:00", { tab_id: "dddddddd-0000-4000-8000-000000000001" }),
     );
-    expect(pgErrorCode(e)).toBe("23503"); // foreign_key_violation on (tenant_id, tab_id)
+    expect(pgErrorCode(e)).toBe("23503"); // foreign_key_violation
+    expect(pgErrorMessage(e)).toMatch(/bookings_tab_fk/);
+  });
+
+  it("refuses a location_id with no locations row (bookings_location_fk)", async () => {
+    const e = await captureError(() =>
+      seedBooking("17:00", { location_id: "eeeeeeee-0000-4000-8000-000000000001" }),
+    );
+    expect(pgErrorCode(e)).toBe("23503"); // foreign_key_violation
+    expect(pgErrorMessage(e)).toMatch(/bookings_location_fk/);
   });
 });

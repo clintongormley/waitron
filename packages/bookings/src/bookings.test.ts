@@ -7,6 +7,7 @@ import type { CoreServices } from "@waitron/module";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
+import type { TenantId } from "@waitron/shared";
 import { bookings } from "./schema/bookings.js";
 import { BOOKINGS_TEST_MIGRATIONS } from "./testing/migrations.js";
 import { fakeCore } from "./testing/fake-core.js";
@@ -23,10 +24,14 @@ import {
 } from "./bookings.js";
 import "./errors.js";
 
+/** A venue's booking config plus its tenant, which the core parent rows (locations, dining_tables,
+ * tills, working_orders) still carry. */
+type VenueCfg = BookingConfig & { tenantId: TenantId };
+
 // PGlite, not real Postgres: these verbs are plain CRUD + a conditional-UPDATE state machine over one
 // table — no privilege or concurrency behaviour that needs a genuine non-superuser backend (the CAS
 // race is proven against real Postgres in `bookings-cas.test.ts`, the routes in `routes.test.ts`). Every read/write still runs
-// through `withTransaction` + `asAppUser`, so the tenant scope and the `party_size > 0` CHECK are exercised
+// through `withTransaction` + `asAppUser`, so the app_user grants and the `party_size > 0` CHECK are exercised
 // exactly as production does, not bypassed. `TESTCONTAINERS_RYUK_DISABLED` is irrelevant here — no
 // container is started. Fixtures apply the whole manifest (BOOKINGS_TEST_MIGRATIONS): bookings FKs
 // into core, so it lands on top of the shared ordered set.
@@ -42,7 +47,7 @@ beforeAll(() => {
 });
 
 interface Venue {
-  cfg: BookingConfig;
+  cfg: VenueCfg;
   /** A fixture person id for `created_by` (no FK — the drawer_opens.person_id seam). */
   createdBy: string;
 }
@@ -61,7 +66,7 @@ async function setupVenue(): Promise<Venue> {
 }
 
 /** Insert an ACTIVE dining table for the venue and return its id (for the optional table-link path). */
-async function makeTable(cfg: BookingConfig, active = true): Promise<string> {
+async function makeTable(cfg: VenueCfg, active = true): Promise<string> {
   const row = await db.execute<{ id: string }>(sql`
     insert into dining_tables (tenant_id, location_id, label, active)
     values (${cfg.tenantId}, ${cfg.locationId}, '12', ${active}) returning id`);
@@ -74,7 +79,7 @@ async function makeTable(cfg: BookingConfig, active = true): Promise<string> {
  * database — the exact shape the location-scope guard must refuse (a booking in location A must
  * not be assigned a table in location B).
  */
-async function makeTableInOtherLocation(cfg: BookingConfig): Promise<string> {
+async function makeTableInOtherLocation(cfg: VenueCfg): Promise<string> {
   const loc = await db.execute<{ id: string }>(sql`
     insert into locations (tenant_id, name, invoice_locales, operation_description)
     values (${cfg.tenantId}, 'Terraza', array['es-ES'], 'Venta en establecimiento') returning id`);
@@ -85,8 +90,8 @@ async function makeTableInOtherLocation(cfg: BookingConfig): Promise<string> {
   return row.rows[0]!.id;
 }
 
-/** Run `fn` inside the venue's tenant scope as `app_user`, exactly as production routes do. */
-function scoped<T>(cfg: BookingConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
+/** Run `fn` as `app_user`, exactly as production routes do. */
+function scoped<T>(cfg: VenueCfg, fn: (tx: Transaction) => Promise<T>): Promise<T> {
   void cfg;
   return withTransaction(db, async (tx) => {
     await asAppUser(tx);
@@ -96,7 +101,7 @@ function scoped<T>(cfg: BookingConfig, fn: (tx: Transaction) => Promise<T>): Pro
 
 /** Insert a booking directly at an arbitrary status (to reach `seated`, which only Task 4's seat sets). */
 async function seedBooking(
-  cfg: BookingConfig,
+  cfg: VenueCfg,
   createdBy: string,
   status: "booked" | "seated" | "completed" | "no_show" | "cancelled",
 ): Promise<string> {
@@ -104,7 +109,6 @@ async function seedBooking(
     const [row] = await tx
       .insert(bookings)
       .values({
-        tenantId: cfg.tenantId,
         locationId: cfg.locationId,
         bookingDate: "2026-08-20",
         bookingTime: "20:00",
@@ -448,7 +452,7 @@ describe("getBooking", () => {
 
 /** Insert an ACTIVE dining table for the venue and return its id (createTable's raw equivalent — the
  * verb lives in apps/server, which a module cannot import). */
-async function seedTable(cfg: BookingConfig, label: string): Promise<string> {
+async function seedTable(cfg: VenueCfg, label: string): Promise<string> {
   const row = await db.execute<{ id: string }>(sql`
     insert into dining_tables (tenant_id, location_id, label, active)
     values (${cfg.tenantId}, ${cfg.locationId}, ${label}, true) returning id`);
@@ -462,7 +466,7 @@ async function seedTable(cfg: BookingConfig, label: string): Promise<string> {
 // The seat cfg is a plain `BookingConfig`; the till + node the tab row needs are captured by `fakeCore`.
 describe("seatBooking", () => {
   async function setupTillVenue(): Promise<{
-    cfg: BookingConfig;
+    cfg: VenueCfg;
     core: CoreServices;
     createdBy: string;
   }> {

@@ -1,6 +1,6 @@
-// The migration SPLIT proven on real Postgres (CLAUDE.md §4): the bookings table + all four FKs come
+// The migration SPLIT proven on real Postgres (CLAUDE.md §4): the bookings table + all three FKs come
 // from the MODULE's set, NOT from core, and core applied ALONE carries no `bookings` relation. Real PG
-// rather than PGlite because the four FKs and the ACL are what this proves, and PGlite is a superuser
+// rather than PGlite because the three FKs and the ACL are what this proves, and PGlite is a superuser
 // holding every grant. The templates are migrated once in globalSetup — `manifest` is the whole chain
 // (bookings FKs into core, so it applies the whole manifest), `core` is [core] alone — so this suite
 // only clones them. The core-vs-manifest contrast is what pins that
@@ -27,7 +27,7 @@ describe("the full manifest carries the bookings module's table and every FK", (
     expect(rows[0]!.reg).toBe("bookings");
   });
 
-  it("installs all four FKs — the two single-column (core-side) and the two composite (custom-side)", async () => {
+  it("installs all three FKs — location from the drizzle schema, table and tab from the custom migration", async () => {
     const { rows } = await suite.admin.execute<{ conname: string }>(sql`
       select conname from pg_constraint
       where conrelid = 'public.bookings'::regclass and contype = 'f'
@@ -36,7 +36,39 @@ describe("the full manifest carries the bookings module's table and every FK", (
       "bookings_location_fk",
       "bookings_tab_fk",
       "bookings_table_fk",
-      "bookings_tenant_fk",
+    ]);
+  });
+
+  it("points each foreign key from one column at its parent's primary key", async () => {
+    const { rows } = await suite.admin.execute<{ def: string }>(sql`
+      select pg_get_constraintdef(oid) as def from pg_constraint
+      where conrelid = 'public.bookings'::regclass and contype = 'f'
+      order by conname`);
+    expect(rows.map((r) => r.def)).toEqual([
+      "FOREIGN KEY (location_id) REFERENCES locations(id) ON DELETE RESTRICT",
+      "FOREIGN KEY (tab_id) REFERENCES working_orders(id)",
+      "FOREIGN KEY (table_id) REFERENCES dining_tables(id)",
+    ]);
+  });
+
+  it("carries no tenant_id column, no unique key, and indexes without the tenant", async () => {
+    const columns = await suite.admin.execute<{ column_name: string }>(sql`
+      select column_name from information_schema.columns
+      where table_schema = 'public' and table_name = 'bookings' and column_name = 'tenant_id'`);
+    expect(columns.rows).toEqual([]);
+    const uniques = await suite.admin.execute<{ conname: string }>(sql`
+      select conname from pg_constraint
+      where conrelid = 'public.bookings'::regclass and contype = 'u'`);
+    expect(uniques.rows).toEqual([]);
+    const indexes = await suite.admin.execute<{ indexname: string; indexdef: string }>(sql`
+      select indexname, indexdef from pg_indexes
+      where schemaname = 'public' and tablename = 'bookings' and indexname <> 'bookings_pkey'
+      order by indexname`);
+    expect(
+      indexes.rows.map((r) => [r.indexname, r.indexdef.replace(/^.* USING btree /, "")]),
+    ).toEqual([
+      ["bookings_location_date_idx", "(location_id, booking_date)"],
+      ["bookings_table_status_date_time_idx", "(table_id, status, booking_date, booking_time)"],
     ]);
   });
 });

@@ -58,24 +58,22 @@ async function insertBooking(
     date: string;
     time: string;
     status?: string;
-    tenantId?: TenantId;
     locationId?: LocationId;
   },
 ): Promise<void> {
-  const tenant = fields.tenantId ?? v.tenantId;
   const location = fields.locationId ?? v.locationId;
   await withTransaction(db, async (tx) => {
     await asAppUser(tx);
     await tx.execute(sql`
       insert into bookings
-        (tenant_id, location_id, table_id, booking_date, booking_time, party_size, contact_name, created_by, status)
+        (location_id, table_id, booking_date, booking_time, party_size, contact_name, created_by, status)
       values
-        (${tenant}, ${location}, ${fields.tableId}, ${fields.date}, ${fields.time},
+        (${location}, ${fields.tableId}, ${fields.date}, ${fields.time},
          2, 'Ana', ${randomUUID()}, ${fields.status ?? "booked"})`);
   });
 }
 
-/** Run the annotator inside the venue's tenant scope as `app_user`, exactly as production does. */
+/** Run the annotator as `app_user`, exactly as production does. */
 function annotate(
   v: Venue,
   now: Date,

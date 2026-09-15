@@ -1,12 +1,11 @@
 // Booking operations run on the caller's transaction. Creation and day lists use the
 // configured location; table assignments also check that location. Route handlers
-// own authorization. Creation stamps cfg.tenantId; one tenant per database, so a by-id read or
-// write needs only the id.
+// own authorization. A by-id read or write needs only the id.
 import "./errors.js";
 import { and, asc, eq, inArray, type InferSelectModel } from "drizzle-orm";
 import { diningTables, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
-import type { LocationId, TenantId } from "@waitron/shared";
+import type { LocationId } from "@waitron/shared";
 import type { CoreServices } from "@waitron/module";
 import { bookings } from "./schema/bookings.js";
 
@@ -14,10 +13,9 @@ import { bookings } from "./schema/bookings.js";
 export type Booking = InferSelectModel<typeof bookings>;
 
 /**
- * tenantId stamps new reservations; locationId scopes day lists and table assignments.
+ * locationId stamps new reservations and scopes day lists and table assignments.
  */
 export interface BookingConfig {
-  tenantId: TenantId;
   locationId: LocationId;
 }
 
@@ -96,7 +94,6 @@ export async function createBooking(
   const [row] = await tx
     .insert(bookings)
     .values({
-      tenantId: cfg.tenantId,
       locationId: cfg.locationId,
       bookingDate: input.bookingDate,
       bookingTime: input.bookingTime,
@@ -127,7 +124,7 @@ export async function listBookings(
 }
 
 /**
- * Read one reservation by id, returning undefined when absent. One tenant per database, so the id
+ * Read one reservation by id, returning undefined when absent. The id
  * alone identifies the row. Lifecycle verbs translate absence into booking.not_found.
  */
 export async function getBooking(

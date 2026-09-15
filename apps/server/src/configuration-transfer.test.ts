@@ -292,10 +292,10 @@ describe("configuration transfer database path", () => {
            'practice-payment', 1.50, 'captured')`);
       await tx.execute(sql`
         insert into bookings
-          (id, tenant_id, location_id, booking_date, booking_time, party_size, contact_name,
+          (id, location_id, booking_date, booking_time, party_size, contact_name,
            table_id, created_by)
         values
-          ('dddddddd-bbbb-bbbb-bbbb-dddddddddddd', ${source.tenantId}, ${source.locationId},
+          ('dddddddd-bbbb-bbbb-bbbb-dddddddddddd', ${source.locationId},
            '2026-09-10', '20:00', 2, 'Practice guest',
            'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
            '33333333-aaaa-aaaa-aaaa-333333333333')`);
@@ -441,7 +441,7 @@ describe("configuration transfer database path", () => {
           where tenant_id = ${target.tenantId} and tab_id is not null) as linked_tables,
         (select count(*)::int from working_orders where tenant_id = ${target.tenantId}) as target_orders,
         (select count(*)::int from payments) as target_payments,
-        (select count(*)::int from bookings where tenant_id = ${target.tenantId}) as target_bookings
+        (select count(*)::int from bookings) as target_bookings
     `);
     expect(imported.rows[0]).toEqual({
       products: 1,

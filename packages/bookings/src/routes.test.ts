@@ -9,7 +9,6 @@ import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitr
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import type { ModuleRouteContext } from "@waitron/module";
 import { fakeCore } from "./testing/fake-core.js";
-import type { BookingConfig } from "./bookings.js";
 import { BOOKINGS_PERMISSIONS } from "./permissions.js";
 import { BOOKINGS_ROUTES } from "./routes.js";
 
@@ -34,7 +33,7 @@ const suite = useTemplateDb({ template: "manifest" });
 const noopLog: Logger = () => {};
 
 interface Venue {
-  cfg: BookingConfig;
+  cfg: ModuleRouteContext["cfg"];
   /** The route context `BOOKINGS_ROUTES.mount` receives — `core.openTab` bound to this venue. */
   ctx: ModuleRouteContext;
   /** A live MANAGEMENT session cookie for a `manager` (holds `booking.manage`). */
@@ -74,7 +73,7 @@ async function setupVenue(): Promise<Venue> {
     return { managerSid: managerSession.id, staffSid: staffSession.id };
   });
 
-  const cfg: BookingConfig = {
+  const cfg: ModuleRouteContext["cfg"] = {
     tenantId: brandTenantId(tenantId),
     locationId: brandLocationId(locationId),
   };
@@ -95,7 +94,7 @@ function mountApp(ctx: ModuleRouteContext): Hono {
 }
 
 /** Insert an ACTIVE dining table for the venue as the app role, returning its id. */
-async function seedTable(cfg: BookingConfig, label = "12"): Promise<string> {
+async function seedTable(cfg: ModuleRouteContext["cfg"], label = "12"): Promise<string> {
   return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const row = await tx.execute<{ id: string }>(sql`

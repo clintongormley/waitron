@@ -66,9 +66,9 @@ async function insertBooking(cfg: TillConfig, tableId: string, time: string): Pr
   await asApp(cfg, (tx) =>
     tx.execute(sql`
       insert into bookings
-        (tenant_id, location_id, table_id, booking_date, booking_time, party_size, contact_name, created_by, status)
+        (location_id, table_id, booking_date, booking_time, party_size, contact_name, created_by, status)
       values
-        (${cfg.tenantId}, ${cfg.locationId}, ${tableId}, '2026-09-15', ${time}, 2, 'Ana', ${randomUUID()}, 'booked')`),
+        (${cfg.locationId}, ${tableId}, '2026-09-15', ${time}, 2, 'Ana', ${randomUUID()}, 'booked')`),
   );
 }
 

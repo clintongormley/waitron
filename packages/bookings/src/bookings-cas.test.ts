@@ -7,6 +7,7 @@ import type { CoreServices } from "@waitron/module";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
+import type { TenantId } from "@waitron/shared";
 import { bookings } from "./schema/bookings.js";
 import { fakeCore } from "./testing/fake-core.js";
 import {
@@ -17,6 +18,10 @@ import {
   type BookingConfig,
 } from "./bookings.js";
 import "./errors.js";
+
+/** A venue's booking config plus its tenant, which the core parent rows (locations, dining_tables,
+ * tills, working_orders) still carry. */
+type VenueCfg = BookingConfig & { tenantId: TenantId };
 
 // Real PostgreSQL (a shared-container clone of the whole-manifest template), NOT PGlite. `seatBooking`'s terminal
 // write is a compare-and-swap — `update … where id = ? and status = 'booked'`, throwing
@@ -35,11 +40,7 @@ beforeAll(() => {
   db = suite.admin;
 });
 
-function asApp<T>(
-  d: Database,
-  cfg: BookingConfig,
-  fn: (tx: Transaction) => Promise<T>,
-): Promise<T> {
+function asApp<T>(d: Database, cfg: VenueCfg, fn: (tx: Transaction) => Promise<T>): Promise<T> {
   void cfg;
   return withTransaction(d, async (tx) => {
     await asAppUser(tx);
@@ -51,7 +52,7 @@ function asApp<T>(
  * seat cfg is a plain `BookingConfig` and the till + node the tab row needs are captured by `fakeCore`
  * (its `SELECT … FOR UPDATE` on the table is what makes the two-backend race below stage). */
 async function setupVenue(): Promise<{
-  cfg: BookingConfig;
+  cfg: VenueCfg;
   core: CoreServices;
   createdBy: string;
 }> {
@@ -73,7 +74,7 @@ async function setupVenue(): Promise<{
 
 /** Insert an ACTIVE dining table for the venue and return its id (createTable's raw equivalent — the
  * verb lives in apps/server, which a module cannot import). */
-async function seedTable(cfg: BookingConfig, label: string): Promise<string> {
+async function seedTable(cfg: VenueCfg, label: string): Promise<string> {
   const row = await db.execute<{ id: string }>(sql`
     insert into dining_tables (tenant_id, location_id, label, active)
     values (${cfg.tenantId}, ${cfg.locationId}, ${label}, true) returning id`);
@@ -104,7 +105,7 @@ async function waitUntilLockBlocked(pid: number): Promise<void> {
 }
 
 /** Count of `working_orders` for this tenant, read as the owner. */
-async function workingOrderCount(cfg: BookingConfig): Promise<number> {
+async function workingOrderCount(cfg: VenueCfg): Promise<number> {
   const { rows } = await db.execute<{ n: number }>(
     sql`select count(*)::int as n from working_orders where tenant_id = ${cfg.tenantId}`,
   );
