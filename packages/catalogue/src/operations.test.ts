@@ -51,7 +51,7 @@ import {
 } from "./operations.js";
 import { AppError } from "@waitron/shared";
 import type { AvailableProduct } from "./operations.js";
-import { createUnit, EACH_UNIT } from "./units.js";
+import { createUnit, EACH_UNIT, readProductUnitId } from "./units.js";
 import { seedCatalogueFixture, seedVenue, useCatalogueDb } from "../test/fixtures.js";
 
 // Query behaviour runs on PGlite; each case starts with empty authoring tables.
@@ -462,6 +462,91 @@ describe("catalogue operations", () => {
       expect(seen!.unit.id).toBe("00000000-0000-0000-0000-000000000001");
       expect(seen!.unitId).toBe("00000000-0000-0000-0000-000000000001");
       expect(seen!.pricingUnit).toBe("each");
+    });
+  });
+
+  it("creates a product with no unit when unitId is null", async () => {
+    await asTenant(async (tx) => {
+      const cat = await createCatalogue(tx, tenantId, { name: "Deli" });
+      const created = await createProduct(tx, tenantId, {
+        catalogueId: cat.id,
+        categoryId: null,
+        descriptions: { en: "loose sweets" },
+        unitId: null,
+        unitPrice: "0.00",
+        vatClass: "general",
+      });
+      expect(created.pricingUnit).toBe("each");
+      expect(created.unit).toEqual(EACH_UNIT);
+      expect(await readProductUnitId(tx, tenantId, created.id)).toBeNull();
+    });
+  });
+
+  it("clears a product's unit when updated to null", async () => {
+    await asTenant(async (tx) => {
+      const cat = await createCatalogue(tx, tenantId, { name: "Deli" });
+      const created = await createProduct(tx, tenantId, {
+        catalogueId: cat.id,
+        categoryId: null,
+        descriptions: { en: "ham" },
+        unitId: kgUnitId,
+        unitPrice: "24.90",
+        vatClass: "reduced",
+      });
+      await updateProduct(tx, tenantId, created.id, { unitId: null });
+      expect(await readProductUnitId(tx, tenantId, created.id)).toBeNull();
+      const [after] = await tx
+        .select({ p: products.pricingUnit })
+        .from(products)
+        .where(eq(products.id, created.id));
+      expect(after!.p).toBe("each");
+    });
+  });
+
+  it("leaves a product's unit unchanged when neither unitId nor pricingUnit is patched", async () => {
+    await asTenant(async (tx) => {
+      const cat = await createCatalogue(tx, tenantId, { name: "Deli" });
+      const created = await createProduct(tx, tenantId, {
+        catalogueId: cat.id,
+        categoryId: null,
+        descriptions: { en: "ham" },
+        unitId: kgUnitId,
+        unitPrice: "24.90",
+        vatClass: "reduced",
+      });
+      await updateProduct(tx, tenantId, created.id, { unitPrice: "25.00" });
+      expect(await readProductUnitId(tx, tenantId, created.id)).toBe(kgUnitId);
+    });
+  });
+
+  it("legacy pricingUnit 'each' creates a product with no unit", async () => {
+    await asTenant(async (tx) => {
+      const cat = await createCatalogue(tx, tenantId, { name: "Deli" });
+      const created = await createProduct(tx, tenantId, {
+        catalogueId: cat.id,
+        categoryId: null,
+        descriptions: { en: "loose sweets" },
+        pricingUnit: "each",
+        unitPrice: "0.00",
+        vatClass: "general",
+      });
+      expect(await readProductUnitId(tx, tenantId, created.id)).toBeNull();
+      expect(created.pricingUnit).toBe("each");
+    });
+  });
+
+  it("still rejects a create with neither unitId nor pricingUnit", async () => {
+    await asTenant(async (tx) => {
+      const cat = await createCatalogue(tx, tenantId, { name: "Deli" });
+      await expect(
+        createProduct(tx, tenantId, {
+          catalogueId: cat.id,
+          categoryId: null,
+          descriptions: { en: "mystery" },
+          unitPrice: "0.00",
+          vatClass: "general",
+        }),
+      ).rejects.toMatchObject({ code: "management.request_invalid" });
     });
   });
 

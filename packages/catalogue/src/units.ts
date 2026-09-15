@@ -230,11 +230,14 @@ export async function reassignProductsToUnit(
     );
 }
 
+/** The editor read of a product's stored unit: `null` when it has no `product_units` row (it reads as
+ * Each in the form). Deliberately different from the display reads, which return the synthetic Each
+ * unit for the same product — the editor needs the real "no unit" so the form can preselect Each. */
 export async function readProductUnitId(
   tx: Transaction,
   tenantId: string,
   productId: string,
-): Promise<string> {
+): Promise<string | null> {
   const [row] = await tx
     .select({ productId: products.id, unitId: productUnits.unitId })
     .from(products)
@@ -244,8 +247,18 @@ export async function readProductUnitId(
     )
     .where(and(eq(products.tenantId, tenantId), eq(products.id, productId)));
   if (row === undefined) throw new AppError("product.not_found", { productId });
-  if (row.unitId === null) throw new AppError("unit.not_found", { unitId: productId });
   return row.unitId;
+}
+
+/** Remove a product's unit assignment (it then reads as Each). A no-op when there is no row. */
+export async function clearProductUnit(
+  tx: Transaction,
+  tenantId: string,
+  productId: string,
+): Promise<void> {
+  await tx
+    .delete(productUnits)
+    .where(and(eq(productUnits.tenantId, tenantId), eq(productUnits.productId, productId)));
 }
 
 /** The products that assign this unit, each with its availability, ordered stably by product id.

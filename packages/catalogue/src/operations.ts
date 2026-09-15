@@ -50,6 +50,7 @@ import { menuItemVariants, productVariants } from "./schema/variants.js";
 import type { ProductVariant } from "./variants.js";
 import {
   assignProductUnit,
+  clearProductUnit,
   EACH_UNIT,
   getSeededUnit,
   getSellableUnit,
@@ -177,7 +178,9 @@ export interface CreateProductInput {
   catalogueId: string;
   categoryId: string | null;
   descriptions: Record<string, string>;
-  unitId?: string;
+  /** The product's sellable unit. `null` = Each (no `product_units` row stored); a real id assigns
+   * that unit; omitted falls back to the legacy `pricingUnit` compat path. */
+  unitId?: string | null;
   pricingUnit?: PricingUnit;
   unitPrice: string;
   vatClass: VatClass;
@@ -203,7 +206,9 @@ export interface UpdateProductInput {
   descriptions?: Record<string, string>;
   unitPrice?: string;
   vatClass?: VatClass;
-  unitId?: string;
+  /** `null` clears the unit (the product then reads as Each); a real id sets it; omitted leaves the
+   * unit unchanged unless the legacy `pricingUnit` compat field is supplied instead. */
+  unitId?: string | null;
   pricingUnit?: PricingUnit;
   categoryId?: string | null;
   /** `null` clears the declaration back to unreviewed; omitted leaves it unchanged. */
@@ -428,12 +433,6 @@ function sellableUnit(
 
 function legacyPricingUnit(unit: SellableUnit): PricingUnit {
   return unit.hardwareUnit === null ? "each" : "weight";
-}
-
-function legacyUnitSeed(pricingUnit: PricingUnit): "each" | "kg" {
-  if (pricingUnit === "each") return "each";
-  if (pricingUnit === "weight") return "kg";
-  throw new AppError("management.request_invalid", { field: "pricingUnit" });
 }
 
 export async function createCatalogue(
@@ -1197,12 +1196,18 @@ export async function createProduct(
   if (input.unitId === undefined && input.pricingUnit === undefined) {
     throw new AppError("management.request_invalid", { field: "unitId" });
   }
-  const selectedUnit =
-    input.unitId === undefined
-      ? await getSeededUnit(tx, tenantId, legacyUnitSeed(input.pricingUnit!))
-      : await getSellableUnit(tx, tenantId, input.unitId);
-  if (selectedUnit === null) {
-    throw new AppError("management.request_invalid", { field: "unitId" });
+  // Resolve to the unit to assign, or null for Each (no product_units row stored).
+  let selectedUnit: SellableUnit | null;
+  if (input.unitId === null) {
+    selectedUnit = null;
+  } else if (input.unitId !== undefined) {
+    selectedUnit = await getSellableUnit(tx, tenantId, input.unitId); // 404s an unknown unit
+  } else if (input.pricingUnit === "each") {
+    selectedUnit = null;
+  } else {
+    selectedUnit = await getSeededUnit(tx, tenantId, "kg"); // legacy weight → the retained kg seed
+    if (selectedUnit === null)
+      throw new AppError("management.request_invalid", { field: "unitId" });
   }
   // Validate before the write: an unreviewed product stores null, a supplied map is checked against
   // the EU-14 taxonomy and rejected (throws `allergen.invalid_code`/`allergen.invalid_presence`)
@@ -1230,7 +1235,7 @@ export async function createProduct(
       description: input.description ?? null,
       kitchenName: input.kitchenName?.trim() || null,
       dietaryDeclarations: validateDietaryDeclarations(input.dietaryDeclarations ?? []),
-      pricingUnit: legacyPricingUnit(selectedUnit),
+      pricingUnit: selectedUnit === null ? "each" : legacyPricingUnit(selectedUnit),
       unitPrice: input.unitPrice,
       vatClass: input.vatClass,
       active: input.active ?? true,
@@ -1241,7 +1246,7 @@ export async function createProduct(
       image: input.image ?? null,
     })
     .returning({ id: products.id });
-  await assignProductUnit(tx, tenantId, row!.id, selectedUnit.id);
+  if (selectedUnit !== null) await assignProductUnit(tx, tenantId, row!.id, selectedUnit.id);
   const membership = await replaceProductCategories(tx, tenantId, row!.id, {
     categoryIds: input.categoryId === null ? [] : [input.categoryId],
     primaryCategoryId: input.categoryId,
@@ -1391,27 +1396,40 @@ export async function updateProduct(
     dietaryDeclarations === undefined
       ? undefined
       : validateDietaryDeclarations(dietaryDeclarations);
-  const selectedUnit =
-    unitId !== undefined
-      ? await getSellableUnit(tx, tenantId, unitId)
-      : pricingUnit === undefined
-        ? null
-        : await getSeededUnit(tx, tenantId, legacyUnitSeed(pricingUnit));
-  if (pricingUnit !== undefined && selectedUnit === null) {
-    throw new AppError("management.request_invalid", { field: "unitId" });
+  // Tri-state: `null` clears the unit, a real id sets it, and an omitted unit is left unchanged
+  // unless the legacy `pricingUnit` compat field is supplied instead ("each" clears, "weight" sets kg).
+  type UnitAction = { kind: "keep" } | { kind: "clear" } | { kind: "set"; unit: SellableUnit };
+  let unitAction: UnitAction;
+  if (unitId === null) {
+    unitAction = { kind: "clear" };
+  } else if (unitId !== undefined) {
+    unitAction = { kind: "set", unit: await getSellableUnit(tx, tenantId, unitId) };
+  } else if (pricingUnit === undefined) {
+    unitAction = { kind: "keep" };
+  } else if (pricingUnit === "each") {
+    unitAction = { kind: "clear" };
+  } else {
+    const kg = await getSeededUnit(tx, tenantId, "kg");
+    if (kg === null) throw new AppError("management.request_invalid", { field: "unitId" });
+    unitAction = { kind: "set", unit: kg };
   }
   await tx
     .update(products)
     .set({
       ...rest,
-      ...(selectedUnit === null ? {} : { pricingUnit: legacyPricingUnit(selectedUnit) }),
+      ...(unitAction.kind === "keep"
+        ? {}
+        : {
+            pricingUnit: unitAction.kind === "clear" ? "each" : legacyPricingUnit(unitAction.unit),
+          }),
       ...(allergens !== undefined ? { manualAllergens: allergens } : {}),
       ...(dietOverride !== undefined ? { dietOverride } : {}),
       ...(directDietary === undefined ? {} : { dietaryDeclarations: directDietary }),
       updatedAt: sql`now()`,
     })
     .where(and(eq(products.tenantId, tenantId), eq(products.id, id)));
-  if (selectedUnit !== null) await assignProductUnit(tx, tenantId, id, selectedUnit.id);
+  if (unitAction.kind === "set") await assignProductUnit(tx, tenantId, id, unitAction.unit.id);
+  else if (unitAction.kind === "clear") await clearProductUnit(tx, tenantId, id);
   // Republish exactly the overlays that changed. When BOTH did, one combined SELECT+UPDATE
   // (`republishProductOverlays`) does the work of the two single-overlay round trips, landing the same
   // `allergens` and `diet` values; when only one changed, the matching single-overlay function runs so

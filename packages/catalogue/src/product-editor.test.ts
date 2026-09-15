@@ -44,6 +44,21 @@ beforeEach(async () => {
   };
 });
 
+it("reads a product with no unit as unitId null", async () => {
+  const saved = await withTenant(fx.db, tenantId, (tx) =>
+    saveProductEditor(tx, tenantId, null, catalogueId, input, "en"),
+  );
+  await withTenant(fx.db, tenantId, (tx) =>
+    tx.execute(
+      sql`delete from product_units where tenant_id = ${tenantId} and product_id = ${saved.id}`,
+    ),
+  );
+  const value = await withTenant(fx.db, tenantId, (tx) =>
+    readProductEditor(tx, tenantId, saved.id),
+  );
+  expect(value.unitId).toBeNull();
+});
+
 it("saves and reads the canonical editor shape with independent content and variants", async () => {
   const saved = await withTenant(fx.db, tenantId, (tx) =>
     saveProductEditor(tx, tenantId, null, catalogueId, input, "en"),

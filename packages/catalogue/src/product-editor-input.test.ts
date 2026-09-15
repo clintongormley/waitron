@@ -23,6 +23,14 @@ const input: ProductEditorInput = {
 it("preserves explicit zero tax, unavailable and unreviewed rather than choosing defaults", () => {
   expect(parseProductEditorInput(input)).toEqual(input);
 });
+it("parses an explicit null unit as null (the Each option)", () => {
+  expect(parseProductEditorInput({ ...input, unitId: null }).unitId).toBeNull();
+});
+it("still rejects a non-null non-uuid unit", () => {
+  expect(() => parseProductEditorInput({ ...input, unitId: "not-a-uuid" })).toThrow(
+    expect.objectContaining({ code: "product.invalid", params: { field: "unitId" } }),
+  );
+});
 it.each([undefined, "", "none", "invalid", false])(
   "rejects an unsupported or missing tax choice %j",
   (vatClass) => {
