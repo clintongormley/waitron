@@ -45,20 +45,20 @@ declare module "@waitron/shared" {
     };
     /** A row was sealed by a key version the ring does not carry — the operator retired a key while
      * rows still referenced it. Recoverable: put the key back and re-run `rotate`. */
-    "credentials.key_version_unknown": { tenantId: string; purpose: string; keyVersion: number };
+    "credentials.key_version_unknown": { purpose: string; keyVersion: number };
     /** GCM authentication failed: the wrong key, a tampered ciphertext, or a row moved between
-     * (tenant, purpose) pairs. The three are indistinguishable by design — an oracle that told them
-     * apart would be a gift to whoever caused it. */
-    "credentials.decrypt_failed": { tenantId: string; purpose: string };
+     * purposes. The three are indistinguishable by design — an oracle that told them apart would be
+     * a gift to whoever caused it. */
+    "credentials.decrypt_failed": { purpose: string };
     /** The row decrypted — GCM authentication passed — but the plaintext is not a JSON object of
      * string fields: not valid JSON at all, or valid JSON that is `null`, an array, or a scalar.
      * Distinct from `credentials.decrypt_failed`: authentication succeeded, so this is not a wrong
      * key or a tampered row, it is a row whose content was never a credential. Carries only
-     * `{tenantId, purpose}` — never the plaintext itself, which is exactly what a raw
-     * `JSON.parse` `SyntaxError` would otherwise embed. */
-    "credentials.malformed_payload": { tenantId: string; purpose: string };
-    /** No row for this (tenant, purpose). Not provisioned. */
-    "credentials.missing": { tenantId: string; purpose: string };
+     * `{purpose}` — never the plaintext itself, which is exactly what a raw `JSON.parse`
+     * `SyntaxError` would otherwise embed. */
+    "credentials.malformed_payload": { purpose: string };
+    /** No row for this purpose. Not provisioned. */
+    "credentials.missing": { purpose: string };
     /** Not a purpose this package knows. `known` lets a CLI print the legal set. */
     "credentials.unknown_purpose": { purpose: string; known: string[] };
     /** The payload's field names do not exactly match the purpose's. `missing` and `expected` are

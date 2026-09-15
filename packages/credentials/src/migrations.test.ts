@@ -2,19 +2,13 @@ import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, captureError, pgErrorCode, pgErrorMessage } from "@waitron/db";
 import { CREDENTIALS_MIGRATIONS } from "./migrations.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
-
-let tenantId: string;
 
 const suite = usePgliteDb({
   resetPerTest: false,
-  // Core first — the tenants foreign key. Ordering across packages is the runtime's job and
-  // nothing enforces it, so it is explicit here.
+  // Core first — the credentials baseline references `tenants`. Ordering across packages is the
+  // runtime's job and nothing enforces it, so it is explicit here.
   migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS],
-  setup: async (db) => {
-    tenantId = await seedTenant(db);
-  },
 });
 
 /** A well-formed row body, so each test below varies exactly one thing. */
@@ -27,22 +21,21 @@ const OK = {
 describe("the credentials migration set", () => {
   it("stores and returns a row round-trip", async () => {
     await suite.db.execute(sql`
-      insert into tenant_credentials (tenant_id, purpose, ciphertext, iv, auth_tag, key_version)
-      values (${tenantId}, 'round.trip', ${OK.ciphertext}, ${OK.iv}, ${OK.authTag}, 1)`);
+      insert into tenant_credentials (purpose, ciphertext, iv, auth_tag, key_version)
+      values ('round.trip', ${OK.ciphertext}, ${OK.iv}, ${OK.authTag}, 1)`);
     const rows = await suite.db.execute<{ n: number }>(sql`
-      select count(*)::int as n from tenant_credentials
-      where tenant_id = ${tenantId} and purpose = 'round.trip'`);
+      select count(*)::int as n from tenant_credentials where purpose = 'round.trip'`);
     expect(rows.rows[0]!.n).toBe(1);
   });
 
-  it("rejects a second row for the same (tenant, purpose)", async () => {
+  it("rejects a second row for the same purpose", async () => {
     await suite.db.execute(sql`
-      insert into tenant_credentials (tenant_id, purpose, ciphertext, iv, auth_tag, key_version)
-      values (${tenantId}, 'dup.purpose', ${OK.ciphertext}, ${OK.iv}, ${OK.authTag}, 1)`);
+      insert into tenant_credentials (purpose, ciphertext, iv, auth_tag, key_version)
+      values ('dup.purpose', ${OK.ciphertext}, ${OK.iv}, ${OK.authTag}, 1)`);
     const error = await captureError(() =>
       suite.db.execute(sql`
-        insert into tenant_credentials (tenant_id, purpose, ciphertext, iv, auth_tag, key_version)
-        values (${tenantId}, 'dup.purpose', ${OK.ciphertext}, ${OK.iv}, ${OK.authTag}, 1)`),
+        insert into tenant_credentials (purpose, ciphertext, iv, auth_tag, key_version)
+        values ('dup.purpose', ${OK.ciphertext}, ${OK.iv}, ${OK.authTag}, 1)`),
     );
     expect(pgErrorCode(error)).toBe("23505"); // unique_violation
   });
@@ -50,8 +43,8 @@ describe("the credentials migration set", () => {
   it("rejects a key_version below 1", async () => {
     const error = await captureError(() =>
       suite.db.execute(sql`
-        insert into tenant_credentials (tenant_id, purpose, ciphertext, iv, auth_tag, key_version)
-        values (${tenantId}, 'bad.version', ${OK.ciphertext}, ${OK.iv}, ${OK.authTag}, 0)`),
+        insert into tenant_credentials (purpose, ciphertext, iv, auth_tag, key_version)
+        values ('bad.version', ${OK.ciphertext}, ${OK.iv}, ${OK.authTag}, 0)`),
     );
     expect(pgErrorCode(error)).toBe("23514"); // check_violation
     expect(pgErrorMessage(error)).toMatch(/tenant_credentials_key_version_ck/);
@@ -60,8 +53,8 @@ describe("the credentials migration set", () => {
   it("rejects an iv that is not 12 bytes", async () => {
     const error = await captureError(() =>
       suite.db.execute(sql`
-        insert into tenant_credentials (tenant_id, purpose, ciphertext, iv, auth_tag, key_version)
-        values (${tenantId}, 'bad.iv', ${OK.ciphertext}, ${Buffer.alloc(8, 1)}, ${OK.authTag}, 1)`),
+        insert into tenant_credentials (purpose, ciphertext, iv, auth_tag, key_version)
+        values ('bad.iv', ${OK.ciphertext}, ${Buffer.alloc(8, 1)}, ${OK.authTag}, 1)`),
     );
     expect(pgErrorCode(error)).toBe("23514");
     expect(pgErrorMessage(error)).toMatch(/tenant_credentials_iv_len_ck/);
@@ -70,8 +63,8 @@ describe("the credentials migration set", () => {
   it("rejects a truncated auth tag", async () => {
     const error = await captureError(() =>
       suite.db.execute(sql`
-        insert into tenant_credentials (tenant_id, purpose, ciphertext, iv, auth_tag, key_version)
-        values (${tenantId}, 'bad.tag', ${OK.ciphertext}, ${OK.iv}, ${Buffer.alloc(12, 2)}, 1)`),
+        insert into tenant_credentials (purpose, ciphertext, iv, auth_tag, key_version)
+        values ('bad.tag', ${OK.ciphertext}, ${OK.iv}, ${Buffer.alloc(12, 2)}, 1)`),
     );
     expect(pgErrorCode(error)).toBe("23514");
     expect(pgErrorMessage(error)).toMatch(/tenant_credentials_auth_tag_len_ck/);
@@ -80,20 +73,24 @@ describe("the credentials migration set", () => {
   it("rejects an empty purpose", async () => {
     const error = await captureError(() =>
       suite.db.execute(sql`
-        insert into tenant_credentials (tenant_id, purpose, ciphertext, iv, auth_tag, key_version)
-        values (${tenantId}, '', ${OK.ciphertext}, ${OK.iv}, ${OK.authTag}, 1)`),
+        insert into tenant_credentials (purpose, ciphertext, iv, auth_tag, key_version)
+        values ('', ${OK.ciphertext}, ${OK.iv}, ${OK.authTag}, 1)`),
     );
     expect(pgErrorCode(error)).toBe("23514");
     expect(pgErrorMessage(error)).toMatch(/tenant_credentials_purpose_ck/);
   });
 
-  it("rejects a row whose tenant does not exist", async () => {
-    const error = await captureError(() =>
-      suite.db.execute(sql`
-        insert into tenant_credentials (tenant_id, purpose, ciphertext, iv, auth_tag, key_version)
-        values (gen_random_uuid(), 'orphan', ${OK.ciphertext}, ${OK.iv}, ${OK.authTag}, 1)`),
-    );
-    expect(pgErrorCode(error)).toBe("23503"); // foreign_key_violation
+  it("carries no tenant column and keys each row by purpose alone", async () => {
+    const result = await suite.db.execute<{ column_name: string }>(sql`
+      select a.attname as column_name
+      from pg_constraint c
+      join pg_attribute a on a.attrelid = c.conrelid and a.attnum = any(c.conkey)
+      where c.conname = 'tenant_credentials_pk'`);
+    expect(result.rows).toEqual([{ column_name: "purpose" }]);
+    const tenantColumn = await suite.db.execute<{ n: number }>(sql`
+      select count(*)::int as n from information_schema.columns
+      where table_name = 'tenant_credentials' and column_name = 'tenant_id'`);
+    expect(tenantColumn.rows[0]!.n).toBe(0);
   });
 });
 

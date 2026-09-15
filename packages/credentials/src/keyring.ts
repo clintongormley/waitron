@@ -83,7 +83,7 @@ export function loadKeyRing(env: Record<string, string | undefined>): KeyRing {
 }
 
 /** The key that sealed a row on `version`, or null when the ring no longer carries it. Null rather
- * than a throw: the store owns the error, because only it knows which (tenant, purpose) failed. */
+ * than a throw: the store owns the error, because only it knows which purpose failed. */
 export function keyForVersion(ring: KeyRing, version: number): Buffer | null {
   if (ring.current.version === version) return ring.current.key;
   if (ring.previous?.version === version) return ring.previous.key;

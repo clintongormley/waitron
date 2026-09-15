@@ -1,13 +1,12 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction, type Database } from "@waitron/db";
 import { hasCode } from "@waitron/shared";
 import { aadFor, seal } from "./cipher.js";
 import { loadKeyRing } from "./keyring.js";
 import { CREDENTIALS_MIGRATIONS } from "./migrations.js";
 import { tenantCredentials } from "./schema/tenant-credentials.js";
 import { getCredential, putCredential, rotateCredentials } from "./store.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
 import { captured } from "./testing/captured.js";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 
@@ -35,17 +34,15 @@ const STRIPE = {
 
 const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS] });
 
-/** Rotation enumerates the whole vault. Clear credentials between cases while reusing the
- * migrated database; stale tenant rows have no credentials to enumerate. */
+/** Rotation enumerates the whole vault, so each case starts with an empty credential table. */
 beforeEach(async () => {
   await suite.db.execute(sql`truncate tenant_credentials cascade`);
 });
 
 describe("rotateCredentials", () => {
   it("re-seals every row onto the current key and advances its version", async () => {
-    const tenantId = await seedTenant(suite.db);
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING_V1, { tenantId, purpose: "payments.stripe", value: STRIPE }),
+      putCredential(tx, RING_V1, { purpose: "payments.stripe", value: STRIPE }),
     );
 
     const result = await rotateCredentials(suite.db, RING_BOTH);
@@ -53,21 +50,19 @@ describe("rotateCredentials", () => {
     expect(result.alreadyCurrent).toBe(0);
 
     const versions = await suite.db.execute<{ key_version: number }>(sql`
-      select key_version from tenant_credentials where tenant_id = ${tenantId}`);
+      select key_version from tenant_credentials`);
     expect(versions.rows[0]!.key_version).toBe(2);
 
     // Readable with the new key ALONE — the old key can now be retired.
     const actual = await withTransaction(suite.db, (tx) =>
-      getCredential(tx, RING_V2_ONLY, { tenantId, purpose: "payments.stripe" }),
+      getCredential(tx, RING_V2_ONLY, { purpose: "payments.stripe" }),
     );
     expect(actual).toEqual(STRIPE);
   });
 
   it("is idempotent — a second run rotates nothing", async () => {
-    const tenantId = await seedTenant(suite.db);
     await withTransaction(suite.db, (tx) =>
       putCredential(tx, RING_V1, {
-        tenantId,
         purpose: "fiscal.aeat",
         value: { pfxBase64: "AA", passphrase: "p", certKind: "sello" },
       }),
@@ -89,13 +84,11 @@ describe("rotateCredentials", () => {
     // `previous`, so this test cannot distinguish "select the key by the row's own key_version"
     // from "always try `previous`". That per-row selection property is pinned separately by
     // store.test.ts's "serves a row on either ring member" test.
-    const tenantId = await seedTenant(suite.db);
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING_V1, { tenantId, purpose: "payments.stripe", value: STRIPE }),
+      putCredential(tx, RING_V1, { purpose: "payments.stripe", value: STRIPE }),
     );
     await withTransaction(suite.db, (tx) =>
       putCredential(tx, RING_BOTH, {
-        tenantId,
         purpose: "fiscal.aeat",
         value: { pfxBase64: "AA", passphrase: "p", certKind: "sello" },
       }),
@@ -106,15 +99,13 @@ describe("rotateCredentials", () => {
     expect(result.alreadyCurrent).toBe(1);
 
     const rows = await suite.db.execute<{ n: number }>(sql`
-      select count(*)::int as n from tenant_credentials
-      where tenant_id = ${tenantId} and key_version = 2`);
+      select count(*)::int as n from tenant_credentials where key_version = 2`);
     expect(rows.rows[0]!.n).toBe(2);
   });
 
   it("refuses to run without a previous key when rows still need one", async () => {
-    const tenantId = await seedTenant(suite.db);
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING_V1, { tenantId, purpose: "payments.stripe", value: STRIPE }),
+      putCredential(tx, RING_V1, { purpose: "payments.stripe", value: STRIPE }),
     );
     const error = await captured(() => rotateCredentials(suite.db, RING_V2_ONLY));
     expect(hasCode(error, "credentials.key_version_unknown")).toBe(true);
@@ -130,12 +121,10 @@ describe("rotateCredentials", () => {
     // (RING_BOTH.previous), so this is `credentials.decrypt_failed` (wrong key material), not
     // `credentials.key_version_unknown` — a different one of tryGetCredential's three throw codes
     // than the "refuses to run without a previous key" case above.
-    const tenantId = await seedTenant(suite.db);
     const strangerKey = Buffer.alloc(32, 9);
-    const sealed = seal(strangerKey, aadFor(tenantId, "payments.stripe"), JSON.stringify(STRIPE));
+    const sealed = seal(strangerKey, aadFor("payments.stripe"), JSON.stringify(STRIPE));
     await withTransaction(suite.db, (tx) =>
       tx.insert(tenantCredentials).values({
-        tenantId,
         purpose: "payments.stripe",
         ciphertext: sealed.ciphertext,
         iv: sealed.iv,
@@ -149,12 +138,12 @@ describe("rotateCredentials", () => {
 
     // No phantom success, no partial write: the row is exactly as it was sealed.
     const row = await suite.db.execute<{ key_version: number }>(sql`
-      select key_version from tenant_credentials where tenant_id = ${tenantId}`);
+      select key_version from tenant_credentials`);
     expect(row.rows[0]!.key_version).toBe(1);
   });
 
   it("skips a row whose purpose the registry no longer knows, rather than crashing on it", async () => {
-    // `listCredentials` has no notion of Purpose — it selects every row a tenant holds, known or
+    // `listCredentials` has no notion of Purpose — it selects every row the vault holds, known or
     // not (unlike `putCredential`'s WRITE side, which is typed `Purpose` and so cannot reach an
     // unknown one — see store.ts's own comment on why THAT check is deliberately absent). Rotation
     // reads back untyped rows off the same table, so a purpose the registry has since retired (or
@@ -162,13 +151,11 @@ describe("rotateCredentials", () => {
     // with raw bytes, bypassing `putCredential` — the same technique as
     // credentials.test.ts's "ordering-probe" row — since this row is never meant to be
     // decrypted; only the iv/auth-tag LENGTH constraints need satisfying, not real ciphertext.
-    const tenantId = await seedTenant(suite.db);
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING_V1, { tenantId, purpose: "payments.stripe", value: STRIPE }),
+      putCredential(tx, RING_V1, { purpose: "payments.stripe", value: STRIPE }),
     );
     await withTransaction(suite.db, (tx) =>
       tx.insert(tenantCredentials).values({
-        tenantId,
         purpose: "legacy.retired-purpose",
         ciphertext: Buffer.from("stale"),
         iv: Buffer.alloc(12, 1),
@@ -181,21 +168,35 @@ describe("rotateCredentials", () => {
     expect(result.rotated).toBe(1);
 
     const rows = await suite.db.execute<{ purpose: string; key_version: number }>(sql`
-      select purpose, key_version from tenant_credentials
-      where tenant_id = ${tenantId} order by purpose`);
+      select purpose, key_version from tenant_credentials order by purpose`);
     const legacy = rows.rows.find((r) => r.purpose === "legacy.retired-purpose");
     // Untouched — still on the old version, because it was never processed at all.
     expect(legacy?.key_version).toBe(1);
   });
 
-  // The count rule "a listed metadata row whose per-tenant-purpose lookup finds no row is not
-  // counted" (rotateCredentials' `if (value === null) return`) was proven here by a two-tenant
-  // fixture: each tenant's pass tried the OTHER tenant's purpose, whose (tenant, purpose) pair was
-  // absent. One tenant per database (this branch's whole point) makes that synthesis impossible —
-  // there is no second tenant to hold the absent pair, and with the tenant read-filter gone a
-  // single-tenant lookup for a listed purpose always finds its row. The branch now guards only a row
-  // deleted between the list and the read (concurrent deletion), which this test explicitly did NOT
-  // simulate; a single-tenant test for it belongs with B2's rotateCredentials restructuring (where
-  // the tenant loop itself goes). Removed rather than rewritten to a one-tenant form that would
-  // assert nothing about the absent-lookup path.
+  it("does not count a row deleted between the listing and its re-seal", async () => {
+    // Rotation lists the vault in one transaction and re-seals each row in its own, so a `delete`
+    // committing in between leaves a listed row with nothing to read. The wrapper deletes the row
+    // as the second transaction (that row's re-seal) opens, which is where a concurrent delete lands.
+    await withTransaction(suite.db, (tx) =>
+      putCredential(tx, RING_V1, { purpose: "payments.stripe", value: STRIPE }),
+    );
+    let transactions = 0;
+    const db = suite.db;
+    const deletingDb = new Proxy(db, {
+      get(target, property, receiver) {
+        if (property !== "transaction") return Reflect.get(target, property, receiver) as unknown;
+        const transaction: Database["transaction"] = async (fn, config) => {
+          transactions += 1;
+          if (transactions === 2) await target.execute(sql`delete from tenant_credentials`);
+          return target.transaction(fn, config);
+        };
+        return transaction;
+      },
+    });
+
+    const result = await rotateCredentials(deletingDb, RING_BOTH);
+    expect(transactions).toBe(2);
+    expect(result).toEqual({ rotated: 0, alreadyCurrent: 0 });
+  });
 });

@@ -2,7 +2,6 @@ import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, asAppUser, withTransaction } from "@waitron/db";
 import { hasCode } from "@waitron/shared";
-import type { TenantId } from "@waitron/shared";
 import { aadFor, seal } from "./cipher.js";
 import { loadKeyRing } from "./keyring.js";
 import { CREDENTIALS_MIGRATIONS } from "./migrations.js";
@@ -14,7 +13,6 @@ import {
   putCredential,
   tryGetCredential,
 } from "./store.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
 import { captured } from "./testing/captured.js";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 
@@ -40,57 +38,109 @@ beforeEach(async () => {
   await suite.db.execute(sql`truncate tenant_credentials`);
 });
 
-/** A tenant per test. `store.test.ts` in packages/scheduler is an order-dependent chain over one
- * shared key and it bit during a later fix; this suite pays one insert per test to avoid that. */
-async function freshTenant(): Promise<TenantId> {
-  return seedTenant(suite.db);
-}
+/**
+ * The seal's additional authenticated data is the purpose alone (`aadFor`, cipher.ts). These run as
+ * `app_user` so the round trip also proves the role's grants cover the whole write-then-read path.
+ */
+describe("the seal binds each credential to its purpose", () => {
+  it("round-trips a credential written and read as app_user", async () => {
+    await withTransaction(suite.db, async (tx) => {
+      await asAppUser(tx);
+      await putCredential(tx, RING_V1, { purpose: "payments.stripe", value: STRIPE });
+    });
+    const actual = await withTransaction(suite.db, async (tx) => {
+      await asAppUser(tx);
+      return getCredential(tx, RING_V1, { purpose: "payments.stripe" });
+    });
+    expect(actual).toEqual(STRIPE);
+  });
+
+  it("opens a row sealed with the purpose's bytes as its authenticated data", async () => {
+    // Sealed here with `Buffer.from(purpose)` directly, not through `aadFor`: this pins the bytes the
+    // store authenticates a read against, so a store that opened with anything else fails here.
+    const sealed = seal(
+      RING_V1.current.key,
+      Buffer.from("payments.stripe", "utf8"),
+      JSON.stringify(STRIPE),
+    );
+    await withTransaction(suite.db, (tx) =>
+      tx.insert(tenantCredentials).values({
+        purpose: "payments.stripe",
+        ciphertext: sealed.ciphertext,
+        iv: sealed.iv,
+        authTag: sealed.authTag,
+        keyVersion: RING_V1.current.version,
+      }),
+    );
+    const actual = await withTransaction(suite.db, async (tx) => {
+      await asAppUser(tx);
+      return getCredential(tx, RING_V1, { purpose: "payments.stripe" });
+    });
+    expect(actual).toEqual(STRIPE);
+  });
+
+  it("refuses a sealed row moved to another purpose with credentials.decrypt_failed", async () => {
+    // The moved-row attack: someone with write access relabels a sealed row so a reader of one
+    // purpose is handed another purpose's material. Same key, intact ciphertext and tag — only the
+    // purpose differs, so only the authenticated data can refuse it.
+    const aeat = { pfxBase64: "AAAA", passphrase: "p", certKind: "sello" };
+    await withTransaction(suite.db, async (tx) => {
+      await asAppUser(tx);
+      await putCredential(tx, RING_V1, { purpose: "fiscal.aeat", value: aeat });
+      await tx.execute(sql`
+        update tenant_credentials set purpose = 'payments.stripe' where purpose = 'fiscal.aeat'`);
+    });
+    const error = await captured(() =>
+      withTransaction(suite.db, async (tx) => {
+        await asAppUser(tx);
+        return getCredential(tx, RING_V1, { purpose: "payments.stripe" });
+      }),
+    );
+    expect(hasCode(error, "credentials.decrypt_failed")).toBe(true);
+    expect(error.params).toEqual({ purpose: "payments.stripe" });
+  });
+});
 
 describe("putCredential and getCredential", () => {
   it("round-trips a payload through the database", async () => {
-    const tenantId = await freshTenant();
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING_V1, { tenantId, purpose: "payments.stripe", value: STRIPE }),
+      putCredential(tx, RING_V1, { purpose: "payments.stripe", value: STRIPE }),
     );
     const actual = await withTransaction(suite.db, (tx) =>
-      getCredential(tx, RING_V1, { tenantId, purpose: "payments.stripe" }),
+      getCredential(tx, RING_V1, { purpose: "payments.stripe" }),
     );
     expect(actual).toEqual(STRIPE);
   });
 
   it("stores no plaintext in the row", async () => {
-    const tenantId = await freshTenant();
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING_V1, { tenantId, purpose: "payments.stripe", value: STRIPE }),
+      putCredential(tx, RING_V1, { purpose: "payments.stripe", value: STRIPE }),
     );
     const rows = await suite.db.execute<{ blob: string }>(sql`
-      select encode(ciphertext, 'escape') as blob from tenant_credentials
-      where tenant_id = ${tenantId}`);
+      select encode(ciphertext, 'escape') as blob from tenant_credentials`);
     expect(rows.rows[0]!.blob).not.toContain("sk_test_x");
   });
 
   it("overwrites an existing purpose rather than failing on the primary key", async () => {
-    const tenantId = await freshTenant();
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING_V1, { tenantId, purpose: "payments.stripe", value: STRIPE }),
+      putCredential(tx, RING_V1, { purpose: "payments.stripe", value: STRIPE }),
     );
     const updated = { ...STRIPE, secretKey: "sk_test_rotated" };
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING_V1, { tenantId, purpose: "payments.stripe", value: updated }),
+      putCredential(tx, RING_V1, { purpose: "payments.stripe", value: updated }),
     );
     const actual = await withTransaction(suite.db, (tx) =>
-      getCredential(tx, RING_V1, { tenantId, purpose: "payments.stripe" }),
+      getCredential(tx, RING_V1, { purpose: "payments.stripe" }),
     );
     expect(actual).toEqual(updated);
   });
 
   it("stamps the ring's current key version", async () => {
-    const tenantId = await freshTenant();
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING_V2_ONLY, { tenantId, purpose: "payments.stripe", value: STRIPE }),
+      putCredential(tx, RING_V2_ONLY, { purpose: "payments.stripe", value: STRIPE }),
     );
     const rows = await suite.db.execute<{ key_version: number }>(sql`
-      select key_version from tenant_credentials where tenant_id = ${tenantId}`);
+      select key_version from tenant_credentials`);
     expect(rows.rows[0]!.key_version).toBe(2);
   });
 
@@ -112,16 +162,15 @@ describe("putCredential and getCredential", () => {
     // value this test itself wrote, so its absence after the second `putCredential` call can only
     // mean the UPDATE branch's `updatedAt` set line actually ran — deterministic regardless of how
     // fast the two puts complete.
-    const tenantId = await freshTenant();
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING_V1, { tenantId, purpose: "payments.stripe", value: STRIPE }),
+      putCredential(tx, RING_V1, { purpose: "payments.stripe", value: STRIPE }),
     );
     const BACKDATED = "2020-01-01T00:00:00Z";
     await suite.db.execute(sql`
       update tenant_credentials set updated_at = ${BACKDATED}
-      where tenant_id = ${tenantId} and purpose = 'payments.stripe'`);
+      where purpose = 'payments.stripe'`);
     const before = await suite.db.execute<{ updated_at: string }>(sql`
-      select updated_at from tenant_credentials where tenant_id = ${tenantId}`);
+      select updated_at from tenant_credentials`);
     const rotated = loadKeyRing({
       WAITRON_CREDENTIALS_KEY: K2,
       WAITRON_CREDENTIALS_KEY_VERSION: "2",
@@ -130,20 +179,19 @@ describe("putCredential and getCredential", () => {
     });
     const updated = { ...STRIPE, secretKey: "sk_test_rotated" };
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, rotated, { tenantId, purpose: "payments.stripe", value: updated }),
+      putCredential(tx, rotated, { purpose: "payments.stripe", value: updated }),
     );
     const after = await suite.db.execute<{ key_version: number; updated_at: string }>(sql`
-      select key_version, updated_at from tenant_credentials where tenant_id = ${tenantId}`);
+      select key_version, updated_at from tenant_credentials`);
     expect(after.rows[0]!.key_version).toBe(2);
     expect(after.rows[0]!.updated_at).not.toBe(before.rows[0]!.updated_at);
     const actual = await withTransaction(suite.db, (tx) =>
-      getCredential(tx, rotated, { tenantId, purpose: "payments.stripe" }),
+      getCredential(tx, rotated, { purpose: "payments.stripe" }),
     );
     expect(actual).toEqual(updated);
   });
 
   it("validates the payload before it ever reaches the database", async () => {
-    const tenantId = await freshTenant();
     // The row count is read via `tx.execute`, INSIDE the same still-open transaction
     // `putCredential` ran in — not via the top-level `db` handle afterward. `withTransaction` wraps
     // this whole callback in `suite.db.transaction(...)`, which rolls back the ENTIRE transaction on an
@@ -156,33 +204,28 @@ describe("putCredential and getCredential", () => {
     const n = await withTransaction(suite.db, async (tx) => {
       const error = await captured(() =>
         putCredential(tx, RING_V1, {
-          tenantId,
           purpose: "payments.stripe",
           value: { secretKey: "sk_test_x" },
         }),
       );
       expect(hasCode(error, "credentials.invalid_payload")).toBe(true);
       const rows = await tx.execute<{ n: number }>(sql`
-        select count(*)::int as n from tenant_credentials where tenant_id = ${tenantId}`);
+        select count(*)::int as n from tenant_credentials`);
       return rows.rows[0]!.n;
     });
     expect(n).toBe(0);
   });
 
   it("raises credentials.missing for a purpose that was never provisioned", async () => {
-    const tenantId = await freshTenant();
     const error = await captured(() =>
-      withTransaction(suite.db, (tx) =>
-        getCredential(tx, RING_V1, { tenantId, purpose: "fiscal.aeat" }),
-      ),
+      withTransaction(suite.db, (tx) => getCredential(tx, RING_V1, { purpose: "fiscal.aeat" })),
     );
     expect(hasCode(error, "credentials.missing")).toBe(true);
   });
 
   it("raises credentials.decrypt_failed when the ring's key is wrong", async () => {
-    const tenantId = await freshTenant();
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING_V1, { tenantId, purpose: "payments.stripe", value: STRIPE }),
+      putCredential(tx, RING_V1, { purpose: "payments.stripe", value: STRIPE }),
     );
     // Same VERSION, different key material — the operator replaced the key without rotating.
     const wrong = loadKeyRing({
@@ -190,21 +233,18 @@ describe("putCredential and getCredential", () => {
       WAITRON_CREDENTIALS_KEY_VERSION: "1",
     });
     const error = await captured(() =>
-      withTransaction(suite.db, (tx) =>
-        getCredential(tx, wrong, { tenantId, purpose: "payments.stripe" }),
-      ),
+      withTransaction(suite.db, (tx) => getCredential(tx, wrong, { purpose: "payments.stripe" })),
     );
     expect(hasCode(error, "credentials.decrypt_failed")).toBe(true);
   });
 
   it("raises credentials.key_version_unknown when the ring lost the row's key", async () => {
-    const tenantId = await freshTenant();
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING_V1, { tenantId, purpose: "payments.stripe", value: STRIPE }),
+      putCredential(tx, RING_V1, { purpose: "payments.stripe", value: STRIPE }),
     );
     const error = await captured(() =>
       withTransaction(suite.db, (tx) =>
-        getCredential(tx, RING_V2_ONLY, { tenantId, purpose: "payments.stripe" }),
+        getCredential(tx, RING_V2_ONLY, { purpose: "payments.stripe" }),
       ),
     );
     expect(hasCode(error, "credentials.key_version_unknown")).toBe(true);
@@ -213,9 +253,8 @@ describe("putCredential and getCredential", () => {
   it("serves a row on either ring member — the interrupted-rotate case", async () => {
     // The reason key_version is a column and not a constant. A rotate killed half-way leaves rows
     // on both versions, and the vault must keep serving both until it is re-run.
-    const tenantId = await freshTenant();
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING_V1, { tenantId, purpose: "payments.stripe", value: STRIPE }),
+      putCredential(tx, RING_V1, { purpose: "payments.stripe", value: STRIPE }),
     );
     const both = loadKeyRing({
       WAITRON_CREDENTIALS_KEY: K2,
@@ -225,16 +264,15 @@ describe("putCredential and getCredential", () => {
     });
     await withTransaction(suite.db, (tx) =>
       putCredential(tx, both, {
-        tenantId,
         purpose: "fiscal.aeat",
         value: { pfxBase64: "AAAA", passphrase: "p", certKind: "sello" },
       }),
     );
     const onV1 = await withTransaction(suite.db, (tx) =>
-      getCredential(tx, both, { tenantId, purpose: "payments.stripe" }),
+      getCredential(tx, both, { purpose: "payments.stripe" }),
     );
     const onV2 = await withTransaction(suite.db, (tx) =>
-      getCredential(tx, both, { tenantId, purpose: "fiscal.aeat" }),
+      getCredential(tx, both, { purpose: "fiscal.aeat" }),
     );
     expect(onV1).toEqual(STRIPE);
     expect(onV2).toEqual({ pfxBase64: "AAAA", passphrase: "p", certKind: "sello" });
@@ -250,14 +288,12 @@ describe("putCredential and getCredential", () => {
  */
 describe("getCredential — a row that decrypts to something that is not a credential", () => {
   async function sealRawRow(
-    tenantId: TenantId,
     purpose: "payments.stripe" | "fiscal.aeat",
     plaintext: string,
   ): Promise<void> {
-    const sealed = seal(RING_V1.current.key, aadFor(tenantId, purpose), plaintext);
+    const sealed = seal(RING_V1.current.key, aadFor(purpose), plaintext);
     await withTransaction(suite.db, (tx) =>
       tx.insert(tenantCredentials).values({
-        tenantId,
         purpose,
         ciphertext: sealed.ciphertext,
         iv: sealed.iv,
@@ -268,14 +304,11 @@ describe("getCredential — a row that decrypts to something that is not a crede
   }
 
   it("raises credentials.malformed_payload for a row whose plaintext is not JSON at all", async () => {
-    const tenantId = await freshTenant();
     // A raw Stripe secret key, not a JSON-encoded object — exactly the shape a `JSON.parse`
     // `SyntaxError` would otherwise quote verbatim into its own message.
-    await sealRawRow(tenantId, "payments.stripe", "sk_live_51ABCDEF");
+    await sealRawRow("payments.stripe", "sk_live_51ABCDEF");
     const error = await captured(() =>
-      withTransaction(suite.db, (tx) =>
-        getCredential(tx, RING_V1, { tenantId, purpose: "payments.stripe" }),
-      ),
+      withTransaction(suite.db, (tx) => getCredential(tx, RING_V1, { purpose: "payments.stripe" })),
     );
     expect(hasCode(error, "credentials.malformed_payload")).toBe(true);
     expect(JSON.stringify(error)).not.toContain("sk_live_51ABCDEF");
@@ -284,12 +317,9 @@ describe("getCredential — a row that decrypts to something that is not a crede
   it("raises credentials.malformed_payload for a row whose plaintext is the JSON literal null", async () => {
     // Valid JSON — `JSON.parse` does not throw — but not an object, so it must be rejected by the
     // shape check rather than silently cast to `Record<string, string>`.
-    const tenantId = await freshTenant();
-    await sealRawRow(tenantId, "payments.stripe", "null");
+    await sealRawRow("payments.stripe", "null");
     const error = await captured(() =>
-      withTransaction(suite.db, (tx) =>
-        getCredential(tx, RING_V1, { tenantId, purpose: "payments.stripe" }),
-      ),
+      withTransaction(suite.db, (tx) => getCredential(tx, RING_V1, { purpose: "payments.stripe" })),
     );
     expect(hasCode(error, "credentials.malformed_payload")).toBe(true);
   });
@@ -300,12 +330,9 @@ describe("getCredential — a row that decrypts to something that is not a crede
     // `if (parsed === null)` left the whole suite green: a row sealed to `["sk_live_x"]` would have
     // been returned from getCredential typed as Record<string, string>, and a host reading `.length`
     // off the array or indexing a numeric key would silently misbehave rather than fail loudly here.
-    const tenantId = await freshTenant();
-    await sealRawRow(tenantId, "payments.stripe", JSON.stringify(["sk_live_x"]));
+    await sealRawRow("payments.stripe", JSON.stringify(["sk_live_x"]));
     const error = await captured(() =>
-      withTransaction(suite.db, (tx) =>
-        getCredential(tx, RING_V1, { tenantId, purpose: "payments.stripe" }),
-      ),
+      withTransaction(suite.db, (tx) => getCredential(tx, RING_V1, { purpose: "payments.stripe" })),
     );
     expect(hasCode(error, "credentials.malformed_payload")).toBe(true);
   });
@@ -315,12 +342,9 @@ describe("getCredential — a row that decrypts to something that is not a crede
     // branch the `typeof parsed !== "object"` operand exists for, distinct from both the null check
     // and the array check above. Same mutation-check as the array case: narrowing the guard to
     // `if (parsed === null)` leaves this row's malformed shape undetected.
-    const tenantId = await freshTenant();
-    await sealRawRow(tenantId, "payments.stripe", JSON.stringify("sk_live_x"));
+    await sealRawRow("payments.stripe", JSON.stringify("sk_live_x"));
     const error = await captured(() =>
-      withTransaction(suite.db, (tx) =>
-        getCredential(tx, RING_V1, { tenantId, purpose: "payments.stripe" }),
-      ),
+      withTransaction(suite.db, (tx) => getCredential(tx, RING_V1, { purpose: "payments.stripe" })),
     );
     expect(hasCode(error, "credentials.malformed_payload")).toBe(true);
   });
@@ -328,9 +352,8 @@ describe("getCredential — a row that decrypts to something that is not a crede
 
 describe("tryGetCredential", () => {
   it("returns null rather than throwing when nothing is provisioned", async () => {
-    const tenantId = await freshTenant();
     const actual = await withTransaction(suite.db, (tx) =>
-      tryGetCredential(tx, RING_V1, { tenantId, purpose: "fiscal.aeat" }),
+      tryGetCredential(tx, RING_V1, { purpose: "fiscal.aeat" }),
     );
     expect(actual).toBeNull();
   });
@@ -338,24 +361,22 @@ describe("tryGetCredential", () => {
 
 describe("deleteCredential", () => {
   it("removes the row and reports that it did", async () => {
-    const tenantId = await freshTenant();
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING_V1, { tenantId, purpose: "payments.stripe", value: STRIPE }),
+      putCredential(tx, RING_V1, { purpose: "payments.stripe", value: STRIPE }),
     );
     const deleted = await withTransaction(suite.db, (tx) =>
-      deleteCredential(tx, { tenantId, purpose: "payments.stripe" }),
+      deleteCredential(tx, { purpose: "payments.stripe" }),
     );
     expect(deleted).toBe(true);
     const after = await withTransaction(suite.db, (tx) =>
-      tryGetCredential(tx, RING_V1, { tenantId, purpose: "payments.stripe" }),
+      tryGetCredential(tx, RING_V1, { purpose: "payments.stripe" }),
     );
     expect(after).toBeNull();
   });
 
   it("reports false when there was nothing to delete", async () => {
-    const tenantId = await freshTenant();
     const deleted = await withTransaction(suite.db, (tx) =>
-      deleteCredential(tx, { tenantId, purpose: "payments.stripe" }),
+      deleteCredential(tx, { purpose: "payments.stripe" }),
     );
     expect(deleted).toBe(false);
   });
@@ -363,9 +384,8 @@ describe("deleteCredential", () => {
 
 describe("listCredentials", () => {
   it("returns metadata and never a value", async () => {
-    const tenantId = await freshTenant();
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING_V1, { tenantId, purpose: "payments.stripe", value: STRIPE }),
+      putCredential(tx, RING_V1, { purpose: "payments.stripe", value: STRIPE }),
     );
     // Exercise the metadata projection as the app role.
     const rows = await withTransaction(suite.db, async (tx) => {
@@ -381,11 +401,6 @@ describe("listCredentials", () => {
     // all) and confirming the old assertion still passed. Naming the exact key set is what would
     // actually catch a future `listCredentials` that started selecting `ciphertext`, `iv` or
     // `authTag` alongside the metadata.
-    expect(Object.keys(rows[0]!).sort()).toEqual([
-      "keyVersion",
-      "purpose",
-      "tenantId",
-      "updatedAt",
-    ]);
+    expect(Object.keys(rows[0]!).sort()).toEqual(["keyVersion", "purpose", "updatedAt"]);
   });
 });
