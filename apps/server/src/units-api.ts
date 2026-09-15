@@ -86,6 +86,19 @@ export function mountUnitsApi(app: Hono, deps: UnitsApiDeps, log: Logger): void 
     }),
   );
 
+  app.get("/management-api/units/:id/products", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = unitId(c);
+      return c.json(
+        await gated(sessionId, async (tx) => {
+          await getUnit(tx, deps.cfg.tenantId, id); // 404 for an unknown or foreign unit
+          return productsUsingUnit(tx, deps.cfg.tenantId, id);
+        }),
+      );
+    }),
+  );
+
   app.post("/management-api/units/:id/products/reassign", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -98,11 +111,11 @@ export function mountUnitsApi(app: Hono, deps: UnitsApiDeps, log: Logger): void 
       ) {
         throw new AppError("management.request_invalid", { field: "productIds" });
       }
-      if (typeof body.unitId !== "string" || !isUuid(body.unitId)) {
+      if (body.unitId !== null && (typeof body.unitId !== "string" || !isUuid(body.unitId))) {
         throw new AppError("management.request_invalid", { field: "unitId" });
       }
       const productIds = body.productIds as string[];
-      const targetUnitId = body.unitId;
+      const targetUnitId = body.unitId as string | null;
       return c.json(
         await gated(sessionId, async (tx) => {
           await getUnit(tx, deps.cfg.tenantId, id); // 404 for an unknown or foreign source unit
