@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { AppError, tenantId as brandTenantId, tillId as brandTillId } from "@waitron/shared";
+import { AppError, tillId as brandTillId } from "@waitron/shared";
 import type { Decimal, TenantId } from "@waitron/shared";
 import { withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
@@ -44,7 +44,7 @@ export interface SumUpCloudProviderOptions {
   client: SumUpClient;
   /** A plain `Database` handle; every phase is scoped with `withTransaction(db, …)`. */
   db: Database;
-  /** The tenant this provider serves — a per-till object, one tenant, known at construction. */
+  /** Stamped on the incident `resolvePending` raises. */
   tenantId: TenantId;
   nodeId: string;
   /** Where `resolvePending` raises `payment.pending_outcome_unactionable`. */
@@ -134,12 +134,11 @@ export class SumUpCloudProvider implements PaymentProvider {
       );
     const readerId = params.readerRef;
     const paymentRef = randomUUID();
-    const key = { tenantId: params.tenantId, provider: SUMUP_PROVIDER, paymentRef };
+    const key = { provider: SUMUP_PROVIDER, paymentRef };
 
     // T1
     await this.inTenant((tx) =>
       insertAttempting(tx, {
-        tenantId: params.tenantId,
         workingOrderId: params.workingOrderId,
         provider: SUMUP_PROVIDER,
         paymentRef,
@@ -247,7 +246,7 @@ export class SumUpCloudProvider implements PaymentProvider {
     return Promise.resolve({ nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 });
   }
   /**
-   * One pass over this tenant's `attempting` rows (spec §3). T1 lists them (unlocked); each is
+   * One pass over this provider's `attempting` rows (spec §3). T1 lists them (unlocked); each is
    * looked up at SumUp OUTSIDE any transaction — by the stamped poll key, else by OUR
    * `payment_ref` (`foreign_transaction_id`) for a row that crashed before T1.5 — and resolved in
    * its own short T2. The non-null case runs through `classify` (the one status→outcome mapping,
@@ -278,17 +277,13 @@ export class SumUpCloudProvider implements PaymentProvider {
    * lifted out and batched.
    */
   async resolvePending(now: Date): Promise<ForwardResult> {
-    const rows = await this.inTenant((tx) =>
-      listAttempting(tx, this.opts.tenantId, SUMUP_PROVIDER),
-    );
+    const rows = await this.inTenant((tx) => listAttempting(tx, SUMUP_PROVIDER));
     if (rows.length === 0) {
       return { nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 };
     }
-    const tenantId = this.opts.tenantId;
     const tills = await this.inTenant((tx) =>
       tillsForWorkingOrders(
         tx,
-        tenantId,
         rows.map((r) => r.workingOrderId),
       ),
     );
@@ -301,7 +296,7 @@ export class SumUpCloudProvider implements PaymentProvider {
      * comes from the pre-fetched map; an absent till (order gone) means no incident but the row
      * still fails. Returns whether an incident was raised. */
     const failWith = (
-      key: { tenantId: string; provider: string; paymentRef: string },
+      key: { provider: string; paymentRef: string },
       workingOrderId: string,
       status: string | null,
     ): Promise<boolean> =>
@@ -311,7 +306,7 @@ export class SumUpCloudProvider implements PaymentProvider {
         const tillId = tills.get(workingOrderId);
         if (tillId === undefined) return false;
         return this.opts.incidents(tx, {
-          tenantId: brandTenantId(key.tenantId),
+          tenantId: this.opts.tenantId,
           tillId: brandTillId(tillId),
           error: new AppError("payment.pending_outcome_unactionable", {
             paymentRef: key.paymentRef,
@@ -322,7 +317,7 @@ export class SumUpCloudProvider implements PaymentProvider {
         });
       });
     for (const row of rows) {
-      const key = { tenantId: row.tenantId, provider: SUMUP_PROVIDER, paymentRef: row.paymentRef };
+      const key = { provider: SUMUP_PROVIDER, paymentRef: row.paymentRef };
       let t: SumUpTransaction | null;
       try {
         t = await this.opts.client.findTransaction(

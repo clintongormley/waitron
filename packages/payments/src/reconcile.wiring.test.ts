@@ -38,7 +38,6 @@ describe("the orphan backstop, end to end", () => {
 
     // 1. Real capture through the provider — the money moves.
     const captured = await provider.collect({
-      tenantId: brandTenantId(seeded.tenantId),
       tillId: brandTillId(seeded.tillId),
       workingOrderId: brandWorkingOrderId(seeded.workingOrderId),
       amount: decimal("12.50"),

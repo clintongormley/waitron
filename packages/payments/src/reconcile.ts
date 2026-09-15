@@ -280,9 +280,7 @@ export async function reconcilePayments(
   now: Date,
 ): Promise<PaymentReconcileResult> {
   // T1 — our rows for the period. No network call inside it.
-  const rows = await withTransaction(deps.db, (tx) =>
-    listReconcilable(tx, tenantId, deps.provider, period),
-  );
+  const rows = await withTransaction(deps.db, (tx) => listReconcilable(tx, deps.provider, period));
 
   // Network — outside every transaction, over a window widened by the settlement lag, because a
   // payment captured at the end of the period settles days after it.
@@ -329,7 +327,7 @@ export async function reconcilePayments(
     for (const record of classified.unmatched) {
       for (const reference of record.references) allReferences.add(reference);
     }
-    const existing = await existingReferences(tx, tenantId, deps.provider, [...allReferences]);
+    const existing = await existingReferences(tx, deps.provider, [...allReferences]);
 
     const missing: SettlementRecord[] = [];
     for (const record of classified.unmatched) {
@@ -395,7 +393,6 @@ export async function reconcilePayments(
         continue;
       }
       const claimed = await markReconcileRemediated(tx, {
-        tenantId,
         provider: deps.provider,
         paymentRef: ref,
         at: now,
@@ -558,7 +555,7 @@ async function raiseMissingLocal(
   for (const record of missing) {
     if (record.hint !== undefined) hintedIds.add(record.hint.workingOrderId);
   }
-  const tills = await tillsForWorkingOrders(tx, tenantId, [...hintedIds]);
+  const tills = await tillsForWorkingOrders(tx, [...hintedIds]);
 
   const byTill = new Map<string, { record: SettlementRecord; paymentRef: string }[]>();
   for (const record of missing) {

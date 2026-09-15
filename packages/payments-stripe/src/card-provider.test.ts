@@ -207,8 +207,8 @@ describe("STRIPE_CARD_PROVIDER.build", () => {
 
 describe("STRIPE_CARD_PROVIDER.readers", () => {
   async function readerDeps(makeStripe: (secretKey: string) => Stripe) {
-    const tenantId = await seedStripe(FOUR_FIELDS);
-    return { deps: { db: suite.db, ring, tenantId }, seat: createStripeCardProvider(makeStripe) };
+    await seedStripe(FOUR_FIELDS);
+    return { deps: { db: suite.db, ring }, seat: createStripeCardProvider(makeStripe) };
   }
 
   it("lists the default account page without a location filter", async () => {

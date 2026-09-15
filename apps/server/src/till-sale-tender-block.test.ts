@@ -204,7 +204,6 @@ async function seedSale(
   if (payment !== undefined) {
     const paymentRef = randomUUID();
     await insertCapturedPayment(tx, {
-      tenantId: cfg.tenantId,
       workingOrderId,
       provider: payment.provider,
       paymentRef,
@@ -217,7 +216,6 @@ async function seedSale(
       provider: payment.provider,
       paymentRef,
       saleId,
-      tenantId: cfg.tenantId,
     });
   }
   return { saleId, workingOrderId };

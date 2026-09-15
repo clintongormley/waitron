@@ -4,7 +4,7 @@
 // ./testing/fake-provider.ts do the throwing — but this is the file the barrel re-exports, so it
 // carries the side-effect import.
 import "./errors.js";
-import type { Decimal, TenantId, TillId, WorkingOrderId } from "@waitron/shared";
+import type { Decimal, TillId, WorkingOrderId } from "@waitron/shared";
 
 /**
  * The lifecycle of one electronic tender as this POS understands it, provider-neutral. 4a covers
@@ -48,7 +48,6 @@ export interface ProviderCapabilities {
 }
 
 export interface CollectParams {
-  tenantId: TenantId;
   tillId: TillId;
   workingOrderId: WorkingOrderId;
   /** Exact decimal, tax-inclusive amount to take on this tender. Split tender is several
@@ -62,7 +61,7 @@ export interface CollectParams {
    * without a reader. */
   readerRef?: string;
   /** Per-transaction staff consent to accept this card offline if the network is down (default
-   * false). Even when true, acceptance still requires the tenant policy to allow it and the amount
+   * false). Even when true, acceptance still requires the venue's policy to allow it and the amount
    * to be within the cap — offline is never automatic. */
   allowOffline?: boolean;
   /** A local simulator result selected by the practice UI. The server only forwards this field to
@@ -172,11 +171,10 @@ export interface PaymentProvider {
 
 /**
  * Parameters to mint one hosted payment for an OPEN working order. `paymentRef` is the caller's
- * `(tenant_id, provider, payment_ref)` idempotency anchor (a uuid), so a retried initiate cannot
- * double-insert. Amount is the tenant's single currency.
+ * `(provider, payment_ref)` idempotency anchor (a uuid), so a retried initiate cannot
+ * double-insert. Amount is the venue's single currency.
  */
 export interface InitiateParams {
-  tenantId: TenantId;
   workingOrderId: WorkingOrderId;
   amount: Decimal;
   paymentRef: string;

@@ -44,7 +44,6 @@ async function setup() {
   ) => {
     await withTransaction(suite.db, (tx) =>
       insertAttempting(tx, {
-        tenantId: t.tenantId,
         workingOrderId: t.workingOrderId,
         provider: "sumup",
         paymentRef,
@@ -58,13 +57,13 @@ async function setup() {
     });
     if (opts.stamped !== false)
       await withTransaction(suite.db, (tx) =>
-        stampAttemptingRef(tx, { tenantId: t.tenantId, provider: "sumup", paymentRef }, ctx),
+        stampAttemptingRef(tx, { provider: "sumup", paymentRef }, ctx),
       );
     return ctx;
   };
   const state = async (ref: string) => {
     const r = await withTransaction(suite.db, (tx) =>
-      getPaymentByRef(tx, { tenantId: t.tenantId, provider: "sumup", paymentRef: ref }),
+      getPaymentByRef(tx, { provider: "sumup", paymentRef: ref }),
     );
     if (r === undefined) throw new Error(`no payments row for ref ${ref}`);
     return r;
@@ -133,7 +132,6 @@ describe("SumUpCloudProvider.resolvePending", () => {
     const { t, provider, state, raised } = await setup();
     await withTransaction(suite.db, (tx) =>
       insertAttempting(tx, {
-        tenantId: t.tenantId,
         workingOrderId: t.workingOrderId,
         provider: "sumup",
         paymentRef: "ghost",

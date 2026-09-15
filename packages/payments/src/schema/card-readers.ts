@@ -1,5 +1,4 @@
-import { boolean, foreignKey, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
-import { tenants } from "@waitron/db";
+import { boolean, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
 
 /**
  * One row per physical card reader the venue owns (SumUp/Stripe). Manager configuration, not a
@@ -12,7 +11,6 @@ export const cardReaders = pgTable(
   "card_readers",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    tenantId: uuid("tenant_id").notNull(),
     // A plain config token (the provider's id), NOT a credential.
     provider: text("provider").notNull(),
     // The provider's own opaque reference (SumUp/Stripe reader id). A public identifier, NOT a credential.
@@ -27,14 +25,5 @@ export const cardReaders = pgTable(
     // Local Enable cannot restore a registration we removed at the provider; verified adoption can.
     unpairedAt: timestamp("unpaired_at", { withTimezone: true, mode: "string" }),
   },
-  (t) => [
-    foreignKey({
-      columns: [t.tenantId],
-      foreignColumns: [tenants.id],
-      name: "card_readers_tenant_fk",
-    }).onDelete("restrict"),
-    // Composite target for tenant-consistent FKs from device_card_readers and payments.reader_id.
-    unique("card_readers_tenant_id_key").on(t.tenantId, t.id),
-    unique("card_readers_provider_ref_key").on(t.tenantId, t.provider, t.providerRef),
-  ],
+  (t) => [unique("card_readers_provider_ref_key").on(t.provider, t.providerRef)],
 );

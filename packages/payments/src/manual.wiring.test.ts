@@ -86,14 +86,12 @@ describe("manual card tender -> recordSale -> associate (atomic, no provider)", 
     const saleId = await pg.db.transaction(async (tx) => {
       const recorded = await recordSale(tx, backend, buildInput(s, BASE));
       const manual = await recordManualCardPayment(tx, {
-        tenantId: s.tenantId,
         workingOrderId: s.workingOrderId,
         amount: decimal("12.10"),
         settledAt: BASE,
         externalRef: "OP-000123",
       });
       await associatePaymentWithSale(tx, {
-        tenantId: s.tenantId,
         provider: MANUAL_PROVIDER,
         paymentRef: manual.paymentRef,
         saleId: recorded.saleId,
@@ -108,7 +106,7 @@ describe("manual card tender -> recordSale -> associate (atomic, no provider)", 
       external_ref: string | null;
     }>(sql`
       select provider, state, sale_id, external_ref
-      from payments where tenant_id = ${s.tenantId}
+      from payments where working_order_id = ${s.workingOrderId}
     `);
     expect(rows.rows).toHaveLength(1);
     expect(rows.rows[0]).toMatchObject({
@@ -128,7 +126,6 @@ describe("manual card tender -> recordSale -> associate (atomic, no provider)", 
       pg.db.transaction(async (tx) => {
         await recordSale(tx, backend, buildInput(s, BASE));
         await recordManualCardPayment(tx, {
-          tenantId: s.tenantId,
           workingOrderId: s.workingOrderId,
           amount: decimal("12.10"),
           settledAt: BASE,
@@ -139,7 +136,7 @@ describe("manual card tender -> recordSale -> associate (atomic, no provider)", 
     ).rejects.toBe(boom);
 
     const rows = await pg.db.execute<{ count: string }>(
-      sql`select count(*)::text as count from payments where tenant_id = ${s.tenantId}`,
+      sql`select count(*)::text as count from payments where working_order_id = ${s.workingOrderId}`,
     );
     expect(rows.rows[0].count).toBe("0");
   });

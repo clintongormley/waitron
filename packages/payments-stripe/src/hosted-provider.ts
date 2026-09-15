@@ -17,8 +17,7 @@ export interface StripeHostedProviderOptions {
   client: StripeHostedClient;
   /** A plain `Database` handle. `initiate` opens its own transaction and scopes it with
    * `withTransaction(db, …)`, so nothing is required of the handle itself. The inbound
-   * webhook path is untenanted and resolves its tenant separately (Slice A's
-   * `resolvePaymentTenant`), so it does NOT use this handle — see the wiring test.
+   * webhook path settles through its own handle, not this one — see the wiring test.
    *
    * This option once demanded a "TENANT-SCOPED `Database` handle", which cannot be constructed —
    * see `StripeOnDeviceProviderOptions.db` for the mechanism and
@@ -57,18 +56,10 @@ export class StripeHostedProvider implements AsyncPaymentProvider {
       // that has no local `payments` row (see hosted-client.ts's `metadata` doc) to name a till.
       metadata: { working_order_id: params.workingOrderId, payment_ref: params.paymentRef },
     });
-    // Persist the initiated row, scoped to the tenant the caller named. The (tenant, provider,
-    // payment_ref) unique makes a retried initiate a no-op-or-throw, and external_ref = session.id
-    // is the webhook resolve/settle key.
-    //
-    // Scoped from `params` rather than from a constructor option — the deliberate difference from
-    // the two interactive providers. Those needed a constructed tenant because `forward` and the
-    // reversal methods carry none of their own; `initiate` is this provider's ONLY database method
-    // and it has the tenant right here, so a constructor option would be surface with no second
-    // caller, and would force a host to build one hosted provider per tenant for no reason.
+    // Persist the initiated row. The (provider, payment_ref) unique makes a retried initiate a
+    // no-op-or-throw, and external_ref = session.id is the key the webhook settles by.
     await withTransaction(this.opts.db, (tx) =>
       insertInitiated(tx, {
-        tenantId: params.tenantId,
         workingOrderId: params.workingOrderId,
         provider: PROVIDER,
         paymentRef: params.paymentRef,

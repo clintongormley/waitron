@@ -31,7 +31,6 @@ describe("the stripe on-device adapter against a real database", () => {
     const t = await seedWorkingOrder(suite.admin, freshNif());
     await withTransaction(suite.admin, (tx) =>
       insertAcceptedOffline(tx, {
-        tenantId: t.tenantId,
         workingOrderId: t.workingOrderId,
         provider: "stripe",
         paymentRef: "dev-off-fwd",
@@ -62,7 +61,6 @@ describe("the stripe on-device adapter against a real database", () => {
 
       const row = await withTransaction(suite.admin, (tx) =>
         getPaymentByRef(tx, {
-          tenantId: t.tenantId,
           provider: "stripe",
           paymentRef: "dev-off-fwd",
         }),
@@ -84,7 +82,6 @@ describe("the stripe on-device adapter against a real database", () => {
         nodeId: TEST_NODE_ID,
       });
       const r = await provider.collect({
-        tenantId: brandTenantId(t.tenantId),
         tillId: brandTillId(t.tillId),
         workingOrderId: brandWorkingOrderId(t.workingOrderId),
         amount: decimal("10.00"),
@@ -95,15 +92,12 @@ describe("the stripe on-device adapter against a real database", () => {
     }
   });
 
-  // reverse.ts described this exact failure and then, on the strength of a requirement that could
-  // not be met, defaulted these callers to omitting `tenantId`. Its own words for the consequence:
-  // "the reversal fails closed with payment.not_found — for a payment that is sitting right
-  // there… it fails every single time." `tenantId` is required there now.
+  // The reversal must find a payment written through the same plain handle, or it fails closed with
+  // payment.not_found for a payment that exists.
   it("refund() reverses a captured payment on the only Database handle the API can build", async () => {
     const t = await seedWorkingOrder(suite.admin, freshNif());
     await withTransaction(suite.admin, (tx) =>
       insertCapturedPayment(tx, {
-        tenantId: t.tenantId,
         workingOrderId: t.workingOrderId,
         provider: "stripe",
         paymentRef: "dev-rev-1",

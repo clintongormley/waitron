@@ -3,11 +3,7 @@ import { sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
-import {
-  decimal,
-  tenantId as brandTenantId,
-  workingOrderId as brandWorkingOrderId,
-} from "@waitron/shared";
+import { decimal, workingOrderId as brandWorkingOrderId } from "@waitron/shared";
 import { PAYMENTS_MIGRATIONS, getPaymentByRef } from "@waitron/payments";
 import { freshNif, seedWorkingOrder } from "@waitron/payments/test/seed.js";
 import type { Seeded } from "@waitron/payments/test/seed.js";
@@ -31,7 +27,6 @@ describe("StripeHostedProvider.initiate", () => {
     const paymentRef = randomUUID();
 
     const res = await provider.initiate({
-      tenantId: brandTenantId(s.tenantId),
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
       amount: decimal("12.10"),
       paymentRef,
@@ -42,7 +37,7 @@ describe("StripeHostedProvider.initiate", () => {
     expect(res.url).toContain(res.externalRef);
 
     const row = await pg.db.transaction((tx) =>
-      getPaymentByRef(tx, { tenantId: s.tenantId, provider: "stripe", paymentRef }),
+      getPaymentByRef(tx, { provider: "stripe", paymentRef }),
     );
     expect(row?.state).toBe("initiated");
     expect(row?.externalRef).toBe(res.externalRef);
@@ -60,7 +55,6 @@ describe("StripeHostedProvider.initiate", () => {
     const provider = new StripeHostedProvider({ client, db: pg.db });
     const seeded = await seedWorkingOrder(pg.db, freshNif());
     await provider.initiate({
-      tenantId: brandTenantId(seeded.tenantId),
       workingOrderId: brandWorkingOrderId(seeded.workingOrderId),
       amount: decimal("12.50"),
       paymentRef: "ref-meta",

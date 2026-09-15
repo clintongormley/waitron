@@ -270,8 +270,7 @@ describe("configuration transfer database path", () => {
         insert into convenio_config (id, tenant_id, location_id)
         values ('99999999-aaaa-aaaa-aaaa-999999999999', ${source.tenantId}, ${source.locationId})`);
       await tx.execute(sql`
-        insert into payment_policy (tenant_id, offline_mode, offline_amount_cap)
-        values (${source.tenantId}, 'cash_only', 50)`);
+        insert into payment_policy (offline_mode, offline_amount_cap) values ('cash_only', 50)`);
       await tx.execute(sql`
         insert into working_orders
           (id, tenant_id, till_id, node_id, order_number, label)
@@ -286,9 +285,9 @@ describe("configuration transfer database path", () => {
            'T1', 'aaaaaaaa-bbbb-bbbb-bbbb-aaaaaaaaaaaa')`);
       await tx.execute(sql`
         insert into payments
-          (id, tenant_id, working_order_id, node_id, provider, payment_ref, amount, state)
+          (id, working_order_id, node_id, provider, payment_ref, amount, state)
         values
-          ('cccccccc-bbbb-bbbb-bbbb-cccccccccccc', ${source.tenantId},
+          ('cccccccc-bbbb-bbbb-bbbb-cccccccccccc',
            'aaaaaaaa-bbbb-bbbb-bbbb-aaaaaaaaaaaa', ${source.nodeId}, 'simulated',
            'practice-payment', 1.50, 'captured')`);
       await tx.execute(sql`
@@ -437,11 +436,11 @@ describe("configuration transfer database path", () => {
         (select count(*)::int from availability where tenant_id = ${target.tenantId}) as availability,
         (select count(*)::int from shift_templates where tenant_id = ${target.tenantId}) as shift_templates,
         (select count(*)::int from convenio_config where tenant_id = ${target.tenantId}) as convenio_config,
-        (select count(*)::int from payment_policy where tenant_id = ${target.tenantId}) as payment_policy,
+        (select count(*)::int from payment_policy) as payment_policy,
         (select count(*)::int from dining_tables
           where tenant_id = ${target.tenantId} and tab_id is not null) as linked_tables,
         (select count(*)::int from working_orders where tenant_id = ${target.tenantId}) as target_orders,
-        (select count(*)::int from payments where tenant_id = ${target.tenantId}) as target_payments,
+        (select count(*)::int from payments) as target_payments,
         (select count(*)::int from bookings where tenant_id = ${target.tenantId}) as target_bookings
     `);
     expect(imported.rows[0]).toEqual({

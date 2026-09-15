@@ -920,7 +920,7 @@ describe("payment slip persisted capture facts", () => {
       const id = await ringSale(app, cfg, cookie, each.menuItemId, "card");
       // Seed the same persisted columns an integrated provider supplies, without contacting hardware.
       await suite.admin.execute(
-        sql`update payments set provider = 'sumup', card_scheme = ${withCard ? "VISA" : null}, card_last4 = ${withCard ? "5838" : null}, card_entry_mode = ${withCard ? "contactless" : null}, card_auth_code = ${withCard ? "328600" : null} where tenant_id = ${cfg.tenantId} and working_order_id = ${id}`,
+        sql`update payments set provider = 'sumup', card_scheme = ${withCard ? "VISA" : null}, card_last4 = ${withCard ? "5838" : null}, card_entry_mode = ${withCard ? "contactless" : null}, card_auth_code = ${withCard ? "328600" : null} where working_order_id = ${id}`,
       );
       const res = await app.request(`/api/sales/${id}/payment-slip`, {
         method: "POST",
@@ -971,7 +971,7 @@ describe("payment slip persisted capture facts", () => {
     const cookie = await login(app, cfg, operatorId);
     const id = await ringSale(app, cfg, cookie, each.menuItemId, "card");
     await suite.admin.execute(
-      sql`update payments set provider = 'sumup', card_scheme = 'VISA', card_last4 = '5838', card_entry_mode = 'contactless', card_auth_code = '328600' where tenant_id = ${cfg.tenantId} and working_order_id = ${id}`,
+      sql`update payments set provider = 'sumup', card_scheme = 'VISA', card_last4 = '5838', card_entry_mode = 'contactless', card_auth_code = '328600' where working_order_id = ${id}`,
     );
     const res = await app.request(`/api/sales/${id}/payment-slip`, {
       method: "POST",

@@ -88,10 +88,10 @@ export async function reverseViaStripe(
       throw new AppError("payment.not_found", { provider, paymentRef: ref });
     }
     const externalRef = f.externalRef;
-    await assertReversible(tx, { tenantId: f.tenantId, provider, paymentRef: ref, kind, amount });
+    await assertReversible(tx, { provider, paymentRef: ref, kind, amount });
     return { ...f, externalRef };
   });
-  const key = { tenantId: found.tenantId, provider, paymentRef: ref };
+  const key = { provider, paymentRef: ref };
 
   // Resolution is (potentially) a NETWORK call, so it belongs here: after the read-only pre-check
   // has committed and OUTSIDE every transaction, next to the refund it feeds. Doing it inside T1

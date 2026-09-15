@@ -20,7 +20,6 @@ describe("recordManualCardPayment", () => {
     const seeded = await seedWorkingOrder(pg.db, freshNif());
     const result = await pg.db.transaction((tx) =>
       recordManualCardPayment(tx, {
-        tenantId: seeded.tenantId,
         workingOrderId: seeded.workingOrderId,
         amount: decimal("12.10"),
         settledAt: SETTLED,
@@ -39,7 +38,7 @@ describe("recordManualCardPayment", () => {
       settled_at: string | null;
     }>(sql`
       select provider, state, amount, external_ref, settled_at
-      from payments where payment_ref = ${result.paymentRef} and tenant_id = ${seeded.tenantId}
+      from payments where payment_ref = ${result.paymentRef}
     `);
     expect(rows.rows[0]).toMatchObject({
       provider: "manual",
@@ -55,14 +54,13 @@ describe("recordManualCardPayment", () => {
     const seeded = await seedWorkingOrder(pg.db, freshNif());
     const result = await pg.db.transaction((tx) =>
       recordManualCardPayment(tx, {
-        tenantId: seeded.tenantId,
         workingOrderId: seeded.workingOrderId,
         amount: decimal("5.00"),
         settledAt: SETTLED,
       }),
     );
     const rows = await pg.db.execute<{ external_ref: string | null }>(
-      sql`select external_ref from payments where payment_ref = ${result.paymentRef} and tenant_id = ${seeded.tenantId}`,
+      sql`select external_ref from payments where payment_ref = ${result.paymentRef}`,
     );
     expect(rows.rows[0].external_ref).toBeNull();
   });
@@ -73,7 +71,6 @@ describe("recordManualRefund", () => {
     const seeded = await seedWorkingOrder(pg.db, freshNif());
     const paid = await pg.db.transaction((tx) =>
       recordManualCardPayment(tx, {
-        tenantId: seeded.tenantId,
         workingOrderId: seeded.workingOrderId,
         amount: decimal("20.00"),
         settledAt: SETTLED,
@@ -81,7 +78,6 @@ describe("recordManualRefund", () => {
     );
     const refunded = await pg.db.transaction((tx) =>
       recordManualRefund(tx, {
-        tenantId: seeded.tenantId,
         paymentRef: paid.paymentRef,
         amount: decimal("20.00"),
       }),
@@ -90,7 +86,7 @@ describe("recordManualRefund", () => {
 
     const rows = await pg.db.execute<{ provider: string; amount: string }>(sql`
       select provider, amount from payment_refunds
-      where payment_ref = ${paid.paymentRef} and tenant_id = ${seeded.tenantId}
+      where payment_ref = ${paid.paymentRef}
     `);
     expect(rows.rows).toHaveLength(1);
     expect(rows.rows[0]).toMatchObject({ provider: "manual", amount: "20.00" });

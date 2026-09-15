@@ -12,7 +12,6 @@ import {
   cardReaders,
 } from "@waitron/payments";
 import { MAX_DELIVERY_ATTEMPTS } from "@waitron/printing";
-import type { TenantId } from "@waitron/shared";
 import type { BackupStatus } from "./backup-status.js";
 import type { AwaitingCertStatus } from "./pass.js";
 import type { TtlCache } from "./ttl-cache.js";
@@ -240,13 +239,13 @@ export const BATTERY_ERROR = 10;
  */
 export function batteryAlertSource(deps: {
   providers: readonly CardProviderContribution[];
-  runtimeDeps: (tenantId: TenantId) => CardProviderRuntimeDeps;
+  runtimeDeps: () => CardProviderRuntimeDeps;
   cache: TtlCache<number | null>;
 }): AlertSource {
   return {
     area: "card_reader",
     permission: "payments.manage",
-    async read({ tx, tenantId }): Promise<readonly OngoingAlert[]> {
+    async read({ tx }): Promise<readonly OngoingAlert[]> {
       const readers = await tx
         .select({
           id: cardReaders.id,
@@ -271,7 +270,7 @@ export function batteryAlertSource(deps: {
             // misconfigured reader is surfaced as a broken check, not silently dropped. That is why
             // there is no null-check here.
             const seat = cardProviderById(deps.providers, r.provider);
-            const status = await seat.readers.status(deps.runtimeDeps(tenantId), r.ref);
+            const status = await seat.readers.status(deps.runtimeDeps(), r.ref);
             return status.batteryPercent ?? null;
           }),
         ),

@@ -1,9 +1,7 @@
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { asAppUser, captureError, pgErrorCode, pgErrorMessage, withTransaction } from "@waitron/db";
-import type { Database } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
-import { freshNif } from "../../test/seed.js";
 import { cardReaders } from "./card-readers.js";
 
 // Real Postgres, not PGlite: this suite doubles as the grant check (CLAUDE.md §4). It writes under
@@ -12,24 +10,15 @@ import { cardReaders } from "./card-readers.js";
 // grant and would pass regardless. A clone of the `core_payments` template (CORE + PAYMENTS).
 const postgres = useTemplateDb({ template: "core_payments" });
 
-/** Seeds one tenant (the only row card_readers' FK needs) and returns its id. */
-async function seedTenant(db: Database): Promise<string> {
-  const t = await db.execute<{ id: string }>(sql`
-    insert into tenants (country, tax_id, legal_name)
-    values ('ES', ${freshNif()}, 'Test SL') returning id`);
-  return t.rows[0]!.id;
-}
-
 describe("card_readers", () => {
-  it("stores a reader and rejects a duplicate (tenant, provider, provider_ref)", async () => {
+  it("stores a reader and rejects a duplicate (provider, provider_ref)", async () => {
     const db = postgres.admin;
-    const tenantId = await seedTenant(db);
 
     await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       await tx
         .insert(cardReaders)
-        .values({ tenantId, provider: "sumup", providerRef: "rdr_1", name: "Counter" });
+        .values({ provider: "sumup", providerRef: "rdr_1", name: "Counter" });
     });
 
     // Round-trips: the row is readable and its defaults are what the schema promises.
@@ -44,7 +33,7 @@ describe("card_readers", () => {
     expect(stored[0]!.disabledAt).toBeNull();
     expect(stored[0]!.unpairedAt).toBeNull();
 
-    // The (tenant_id, provider, provider_ref) unique rejects a second reader with the same ref.
+    // The (provider, provider_ref) unique rejects a second reader with the same ref.
     // `tx.insert` wraps the PG error in a DrizzleQueryError whose top-level `.message` is the
     // generic "Failed query: …"; the constraint name lives on `.cause`, read by `pgErrorMessage`.
     const dup = await captureError(() =>
@@ -52,7 +41,7 @@ describe("card_readers", () => {
         await asAppUser(tx);
         await tx
           .insert(cardReaders)
-          .values({ tenantId, provider: "sumup", providerRef: "rdr_1", name: "Dup" });
+          .values({ provider: "sumup", providerRef: "rdr_1", name: "Dup" });
       }),
     );
     expect(pgErrorCode(dup)).toBe("23505"); // unique_violation

@@ -334,10 +334,9 @@ function stubCardProvider(): CardProviderContribution {
   };
 }
 
-const cardRuntimeDeps = (tenantId: TenantId): CardProviderRuntimeDeps => ({
+const cardRuntimeDeps = (): CardProviderRuntimeDeps => ({
   db,
   ring: {} as never,
-  tenantId,
 });
 
 /**
@@ -367,10 +366,10 @@ function ongoingRegistry(opts: { backupDisabled?: boolean; awaitingCert?: boolea
   });
 }
 
-async function seedLowReader(tenantId: TenantId, name = "Datafono"): Promise<void> {
+async function seedLowReader(name = "Datafono"): Promise<void> {
   await db.execute(sql`
-    insert into card_readers (tenant_id, provider, provider_ref, name, active)
-    values (${tenantId}, 'stub', ${`ref-${name}`}, ${name}, true)`);
+    insert into card_readers (provider, provider_ref, name, active)
+    values ('stub', ${`ref-${name}`}, ${name}, true)`);
 }
 
 /** A document print job old enough to count as stuck, on an active printer, so `printingAlertSource`
@@ -400,7 +399,7 @@ describe("ongoing alert sources through the route", () => {
     // permission tests do, then fire all four areas.
     roleOverride.set("supervisor", ["payments.manage"]);
     const v = await seedVenue();
-    await seedLowReader(v.tenantId);
+    await seedLowReader();
     await seedStuckPrintJob(v.tenantId);
     const app = appFor(v, ongoingRegistry({ backupDisabled: true, awaitingCert: true }));
 

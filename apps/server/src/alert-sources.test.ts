@@ -309,15 +309,14 @@ describe("printingAlertSource — printer.jobs_waiting", () => {
 const batterySuite = usePgliteDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
 async function seedReader(t: {
-  tenantId: TenantId;
   provider?: string;
   providerRef: string;
   name: string;
   active?: boolean;
 }): Promise<string> {
   const { rows } = await batterySuite.db.execute<{ id: string }>(sql`
-    insert into card_readers (tenant_id, provider, provider_ref, name, active)
-    values (${t.tenantId}, ${t.provider ?? "stub"}, ${t.providerRef}, ${t.name}, ${t.active ?? true})
+    insert into card_readers (provider, provider_ref, name, active)
+    values (${t.provider ?? "stub"}, ${t.providerRef}, ${t.name}, ${t.active ?? true})
     returning id`);
   return rows[0]!.id;
 }
@@ -354,9 +353,10 @@ function stubProvider(opts: {
   };
 }
 
-const stubRuntimeDeps =
-  (db: Database) =>
-  (tenantId: TenantId): CardProviderRuntimeDeps => ({ db, ring: {} as never, tenantId });
+const stubRuntimeDeps = (db: Database) => (): CardProviderRuntimeDeps => ({
+  db,
+  ring: {} as never,
+});
 
 async function readBattery(source: AlertSource, tenantId: TenantId, now = NOW) {
   return withTransaction(batterySuite.db, async (tx) => {
@@ -368,10 +368,10 @@ async function readBattery(source: AlertSource, tenantId: TenantId, now = NOW) {
 describe("batteryAlertSource", () => {
   it("warns at the warning floor, errors at the error floor, and is silent above or absent", async () => {
     const tenantId = await seedTenant(batterySuite.db);
-    const at25 = await seedReader({ tenantId, providerRef: "p25", name: "R25" });
-    const at20 = await seedReader({ tenantId, providerRef: "p20", name: "R20" });
-    const at10 = await seedReader({ tenantId, providerRef: "p10", name: "R10" });
-    await seedReader({ tenantId, providerRef: "pNone", name: "RNone" });
+    const at25 = await seedReader({ providerRef: "p25", name: "R25" });
+    const at20 = await seedReader({ providerRef: "p20", name: "R20" });
+    const at10 = await seedReader({ providerRef: "p10", name: "R10" });
+    await seedReader({ providerRef: "pNone", name: "RNone" });
 
     const percentByRef: Record<string, number | undefined> = {
       p25: 25,
@@ -410,7 +410,7 @@ describe("batteryAlertSource", () => {
 
   it("reuses one provider status read for five minutes, then reads again", async () => {
     const tenantId = await seedTenant(batterySuite.db);
-    await seedReader({ tenantId, providerRef: "p1", name: "R1" });
+    await seedReader({ providerRef: "p1", name: "R1" });
 
     let clock = NOW;
     const calls = { n: 0 };
@@ -434,7 +434,7 @@ describe("batteryAlertSource", () => {
 
   it("ignores a deactivated low reader", async () => {
     const tenantId = await seedTenant(batterySuite.db);
-    await seedReader({ tenantId, providerRef: "pOff", name: "Retired", active: false });
+    await seedReader({ providerRef: "pOff", name: "Retired", active: false });
     const calls = { n: 0 };
     const source = batteryAlertSource({
       providers: [stubProvider({ battery: () => 5, calls })],

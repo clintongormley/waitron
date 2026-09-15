@@ -193,7 +193,6 @@ export function createStripeCardProvider(
           makeStripe,
         }),
         db: deps.db,
-        tenantId: deps.tenantId,
         nodeId: deps.nodeId,
       });
     },

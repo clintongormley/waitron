@@ -16,7 +16,6 @@ import type { PaymentRow } from "./store.js";
 export const MANUAL_PROVIDER = "manual";
 
 export interface ManualCardPaymentParams {
-  tenantId: string;
   workingOrderId: string;
   /** Exact decimal, tax-inclusive amount taken on this tender. */
   amount: Decimal;
@@ -46,7 +45,6 @@ export async function recordManualCardPayment(
 ): Promise<ManualCardPaymentResult> {
   const paymentRef = `manual-${randomUUID()}`;
   await insertCapturedPayment(tx, {
-    tenantId: params.tenantId,
     workingOrderId: params.workingOrderId,
     provider: MANUAL_PROVIDER,
     paymentRef,
@@ -66,10 +64,9 @@ export async function recordManualCardPayment(
  */
 export async function recordManualRefund(
   tx: Transaction,
-  params: { tenantId: string; paymentRef: string; amount: Decimal },
+  params: { paymentRef: string; amount: Decimal },
 ): Promise<PaymentRow> {
   return recordRefund(tx, {
-    tenantId: params.tenantId,
     provider: MANUAL_PROVIDER,
     paymentRef: params.paymentRef,
     amount: params.amount,

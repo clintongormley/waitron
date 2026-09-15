@@ -15,7 +15,7 @@ const SETTLED = new Date("2026-07-23T10:00:00Z");
 describe("concurrent reversals serialise on the payment row's FOR UPDATE lock", () => {
   it("a second recordRefund blocks until the first transaction commits, then sees the updated total", async () => {
     const seeded = await seedWorkingOrder(postgres.admin, freshNif());
-    const key = { tenantId: seeded.tenantId, provider: "fake", paymentRef: "c1" };
+    const key = { provider: "fake", paymentRef: "c1" };
     await postgres.admin.transaction((tx) =>
       insertCapturedPayment(tx, {
         ...key,

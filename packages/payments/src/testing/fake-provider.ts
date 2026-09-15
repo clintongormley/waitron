@@ -16,7 +16,7 @@ import type {
   PaymentResult,
   ProviderCapabilities,
 } from "../provider.js";
-import type { PaymentRecord, PaymentRow } from "../store.js";
+import type { PaymentRow } from "../store.js";
 import {
   claimAcceptedOffline,
   declineForwarded,
@@ -48,9 +48,7 @@ export class FakePaymentProvider implements PaymentProvider {
   private offlineNext = false;
   private readonly declineForwardRefs = new Set<string>();
 
-  /** The tenant this fake serves. Real `PaymentProvider`s are per-till, therefore per-tenant,
-   * objects (see `StripeOnDeviceProviderOptions.tenantId`); a double that drained every tenant at
-   * once would model a shape no real provider has. */
+  /** `tenantId` is stamped on the incident `forward` raises for a declined payment. */
   constructor(
     private readonly db: Database,
     private readonly tenantId: string,
@@ -75,15 +73,6 @@ export class FakePaymentProvider implements PaymentProvider {
   }
 
   async collect(params: CollectParams): Promise<PaymentResult> {
-    // Without this check the double would accept a collect for another tenant, write an `accepted_offline` row, and then never drain it — `forward`
-    // claims by `this.tenantId` — with no error anywhere. A double that silently loses money is
-    // worse than no double.
-    if (params.tenantId.toLowerCase() !== this.tenantId.toLowerCase()) {
-      throw new AppError("payment.not_found", {
-        provider: this.provider,
-        paymentRef: "<tenant mismatch>",
-      });
-    }
     const paymentRef = nextRef();
     if (this.offlineNext) {
       this.offlineNext = false;
@@ -93,7 +82,6 @@ export class FakePaymentProvider implements PaymentProvider {
     this.failNext = false;
     const settledAt = willFail ? null : new Date();
     const common = {
-      tenantId: params.tenantId,
       workingOrderId: params.workingOrderId,
       provider: this.provider,
       paymentRef,
@@ -124,12 +112,12 @@ export class FakePaymentProvider implements PaymentProvider {
    */
   async forward(now: Date): Promise<ForwardResult> {
     return this.db.transaction(async (tx) => {
-      const claimed = await claimAcceptedOffline(tx, this.tenantId, this.provider);
+      const claimed = await claimAcceptedOffline(tx, this.provider);
       let forwarded = 0;
       let declined = 0;
       let incidentsRaised = 0;
       for (const p of claimed) {
-        const key = { tenantId: p.tenantId, provider: this.provider, paymentRef: p.paymentRef };
+        const key = { provider: this.provider, paymentRef: p.paymentRef };
         if (this.declineForwardRefs.has(p.paymentRef)) {
           await declineForwarded(tx, key);
           declined += 1;
@@ -138,7 +126,7 @@ export class FakePaymentProvider implements PaymentProvider {
             .from(workingOrders)
             .where(eq(workingOrders.id, p.workingOrderId));
           const raised = await recordIncidentOnce(tx, {
-            tenantId: brandTenantId(p.tenantId),
+            tenantId: brandTenantId(this.tenantId),
             tillId: brandTillId(wo.tillId),
             ...(p.saleId === null ? {} : { saleId: brandSaleId(p.saleId) }),
             error: new AppError("payment.offline_forward_declined", {
@@ -167,8 +155,8 @@ export class FakePaymentProvider implements PaymentProvider {
 
   async void(ref: string): Promise<PaymentResult> {
     const row = await this.db.transaction(async (tx) => {
-      const found = await this.require(tx, ref);
-      return recordVoid(tx, { tenantId: found.tenantId, provider: this.provider, paymentRef: ref });
+      await this.require(tx, ref);
+      return recordVoid(tx, { provider: this.provider, paymentRef: ref });
     });
     return this.toResult(ref, row);
   }
@@ -183,9 +171,8 @@ export class FakePaymentProvider implements PaymentProvider {
    * doc. */
   async partialRefund(ref: string, amount: Decimal): Promise<PaymentResult> {
     const row = await this.db.transaction(async (tx) => {
-      const found = await this.require(tx, ref);
+      await this.require(tx, ref);
       return recordRefund(tx, {
-        tenantId: found.tenantId,
         provider: this.provider,
         paymentRef: ref,
         amount,
@@ -198,7 +185,6 @@ export class FakePaymentProvider implements PaymentProvider {
     const row = await this.db.transaction(async (tx) => {
       const found = await this.require(tx, ref);
       return recordRefund(tx, {
-        tenantId: found.tenantId,
         provider: this.provider,
         paymentRef: ref,
         amount: decimal(found.amount),
@@ -207,12 +193,12 @@ export class FakePaymentProvider implements PaymentProvider {
     return this.toResult(ref, row);
   }
 
-  /** The offline branch of `collect`: read the tenant policy, apply the neutral gate. On "accept"
+  /** The offline branch of `collect`: read the venue's policy, apply the neutral gate. On "accept"
    * write an `accepted_offline` row (settledAt = acceptance time) and report `offline: true`; on
    * "refuse" write NOTHING and report `network_unavailable` (no money moved). */
   private async collectOffline(params: CollectParams, paymentRef: string): Promise<PaymentResult> {
     return this.db.transaction(async (tx) => {
-      const policy = await getPaymentPolicy(tx, params.tenantId);
+      const policy = await getPaymentPolicy(tx);
       const decision = resolveOfflineDecision(policy, params.allowOffline ?? false, params.amount);
       if (decision === "refuse") {
         return {
@@ -225,7 +211,6 @@ export class FakePaymentProvider implements PaymentProvider {
       }
       const settledAt = new Date();
       await insertAcceptedOffline(tx, {
-        tenantId: params.tenantId,
         workingOrderId: params.workingOrderId,
         provider: this.provider,
         paymentRef,
@@ -243,7 +228,7 @@ export class FakePaymentProvider implements PaymentProvider {
     });
   }
 
-  private async require(tx: Transaction, ref: string): Promise<PaymentRecord> {
+  private async require(tx: Transaction, ref: string): Promise<PaymentRow> {
     const found = await findPaymentByRef(tx, this.provider, ref);
     if (found === undefined) {
       throw new AppError("payment.not_found", { provider: this.provider, paymentRef: ref });

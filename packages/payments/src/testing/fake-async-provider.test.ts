@@ -2,11 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
-import {
-  decimal,
-  tenantId as brandTenantId,
-  workingOrderId as brandWorkingOrderId,
-} from "@waitron/shared";
+import { decimal, workingOrderId as brandWorkingOrderId } from "@waitron/shared";
 import { PAYMENTS_MIGRATIONS } from "../migrations.js";
 import { getPaymentByRef } from "../store.js";
 import { freshNif, seedWorkingOrder } from "../../test/seed.js";
@@ -23,7 +19,6 @@ describe("FakeAsyncProvider", () => {
     const s = await seedWorkingOrder(pg.db, freshNif());
     const provider = new FakeAsyncProvider(pg.db);
     const res = await provider.initiate({
-      tenantId: brandTenantId(s.tenantId),
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
       amount: decimal("12.10"),
       paymentRef: "pay-1",
@@ -32,7 +27,7 @@ describe("FakeAsyncProvider", () => {
     expect(res.externalRef).toMatch(/^fake-hosted-/);
     expect(res.url).toContain(res.externalRef);
     const row = await pg.db.transaction((tx) =>
-      getPaymentByRef(tx, { tenantId: s.tenantId, provider: "fake", paymentRef: "pay-1" }),
+      getPaymentByRef(tx, { provider: "fake", paymentRef: "pay-1" }),
     );
     expect(row?.state).toBe("initiated");
     expect(row?.externalRef).toBe(res.externalRef);

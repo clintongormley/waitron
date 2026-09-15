@@ -19,7 +19,6 @@ describe("claimAcceptedOffline SKIP LOCKED partitions the queue across concurren
     for (const ref of ["q1", "q2"]) {
       await postgres.admin.transaction((tx) =>
         insertAcceptedOffline(tx, {
-          tenantId: seeded.tenantId,
           workingOrderId: seeded.workingOrderId,
           provider: "fake",
           paymentRef: ref,
@@ -52,9 +51,7 @@ describe("claimAcceptedOffline SKIP LOCKED partitions the queue across concurren
 
       // The waiter's real claimAcceptedOffline runs WHILE the holder holds its lock. SKIP LOCKED
       // means it returns immediately (never blocks) with exactly the row the holder did NOT lock.
-      const secondClaim = await withTransaction(waiter, (tx) =>
-        claimAcceptedOffline(tx, seeded.tenantId, "fake"),
-      );
+      const secondClaim = await withTransaction(waiter, (tx) => claimAcceptedOffline(tx, "fake"));
       const secondRefs = secondClaim.map((r) => r.paymentRef);
 
       expect(secondRefs).not.toContain(lockedRef); // never the locked row

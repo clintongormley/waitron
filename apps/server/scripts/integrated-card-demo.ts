@@ -348,7 +348,6 @@ async function main(): Promise<void> {
     const capturedProvider = new StripeTerminalProvider({
       client: new NarratingStripeClient(capturedClient, "reader"),
       db,
-      tenantId: cfg.tenantId,
       nodeId: cfg.nodeId,
       poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
     });
@@ -393,7 +392,6 @@ async function main(): Promise<void> {
     const declinedProvider = new StripeTerminalProvider({
       client: new NarratingStripeClient(declinedClient, "reader"),
       db,
-      tenantId: cfg.tenantId,
       nodeId: cfg.nodeId,
       poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
     });

@@ -26,7 +26,7 @@ import {
   recordFailedRefund,
   recordRefund,
   recordVoid,
-  resolvePaymentTenant,
+  hasPaymentWithExternalRef,
   settleForwarded,
   settleInitiated,
   stampAttemptingRef,
@@ -56,10 +56,9 @@ async function seedTenant() {
 /** Inserts a captured payment for `seeded` at `paymentRef` (default "10.00") and returns the key
  * to reuse against every other store call. */
 async function capture(seeded: Seeded, paymentRef: string, amount = "10.00") {
-  const key = { tenantId: seeded.tenantId, provider: "fake", paymentRef };
+  const key = { provider: "fake", paymentRef };
   await pg.db.transaction((tx) =>
     insertCapturedPayment(tx, {
-      tenantId: seeded.tenantId,
       workingOrderId: seeded.workingOrderId,
       provider: "fake",
       paymentRef,
@@ -70,7 +69,7 @@ async function capture(seeded: Seeded, paymentRef: string, amount = "10.00") {
   return key;
 }
 
-async function getRow(key: { tenantId: string; provider: string; paymentRef: string }) {
+async function getRow(key: { provider: string; paymentRef: string }) {
   return pg.db.transaction((tx) => getPaymentByRef(tx, key));
 }
 
@@ -111,10 +110,9 @@ describe("insertCapturedPayment", () => {
 describe("insertFailedPayment", () => {
   it("inserts state=failed with a null settledAt", async () => {
     const seeded = await seedTenant();
-    const key = { tenantId: seeded.tenantId, provider: "fake", paymentRef: "p2" };
+    const key = { provider: "fake", paymentRef: "p2" };
     await pg.db.transaction((tx) =>
       insertFailedPayment(tx, {
-        tenantId: seeded.tenantId,
         workingOrderId: seeded.workingOrderId,
         provider: "fake",
         paymentRef: "p2",
@@ -148,8 +146,7 @@ describe("recordVoid", () => {
   });
 
   it("throws payment.not_found for an unknown ref", async () => {
-    const seeded = await seedTenant();
-    const key = { tenantId: seeded.tenantId, provider: "fake", paymentRef: "unknown" };
+    const key = { provider: "fake", paymentRef: "unknown" };
     const error = await pg.db.transaction((tx) => recordVoid(tx, key)).catch((e: unknown) => e);
     expect(error).toBeInstanceOf(AppError);
     expect((error as AppError).code).toBe("payment.not_found");
@@ -167,7 +164,7 @@ describe("recordRefund", () => {
     const row = await getRow(key);
     expect(row?.state).toBe("refunded");
     const refunds = await pg.db.execute<{ amount: string }>(
-      sql`select amount from payment_refunds where payment_ref = ${"p5"} and tenant_id = ${seeded.tenantId}`,
+      sql`select amount from payment_refunds where payment_ref = ${"p5"}`,
     );
     expect(refunds.rows).toHaveLength(1);
     expect(refunds.rows[0].amount).toBe("20.00");
@@ -185,8 +182,7 @@ describe("recordRefund", () => {
     const withoutKey = await capture(seeded, "auth-without", "20.00");
     await pg.db.transaction((tx) => recordRefund(tx, { ...withoutKey, amount: decimal("20.00") }));
     const rows = await pg.db.execute<{ payment_ref: string; authorized_by: string | null }>(
-      sql`select payment_ref, authorized_by from payment_refunds
-          where tenant_id = ${seeded.tenantId} order by payment_ref`,
+      sql`select payment_ref, authorized_by from payment_refunds order by payment_ref`,
     );
     expect(rows.rows).toEqual([
       { payment_ref: "auth-with", authorized_by: authorizer },
@@ -244,10 +240,9 @@ describe("recordRefund", () => {
 
   it("throws payment.not_refundable for a failed payment", async () => {
     const seeded = await seedTenant();
-    const key = { tenantId: seeded.tenantId, provider: "fake", paymentRef: "p10" };
+    const key = { provider: "fake", paymentRef: "p10" };
     await pg.db.transaction((tx) =>
       insertFailedPayment(tx, {
-        tenantId: seeded.tenantId,
         workingOrderId: seeded.workingOrderId,
         provider: "fake",
         paymentRef: "p10",
@@ -262,8 +257,7 @@ describe("recordRefund", () => {
   });
 
   it("throws payment.not_found for an unknown ref", async () => {
-    const seeded = await seedTenant();
-    const key = { tenantId: seeded.tenantId, provider: "fake", paymentRef: "unknown" };
+    const key = { provider: "fake", paymentRef: "unknown" };
     const error = await pg.db
       .transaction((tx) => recordRefund(tx, { ...key, amount: decimal("1.00") }))
       .catch((e: unknown) => e);
@@ -321,8 +315,7 @@ describe("assertReversible", () => {
   });
 
   it("throws payment.not_found for an unknown ref", async () => {
-    const seeded = await seedTenant();
-    const key = { tenantId: seeded.tenantId, provider: "fake", paymentRef: "unknown" };
+    const key = { provider: "fake", paymentRef: "unknown" };
     const error = await pg.db
       .transaction((tx) => assertReversible(tx, { ...key, kind: "void" }))
       .catch((e: unknown) => e);
@@ -346,14 +339,14 @@ describe("associatePaymentWithSale", () => {
     const key = await capture(seeded, "p12r");
     const saleId = await seedSale(pg.db, seeded);
     const reader = await pg.db.execute<{ id: string }>(sql`
-      insert into card_readers (tenant_id, provider, provider_ref, name)
-      values (${seeded.tenantId}, 'stripe', 'tmr_stamp', 'Front counter') returning id`);
+      insert into card_readers (provider, provider_ref, name)
+      values ('stripe', 'tmr_stamp', 'Front counter') returning id`);
     const readerId = reader.rows[0]!.id;
     await pg.db.transaction((tx) => associatePaymentWithSale(tx, { ...key, saleId, readerId }));
     const [row] = (
       await pg.db.execute<{ reader_id: string | null }>(sql`
         select reader_id from payments
-        where tenant_id = ${key.tenantId} and provider = ${key.provider} and payment_ref = ${key.paymentRef}`)
+        where provider = ${key.provider} and payment_ref = ${key.paymentRef}`)
     ).rows;
     expect(row!.reader_id).toBe(readerId);
   });
@@ -361,7 +354,7 @@ describe("associatePaymentWithSale", () => {
   it("throws payment.not_found for an unknown ref", async () => {
     const seeded = await seedTenant();
     const saleId = await seedSale(pg.db, seeded);
-    const key = { tenantId: seeded.tenantId, provider: "fake", paymentRef: "unknown" };
+    const key = { provider: "fake", paymentRef: "unknown" };
     const error = await pg.db
       .transaction((tx) => associatePaymentWithSale(tx, { ...key, saleId }))
       .catch((e: unknown) => e);
@@ -391,9 +384,7 @@ describe("associatePaymentWithSale", () => {
 
 describe("getPaymentByRef", () => {
   it("returns undefined for an unknown ref", async () => {
-    const seeded = await seedTenant();
     const row = await getRow({
-      tenantId: seeded.tenantId,
       provider: "fake",
       paymentRef: "unknown",
     });
@@ -402,11 +393,10 @@ describe("getPaymentByRef", () => {
 });
 
 describe("findPaymentByRef", () => {
-  it("returns the row, with tenantId, for a known ref without a tenant filter", async () => {
+  it("returns the row for a known ref", async () => {
     const seeded = await seedTenant();
     await capture(seeded, "p12");
     const row = await pg.db.transaction((tx) => findPaymentByRef(tx, "fake", "p12"));
-    expect(row?.tenantId).toBe(seeded.tenantId);
     expect(row?.state).toBe("captured");
     expect(row?.amount).toBe("10.00");
   });
@@ -424,7 +414,7 @@ describe("findCapturedPaymentForWorkingOrder", () => {
   // branch (a non-null `saleId`) is asserted in store.pg.test.ts, on real Postgres.
   it("returns a captured payment for the working order, ignoring non-captured states", async () => {
     const s = await seedWorkingOrder(pg.db, freshNif());
-    const key = { tenantId: s.tenantId, provider: "stripe", workingOrderId: s.workingOrderId };
+    const key = { provider: "stripe", workingOrderId: s.workingOrderId };
     // A failed attempt must NOT match (a legitimately-declined card is re-chargeable).
     await pg.db.transaction((tx) =>
       insertFailedPayment(tx, { ...key, paymentRef: "f1", amount: decimal("5.00") }),
@@ -454,7 +444,7 @@ describe("findCapturedPaymentForWorkingOrder", () => {
 
   it("matches an accepted_offline payment that is still unassociated (saleId null)", async () => {
     const s = await seedWorkingOrder(pg.db, freshNif());
-    const key = { tenantId: s.tenantId, provider: "stripe", workingOrderId: s.workingOrderId };
+    const key = { provider: "stripe", workingOrderId: s.workingOrderId };
     await pg.db.transaction((tx) =>
       insertAcceptedOffline(tx, {
         ...key,
@@ -469,7 +459,7 @@ describe("findCapturedPaymentForWorkingOrder", () => {
 
   it("returns undefined when the only payment is attempting (the lost-T2 window is not yet captured)", async () => {
     const s = await seedWorkingOrder(pg.db, freshNif());
-    const key = { tenantId: s.tenantId, provider: "stripe", workingOrderId: s.workingOrderId };
+    const key = { provider: "stripe", workingOrderId: s.workingOrderId };
     await pg.db.transaction((tx) =>
       insertAttempting(tx, { ...key, paymentRef: "a1", amount: decimal("9.00") }),
     );
@@ -486,7 +476,7 @@ describe("findCapturedPaymentForWorkingOrder", () => {
     // insertion order (the later-settled one inserted FIRST) and asserts the more recently settled
     // one wins.
     const s = await seedWorkingOrder(pg.db, freshNif());
-    const key = { tenantId: s.tenantId, provider: "stripe", workingOrderId: s.workingOrderId };
+    const key = { provider: "stripe", workingOrderId: s.workingOrderId };
     await pg.db.transaction((tx) =>
       insertCapturedPayment(tx, {
         ...key,
@@ -517,10 +507,10 @@ describe("findCapturedPaymentForWorkingOrder", () => {
     // proves `NULLS LAST` earns its place: delete it from the query's `orderBy` and this test fails,
     // returning "null-settled" instead of "real-settled".
     const s = await seedWorkingOrder(pg.db, freshNif());
-    const key = { tenantId: s.tenantId, provider: "stripe", workingOrderId: s.workingOrderId };
+    const key = { provider: "stripe", workingOrderId: s.workingOrderId };
     await pg.db.execute(sql`
-      insert into payments (tenant_id, working_order_id, provider, payment_ref, amount, state, settled_at)
-      values (${key.tenantId}, ${key.workingOrderId}, ${key.provider}, 'null-settled', '3.00', 'captured', null)
+      insert into payments (working_order_id, provider, payment_ref, amount, state, settled_at)
+      values (${key.workingOrderId}, ${key.provider}, 'null-settled', '3.00', 'captured', null)
     `);
     await pg.db.transaction((tx) =>
       insertCapturedPayment(tx, {
@@ -540,7 +530,6 @@ describe("insertCapturedPayment external_ref", () => {
     const seeded = await seedTenant();
     await pg.db.transaction((tx) =>
       insertCapturedPayment(tx, {
-        tenantId: seeded.tenantId,
         workingOrderId: seeded.workingOrderId,
         provider: "fake",
         paymentRef: "ext1",
@@ -550,7 +539,7 @@ describe("insertCapturedPayment external_ref", () => {
       }),
     );
     const rows = await pg.db.execute<{ external_ref: string | null }>(
-      sql`select external_ref from payments where payment_ref = ${"ext1"} and tenant_id = ${seeded.tenantId}`,
+      sql`select external_ref from payments where payment_ref = ${"ext1"}`,
     );
     expect(rows.rows[0].external_ref).toBe("OP-42");
   });
@@ -559,7 +548,7 @@ describe("insertCapturedPayment external_ref", () => {
     const seeded = await seedTenant();
     await capture(seeded, "ext2");
     const rows = await pg.db.execute<{ external_ref: string | null }>(
-      sql`select external_ref from payments where payment_ref = ${"ext2"} and tenant_id = ${seeded.tenantId}`,
+      sql`select external_ref from payments where payment_ref = ${"ext2"}`,
     );
     expect(rows.rows[0].external_ref).toBeNull();
   });
@@ -570,21 +559,20 @@ describe("attempting lifecycle", () => {
     const seeded = await seedTenant();
     await pg.db.transaction((tx) =>
       insertAttempting(tx, {
-        tenantId: seeded.tenantId,
         workingOrderId: seeded.workingOrderId,
         provider: "fake",
         paymentRef: "a1",
         amount: decimal("12.10"),
       }),
     );
-    const row = await getRow({ tenantId: seeded.tenantId, provider: "fake", paymentRef: "a1" });
+    const row = await getRow({ provider: "fake", paymentRef: "a1" });
     expect(row?.state).toBe("attempting");
     expect(row?.settledAt).toBeNull();
   });
 
   it("captureAttempting advances attempting -> captured with settledAt + external_ref", async () => {
     const seeded = await seedTenant();
-    const key = { tenantId: seeded.tenantId, provider: "fake", paymentRef: "a2" };
+    const key = { provider: "fake", paymentRef: "a2" };
     await pg.db.transaction((tx) =>
       insertAttempting(tx, {
         ...key,
@@ -601,16 +589,14 @@ describe("attempting lifecycle", () => {
       state: string;
       external_ref: string | null;
       settled_at: string | null;
-    }>(
-      sql`select state, external_ref, settled_at from payments where payment_ref = ${"a2"} and tenant_id = ${seeded.tenantId}`,
-    );
+    }>(sql`select state, external_ref, settled_at from payments where payment_ref = ${"a2"}`);
     expect(rows.rows[0]).toMatchObject({ state: "captured", external_ref: "pi_123" });
     expect(rows.rows[0].settled_at).not.toBeNull();
   });
 
   it("failAttempting advances attempting -> failed", async () => {
     const seeded = await seedTenant();
-    const key = { tenantId: seeded.tenantId, provider: "fake", paymentRef: "a3" };
+    const key = { provider: "fake", paymentRef: "a3" };
     await pg.db.transaction((tx) =>
       insertAttempting(tx, {
         ...key,
@@ -624,8 +610,7 @@ describe("attempting lifecycle", () => {
   });
 
   it("captureAttempting throws payment.not_found when there is no attempting row", async () => {
-    const seeded = await seedTenant();
-    const key = { tenantId: seeded.tenantId, provider: "fake", paymentRef: "nope" };
+    const key = { provider: "fake", paymentRef: "nope" };
     const err = await pg.db
       .transaction((tx) =>
         captureAttempting(tx, { ...key, settledAt: new Date(), externalRef: "pi_x" }),
@@ -638,7 +623,7 @@ describe("attempting lifecycle", () => {
 describe("externalRef on read-back + failed refunds", () => {
   it("getPaymentByRef returns externalRef", async () => {
     const seeded = await seedTenant();
-    const key = { tenantId: seeded.tenantId, provider: "fake", paymentRef: "e1" };
+    const key = { provider: "fake", paymentRef: "e1" };
     await pg.db.transaction((tx) =>
       insertCapturedPayment(tx, {
         ...key,
@@ -658,7 +643,7 @@ describe("externalRef on read-back + failed refunds", () => {
     await pg.db.transaction((tx) => recordFailedRefund(tx, { ...key, amount: decimal("5.00") }));
     expect((await getRow(key))?.state).toBe("captured");
     const refunds = await pg.db.execute<{ state: string }>(
-      sql`select state from payment_refunds where payment_ref = ${"e2"} and tenant_id = ${seeded.tenantId}`,
+      sql`select state from payment_refunds where payment_ref = ${"e2"}`,
     );
     expect(refunds.rows).toEqual([{ state: "failed" }]);
   });
@@ -676,7 +661,7 @@ describe("externalRef on read-back + failed refunds", () => {
     );
     const rows = await pg.db.execute<{ payment_ref: string; authorized_by: string | null }>(
       sql`select payment_ref, authorized_by from payment_refunds
-          where tenant_id = ${seeded.tenantId} and state = 'failed' order by payment_ref`,
+          where state = 'failed' order by payment_ref`,
     );
     expect(rows.rows).toEqual([
       { payment_ref: "fauth-with", authorized_by: authorizer },
@@ -696,8 +681,7 @@ describe("externalRef on read-back + failed refunds", () => {
   });
 
   it("recordFailedRefund throws payment.not_found for an unknown ref", async () => {
-    const seeded = await seedTenant();
-    const key = { tenantId: seeded.tenantId, provider: "fake", paymentRef: "no-such-ref" };
+    const key = { provider: "fake", paymentRef: "no-such-ref" };
     const error = await pg.db
       .transaction((tx) => recordFailedRefund(tx, { ...key, amount: decimal("5.00") }))
       .catch((e: unknown) => e);
@@ -711,7 +695,6 @@ describe("listAcceptedOffline", () => {
     const s = await seedWorkingOrder(pg.db, freshNif());
     await pg.db.transaction((tx) =>
       insertAcceptedOffline(tx, {
-        tenantId: s.tenantId,
         workingOrderId: s.workingOrderId,
         provider: "fake",
         paymentRef: "lst-1",
@@ -719,7 +702,7 @@ describe("listAcceptedOffline", () => {
         settledAt: new Date("2026-07-24T10:00:00Z"),
       }),
     );
-    const listed = await pg.db.transaction((tx) => listAcceptedOffline(tx, s.tenantId, "fake"));
+    const listed = await pg.db.transaction((tx) => listAcceptedOffline(tx, "fake"));
     expect(listed.map((r) => r.paymentRef)).toContain("lst-1");
     expect(listed.find((r) => r.paymentRef === "lst-1")?.saleId).toBeNull();
   });
@@ -732,7 +715,6 @@ describe("Mode 3 initiated lifecycle", () => {
   async function initiate(seeded: Seeded, externalRef = HOSTED, paymentRef = "pay-1") {
     await pg.db.transaction((tx) =>
       insertInitiated(tx, {
-        tenantId: seeded.tenantId,
         workingOrderId: seeded.workingOrderId,
         provider: "fake",
         paymentRef,
@@ -740,7 +722,7 @@ describe("Mode 3 initiated lifecycle", () => {
         amount: decimal("12.10"),
       }),
     );
-    return { tenantId: seeded.tenantId, provider: "fake", paymentRef };
+    return { provider: "fake", paymentRef };
   }
 
   it("insertInitiated writes state=initiated, settledAt null, external_ref set", async () => {
@@ -819,7 +801,6 @@ describe("Mode 3 initiated lifecycle", () => {
     // Two manual rows sharing a hand-keyed external_ref: allowed (provider = 'manual' is excluded).
     await pg.db.transaction((tx) =>
       insertCapturedPayment(tx, {
-        tenantId: seeded.tenantId,
         workingOrderId: seeded.workingOrderId,
         provider: "manual",
         paymentRef: "m-1",
@@ -831,7 +812,6 @@ describe("Mode 3 initiated lifecycle", () => {
     await expect(
       pg.db.transaction((tx) =>
         insertCapturedPayment(tx, {
-          tenantId: seeded.tenantId,
           workingOrderId: seeded.workingOrderId,
           provider: "manual",
           paymentRef: "m-2",
@@ -862,9 +842,7 @@ describe("listReconcilable", () => {
   it("returns captured rows settled inside the period, joined to their working order", async () => {
     const seeded = await seedTenant();
     await capture(seeded, "in-period");
-    const rows = await pg.db.transaction((tx) =>
-      listReconcilable(tx, seeded.tenantId, "fake", PERIOD),
-    );
+    const rows = await pg.db.transaction((tx) => listReconcilable(tx, "fake", PERIOD));
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({
       paymentRef: "in-period",
@@ -889,7 +867,6 @@ describe("listReconcilable", () => {
     const seeded = await seedTenant();
     await pg.db.transaction(async (tx) => {
       await insertAcceptedOffline(tx, {
-        tenantId: seeded.tenantId,
         workingOrderId: seeded.workingOrderId,
         provider: "fake",
         paymentRef: "forwarded",
@@ -897,14 +874,11 @@ describe("listReconcilable", () => {
         settledAt: SETTLED,
       });
       await settleForwarded(tx, {
-        tenantId: seeded.tenantId,
         provider: "fake",
         paymentRef: "forwarded",
       });
     });
-    const rows = await pg.db.transaction((tx) =>
-      listReconcilable(tx, seeded.tenantId, "fake", PERIOD),
-    );
+    const rows = await pg.db.transaction((tx) => listReconcilable(tx, "fake", PERIOD));
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ paymentRef: "forwarded", state: "settled", amount: "12.00" });
     // Anchored on settled_at, like a captured row — the acceptance time the offline insert stamped.
@@ -919,7 +893,6 @@ describe("listReconcilable", () => {
     const seeded = await seedTenant();
     await pg.db.transaction((tx) =>
       insertInitiated(tx, {
-        tenantId: seeded.tenantId,
         workingOrderId: seeded.workingOrderId,
         provider: "fake",
         paymentRef: "first-pending",
@@ -929,7 +902,6 @@ describe("listReconcilable", () => {
     );
     await pg.db.transaction((tx) =>
       insertCapturedPayment(tx, {
-        tenantId: seeded.tenantId,
         workingOrderId: seeded.workingOrderId,
         provider: "fake",
         paymentRef: "second-held",
@@ -938,9 +910,7 @@ describe("listReconcilable", () => {
       }),
     );
     const now = { from: new Date(Date.now() - 60_000), to: new Date(Date.now() + 60_000) };
-    const rows = await pg.db.transaction((tx) =>
-      listReconcilable(tx, seeded.tenantId, "fake", now),
-    );
+    const rows = await pg.db.transaction((tx) => listReconcilable(tx, "fake", now));
     expect(rows.map((r) => r.paymentRef)).toEqual(["first-pending", "second-held"]);
   });
 
@@ -948,24 +918,19 @@ describe("listReconcilable", () => {
     const seeded = await seedTenant();
     await capture(seeded, "outside");
     const later = { from: new Date("2026-07-23T00:00:00Z"), to: new Date("2026-07-24T00:00:00Z") };
-    expect(
-      await pg.db.transaction((tx) => listReconcilable(tx, seeded.tenantId, "fake", later)),
-    ).toEqual([]);
+    expect(await pg.db.transaction((tx) => listReconcilable(tx, "fake", later))).toEqual([]);
   });
 
   it("excludes another provider's rows", async () => {
     const seeded = await seedTenant();
     await capture(seeded, "ours");
-    expect(
-      await pg.db.transaction((tx) => listReconcilable(tx, seeded.tenantId, "other", PERIOD)),
-    ).toEqual([]);
+    expect(await pg.db.transaction((tx) => listReconcilable(tx, "other", PERIOD))).toEqual([]);
   });
 
   it("includes initiated rows by created_at and reports auditedAt from it", async () => {
     const seeded = await seedTenant();
     await pg.db.transaction((tx) =>
       insertInitiated(tx, {
-        tenantId: seeded.tenantId,
         workingOrderId: seeded.workingOrderId,
         provider: "fake",
         paymentRef: "pending",
@@ -975,9 +940,7 @@ describe("listReconcilable", () => {
     );
     // created_at defaults to now(), so widen the period to today rather than the fixed fixture day.
     const now = { from: new Date(Date.now() - 60_000), to: new Date(Date.now() + 60_000) };
-    const rows = await pg.db.transaction((tx) =>
-      listReconcilable(tx, seeded.tenantId, "fake", now),
-    );
+    const rows = await pg.db.transaction((tx) => listReconcilable(tx, "fake", now));
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ paymentRef: "pending", state: "initiated", settledAt: null });
     expect(rows[0].auditedAt).not.toBeNull();
@@ -987,14 +950,12 @@ describe("listReconcilable", () => {
     const seeded = await seedTenant();
     await pg.db.transaction(async (tx) => {
       await insertFailedPayment(tx, {
-        tenantId: seeded.tenantId,
         workingOrderId: seeded.workingOrderId,
         provider: "fake",
         paymentRef: "nope",
         amount: decimal("3.00"),
       });
       await insertAcceptedOffline(tx, {
-        tenantId: seeded.tenantId,
         workingOrderId: seeded.workingOrderId,
         provider: "fake",
         paymentRef: "queued",
@@ -1002,18 +963,14 @@ describe("listReconcilable", () => {
         settledAt: SETTLED,
       });
     });
-    expect(
-      await pg.db.transaction((tx) => listReconcilable(tx, seeded.tenantId, "fake", PERIOD)),
-    ).toEqual([]);
+    expect(await pg.db.transaction((tx) => listReconcilable(tx, "fake", PERIOD))).toEqual([]);
   });
 
   it("reports the working order status the orphan rule reads", async () => {
     const seeded = await seedTenant();
     await capture(seeded, "abandoned-one");
     await setOrderStatus(seeded, "abandoned");
-    const rows = await pg.db.transaction((tx) =>
-      listReconcilable(tx, seeded.tenantId, "fake", PERIOD),
-    );
+    const rows = await pg.db.transaction((tx) => listReconcilable(tx, "fake", PERIOD));
     expect(rows[0].workingOrderStatus).toBe("abandoned");
   });
 });
@@ -1025,7 +982,6 @@ describe("existingReferences", () => {
   async function seedReference(seeded: Seeded, paymentRef: string, externalRef: string) {
     await pg.db.transaction((tx) =>
       insertInitiated(tx, {
-        tenantId: seeded.tenantId,
         workingOrderId: seeded.workingOrderId,
         provider: "fake",
         paymentRef,
@@ -1040,7 +996,7 @@ describe("existingReferences", () => {
     await seedReference(seeded, "r-init", "ext-1");
     await seedReference(seeded, "r-init2", "ext-2");
     const found = await pg.db.transaction((tx) =>
-      existingReferences(tx, seeded.tenantId, "fake", ["nope", "ext-1", "ext-2"]),
+      existingReferences(tx, "fake", ["nope", "ext-1", "ext-2"]),
     );
     expect(found).toEqual(new Set(["ext-1", "ext-2"]));
   });
@@ -1051,7 +1007,7 @@ describe("existingReferences", () => {
     const seeded = await seedTenant();
     await seedReference(seeded, "r-init3", "ext-3");
     const found = await pg.db.transaction((tx) =>
-      existingReferences(tx, seeded.tenantId, "fake", ["ghost-a", "ghost-b", "ext-3"]),
+      existingReferences(tx, "fake", ["ghost-a", "ghost-b", "ext-3"]),
     );
     expect(found).toEqual(new Set(["ext-3"]));
   });
@@ -1059,15 +1015,13 @@ describe("existingReferences", () => {
   it("is empty for unknown references, an empty list, and another provider", async () => {
     const seeded = await seedTenant();
     await seedReference(seeded, "r-init4", "ext-4");
-    expect(
-      await pg.db.transaction((tx) => existingReferences(tx, seeded.tenantId, "fake", ["ghost"])),
-    ).toEqual(new Set());
-    expect(
-      await pg.db.transaction((tx) => existingReferences(tx, seeded.tenantId, "fake", [])),
-    ).toEqual(new Set());
-    expect(
-      await pg.db.transaction((tx) => existingReferences(tx, seeded.tenantId, "other", ["ext-4"])),
-    ).toEqual(new Set());
+    expect(await pg.db.transaction((tx) => existingReferences(tx, "fake", ["ghost"]))).toEqual(
+      new Set(),
+    );
+    expect(await pg.db.transaction((tx) => existingReferences(tx, "fake", []))).toEqual(new Set());
+    expect(await pg.db.transaction((tx) => existingReferences(tx, "other", ["ext-4"]))).toEqual(
+      new Set(),
+    );
   });
 
   it("chunks the IN list — a match past the first chunk boundary is still found", async () => {
@@ -1076,9 +1030,7 @@ describe("existingReferences", () => {
     // 1000 non-matching references fill the first chunk exactly (CHUNK_SIZE); "ext-5" lands in the
     // second chunk, so this only passes if every chunk is actually queried.
     const references = [...Array.from({ length: 1000 }, (_, i) => `ghost-${i}`), "ext-5"];
-    const found = await pg.db.transaction((tx) =>
-      existingReferences(tx, seeded.tenantId, "fake", references),
-    );
+    const found = await pg.db.transaction((tx) => existingReferences(tx, "fake", references));
     expect(found).toEqual(new Set(["ext-5"]));
   });
 });
@@ -1092,21 +1044,17 @@ describe("markReconcileRemediated", () => {
     expect(await pg.db.transaction((tx) => markReconcileRemediated(tx, { ...key, at }))).toBe(
       false,
     );
-    const rows = await pg.db.transaction((tx) =>
-      listReconcilable(tx, seeded.tenantId, "fake", PERIOD),
-    );
+    const rows = await pg.db.transaction((tx) => listReconcilable(tx, "fake", PERIOD));
     // The exact passed timestamp, not just non-null — a bug stamping now() instead of `at` would
     // still pass a `.not.toBeNull()` check.
     expect(new Date(rows[0].reconcileRemediatedAt!).toISOString()).toBe(at.toISOString());
   });
 
   it("returns false for a payment that does not exist", async () => {
-    const seeded = await seedTenant();
     const at = new Date("2026-07-25T08:00:00Z");
     expect(
       await pg.db.transaction((tx) =>
         markReconcileRemediated(tx, {
-          tenantId: seeded.tenantId,
           provider: "fake",
           paymentRef: "ghost",
           at,
@@ -1148,7 +1096,7 @@ describe("tillsForWorkingOrders", () => {
     const seeded = await seedTenant();
     const second = await seedSecondTill(seeded);
     const tills = await pg.db.transaction((tx) =>
-      tillsForWorkingOrders(tx, seeded.tenantId, [
+      tillsForWorkingOrders(tx, [
         seeded.workingOrderId,
         second.workingOrderId,
         "00000000-0000-0000-0000-000000000000",
@@ -1163,10 +1111,7 @@ describe("tillsForWorkingOrders", () => {
   });
 
   it("is empty for an empty input list", async () => {
-    const seeded = await seedTenant();
-    expect(await pg.db.transaction((tx) => tillsForWorkingOrders(tx, seeded.tenantId, []))).toEqual(
-      new Map(),
-    );
+    expect(await pg.db.transaction((tx) => tillsForWorkingOrders(tx, []))).toEqual(new Map());
   });
 
   it("chunks the IN list — a match past the first chunk boundary is still found", async () => {
@@ -1180,17 +1125,16 @@ describe("tillsForWorkingOrders", () => {
       ),
       seeded.workingOrderId,
     ];
-    const tills = await pg.db.transaction((tx) => tillsForWorkingOrders(tx, seeded.tenantId, ids));
+    const tills = await pg.db.transaction((tx) => tillsForWorkingOrders(tx, ids));
     expect(tills).toEqual(new Map([[seeded.workingOrderId, seeded.tillId]]));
   });
 });
 
-describe("resolvePaymentTenant", () => {
-  it("returns the owning tenant for a (provider, external_ref) an initiated row carries", async () => {
+describe("hasPaymentWithExternalRef", () => {
+  it("is true for a (provider, external_ref) a payment row carries, in any state", async () => {
     const seeded = await seedTenant();
     await pg.db.transaction((tx) =>
       insertInitiated(tx, {
-        tenantId: seeded.tenantId,
         workingOrderId: seeded.workingOrderId,
         provider: "fake",
         paymentRef: "res-1",
@@ -1198,15 +1142,29 @@ describe("resolvePaymentTenant", () => {
         amount: decimal("10.00"),
       }),
     );
-    expect(await resolvePaymentTenant(pg.db, "fake", "hosted-res-1")).toBe(seeded.tenantId);
+    expect(await hasPaymentWithExternalRef(pg.db, "fake", "hosted-res-1")).toBe(true);
+    // A row already past `initiated` still counts: the webhook reads that as a redelivery.
+    await pg.db.transaction((tx) =>
+      settleInitiated(tx, { provider: "fake", externalRef: "hosted-res-1", settledAt: SETTLED }),
+    );
+    expect(await hasPaymentWithExternalRef(pg.db, "fake", "hosted-res-1")).toBe(true);
   });
 
-  it("returns null for a reference no local row carries — the missingLocal case reconcile audits", async () => {
-    // The `?? null` arm of the seam's single expression: `resolve_payment_tenant` is a scalar select,
-    // so it always returns one ROW; when nothing matches, that row's `tenant_id` is SQL NULL, and this
-    // is what turns it into a JS null the webhook route can branch on rather than an undefined. Both
-    // arms have to be exercised here: the test above is the non-null one.
-    expect(await resolvePaymentTenant(pg.db, "fake", "nothing-ever-initiated-this")).toBeNull();
+  it("is false for a reference no local row carries, or one held under another provider", async () => {
+    const seeded = await seedTenant();
+    await pg.db.transaction((tx) =>
+      insertInitiated(tx, {
+        workingOrderId: seeded.workingOrderId,
+        provider: "fake",
+        paymentRef: "res-2",
+        externalRef: "hosted-res-2",
+        amount: decimal("10.00"),
+      }),
+    );
+    expect(await hasPaymentWithExternalRef(pg.db, "fake", "nothing-ever-initiated-this")).toBe(
+      false,
+    );
+    expect(await hasPaymentWithExternalRef(pg.db, "stripe", "hosted-res-2")).toBe(false);
   });
 });
 
@@ -1215,40 +1173,32 @@ describe("listAttempting / stampAttemptingRef", () => {
     const t = await seedWorkingOrder(pg.db, freshNif());
     await pg.db.transaction(async (tx) => {
       await insertAttempting(tx, {
-        tenantId: t.tenantId,
         workingOrderId: t.workingOrderId,
         provider: "sumup",
         paymentRef: "ref-a",
         amount: decimal("10.00"),
       });
       await insertAttempting(tx, {
-        tenantId: t.tenantId,
         workingOrderId: t.workingOrderId,
         provider: "sumup",
         paymentRef: "ref-b",
         amount: decimal("11.00"),
       });
       await insertAttempting(tx, {
-        tenantId: t.tenantId,
         workingOrderId: t.workingOrderId,
         provider: "stripe",
         paymentRef: "ref-c",
         amount: decimal("12.00"),
       });
       await captureAttempting(tx, {
-        tenantId: t.tenantId,
         provider: "sumup",
         paymentRef: "ref-b",
         settledAt: new Date(),
         externalRef: "txn_b",
       });
-      await stampAttemptingRef(
-        tx,
-        { tenantId: t.tenantId, provider: "sumup", paymentRef: "ref-a" },
-        "ctx_a",
-      );
+      await stampAttemptingRef(tx, { provider: "sumup", paymentRef: "ref-a" }, "ctx_a");
     });
-    const rows = await pg.db.transaction((tx) => listAttempting(tx, t.tenantId, "sumup"));
+    const rows = await pg.db.transaction((tx) => listAttempting(tx, "sumup"));
     expect(rows.map((r) => [r.paymentRef, r.externalRef, r.amount])).toEqual([
       ["ref-a", "ctx_a", "10.00"],
     ]);
@@ -1258,7 +1208,7 @@ describe("listAttempting / stampAttemptingRef", () => {
 
   it("stampAttemptingRef touches only a row still attempting (a captured row keeps its refundable id)", async () => {
     const t = await seedWorkingOrder(pg.db, freshNif());
-    const key = { tenantId: t.tenantId, provider: "sumup", paymentRef: "ref-e" };
+    const key = { provider: "sumup", paymentRef: "ref-e" };
     await pg.db.transaction(async (tx) => {
       await insertAttempting(tx, {
         ...key,

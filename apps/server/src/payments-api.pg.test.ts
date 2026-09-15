@@ -715,7 +715,7 @@ describe("reader adoption and local management", () => {
     });
     expect(await again.json()).toEqual({ id, status: "paired" });
     const stored = await suite.admin.execute(
-      sql`select id, name, active, disabled_at from card_readers where tenant_id = ${venue.tenantId}`,
+      sql`select id, name, active, disabled_at from card_readers`,
     );
     expect(stored.rows).toEqual([{ id, name: "Terrace", active: true, disabled_at: null }]);
     expect(await (await send(app, "GET", `${base}/devices/${device}/reader`, opts)).json()).toEqual(
@@ -744,13 +744,7 @@ describe("reader adoption and local management", () => {
     expect(await result.json()).toEqual({
       error: { code: "reader.not_listed", params: { providerId: "stripe" } },
     });
-    expect(
-      (
-        await suite.admin.execute(
-          sql`select id from card_readers where tenant_id = ${venue.tenantId}`,
-        )
-      ).rows,
-    ).toEqual([]);
+    expect((await suite.admin.execute(sql`select id from card_readers`)).rows).toEqual([]);
     expect(removed).toEqual([]);
   });
 
@@ -851,7 +845,7 @@ describe("reader adoption and local management", () => {
     const unpairWrite = withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       await tx.execute(
-        sql`update card_readers set active = false, disabled_at = now(), unpaired_at = now() where tenant_id = ${venue.tenantId} and id = ${id}`,
+        sql`update card_readers set active = false, disabled_at = now(), unpaired_at = now() where id = ${id}`,
       );
       updated();
       await hold;
@@ -946,13 +940,7 @@ describe("reader adoption and local management", () => {
     expect(await response.json()).toEqual({
       error: { code: "reader.provider_disconnected", params: { providerId: "stripe" } },
     });
-    expect(
-      (
-        await suite.admin.execute(
-          sql`select id from card_readers where tenant_id = ${venue.tenantId}`,
-        )
-      ).rows,
-    ).toEqual([]);
+    expect((await suite.admin.execute(sql`select id from card_readers`)).rows).toEqual([]);
     expect(removes).toBe(0);
   });
 

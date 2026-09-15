@@ -79,7 +79,6 @@ async function seedInitiated(
     insert into working_orders (tenant_id, till_id, order_number) values (${tenantId}, ${till.rows[0]!.id}, 1) returning id`);
   await withTransaction(db, (tx) =>
     insertInitiated(tx, {
-      tenantId,
       workingOrderId: wo.rows[0]!.id,
       provider: "stripe",
       paymentRef: randomUUID(),
@@ -110,24 +109,16 @@ function completedEvent(sessionId: string, amountTotalMinor = 1210): string {
   });
 }
 
-async function paymentState(
-  db: Database,
-  tenantId: TenantId,
-  sessionId: string,
-): Promise<string | undefined> {
+async function paymentState(db: Database, sessionId: string): Promise<string | undefined> {
   const rows = await db.execute<{ state: string }>(
-    sql`select state from payments where tenant_id = ${tenantId} and external_ref = ${sessionId}`,
+    sql`select state from payments where external_ref = ${sessionId}`,
   );
   return rows.rows[0]?.state;
 }
 
-async function settledAt(
-  db: Database,
-  tenantId: TenantId,
-  sessionId: string,
-): Promise<string | null | undefined> {
+async function settledAt(db: Database, sessionId: string): Promise<string | null | undefined> {
   const rows = await db.execute<{ settled_at: string | null }>(
-    sql`select settled_at from payments where tenant_id = ${tenantId} and external_ref = ${sessionId}`,
+    sql`select settled_at from payments where external_ref = ${sessionId}`,
   );
   return rows.rows[0]?.settled_at;
 }
@@ -151,7 +142,7 @@ describe("POST /webhooks/stripe/:tenantId — a verified checkout.session.comple
     const res = await post(app, seeded.tenantId, body, signStripeBody(body, seeded.webhookSecret));
 
     expect(res.status).toBe(200);
-    expect(await paymentState(suite.db, seeded.tenantId, seeded.sessionId)).toBe("captured");
+    expect(await paymentState(suite.db, seeded.sessionId)).toBe("captured");
   });
 
   it("advances an expired session to failed and answers 2xx", async () => {
@@ -168,7 +159,7 @@ describe("POST /webhooks/stripe/:tenantId — a verified checkout.session.comple
     const res = await post(app, seeded.tenantId, body, signStripeBody(body, seeded.webhookSecret));
 
     expect(res.status).toBe(200);
-    expect(await paymentState(suite.db, seeded.tenantId, seeded.sessionId)).toBe("failed");
+    expect(await paymentState(suite.db, seeded.sessionId)).toBe("failed");
   });
 
   it("acks 2xx and settles nothing for a verified event type it does not act on", async () => {
@@ -185,7 +176,7 @@ describe("POST /webhooks/stripe/:tenantId — a verified checkout.session.comple
     const res = await post(app, seeded.tenantId, body, signStripeBody(body, seeded.webhookSecret));
 
     expect(res.status).toBe(200);
-    expect(await paymentState(suite.db, seeded.tenantId, seeded.sessionId)).toBe("initiated");
+    expect(await paymentState(suite.db, seeded.sessionId)).toBe("initiated");
   });
 });
 
@@ -205,7 +196,7 @@ describe("the signature is the sole gate", () => {
     );
 
     expect(res.status).toBe(400);
-    expect(await paymentState(suite.db, seeded.tenantId, seeded.sessionId)).toBe("initiated");
+    expect(await paymentState(suite.db, seeded.sessionId)).toBe("initiated");
   });
 
   it("refuses a request carrying no Stripe-Signature header at all with 400", async () => {
@@ -220,7 +211,7 @@ describe("the signature is the sole gate", () => {
     });
 
     expect(res.status).toBe(400);
-    expect(await paymentState(suite.db, seeded.tenantId, seeded.sessionId)).toBe("initiated");
+    expect(await paymentState(suite.db, seeded.sessionId)).toBe("initiated");
   });
 
   it("reads the RAW body — a whitespace-irregular body signed over its exact bytes verifies", async () => {
@@ -240,7 +231,7 @@ describe("the signature is the sole gate", () => {
       signStripeBody(spaced, seeded.webhookSecret),
     );
     expect(ok.status).toBe(200);
-    expect(await paymentState(suite.db, seeded.tenantId, seeded.sessionId)).toBe("captured");
+    expect(await paymentState(suite.db, seeded.sessionId)).toBe("captured");
   });
 
   it("byte-exactness bites: the same body signed over its RE-SERIALISED form is refused 400", async () => {
@@ -261,7 +252,7 @@ describe("the signature is the sole gate", () => {
     );
 
     expect(res.status).toBe(400);
-    expect(await paymentState(suite.db, seeded.tenantId, seeded.sessionId)).toBe("initiated");
+    expect(await paymentState(suite.db, seeded.sessionId)).toBe("initiated");
   });
 });
 
@@ -291,13 +282,13 @@ describe("no-op acknowledgements (2xx)", () => {
     const sig = signStripeBody(body, seeded.webhookSecret);
 
     expect((await post(app, seeded.tenantId, body, sig)).status).toBe(200);
-    const firstSettledAt = await settledAt(suite.db, seeded.tenantId, seeded.sessionId);
+    const firstSettledAt = await settledAt(suite.db, seeded.sessionId);
 
     // At-least-once redelivery: 2xx again, still captured, and `settled_at` untouched — the row was
     // already past `initiated`, so `settleInitiated` matched nothing (no second write).
     expect((await post(app, seeded.tenantId, body, sig)).status).toBe(200);
-    expect(await paymentState(suite.db, seeded.tenantId, seeded.sessionId)).toBe("captured");
-    expect(await settledAt(suite.db, seeded.tenantId, seeded.sessionId)).toBe(firstSettledAt);
+    expect(await paymentState(suite.db, seeded.sessionId)).toBe("captured");
+    expect(await settledAt(suite.db, seeded.sessionId)).toBe(firstSettledAt);
   });
 });
 
@@ -315,7 +306,7 @@ describe("the webhook shares the app with /health", () => {
     expect(
       (await post(app, seeded.tenantId, body, signStripeBody(body, seeded.webhookSecret))).status,
     ).toBe(200);
-    expect(await paymentState(suite.db, seeded.tenantId, seeded.sessionId)).toBe("captured");
+    expect(await paymentState(suite.db, seeded.sessionId)).toBe("captured");
   });
 });
 
@@ -350,7 +341,7 @@ describe("permanent client errors are 400 (a retry can never fix them)", () => {
     const res = await post(app, seeded.tenantId, body, signStripeBody(body, seeded.webhookSecret));
 
     expect(res.status).toBe(400);
-    expect(await paymentState(suite.db, seeded.tenantId, seeded.sessionId)).toBe("initiated");
+    expect(await paymentState(suite.db, seeded.sessionId)).toBe("initiated");
     expect(lines.map((l) => l.event)).toContain("payment.credential_environment_mismatch");
   });
 });

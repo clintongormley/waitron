@@ -22,7 +22,7 @@ const BOGUS_NODE = "99999999-9999-4999-8999-999999999999";
 
 /** Seeds tenant → location → till → working_order plus a node under that tenant/location. */
 async function seedOrderWithNode(): Promise<{
-  seeded: { tenantId: string; workingOrderId: string };
+  seeded: { workingOrderId: string };
   node: string;
 }> {
   const seeded = await seedWorkingOrder(pg.db, freshNif());
@@ -38,13 +38,13 @@ async function seedOrderWithNode(): Promise<{
 }
 
 async function insertPayment(
-  seeded: { tenantId: string; workingOrderId: string },
+  seeded: { workingOrderId: string },
   paymentRef: string,
   nodeId: string | null,
 ): Promise<{ node_id: string | null }[]> {
   const { rows } = await pg.db.execute<{ node_id: string | null }>(sql`
-    insert into payments (tenant_id, working_order_id, node_id, provider, payment_ref, amount, state)
-    values (${seeded.tenantId}, ${seeded.workingOrderId}, ${nodeId}, 'fake', ${paymentRef}, '10.00', 'captured')
+    insert into payments (working_order_id, node_id, provider, payment_ref, amount, state)
+    values (${seeded.workingOrderId}, ${nodeId}, 'fake', ${paymentRef}, '10.00', 'captured')
     returning node_id`);
   return rows;
 }

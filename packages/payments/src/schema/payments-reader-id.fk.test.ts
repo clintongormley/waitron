@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, withTransaction } from "@waitron/db";
+import { randomUUID } from "node:crypto";
+import { asAppUser, captureError, pgErrorCode, pgErrorMessage, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { freshNif, seedWorkingOrder } from "../../test/seed.js";
@@ -13,11 +14,9 @@ import { payments } from "./payments.js";
 // `core_payments` template (CORE + PAYMENTS).
 const postgres = useTemplateDb({ template: "core_payments" });
 
-/** Seeds a tenant/till/working_order (via the shared payments seed helper) plus one card reader
- * for that same tenant, everything `payments.reader_id`'s composite FK needs a real row to point
- * at. */
+/** Seeds a till/working_order (via the shared payments seed helper) plus one card reader — the
+ * rows `payments.reader_id`'s FK points at. */
 async function seedOrderWithReader(db: Database): Promise<{
-  tenantId: string;
   workingOrderId: string;
   readerId: string;
 }> {
@@ -25,14 +24,12 @@ async function seedOrderWithReader(db: Database): Promise<{
   const reader = await db
     .insert(cardReaders)
     .values({
-      tenantId: seeded.tenantId,
       provider: "sumup",
       providerRef: `rdr_${seeded.workingOrderId}`,
       name: "Counter",
     })
     .returning({ id: cardReaders.id });
   return {
-    tenantId: seeded.tenantId,
     workingOrderId: seeded.workingOrderId,
     readerId: reader[0]!.id,
   };
@@ -41,12 +38,11 @@ async function seedOrderWithReader(db: Database): Promise<{
 describe("payments.reader_id", () => {
   it("stores a payment's reader and round-trips it", async () => {
     const db = postgres.admin;
-    const { tenantId, workingOrderId, readerId } = await seedOrderWithReader(db);
+    const { workingOrderId, readerId } = await seedOrderWithReader(db);
 
     await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       await tx.insert(payments).values({
-        tenantId,
         workingOrderId,
         readerId,
         provider: "sumup",
@@ -62,5 +58,25 @@ describe("payments.reader_id", () => {
     });
     expect(stored).toHaveLength(1);
     expect(stored[0]!.readerId).toBe(readerId);
+  });
+
+  it("refuses a reader that does not exist", async () => {
+    const db = postgres.admin;
+    const { workingOrderId } = await seedOrderWithReader(db);
+    const error = await captureError(() =>
+      withTransaction(db, async (tx) => {
+        await asAppUser(tx);
+        await tx.insert(payments).values({
+          workingOrderId,
+          readerId: randomUUID(),
+          provider: "sumup",
+          paymentRef: "pay_missing_reader",
+          amount: "10.00",
+          state: "captured",
+        });
+      }),
+    );
+    expect(pgErrorCode(error)).toBe("23503"); // foreign_key_violation
+    expect(pgErrorMessage(error)).toMatch(/payments_reader_fk/);
   });
 });

@@ -4,7 +4,7 @@ import { withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import type { KeyRing } from "@waitron/credentials";
 import { StripeHostedProvider, stripeHostedClient } from "@waitron/payments-stripe";
-import { expireInitiated, resolvePaymentTenant, settleInitiated } from "@waitron/payments";
+import { expireInitiated, hasPaymentWithExternalRef, settleInitiated } from "@waitron/payments";
 import type { InboundSettlement } from "@waitron/payments";
 import { AppError, isAppError, tenantId as brandTenantId } from "@waitron/shared";
 import type { DeploymentEnvironment } from "./config.js";
@@ -20,7 +20,7 @@ const PURPOSE = "payments.stripe";
  * The AppError codes the route answers **400** to — PERMANENT client errors a retry can never fix,
  * which deliberately break the endpoint's otherwise-5xx "never drop a settlement" bias:
  *
- * - `payment.webhook_signature_invalid` / `payment.webhook_tenant_mismatch` — this file's own gate.
+ * - `payment.webhook_signature_invalid` — the signature check, this route's one gate.
  * - `shared.invalid_id` — a malformed `:tenantId` path segment (`brandTenantId` throws it before any
  *   database access); the request is unroutable, not merely unlucky.
  * - `payment.credential_environment_mismatch` — a live key on a pre-production host (or vice versa):
@@ -32,7 +32,6 @@ const PURPOSE = "payments.stripe";
  */
 const CLIENT_ERROR_CODES: ReadonlySet<string> = new Set([
   "payment.webhook_signature_invalid",
-  "payment.webhook_tenant_mismatch",
   "shared.invalid_id",
   "payment.credential_environment_mismatch",
 ]);
@@ -77,13 +76,12 @@ export function hostedWebhookSecretFrom(
 }
 
 /**
- * The receiving half of Mode 3, security path only (design §5 steps 2–6). It selects the PATH
- * tenant's own signing secret, verifies the raw event as the SOLE gate, cross-checks the resolved
- * tenant against the path, and advances the payment state under `withTransaction`.
+ * The receiving half of Mode 3, security path only (design §5 steps 2–6). It reads the database's
+ * `payments.stripe` signing secret, verifies the raw event as the SOLE gate, and advances the payment
+ * state under `withTransaction`.
  *
- * The signature is the whole of the authorisation: the path `:tenantId` is attacker-controllable, so
- * nothing acts on it until that tenant's real `webhookSecret` verifies the raw bytes. Naming a tenant
- * therefore buys an attacker nothing.
+ * The signature is the whole of the authorisation. The path `:tenantId` is attacker-controllable and
+ * only labels the error payloads and logs; it selects nothing.
  *
  * DEFERRED, by design: the `recordSale` + `associatePaymentWithSale` sale-chaining the wiring
  * capstone (`packages/payments/src/async.wiring.test.ts`) proves is NOT done here — it is blocked on
@@ -101,7 +99,7 @@ export async function settleWebhook(
   const tenant = brandTenantId(pathTenantId);
   const ref = { tenantId: pathTenantId, purpose: PURPOSE };
   // Secret selection: the database's one credential for this purpose. The path tenant plays no part
-  // in opening it; the signature check and the resolved-tenant cross-check below are the gates.
+  // in opening it; the signature check below is the gate.
   const payload = await readCredential(deps.db, deps.ring, tenant, PURPOSE);
   const secretKey = stripeSecretKeyFrom(payload, ref, deps.environment);
   const webhookSecret = hostedWebhookSecretFrom(payload, ref);
@@ -131,11 +129,8 @@ export async function settleWebhook(
   if (parsed === null) return "ignored"; // a verified event type we do not act on
   const event = parsed;
 
-  // Cross-check the #26 seam: the resolved owner must be the path tenant. `resolvePaymentTenant`
-  // runs on a plain handle OUTSIDE any transaction — its SECURITY DEFINER function is the single
-  // lookup function, returning only `tenant_id`.
-  const resolved = await resolvePaymentTenant(deps.db, event.provider, event.externalRef);
-  if (resolved === null) {
+  // Runs on a plain handle, before the settle transaction opens.
+  if (!(await hasPaymentWithExternalRef(deps.db, event.provider, event.externalRef))) {
     // No local `initiated` row: a session minted-then-crashed before its row was written, or one
     // this host never minted. Ack 2xx and let `reconcile`'s `missing_local` backstop it — never a
     // 400 that would make Stripe retry a settlement it can never place locally.
@@ -144,15 +139,6 @@ export async function settleWebhook(
       externalRef: event.externalRef,
     });
     return "unresolved";
-  }
-  // uuid comparison is case-insensitive in Postgres, so compare case-folded — a path whose casing
-  // differs from the stored uuid is the same tenant, not a mismatch.
-  if (resolved.toLowerCase() !== pathTenantId.toLowerCase()) {
-    throw new AppError("payment.webhook_tenant_mismatch", {
-      pathTenantId,
-      resolvedTenantId: resolved,
-      externalRef: event.externalRef,
-    });
   }
 
   return withTransaction(deps.db, async (tx) => {
@@ -178,10 +164,9 @@ export async function settleWebhook(
  *
  * Status contract: a returned `WebhookOutcome` — verified-and-processed, redelivery, ignored,
  * unresolved — is a uniform empty 2xx, so no existence oracle distinguishes the no-ops. A signature
- * failure or a tenant cross-check disagreement is a 400 (misconfiguration/abuse, not transient — a
- * retry cannot fix it). Anything else — a missing/unusable credential, a decrypt failure, a
- * transient DB fault — is a 5xx so Stripe retries: a provisioning race then resolves itself, and no
- * settlement is lost. Only the error CODE is ever logged, never a caught value's message.
+ * failure is a 400 (misconfiguration/abuse, not transient — a retry cannot fix it). Anything else —
+ * a missing/unusable credential, a decrypt failure, a transient DB fault — is a 5xx so Stripe
+ * retries: a provisioning race then resolves itself, and no settlement is lost. Only the error CODE is ever logged, never a caught value's message.
  */
 export function mountWebhook(app: Hono, deps: WebhookDeps, log: Logger): void {
   app.post("/webhooks/stripe/:tenantId", async (c) => {

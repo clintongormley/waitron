@@ -18,7 +18,7 @@ import {
   PAYMENTS_MIGRATIONS,
   associatePaymentWithSale,
   getPaymentByRef,
-  resolvePaymentTenant,
+  hasPaymentWithExternalRef,
   settleInitiated,
 } from "@waitron/payments";
 import { freshNif, seedForSale } from "@waitron/payments/test/seed.js";
@@ -91,7 +91,6 @@ describe("stripe hosted: initiate -> webhook -> settle -> recordSale -> associat
 
     // 1. initiate — mints the session, writes the initiated row (working order stays open).
     const init = await provider.initiate({
-      tenantId: brandTenantId(s.tenantId),
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
       amount: decimal("12.10"),
       paymentRef,
@@ -107,10 +106,9 @@ describe("stripe hosted: initiate -> webhook -> settle -> recordSale -> associat
     const event = provider.verifyAndParse(payload, "good");
     expect(event?.outcome).toBe("settled");
 
-    // 3. The (deferred) app-level orchestrator: resolve the tenant untenanted, then settle + chain +
-    //    associate in one tenant-scoped transaction.
-    const tenantId = await resolvePaymentTenant(pg.db, event!.provider, event!.externalRef);
-    expect(tenantId).toBe(s.tenantId);
+    // 3. The app-level orchestrator: confirm a local payment carries the session, then settle +
+    //    chain + associate in one transaction.
+    expect(await hasPaymentWithExternalRef(pg.db, event!.provider, event!.externalRef)).toBe(true);
 
     const saleId = await withTransaction(pg.db, async (tx) => {
       const row = await settleInitiated(tx, {
@@ -125,7 +123,6 @@ describe("stripe hosted: initiate -> webhook -> settle -> recordSale -> associat
         buildInput(s, { amount: "12.10", settledAt: event!.settledAt }),
       );
       await associatePaymentWithSale(tx, {
-        tenantId: tenantId!,
         provider: "stripe",
         paymentRef,
         saleId: recorded.saleId,
@@ -135,7 +132,7 @@ describe("stripe hosted: initiate -> webhook -> settle -> recordSale -> associat
 
     // 4. After commit: the payment is captured, associated, and still carries the session external_ref.
     const finalRow = await pg.db.transaction((tx) =>
-      getPaymentByRef(tx, { tenantId: s.tenantId, provider: "stripe", paymentRef }),
+      getPaymentByRef(tx, { provider: "stripe", paymentRef }),
     );
     expect(finalRow?.state).toBe("captured");
     expect(finalRow?.saleId).toBe(saleId);

@@ -53,22 +53,13 @@ export const payments = pgTable(
   "payments",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    tenantId: uuid("tenant_id").notNull(),
     workingOrderId: uuid("working_order_id").notNull(),
     // Nullable: the payment row exists before the sale does (the money moves first). Set to the
     // committed sale in the associate-back step.
     saleId: uuid("sale_id"),
-    // Nullable in this task (node rekey scaffolding), and stays nullable in this slice — no writer
-    // yet (design §5). Bare column: the FK is the tenant-consistent COMPOSITE (tenant_id, node_id)
-    // → nodes(tenant_id, id) declared in extraConfig below, alongside this table's existing
-    // composite tenant/working-order/sale FKs, so a set node_id must belong to THIS payment's
-    // tenant, not merely exist somewhere in `nodes`. MATCH SIMPLE (the default) satisfies it while
-    // node_id is NULL, so the column stays nullable.
+    // Nullable: no writer sets it yet (design §5). Its FK is declared in extraConfig below.
     nodeId: uuid("node_id"),
     // Nullable: cash, manual card, and the Stripe phone-as-reader path name no physical reader.
-    // Bare column: the FK is the tenant-consistent COMPOSITE (tenant_id, reader_id) →
-    // card_readers(tenant_id, id) declared in extraConfig below, mirroring node_id/sale_id. MATCH
-    // SIMPLE (the default) satisfies it while reader_id is NULL, so the column stays nullable.
     readerId: uuid("reader_id"),
     provider: text("provider").notNull(),
     /** This provider's opaque reference and the idempotency anchor. */
@@ -107,43 +98,34 @@ export const payments = pgTable(
       .defaultNow(),
   },
   (t) => [
-    // Composite target so payment_refunds can point at a tenant-consistent payment.
-    unique("payments_tenant_id_key").on(t.tenantId, t.id),
     // Idempotency: a retried collect cannot double-insert the same provider reference.
-    unique("payments_provider_ref_key").on(t.tenantId, t.provider, t.paymentRef),
-    // Tenant-consistent FK to the pre-sale entity (also anchors tenant_id).
+    unique("payments_provider_ref_key").on(t.provider, t.paymentRef),
     foreignKey({
-      columns: [t.tenantId, t.workingOrderId],
-      foreignColumns: [workingOrders.tenantId, workingOrders.id],
+      columns: [t.workingOrderId],
+      foreignColumns: [workingOrders.id],
       name: "payments_working_order_fk",
     }).onDelete("restrict"),
-    // Nullable composite FK to the committed sale. MATCH SIMPLE: satisfied while sale_id is null.
+    // The nullable FKs (sale, node, reader) are satisfied while their column is null.
     foreignKey({
-      columns: [t.tenantId, t.saleId],
-      foreignColumns: [sales.tenantId, sales.id],
+      columns: [t.saleId],
+      foreignColumns: [sales.id],
       name: "payments_sale_fk",
     }).onDelete("restrict"),
-    // Tenant-consistent composite FK to the owning node (Copilot #54): a payment cannot point at a
-    // node belonging to another tenant. Mirrors `payments_working_order_fk`/`payments_sale_fk` and `sales_node_fk`. MATCH
-    // SIMPLE (the default) satisfies it while node_id is NULL, so the column stays nullable.
     foreignKey({
-      columns: [t.tenantId, t.nodeId],
-      foreignColumns: [nodes.tenantId, nodes.id],
+      columns: [t.nodeId],
+      foreignColumns: [nodes.id],
       name: "payments_node_fk",
     }),
-    // Tenant-consistent composite FK to the card reader that took this payment. Mirrors
-    // `payments_sale_fk`/`payments_node_fk`. MATCH SIMPLE (the default) satisfies it while
-    // reader_id is NULL, so the column stays nullable.
     foreignKey({
-      columns: [t.tenantId, t.readerId],
-      foreignColumns: [cardReaders.tenantId, cardReaders.id],
+      columns: [t.readerId],
+      foreignColumns: [cardReaders.id],
       name: "payments_reader_fk",
     }).onDelete("restrict"),
     index("payments_working_order_idx").on(t.workingOrderId),
     index("payments_sale_idx").on(t.saleId),
-    // The reconcile sweep's own filter: one tenant's rows for one provider over a settled_at
-    // window. Plain and non-unique — it constrains nothing, so it cannot collide with any writer.
-    index("payments_reconcile_idx").on(t.tenantId, t.provider, t.settledAt),
+    // The reconcile sweep's own filter: one provider's rows over a settled_at window. Plain and
+    // non-unique — it constrains nothing, so it cannot collide with any writer.
+    index("payments_reconcile_idx").on(t.provider, t.settledAt),
     check("payments_amount_ck", sql`${t.amount} > 0`),
     check("payments_card_last4_ck", sql`${t.cardLast4} is null or length(${t.cardLast4}) = 4`),
     check(

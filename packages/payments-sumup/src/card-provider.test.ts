@@ -222,13 +222,13 @@ describe("SUMUP_CARD_PROVIDER.build", () => {
 
 describe("SUMUP_CARD_PROVIDER.readers", () => {
   async function readerDeps(fetchImpl: typeof globalThis.fetch) {
-    const tenantId = await seedSumUp({
+    await seedSumUp({
       apiKey: "sup_sk_x",
       merchantCode: "MABC123",
       affiliateAppId: "-",
       affiliateKey: "-",
     });
-    return { db: suite.db, ring, tenantId, fetch: fetchImpl };
+    return { db: suite.db, ring, fetch: fetchImpl };
   }
 
   it("lists only paired readers with their provider identity", async () => {

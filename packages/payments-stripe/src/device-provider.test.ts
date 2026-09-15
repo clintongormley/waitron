@@ -22,8 +22,7 @@ const AT = new Date("2026-07-24T10:00:00Z");
 // this core+payments container); threaded into the adapter's withTransaction (design §4d(B)).
 const TEST_NODE_ID = "11111111-1111-4111-8111-111111111111";
 
-/** An on-device provider is a per-till, therefore per-tenant, object, so the tenant has to exist
- * before the provider does. Mirrors `provider.test.ts`'s `providerFor`. */
+/** The provider stamps `s.tenantId` on the incident its `forward` raises for a decline. */
 function providerFor(client: FakeStripeDevice, s: { tenantId: string }): StripeOnDeviceProvider {
   return new StripeOnDeviceProvider({
     client,
@@ -33,12 +32,8 @@ function providerFor(client: FakeStripeDevice, s: { tenantId: string }): StripeO
   });
 }
 
-function collectParams(
-  s: { tenantId: string; tillId: string; workingOrderId: string },
-  allowOffline?: boolean,
-) {
+function collectParams(s: { tillId: string; workingOrderId: string }, allowOffline?: boolean) {
   return {
-    tenantId: brandTenantId(s.tenantId),
     tillId: brandTillId(s.tillId),
     workingOrderId: brandWorkingOrderId(s.workingOrderId),
     amount: decimal("10.00"),
@@ -54,7 +49,7 @@ describe("StripeOnDeviceProvider.collect", () => {
     expect(r.state).toBe("captured");
     expect(r.settledAt).not.toBeNull();
     const row = await pg.db.transaction((tx) =>
-      getPaymentByRef(tx, { tenantId: s.tenantId, provider: "stripe", paymentRef: r.paymentRef }),
+      getPaymentByRef(tx, { provider: "stripe", paymentRef: r.paymentRef }),
     );
     expect(row?.state).toBe("captured");
     expect(row?.externalRef).toMatch(/^pi_/);
@@ -62,7 +57,7 @@ describe("StripeOnDeviceProvider.collect", () => {
 
   it("accepted_offline (policy allows, consent given, under cap) chains immediately with offline:true", async () => {
     const s = await seedWorkingOrder(pg.db, freshNif());
-    await seedPaymentPolicy(pg.db, s.tenantId, "accept_offline", "50.00");
+    await seedPaymentPolicy(pg.db, "accept_offline", "50.00");
     const client = new FakeStripeDevice();
     client.nextCollect("offline"); // the gate must ACCEPT (policy + consent + under cap) for the device to store
     const provider = providerFor(client, s);
@@ -83,7 +78,7 @@ describe("StripeOnDeviceProvider.collect", () => {
     expect(r.state).toBe("network_unavailable");
     expect(r.settledAt).toBeNull();
     const row = await pg.db.transaction((tx) =>
-      getPaymentByRef(tx, { tenantId: s.tenantId, provider: "stripe", paymentRef: r.paymentRef }),
+      getPaymentByRef(tx, { provider: "stripe", paymentRef: r.paymentRef }),
     );
     expect(row).toBeUndefined();
   });
@@ -140,7 +135,7 @@ describe("StripeOnDeviceProvider.collect", () => {
     const r = await provider.collect(collectParams(s));
     expect(r.state).toBe("failed");
     const row = await pg.db.transaction((tx) =>
-      getPaymentByRef(tx, { tenantId: s.tenantId, provider: "stripe", paymentRef: r.paymentRef }),
+      getPaymentByRef(tx, { provider: "stripe", paymentRef: r.paymentRef }),
     );
     expect(row?.state).toBe("failed");
   });
@@ -161,7 +156,7 @@ describe("StripeOnDeviceProvider.resolvePending", () => {
 describe("StripeOnDeviceProvider.forward", () => {
   it("settles a cleared offline payment and declines a refused one (+ one incident), empty queue = zeros", async () => {
     const s = await seedWorkingOrder(pg.db, freshNif());
-    await seedPaymentPolicy(pg.db, s.tenantId, "accept_offline", "50.00");
+    await seedPaymentPolicy(pg.db, "accept_offline", "50.00");
     const client = new FakeStripeDevice();
     const provider = providerFor(client, s);
 
@@ -182,10 +177,10 @@ describe("StripeOnDeviceProvider.forward", () => {
     });
 
     const rowA = await pg.db.transaction((tx) =>
-      getPaymentByRef(tx, { tenantId: s.tenantId, provider: "stripe", paymentRef: a.paymentRef }),
+      getPaymentByRef(tx, { provider: "stripe", paymentRef: a.paymentRef }),
     );
     const rowB = await pg.db.transaction((tx) =>
-      getPaymentByRef(tx, { tenantId: s.tenantId, provider: "stripe", paymentRef: b.paymentRef }),
+      getPaymentByRef(tx, { provider: "stripe", paymentRef: b.paymentRef }),
     );
     expect(rowA?.state).toBe("settled");
     expect(rowB?.state).toBe("declined");
@@ -204,7 +199,7 @@ describe("StripeOnDeviceProvider.forward", () => {
 
   it("reports a nextDueAt while a ref is still pending on the device", async () => {
     const s = await seedWorkingOrder(pg.db, freshNif());
-    await seedPaymentPolicy(pg.db, s.tenantId, "accept_offline", "50.00");
+    await seedPaymentPolicy(pg.db, "accept_offline", "50.00");
     const client = new FakeStripeDevice();
     const provider = providerFor(client, s);
 
@@ -220,7 +215,7 @@ describe("StripeOnDeviceProvider.forward", () => {
 
     // Precondition: `b` really is still outstanding.
     const rowB = await pg.db.transaction((tx) =>
-      getPaymentByRef(tx, { tenantId: s.tenantId, provider: "stripe", paymentRef: b.paymentRef }),
+      getPaymentByRef(tx, { provider: "stripe", paymentRef: b.paymentRef }),
     );
     expect(rowB?.state).toBe("accepted_offline");
 

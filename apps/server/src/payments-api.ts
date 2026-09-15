@@ -137,13 +137,12 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       return fn(tx);
     });
 
-  // The runtime context every provider seat call takes — this tenant's db handle, the vault key ring,
-  // the tenant id, and the test-injected fetch when present. Built identically at each reader call
+  // The runtime context every provider seat call takes — the db handle, the vault key ring, and the
+  // test-injected fetch when present. Built identically at each reader call
   // (add / status / remove), so it lives in one place.
   const runtimeDeps = (): CardProviderRuntimeDeps => ({
     db: deps.db,
     ring: deps.ring,
-    tenantId: deps.cfg.tenantId,
     ...(deps.fetch ? { fetch: deps.fetch } : {}),
   });
 
@@ -211,9 +210,9 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         await requireConnected(tx, seat);
         const [saved] = await tx
           .insert(cardReaders)
-          .values({ tenantId: deps.cfg.tenantId, provider: providerId, providerRef, name })
+          .values({ provider: providerId, providerRef, name })
           .onConflictDoUpdate({
-            target: [cardReaders.tenantId, cardReaders.provider, cardReaders.providerRef],
+            target: [cardReaders.provider, cardReaders.providerRef],
             set: { name, active: true, disabledAt: null, unpairedAt: null },
           })
           .returning({ id: cardReaders.id });
@@ -419,7 +418,6 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         const [row] = await tx
           .insert(cardReaders)
           .values({
-            tenantId: deps.cfg.tenantId,
             provider: providerId,
             providerRef: result.providerRef,
             name,
@@ -526,9 +524,9 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         if (reader === undefined) throw new AppError("reader.not_found", { id: readerId });
         await tx
           .insert(deviceCardReaders)
-          .values({ tenantId: deps.cfg.tenantId, deviceId, readerId })
+          .values({ deviceId, readerId })
           .onConflictDoUpdate({
-            target: [deviceCardReaders.tenantId, deviceCardReaders.deviceId],
+            target: [deviceCardReaders.deviceId],
             set: { readerId },
           });
       });

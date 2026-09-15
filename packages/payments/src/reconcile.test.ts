@@ -55,7 +55,6 @@ function deps(report: FakeSettlementReport, reverse = recordingReverse().fn): Re
 async function capture(seeded: Seeded, paymentRef: string, externalRef: string, amount = "10.00") {
   await withTransaction(pg.db, (tx) =>
     insertCapturedPayment(tx, {
-      tenantId: seeded.tenantId,
       workingOrderId: seeded.workingOrderId,
       provider: PROVIDER,
       paymentRef,
@@ -72,7 +71,6 @@ async function capture(seeded: Seeded, paymentRef: string, externalRef: string, 
 async function forwardedOffline(seeded: Seeded, paymentRef: string, externalRef: string) {
   await withTransaction(pg.db, async (tx) => {
     await insertAcceptedOffline(tx, {
-      tenantId: seeded.tenantId,
       workingOrderId: seeded.workingOrderId,
       provider: PROVIDER,
       paymentRef,
@@ -80,7 +78,7 @@ async function forwardedOffline(seeded: Seeded, paymentRef: string, externalRef:
       amount: decimal("10.00"),
       settledAt: OLD_SETTLED,
     });
-    await settleForwarded(tx, { tenantId: seeded.tenantId, provider: PROVIDER, paymentRef });
+    await settleForwarded(tx, { provider: PROVIDER, paymentRef });
   });
 }
 
@@ -255,7 +253,6 @@ describe("reconcilePayments", () => {
     const seeded = await seedWorkingOrder(pg.db, freshNif());
     await withTransaction(pg.db, (tx) =>
       insertInitiated(tx, {
-        tenantId: seeded.tenantId,
         workingOrderId: seeded.workingOrderId,
         provider: PROVIDER,
         paymentRef: "p-init",
@@ -356,7 +353,6 @@ describe("reconcilePayments", () => {
     // it (unbounded by period, same as the single-record test below), so it must not be reported.
     await withTransaction(pg.db, (tx) =>
       insertCapturedPayment(tx, {
-        tenantId: seeded.tenantId,
         workingOrderId: seeded.workingOrderId,
         provider: PROVIDER,
         paymentRef: "p-elsewhere",
@@ -431,7 +427,7 @@ async function associate(seeded: Seeded, paymentRef: string): Promise<void> {
   const saleId = await seedSale(pg.db, seeded);
   await pg.db.execute(sql`
     update payments set sale_id = ${saleId}
-    where tenant_id = ${seeded.tenantId} and payment_ref = ${paymentRef}`);
+    where payment_ref = ${paymentRef}`);
 }
 
 /** Sets a seeded working order's status. `settled` also needs `settled_at` (the biconditional

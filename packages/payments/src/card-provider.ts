@@ -106,6 +106,7 @@ export interface ReaderStatus {
 export interface CardProviderBuildDeps {
   db: Database;
   ring: KeyRing;
+  /** Stamped on the incidents a provider raises (the `incidents` table still carries a tenant). */
   tenantId: TenantId;
   nodeId: string;
   environment: "preproduction" | "production";
@@ -115,7 +116,6 @@ export interface CardProviderBuildDeps {
 export interface CardProviderRuntimeDeps {
   db: Database;
   ring: KeyRing;
-  tenantId: TenantId;
   fetch?: typeof fetch;
 }
 

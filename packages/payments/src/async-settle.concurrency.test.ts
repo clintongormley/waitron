@@ -18,14 +18,14 @@ import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import {
   associatePaymentWithSale,
   getPaymentByRef,
-  resolvePaymentTenant,
+  hasPaymentWithExternalRef,
   settleInitiated,
 } from "./store.js";
 import { FakeAsyncProvider } from "./testing/fake-async-provider.js";
 import { freshNif, seedForSale } from "../test/seed.js";
 import type { SeededForSale } from "../test/seed.js";
 
-// This mirrors async.wiring.test.ts's capstone composition (verify -> resolveTenant ->
+// This mirrors async.wiring.test.ts's capstone composition (verify -> hasPaymentWithExternalRef ->
 // withTransaction{ settleInitiated + recordSale + associate }), but proves the SAME idempotency under
 // real concurrent delivery instead of sequential redelivery: two independent Postgres connections,
 // each running the full orchestration inside its own transaction, racing on the same settlement
@@ -108,8 +108,7 @@ async function orchestrate(
 ): Promise<string | null> {
   const event = provider.verifyAndParse(payload, "signature");
   if (event === null) return null;
-  const tenantId = await resolvePaymentTenant(db, event.provider, event.externalRef);
-  if (tenantId === null) return null;
+  if (!(await hasPaymentWithExternalRef(db, event.provider, event.externalRef))) return null;
   return withTransaction(db, async (tx) => {
     const row = await settleInitiated(tx, {
       provider: event.provider,
@@ -123,7 +122,6 @@ async function orchestrate(
     }
     const recorded = await recordSale(tx, backend, buildInput(s, event.settledAt));
     await associatePaymentWithSale(tx, {
-      tenantId,
       provider: event.provider,
       paymentRef: row.paymentRef,
       saleId: recorded.saleId,
@@ -136,7 +134,6 @@ describe("two simultaneous deliveries of the same settlement race on settleIniti
   it("chains exactly one sale — the second delivery's UPDATE matches nothing once the first has committed", async () => {
     const s = await seedForSale(postgres.admin, backend, freshNif());
     const minted = await provider.initiate({
-      tenantId: brandTenantId(s.tenantId),
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
       amount: decimal("12.10"),
       paymentRef: "pay-1",
@@ -190,7 +187,7 @@ describe("two simultaneous deliveries of the same settlement race on settleIniti
       expect(sales.rows[0].count).toBe("1"); // never two invoice numbers for one settlement
 
       const row = await postgres.admin.transaction((tx) =>
-        getPaymentByRef(tx, { tenantId: s.tenantId, provider: "fake", paymentRef: "pay-1" }),
+        getPaymentByRef(tx, { provider: "fake", paymentRef: "pay-1" }),
       );
       expect(row?.state).toBe("captured");
       expect(row?.saleId).toBe(holderSaleId);

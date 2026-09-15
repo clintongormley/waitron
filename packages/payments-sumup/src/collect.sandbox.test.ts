@@ -71,7 +71,6 @@ d("SumUp live sandbox: collect against the paired Solo", () => {
 
     console.log("TAP THE CARD NOW");
     const result = await provider.collect({
-      tenantId: brandTenantId(s.tenantId),
       tillId: brandTillId(s.tillId),
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
       amount: decimal("1.00"),
@@ -100,7 +99,6 @@ d("SumUp live sandbox: collect against the paired Solo", () => {
     // under the real `SUMUP_PROVIDER` ("sumup", the string the adapter itself writes).
     const row = await pg.db.transaction((tx) =>
       getPaymentByRef(tx, {
-        tenantId: s.tenantId,
         provider: SUMUP_PROVIDER,
         paymentRef: result.paymentRef,
       }),

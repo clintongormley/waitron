@@ -36,7 +36,6 @@ export async function reverseViaSumUp(
       throw new AppError("payment.not_found", { provider: SUMUP_PROVIDER, paymentRef: ref });
     }
     await assertReversible(tx, {
-      tenantId: f.tenantId,
       provider: SUMUP_PROVIDER,
       paymentRef: ref,
       kind,
@@ -44,7 +43,7 @@ export async function reverseViaSumUp(
     });
     return { ...f, externalRef: f.externalRef };
   });
-  const key = { tenantId: found.tenantId, provider: SUMUP_PROVIDER, paymentRef: ref };
+  const key = { provider: SUMUP_PROVIDER, paymentRef: ref };
   const attempted = amount ?? decimal(found.amount);
 
   const outcome = await client.refund({

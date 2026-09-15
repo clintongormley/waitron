@@ -4,7 +4,6 @@ import { CORE_MIGRATIONS } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import {
   decimal,
-  tenantId as brandTenantId,
   tillId as brandTillId,
   workingOrderId as brandWorkingOrderId,
 } from "@waitron/shared";
@@ -82,7 +81,6 @@ d("Stripe test-mode sandbox: collect against a simulated reader", () => {
     const provider = new StripeTerminalProvider({
       client: stripeClient(stripe),
       db: pg.db,
-      tenantId: brandTenantId(s.tenantId),
       nodeId: "11111111-1111-4111-8111-111111111111",
       poll: { maxAttempts: 40, intervalMs: 500 },
     });
@@ -90,7 +88,6 @@ d("Stripe test-mode sandbox: collect against a simulated reader", () => {
     // real reader needs the PaymentIntent to exist and be handed to `processPaymentIntent` before
     // `presentPaymentMethod` has anything to resolve, hence the short delay before presenting.
     const collecting = provider.collect({
-      tenantId: brandTenantId(s.tenantId),
       tillId: brandTillId(s.tillId),
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
       amount: decimal("12.10"),
@@ -123,12 +120,10 @@ d("Stripe test-mode sandbox: collect against a simulated reader", () => {
     const provider = new StripeTerminalProvider({
       client,
       db: pg.db,
-      tenantId: brandTenantId(s.tenantId),
       nodeId: "11111111-1111-4111-8111-111111111111",
       poll: { maxAttempts: 40, intervalMs: 500 },
     });
     const collecting = provider.collect({
-      tenantId: brandTenantId(s.tenantId),
       tillId: brandTillId(s.tillId),
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
       amount: decimal("12.10"),
@@ -140,7 +135,6 @@ d("Stripe test-mode sandbox: collect against a simulated reader", () => {
     expect(first.state).toBe("captured");
     const row = await pg.db.transaction((tx) =>
       getPaymentByRef(tx, {
-        tenantId: s.tenantId,
         provider: "stripe",
         paymentRef: first.paymentRef,
       }),

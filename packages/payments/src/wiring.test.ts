@@ -120,7 +120,6 @@ describe("collect -> recordSale -> associate (the payment seam, end to end)", ()
 
     // 1. The payment settles the tender.
     const paid = await provider.collect({
-      tenantId: brandTenantId(s.tenantId),
       tillId: brandTillId(s.tillId),
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
       amount: decimal("12.10"),
@@ -134,7 +133,6 @@ describe("collect -> recordSale -> associate (the payment seam, end to end)", ()
     const saleId = await pg.db.transaction(async (tx) => {
       const recorded = await recordSale(tx, backend, buildInput(s, paid));
       await associatePaymentWithSale(tx, {
-        tenantId: s.tenantId,
         provider: "fake",
         paymentRef: paid.paymentRef,
         saleId: recorded.saleId,
@@ -144,7 +142,7 @@ describe("collect -> recordSale -> associate (the payment seam, end to end)", ()
 
     // 3. After commit, the payment row carries the committed sale's id.
     const row = await pg.db.transaction((tx) =>
-      getPaymentByRef(tx, { tenantId: s.tenantId, provider: "fake", paymentRef: paid.paymentRef }),
+      getPaymentByRef(tx, { provider: "fake", paymentRef: paid.paymentRef }),
     );
     expect(row?.saleId).toBe(saleId);
     expect(row?.state).toBe("captured");
@@ -157,7 +155,6 @@ describe("collect -> recordSale -> associate (the payment seam, end to end)", ()
     provider.failNextCollect();
 
     const paid = await provider.collect({
-      tenantId: brandTenantId(s.tenantId),
       tillId: brandTillId(s.tillId),
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
       amount: decimal("12.10"),

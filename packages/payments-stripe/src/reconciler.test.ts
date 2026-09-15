@@ -40,7 +40,6 @@ async function abandonedOrphan(params: {
 }): Promise<void> {
   await withTransaction(pg.db, (tx) =>
     insertCapturedPayment(tx, {
-      tenantId: params.tenantId,
       workingOrderId: params.workingOrderId,
       provider: "stripe",
       paymentRef: params.paymentRef,
@@ -64,7 +63,6 @@ describe("StripeReconciler", () => {
     // No sale, but the working order is still open, so this is not an orphan — the clean case.
     await withTransaction(pg.db, (tx) =>
       insertCapturedPayment(tx, {
-        tenantId: seeded.tenantId,
         workingOrderId: seeded.workingOrderId,
         provider: "stripe",
         paymentRef: "ref-terminal",
@@ -89,7 +87,6 @@ describe("StripeReconciler", () => {
     const seeded = await seedWorkingOrder(pg.db, freshNif());
     await withTransaction(pg.db, (tx) =>
       insertInitiated(tx, {
-        tenantId: seeded.tenantId,
         workingOrderId: seeded.workingOrderId,
         provider: "stripe",
         paymentRef: "ref-hosted",

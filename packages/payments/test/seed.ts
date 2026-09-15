@@ -122,14 +122,12 @@ export async function seedForSale(
   return { ...seeded, seriesId };
 }
 
-/** Seeds one `payment_policy` row for the tenant through the fixture connection. */
+/** Seeds the venue's one `payment_policy` row (`id = 1`) through the fixture connection. */
 export async function seedPaymentPolicy(
   db: Database,
-  tenantId: string,
   mode: "accept_offline" | "cash_only",
   cap: string,
 ): Promise<void> {
   await db.execute(sql`
-    insert into payment_policy (tenant_id, offline_mode, offline_amount_cap)
-    values (${tenantId}, ${mode}, ${cap})`);
+    insert into payment_policy (offline_mode, offline_amount_cap) values (${mode}, ${cap})`);
 }

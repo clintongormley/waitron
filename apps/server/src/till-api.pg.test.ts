@@ -307,7 +307,6 @@ function fakePool(cfg: TillConfig, providerDb: Database, client: FakeStripe): Ca
         provider = new StripeTerminalProvider({
           client,
           db: providerDb,
-          tenantId: cfg.tenantId,
           nodeId: cfg.nodeId,
           // No real waiting: FakeStripe resolves synchronously, so a poll never actually stalls.
           poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
@@ -338,29 +337,22 @@ function apiDepsWithPool(cfg: TillConfig, pool: CardProviderPool): TillApiDeps {
   };
 }
 
-/** Seed an ACTIVE `card_readers` row (default provider `stripe`) and return its id + `providerRef`.
- * `tenantId` overrides the stamped tenant id. */
+/** Seed an ACTIVE `card_readers` row (default provider `stripe`) and return its id + `providerRef`. */
 async function seedReader(
-  cfg: TillConfig,
-  opts: { provider?: string; providerRef?: string; tenantId?: string; name?: string } = {},
+  opts: { provider?: string; providerRef?: string; name?: string } = {},
 ): Promise<{ id: string; providerRef: string }> {
   const providerRef = opts.providerRef ?? `reader_${randomUUID()}`;
   const r = await suite.admin.execute<{ id: string }>(sql`
-    insert into card_readers (tenant_id, provider, provider_ref, name)
-    values (${opts.tenantId ?? cfg.tenantId}, ${opts.provider ?? "stripe"}, ${providerRef}, ${opts.name ?? "Front counter"})
+    insert into card_readers (provider, provider_ref, name)
+    values (${opts.provider ?? "stripe"}, ${providerRef}, ${opts.name ?? "Front counter"})
     returning id`);
   return { id: r.rows[0]!.id, providerRef };
 }
 
 /** Point a device at its DEFAULT reader (`device_card_readers`). */
-async function setDefaultReader(
-  cfg: TillConfig,
-  deviceId: string,
-  readerId: string,
-): Promise<void> {
+async function setDefaultReader(deviceId: string, readerId: string): Promise<void> {
   await suite.admin.execute(sql`
-    insert into device_card_readers (tenant_id, device_id, reader_id)
-    values (${cfg.tenantId}, ${deviceId}, ${readerId})`);
+    insert into device_card_readers (device_id, reader_id) values (${deviceId}, ${readerId})`);
 }
 
 /** Seal the `payments.stripe` credential so the provider counts as CONNECTED (the pay
@@ -385,9 +377,9 @@ function deviceIdOf(cookie: string): string {
 }
 
 /** The stamped `payments.reader_id` for a working order (NULL when none), read as app_user. */
-async function readerIdOnPayment(cfg: TillConfig, workingOrderId: string): Promise<string | null> {
+async function readerIdOnPayment(workingOrderId: string): Promise<string | null> {
   const rows = await suite.admin.execute<{ reader_id: string | null }>(sql`
-    select reader_id from payments where tenant_id = ${cfg.tenantId} and working_order_id = ${workingOrderId}`);
+    select reader_id from payments where working_order_id = ${workingOrderId}`);
   return rows.rows[0]?.reader_id ?? null;
 }
 
@@ -911,8 +903,8 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       const cookie = await loginSession(app, cfg, operatorId);
       const deviceCookie = await enrolTillCookie(cfg, await createTillProfile(cfg));
       await connectStripe();
-      const reader = await seedReader(cfg);
-      await setDefaultReader(cfg, deviceIdOf(deviceCookie), reader.id);
+      const reader = await seedReader();
+      await setDefaultReader(deviceIdOf(deviceCookie), reader.id);
 
       const workingOrderId = randomUUID();
       const payRes = await app.request("/api/pay", {
@@ -929,7 +921,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       expect(outcome.outcome).toBe("captured");
       expect(outcome.ticket?.total).toBe("1.50");
       // The payment records the reader it settled on (Task 12) — proof the pay routed to the default.
-      expect(await readerIdOnPayment(cfg, workingOrderId)).toBe(reader.id);
+      expect(await readerIdOnPayment(workingOrderId)).toBe(reader.id);
     } finally {
       await providerDb.close();
     }
@@ -945,9 +937,9 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       const cookie = await loginSession(app, cfg, operatorId);
       const deviceCookie = await enrolTillCookie(cfg, await createTillProfile(cfg));
       await connectStripe();
-      const dflt = await seedReader(cfg, { name: "Default" });
-      const other = await seedReader(cfg, { name: "Other" });
-      await setDefaultReader(cfg, deviceIdOf(deviceCookie), dflt.id);
+      const dflt = await seedReader({ name: "Default" });
+      const other = await seedReader({ name: "Other" });
+      await setDefaultReader(deviceIdOf(deviceCookie), dflt.id);
 
       const workingOrderId = randomUUID();
       const payRes = await app.request("/api/pay", {
@@ -963,7 +955,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       expect(payRes.status).toBe(200);
       expect((await payRes.json()).outcome).toBe("captured");
       // The OVERRIDE reader was charged and stamped, not the default.
-      expect(await readerIdOnPayment(cfg, workingOrderId)).toBe(other.id);
+      expect(await readerIdOnPayment(workingOrderId)).toBe(other.id);
     } finally {
       await providerDb.close();
     }
@@ -987,8 +979,8 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       const cookie = await loginSession(app, cfg, operatorId);
       const deviceCookie = await enrolTillCookie(cfg, await createTillProfile(cfg));
       await connectStripe();
-      const readerA = await seedReader(cfg, { name: "Reader A" });
-      const readerB = await seedReader(cfg, { name: "Reader B" });
+      const readerA = await seedReader({ name: "Reader A" });
+      const readerB = await seedReader({ name: "Reader B" });
 
       const pay = async (readerId: string): Promise<void> => {
         const res = await app.request("/api/pay", {
@@ -1031,8 +1023,8 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       const cookie = await loginSession(app, cfg, operatorId);
       const deviceCookie = await enrolTillCookie(cfg, await createTillProfile(cfg));
       await connectStripe();
-      const reader = await seedReader(cfg);
-      await setDefaultReader(cfg, deviceIdOf(deviceCookie), reader.id);
+      const reader = await seedReader();
+      await setDefaultReader(deviceIdOf(deviceCookie), reader.id);
 
       // The sweep tick: fetch the provider (no reader) and resolve pending — exactly what
       // `connectedCardProviderSweep` does. This caches the provider; it must NOT poison it.
@@ -1051,7 +1043,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
 
       expect(payRes.status).toBe(200); // not a 500
       expect((await payRes.json()).outcome).toBe("captured");
-      expect(await readerIdOnPayment(cfg, workingOrderId)).toBe(reader.id);
+      expect(await readerIdOnPayment(workingOrderId)).toBe(reader.id);
     } finally {
       await providerDb.close();
     }
@@ -1096,8 +1088,8 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, providerDb, new FakeStripe())), noopLog);
       const cookie = await loginSession(app, cfg, operatorId);
       const deviceCookie = await enrolTillCookie(cfg, await createTillProfile(cfg));
-      const reader = await seedReader(cfg); // active reader, but provider not connected
-      await setDefaultReader(cfg, deviceIdOf(deviceCookie), reader.id);
+      const reader = await seedReader(); // active reader, but provider not connected
+      await setDefaultReader(deviceIdOf(deviceCookie), reader.id);
 
       const payRes = await app.request("/api/pay", {
         method: "POST",
@@ -1129,8 +1121,8 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       const cookie = await loginSession(app, cfg, operatorId);
       const deviceCookie = await enrolTillCookie(cfg, await createTillProfile(cfg));
       await connectStripe();
-      const reader = await seedReader(cfg);
-      await setDefaultReader(cfg, deviceIdOf(deviceCookie), reader.id);
+      const reader = await seedReader();
+      await setDefaultReader(deviceIdOf(deviceCookie), reader.id);
 
       const workingOrderId = randomUUID();
       const payRes = await app.request("/api/pay", {
@@ -1178,7 +1170,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
           cfg,
           secureCookies: false,
           venueLocale: cfg.locale,
-          cardProvider: new SimulatorPaymentProvider(providerDb, cfg.tenantId),
+          cardProvider: new SimulatorPaymentProvider(providerDb),
         },
         noopLog,
       );
@@ -1199,7 +1191,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       expect(payRes.status).toBe(200);
       expect((await payRes.json()).outcome).toBe("captured");
       // A practice sale touches no real reader, so `payments.reader_id` stays NULL.
-      expect(await readerIdOnPayment(cfg, workingOrderId)).toBeNull();
+      expect(await readerIdOnPayment(workingOrderId)).toBeNull();
     } finally {
       await providerDb.close();
     }
@@ -1214,8 +1206,8 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       const cookie = await loginSession(app, cfg, operatorId);
       const deviceCookie = await enrolTillCookie(cfg, await createTillProfile(cfg));
       await connectStripe();
-      const reader = await seedReader(cfg);
-      await setDefaultReader(cfg, deviceIdOf(deviceCookie), reader.id);
+      const reader = await seedReader();
+      await setDefaultReader(deviceIdOf(deviceCookie), reader.id);
       const payRes = await app.request("/api/pay", {
         method: "POST",
         headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
@@ -1240,8 +1232,8 @@ describe("GET /api/till (per-device card provider, over HTTP)", () => {
       const app = new Hono();
       mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, providerDb, new FakeStripe())), noopLog);
       const deviceCookie = await enrolTillCookie(cfg, await createTillProfile(cfg));
-      const reader = await seedReader(cfg); // provider "stripe"
-      await setDefaultReader(cfg, deviceIdOf(deviceCookie), reader.id);
+      const reader = await seedReader(); // provider "stripe"
+      await setDefaultReader(deviceIdOf(deviceCookie), reader.id);
 
       const res = await app.request("/api/till", { headers: { cookie: deviceCookie } });
       expect(res.status).toBe(200);
@@ -1295,13 +1287,13 @@ describe("GET /api/till (per-device card provider, over HTTP)", () => {
           cfg,
           secureCookies: false,
           venueLocale: cfg.locale,
-          cardProvider: new SimulatorPaymentProvider(providerDb, cfg.tenantId),
+          cardProvider: new SimulatorPaymentProvider(providerDb),
         },
         noopLog,
       );
       const deviceCookie = await enrolTillCookie(cfg, await createTillProfile(cfg));
-      const reader = await seedReader(cfg);
-      await setDefaultReader(cfg, deviceIdOf(deviceCookie), reader.id);
+      const reader = await seedReader();
+      await setDefaultReader(deviceIdOf(deviceCookie), reader.id);
 
       const res = await app.request("/api/till", { headers: { cookie: deviceCookie } });
       expect(res.status).toBe(200);
@@ -1908,7 +1900,7 @@ describe("handheld sales and device capability gates", () => {
       provider: string;
       state: string;
       payment_ref: string;
-    }>(sql`select provider, state, payment_ref from payments where tenant_id = ${cfg.tenantId}`);
+    }>(sql`select provider, state, payment_ref from payments`);
     expect(paymentRows.rows).toHaveLength(1);
     expect(paymentRows.rows[0]!.provider).toBe(MANUAL_PROVIDER);
     expect(paymentRows.rows[0]!.state).toBe("captured");

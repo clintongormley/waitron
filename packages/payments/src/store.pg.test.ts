@@ -7,8 +7,10 @@ import {
   captureAttempting,
   findCapturedPaymentForWorkingOrder,
   findCapturedPaymentForWorkingOrderAnyProvider,
+  hasPaymentWithExternalRef,
   insertAttempting,
   insertCapturedPayment,
+  insertInitiated,
 } from "./store.js";
 import { freshNif, seedSale, seedWorkingOrder } from "../test/seed.js";
 
@@ -37,15 +39,13 @@ describe("findCapturedPaymentForWorkingOrder", () => {
     const probe = await postgres.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
       const orderKey = {
-        tenantId: tenant.tenantId,
         provider: "stripe",
         workingOrderId: tenant.workingOrderId,
       };
-      const paymentKey = { tenantId: tenant.tenantId, provider: "stripe", paymentRef: "replay-1" };
+      const paymentKey = { provider: "stripe", paymentRef: "replay-1" };
 
       await withTransaction(probe, (tx) =>
         insertCapturedPayment(tx, {
-          tenantId: tenant.tenantId,
           workingOrderId: tenant.workingOrderId,
           provider: "stripe",
           paymentRef: "replay-1",
@@ -85,14 +85,12 @@ describe("payments card columns", () => {
     try {
       const row = await withTransaction(probe, async (tx) => {
         await insertAttempting(tx, {
-          tenantId: tenant.tenantId,
           workingOrderId: tenant.workingOrderId,
           provider: "sumup_cloud",
           paymentRef: "card-ref-1",
           amount: decimal("1.00"),
         });
         return captureAttempting(tx, {
-          tenantId: tenant.tenantId,
           provider: "sumup_cloud",
           paymentRef: "card-ref-1",
           settledAt: new Date("2026-09-11T10:53:58Z"),
@@ -116,14 +114,12 @@ describe("payments card columns", () => {
       await expect(
         withTransaction(probe, async (tx) => {
           await insertAttempting(tx, {
-            tenantId: tenant.tenantId,
             workingOrderId: tenant.workingOrderId,
             provider: "sumup_cloud",
             paymentRef: "card-ref-2",
             amount: decimal("1.00"),
           });
           await captureAttempting(tx, {
-            tenantId: tenant.tenantId,
             provider: "sumup_cloud",
             paymentRef: "card-ref-2",
             settledAt: new Date(),
@@ -144,14 +140,12 @@ describe("payments card columns", () => {
       await expect(
         withTransaction(probe, async (tx) => {
           await insertAttempting(tx, {
-            tenantId: tenant.tenantId,
             workingOrderId: tenant.workingOrderId,
             provider: "sumup_cloud",
             paymentRef: "card-ref-3",
             amount: decimal("1.00"),
           });
           await captureAttempting(tx, {
-            tenantId: tenant.tenantId,
             provider: "sumup_cloud",
             paymentRef: "card-ref-3",
             settledAt: new Date(),
@@ -173,14 +167,12 @@ describe("findCapturedPaymentForWorkingOrderAnyProvider", () => {
     try {
       await withTransaction(probe, async (tx) => {
         await insertAttempting(tx, {
-          tenantId: tenant.tenantId,
           workingOrderId: tenant.workingOrderId,
           provider: "sumup_cloud",
           paymentRef: "any-ref-1",
           amount: decimal("1.00"),
         });
         await captureAttempting(tx, {
-          tenantId: tenant.tenantId,
           provider: "sumup_cloud",
           paymentRef: "any-ref-1",
           settledAt: SETTLED,
@@ -191,7 +183,6 @@ describe("findCapturedPaymentForWorkingOrderAnyProvider", () => {
 
       const row = await withTransaction(probe, (tx) =>
         findCapturedPaymentForWorkingOrderAnyProvider(tx, {
-          tenantId: tenant.tenantId,
           workingOrderId: tenant.workingOrderId,
         }),
       );
@@ -212,11 +203,32 @@ describe("findCapturedPaymentForWorkingOrderAnyProvider", () => {
     try {
       const row = await withTransaction(probe, (tx) =>
         findCapturedPaymentForWorkingOrderAnyProvider(tx, {
-          tenantId: tenant.tenantId,
           workingOrderId: tenant.workingOrderId,
         }),
       );
       expect(row).toBeNull();
+    } finally {
+      await probe.close();
+    }
+  });
+});
+
+describe("hasPaymentWithExternalRef", () => {
+  it("answers through app_user's SELECT grant on payments, on a plain connection", async () => {
+    const seeded = await seedWorkingOrder(postgres.admin, freshNif());
+    await withTransaction(postgres.admin, (tx) =>
+      insertInitiated(tx, {
+        workingOrderId: seeded.workingOrderId,
+        provider: "stripe",
+        paymentRef: "hosted-probe",
+        externalRef: "cs_probe",
+        amount: decimal("10.00"),
+      }),
+    );
+    const probe = await postgres.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
+    try {
+      expect(await hasPaymentWithExternalRef(probe, "stripe", "cs_probe")).toBe(true);
+      expect(await hasPaymentWithExternalRef(probe, "stripe", "cs_absent")).toBe(false);
     } finally {
       await probe.close();
     }

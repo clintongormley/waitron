@@ -1,11 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import {
-  AppError,
-  saleId as brandSaleId,
-  tenantId as brandTenantId,
-  tillId as brandTillId,
-} from "@waitron/shared";
+import { AppError, saleId as brandSaleId, tillId as brandTillId } from "@waitron/shared";
 import type { Decimal, TenantId } from "@waitron/shared";
 import { withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
@@ -50,12 +45,10 @@ export interface StripeOnDeviceProviderOptions {
   /** A plain `Database` handle. `collect`/`forward`/`reverse` open their own transactions and scope
    * each one with `withTransaction(db, …)`, so nothing is required of the handle itself. */
   db: Database;
-  /** The tenant this provider serves. An on-device provider is a per-till object and a till belongs
-   * to exactly one tenant, so the scope is known at construction — which is what lets `forward` be
-   * scoped at all, since it carries no tenant in its arguments. */
+  /** Stamped on the incident `forward` raises for a declined payment. */
   tenantId: TenantId;
   /** This node's id, passed on to `reverseViaStripe` to identify the node for the record path.
-   * Known at construction like `tenantId` (one node per till). */
+   * Known at construction (one node per till). */
   nodeId: string;
 }
 
@@ -106,7 +99,7 @@ export class StripeOnDeviceProvider implements PaymentProvider {
     // Gate up front: the neutral policy decides whether offline is permitted for THIS transaction,
     // which configures the device's offline behaviour BEFORE anything is stored.
     const offlineAllowed = await this.inTenant(async (tx) => {
-      const policy = await getPaymentPolicy(tx, params.tenantId);
+      const policy = await getPaymentPolicy(tx);
       return (
         resolveOfflineDecision(policy, params.allowOffline ?? false, params.amount) === "accept"
       );
@@ -126,7 +119,6 @@ export class StripeOnDeviceProvider implements PaymentProvider {
     });
 
     const common = {
-      tenantId: params.tenantId,
       workingOrderId: params.workingOrderId,
       provider: PROVIDER,
       paymentRef,
@@ -189,9 +181,7 @@ export class StripeOnDeviceProvider implements PaymentProvider {
 
   async forward(now: Date): Promise<ForwardResult> {
     // T1 (read, no lock): list our pending offline payments. Never hold a lock across the device sync.
-    const pending = await this.inTenant((tx) =>
-      listAcceptedOffline(tx, this.opts.tenantId, PROVIDER),
-    );
+    const pending = await this.inTenant((tx) => listAcceptedOffline(tx, PROVIDER));
     if (pending.length === 0) {
       return { nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 };
     }
@@ -235,7 +225,7 @@ export class StripeOnDeviceProvider implements PaymentProvider {
       let declinedCount = 0;
       let incidentsRaised = 0;
       for (const p of pending) {
-        const key = { tenantId: p.tenantId, provider: PROVIDER, paymentRef: p.paymentRef };
+        const key = { provider: PROVIDER, paymentRef: p.paymentRef };
         if (settledSet.has(p.paymentRef)) {
           await settleForwarded(tx, key);
           forwarded += 1;
@@ -247,7 +237,7 @@ export class StripeOnDeviceProvider implements PaymentProvider {
             .from(workingOrders)
             .where(eq(workingOrders.id, p.workingOrderId));
           const raised = await recordIncidentOnce(tx, {
-            tenantId: brandTenantId(p.tenantId),
+            tenantId: this.opts.tenantId,
             tillId: brandTillId(wo.tillId),
             ...(p.saleId === null ? {} : { saleId: brandSaleId(p.saleId) }),
             error: new AppError("payment.offline_forward_declined", {

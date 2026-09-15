@@ -331,13 +331,12 @@ export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
  * below carries.
  */
 export async function buildCardProvider(
-  cfg: Pick<TillConfig, "tenantId">,
   db: Database,
   onboardingIntent?: OnboardingIntent,
   paymentTestProviders = false,
 ): Promise<PaymentProvider | undefined> {
   if (onboardingIntent === "demo" || (onboardingIntent === "prepare" && !paymentTestProviders)) {
-    return new SimulatorPaymentProvider(db, cfg.tenantId);
+    return new SimulatorPaymentProvider(db);
   }
   return undefined;
 }
@@ -1804,7 +1803,6 @@ export async function startServer(
   // reader's own provider through `cardPool` below (built once, one live provider per id), so a
   // live/integration till gets `undefined` here.
   const cardProvider = await buildCardProvider(
-    till,
     db,
     config.onboardingIntent,
     config.paymentTestProviders,
@@ -2190,14 +2188,13 @@ export async function startServer(
   // sources below. Route mounts are order-independent among themselves, so sitting beside the other
   // management-api mounts is fine as long as it precedes any catch-all handler.
   //
-  // The runtime context each card-provider seat call takes for the battery read — this tenant's db
-  // handle, the vault key ring, the tenant id — built exactly as `payments-api.ts` builds its
+  // The runtime context each card-provider seat call takes for the battery read — the db handle and
+  // the vault key ring — built exactly as `payments-api.ts` builds its
   // `runtimeDeps`, minus the test-only `fetch` (none is injected on this path, so production uses the
   // global fetch). It reuses the same `db`/`ring` bindings, never a second copy.
-  const cardRuntimeDeps = (tenantId: TenantId): CardProviderRuntimeDeps => ({
+  const cardRuntimeDeps = (): CardProviderRuntimeDeps => ({
     db,
     ring,
-    tenantId,
   });
   // The battery reading is reused for five minutes so an open dashboard's minute-by-minute poll does
   // not hammer the provider; the backup freshness for one minute.

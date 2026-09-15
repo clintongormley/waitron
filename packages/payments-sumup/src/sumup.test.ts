@@ -40,7 +40,6 @@ describe("the sumup cloud adapter against a real database", () => {
         poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
       });
       const result = await provider.collect({
-        tenantId: brandTenantId(t.tenantId),
         tillId: brandTillId(t.tillId),
         workingOrderId: brandWorkingOrderId(t.workingOrderId),
         amount: decimal("10.00"),
@@ -56,7 +55,7 @@ describe("the sumup cloud adapter against a real database", () => {
 
   it("collect() throws when no readerRef is supplied — a SumUp collect cannot proceed without a reader", async () => {
     // The reader is a per-collect input now; a collect with none is a host wiring error, not a
-    // decline. Thrown after the tenant check, before any DB write or network call — no attempting row.
+    // decline. Thrown before any DB write or network call — no attempting row.
     const t = await seedWorkingOrder(suite.admin, freshNif());
     const provider = new SumUpCloudProvider({
       client: new FakeSumUp(),
@@ -68,7 +67,6 @@ describe("the sumup cloud adapter against a real database", () => {
     });
     await expect(
       provider.collect({
-        tenantId: brandTenantId(t.tenantId),
         tillId: brandTillId(t.tillId),
         workingOrderId: brandWorkingOrderId(t.workingOrderId),
         amount: decimal("10.00"),

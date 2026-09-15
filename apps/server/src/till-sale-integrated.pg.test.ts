@@ -201,7 +201,6 @@ function integratedDeps(
   const provider = new StripeTerminalProvider({
     client,
     db: app,
-    tenantId: cfg.tenantId,
     nodeId: cfg.nodeId,
     poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
   });
@@ -444,7 +443,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     const { cfg, cafe } = await setupVenue();
     const app = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
-      const provider = new SimulatorPaymentProvider(app, cfg.tenantId);
+      const provider = new SimulatorPaymentProvider(app);
       const id = randomUUID();
       const out = await payWorkingOrderIntegrated({ db: app, backend, clock, provider }, cfg, {
         id,
@@ -467,7 +466,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     const { cfg, cafe } = await setupVenue();
     const app = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
-      const provider = new SimulatorPaymentProvider(app, cfg.tenantId);
+      const provider = new SimulatorPaymentProvider(app);
       const id = randomUUID();
       const out = await payWorkingOrderIntegrated({ db: app, backend, clock, provider }, cfg, {
         id,
@@ -866,7 +865,6 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
       const provider = new StripeTerminalProvider({
         client: new FakeStripe(),
         db: app,
-        tenantId: cfg.tenantId,
         nodeId: cfg.nodeId,
         poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
       });
@@ -919,7 +917,6 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
       await asAppUser(tx);
       await createOpenOrder(tx, cfg, id, [{ productId: cafe.id, quantity }], null);
       await insertCapturedPayment(tx, {
-        tenantId: cfg.tenantId,
         workingOrderId: id,
         provider: "stripe",
         paymentRef: `pi-ref-${randomUUID()}`,
@@ -985,7 +982,6 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
       await withTransaction(suite.admin, async (tx) => {
         await asAppUser(tx);
         await insertCapturedPayment(tx, {
-          tenantId: cfg.tenantId,
           workingOrderId: id,
           provider: "stripe",
           paymentRef: `pi-ref-${randomUUID()}`,
@@ -1339,16 +1335,11 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
   describe("lost-T2 recovery settles (never re-files)", () => {
     /** Seed the lost-T2 state on an already-placed invoice-first order: a captured stripe payment for it
      *  whose sale_id is NULL. `capturedAmount` is the GROSS the card was charged (amount due, or +tip). */
-    async function seedLostCaptureOnPlaced(
-      cfg: TillConfig,
-      id: string,
-      capturedAmount: string,
-    ): Promise<string> {
+    async function seedLostCaptureOnPlaced(id: string, capturedAmount: string): Promise<string> {
       const externalRef = `pi_lost_${randomUUID()}`;
       await withTransaction(suite.admin, async (tx) => {
         await asAppUser(tx);
         await insertCapturedPayment(tx, {
-          tenantId: cfg.tenantId,
           workingOrderId: id,
           provider: "stripe",
           paymentRef: `pi-ref-${randomUUID()}`,
@@ -1366,7 +1357,7 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
       const app = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
       try {
         const { id } = await placeInvoiceFirst(cfg, cafe); // placing fires the ticket item to the station
-        const externalRef = await seedLostCaptureOnPlaced(cfg, id, "1.50"); // charged exactly the total
+        const externalRef = await seedLostCaptureOnPlaced(id, "1.50"); // charged exactly the total
         expect(await stationQueueOrderIds(cfg, station)).toEqual([id]);
         expect(await collectedAtSet(id)).toBe(false);
 
@@ -1404,7 +1395,7 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
       const app = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
       try {
         const { id } = await placeInvoiceFirst(cfg, cafe);
-        await seedLostCaptureOnPlaced(cfg, id, "1.80"); // amount due 1.50 → tip reconstructed as 0.30
+        await seedLostCaptureOnPlaced(id, "1.80"); // amount due 1.50 → tip reconstructed as 0.30
 
         const { deps, client } = integratedDeps(cfg, app);
         const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
@@ -1429,7 +1420,7 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
       const app = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
       try {
         const { id, saleId } = await placeInvoiceFirst(cfg, cafe);
-        await seedLostCaptureOnPlaced(cfg, id, "1.00"); // below the 1.50 amount due — cannot even cover it
+        await seedLostCaptureOnPlaced(id, "1.00"); // below the 1.50 amount due — cannot even cover it
 
         const { deps, client } = integratedDeps(cfg, app);
         await expect(payWorkingOrderIntegrated(deps, cfg, { id, lines: [] })).rejects.toBeDefined();
@@ -1452,7 +1443,7 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
       const appB = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
       try {
         const { id } = await placeInvoiceFirst(cfg, cafe);
-        await seedLostCaptureOnPlaced(cfg, id, "1.50");
+        await seedLostCaptureOnPlaced(id, "1.50");
 
         // ONE lost capture, TWO retries. Both P1s pass the pre-check (sale_id NULL) with an outstanding
         // invoice → recover-settle; finalizeSettleRecovery's FOR UPDATE fully serialises them, so one

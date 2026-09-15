@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { Decimal, TenantId } from "@waitron/shared";
+import type { Decimal } from "@waitron/shared";
 import { withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type {
@@ -35,13 +35,8 @@ export interface StripeTerminalProviderOptions {
    * (T1 precedes the reader network call, so no money moved), which is the only reason this
    * adapter's version was less serious than the on-device one. `stripe.test.ts` is the proof. */
   db: Database;
-  /** The tenant this provider serves. A terminal provider is a per-till object and a till belongs
-   * to exactly one tenant, so the scope is known at construction — which is what makes every
-   * database phase below scopable without threading a tenant through methods (`void`/`refund`
-   * carry only a payment reference). The host builds one provider per tenant. */
-  tenantId: TenantId;
   /** This node's id, passed on to `reverseViaStripe` to identify the node for the record path. A
-   * per-till provider serves one node, so the id is known at construction, exactly like `tenantId`. */
+   * per-till provider serves one node, so the id is known at construction. */
   nodeId: string;
   poll?: { maxAttempts?: number; intervalMs?: number; sleep?: (ms: number) => Promise<void> };
 }
@@ -51,9 +46,8 @@ export interface StripeTerminalProviderOptions {
  * network, the outcome after, PI id in `external_ref`. A stalled reader (poll window exhausted) is
  * cancelled and the payment resolves to `failed` — the caller always gets a `PaymentResult`, never
  * an exception; the `stripe.collect_timeout` code stays declared in `errors.ts` for a future
- * incident. Reversals (void / refund / partialRefund) look the payment up untenanted via
- * `findPaymentByRef` (the interface method carries only a ref) — this works under the hermetic
- * (superuser) suite and a tenanted caller; the untenanted webhook case is deferred by design.
+ * incident. Reversals (void / refund / partialRefund) look the payment up via `findPaymentByRef`
+ * (the interface method carries only a ref).
  *
  * Deliberately carries NO session/PaymentIntent metadata analogous to the hosted create's
  * `metadata` stamp — see `hosted-client.ts`'s `createCheckoutSession` doc for why that stamp exists
@@ -86,12 +80,11 @@ export class StripeTerminalProvider implements PaymentProvider {
     const paymentRef = randomUUID();
     // See `workingOrderIdempotencyKey`'s own doc for the rationale (shared with the on-device provider).
     const stripeIdempotencyKey = workingOrderIdempotencyKey(params.workingOrderId);
-    const key = { tenantId: params.tenantId, provider: PROVIDER, paymentRef };
+    const key = { provider: PROVIDER, paymentRef };
 
     // T1 — commit the attempt before any network call.
     await this.inTenant((tx) =>
       insertAttempting(tx, {
-        tenantId: params.tenantId,
         workingOrderId: params.workingOrderId,
         provider: PROVIDER,
         paymentRef,

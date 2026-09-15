@@ -688,13 +688,12 @@ async function fileImmediateSale(
   // here). Cash gets no payments row. `settledAt` is the SAME reading the tender carries.
   if (isCard) {
     const { provider, paymentRef } = await recordManualCardPayment(tx, {
-      tenantId: cfg.tenantId,
       workingOrderId,
       amount: decimal(priced.total),
       settledAt,
       externalRef: tender.externalRef,
     });
-    await associatePaymentWithSale(tx, { provider, paymentRef, saleId, tenantId: cfg.tenantId });
+    await associatePaymentWithSale(tx, { provider, paymentRef, saleId });
   }
 
   // → settled. `working_orders_enforce_transition` permits both open → settled (walk-up/pay) and
@@ -878,7 +877,6 @@ export async function payWorkingOrderIntegrated(
       // filed and the order is therefore `settled`, so the replay above (step 2) has already returned —
       // this only fires on an `open`/`placed` order.
       const captured = await findCapturedPaymentForWorkingOrder(tx, {
-        tenantId: cfg.tenantId,
         provider: deps.provider.provider,
         workingOrderId: req.id,
       });
@@ -943,7 +941,6 @@ export async function payWorkingOrderIntegrated(
   const baseAmount =
     prepared.kind === "settle" ? prepared.outstanding.amountDue : prepared.priced.total;
   const result = await deps.provider.collect({
-    tenantId: cfg.tenantId,
     tillId: cfg.tillId,
     workingOrderId: brandWorkingOrderId(req.id),
     amount: addDecimal(baseAmount, tip),
@@ -1061,7 +1058,6 @@ async function finalizeCapture(
         provider: result.provider,
         paymentRef: result.paymentRef,
         saleId,
-        tenantId: cfg.tenantId,
         ...(deps.readerId === undefined ? {} : { readerId: deps.readerId }),
       });
 
@@ -1242,7 +1238,6 @@ async function finalizeRecovery(
       provider: deps.provider.provider,
       paymentRef: captured.paymentRef,
       saleId,
-      tenantId: cfg.tenantId,
       ...(deps.readerId === undefined ? {} : { readerId: deps.readerId }),
     });
 
@@ -1387,7 +1382,6 @@ async function finalizeSettle(
         provider: result.provider,
         paymentRef: result.paymentRef,
         saleId: outstanding.saleId,
-        tenantId: cfg.tenantId,
         ...(deps.readerId === undefined ? {} : { readerId: deps.readerId }),
       });
 
@@ -1516,7 +1510,6 @@ async function finalizeSettleRecovery(
       provider: deps.provider.provider,
       paymentRef: captured.paymentRef,
       saleId: outstanding.saleId,
-      tenantId: cfg.tenantId,
       ...(deps.readerId === undefined ? {} : { readerId: deps.readerId }),
     });
 
@@ -1675,7 +1668,6 @@ export async function collectOrder(
       // inline with the settlement.
       if (req.tender.method === "card") {
         const { provider, paymentRef } = await recordManualCardPayment(tx, {
-          tenantId: cfg.tenantId,
           workingOrderId: req.id,
           amount: decimal(sale.total),
           settledAt,
@@ -1685,7 +1677,6 @@ export async function collectOrder(
           provider,
           paymentRef,
           saleId: brandSaleId(sale.id),
-          tenantId: cfg.tenantId,
         });
       }
 

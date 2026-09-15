@@ -7,7 +7,6 @@ import { openIncidents } from "@waitron/core";
 import {
   AppError,
   decimal,
-  tenantId as brandTenantId,
   tillId as brandTillId,
   workingOrderId as brandWorkingOrderId,
 } from "@waitron/shared";
@@ -39,7 +38,6 @@ async function collect(
   allowOffline?: boolean,
 ) {
   return provider.collect({
-    tenantId: brandTenantId(s.tenantId),
     tillId: brandTillId(s.tillId),
     workingOrderId: brandWorkingOrderId(s.workingOrderId),
     amount: decimal(amount),
@@ -57,7 +55,6 @@ describe("FakePaymentProvider.collect", () => {
     expect(r.provider).toBe("fake");
     const row = await pg.db.transaction((tx) => findPaymentByRef(tx, "fake", r.paymentRef));
     expect(row?.state).toBe("captured");
-    expect(row?.tenantId).toBe(s.tenantId);
     expect(row?.amount).toBe("10.00");
   });
 
@@ -125,7 +122,6 @@ describe("FakePaymentProvider.partialRefund", () => {
     const seeded = await seedTenant();
     const provider = new FakePaymentProvider(pg.db, seeded.tenantId);
     const paid = await provider.collect({
-      tenantId: brandTenantId(seeded.tenantId),
       tillId: brandTillId(seeded.tillId),
       workingOrderId: brandWorkingOrderId(seeded.workingOrderId),
       amount: decimal("20.00"),
@@ -145,7 +141,7 @@ describe("FakePaymentProvider.capabilities", () => {
 describe("FakePaymentProvider.collect offline", () => {
   it("accepts offline when policy allows, staff opt in, and amount is within the cap", async () => {
     const s = await seedTenant();
-    await seedPaymentPolicy(pg.db, s.tenantId, "accept_offline", "50.00");
+    await seedPaymentPolicy(pg.db, "accept_offline", "50.00");
     const provider = new FakePaymentProvider(pg.db, s.tenantId);
     provider.offlineNextCollect();
     const r = await collect(provider, s, "10.00", true);
@@ -159,7 +155,7 @@ describe("FakePaymentProvider.collect offline", () => {
 
   it("returns network_unavailable and writes nothing when staff did not opt in", async () => {
     const s = await seedTenant();
-    await seedPaymentPolicy(pg.db, s.tenantId, "accept_offline", "50.00");
+    await seedPaymentPolicy(pg.db, "accept_offline", "50.00");
     const provider = new FakePaymentProvider(pg.db, s.tenantId);
     provider.offlineNextCollect();
     const r = await collect(provider, s, "10.00", false);
@@ -179,7 +175,7 @@ describe("FakePaymentProvider.collect offline", () => {
 
   it("returns network_unavailable over the cap", async () => {
     const s = await seedTenant();
-    await seedPaymentPolicy(pg.db, s.tenantId, "accept_offline", "50.00");
+    await seedPaymentPolicy(pg.db, "accept_offline", "50.00");
     const provider = new FakePaymentProvider(pg.db, s.tenantId);
     provider.offlineNextCollect();
     const r = await collect(provider, s, "50.01", true);
@@ -188,7 +184,7 @@ describe("FakePaymentProvider.collect offline", () => {
 
   it("offlineNextCollect is one-shot — the next collect is a normal online capture", async () => {
     const s = await seedTenant();
-    await seedPaymentPolicy(pg.db, s.tenantId, "accept_offline", "50.00");
+    await seedPaymentPolicy(pg.db, "accept_offline", "50.00");
     const provider = new FakePaymentProvider(pg.db, s.tenantId);
     provider.offlineNextCollect();
     await collect(provider, s, "10.00", true);
@@ -208,7 +204,6 @@ async function acceptOfflineAndAssociate(
   const saleId = await seedSale(pg.db, s);
   await pg.db.transaction((tx) =>
     associatePaymentWithSale(tx, {
-      tenantId: s.tenantId,
       provider: "fake",
       paymentRef: r.paymentRef,
       saleId,
@@ -220,7 +215,7 @@ async function acceptOfflineAndAssociate(
 describe("FakePaymentProvider.forward", () => {
   it("settles an accepted_offline payment the network clears", async () => {
     const s = await seedTenant();
-    await seedPaymentPolicy(pg.db, s.tenantId, "accept_offline", "50.00");
+    await seedPaymentPolicy(pg.db, "accept_offline", "50.00");
     const provider = new FakePaymentProvider(pg.db, s.tenantId);
     const ref = await acceptOfflineAndAssociate(provider, s);
     const result = await provider.forward(new Date());
@@ -236,7 +231,7 @@ describe("FakePaymentProvider.forward", () => {
 
   it("declines a payment the network refuses, raising one incident, without touching the sale", async () => {
     const s = await seedTenant();
-    await seedPaymentPolicy(pg.db, s.tenantId, "accept_offline", "50.00");
+    await seedPaymentPolicy(pg.db, "accept_offline", "50.00");
     const provider = new FakePaymentProvider(pg.db, s.tenantId);
     const ref = await acceptOfflineAndAssociate(provider, s);
     provider.declineForwardFor(ref);
@@ -251,7 +246,7 @@ describe("FakePaymentProvider.forward", () => {
 
   it("is idempotent — a second forward advances nothing and raises no duplicate incident", async () => {
     const s = await seedTenant();
-    await seedPaymentPolicy(pg.db, s.tenantId, "accept_offline", "50.00");
+    await seedPaymentPolicy(pg.db, "accept_offline", "50.00");
     const provider = new FakePaymentProvider(pg.db, s.tenantId);
     const ref = await acceptOfflineAndAssociate(provider, s);
     provider.declineForwardFor(ref);

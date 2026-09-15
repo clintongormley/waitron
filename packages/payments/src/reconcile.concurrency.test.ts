@@ -57,7 +57,6 @@ describe("concurrent reconcile sweeps", () => {
     const seeded = await seedWorkingOrder(postgres.admin, "B66666666");
     await withTransaction(postgres.admin, (tx) =>
       insertCapturedPayment(tx, {
-        tenantId: seeded.tenantId,
         workingOrderId: seeded.workingOrderId,
         provider: "fake",
         paymentRef: "race-1",

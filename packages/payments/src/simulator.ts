@@ -8,7 +8,7 @@ import type {
   PaymentResult,
   ProviderCapabilities,
 } from "./provider.js";
-import type { PaymentRecord, PaymentRow } from "./store.js";
+import type { PaymentRow } from "./store.js";
 import {
   findPaymentByRef,
   insertCapturedPayment,
@@ -22,23 +22,13 @@ export class SimulatorPaymentProvider implements PaymentProvider {
   readonly provider = "simulator";
   readonly capabilities: ProviderCapabilities = { partialRefund: true };
 
-  constructor(
-    private readonly db: Database,
-    private readonly tenantId: string,
-  ) {}
+  constructor(private readonly db: Database) {}
 
   async collect(params: CollectParams): Promise<PaymentResult> {
-    if (params.tenantId.toLowerCase() !== this.tenantId.toLowerCase()) {
-      throw new AppError("payment.not_found", {
-        provider: this.provider,
-        paymentRef: "<tenant mismatch>",
-      });
-    }
     const paymentRef = `sim-${randomUUID()}`;
     const declined = params.simulationOutcome === "declined";
     const settledAt = declined ? null : new Date();
     const common = {
-      tenantId: params.tenantId,
       workingOrderId: params.workingOrderId,
       provider: this.provider,
       paymentRef,
@@ -71,8 +61,8 @@ export class SimulatorPaymentProvider implements PaymentProvider {
 
   async void(ref: string): Promise<PaymentResult> {
     const row = await this.db.transaction(async (tx) => {
-      const found = await this.require(tx, ref);
-      return recordVoid(tx, { tenantId: found.tenantId, provider: this.provider, paymentRef: ref });
+      await this.require(tx, ref);
+      return recordVoid(tx, { provider: this.provider, paymentRef: ref });
     });
     return this.toResult(ref, row);
   }
@@ -81,7 +71,6 @@ export class SimulatorPaymentProvider implements PaymentProvider {
     const row = await this.db.transaction(async (tx) => {
       const found = await this.require(tx, ref);
       return recordRefund(tx, {
-        tenantId: found.tenantId,
         provider: this.provider,
         paymentRef: ref,
         amount: decimal(found.amount),
@@ -92,9 +81,8 @@ export class SimulatorPaymentProvider implements PaymentProvider {
 
   async partialRefund(ref: string, amount: Decimal): Promise<PaymentResult> {
     const row = await this.db.transaction(async (tx) => {
-      const found = await this.require(tx, ref);
+      await this.require(tx, ref);
       return recordRefund(tx, {
-        tenantId: found.tenantId,
         provider: this.provider,
         paymentRef: ref,
         amount,
@@ -103,7 +91,7 @@ export class SimulatorPaymentProvider implements PaymentProvider {
     return { provider: this.provider, paymentRef: ref, state: row.state, amount, settledAt: null };
   }
 
-  private async require(tx: Transaction, ref: string): Promise<PaymentRecord> {
+  private async require(tx: Transaction, ref: string): Promise<PaymentRow> {
     const found = await findPaymentByRef(tx, this.provider, ref);
     if (found === undefined) {
       throw new AppError("payment.not_found", { provider: this.provider, paymentRef: ref });
