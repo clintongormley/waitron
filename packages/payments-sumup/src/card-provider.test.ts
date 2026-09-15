@@ -60,7 +60,7 @@ async function seedSumUp(value: {
 }): Promise<TenantId> {
   const tenantId = await seedTenant(suite.db);
   await withTransaction(suite.db, (tx) =>
-    putCredential(tx, ring, { tenantId, purpose: "payments.sumup", value }),
+    putCredential(tx, ring, { purpose: "payments.sumup", value }),
   );
   return tenantId;
 }
@@ -468,7 +468,7 @@ describe("optionsFromSealed", () => {
 
 describe("deferredClient", () => {
   it("reads the sealed credential on first use, then reuses the resolved client", async () => {
-    const tenantId = await seedSumUp({
+    await seedSumUp({
       apiKey: "sup_sk_x",
       merchantCode: "MABC123",
       affiliateAppId: "-",
@@ -480,7 +480,7 @@ describe("deferredClient", () => {
       ]),
       "GET /v0.1/merchants/MABC123/readers": () => json(200, { items: [] }),
     });
-    const client = deferredClient({ db: suite.db, ring, tenantId, fetch });
+    const client = deferredClient({ db: suite.db, ring, fetch });
     expect(await client.memberships()).toEqual([
       { merchantCode: "MABC123", name: "Test restaurant" },
     ]);
@@ -489,15 +489,13 @@ describe("deferredClient", () => {
   });
 
   it("does not cache a failed read, so a later call retries once the credential exists", async () => {
-    const tenantId = await seedTenant(suite.db); // no payments.sumup credential yet
     const fetch = routedFetch({
       "GET /v0.1/memberships": memberships([{ resource_id: "M", resource: { name: "x" } }]),
     });
-    const client = deferredClient({ db: suite.db, ring, tenantId, fetch });
+    const client = deferredClient({ db: suite.db, ring, fetch });
     await expect(client.memberships()).rejects.toMatchObject({ code: "credentials.missing" });
     await withTransaction(suite.db, (tx) =>
       putCredential(tx, ring, {
-        tenantId,
         purpose: "payments.sumup",
         value: { apiKey: "k", merchantCode: "M", affiliateAppId: "-", affiliateKey: "-" },
       }),

@@ -89,7 +89,7 @@ export class StripeReconciler implements PaymentReconciler {
         db: this.opts.db,
         provider: PROVIDER,
         report: stripeSettlementReport(account.report, settlementLagMs),
-        reverse: (paymentRef) => this.reverse(account, tenantId, paymentRef),
+        reverse: (paymentRef) => this.reverse(account, paymentRef),
         incidents: recordIncidentOnce,
         settlementLagMs,
         nodeId: this.opts.nodeId,
@@ -105,25 +105,15 @@ export class StripeReconciler implements PaymentReconciler {
    * `reverseViaStripe` both interactive providers use, so the local pre-check, the failure
    * bookkeeping and the state transitions are shared code rather than a second implementation.
    *
-   * This caller adds two things to the shared helper, and a hosted orphan needs BOTH to be refunded
-   * at all.
-   *
-   * The first is the processor-ref resolver — a Checkout Session id is not something
-   * `stripe.refunds` can address.
-   *
-   * The second is the tenant, threaded from `reconcile`'s argument to the reversal's explicit
-   * tenant check. The callback itself receives only a payment reference.
+   * This caller adds the processor-ref resolver to the shared helper: a hosted orphan stores a
+   * Checkout Session id, which `stripe.refunds` cannot address, so it cannot be refunded without one.
    *
    * Throwing out of the resolver remains the correct failure mode: `reconcilePayments` catches it,
    * records the `AppError` code on `remediationFailures` and folds it into ONE aggregated
    * `payment.reconcile_remediation_failed` incident per till. An under-remediated orphan carrying an
    * open incident is the safe failure, a double refund is not.
    */
-  private async reverse(
-    account: StripeReconcileAccount,
-    tenantId: TenantId,
-    paymentRef: string,
-  ): Promise<void> {
+  private async reverse(account: StripeReconcileAccount, paymentRef: string): Promise<void> {
     await reverseViaStripe(
       this.opts.db,
       account.refund,
@@ -132,7 +122,6 @@ export class StripeReconciler implements PaymentReconciler {
       "refund",
       undefined,
       {
-        tenantId,
         // The sweep's own node id — the reversal's node identity (it once fed sync capture; capture
         // is gone — swap S5).
         nodeId: this.opts.nodeId,

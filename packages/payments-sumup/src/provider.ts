@@ -120,20 +120,11 @@ export class SumUpCloudProvider implements PaymentProvider {
     this.now = opts.now ?? (() => new Date());
   }
 
-  /** Case-insensitive, as `StripeTerminalProvider.requireOwnTenant` explains (Postgres renders a
-   * uuid lowercase; `tenantId()` preserves the caller's case). Before any network call. */
-  private requireOwnTenant(supplied: TenantId): void {
-    if (supplied.toLowerCase() !== this.opts.tenantId.toLowerCase()) {
-      throw new AppError("sumup.tenant_mismatch", { expected: this.opts.tenantId, supplied });
-    }
-  }
-
   private inTenant<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
     return withTransaction(this.opts.db, fn);
   }
 
   async collect(params: CollectParams): Promise<PaymentResult> {
-    this.requireOwnTenant(params.tenantId);
     // The reader ref is a PER-COLLECT input, not baked into the provider: one cached provider serves
     // every reader on this vendor, and the sale carries the reader it chose. A SumUp collect cannot
     // proceed without one — its absence is a host wiring error, not an operator condition.
@@ -385,12 +376,9 @@ export class SumUpCloudProvider implements PaymentProvider {
 
   /** void / refund / partialRefund all share one reversal path (`reverseViaSumUp`); a `void` is a
    * full refund at SumUp (spec §5 — there is no separate void endpoint), a `partialRefund` carries
-   * the amount. Every phase is tenant-scoped inside `reverseViaSumUp`. */
+   * the amount. */
   private reverse(kind: "void" | "refund", ref: string, amount?: Decimal): Promise<PaymentResult> {
-    return reverseViaSumUp(this.opts.db, this.opts.client, ref, kind, amount, {
-      tenantId: this.opts.tenantId,
-      nodeId: this.opts.nodeId,
-    });
+    return reverseViaSumUp(this.opts.db, this.opts.client, ref, kind, amount);
   }
   void(ref: string): Promise<PaymentResult> {
     return this.reverse("void", ref);

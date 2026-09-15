@@ -146,23 +146,6 @@ describe("StripeOnDeviceProvider.collect", () => {
   });
 });
 
-describe("StripeOnDeviceProvider tenant mis-wiring", () => {
-  it("accepts a params tenant that differs only in UUID case", async () => {
-    // `tenantId()` validates case-insensitively and returns the value unchanged, so a host reading
-    // its tenant from config in upper case and a caller carrying the canonical lower-case form
-    // Postgres renders hold the SAME tenant. A `!==` comparison would reject every sale.
-    const s = await seedWorkingOrder(pg.db, freshNif());
-    const provider = new StripeOnDeviceProvider({
-      client: new FakeStripeDevice(),
-      db: pg.db,
-      tenantId: brandTenantId(s.tenantId.toUpperCase()),
-      nodeId: TEST_NODE_ID,
-    });
-    const r = await provider.collect(collectParams(s));
-    expect(r.state).toBe("captured");
-  });
-});
-
 describe("StripeOnDeviceProvider.resolvePending", () => {
   it("resolvePending is all-zeros (the device SDK returns a terminal outcome before collect writes its row)", async () => {
     const provider = providerFor(new FakeStripeDevice(), await seedWorkingOrder(pg.db, freshNif()));

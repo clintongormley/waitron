@@ -51,9 +51,8 @@ export interface StripeOnDeviceProviderOptions {
    * each one with `withTransaction(db, …)`, so nothing is required of the handle itself. */
   db: Database;
   /** The tenant this provider serves. An on-device provider is a per-till object and a till belongs
-   * to exactly one tenant, so the scope is known at construction — which is what lets `forward` and
-   * the reversals be scoped at all, since neither carries a tenant in its arguments. The host
-   * builds one provider per tenant. */
+   * to exactly one tenant, so the scope is known at construction — which is what lets `forward` be
+   * scoped at all, since it carries no tenant in its arguments. */
   tenantId: TenantId;
   /** This node's id, passed on to `reverseViaStripe` to identify the node for the record path.
    * Known at construction like `tenantId` (one node per till). */
@@ -91,31 +90,6 @@ export class StripeOnDeviceProvider implements PaymentProvider {
     return this.opts.client.createConnectionToken();
   }
 
-  /** The tenant this provider serves — the single source of truth for scope. A method-supplied
-   * tenant is VALIDATED against it; the two are equal thereafter, so which one the writes below
-   * use does not matter (they use `params`, unchanged).
-   *
-   * That is the rule, not an exception: an object with a per-tenant identity scopes from that
-   * identity, and an object without one (`StripeHostedProvider`, whose only database method is
-   * `initiate`) scopes from its parameters. Both are "the tenant is established exactly once, as
-   * early as it is known".
-   *
-   * Compared case-INSENSITIVELY. `tenantId()` validates the UUID shape with a case-insensitive
-   * pattern and returns the value unchanged, so a host reading `A1B2…` from config and a caller
-   * carrying `a1b2…` from a database read hold the same tenant in Postgres's eyes and different
-   * strings in JavaScript's. A `!==` here would reject every sale on that till.
-   *
-   * Throws `stripe.tenant_mismatch` before any network call: the on-device path charges the card
-   * before writing its local row. */
-  private requireOwnTenant(supplied: TenantId): void {
-    if (supplied.toLowerCase() !== this.opts.tenantId.toLowerCase()) {
-      throw new AppError("stripe.tenant_mismatch", {
-        expected: this.opts.tenantId,
-        supplied,
-      });
-    }
-  }
-
   /** Every database phase runs through here, so no transaction this adapter opens can be left
    * unscoped — the failure that made `collect` charge cards without recording them and `forward` a
    * permanent silent no-op under a real role. */
@@ -124,9 +98,6 @@ export class StripeOnDeviceProvider implements PaymentProvider {
   }
 
   async collect(params: CollectParams): Promise<PaymentResult> {
-    // FIRST — before the policy read and, critically, before `collectOnDevice` takes the money.
-    // This class writes its row after the card is charged, so the tenant check must precede it.
-    this.requireOwnTenant(params.tenantId);
     const paymentRef = randomUUID();
     // See `workingOrderIdempotencyKey`'s own doc for the rationale (shared with the terminal
     // provider); `paymentRef` stays the separate, per-attempt random ref that also feeds the
@@ -300,12 +271,11 @@ export class StripeOnDeviceProvider implements PaymentProvider {
     return Promise.resolve({ nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 });
   }
 
-  /** The one place a reversal's tenant scope is derived, for the same reason `inTenant` is the one
-   * place a transaction's is. Delegates to the shared `reverseViaStripe` (the design's "shared with StripeTerminalProvider, not re-implemented"); the on-device client's `refund` satisfies `StripeRefunder` structurally.
-   * The reversal checks the returned payment's tenant id before any money moves. */
+  /** The one reversal path. Delegates to the shared `reverseViaStripe` (the design's "shared with
+   * StripeTerminalProvider, not re-implemented"); the on-device client's `refund` satisfies
+   * `StripeRefunder` structurally. */
   private reverse(kind: "void" | "refund", ref: string, amount?: Decimal): Promise<PaymentResult> {
     return reverseViaStripe(this.opts.db, this.opts.client, PROVIDER, ref, kind, amount, {
-      tenantId: this.opts.tenantId,
       nodeId: this.opts.nodeId,
     });
   }

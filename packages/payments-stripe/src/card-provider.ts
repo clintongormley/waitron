@@ -4,7 +4,6 @@ import type { Database } from "@waitron/db";
 import { getCredential } from "@waitron/credentials";
 import type { KeyRing } from "@waitron/credentials";
 import { AppError } from "@waitron/shared";
-import type { TenantId } from "@waitron/shared";
 import type {
   AddReaderResult,
   CardProviderBuildDeps,
@@ -61,14 +60,12 @@ function keyEnvironmentOf(secretKey: string): DeploymentEnvironment | null {
  * unknown (a caller that cannot supply it) or the key's environment is unclassifiable. */
 function assertKeyEnvironment(
   secretKey: string,
-  tenantId: TenantId,
   environment: DeploymentEnvironment | undefined,
 ): void {
   if (environment === undefined) return;
   const keyEnvironment = keyEnvironmentOf(secretKey);
   if (keyEnvironment !== null && keyEnvironment !== environment) {
     throw new AppError("payment.credential_environment_mismatch", {
-      tenantId,
       keyEnvironment,
       hostEnvironment: environment,
     });
@@ -81,28 +78,26 @@ function assertKeyEnvironment(
  * runs when `environment` is supplied. */
 export function secretKeyFromSealed(
   payload: Record<string, string>,
-  tenantId: TenantId,
   environment?: DeploymentEnvironment,
 ): string {
   const secretKey = payload.secretKey;
   if (secretKey === undefined || secretKey === "")
     throw new AppError("payment.provider_credential_rejected", { providerId: PROVIDER_ID });
-  assertKeyEnvironment(secretKey, tenantId, environment);
+  assertKeyEnvironment(secretKey, environment);
   return secretKey;
 }
 
-/** Read the tenant's sealed `payments.stripe` credential and validate/decrypt it into a secret key.
- * The read happens on each call so provisioning and rotation take effect without a restart. */
-async function secretKeyForTenant(deps: {
+/** Read the sealed `payments.stripe` credential and validate/decrypt it into a secret key. The read
+ * happens on each call so provisioning and rotation take effect without a restart. */
+async function sealedSecretKey(deps: {
   db: Database;
   ring: KeyRing;
-  tenantId: TenantId;
   environment?: DeploymentEnvironment;
 }): Promise<string> {
   const payload = await withTransaction(deps.db, (tx) =>
-    getCredential(tx, deps.ring, { tenantId: deps.tenantId, purpose: CREDENTIAL_PURPOSE }),
+    getCredential(tx, deps.ring, { purpose: CREDENTIAL_PURPOSE }),
   );
-  return secretKeyFromSealed(payload, deps.tenantId, deps.environment);
+  return secretKeyFromSealed(payload, deps.environment);
 }
 
 /** A `StripeClient` that resolves the real client (from the sealed credential) on first use. `build`
@@ -114,13 +109,12 @@ async function secretKeyForTenant(deps: {
 export function deferredStripeClient(deps: {
   db: Database;
   ring: KeyRing;
-  tenantId: TenantId;
   environment?: DeploymentEnvironment;
   makeStripe: MakeStripe;
 }): StripeClient {
   let cached: Promise<StripeClient> | undefined;
   const client = (): Promise<StripeClient> =>
-    (cached ??= secretKeyForTenant(deps)
+    (cached ??= sealedSecretKey(deps)
       .then((secretKey) => stripeClient(deps.makeStripe(secretKey)))
       .catch((error: unknown) => {
         cached = undefined;
@@ -167,8 +161,7 @@ export function createStripeCardProvider(
 
       // The prefix/environment guard runs BEFORE the network call: a mis-copied live/test key is a
       // provisioning mistake, and Stripe would accept the (valid, wrong-environment) key otherwise.
-      if (deps.tenantId !== undefined)
-        assertKeyEnvironment(secretKey, deps.tenantId, deps.environment);
+      assertKeyEnvironment(secretKey, deps.environment);
 
       const stripe = makeStripe(secretKey);
       let account: Stripe.Account;
@@ -196,7 +189,6 @@ export function createStripeCardProvider(
         client: deferredStripeClient({
           db: deps.db,
           ring: deps.ring,
-          tenantId: deps.tenantId,
           environment: deps.environment,
           makeStripe,
         }),
@@ -209,7 +201,7 @@ export function createStripeCardProvider(
     readers: {
       canUnpair: false,
       async list(deps) {
-        const secretKey = await secretKeyForTenant(deps);
+        const secretKey = await sealedSecretKey(deps);
         // The default account page only; this does not enumerate subsequent pages.
         const page = await makeStripe(secretKey).terminal.readers.list();
         return page.data.map((reader) => ({
@@ -224,7 +216,7 @@ export function createStripeCardProvider(
         // absence is a caller-contract violation, not a runtime condition an operator can act on.
         if (input.reference === undefined)
           throw new Error("stripe readers.add requires a reader reference");
-        const secretKey = await secretKeyForTenant(deps);
+        const secretKey = await sealedSecretKey(deps);
         // One retrieve verifies the id exists (and that this account owns it); a bad id throws.
         await makeStripe(secretKey).terminal.readers.retrieve(input.reference);
         return { providerRef: input.reference, status: "paired" };
@@ -232,7 +224,7 @@ export function createStripeCardProvider(
 
       async status(deps: CardProviderRuntimeDeps, providerRef: string): Promise<ReaderStatus> {
         try {
-          const secretKey = await secretKeyForTenant(deps);
+          const secretKey = await sealedSecretKey(deps);
           const reader = await makeStripe(secretKey).terminal.readers.retrieve(providerRef);
           if (!("status" in reader)) return { online: false, unreachable: true };
           return {

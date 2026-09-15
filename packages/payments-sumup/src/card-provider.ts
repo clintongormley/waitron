@@ -3,7 +3,6 @@ import type { Database } from "@waitron/db";
 import { getCredential } from "@waitron/credentials";
 import type { KeyRing } from "@waitron/credentials";
 import { AppError } from "@waitron/shared";
-import type { TenantId } from "@waitron/shared";
 import type {
   AddReaderResult,
   CardProviderBuildDeps,
@@ -48,18 +47,17 @@ const CLIENT_METHODS = [
   "memberships",
 ] as const;
 
-/** Read the tenant's sealed `payments.sumup` credential and construct a real `sumupClient` from it.
+/** Read the sealed `payments.sumup` credential and construct a real `sumupClient` from it.
  * The read happens on each call so provisioning and rotation take effect without a restart (the
  * `readCredential` convention). `fetch` is threaded through for tests and for a host that injects
  * its own. */
 export async function sumupClientForTenant(deps: {
   db: Database;
   ring: KeyRing;
-  tenantId: TenantId;
   fetch?: typeof fetch;
 }): Promise<SumUpClient> {
   const payload = await withTransaction(deps.db, (tx) =>
-    getCredential(tx, deps.ring, { tenantId: deps.tenantId, purpose: CREDENTIAL_PURPOSE }),
+    getCredential(tx, deps.ring, { purpose: CREDENTIAL_PURPOSE }),
   );
   return sumupClient({
     ...optionsFromSealed(payload),
@@ -96,7 +94,6 @@ export function optionsFromSealed(
 export function deferredClient(deps: {
   db: Database;
   ring: KeyRing;
-  tenantId: TenantId;
   fetch?: typeof fetch;
 }): SumUpClient {
   let cached: Promise<SumUpClient> | undefined;
@@ -194,7 +191,7 @@ export const SUMUP_CARD_PROVIDER: CardProviderContribution = {
 
   build(deps: CardProviderBuildDeps): PaymentProvider {
     return new SumUpCloudProvider({
-      client: deferredClient({ db: deps.db, ring: deps.ring, tenantId: deps.tenantId }),
+      client: deferredClient({ db: deps.db, ring: deps.ring }),
       db: deps.db,
       tenantId: deps.tenantId,
       nodeId: deps.nodeId,

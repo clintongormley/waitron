@@ -75,8 +75,7 @@ export class FakePaymentProvider implements PaymentProvider {
   }
 
   async collect(params: CollectParams): Promise<PaymentResult> {
-    // Mirrors the real adapters' `requireOwnTenant`. Without it this double would accept a collect
-    // for another tenant, write an `accepted_offline` row, and then never drain it — `forward`
+    // Without this check the double would accept a collect for another tenant, write an `accepted_offline` row, and then never drain it — `forward`
     // claims by `this.tenantId` — with no error anywhere. A double that silently loses money is
     // worse than no double.
     if (params.tenantId.toLowerCase() !== this.tenantId.toLowerCase()) {

@@ -300,13 +300,12 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       await gated(sessionId, async () => {});
       const seat = cardProviderById(deps.providers, id); // payment.provider_unknown on a bad id
       // The seat verifies the credential and returns the merchant name to confirm PLUS the complete
-      // payload to seal. `environment` AND `tenantId` MUST both be passed or the Stripe prefix/env
-      // guard silently no-ops (it refuses a wrong-environment key only when it knows the host's env).
+      // payload to seal. `environment` MUST be passed or the Stripe prefix/env guard silently no-ops
+      // (it refuses a wrong-environment key only when it knows the host's env).
       const { merchantName, sealedPayload } = await seat.connect(
         {
           ...(deps.fetch ? { fetch: deps.fetch } : {}),
           environment: deps.environment,
-          tenantId: deps.cfg.tenantId,
         },
         payload,
       );

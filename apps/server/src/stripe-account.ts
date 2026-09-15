@@ -71,7 +71,6 @@ export function stripeSecretKeyFrom(
   const keyEnvironment = keyEnvironmentOf(secretKey);
   if (keyEnvironment !== null && keyEnvironment !== environment) {
     throw new AppError("payment.credential_environment_mismatch", {
-      tenantId: ref.tenantId,
       keyEnvironment,
       hostEnvironment: environment,
     });

@@ -278,9 +278,8 @@ describe("reverseViaStripe's processor-ref resolution", () => {
     // The identity default is what keeps the terminal and on-device callers byte-identical: neither
     // supplies a resolver, so the stored `external_ref` must reach `stripe.refunds` untouched.
     const client = new FakeStripe();
-    const { paymentRef, tenantId } = await capturedPayment("pi_plain");
+    const { paymentRef } = await capturedPayment("pi_plain");
     await reverseViaStripe(pg.db, client, "stripe", paymentRef, "refund", undefined, {
-      tenantId,
       nodeId: TEST_NODE_ID,
     });
     expect(client.lastRefund?.paymentIntentId).toBe("pi_plain");
@@ -288,9 +287,8 @@ describe("reverseViaStripe's processor-ref resolution", () => {
 
   it("resolves the external ref through the supplied resolver before refunding", async () => {
     const client = new FakeStripe();
-    const { paymentRef, tenantId } = await capturedPayment("cs_hosted");
+    const { paymentRef } = await capturedPayment("cs_hosted");
     await reverseViaStripe(pg.db, client, "stripe", paymentRef, "refund", undefined, {
-      tenantId,
       nodeId: TEST_NODE_ID,
       resolveProcessorRef: (ref) => Promise.resolve(ref === "cs_hosted" ? "pi_resolved" : ref),
     });
@@ -304,14 +302,13 @@ describe("reverseViaStripe's processor-ref resolution", () => {
     // invalid local state must fail fast without touching the processor at all — not even to look
     // an identifier up.
     const client = new FakeStripe();
-    const { paymentRef, tenantId } = await capturedPayment("cs_precheck");
+    const { paymentRef } = await capturedPayment("cs_precheck");
     let resolved = 0;
     const resolve = (ref: string): Promise<string> => {
       resolved += 1;
       return Promise.resolve(ref);
     };
     await reverseViaStripe(pg.db, client, "stripe", paymentRef, "void", undefined, {
-      tenantId,
       nodeId: TEST_NODE_ID,
       resolveProcessorRef: resolve,
     });
@@ -319,7 +316,6 @@ describe("reverseViaStripe's processor-ref resolution", () => {
     // Second void: `assertReversible` throws on the now-`voided` row before any resolution happens.
     await expect(
       reverseViaStripe(pg.db, client, "stripe", paymentRef, "void", undefined, {
-        tenantId,
         nodeId: TEST_NODE_ID,
         resolveProcessorRef: resolve,
       }),

@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { AppError } from "@waitron/shared";
 import type { Decimal, TenantId } from "@waitron/shared";
 import { withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
@@ -69,31 +68,6 @@ export class StripeTerminalProvider implements PaymentProvider {
     this.poll = { ...DEFAULT_POLL, ...opts.poll };
   }
 
-  /** The tenant this provider serves — the single source of truth for scope. A method-supplied
-   * tenant is VALIDATED against it; the two are equal thereafter, so which one the writes below
-   * use does not matter (they use `params`, unchanged).
-   *
-   * That is the rule, not an exception: an object with a per-tenant identity scopes from that
-   * identity, and an object without one (`StripeHostedProvider`, whose only database method is
-   * `initiate`) scopes from its parameters. Both are "the tenant is established exactly once, as
-   * early as it is known".
-   *
-   * Compared case-INSENSITIVELY. `tenantId()` validates the UUID shape with a case-insensitive
-   * pattern and returns the value unchanged, so a host reading `A1B2…` from config and a caller
-   * carrying `a1b2…` from a database read hold the same tenant in Postgres's eyes and different
-   * strings in JavaScript's. A `!==` here would reject every sale on that till.
-   *
-   * Throws `stripe.tenant_mismatch` before any network call: the on-device path charges the card
-   * before writing its local row. */
-  private requireOwnTenant(supplied: TenantId): void {
-    if (supplied.toLowerCase() !== this.opts.tenantId.toLowerCase()) {
-      throw new AppError("stripe.tenant_mismatch", {
-        expected: this.opts.tenantId,
-        supplied,
-      });
-    }
-  }
-
   /** Every database phase runs through here, so no transaction this adapter opens can be left
    * unscoped — the failure that made `collect` throw `42501` on every sale under a real role. */
   private inTenant<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
@@ -101,7 +75,6 @@ export class StripeTerminalProvider implements PaymentProvider {
   }
 
   async collect(params: CollectParams): Promise<PaymentResult> {
-    this.requireOwnTenant(params.tenantId);
     // The reader ref is a PER-COLLECT input, not baked into the provider: one cached provider serves
     // every reader on this vendor, and the sale carries the reader it chose. A Terminal collect
     // cannot proceed without one — its absence is a host wiring error, not an operator condition.
@@ -199,12 +172,9 @@ export class StripeTerminalProvider implements PaymentProvider {
     }
   }
 
-  /** The one place a reversal's tenant scope is derived, for the same reason `inTenant` is the one
-   * place a transaction's is. The three public methods below differ only in kind and amount.
-   * The reversal checks the returned payment's tenant id before any money moves. */
+  /** The one reversal path; the three public methods below differ only in kind and amount. */
   private reverse(kind: "void" | "refund", ref: string, amount?: Decimal): Promise<PaymentResult> {
     return reverseViaStripe(this.opts.db, this.opts.client, PROVIDER, ref, kind, amount, {
-      tenantId: this.opts.tenantId,
       nodeId: this.opts.nodeId,
     });
   }

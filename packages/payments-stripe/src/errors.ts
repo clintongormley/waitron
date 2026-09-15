@@ -7,14 +7,8 @@ declare module "@waitron/shared" {
     /** The reader did not resolve its action within the poll window; the action was cancelled and
      * the payment failed. */
     "stripe.collect_timeout": { paymentRef: string; readerId: string };
-    /** A `collect` was handed params for a different tenant than the provider was constructed for —
-     * a host wiring error. Raised BEFORE any network call, so no money moves.
-     *
-     * The on-device path calls `collectOnDevice` before `insertCapturedPayment`, so the tenant
-     * check must precede the network call to refuse a mis-wiring before the card is charged. */
-    "stripe.tenant_mismatch": { expected: string; supplied: string };
     /**
-     * A tenant's Stripe key belongs to the other environment. A test key on a production
+     * The venue's Stripe key belongs to the other environment. A test key on a production
      * deployment takes payments that never settle, and `reconcile` then sweeps a test-mode account
      * against live rows and reports every one as missing upstream. Thrown by the card-provider
      * seat's `connect`/`build` (the `sk_live_`/`sk_test_` prefix guard) and by `apps/server`'s
@@ -25,7 +19,6 @@ declare module "@waitron/shared" {
      * the key's ENVIRONMENT, never the key or any prefix of it.
      */
     "payment.credential_environment_mismatch": {
-      tenantId: string;
       keyEnvironment: string;
       hostEnvironment: string;
     };

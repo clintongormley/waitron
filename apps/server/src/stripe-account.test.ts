@@ -3,7 +3,7 @@ import type Stripe from "stripe";
 import { CORE_MIGRATIONS, captureError, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { CREDENTIALS_MIGRATIONS, loadKeyRing, putCredential } from "@waitron/credentials";
-import { isAppError } from "@waitron/shared";
+import { isAppError, type AppError } from "@waitron/shared";
 import { defaultMakeStripe, stripeAccountResolver, stripeSecretKeyFrom } from "./stripe-account.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 
@@ -87,13 +87,10 @@ describe("stripeSecretKeyFrom", () => {
     const error = await captureError(() =>
       Promise.resolve(stripeSecretKeyFrom({ secretKey: "sk_test_abc123" }, REF, "production")),
     );
-    expect(error).toMatchObject({
-      code: "payment.credential_environment_mismatch",
-      params: {
-        tenantId: REF.tenantId,
-        keyEnvironment: "preproduction",
-        hostEnvironment: "production",
-      },
+    expect(error).toMatchObject({ code: "payment.credential_environment_mismatch" });
+    expect((error as AppError).params).toEqual({
+      keyEnvironment: "preproduction",
+      hostEnvironment: "production",
     });
   });
 

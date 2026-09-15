@@ -4,7 +4,6 @@ import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { CREDENTIALS_MIGRATIONS, loadKeyRing, putCredential } from "@waitron/credentials";
 import type { IncidentSink } from "@waitron/payments";
-import { tenantId as brandTenantId } from "@waitron/shared";
 import type { TenantId } from "@waitron/shared";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import {
@@ -90,7 +89,7 @@ function fakeMakeStripe(
 async function seedStripe(value: Record<string, string>): Promise<TenantId> {
   const tenantId = await seedTenant(suite.db);
   await withTransaction(suite.db, (tx) =>
-    putCredential(tx, ring, { tenantId, purpose: "payments.stripe", value }),
+    putCredential(tx, ring, { purpose: "payments.stripe", value }),
   );
   return tenantId;
 }
@@ -181,15 +180,7 @@ describe("STRIPE_CARD_PROVIDER.connect", () => {
   it("throws credential_environment_mismatch for a test key on a production host, before any call", async () => {
     const calls = freshCalls();
     const seat = createStripeCardProvider(fakeMakeStripe({}, calls));
-    await expect(
-      seat.connect(
-        {
-          environment: "production",
-          tenantId: brandTenantId("11111111-1111-4111-8111-111111111111"),
-        },
-        FOUR_FIELDS,
-      ),
-    ).rejects.toMatchObject({
+    await expect(seat.connect({ environment: "production" }, FOUR_FIELDS)).rejects.toMatchObject({
       code: "payment.credential_environment_mismatch",
       params: { keyEnvironment: "preproduction", hostEnvironment: "production" },
     });
@@ -358,42 +349,29 @@ describe("STRIPE_CARD_PROVIDER.readers", () => {
 
 describe("secretKeyFromSealed", () => {
   it("returns the secret key from a well-formed payload", () => {
-    expect(
-      secretKeyFromSealed(
-        { secretKey: "sk_test_x" },
-        brandTenantId("11111111-1111-4111-8111-111111111111"),
-      ),
-    ).toBe("sk_test_x");
+    expect(secretKeyFromSealed({ secretKey: "sk_test_x" })).toBe("sk_test_x");
   });
 
   it("rejects a sealed payload missing the secret key", () => {
-    expect(() =>
-      secretKeyFromSealed(
-        { webhookSecret: "w" },
-        brandTenantId("11111111-1111-4111-8111-111111111111"),
-      ),
-    ).toThrow(/payment.provider_credential_rejected/);
+    expect(() => secretKeyFromSealed({ webhookSecret: "w" })).toThrow(
+      /payment.provider_credential_rejected/,
+    );
   });
 
   it("throws credential_environment_mismatch for a live key on a pre-production host", () => {
-    expect(() =>
-      secretKeyFromSealed(
-        { secretKey: "sk_live_x" },
-        brandTenantId("11111111-1111-4111-8111-111111111111"),
-        "preproduction",
-      ),
-    ).toThrow(/payment.credential_environment_mismatch/);
+    expect(() => secretKeyFromSealed({ secretKey: "sk_live_x" }, "preproduction")).toThrow(
+      /payment.credential_environment_mismatch/,
+    );
   });
 });
 
 describe("deferredStripeClient", () => {
   it("reads the sealed credential on first use and dispatches through the resolved client", async () => {
-    const tenantId = await seedStripe(FOUR_FIELDS);
+    await seedStripe(FOUR_FIELDS);
     const calls = freshCalls();
     const client = deferredStripeClient({
       db: suite.db,
       ring,
-      tenantId,
       environment: "preproduction",
       makeStripe: fakeMakeStripe({}, calls),
     });
@@ -406,12 +384,10 @@ describe("deferredStripeClient", () => {
   });
 
   it("does not cache a failed read, so a later call retries once the credential exists", async () => {
-    const tenantId = await seedTenant(suite.db); // no payments.stripe credential yet
     const calls = freshCalls();
     const client = deferredStripeClient({
       db: suite.db,
       ring,
-      tenantId,
       environment: "preproduction",
       makeStripe: fakeMakeStripe({}, calls),
     });
@@ -419,7 +395,7 @@ describe("deferredStripeClient", () => {
       code: "credentials.missing",
     });
     await withTransaction(suite.db, (tx) =>
-      putCredential(tx, ring, { tenantId, purpose: "payments.stripe", value: FOUR_FIELDS }),
+      putCredential(tx, ring, { purpose: "payments.stripe", value: FOUR_FIELDS }),
     );
     await client.cancelReaderAction("tmr_abc");
     expect(calls.cancelled).toEqual(["tmr_abc"]);
