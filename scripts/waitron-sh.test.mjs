@@ -76,8 +76,8 @@ case "$1" in
     case "$args" in
       *" pull "*|*" pull")
         # Mimics real compose, which exits 0 on a failed pull when given --ignore-pull-failures
-        # (probed on Compose v5.1.0). install no longer passes the flag, so re-adding it makes the
-        # pull-failure test fail here.
+        # (probed on Compose v5.1.0). install must not pass the flag; if it does, this stub exits 0
+        # and the pull-failure test fails.
         case "$args" in *--ignore-pull-failures*) exit 0 ;; esac
         [ "${pullErr}" = "1" ] && exit 1 ;;
       *" ps "*|*" ps") echo "${dockerPs}" ;;

@@ -46,7 +46,7 @@ export const SHUTDOWN_DEADLINE_MS = 8000;
  *
  * A THIRD signal, of either name, is not caught by anything here: both `once` listeners have
  * already fired and removed themselves, so it falls through to Node's default action and kills the
- * process immediately, mid-shutdown, with the pool undrained. Accepted gap, not a covered case.
+ * process immediately, mid-shutdown, with the pools still open. Accepted gap, not a covered case.
  */
 export function installShutdownHandlers(
   server: { close(): Promise<void> },

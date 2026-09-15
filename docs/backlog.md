@@ -1314,6 +1314,12 @@ image constraints under *Detail → Box image*.
   `@waitron/db`'s enumerated `exports` map, which is why it is not a five-minute change.
 - **A box that mints its certificate before NTP sync persists a wrong validity window**, with no
   renewal path yet. Ties to a time-health check and certificate renewal.
+- **Server shutdown can skip closing its database pools.** In `makeStartedServer`
+  (`apps/server/src/boot.ts`), the step that stops background work (`stopWork`) runs outside the
+  try/finally that closes the pools, so if it ever rejected, `closePools` would be skipped and the
+  pools left open. Trading mode's version awaits the live change listener's startup and its close
+  without catching a failure. From reading the code these are believed not to reject today; that has
+  not been tested.
 - **Hardening from onboarding 2b:** a DB-level advisory lock on `tenantId` spanning
   guard→stamp→`applyVenue`; a wizard-only box runs its trading life on the owner role rather than
   `app_user` until the role-split retrofit.

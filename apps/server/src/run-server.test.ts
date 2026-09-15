@@ -108,6 +108,7 @@ describe("installShutdownHandlers", () => {
     let fire: (() => void) | undefined;
     const exit = vi.fn();
     const written: string[] = [];
+    const pendingWrites: (() => void)[] = [];
     const handlers = new Map<string, () => void>();
     installShutdownHandlers(
       { close: () => Promise.reject(new Error("pool end failed")) },
@@ -116,6 +117,7 @@ describe("installShutdownHandlers", () => {
         write: (line, done) => {
           written.push(line);
           if (completeWrites) done();
+          else pendingWrites.push(done);
         },
         exit,
         now: () => new Date("2026-09-08T00:00:00Z"),
@@ -126,7 +128,7 @@ describe("installShutdownHandlers", () => {
       },
     );
     handlers.get("SIGTERM")!();
-    return { fire: () => fire!(), exit, written };
+    return { fire: () => fire!(), exit, written, pendingWrites };
   }
 
   it("still exits 1 at the deadline when close rejects and the failure log write never completes", async () => {
@@ -173,34 +175,15 @@ describe("installShutdownHandlers", () => {
   });
 
   it("a stalled failure-log write completing after the deadline's exit does not exit again", async () => {
-    let fire: (() => void) | undefined;
-    const pendingWrites: (() => void)[] = [];
-    const exit = vi.fn();
-    const written: string[] = [];
-    const handlers = new Map<string, () => void>();
-    installShutdownHandlers(
-      { close: () => Promise.reject(new Error("pool end failed")) },
-      {
-        on: (sig, fn) => void handlers.set(sig, fn),
-        write: (line, done) => {
-          written.push(line);
-          pendingWrites.push(done);
-        },
-        exit,
-        now: () => new Date("2026-09-08T00:00:00Z"),
-        setTimer: (_ms, fn) => {
-          fire = fn;
-          return { cancel: () => {} };
-        },
-      },
-    );
-    handlers.get("SIGTERM")!();
-    await vi.waitFor(() => expect(written.join("")).toContain("server.shutdown_failed"));
-    fire!();
-    expect(exit).toHaveBeenCalledWith(1);
-    for (const done of pendingWrites) done();
-    expect(exit).toHaveBeenCalledTimes(1);
-    expect(exit).toHaveBeenCalledWith(1);
+    const h = rejectingHarness(false);
+    await vi.waitFor(() => expect(h.written.join("")).toContain("server.shutdown_failed"));
+    h.fire();
+    expect(h.exit).toHaveBeenCalledWith(1);
+    for (const done of h.pendingWrites) done();
+    expect(h.exit).toHaveBeenCalledTimes(1);
+    expect(h.exit).toHaveBeenCalledWith(1);
+    // close() already failed, so the deadline exits without also logging a timeout.
+    expect(h.written.join("")).not.toContain("server.shutdown_timeout");
   });
 
   it("a rejection arriving after the deadline already exited neither logs nor exits again", async () => {

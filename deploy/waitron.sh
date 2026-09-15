@@ -121,8 +121,9 @@ fetch_box_files() {
   echo "waitron.sh: wrote compose.yml from ${ref} (any local compose.yml edits were overwritten)"
 }
 
-# 4. main pulls the published image and records no override; a branch/commit builds both images on
-#    the box from the git context and records the tags in .env so the box stays on them.
+# 4. main pulls every image in compose.yml and records no override; a branch/commit builds both
+#    Waitron images on the box from the git context and records the tags in .env so the box stays
+#    on them.
 select_image() {
   local ref="$1"
   if [ "$ref" = "main" ]; then
