@@ -13,7 +13,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tenantId as brandTenantId,
   tillId as brandTillId,
 } from "@waitron/shared";
 import type { Logger } from "./logger.js";
@@ -89,12 +88,12 @@ async function setupTenant(): Promise<{ venue: VenueResult; managerId: string; s
   const { managerId, staffId } = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const manager = await tx.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, email, pin_hash, password_hash, role)
-      values (${venue.tenantId}, 'The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')
+      insert into persons (display_name, email, pin_hash, password_hash, role)
+      values ('The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')
       returning id`);
     const staff = await tx.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, email, pin_hash, password_hash, role)
-      values (${venue.tenantId}, 'The Clerk', ${STAFF_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'staff')
+      insert into persons (display_name, email, pin_hash, password_hash, role)
+      values ('The Clerk', ${STAFF_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'staff')
       returning id`);
     return { managerId: manager.rows[0]!.id, staffId: staff.rows[0]!.id };
   });
@@ -106,7 +105,6 @@ async function setupTenant(): Promise<{ venue: VenueResult; managerId: string; s
  *  helper in `move-merge.pg.test.ts`; `boot.ts` threads the real `till` config here in production. */
 function tillConfigFromVenue(venue: VenueResult): TillConfig {
   return {
-    tenantId: brandTenantId(venue.tenantId),
     tillId: brandTillId(venue.tillId),
     nodeId: brandNodeId(venue.nodeId),
     seriesId: brandSeriesId(venue.seriesIds[0]!),
@@ -124,7 +122,7 @@ function mountApp(venue: VenueResult): Hono {
     app,
     {
       db: suite.admin,
-      cfg: { tenantId: venue.tenantId, nodeId: venue.nodeId },
+      cfg: { nodeId: venue.nodeId },
       // The venue's own config (tenant + location) the zone/table config routes scope to.
       venueCfg: tillConfigFromVenue(venue),
       secureCookies: false,
@@ -1349,13 +1347,13 @@ describe("/management-api/stations (KDS-1 config)", () => {
     // Seed a real category + product to route, on the app role under this venue's tenant.
     const { categoryId, productId } = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
-      const catalogue = await createCatalogue(tx, brandTenantId(venue.tenantId), {
+      const catalogue = await createCatalogue(tx, {
         name: unique("Carta"),
       });
-      const category = await createCategory(tx, brandTenantId(venue.tenantId), {
+      const category = await createCategory(tx, {
         name: { [LOCALE]: unique("Cat") },
       });
-      const product = await createProduct(tx, brandTenantId(venue.tenantId), {
+      const product = await createProduct(tx, {
         catalogueId: catalogue.id,
         categoryId: category.id,
         name: unique("Prod"),
@@ -1615,13 +1613,13 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
     // Seed a real product to route, on the app role under this venue's tenant.
     const { productId } = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
-      const catalogue = await createCatalogue(tx, brandTenantId(venue.tenantId), {
+      const catalogue = await createCatalogue(tx, {
         name: unique("Carta"),
       });
-      const category = await createCategory(tx, brandTenantId(venue.tenantId), {
+      const category = await createCategory(tx, {
         name: { [LOCALE]: unique("Cat") },
       });
-      const product = await createProduct(tx, brandTenantId(venue.tenantId), {
+      const product = await createProduct(tx, {
         catalogueId: catalogue.id,
         categoryId: category.id,
         name: unique("Prod"),

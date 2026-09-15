@@ -18,8 +18,7 @@ import { assertQuantityPrecision } from "./units.js";
 
 const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
 
-async function product(tx: Transaction, tenantId: string, name: string) {
-  void tenantId;
+async function product(tx: Transaction, name: string) {
   const menu = await tx.execute<{ id: string }>(sql`
     insert into catalogues (name) values ('Menu') returning id`);
   return (
@@ -67,7 +66,7 @@ describe("unit operations", () => {
   });
 
   it("creates, reads, updates, assigns and deletes within a tenant", async () => {
-    const tenantId = await seedTenant(suite.db);
+    await seedTenant(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const unit = await createUnit(
         tx,
@@ -82,7 +81,7 @@ describe("unit operations", () => {
         precision: 1,
       });
 
-      const productId = await product(tx, tenantId, "Soup");
+      const productId = await product(tx, "Soup");
       await assignProductUnit(tx, productId, unit.id);
       await tx.execute(sql`
         update products set active = false where id = ${productId}`);
@@ -94,7 +93,7 @@ describe("unit operations", () => {
   });
 
   it("lists the products using a unit, with each product's availability", async () => {
-    const tenantId = await seedTenant(suite.db);
+    await seedTenant(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const unit = await createUnit(
         tx,
@@ -103,8 +102,8 @@ describe("unit operations", () => {
       );
       expect(await productsUsingUnit(tx, unit.id)).toEqual([]);
 
-      const soup = await product(tx, tenantId, "Soup");
-      const tea = await product(tx, tenantId, "Tea");
+      const soup = await product(tx, "Soup");
+      const tea = await product(tx, "Tea");
       await assignProductUnit(tx, soup, unit.id);
       await assignProductUnit(tx, tea, unit.id);
       await tx.execute(sql`
@@ -122,7 +121,7 @@ describe("unit operations", () => {
   });
 
   it("reassigns products from one unit to another", async () => {
-    const tenantId = await seedTenant(suite.db);
+    await seedTenant(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const from = await createUnit(
         tx,
@@ -134,8 +133,8 @@ describe("unit operations", () => {
         { name: { en: "kg" }, precision: 3, abbreviation: { en: "u" } },
         "en",
       );
-      const a = await product(tx, tenantId, "A");
-      const b = await product(tx, tenantId, "B");
+      const a = await product(tx, "A");
+      const b = await product(tx, "B");
       await assignProductUnit(tx, a, from.id);
       await assignProductUnit(tx, b, from.id);
       expect(await productsUsingUnit(tx, from.id)).toHaveLength(2);
@@ -149,7 +148,7 @@ describe("unit operations", () => {
   // The contract the single-statement reassignment settled on: an id the source unit does not
   // currently hold is not an error, it is simply not matched.
   it("skips an unknown product id instead of failing the reassignment", async () => {
-    const owner = await seedTenant(suite.db);
+    await seedTenant(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const from = await createUnit(
         tx,
@@ -161,7 +160,7 @@ describe("unit operations", () => {
         { name: { en: "kg" }, precision: 3, abbreviation: { en: "u" } },
         "en",
       );
-      const a = await product(tx, owner, "A");
+      const a = await product(tx, "A");
       await assignProductUnit(tx, a, from.id);
 
       await expect(
@@ -175,14 +174,14 @@ describe("unit operations", () => {
   });
 
   it("refuses to reassign to a unit that does not exist", async () => {
-    const tenantId = await seedTenant(suite.db);
+    await seedTenant(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const from = await createUnit(
         tx,
         { name: { en: "each" }, precision: 0, abbreviation: { en: "u" } },
         "en",
       );
-      const a = await product(tx, tenantId, "A");
+      const a = await product(tx, "A");
       await assignProductUnit(tx, a, from.id);
       await expect(
         reassignProductsToUnit(tx, from.id, [a], "00000000-0000-4000-8000-000000000000"),

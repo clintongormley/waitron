@@ -2,7 +2,6 @@ import { beforeEach, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { withTransaction } from "@waitron/db";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import type { TenantId } from "@waitron/shared";
 import { createCatalogue, listProducts } from "./operations.js";
 import { readProductEditor, saveProductEditor, type ProductEditorInput } from "./product-editor.js";
 import { createUnit } from "./units.js";
@@ -11,13 +10,12 @@ import { createModifier } from "./modifiers.js";
 import { useCatalogueDb } from "../test/fixtures.js";
 
 const fx = useCatalogueDb();
-let tenantId: TenantId;
 let catalogueId: string;
 let input: ProductEditorInput;
 beforeEach(async () => {
-  tenantId = await seedTenant(fx.db);
+  await seedTenant(fx.db);
   const setup = await withTransaction(fx.db, async (tx) => ({
-    catalogue: await createCatalogue(tx, tenantId, { name: "Menu" }),
+    catalogue: await createCatalogue(tx, { name: "Menu" }),
     unit: await createUnit(
       tx,
       { name: { en: "each" }, precision: 0, abbreviation: { en: "u" } },
@@ -78,7 +76,7 @@ it("reads a product with no unit as unitId null", async () => {
 
 it("saves and reads the canonical editor shape with independent content and variants", async () => {
   const saved = await withTransaction(fx.db, (tx) =>
-    saveProductEditor(tx, tenantId, null, catalogueId, input, "en"),
+    saveProductEditor(tx, null, catalogueId, input, "en"),
   );
   expect(saved).toEqual({
     ...input,
@@ -91,7 +89,6 @@ it("saves and reads the canonical editor shape with independent content and vari
   const updated = await withTransaction(fx.db, (tx) =>
     saveProductEditor(
       tx,
-      tenantId,
       saved.id,
       catalogueId,
       {
@@ -139,20 +136,20 @@ it("refuses a save with exactly one variant but allows none or two", async () =>
 
 it("changes the product's unit on update", async () => {
   const saved = await withTransaction(fx.db, (tx) =>
-    saveProductEditor(tx, tenantId, null, catalogueId, input, "en"),
+    saveProductEditor(tx, null, catalogueId, input, "en"),
   );
   const other = await withTransaction(fx.db, (tx) =>
     createUnit(tx, { name: { en: "kg" }, precision: 3, abbreviation: { en: "u" } }, "en"),
   );
   const updated = await withTransaction(fx.db, (tx) =>
-    saveProductEditor(tx, tenantId, saved.id, catalogueId, { ...saved, unitId: other.id }, "en"),
+    saveProductEditor(tx, saved.id, catalogueId, { ...saved, unitId: other.id }, "en"),
   );
   expect(updated.unitId).toBe(other.id);
 });
 
 it("writes direct declarations without reviving or rewriting stale recipe derivation", async () => {
   const saved = await withTransaction(fx.db, (tx) =>
-    saveProductEditor(tx, tenantId, null, catalogueId, input, "en"),
+    saveProductEditor(tx, null, catalogueId, input, "en"),
   );
   const staleRecipe = { allergens: { milk: { presence: "contains" } }, source: "old" };
   const staleDiet = { origins: ["dairy"], pending: false };
@@ -163,7 +160,6 @@ it("writes direct declarations without reviving or rewriting stale recipe deriva
       where id = ${saved.id}`);
     await saveProductEditor(
       tx,
-      tenantId,
       saved.id,
       catalogueId,
       { ...input, dietaryDeclarations: ["halal", "kosher"] },
@@ -188,7 +184,6 @@ it("rolls back product and variants when a supporting association fails", async 
     withTransaction(fx.db, (tx) =>
       saveProductEditor(
         tx,
-        tenantId,
         null,
         catalogueId,
         { ...input, modifierIds: [crypto.randomUUID()] },
@@ -201,10 +196,9 @@ it("rolls back product and variants when a supporting association fails", async 
 
 it("round-trips real category and modifier associations", async () => {
   const associations = await withTransaction(fx.db, async (tx) => ({
-    category: await createCategory(tx, tenantId, { name: { en: "Drinks" } }, "en"),
+    category: await createCategory(tx, { name: { en: "Drinks" } }, "en"),
     modifier: await createModifier(
       tx,
-      tenantId,
       { type: "text", name: { en: "Note" }, available: true },
       "en",
     ),
@@ -212,7 +206,6 @@ it("round-trips real category and modifier associations", async () => {
   const saved = await withTransaction(fx.db, (tx) =>
     saveProductEditor(
       tx,
-      tenantId,
       null,
       catalogueId,
       {
@@ -242,7 +235,6 @@ it.each([
     withTransaction(fx.db, (tx) =>
       saveProductEditor(
         tx,
-        tenantId,
         null,
         catalogueId,
         { ...input, [field]: value } as ProductEditorInput,

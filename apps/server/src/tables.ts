@@ -113,7 +113,6 @@ export async function createTable(
     const [row] = await tx
       .insert(diningTables)
       .values({
-        tenantId: cfg.tenantId,
         locationId: cfg.locationId,
         label: input.label,
         zoneId: input.zoneId ?? null,
@@ -335,7 +334,6 @@ export async function createZone(
     const [row] = await tx
       .insert(floorZones)
       .values({
-        tenantId: cfg.tenantId,
         locationId: cfg.locationId,
         name: input.name,
         displayOrder: input.displayOrder ?? 0,
@@ -466,7 +464,6 @@ export async function createStatus(
   tx: Transaction,
   input: {
     managementSessionId: string;
-    tenantId: string;
     label: string;
     color: string;
     displayOrder?: number;
@@ -478,7 +475,6 @@ export async function createStatus(
     const [row] = await tx
       .insert(tableServiceStatuses)
       .values({
-        tenantId: input.tenantId,
         label: input.label,
         color,
         displayOrder: input.displayOrder ?? 0,
@@ -532,7 +528,7 @@ export async function listServiceStatuses(tx: Transaction): Promise<ServiceStatu
  */
 export async function listStatuses(
   tx: Transaction,
-  input: { managementSessionId: string; tenantId: string },
+  input: { managementSessionId: string },
 ): Promise<ServiceStatus[]> {
   await requireConfigure(tx, input.managementSessionId);
   return tx
@@ -558,7 +554,6 @@ export async function updateStatus(
   tx: Transaction,
   input: {
     managementSessionId: string;
-    tenantId: string;
     id: string;
     label?: string;
     color?: string;
@@ -596,7 +591,7 @@ export async function updateStatus(
  *  holds no DELETE on `table_service_statuses`). Manager/admin only. Absent id → `status.not_found`. */
 export async function deactivateStatus(
   tx: Transaction,
-  input: { managementSessionId: string; tenantId: string; id: string },
+  input: { managementSessionId: string; id: string },
 ): Promise<void> {
   await requireConfigure(tx, input.managementSessionId);
   const updated = await tx

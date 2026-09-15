@@ -20,10 +20,10 @@ const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS] });
  * tenant (via seedTenant's fresh NIF) so rows are order-independent.
  */
 async function setup(): Promise<PrintConfig> {
-  const tenantId = await seedTenant(suite.db);
+  await seedTenant(suite.db);
   const { rows } = await suite.db.execute<{ id: string }>(sql`
     insert into locations (name, invoice_locales, operation_description) values ('Bar', array['es-ES'], 'Sale on premises') returning id`);
-  return { tenantId, locationId: rows[0]!.id };
+  return { locationId: rows[0]!.id };
 }
 
 function asTx<T>(cfg: PrintConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {

@@ -2,11 +2,7 @@ import { CORE_MIGRATIONS, captureError, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import {
-  AppError,
-  locationId as brandLocationId,
-  tenantId as brandTenantId,
-} from "@waitron/shared";
+import { AppError, locationId as brandLocationId } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { WorkforceBackend } from "./clocking.js";
@@ -28,7 +24,6 @@ import {
 // floor itself is immutability.test.ts.
 const backend = new WorkforceBackend();
 
-let tenantId: string;
 let locationId: string;
 let personId: string;
 
@@ -36,8 +31,8 @@ const suite = usePgliteDb({
   resetPerTest: false,
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS],
   setup: async (db) => {
-    tenantId = await seedTenant(db);
-    locationId = await seedLocation(db, tenantId);
+    await seedTenant(db);
+    locationId = await seedLocation(db);
     personId = await seedPerson(db);
   },
 });
@@ -88,7 +83,7 @@ describe("publishRoster", () => {
       periodStart: "2026-03-02",
       periodEnd: "2026-03-08",
     });
-    const otherLocation = await seedLocation(suite.db, tenantId);
+    const otherLocation = await seedLocation(suite.db);
 
     const inPeriod = await insertDraftShift(suite.db, {
       personId,
@@ -574,7 +569,7 @@ describe("getPlannedVsActual", () => {
     inAt: string,
     outAt: string,
   ): Promise<void> {
-    const node = await seedNode(suite.db, brandTenantId(tenantId), brandLocationId(loc));
+    const node = await seedNode(suite.db, brandLocationId(loc));
     await insertTimeEntry(suite.db, {
       nodeId: node,
       personId: person,
@@ -602,7 +597,7 @@ describe("getPlannedVsActual", () => {
   }
 
   it("matches a PUBLISHED planned shift to its worked session, and reports late minutes", async () => {
-    const loc = await seedLocation(suite.db, tenantId);
+    const loc = await seedLocation(suite.db);
     const p = await seedPerson(suite.db, `pva-${crypto.randomUUID()}`);
     await insertDraftShift(suite.db, {
       personId: p,
@@ -625,7 +620,7 @@ describe("getPlannedVsActual", () => {
   });
 
   it("flags a no-show (published shift, not worked) and an unplanned day (worked, not planned)", async () => {
-    const loc = await seedLocation(suite.db, tenantId);
+    const loc = await seedLocation(suite.db);
     const noShowPerson = await seedPerson(suite.db, `ns-${crypto.randomUUID()}`);
     await insertDraftShift(suite.db, {
       personId: noShowPerson,
@@ -650,7 +645,7 @@ describe("getPlannedVsActual", () => {
   it("counts only the PUBLISHED version's shifts — excludes drafts and superseded versions", async () => {
     // Owner decision (2026-08-15): "planned" = the currently-published roster, so an in-progress draft
     // and a retired (superseded) version must NOT manufacture phantom no-shows.
-    const loc = await seedLocation(suite.db, tenantId);
+    const loc = await seedLocation(suite.db);
     const p = await seedPerson(suite.db, `pub-${crypto.randomUUID()}`);
     // Version A: a shift on 2026-03-02, published.
     await insertDraftShift(suite.db, {
@@ -688,7 +683,7 @@ describe("getPlannedVsActual", () => {
   });
 
   it("excludes a session whose local day is OUTSIDE the window, includes one inside", async () => {
-    const loc = await seedLocation(suite.db, tenantId);
+    const loc = await seedLocation(suite.db);
     const p = await seedPerson(suite.db, `bound-${crypto.randomUUID()}`);
     // One day BEFORE the window (2026-03-01) — must be excluded even though the widened fetch grabs it.
     await seedSession(p, loc, "2026-03-01T09:00:00Z", "2026-03-01T12:00:00Z");
@@ -705,8 +700,8 @@ describe("getPlannedVsActual", () => {
   });
 
   it("scopes to the queried location — another location's published shifts and entries do not leak in", async () => {
-    const loc = await seedLocation(suite.db, tenantId);
-    const other = await seedLocation(suite.db, tenantId);
+    const loc = await seedLocation(suite.db);
+    const other = await seedLocation(suite.db);
     const p = await seedPerson(suite.db, `scope-${crypto.randomUUID()}`);
     await insertDraftShift(suite.db, {
       personId: p,
@@ -723,7 +718,7 @@ describe("getPlannedVsActual", () => {
   });
 
   it("returns [] for a window with no shifts and no sessions", async () => {
-    const loc = await seedLocation(suite.db, tenantId);
+    const loc = await seedLocation(suite.db);
     const rows = await run((tx) =>
       backend.getPlannedVsActual(tx, {
         locationId: loc,

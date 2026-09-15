@@ -12,13 +12,13 @@ import { getSeededUnit } from "./units.js";
 const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
 
 async function venue(country: string, province: string, receipt: string) {
-  const tenantId = await seedTenant(suite.db);
-  await suite.db.execute(sql`update tenants set country = ${country} where id = ${tenantId}`);
+  await seedTenant(suite.db);
+  await suite.db.execute(sql`update tenants set country = ${country} where id = 1`);
   const location = await suite.db.execute<{ id: string }>(sql`
     insert into locations (name, province, invoice_locales, operation_description) values ('Venue', ${province}, array[${receipt}], 'Hospitality') returning id`);
   const locationId = brandLocationId(location.rows[0]!.id);
-  const nodeId = await seedNode(suite.db, tenantId, locationId);
-  return { tenantId, locationId, nodeId };
+  const nodeId = await seedNode(suite.db, locationId);
+  return { locationId, nodeId };
 }
 
 async function storedLanguages() {
@@ -150,7 +150,7 @@ describe("catalogue provisioning", () => {
       where seed_key = 'g'`);
     await suite.db.execute(sql`
       delete from units where seed_key = 'mg'`);
-    const otherNode = await seedNode(suite.db, node.tenantId, node.locationId);
+    const otherNode = await seedNode(suite.db, node.locationId);
     await run(otherNode);
     expect((await storedUnits()).find((unit) => unit.seed_key === "g")?.name).toEqual({
       en: "piece",

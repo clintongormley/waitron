@@ -28,7 +28,6 @@ import type {
   NodeId,
   SaleId,
   SeriesId,
-  TenantId,
   TillId,
   WorkingOrderId,
 } from "@waitron/shared";
@@ -96,7 +95,6 @@ export interface RecordSaleTender {
 }
 
 export interface RecordSaleInput {
-  tenantId: TenantId;
   /** Where the sale rings — written to `sales.till_id` and the fiscal record's `till_id` snapshot,
    * and used for incidents (which stay till-keyed). */
   tillId: TillId;
@@ -244,7 +242,6 @@ export async function recordSale(
   if (series === undefined) {
     throw new AppError("sale.series_not_found", {
       seriesId: input.seriesId,
-      tenantId: input.tenantId,
     });
   }
   if (series.nodeId !== input.nodeId) {
@@ -344,7 +341,6 @@ export async function recordSale(
   // ./incidents.ts's own doc comment on recordIncident.
   for (const incident of pending) {
     await recordIncident(tx, {
-      tenantId: input.tenantId,
       tillId: input.tillId,
       saleId,
       detectedAt: now.instant,
@@ -362,7 +358,6 @@ export async function recordSale(
     // rather than by an early pre-check. Placed before `backend.recordSale` so the fiscal write is
     // never reached on a settlement that cannot complete.
     await settleSale(tx, {
-      tenantId: input.tenantId,
       saleId,
       tenders: input.settlement.tenders,
     });

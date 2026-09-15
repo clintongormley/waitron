@@ -3,7 +3,7 @@ import type { SQL } from "drizzle-orm";
 import { isUniqueViolation, purchaseInvoiceVat, purchaseInvoices } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError, compareDecimal, decimal } from "@waitron/shared";
-import type { Decimal, TenantId } from "@waitron/shared";
+import type { Decimal } from "@waitron/shared";
 import "./errors.js";
 import type {
   CreatePurchaseInvoiceInput,
@@ -130,11 +130,9 @@ function validateLines(lines: readonly PurchaseInvoiceLineInput[]): void {
  */
 async function insertLines(
   tx: Transaction,
-  tenantId: TenantId,
   invoiceId: string,
   lines: readonly PurchaseInvoiceLineInput[],
 ): Promise<LineRowWithId[]> {
-  void tenantId;
   return tx
     .insert(purchaseInvoiceVat)
     .values(
@@ -183,7 +181,6 @@ async function selectLines(tx: Transaction, invoiceId: string): Promise<Purchase
  */
 export async function createPurchaseInvoice(
   tx: Transaction,
-  tenantId: TenantId,
   input: CreatePurchaseInvoiceInput,
 ): Promise<PurchaseInvoice> {
   validateProportion(input.header.deductibleProportion);
@@ -224,7 +221,7 @@ export async function createPurchaseInvoice(
     throw error;
   }
 
-  const lines = sortLineRows(await insertLines(tx, tenantId, header.id, input.lines)).map(mapLine);
+  const lines = sortLineRows(await insertLines(tx, header.id, input.lines)).map(mapLine);
   return { ...header, lines };
 }
 
@@ -283,7 +280,6 @@ export async function listPurchaseInvoices(
  */
 export async function updatePurchaseInvoice(
   tx: Transaction,
-  tenantId: TenantId,
   id: string,
   patch: UpdatePurchaseInvoiceInput,
 ): Promise<void> {
@@ -301,7 +297,7 @@ export async function updatePurchaseInvoice(
 
   if (patch.lines !== undefined) {
     await tx.delete(purchaseInvoiceVat).where(eq(purchaseInvoiceVat.purchaseInvoiceId, id));
-    await insertLines(tx, tenantId, id, patch.lines);
+    await insertLines(tx, id, patch.lines);
   }
 }
 

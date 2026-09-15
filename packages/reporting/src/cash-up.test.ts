@@ -16,7 +16,6 @@ beforeEach(async () => {
 });
 function run(overrides: Partial<DailyCloseInput> = {}): Promise<CashUp> {
   const input: DailyCloseInput = {
-    tenantId: venue.tenantId,
     nodeId: venue.nodeId,
     businessDay: DAY,
     timeZone: "Europe/Madrid",
@@ -44,7 +43,7 @@ async function saleWithTenders(
     total: "100.00",
     lines: [{ vatRate: "21.00", lineTotal: "82.64" }],
   });
-  for (const t of tenderRows) await seedTender(suite.db, { tenantId: venue.tenantId, saleId }, t);
+  for (const t of tenderRows) await seedTender(suite.db, { saleId }, t);
 }
 
 describe("computeCashUp", () => {
@@ -64,7 +63,7 @@ describe("computeCashUp", () => {
   });
 
   it("breaks down by till", async () => {
-    const till2 = await seedTill(suite.db, venue.tenantId, venue.locationId);
+    const till2 = await seedTill(suite.db, venue.locationId);
     await saleWithTenders(1, [{ method: "cash", amount: "30.00", settledAt: settledNoon }]);
     const s2 = await seedSale(
       suite.db,
@@ -78,7 +77,7 @@ describe("computeCashUp", () => {
     );
     await seedTender(
       suite.db,
-      { tenantId: venue.tenantId, saleId: s2 },
+      { saleId: s2 },
       { method: "card", amount: "40.00", settledAt: settledNoon },
     );
     const cash = await run();
@@ -112,7 +111,7 @@ describe("computeCashUp", () => {
     });
     await seedTender(
       suite.db,
-      { tenantId: other.tenantId, saleId: s },
+      { saleId: s },
       { method: "cash", amount: "10.00", settledAt: settledNoon },
     );
     expect((await run()).byTill).toEqual([]);

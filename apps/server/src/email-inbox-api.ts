@@ -11,7 +11,6 @@ export type EmailDeliveryMode = "local_capture" | "smtp" | "unconfigured";
 
 export interface EmailInboxApiDeps {
   db: Database;
-  cfg: { tenantId: string };
   resolveMode(): Promise<EmailDeliveryMode>;
   mailpit: MailpitClient;
 }

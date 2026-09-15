@@ -1,11 +1,9 @@
-import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import {
   compareDecimal,
   decimal,
-  tenantId as brandTenantId,
   tillId as brandTillId,
   workingOrderId as brandWorkingOrderId,
 } from "@waitron/shared";
@@ -22,12 +20,10 @@ const AT = new Date("2026-07-24T10:00:00Z");
 // this core+payments container); threaded into the adapter's withTransaction (design §4d(B)).
 const TEST_NODE_ID = "11111111-1111-4111-8111-111111111111";
 
-/** The provider stamps `s.tenantId` on the incident its `forward` raises for a decline. */
-function providerFor(client: FakeStripeDevice, s: { tenantId: string }): StripeOnDeviceProvider {
+function providerFor(client: FakeStripeDevice): StripeOnDeviceProvider {
   return new StripeOnDeviceProvider({
     client,
     db: pg.db,
-    tenantId: brandTenantId(s.tenantId),
     nodeId: TEST_NODE_ID,
   });
 }
@@ -44,7 +40,7 @@ function collectParams(s: { tillId: string; workingOrderId: string }, allowOffli
 describe("StripeOnDeviceProvider.collect", () => {
   it("online capture writes a captured row with the PI id in external_ref", async () => {
     const s = await seedWorkingOrder(pg.db, freshNif());
-    const provider = providerFor(new FakeStripeDevice(), s);
+    const provider = providerFor(new FakeStripeDevice());
     const r = await provider.collect(collectParams(s));
     expect(r.state).toBe("captured");
     expect(r.settledAt).not.toBeNull();
@@ -60,7 +56,7 @@ describe("StripeOnDeviceProvider.collect", () => {
     await seedPaymentPolicy(pg.db, "accept_offline", "50.00");
     const client = new FakeStripeDevice();
     client.nextCollect("offline"); // the gate must ACCEPT (policy + consent + under cap) for the device to store
-    const provider = providerFor(client, s);
+    const provider = providerFor(client);
     const r = await provider.collect(collectParams(s, true));
     expect(r.state).toBe("accepted_offline");
     expect(r.offline).toBe(true);
@@ -73,7 +69,7 @@ describe("StripeOnDeviceProvider.collect", () => {
     // the offline scenario yields network_unavailable. This makes the gate wiring load-bearing.
     const client = new FakeStripeDevice();
     client.nextCollect("offline");
-    const provider = providerFor(client, s);
+    const provider = providerFor(client);
     const r = await provider.collect(collectParams(s, true));
     expect(r.state).toBe("network_unavailable");
     expect(r.settledAt).toBeNull();
@@ -91,7 +87,7 @@ describe("StripeOnDeviceProvider.collect", () => {
     // hosted-provider.test.ts's "stamps the working order and payment ref into the session metadata".
     const s = await seedWorkingOrder(pg.db, freshNif());
     const client = new FakeStripeDevice();
-    const provider = providerFor(client, s);
+    const provider = providerFor(client);
     const r = await provider.collect(collectParams(s));
     expect(client.lastCollect?.metadata).toEqual({
       working_order_id: s.workingOrderId,
@@ -106,7 +102,7 @@ describe("StripeOnDeviceProvider.collect", () => {
     // attribution hint the reconcile audit reads). `lastCollect` records what the device was handed.
     const s = await seedWorkingOrder(pg.db, freshNif());
     const client = new FakeStripeDevice();
-    const provider = providerFor(client, s);
+    const provider = providerFor(client);
 
     const first = await provider.collect(collectParams(s));
     const firstKey = client.lastCollect?.idempotencyKey;
@@ -131,7 +127,7 @@ describe("StripeOnDeviceProvider.collect", () => {
     const s = await seedWorkingOrder(pg.db, freshNif());
     const client = new FakeStripeDevice();
     client.nextCollect("declined");
-    const provider = providerFor(client, s);
+    const provider = providerFor(client);
     const r = await provider.collect(collectParams(s));
     expect(r.state).toBe("failed");
     const row = await pg.db.transaction((tx) =>
@@ -143,7 +139,7 @@ describe("StripeOnDeviceProvider.collect", () => {
 
 describe("StripeOnDeviceProvider.resolvePending", () => {
   it("resolvePending is all-zeros (the device SDK returns a terminal outcome before collect writes its row)", async () => {
-    const provider = providerFor(new FakeStripeDevice(), await seedWorkingOrder(pg.db, freshNif()));
+    const provider = providerFor(new FakeStripeDevice());
     expect(await provider.resolvePending(AT)).toEqual({
       nextDueAt: null,
       forwarded: 0,
@@ -158,7 +154,7 @@ describe("StripeOnDeviceProvider.forward", () => {
     const s = await seedWorkingOrder(pg.db, freshNif());
     await seedPaymentPolicy(pg.db, "accept_offline", "50.00");
     const client = new FakeStripeDevice();
-    const provider = providerFor(client, s);
+    const provider = providerFor(client);
 
     // Two offline-accepted payments (policy accepts + consent + under cap → the device stores).
     client.nextCollect("offline");
@@ -201,7 +197,7 @@ describe("StripeOnDeviceProvider.forward", () => {
     const s = await seedWorkingOrder(pg.db, freshNif());
     await seedPaymentPolicy(pg.db, "accept_offline", "50.00");
     const client = new FakeStripeDevice();
-    const provider = providerFor(client, s);
+    const provider = providerFor(client);
 
     client.nextCollect("offline");
     const a = await provider.collect(collectParams(s, true));
@@ -230,7 +226,7 @@ describe("StripeOnDeviceProvider reversals", () => {
   it("refunds a captured payment; a Stripe-refused refund leaves state unchanged", async () => {
     const s = await seedWorkingOrder(pg.db, freshNif());
     const client = new FakeStripeDevice();
-    const provider = providerFor(client, s);
+    const provider = providerFor(client);
     const paid = await provider.collect(collectParams(s));
 
     client.refundFailsNext();
@@ -244,7 +240,7 @@ describe("StripeOnDeviceProvider reversals", () => {
   it("void: reverses a captured payment to voided", async () => {
     const s = await seedWorkingOrder(pg.db, freshNif());
     const client = new FakeStripeDevice();
-    const provider = providerFor(client, s);
+    const provider = providerFor(client);
     const paid = await provider.collect(collectParams(s));
 
     const voided = await provider.void(paid.paymentRef);
@@ -254,7 +250,7 @@ describe("StripeOnDeviceProvider reversals", () => {
   it("partialRefund: reports the refunded amount, not the capture, and sets partially_refunded", async () => {
     const s = await seedWorkingOrder(pg.db, freshNif());
     const client = new FakeStripeDevice();
-    const provider = providerFor(client, s);
+    const provider = providerFor(client);
     const paid = await provider.collect(collectParams(s)); // amount 10.00
 
     const refunded = await provider.partialRefund(paid.paymentRef, decimal("4.00"));
@@ -266,7 +262,7 @@ describe("StripeOnDeviceProvider reversals", () => {
 describe("StripeOnDeviceProvider.connectionToken", () => {
   it("mints a connection token for the device to initialise its on-device SDK", async () => {
     // Any tenant: `connectionToken` only calls the fake client and touches no database.
-    const provider = providerFor(new FakeStripeDevice(), { tenantId: randomUUID() });
+    const provider = providerFor(new FakeStripeDevice());
 
     const { secret } = await provider.connectionToken();
     expect(typeof secret).toBe("string");

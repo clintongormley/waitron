@@ -19,7 +19,6 @@ import "./errors.js";
 // paths, the request-shape 400s and the not-logged-in 401.
 
 const noopLog: Logger = () => {};
-let tenantId: string;
 let tillId: string;
 let locationId: string;
 let me: string;
@@ -30,29 +29,29 @@ const suite = usePgliteDb({
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS],
   timeoutMs: 60_000,
   setup: async (db) => {
-    tenantId = await seedTenant(db);
+    await seedTenant(db);
     const loc = await db.execute<{ id: string }>(sql`
-      insert into locations (tenant_id, name, invoice_locales, operation_description)
-      values (${tenantId}, 'Counter', array['es-ES'], 'Retail') returning id`);
+      insert into locations (name, invoice_locales, operation_description)
+      values ('Counter', array['es-ES'], 'Retail') returning id`);
     locationId = loc.rows[0]!.id;
     const till = await db.execute<{ id: string }>(sql`
-      insert into tills (tenant_id, location_id, name)
-      values (${tenantId}, ${locationId}, 'Till 1') returning id`);
+      insert into tills (location_id, name)
+      values (${locationId}, 'Till 1') returning id`);
     tillId = till.rows[0]!.id;
     const meRow = await db.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, role)
-      values (${tenantId}, 'Me', ${hashPin("1111")}, 'staff') returning id`);
+      insert into persons (display_name, pin_hash, role)
+      values ('Me', ${hashPin("1111")}, 'staff') returning id`);
     me = meRow.rows[0]!.id;
     const colRow = await db.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, role)
-      values (${tenantId}, 'Colleague', ${hashPin("2222")}, 'staff') returning id`);
+      insert into persons (display_name, pin_hash, role)
+      values ('Colleague', ${hashPin("2222")}, 'staff') returning id`);
     colleague = colRow.rows[0]!.id;
   },
 });
 
 function mountApp(): Hono {
   const app = new Hono();
-  mountScheduleApi(app, { db: suite.db, cfg: { tenantId } }, noopLog);
+  mountScheduleApi(app, { db: suite.db }, noopLog);
   return app;
 }
 
@@ -61,7 +60,7 @@ function mountApp(): Hono {
 async function cookieFor(personId: string, pin: string): Promise<string> {
   const session = await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
-    return loginWithPin(tx, { tenantId, tillId, personId, pin });
+    return loginWithPin(tx, { tillId, personId, pin });
   });
   return `${SESSION_COOKIE}=${session.id}`;
 }

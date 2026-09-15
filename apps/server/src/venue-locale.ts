@@ -23,14 +23,14 @@ import { FALLBACK_LOCALE, SUPPORTED_LOCALE_CODES, type SupportedLocale } from "@
  */
 export async function readVenueLocale(
   db: Database,
-  params: { tenantId: string; locationId: string; override?: string },
+  params: { locationId: string; override?: string },
 ): Promise<SupportedLocale> {
   return withTransaction(db, async (tx) => {
     await asAppUser(tx);
     const [t] = await tx
       .select({ country: tenants.country })
       .from(tenants)
-      .where(eq(tenants.id, params.tenantId));
+      .where(eq(tenants.id, 1));
     const [loc] = await tx
       .select({ province: locations.province })
       .from(locations)

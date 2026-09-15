@@ -15,7 +15,7 @@
 //
 // FISCAL NOTE (CLAUDE.md §5): re-registering a till starts a NEW hash chain and mints a fresh
 // installation number. So this REUSES an already-provisioned venue (an existing `.env` naming a
-// tenant the database still holds) and REFUSES to provision when the database already holds a venue
+// till the database still holds) and REFUSES to provision when the database already holds a venue
 // this `.env` cannot account for — it never mints a second one into a live database. The only
 // sanctioned "start over" is `pnpm dev:reset`, which wipes the Docker volume (throwaway
 // preproduction data); this script never deletes data itself.
@@ -58,7 +58,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tenantId as brandTenantId,
   tillId as brandTillId,
 } from "@waitron/shared";
 import { ALL_MODULES } from "../src/modules.js";
@@ -142,7 +141,6 @@ export interface DevEnv {
   WAITRON_HTTP_PORT: string;
   WAITRON_CREDENTIALS_KEY: string;
   WAITRON_CREDENTIALS_KEY_VERSION: string;
-  WAITRON_TILL_TENANT_ID: string;
   WAITRON_TILL_TILL_ID: string;
   WAITRON_TILL_NODE_ID: string;
   WAITRON_TILL_SERIES_ID: string;
@@ -161,7 +159,6 @@ const ENV_KEYS: readonly (keyof DevEnv)[] = [
   "WAITRON_HTTP_PORT",
   "WAITRON_CREDENTIALS_KEY",
   "WAITRON_CREDENTIALS_KEY_VERSION",
-  "WAITRON_TILL_TENANT_ID",
   "WAITRON_TILL_TILL_ID",
   "WAITRON_TILL_NODE_ID",
   "WAITRON_TILL_SERIES_ID",
@@ -213,7 +210,6 @@ export interface DevSetupResult {
 
 /** The five fiscal ids `provisionVenue` returns, in the shape `buildDevEnv` maps to the env contract. */
 export interface DevVenueIds {
-  tenantId: string;
   tillId: string;
   nodeId: string;
   seriesId: string;
@@ -245,7 +241,6 @@ export function buildDevEnv(input: {
     WAITRON_HTTP_PORT: "8080",
     WAITRON_CREDENTIALS_KEY: credentialsKey,
     WAITRON_CREDENTIALS_KEY_VERSION: "1",
-    WAITRON_TILL_TENANT_ID: ids.tenantId,
     WAITRON_TILL_TILL_ID: ids.tillId,
     WAITRON_TILL_NODE_ID: ids.nodeId,
     WAITRON_TILL_SERIES_ID: ids.seriesId,
@@ -296,22 +291,23 @@ export async function waitForPostgres(uri: string, log: (line: string) => void):
 }
 
 /**
- * Read whether the database contains the expected tenant and whether any tenant
- * exists. The connection needs SELECT on tenants; the query enforces that privilege.
- * Only an absent tenants table means no venue; propagate other query failures so
- * a failed inspection cannot trigger provisioning over an existing venue.
+ * Read whether the database contains the till this `.env` names, and whether it holds a venue at all.
+ * The taxpayer row is the "any venue" signal because provisioning always writes it; the till is what
+ * the `.env` can still name now that there is no tenant id to name. The connection needs SELECT on
+ * both tables; the query enforces that privilege. Only an absent table means no venue; propagate
+ * other query failures so a failed inspection cannot trigger provisioning over an existing venue.
  */
 export async function inspectVenues(
   uri: string,
-  expectedTenantId: string | null,
+  expectedTillId: string | null,
 ): Promise<{ hasExpected: boolean; hasAny: boolean }> {
   const client = new pg.Client({ connectionString: uri });
   try {
     await client.connect();
 
     const { rows } = await client.query<{ has_expected: boolean; has_any: boolean }>(
-      "select exists(select 1 from tenants where id = $1) as has_expected, exists(select 1 from tenants) as has_any",
-      [expectedTenantId],
+      "select exists(select 1 from tills where id = $1) as has_expected, exists(select 1 from tenants) as has_any",
+      [expectedTillId],
     );
     return { hasExpected: rows[0]?.has_expected ?? false, hasAny: rows[0]?.has_any ?? false };
   } catch (error) {
@@ -334,7 +330,6 @@ async function provisionVenue(
   seedLocale: SeedLocale,
   salesDays: number,
 ): Promise<{
-  tenantId: string;
   tillId: string;
   nodeId: string;
   seriesId: string;
@@ -377,7 +372,6 @@ async function provisionVenue(
   // planVenue emits the standard series first, then the rectificative one — seriesIds[0] is the
   // ordinary sale's series (the same index `till-demo.ts` reads).
   const ids = {
-    tenantId: venue.tenantId,
     tillId: venue.tillId,
     nodeId: venue.nodeId,
     seriesId: venue.seriesIds[0]!,
@@ -427,7 +421,6 @@ async function seedDemoDevices(
   // request carries the venue), so the sale-side fields carry inert-but-valid placeholders (no card,
   // no tips, `prepay`) — the enrol path never persists them.
   const cfg: TillConfig = {
-    tenantId: brandTenantId(ids.tenantId),
     tillId: brandTillId(ids.tillId),
     nodeId: brandNodeId(ids.nodeId),
     seriesId: brandSeriesId(ids.seriesId),
@@ -443,7 +436,7 @@ async function seedDemoDevices(
   const { profiles, stations } = await withTransaction(db, async (tx) => {
     await asAppUser(tx);
     return {
-      profiles: await listDeviceProfiles(tx, cfg.tenantId),
+      profiles: await listDeviceProfiles(tx),
       stations: await listStations(tx, cfg),
     };
   });
@@ -588,11 +581,11 @@ export async function devSetup(opts: DevSetupOptions): Promise<DevSetupResult> {
   await waitForPostgres(databaseUrl, log);
 
   // Read the existing `.env` (if any) and ask the database, in one connection, whether it holds the
-  // tenant that `.env` names and whether it holds any tenant at all.
+  // till that `.env` names and whether it holds any venue at all.
   const existing = existsSync(envPath) ? parseEnvFile(readFileSync(envPath, "utf8")) : undefined;
-  const expectedTenantId =
-    existing !== undefined && isCompleteDevEnv(existing) ? existing.WAITRON_TILL_TENANT_ID : null;
-  const { hasExpected, hasAny } = await inspectVenues(databaseUrl, expectedTenantId);
+  const expectedTillId =
+    existing !== undefined && isCompleteDevEnv(existing) ? existing.WAITRON_TILL_TILL_ID : null;
+  const { hasExpected, hasAny } = await inspectVenues(databaseUrl, expectedTillId);
 
   // Reuse: the `.env` names a venue the database still holds.
   if (existing !== undefined && isCompleteDevEnv(existing) && hasExpected) {

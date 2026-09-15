@@ -78,24 +78,23 @@ async function waitForABlockedBackend(): Promise<void> {
 }
 
 function printCfg(cfg: TillConfig): PrintConfig {
-  return { tenantId: cfg.tenantId, locationId: cfg.locationId };
+  return { locationId: cfg.locationId };
 }
 
 describe("print-on-fire concurrency — FOR SHARE on the mapping read", () => {
   it("a concurrent deactivatePrinter WAITS for the fire to commit instead of aborting it", async () => {
     // ---- Setup, committed on the admin connection so both racing backends see it ----
-    const tenantId = await seedTenant(suite.admin);
+    await seedTenant(suite.admin);
     await seedLegacySellingUnits(suite.admin);
     const loc = await suite.admin.execute<{ id: string }>(sql`
-      insert into locations (tenant_id, name, invoice_locales, operation_description)
-      values (${tenantId}, 'Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
+      insert into locations (name, invoice_locales, operation_description)
+      values ('Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
     const locationId = loc.rows[0]!.id;
     const till = await suite.admin.execute<{ id: string }>(sql`
-      insert into tills (tenant_id, location_id, name)
-      values (${tenantId}, ${locationId}, 'Caja 1') returning id`);
-    const nodeId = await seedNode(suite.admin, tenantId, brandLocationId(locationId));
+      insert into tills (location_id, name)
+      values (${locationId}, 'Caja 1') returning id`);
+    const nodeId = await seedNode(suite.admin, brandLocationId(locationId));
     const cfg: TillConfig = {
-      tenantId,
       tillId: brandTillId(till.rows[0]!.id),
       nodeId: brandNodeId(nodeId),
       seriesId: brandSeriesId(randomUUID()),
@@ -109,7 +108,7 @@ describe("print-on-fire concurrency — FOR SHARE on the mapping read", () => {
       suite.admin,
       async (tx) => {
         await asAppUser(tx);
-        const cat = await createCatalogue(tx, tenantId, { name: "Carta" });
+        const cat = await createCatalogue(tx, { name: "Carta" });
         await assignCatalogueToLocation(tx, locationId, cat.id);
         const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
         const { id: printerId } = await createPrinter(tx, printCfg(cfg), {
@@ -117,8 +116,8 @@ describe("print-on-fire concurrency — FOR SHARE on the mapping read", () => {
           transport: "cloud_poll",
           pollId: `poll-${randomUUID()}`,
         });
-        await attachPrinterToStation(tx, printCfg(cfg), { stationId: cocina.id, printerId });
-        const { id: product } = await createProduct(tx, tenantId, {
+        await attachPrinterToStation(tx, { stationId: cocina.id, printerId });
+        const { id: product } = await createProduct(tx, {
           catalogueId: cat.id,
           categoryId: null,
           name: "Chuleton",

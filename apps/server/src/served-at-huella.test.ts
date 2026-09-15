@@ -32,7 +32,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tenantId as brandTenantId,
   tillId as brandTillId,
 } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
@@ -150,7 +149,6 @@ function venueRequest(nif: string): VenueRequest {
 
 function tillConfigFromVenue(venue: VenueResult): TillConfig {
   return {
-    tenantId: brandTenantId(venue.tenantId),
     tillId: brandTillId(venue.tillId),
     nodeId: brandNodeId(venue.nodeId),
     // planVenue emits the standard series first, then the rectificative one.
@@ -207,7 +205,6 @@ async function seedShop(db: Database, emisorNif: string): Promise<Shop> {
   const cfg = tillConfigFromVenue(venue);
   await withTransaction(db, (tx) =>
     registerSif(tx, {
-      tenantId: cfg.tenantId,
       nodeId: cfg.nodeId,
       nif: emisorNif,
       idSistemaInformatico: "W1",
@@ -215,9 +212,9 @@ async function seedShop(db: Database, emisorNif: string): Promise<Shop> {
   );
   const seeded = await withTransaction(db, async (tx) => {
     await asAppUser(tx);
-    const cat = await createCatalogue(tx, cfg.tenantId, { name: "Delicatessen" });
-    const bebidas = await createCategory(tx, cfg.tenantId, { name: { [LOCALE]: "Bebidas" } });
-    const agua = await createProduct(tx, cfg.tenantId, {
+    const cat = await createCatalogue(tx, { name: "Delicatessen" });
+    const bebidas = await createCategory(tx, { name: { [LOCALE]: "Bebidas" } });
+    const agua = await createProduct(tx, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
       name: "Agua mineral",
@@ -225,7 +222,7 @@ async function seedShop(db: Database, emisorNif: string): Promise<Shop> {
       unitPrice: "1.50",
       vatClass: "general",
     });
-    const cafe = await createProduct(tx, cfg.tenantId, {
+    const cafe = await createProduct(tx, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
       name: "Café solo",
@@ -656,19 +653,19 @@ async function attachOption(
 ): Promise<{ groupId: string; itemId: string }> {
   return withTransaction(shop.db, async (tx) => {
     await asAppUser(tx);
-    const group = await createOptionGroup(tx, shop.cfg.tenantId, {
+    const group = await createOptionGroup(tx, {
       name: { [LOCALE]: "Pan" },
       minSelect: 0,
       maxSelect: 1,
       required: false,
     });
-    const item = await createOptionGroupItem(tx, shop.cfg.tenantId, group.id, {
+    const item = await createOptionGroupItem(tx, group.id, {
       name: OPTION_ITEM_NAME,
       priceDelta: OPTION_ITEM_PRICE_DELTA,
       vatClass: OPTION_ITEM_VAT_CLASS,
       addAllergens: overlay.addAllergens,
     });
-    await setProductOptionGroups(tx, shop.cfg.tenantId, shop.aguaId, [group.id]);
+    await setProductOptionGroups(tx, shop.aguaId, [group.id]);
     return { groupId: group.id, itemId: item.id };
   });
 }

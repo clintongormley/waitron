@@ -42,7 +42,6 @@ const HUELLA = "A".repeat(64);
 const noopLog: Logger = () => {};
 
 const F = {
-  tenantId: "c0000000-0000-4000-8000-000000000001",
   locationId: "c0000000-0000-4000-8000-000000000002",
   tillId: "c0000000-0000-4000-8000-000000000003",
   seriesId: "c0000000-0000-4000-8000-000000000004",
@@ -53,38 +52,38 @@ const F = {
 
 async function seedFiscalRegistro(admin: Database): Promise<void> {
   await admin.execute(
-    sql`insert into tenants (id, country, tax_id, legal_name) values (${F.tenantId}, 'ES', '89890001K', 'Waitron SL')`,
+    sql`insert into tenants (id, country, tax_id, legal_name) values (1, 'ES', '89890001K', 'Waitron SL')`,
   );
   await admin.execute(
-    sql`insert into locations (id, tenant_id, name, invoice_locales, operation_description) values (${F.locationId}, ${F.tenantId}, 'Local principal', array['es'], 'Venta en establecimiento')`,
+    sql`insert into locations (id, name, invoice_locales, operation_description) values (${F.locationId}, 'Local principal', array['es'], 'Venta en establecimiento')`,
   );
   await admin.execute(
-    sql`insert into tills (id, tenant_id, location_id, name) values (${F.tillId}, ${F.tenantId}, ${F.locationId}, 'Caja 1')`,
+    sql`insert into tills (id, location_id, name) values (${F.tillId}, ${F.locationId}, 'Caja 1')`,
   );
   await admin.execute(
-    sql`insert into nodes (id, tenant_id, location_id, name) values (${F.nodeId}, ${F.tenantId}, ${F.locationId}, 'Node 1')`,
+    sql`insert into nodes (id, location_id, name) values (${F.nodeId}, ${F.locationId}, 'Node 1')`,
   );
   await admin.execute(
-    sql`insert into invoice_series (id, tenant_id, node_id, code, purpose, next_number) values (${F.seriesId}, ${F.tenantId}, ${F.nodeId}, 'FA', 'standard', 5)`,
+    sql`insert into invoice_series (id, node_id, code, purpose, next_number) values (${F.seriesId}, ${F.nodeId}, 'FA', 'standard', 5)`,
   );
   await admin.execute(
-    sql`insert into invoice_series (tenant_id, node_id, code, purpose) values (${F.tenantId}, ${F.nodeId}, 'RE', 'rectificative')`,
+    sql`insert into invoice_series (node_id, code, purpose) values (${F.nodeId}, 'RE', 'rectificative')`,
   );
   await admin.execute(
     sql`insert into contadores_instalacion (nif, id_sistema_informatico, proximo_numero) values ('89890001K', 'W1', 2)`,
   );
   await admin.execute(
-    sql`insert into registro_sif (id, tenant_id, node_id, nif, id_sistema_informatico, numero_instalacion) values (${F.sifId}, ${F.tenantId}, ${F.nodeId}, '89890001K', 'W1', 1)`,
+    sql`insert into registro_sif (id, node_id, nif, id_sistema_informatico, numero_instalacion) values (${F.sifId}, ${F.nodeId}, '89890001K', 'W1', 1)`,
   );
   await admin.execute(
-    sql`insert into sales (id, tenant_id, till_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes, total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state) values (${F.saleId}, ${F.tenantId}, ${F.tillId}, ${F.nodeId}, ${F.seriesId}, 4, '2026-07-20T19:20:30+01:00', 60, '0.00', '[]'::jsonb, 'es', array['es'], 'verifactu', 'recorded')`,
+    sql`insert into sales (id, till_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes, total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state) values (${F.saleId}, ${F.tillId}, ${F.nodeId}, ${F.seriesId}, 4, '2026-07-20T19:20:30+01:00', 60, '0.00', '[]'::jsonb, 'es', array['es'], 'verifactu', 'recorded')`,
   );
   const registro = await admin.execute<{ id: string }>(sql`
-    insert into registros_facturacion (tenant_id, till_id, node_id, sif_id, sale_id, secuencia, tipo_registro,
+    insert into registros_facturacion (till_id, node_id, sif_id, sale_id, secuencia, tipo_registro,
       id_emisor_factura, num_serie_factura, fecha_expedicion_factura, nombre_razon_emisor,
       tipo_factura, descripcion_operacion, desglose, cuota_total, importe_total,
       primer_registro, sistema_informatico, fecha_hora_huso_gen_registro, offset_minutos, tipo_huella, huella)
-    values (${F.tenantId}, ${F.tillId}, ${F.nodeId}, ${F.sifId}, ${F.saleId}, 1, 'alta',
+    values (${F.tillId}, ${F.nodeId}, ${F.sifId}, ${F.saleId}, 1, 'alta',
       '89890001K', 'FA/4', '2026-07-20', 'Waitron SL',
       'F2', 'Venta en establecimiento', '[]'::jsonb, '12.35', '123.45',
       true, '{}'::jsonb, '2026-07-20T19:20:30+01:00', 60, '01', ${HUELLA})
@@ -92,7 +91,7 @@ async function seedFiscalRegistro(admin: Database): Promise<void> {
   // The chain head: no row exists until an append or a registration creates one — insert it
   // explicitly, pointing at the record, at sequence 1 (both pointers set: `cadenas_puntero_ck`).
   await admin.execute(
-    sql`insert into cadenas (tenant_id, node_id, secuencia, ultimo_registro_id, ultima_huella) values (${F.tenantId}, ${F.nodeId}, 1, ${registro.rows[0]!.id}, ${HUELLA})`,
+    sql`insert into cadenas (node_id, secuencia, ultimo_registro_id, ultima_huella) values (${F.nodeId}, 1, ${registro.rows[0]!.id}, ${HUELLA})`,
   );
 }
 
@@ -301,7 +300,6 @@ beforeAll(async () => {
           name: "secrets/trading.env",
           bytes: Buffer.from(
             formatEnvFile({
-              WAITRON_TILL_TENANT_ID: F.tenantId,
               WAITRON_TILL_TILL_ID: F.tillId,
               WAITRON_TILL_NODE_ID: F.nodeId,
               WAITRON_TILL_SERIES_ID: F.seriesId,
@@ -375,7 +373,7 @@ describe("fiscal restore (real Postgres, end to end)", () => {
         { code: `RE-${n}`, retired: false, next_number: 1 },
       ]);
       const env = parseEnvFile(await readFile(join(dirs.stateDir, "trading.env"), "utf8"));
-      expect(env.WAITRON_TILL_SERIES_ID).toBe(await readStandardSeriesId(db, F.tenantId, F.nodeId));
+      expect(env.WAITRON_TILL_SERIES_ID).toBe(await readStandardSeriesId(db, F.nodeId));
       expect(env.WAITRON_TILL_NODE_ID).toBe(F.nodeId);
       expect(env.DATABASE_URL).toBe("postgres://app@localhost/waitron");
       expect(await readFile(join(dirs.stateDir, "secrets.env"), "utf8")).toBe(

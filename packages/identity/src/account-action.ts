@@ -26,15 +26,9 @@ function hashToken(token: string): string {
   return createHash("sha256").update(token, "utf8").digest("hex");
 }
 
-function hashCode(
-  key: Buffer,
-  tenantId: string,
-  email: string,
-  purpose: string,
-  code: string,
-): string {
+function hashCode(key: Buffer, email: string, purpose: string, code: string): string {
   return createHmac("sha256", key)
-    .update(`${tenantId}\0${normalizeEmail(email)}\0${purpose}\0${code}`, "utf8")
+    .update(`${normalizeEmail(email)}\0${purpose}\0${code}`, "utf8")
     .digest("hex");
 }
 
@@ -55,7 +49,6 @@ export interface IssuedAccountAction {
 export async function issueAccountAction(
   tx: Transaction,
   input: {
-    tenantId: string;
     personId: string;
     purpose: AccountActionPurpose;
     codeKey?: Buffer;
@@ -118,9 +111,7 @@ export async function issueAccountAction(
       targetEmail: input.purpose === "email_change" ? deliveryEmail : null,
       tokenHash: hashToken(token),
       codeHash:
-        code === undefined
-          ? null
-          : hashCode(input.codeKey!, input.tenantId, deliveryEmail, input.purpose, code),
+        code === undefined ? null : hashCode(input.codeKey!, deliveryEmail, input.purpose, code),
       codeExpiresAt: codeExpiresAt ?? null,
       createdAt: nowIso,
       expiresAt,
@@ -140,7 +131,6 @@ export async function issueAccountAction(
 }
 
 interface CompletionInput {
-  tenantId: string;
   purpose: CredentialActionPurpose;
   password: string;
   pin?: string;
@@ -149,7 +139,7 @@ interface CompletionInput {
 
 export async function confirmEmailChangeByCode(
   tx: Transaction,
-  input: { tenantId: string; personId: string; code: string; codeKey: Buffer; now?: Date },
+  input: { personId: string; code: string; codeKey: Buffer; now?: Date },
 ): Promise<string | null> {
   const nowIso = (input.now ?? new Date()).toISOString();
   const [action] = await tx
@@ -175,7 +165,7 @@ export async function confirmEmailChangeByCode(
   if (action?.codeHash === null || action?.targetEmail === null || action === undefined)
     return null;
   const supplied = Buffer.from(
-    hashCode(input.codeKey, input.tenantId, action.targetEmail, "email_change", input.code),
+    hashCode(input.codeKey, action.targetEmail, "email_change", input.code),
     "hex",
   );
   const stored = Buffer.from(action.codeHash, "hex");
@@ -232,7 +222,6 @@ function statusAcceptsPurpose(
 export async function inspectAccountAction(
   tx: Transaction,
   input: {
-    tenantId: string;
     token: string;
     purpose: CredentialActionPurpose;
     now?: Date;
@@ -305,7 +294,7 @@ async function finishClaimedAction(
 /** Lock the account before replacing its setup or reset action; unavailable accounts remain silent. */
 export async function requestAccountRecoveryAction(
   tx: Transaction,
-  input: { tenantId: string; email: string; now?: Date },
+  input: { email: string; now?: Date },
 ): Promise<IssuedAccountAction | null> {
   const email = normalizeEmail(input.email);
   if (!isValidEmail(email)) return null;
@@ -318,7 +307,6 @@ export async function requestAccountRecoveryAction(
     .for("update");
   if (person === undefined) return null;
   return issueAccountAction(tx, {
-    tenantId: input.tenantId,
     personId: person.id,
     purpose: person.status === "pending" ? "invitation" : "password_reset",
     now: input.now,

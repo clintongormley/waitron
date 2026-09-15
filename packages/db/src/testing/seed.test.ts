@@ -37,22 +37,20 @@ describe("seedTenant", () => {
     db = suite.db;
   });
 
-  it("inserts one tenant and returns its id", async () => {
-    const id = await seedTenant(db);
+  it("inserts the one taxpayer row, keyed 1", async () => {
+    await seedTenant(db);
     const result = await db.execute<{ n: number }>(
-      sql`select count(*)::int as n from tenants where id = ${id}`,
+      sql`select count(*)::int as n from tenants where id = 1`,
     );
     expect((result.rows[0] as { n: number }).n).toBe(1);
   });
 
-  it("gives each tenant its own tax_id, so a suite can seed several", async () => {
+  it("is a no-op when the row is already there, so a suite may call it repeatedly", async () => {
     await seedTenant(db);
     await seedTenant(db);
     await seedTenant(db);
-    const result = await db.execute<{ n: number }>(
-      sql`select count(distinct tax_id)::int as n from tenants`,
-    );
-    expect((result.rows[0] as { n: number }).n).toBe(3);
+    const result = await db.execute<{ n: number }>(sql`select count(*)::int as n from tenants`);
+    expect((result.rows[0] as { n: number }).n).toBe(1);
   });
 });
 
@@ -64,14 +62,13 @@ describe("seedNode", () => {
   });
 
   it("inserts one node for the tenant + location and returns its id", async () => {
-    // seedNode takes the tenant and location as given, so build them first: a
-    // node FKs both, and there is deliberately no seedLocation helper (only
-    // seedTenant and seedNode exist).
-    const tenant = await seedTenant(db);
+    // seedNode takes the location as given, so build it first: a node FKs it, and
+    // there is deliberately no seedLocation helper (only seedTenant and seedNode exist).
+    await seedTenant(db);
     const locResult = await db.execute<{ id: string }>(sql`
       insert into locations (name, invoice_locales, operation_description) values ('Test location', ARRAY['es']::text[], 'Restaurant') returning id`);
     const location = brandLocationId(locResult.rows[0]!.id);
-    const node = await seedNode(db, tenant, location);
+    const node = await seedNode(db, location);
     const result = await db.execute<{ n: number }>(
       sql`select count(*)::int as n from nodes where id = ${node} and location_id = ${location}`,
     );
@@ -88,10 +85,10 @@ describe("seedKitchenStation", () => {
 
   // Build the tenant + location the station FKs first (as seedNode's suite does), then seed the station.
   async function seedVenue() {
-    const tenant = await seedTenant(db);
+    await seedTenant(db);
     const locResult = await db.execute<{ id: string }>(sql`
       insert into locations (name, invoice_locales, operation_description) values ('Test location', ARRAY['es']::text[], 'Restaurant') returning id`);
-    return { tenant, location: brandLocationId(locResult.rows[0]!.id) };
+    return { location: brandLocationId(locResult.rows[0]!.id) };
   }
 
   it("defaults to a DEFAULT station named 'Cocina' and returns its id", async () => {

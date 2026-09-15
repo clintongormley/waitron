@@ -19,9 +19,9 @@ const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] 
 
 describe("site content languages", () => {
   it("requires a variant's customer name in a new default language but leaves the product's optional", async () => {
-    const tenantId = await seedTenant(suite.db);
+    await seedTenant(suite.db);
     await withTransaction(suite.db, async (tx) => {
-      const catalogue = await createCatalogue(tx, tenantId, { name: "Bar" });
+      const catalogue = await createCatalogue(tx, { name: "Bar" });
       const unit = await createUnit(
         tx,
         { name: { en: "each", fr: "unité" }, precision: 0, abbreviation: { en: "u" } },
@@ -29,7 +29,7 @@ describe("site content languages", () => {
       );
       // The product has only a staff name (no customer name), so it never gaps; the variant carries a
       // partial customer name and is the sole gap until it is completed.
-      const product = await createProduct(tx, tenantId, {
+      const product = await createProduct(tx, {
         catalogueId: catalogue.id,
         categoryId: null,
         name: "Coffee",
@@ -149,9 +149,8 @@ describe("site content languages", () => {
   );
 
   it("recognizes regional translation keys consistently when changing the default", async () => {
-    const tenantId = await seedTenant(suite.db);
+    await seedTenant(suite.db);
     await withTransaction(suite.db, async (tx) => {
-      void tenantId;
       await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "fr"] });
       const menu = await tx.execute<{ id: string }>(
         sql`insert into catalogues (name) values ('Lunch') returning id`,
@@ -197,9 +196,8 @@ describe("site content languages", () => {
   });
 
   it("refuses to change the default while a product lacks its translation", async () => {
-    const tenantId = await seedTenant(suite.db);
+    await seedTenant(suite.db);
     await withTransaction(suite.db, async (tx) => {
-      void tenantId;
       await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "fr"] });
       const menu = await tx.execute<{ id: string }>(
         sql`insert into catalogues (name) values ('Lunch') returning id`,

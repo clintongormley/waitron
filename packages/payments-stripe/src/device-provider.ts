@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { AppError, saleId as brandSaleId, tillId as brandTillId } from "@waitron/shared";
-import type { Decimal, TenantId } from "@waitron/shared";
+import type { Decimal } from "@waitron/shared";
 import { withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { workingOrders } from "@waitron/db";
@@ -46,7 +46,6 @@ export interface StripeOnDeviceProviderOptions {
    * each one with `withTransaction(db, …)`, so nothing is required of the handle itself. */
   db: Database;
   /** Stamped on the incident `forward` raises for a declined payment. */
-  tenantId: TenantId;
   /** This node's id, passed on to `reverseViaStripe` to identify the node for the record path.
    * Known at construction (one node per till). */
   nodeId: string;
@@ -237,7 +236,6 @@ export class StripeOnDeviceProvider implements PaymentProvider {
             .from(workingOrders)
             .where(eq(workingOrders.id, p.workingOrderId));
           const raised = await recordIncidentOnce(tx, {
-            tenantId: this.opts.tenantId,
             tillId: brandTillId(wo.tillId),
             ...(p.saleId === null ? {} : { saleId: brandSaleId(p.saleId) }),
             error: new AppError("payment.offline_forward_declined", {

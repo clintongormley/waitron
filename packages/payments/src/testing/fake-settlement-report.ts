@@ -14,8 +14,8 @@ export class FakeSettlementReport implements SettlementReportSource {
 
   constructor(private readonly records: SettlementRecord[]) {}
 
-  async fetch(tenantId: TenantId, window: ReconcilePeriod): Promise<SettlementRecord[]> {
-    this.tenants.push(tenantId);
+  async fetch(window: ReconcilePeriod): Promise<SettlementRecord[]> {
+    this.tenants.push();
     this.windows.push(window);
     return this.records;
   }

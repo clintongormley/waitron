@@ -39,7 +39,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tenantId as brandTenantId,
   tillId as brandTillId,
 } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
@@ -93,7 +92,6 @@ function nextNif(): string {
 
 function tillConfigFromVenue(venue: VenueResult): TillConfig {
   return {
-    tenantId: brandTenantId(venue.tenantId),
     tillId: brandTillId(venue.tillId),
     nodeId: brandNodeId(venue.nodeId),
     // planVenue emits the standard series first, then the rectificative one.
@@ -159,10 +157,10 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
   const cfg = tillConfigFromVenue(venue);
   const catalogue = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
-    const cat = await createCatalogue(tx, cfg.tenantId, { name: "Delicatessen" });
-    const comida = await createCategory(tx, cfg.tenantId, { name: { [LOCALE]: "Comida" } });
-    const bebidas = await createCategory(tx, cfg.tenantId, { name: { [LOCALE]: "Bebidas" } });
-    await createProduct(tx, cfg.tenantId, {
+    const cat = await createCatalogue(tx, { name: "Delicatessen" });
+    const comida = await createCategory(tx, { name: { [LOCALE]: "Comida" } });
+    const bebidas = await createCategory(tx, { name: { [LOCALE]: "Bebidas" } });
+    await createProduct(tx, {
       catalogueId: cat.id,
       categoryId: comida.id,
       name: "Jamón cortado",
@@ -170,7 +168,7 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
       unitPrice: "24.90",
       vatClass: "reduced",
     });
-    const water = await createProduct(tx, cfg.tenantId, {
+    const water = await createProduct(tx, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
       name: "Agua mineral",
@@ -238,7 +236,7 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
       insert into preparation_routes (location_id, category_id, station_id)
       values (${cfg.locationId}, ${bebidas.id},
         (select id from kitchen_stations
-         where tenant_id = ${cfg.tenantId} and location_id = ${cfg.locationId} and is_default))`);
+         where location_id = ${cfg.locationId} and is_default))`);
     return {
       available: (await listAvailableProducts(tx, cfg.locationId)).products,
       zoneId: zone.rows[0]!.id,
@@ -301,11 +299,11 @@ describe("recordTillSale", () => {
     }>(sql`
       select variant_id, name, variant_name, kitchen_name, variant_kitchen_name, descriptions,
              variant_descriptions, unit_price_gross
-      from working_order_lines where tenant_id = ${cfg.tenantId}
+      from working_order_lines
       union all
       select variant_id, name, variant_name, kitchen_name, variant_kitchen_name, descriptions,
              variant_descriptions, null
-      from sale_lines where tenant_id = ${cfg.tenantId}
+      from sale_lines
       order by unit_price_gross nulls last`);
     const names = {
       variant_id: variantIds!.double,
@@ -420,7 +418,7 @@ describe("recordTillSale", () => {
     }>(sql`
       select variant_id, name, variant_name, kitchen_name, variant_kitchen_name, descriptions,
              variant_descriptions
-      from sale_lines where tenant_id = ${cfg.tenantId}
+      from sale_lines
       order by line_no`);
     expect(stored.rows).toEqual([
       {
@@ -474,7 +472,7 @@ describe("recordTillSale", () => {
     ]);
     const prep = await suite.admin.execute<{ count: number }>(sql`
       select count(*)::int as count from ticket_items
-      where tenant_id = ${cfg.tenantId}`);
+      `);
     expect(prep.rows).toEqual([{ count: 1 }]);
   });
 
@@ -495,7 +493,7 @@ describe("recordTillSale", () => {
     expect(typeof result.qr).toBe("string"); // regime verification URL (may be empty)
     const prep = await suite.admin.execute<{ count: number }>(sql`
       select count(*)::int as count from ticket_items
-      where tenant_id = ${cfg.tenantId}`);
+      `);
     expect(prep.rows).toEqual([{ count: 1 }]);
 
     // A genuine chained fiscal record exists — one for this tenant's single sale.
@@ -580,7 +578,7 @@ describe("recordTillSale", () => {
     const fake = new FakeFiscalBackend(suite.admin);
     await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
-      await fake.registerNode(tx, cfg.nodeId, { tenantId: cfg.tenantId });
+      await fake.registerNode(tx, cfg.nodeId);
     });
 
     const result = await recordTillSale({ db: suite.admin, backend: fake, clock }, cfg, {
@@ -647,9 +645,9 @@ describe("priceOrderLines re-keys bare catalogue content to the venue invoice_lo
     const cfg = tillConfigFromVenue(venue);
     const productId = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
-      const cat = await createCatalogue(tx, cfg.tenantId, { name: "Delicatessen" });
-      const bebidas = await createCategory(tx, cfg.tenantId, { name: { [LOCALE]: "Bebidas" } });
-      const product = await createProduct(tx, cfg.tenantId, {
+      const cat = await createCatalogue(tx, { name: "Delicatessen" });
+      const bebidas = await createCategory(tx, { name: { [LOCALE]: "Bebidas" } });
+      const product = await createProduct(tx, {
         catalogueId: cat.id,
         categoryId: bebidas.id,
         name: "Bare staff name",
@@ -788,9 +786,9 @@ describe("ordering modifiers — parent + child lines", () => {
     const cfg = tillConfigFromVenue(venue);
     const available = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
-      const cat = await createCatalogue(tx, cfg.tenantId, { name: "Delicatessen" });
-      const comida = await createCategory(tx, cfg.tenantId, { name: { [LOCALE]: "Comida" } });
-      const burger = await createProduct(tx, cfg.tenantId, {
+      const cat = await createCatalogue(tx, { name: "Delicatessen" });
+      const comida = await createCategory(tx, { name: { [LOCALE]: "Comida" } });
+      const burger = await createProduct(tx, {
         catalogueId: cat.id,
         categoryId: comida.id,
         name: "Hamburguesa",
@@ -798,7 +796,7 @@ describe("ordering modifiers — parent + child lines", () => {
         unitPrice: "9.00",
         vatClass: "general",
       });
-      const menu = await createProduct(tx, cfg.tenantId, {
+      const menu = await createProduct(tx, {
         catalogueId: cat.id,
         categoryId: comida.id,
         name: "Menú",
@@ -806,7 +804,7 @@ describe("ordering modifiers — parent + child lines", () => {
         unitPrice: "12.00",
         vatClass: "general",
       });
-      await createProduct(tx, cfg.tenantId, {
+      await createProduct(tx, {
         catalogueId: cat.id,
         categoryId: comida.id,
         name: "Jamón",
@@ -816,7 +814,7 @@ describe("ordering modifiers — parent + child lines", () => {
       });
       // "Combo" carries a REQUIRED group whose only item is INACTIVE — so it resolves to `items: []`.
       // A required-but-empty group is an authoring bug and must NOT deadlock a sale (CLAUDE.md §5).
-      const combo = await createProduct(tx, cfg.tenantId, {
+      const combo = await createProduct(tx, {
         catalogueId: cat.id,
         categoryId: comida.id,
         name: "Combo",
@@ -826,7 +824,7 @@ describe("ordering modifiers — parent + child lines", () => {
       });
       // "Plato" carries a NON-required group demanding at least TWO picks (`min_select` 2) — the
       // `below_min` selection-invalid path (a non-required group with a floor is DB-legal).
-      const plato = await createProduct(tx, cfg.tenantId, {
+      const plato = await createProduct(tx, {
         catalogueId: cat.id,
         categoryId: comida.id,
         name: "Plato",
@@ -838,7 +836,6 @@ describe("ordering modifiers — parent + child lines", () => {
       const [extras] = await tx
         .insert(optionGroups)
         .values({
-          tenantId: cfg.tenantId,
           name: { es: "Extras" },
           minSelect: 0,
           maxSelect: 3,
@@ -848,7 +845,6 @@ describe("ordering modifiers — parent + child lines", () => {
         .returning({ id: optionGroups.id });
       await tx.insert(optionGroupItems).values([
         {
-          tenantId: cfg.tenantId,
           groupId: extras!.id,
           name: { es: "Bacon" },
           priceDelta: "0.50",
@@ -859,7 +855,6 @@ describe("ordering modifiers — parent + child lines", () => {
           sort: 0,
         },
         {
-          tenantId: cfg.tenantId,
           groupId: extras!.id,
           name: { es: "Queso" },
           priceDelta: "0.75",
@@ -871,7 +866,6 @@ describe("ordering modifiers — parent + child lines", () => {
       const [size] = await tx
         .insert(optionGroups)
         .values({
-          tenantId: cfg.tenantId,
           name: { es: "Tamaño" },
           minSelect: 1,
           maxSelect: 1,
@@ -881,7 +875,6 @@ describe("ordering modifiers — parent + child lines", () => {
         .returning({ id: optionGroups.id });
       await tx.insert(optionGroupItems).values([
         {
-          tenantId: cfg.tenantId,
           groupId: size!.id,
           name: { es: "Pequeño" },
           priceDelta: "0",
@@ -889,7 +882,6 @@ describe("ordering modifiers — parent + child lines", () => {
           sort: 0,
         },
         {
-          tenantId: cfg.tenantId,
           groupId: size!.id,
           name: { es: "Grande" },
           priceDelta: "2.00",
@@ -902,7 +894,6 @@ describe("ordering modifiers — parent + child lines", () => {
       const [salsa] = await tx
         .insert(optionGroups)
         .values({
-          tenantId: cfg.tenantId,
           name: { es: "Salsa" },
           minSelect: 1,
           maxSelect: 1,
@@ -911,7 +902,6 @@ describe("ordering modifiers — parent + child lines", () => {
         })
         .returning({ id: optionGroups.id });
       await tx.insert(optionGroupItems).values({
-        tenantId: cfg.tenantId,
         groupId: salsa!.id,
         name: { es: "Alioli" },
         priceDelta: "0",
@@ -924,7 +914,6 @@ describe("ordering modifiers — parent + child lines", () => {
       const [guarnicion] = await tx
         .insert(optionGroups)
         .values({
-          tenantId: cfg.tenantId,
           name: { es: "Guarnición" },
           minSelect: 2,
           maxSelect: 3,
@@ -934,7 +923,6 @@ describe("ordering modifiers — parent + child lines", () => {
         .returning({ id: optionGroups.id });
       await tx.insert(optionGroupItems).values([
         {
-          tenantId: cfg.tenantId,
           groupId: guarnicion!.id,
           name: { es: "Patatas" },
           priceDelta: "1.00",
@@ -942,7 +930,6 @@ describe("ordering modifiers — parent + child lines", () => {
           sort: 0,
         },
         {
-          tenantId: cfg.tenantId,
           groupId: guarnicion!.id,
           name: { es: "Ensalada" },
           priceDelta: "1.50",
@@ -952,11 +939,10 @@ describe("ordering modifiers — parent + child lines", () => {
       ]);
 
       await tx.insert(productOptionGroups).values([
-        { tenantId: cfg.tenantId, productId: burger.id, groupId: extras!.id, sort: 0 },
-        { tenantId: cfg.tenantId, productId: menu.id, groupId: size!.id, sort: 0 },
-        { tenantId: cfg.tenantId, productId: combo.id, groupId: salsa!.id, sort: 0 },
+        { productId: burger.id, groupId: extras!.id, sort: 0 },
+        { productId: menu.id, groupId: size!.id, sort: 0 },
+        { productId: combo.id, groupId: salsa!.id, sort: 0 },
         {
-          tenantId: cfg.tenantId,
           productId: plato.id,
           groupId: guarnicion!.id,
           sort: 0,
@@ -1212,8 +1198,8 @@ describe("ordering modifiers — parent + child lines", () => {
     await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       await tx.execute(
-        sql`insert into dining_tables (id, tenant_id, location_id, label, active)
-            values (${tableId}, ${v.cfg.tenantId}, ${v.cfg.locationId}, 'Mesa 1', true)`,
+        sql`insert into dining_tables (id, location_id, label, active)
+            values (${tableId}, ${v.cfg.locationId}, 'Mesa 1', true)`,
       );
     });
 
@@ -1272,8 +1258,8 @@ describe("ordering modifiers — parent + child lines", () => {
     const tabId = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       await tx.execute(
-        sql`insert into dining_tables (id, tenant_id, location_id, label, active)
-            values (${tableId}, ${v.cfg.tenantId}, ${v.cfg.locationId}, 'Mesa 1', true)`,
+        sql`insert into dining_tables (id, location_id, label, active)
+            values (${tableId}, ${v.cfg.locationId}, 'Mesa 1', true)`,
       );
       const { tabId } = await openTab(tx, v.cfg, { tableId });
       await addTabRound(tx, v.cfg, tabId, [{ productId: burger.id, quantity: "1" }]);
@@ -1305,8 +1291,8 @@ describe("ordering modifiers — parent + child lines", () => {
     await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       await tx.execute(
-        sql`insert into dining_tables (id, tenant_id, location_id, label, active)
-            values (${tableId}, ${v.cfg.tenantId}, ${v.cfg.locationId}, 'Mesa NC', true)`,
+        sql`insert into dining_tables (id, location_id, label, active)
+            values (${tableId}, ${v.cfg.locationId}, 'Mesa NC', true)`,
       );
     });
 

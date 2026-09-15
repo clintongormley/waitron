@@ -40,9 +40,9 @@ const FOREIGN_KEY_VIOLATION = "23503";
  * write (enrol, `assign-device-profile`, or the hardware PATCH) named a binding that no row of this
  * tenant matches — the composite makes each check tenant-isolated and atomic with the write (no
  * read-then-write race), so the routes translate it here rather than pre-checking:
- *  - `devices_device_profile_fk (tenant_id, device_profile_id)` — a reassign to an unknown/foreign
+ *  - `devices_device_profile_fk (device_profile_id)` — a reassign to an unknown/foreign
  *    profile (`deviceProfileId`);
- *  - `devices_receipt_printer_fk (tenant_id, receipt_printer_id)` — a hardware PATCH naming an
+ *  - `devices_receipt_printer_fk (receipt_printer_id)` — a hardware PATCH naming an
  *    unknown/foreign printer (`receiptPrinterId`).
  * Only `devices` carries a binding FK: a join request names none, so nothing at knock time can trip one.
  */
@@ -84,15 +84,12 @@ const TILL_NAME_UNIQUE = "tills_tenant_location_name_key";
  */
 async function createRegister(
   tx: Transaction,
-  cfg: TillConfig,
+
   locationId: string,
   name: string,
 ): Promise<string> {
   try {
-    const [till] = await tx
-      .insert(tills)
-      .values({ tenantId: cfg.tenantId, locationId, name })
-      .returning({ id: tills.id });
+    const [till] = await tx.insert(tills).values({ locationId, name }).returning({ id: tills.id });
     return till!.id;
   } catch (error) {
     if (isUniqueViolation(error)) {
@@ -141,7 +138,7 @@ export async function resolveDeviceBinding(
   locationId: string,
   input: { profileId: string; name: string; stationId?: string | null; registerId?: string | null },
 ): Promise<{ stationId: string | null; tillId: string | null; formFactor: FormFactor }> {
-  const profile = await getDeviceProfile(tx, cfg.tenantId, input.profileId);
+  const profile = await getDeviceProfile(tx, input.profileId);
   // `profileId` is the admin's choice in the accept dialog, so a well-formed id that names no profile
   // of this tenant —
   // unknown, or one deleted meanwhile — is a CLIENT-recoverable 404, NOT a server fault: reuse
@@ -161,7 +158,7 @@ export async function resolveDeviceBinding(
       stationId = input.stationId;
       break;
     case "till":
-      tillId = await createRegister(tx, cfg, locationId, input.name);
+      tillId = await createRegister(tx, locationId, input.name);
       break;
     case "handheld":
       if (input.registerId == null) throw new AppError("device.register_required", {});

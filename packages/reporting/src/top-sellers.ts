@@ -59,7 +59,7 @@ export async function computeTopSellers(
     join sales s on s.id = sl.sale_id
     where ${businessDayRangeClause(sql`s.issued_at`, input)}
       ${nodeClause}
-      and ${activeSalesClause({ tenantId: input.tenantId })}
+      and ${activeSalesClause()}
     group by sl.name, sl.variant_name
     order by sum(sl.quantity) desc, sl.name asc, sl.variant_name asc
     limit ${input.limit}

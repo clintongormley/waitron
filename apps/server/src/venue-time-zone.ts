@@ -2,10 +2,7 @@ import { eq } from "drizzle-orm";
 import { asAppUser, locations, withTransaction, type Database } from "@waitron/db";
 
 /** Onboarding derives this zone from the address; email times use the deployment's location. */
-export function readVenueTimeZone(
-  db: Database,
-  input: { tenantId: string; locationId: string },
-): Promise<string> {
+export function readVenueTimeZone(db: Database, input: { locationId: string }): Promise<string> {
   return withTransaction(db, async (tx) => {
     await asAppUser(tx);
     const [location] = await tx

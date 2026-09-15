@@ -12,7 +12,6 @@ import { locations, tenants } from "./tenants.js";
 // (station_id) → kitchen_stations FKs on categories/products, written and read as the
 // non-owner `app_user` — the deployment role, which PGlite (every connection a superuser) cannot be.
 // The suite retains the reads and writes under app_user's grants.
-const TENANT_A = "11111111-1111-4111-8111-111111111111";
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const RANDOM_UUID = "99999999-9999-4999-8999-999999999999";
 
@@ -27,7 +26,7 @@ describe("categories.station_id / products.station_id routing FKs (app-writable)
     const admin = suite.admin;
     await admin
       .insert(tenants)
-      .values([{ id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
+      .values([{ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
     await admin.insert(locations).values([
       {
         id: LOCATION_A,
@@ -66,8 +65,7 @@ describe("categories.station_id / products.station_id routing FKs (app-writable)
     return r.rows[0]!.id;
   }
 
-  function asApp<T>(tenant: string, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-    void tenant;
+  function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
     return withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return fn(tx);
@@ -77,10 +75,10 @@ describe("categories.station_id / products.station_id routing FKs (app-writable)
   it("lets the app role route a category to an own-tenant station and rejects a missing one", async () => {
     // The app role writes and reads back station_id (the additive column, under categories' existing
     // grant) …
-    await asApp(TENANT_A, (tx) =>
+    await asApp((tx) =>
       tx.execute(sql`update categories set station_id = ${stationA} where id = ${categoryA}`),
     );
-    const [row] = await asApp(TENANT_A, (tx) =>
+    const [row] = await asApp((tx) =>
       tx
         .execute<{ station_id: string | null }>(
           sql`select station_id from categories where id = ${categoryA}`,
@@ -91,7 +89,7 @@ describe("categories.station_id / products.station_id routing FKs (app-writable)
 
     // … a station that names no row at all is refused (FK existence) …
     const eRandom = await captureError(() =>
-      asApp(TENANT_A, (tx) =>
+      asApp((tx) =>
         tx.execute(sql`update categories set station_id = ${RANDOM_UUID} where id = ${categoryA}`),
       ),
     );
@@ -99,10 +97,10 @@ describe("categories.station_id / products.station_id routing FKs (app-writable)
   });
 
   it("lets the app role route a product to an own-tenant station and rejects a missing one", async () => {
-    await asApp(TENANT_A, (tx) =>
+    await asApp((tx) =>
       tx.execute(sql`update products set station_id = ${stationA} where id = ${productA}`),
     );
-    const [row] = await asApp(TENANT_A, (tx) =>
+    const [row] = await asApp((tx) =>
       tx
         .execute<{ station_id: string | null }>(
           sql`select station_id from products where id = ${productA}`,
@@ -112,7 +110,7 @@ describe("categories.station_id / products.station_id routing FKs (app-writable)
     expect(row!.station_id).toBe(stationA);
 
     const eRandom = await captureError(() =>
-      asApp(TENANT_A, (tx) =>
+      asApp((tx) =>
         tx.execute(sql`update products set station_id = ${RANDOM_UUID} where id = ${productA}`),
       ),
     );

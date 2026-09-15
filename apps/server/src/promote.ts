@@ -61,7 +61,6 @@ export interface PromoteDeps {
   /** The box key ring — unseals this node's identity private key to sign the minted document. */
   readonly ring: KeyRing;
   /** This node's tenant — scopes the identity-key read and the trust set. */
-  readonly tenantId: string;
   /** This node's id — the new document's `signerNodeId` and the node that becomes serving-primary. */
   readonly nodeId: string;
 }
@@ -144,7 +143,6 @@ export async function promoteLocalSecondaryToPrimary(
   const document = await mintNextMembershipDocument(
     { db: deps.appDb, ring: deps.ring },
     {
-      tenantId: deps.tenantId,
       heldDocument: held,
       nodes: nextStandings(held?.body.nodes ?? [], deps.nodeId),
       signerNodeId: deps.nodeId,
@@ -278,7 +276,7 @@ export async function promoteMirrorToPrimary(
 
   await refreshDeploymentHolders(deps.appDb, deps.holders);
   // Read the corrected series id up front — it is also the value an already-primary re-run returns.
-  const seriesId = await readStandardSeriesId(deps.appDb, deps.tenantId, deps.nodeId);
+  const seriesId = await readStandardSeriesId(deps.appDb, deps.nodeId);
 
   if (deps.holders.mode.current === "primary") {
     // Already promoted — idempotent no-op. trading.env was already corrected before this box's own PONR,
@@ -293,11 +291,10 @@ export async function promoteMirrorToPrimary(
   // non-setup key.
   const held = await readNodeMembership(deps.appDb);
   assertNotFenced(held, deps.nodeId); // before PONR/persist: a fenced mirror was superseded — refuse (§5)
-  const endorsement = await readNodeEndorsement(deps.appDb, deps.tenantId, deps.nodeId);
+  const endorsement = await readNodeEndorsement(deps.appDb, deps.nodeId);
   const document = await mintNextMembershipDocument(
     { db: deps.appDb, ring: deps.ring },
     {
-      tenantId: deps.tenantId,
       heldDocument: held,
       nodes: nextStandings(held?.body.nodes ?? [], deps.nodeId),
       signerNodeId: deps.nodeId,

@@ -1,7 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { AppError, saleId as brandSaleId, seriesId as brandSeriesId } from "@waitron/shared";
-import type { NodeId, SaleId, SeriesId, TenantId, TillId } from "@waitron/shared";
+import type { NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
 // See record-correction.test.ts's own note: there is no `@waitron/fiscal/testing` subpath; the real
 // import path is `@waitron/fiscal/src/testing/fake-backend.js`, used in test files only.
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
@@ -27,7 +27,6 @@ import type { RecordSaleInput } from "./record-sale.js";
 import { recordVoid } from "./record-void.js";
 import { seedBareSale, seedRectificativeSeries, seedTenant } from "../test/fixtures.js";
 
-let tenantId: TenantId;
 let tillId: TillId;
 let nodeId: NodeId;
 let seriesId: SeriesId; // the ordinary (purpose='standard') series — the F3 reuses it (owner decision)
@@ -50,7 +49,7 @@ const suite = usePgliteDb({
 });
 
 beforeEach(async () => {
-  ({ tenantId, tillId, nodeId, seriesId } = await seedTenant(suite.db));
+  ({ tillId, nodeId, seriesId } = await seedTenant(suite.db));
   // Seed a manager (holds `sale.void`) as the superuser owner and open its session — the precondition
   // void below needs an authorizer, exactly as the record-void suite arranges.
   const { rows } = await suite.db.execute<{ id: string }>(
@@ -94,7 +93,6 @@ const RECIPIENT = { taxId: "B12345678", legalName: "Acme Corp SL", countryCode: 
  * makes "the F3 is unsettled" a real assertion rather than a vacuous one. */
 function saleInput(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
   return {
-    tenantId,
     tillId,
     nodeId,
     seriesId,
@@ -137,7 +135,6 @@ function substitutionInput(
   overrides: Partial<RecordSubstitutionInput> = {},
 ): RecordSubstitutionInput {
   return {
-    tenantId,
     tillId,
     nodeId,
     seriesId,
@@ -314,7 +311,7 @@ describe("recordSubstitution — the series (node-ownership guards)", () => {
     // number from another node's counter would let two chains issue from one series.
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId } = await sellTicket(backend);
-    const other = await seedTenant(suite.db, { tenantId });
+    const other = await seedTenant(suite.db);
     await expect(substitute(backend, [saleId], { seriesId: other.seriesId })).rejects.toMatchObject(
       {
         code: "sale.series_wrong_node",
@@ -468,7 +465,7 @@ describe("recordSubstitution — a mixed batch fails atomically", () => {
     const { saleId: recorded } = await sellTicket(backend); // number 1, has a fiscal record
     const unrecorded = await seedBareSale(
       suite.db,
-      { tenantId, tillId, nodeId, seriesId },
+      { tillId, nodeId, seriesId },
       { invoiceNumber: 99 }, // distinct number: avoids the series-unique collision with the ticket
     );
 

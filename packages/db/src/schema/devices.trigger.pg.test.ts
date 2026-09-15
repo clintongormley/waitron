@@ -10,14 +10,13 @@ import type { Database } from "../client.js";
 import { captureError, pgErrorMessage } from "../testing/errors.js";
 import { seedKitchenStation, seedTenant } from "../testing/seed.js";
 import { useTemplateDb } from "../testing/lifecycle.js";
-import type { LocationId, TenantId } from "@waitron/shared";
+import type { LocationId } from "@waitron/shared";
 
 const TOKEN_HASH = "scrypt$00$00";
 
 describe("devices binding-rule trigger (form factor → station XOR register)", () => {
   const suite = useTemplateDb({ template: "core", resetPerTest: false });
   let admin: Database;
-  let tenantId: TenantId;
   let locationId: LocationId;
   let stationId: string;
   let tillId: string;
@@ -26,11 +25,11 @@ describe("devices binding-rule trigger (form factor → station XOR register)", 
 
   beforeAll(async () => {
     admin = suite.admin;
-    tenantId = await seedTenant(admin);
+    await seedTenant(admin);
     const location = await admin.execute<{ id: string }>(sql`
       insert into locations (name, invoice_locales, operation_description) values ('Loc', array['es'], 'Hostelería') returning id`);
     locationId = location.rows[0]!.id as LocationId;
-    stationId = await seedKitchenStation(admin, { tenantId, locationId });
+    stationId = await seedKitchenStation(admin, { locationId });
     const till = await admin.execute<{ id: string }>(sql`
       insert into tills (location_id, name) values (${locationId}, 'Till') returning id`);
     tillId = till.rows[0]!.id;

@@ -12,7 +12,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tenantId as brandTenantId,
   tillId as brandTillId,
 } from "@waitron/shared";
 import { mountPaymentsApi } from "./payments-api.js";
@@ -55,7 +54,6 @@ function nextName(prefix: string): string {
 }
 
 interface Venue {
-  tenantId: string;
   locationId: string;
   managerCookie: string;
   staffCookie: string;
@@ -64,31 +62,28 @@ interface Venue {
 /** A fresh tenant + location + a manager and a staff person, each with a management session. Each
  * test seeds its OWN venue so reader/credential counts are order-independent across the shared clone. */
 async function seedVenue(): Promise<Venue> {
-  const tenantId = randomUUID();
   await suite.admin.execute(sql`
     insert into tenants (id, country, tax_id, legal_name)
-    values (${tenantId}, 'ES', ${nextNif()}, 'Deli Test SL')`);
+    values (1, 'ES', ${nextNif()}, 'Deli Test SL')`);
   const loc = await suite.admin.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
+    insert into locations (name, invoice_locales, operation_description)
+    values ('Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
   const locationId = loc.rows[0]!.id;
   const { managerSid, staffSid } = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const mgr = await tx.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, role)
-      values (${tenantId}, 'The Manager', ${hashPin("1234")}, 'manager') returning id`);
+      insert into persons (display_name, pin_hash, role)
+      values ('The Manager', ${hashPin("1234")}, 'manager') returning id`);
     const stf = await tx.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, role)
-      values (${tenantId}, 'The Clerk', ${hashPin("1234")}, 'staff') returning id`);
+      insert into persons (display_name, pin_hash, role)
+      values ('The Clerk', ${hashPin("1234")}, 'staff') returning id`);
     const managerSession = await startManagementSession(tx, {
-      tenantId,
       personId: mgr.rows[0]!.id,
     });
-    const staffSession = await startManagementSession(tx, { tenantId, personId: stf.rows[0]!.id });
+    const staffSession = await startManagementSession(tx, { personId: stf.rows[0]!.id });
     return { managerSid: managerSession.id, staffSid: staffSession.id };
   });
   return {
-    tenantId,
     locationId,
     managerCookie: `${MANAGEMENT_COOKIE}=${managerSid}`,
     staffCookie: `${MANAGEMENT_COOKIE}=${staffSid}`,
@@ -100,14 +95,14 @@ async function seedVenue(): Promise<Venue> {
  * device_binding_rule trigger. */
 async function seedDevice(venue: Venue): Promise<string> {
   const profile = await suite.admin.execute<{ id: string }>(sql`
-    insert into device_profiles (tenant_id, name, form_factor)
-    values (${venue.tenantId}, ${nextName("Perfil caja")}, 'till') returning id`);
+    insert into device_profiles (name, form_factor)
+    values (${nextName("Perfil caja")}, 'till') returning id`);
   const till = await suite.admin.execute<{ id: string }>(sql`
-    insert into tills (tenant_id, location_id, name)
-    values (${venue.tenantId}, ${venue.locationId}, ${nextName("Caja")}) returning id`);
+    insert into tills (location_id, name)
+    values (${venue.locationId}, ${nextName("Caja")}) returning id`);
   const dev = await suite.admin.execute<{ id: string }>(sql`
-    insert into devices (tenant_id, location_id, till_id, device_profile_id, label, token_hash)
-    values (${venue.tenantId}, ${venue.locationId}, ${till.rows[0]!.id}, ${profile.rows[0]!.id}, 'Registro', 'x')
+    insert into devices (location_id, till_id, device_profile_id, label, token_hash)
+    values (${venue.locationId}, ${till.rows[0]!.id}, ${profile.rows[0]!.id}, 'Registro', 'x')
     returning id`);
   return dev.rows[0]!.id;
 }
@@ -162,7 +157,6 @@ const pool: CardProviderPool = {
 
 function cfgOf(venue: Venue): TillConfig {
   return {
-    tenantId: brandTenantId(venue.tenantId),
     tillId: brandTillId(randomUUID()),
     nodeId: brandNodeId(randomUUID()),
     seriesId: brandSeriesId(randomUUID()),

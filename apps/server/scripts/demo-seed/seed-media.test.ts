@@ -1,4 +1,3 @@
-import { tenantId as brandTenantId } from "@waitron/shared";
 // Real PostgreSQL checks the demo writes image bytes and product references as app_user.
 
 import { createHash } from "node:crypto";
@@ -34,7 +33,7 @@ function nextNif(): string {
 }
 
 /** Provision a fresh chained venue (as the owner) and return the ids the seed needs. */
-async function provisionVenue(): Promise<{ tenantId: string; locationId: string }> {
+async function provisionVenue(): Promise<{ locationId: string }> {
   const venue = await applyVenue(
     planVenue(
       {
@@ -68,23 +67,23 @@ async function provisionVenue(): Promise<{ tenantId: string; locationId: string 
     ),
     { db: suite.admin, modules: ALL_MODULES },
   );
-  return { tenantId: venue.tenantId, locationId: venue.locationId };
+  return { locationId: venue.locationId };
 }
 
 describe("seedMedia", () => {
   it("stores committed tiles in the library and attaches content-addressed product references", async () => {
-    const { tenantId, locationId } = await provisionVenue();
+    const { locationId } = await provisionVenue();
 
     const { productsByImage, images } = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
-      const { productsByImage } = await seedCatalogues(tx, brandTenantId(tenantId), {
+      const { productsByImage } = await seedCatalogues(tx, {
         locationId,
         locale: LOCALE,
       });
       await seedMedia(tx, { productsByImage });
       // Read every product's stored image back, as app_user, keyed by product id.
       const { rows } = await tx.execute<{ id: string; image: string | null }>(
-        sql`select id, image from products where tenant_id = ${tenantId}`,
+        sql`select id, image from products `,
       );
       const images = new Map(rows.map((r) => [r.id, r.image]));
       return { productsByImage, images };
@@ -131,10 +130,10 @@ describe("seedMedia", () => {
   });
 
   it("reuses existing image bytes when the media step runs twice", async () => {
-    const { tenantId, locationId } = await provisionVenue();
+    const { locationId } = await provisionVenue();
     await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
-      const { productsByImage } = await seedCatalogues(tx, brandTenantId(tenantId), {
+      const { productsByImage } = await seedCatalogues(tx, {
         locationId,
         locale: LOCALE,
       });

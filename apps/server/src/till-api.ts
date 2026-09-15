@@ -690,7 +690,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         session = await withTransaction(deps.db, async (tx) => {
           await asAppUser(tx);
           return loginWithPin(tx, {
-            tenantId: deps.cfg.tenantId,
             // §6: the DEVICE's own register, not the box's env `cfg.tillId`.
             tillId: deviceTillId,
             personId,
@@ -758,7 +757,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const locale = typeof body.locale === "string" ? body.locale : "";
       await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
-        await setPersonLocale(tx, { tenantId: deps.cfg.tenantId, personId, locale });
+        await setPersonLocale(tx, { personId, locale });
       });
       return c.body(null, 204);
     }),
@@ -799,12 +798,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       // built-in default for its form factor (SP-B4, generalising SP-B1 / SP-A.2 §16.3; the profile is
       // the sole canvas binding since the Task 10 cutover). The counter therefore always has a canvas
       // to render from.
-      const device = await tryReadDevice({ db: deps.db, cfg: deps.cfg, devMode: deps.devMode }, c);
+      const device = await tryReadDevice({ db: deps.db, devMode: deps.devMode }, c);
       // The venue's server list (till-reroute §3.2). Read HERE, outside the boot transaction below:
-      // `node_membership` is a whole-DB singleton row with no `tenant_id`, so it does not need the
+      // `node_membership` is a whole-DB singleton row, so it does not need the
       // transaction. Read straight off `deps.db`, like every other read in this file.
       const held = await readNodeMembership(deps.db);
-      // The deployment holds one tenant per database. ONE transaction reads the issuer identity
+      // ONE transaction reads the issuer identity
       // and the authored receipt trim (`getReceipt`, its own `tenant_receipts` row — SP-B4), plus
       // the resolved canvas below: all run inside the same `withTransaction` + `asAppUser` block,
       // never a second connection. `getReceipt` does not authorize — this boot read is
@@ -815,7 +814,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         const [row] = await tx
           .select({ venueName: tenants.legalName, nif: tenants.taxId })
           .from(tenants)
-          .where(eq(tenants.id, deps.cfg.tenantId));
+          .where(eq(tenants.id, 1));
         // The venue's KDS whole-ticket bump mode (KDS-1 §2e, `locations.bump_mode`) — read HERE
         // from the till's own location rather than off `deps.cfg` like `orderFlow`: `orderFlow`
         // rides the config because the SALE PATH dispatches on it, whereas `bump_mode` has no
@@ -848,7 +847,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         }));
         // The authored receipt trim, or the built-in default when the tenant has never opened the editor:
         // `getReceipt` reads it from `tenant_receipts`, returning DEFAULT_RECEIPT on absence — no backfill.
-        const receipt = await getReceipt(tx, deps.cfg.tenantId);
+        const receipt = await getReceipt(tx);
         // SP-B4 + device-profile §5.3: EVERY request resolves a CanvasDef (never undefined) plus the
         // device's capability set, so the counter always has a canvas to render and the render axis
         // knows which capability cards to draw. Capabilities relocated OFF the canvas onto the device
@@ -869,26 +868,25 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         if (device != null) {
           const profile =
             device.deviceProfileId != null
-              ? await getDeviceProfile(tx, deps.cfg.tenantId, device.deviceProfileId)
+              ? await getDeviceProfile(tx, device.deviceProfileId)
               : undefined;
           capabilities = profile?.capabilities ?? [];
           inactivityTimeoutSeconds = profile?.inactivityTimeoutSeconds ?? null;
           let assigned: CanvasDef | undefined;
           if (profile?.canvasId != null) {
-            assigned = (await getCanvas(tx, deps.cfg.tenantId, profile.canvasId))?.definition;
+            assigned = (await getCanvas(tx, profile.canvasId))?.definition;
           }
           // The `?.definition` (getCanvas's return is optional) then `??` is belt-and-braces: a
           // NON-null `canvasId` that resolves to NO canvas is UNREACHABLE by construction, so it
-          // is intentionally untested. The composite FK `device_profiles(tenant_id, canvas_id) →
-          // canvases(tenant_id, id)` is ON DELETE RESTRICT (device_profiles migration), enforced even on
+          // is intentionally untested. The composite FK `device_profiles(canvas_id) →
+          // canvases(id)` is ON DELETE RESTRICT (device_profiles migration), enforced even on
           // PGlite: a profile can neither reference a non-existent canvas id (FK violation at insert) nor
           // keep a reference to a canvas deleted out from under it (RESTRICT blocks the delete). The `??`
           // still yields a valid form-factor default should that invariant ever be relaxed, and covers a
           // profile whose `canvasId` is NULL (a "default canvas + these capabilities" profile, §5.2).
-          canvas =
-            assigned ?? (await getCanvasForFormFactor(tx, deps.cfg.tenantId, device.formFactor));
+          canvas = assigned ?? (await getCanvasForFormFactor(tx, device.formFactor));
         } else {
-          canvas = await getCanvasForFormFactor(tx, deps.cfg.tenantId, "till");
+          canvas = await getCanvasForFormFactor(tx, "till");
         }
         // The integrated card provider is now PER-DEVICE (Task 12): the string the till reads to pick
         // its card-collect route comes from the paying device's DEFAULT reader (`device_card_readers`
@@ -948,11 +946,11 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         boot.bumpMode === undefined ||
         boot.fireControl === undefined
       ) {
-        // Structurally unreachable: `deps.cfg.tenantId`/`locationId` are the till's own tenant
-        // and location (provisioning stamped both), so their rows always exist and the by-id
-        // reads return them. A misconfigured till pointed at a nonexistent tenant/location
-        // becomes an opaque 500 via `run`, never a partial payload.
-        throw new Error(`GET /api/till: no tenant/location row for ${deps.cfg.tenantId}`);
+        // Structurally unreachable: the taxpayer row is the database's one row and
+        // `deps.cfg.locationId` is the till's own location (provisioning stamped it), so both
+        // reads return a row. A misconfigured till pointed at a nonexistent location becomes an
+        // opaque 500 via `run`, never a partial payload.
+        throw new Error(`GET /api/till: no taxpayer/location row for ${deps.cfg.locationId}`);
       }
       /* v8 ignore stop */
       return c.json({
@@ -1454,7 +1452,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       if (!isUuid(id)) throw new AppError("station.not_found", { stationId: id });
       const queue = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
-        return listStationQueue(tx, deps.cfg, id);
+        return listStationQueue(tx, id);
       });
       return c.json(queue);
     }),

@@ -48,11 +48,8 @@ import {
   listAvailableProducts,
 } from "@waitron/catalogue";
 import type { AvailableProduct } from "@waitron/catalogue";
-import { tenantId as brandTenantId } from "@waitron/shared";
-import type { TenantId } from "@waitron/shared";
 
 interface Venue {
-  tenantId: TenantId;
   locationId: string;
 }
 
@@ -61,14 +58,14 @@ interface Venue {
  * these two rows are needed: this demo rings no sale, so no till / node / series.
  */
 async function seedVenue(db: Database): Promise<Venue> {
-  const t = await db.execute<{ id: string }>(
-    sql`insert into tenants (country, tax_id, legal_name) values ('ES', '50000000K', 'Deli Demo SL') returning id`,
+  await db.execute(
+    sql`insert into tenants (id, country, tax_id, legal_name)
+          values (1, 'ES', '50000000K', 'Deli Demo SL') on conflict (id) do nothing`,
   );
-  const tenantId = brandTenantId(t.rows[0]!.id);
   const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Sala principal', array['es-ES'], 'Venta en establecimiento') returning id`);
-  return { tenantId, locationId: loc.rows[0]!.id };
+    insert into locations (name, invoice_locales, operation_description)
+    values ('Sala principal', array['es-ES'], 'Venta en establecimiento') returning id`);
+  return { locationId: loc.rows[0]!.id };
 }
 
 /** The product's staff-facing name, or a stable fallback when it is blank. `apps/*` is out of the
@@ -185,12 +182,12 @@ async function main(): Promise<void> {
     // PostgreSQL.
     await withTransaction(db, async (tx) => {
       await asAppUser(tx);
-      const cat = await createCatalogue(tx, venue.tenantId, { name: "Delicatessen" });
-      const comida = await createCategory(tx, venue.tenantId, { name: { en: "Comida" } });
-      const postres = await createCategory(tx, venue.tenantId, { name: { en: "Postres" } });
+      const cat = await createCatalogue(tx, { name: "Delicatessen" });
+      const comida = await createCategory(tx, { name: { en: "Comida" } });
+      const postres = await createCategory(tx, { name: { en: "Postres" } });
 
       // 1. `contains` WITH a source — the richest declaration.
-      await createProduct(tx, venue.tenantId, {
+      await createProduct(tx, {
         catalogueId: cat.id,
         categoryId: comida.id,
         name: "Empanada de trigo",
@@ -204,7 +201,7 @@ async function main(): Promise<void> {
       });
 
       // 2. a `may_contain` (cross-contamination) alongside a plain `contains`.
-      await createProduct(tx, venue.tenantId, {
+      await createProduct(tx, {
         catalogueId: cat.id,
         categoryId: postres.id,
         name: "Tarta de la casa",
@@ -218,7 +215,7 @@ async function main(): Promise<void> {
       });
 
       // 3. reviewed, but no declarable allergens — the empty map. NOT the same as pending.
-      await createProduct(tx, venue.tenantId, {
+      await createProduct(tx, {
         catalogueId: cat.id,
         categoryId: comida.id,
         name: "Ensalada de la huerta",
@@ -229,7 +226,7 @@ async function main(): Promise<void> {
       });
 
       // 4. allergens left UNSET (null) — never reviewed → PENDING.
-      await createProduct(tx, venue.tenantId, {
+      await createProduct(tx, {
         catalogueId: cat.id,
         categoryId: comida.id,
         name: "Sopa del día",

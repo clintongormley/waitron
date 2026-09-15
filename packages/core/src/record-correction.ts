@@ -16,7 +16,7 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError, decimal } from "@waitron/shared";
-import type { NodeId, SaleId, SeriesId, TenantId, TillId } from "@waitron/shared";
+import type { NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
 import type { FiscalBackend, FiscalRecordRef, TrustedClock } from "@waitron/fiscal";
 import { authorize, type AuthzInput } from "@waitron/identity";
 import { recordIncident } from "./incidents.js";
@@ -25,7 +25,6 @@ import { buildVatBreakdown } from "./record-sale.js";
 import type { RecordSaleLine } from "./record-sale.js";
 
 export interface RecordCorrectionInput {
-  tenantId: TenantId;
   /**
    * The till this corrective invoice rings at — an informational snapshot only (written to `sales.till_id`
    * and the fiscal record's `till_id`, and used for incidents). NOT checked against the series; see
@@ -154,7 +153,6 @@ export async function recordCorrection(
   if (series === undefined) {
     throw new AppError("sale.series_not_found", {
       seriesId: input.seriesId,
-      tenantId: input.tenantId,
     });
   }
   if (series.nodeId !== input.nodeId) {
@@ -276,7 +274,6 @@ export async function recordCorrection(
   // sale (the one this call created), matching `recordSale`'s own deferral until `saleId` exists.
   for (const incident of pending) {
     await recordIncident(tx, {
-      tenantId: input.tenantId,
       tillId: input.tillId,
       saleId,
       detectedAt: now.instant,

@@ -491,14 +491,14 @@ it("maps the bundled PostgreSQL stemmers and keeps unknown dictionary languages 
 
 it("protects an image used only by a category and releases it after clearing the reference", async () => {
   const { createCategory, updateCategory } = await import("@waitron/catalogue");
-  const tenantId = await seedTenant(suite.db);
+  await seedTenant(suite.db);
   await withTransaction(suite.db, async (tx) => {
     const { image } = await uploadImage(
       tx,
       { bytes: photo, names: { en: "Food" }, altText: { en: "Food on a plate" }, labels: [] },
       { maxUploadBytes: 100 },
     );
-    const category = await createCategory(tx, tenantId, {
+    const category = await createCategory(tx, {
       name: { en: "Food" },
       image: image.filename,
     });

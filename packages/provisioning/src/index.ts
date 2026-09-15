@@ -32,7 +32,6 @@ export { FISCAL_TERRITORIES, resolveFiscalModules } from "./fiscal-modules.js";
 export type { FiscalModules } from "./fiscal-modules.js";
 export { venueFiscalSelection } from "./venue-fiscal.js";
 export type { VenueFiscalSelection } from "./venue-fiscal.js";
-export { deriveTenantId } from "./tenant-id.js";
 export {
   assertNoForeignTenant,
   assertNoOperationalVenue,

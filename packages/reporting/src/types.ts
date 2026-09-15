@@ -1,11 +1,10 @@
-import type { Decimal, NodeId, TenantId, TillId, TimingBand } from "@waitron/shared";
+import type { Decimal, NodeId, TillId, TimingBand } from "@waitron/shared";
 import type { LiquidationPeriod } from "./period.js";
 
 /** A tender method, mirroring `tender_method` in packages/db/src/schema/sales.ts. */
 export type TenderMethod = "cash" | "card" | "voucher" | "transfer" | "other";
 
 export interface DailyCloseInput {
-  tenantId: TenantId;
   /** Omit → aggregate across ALL the tenant's nodes (every node in the database), the same
    * venue-wide shape `PeriodVatInput` allows. Node-grain callers (the fiscal daily close, the
    * dashboard's per-till daily-close view) pass a node; the dashboard OVERVIEW omits it so its
@@ -20,7 +19,6 @@ export interface DailyCloseInput {
 }
 
 export interface PeriodVatInput {
-  tenantId: TenantId;
   /** Omit → aggregate across ALL the tenant's nodes (every node in the database). */
   nodeId?: NodeId;
   /** Inclusive lower bound, local calendar date of the business day, "YYYY-MM-DD". */
@@ -56,7 +54,6 @@ export interface TopSeller {
 
 export interface VatReturnInput {
   /** The obligado — a modelo 303 aggregates ALL nodes of the legal entity (no node predicate). */
-  tenantId: TenantId;
   /** Civil calendar year of the liquidation period, e.g. 2026 (must be an integer). */
   year: number;
   /** The liquidation period (month/quarter/year). */
@@ -87,14 +84,12 @@ export interface InputVatSummary {
 }
 
 export interface InputVatReturn extends InputVatSummary {
-  tenantId: TenantId;
   year: number;
   /** The liquidation period (month/quarter/year). */
   period: LiquidationPeriod;
 }
 
 export interface VatReturn {
-  tenantId: TenantId;
   year: number;
   /** The liquidation period (month/quarter/year). */
   period: LiquidationPeriod;
@@ -155,7 +150,6 @@ export interface CloseCounts {
 }
 
 export interface DailyClose {
-  tenantId: TenantId;
   /** The node this close is grain-scoped to, or omitted for a venue-wide close (mirrors
    * `DailyCloseInput.nodeId`). The fiscal `recordDailyClose` always supplies a node; the venue-wide
    * overview does not read this field. */
@@ -171,7 +165,6 @@ export interface DailyClose {
  * exactly as the other `/reports` routes are (design §7.4). No business-day range — the read is a
  * live snapshot of right now, not a closed historical period. */
 export interface OverdueOrdersInput {
-  tenantId: TenantId;
   nodeId: NodeId;
 }
 

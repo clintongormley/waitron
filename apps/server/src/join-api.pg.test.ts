@@ -66,23 +66,20 @@ async function knock(
 }
 
 let profileCounter = 0;
-async function seedProfile(
-  cfg: TillConfig,
-  formFactor: "till" | "kds" | "phone-portrait",
-): Promise<string> {
+async function seedProfile(formFactor: "till" | "kds" | "phone-portrait"): Promise<string> {
   profileCounter += 1;
   const { rows } = await suite.admin.execute<{ id: string }>(sql`
-    insert into device_profiles (tenant_id, name, form_factor, capabilities)
-    values (${cfg.tenantId}, ${`Profile ${profileCounter}`}, ${formFactor}, '[]'::jsonb)
+    insert into device_profiles (name, form_factor, capabilities)
+    values (${`Profile ${profileCounter}`}, ${formFactor}, '[]'::jsonb)
     returning id`);
   return rows[0]!.id;
 }
 
 /** How many pending requests this tenant holds — read as the superuser, so the assertion is about the
  *  table and not about what a route chose to show. */
-async function pendingCount(cfg: TillConfig): Promise<number> {
+async function pendingCount(): Promise<number> {
   const { rows } = await suite.admin.execute<{ n: number }>(
-    sql`select count(*)::int as n from join_requests where tenant_id = ${cfg.tenantId}`,
+    sql`select count(*)::int as n from join_requests `,
   );
   return rows[0]!.n;
 }
@@ -373,7 +370,7 @@ describe("POST /management-api/join-requests/:id/deny", () => {
       cookie: venue.managerCookie,
     });
     expect(first.status).toBe(204);
-    expect(await pendingCount(venue.cfg)).toBe(0);
+    expect(await pendingCount()).toBe(0);
     const second = await send(app, "POST", `/management-api/join-requests/${made.joinId}/deny`, {
       cookie: venue.managerCookie,
     });
@@ -390,12 +387,12 @@ describe("POST /management-api/join-requests/:id/deny", () => {
     });
     expect(refused.status).toBe(403);
     expect((await errorOf(refused)).params).toEqual({ permission: "printer.manage" });
-    expect(await pendingCount(venue.cfg)).toBe(1);
+    expect(await pendingCount()).toBe(1);
     const ok = await send(app, "POST", `/management-api/join-requests/${agent.joinId}/deny`, {
       cookie: venue.managerCookie,
     });
     expect(ok.status).toBe(204);
-    expect(await pendingCount(venue.cfg)).toBe(0);
+    expect(await pendingCount()).toBe(0);
   });
 
   it("answers 403 to a caller holding NEITHER permission, for a live id AND an unknown one", async () => {
@@ -411,7 +408,7 @@ describe("POST /management-api/join-requests/:id/deny", () => {
       expect(res.status).toBe(403);
       expect((await errorOf(res)).code).toBe("authorization.not_permitted");
     }
-    expect(await pendingCount(venue.cfg)).toBe(1);
+    expect(await pendingCount()).toBe(1);
   });
 });
 
@@ -419,7 +416,7 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
   it("enrols the device when the number matches, and the request is consumed", async () => {
     const venue = await setupVenue(suite.admin);
     const app = mountApp(venue.cfg);
-    const profileId = await seedProfile(venue.cfg, "kds");
+    const profileId = await seedProfile("kds");
     const made = await knock(venue, { kind: "device", label: "Pantalla Cocina" });
     const res = await send(
       app,
@@ -440,7 +437,7 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
       name: "Pantalla Cocina",
       formFactor: "kds",
     });
-    expect(await pendingCount(venue.cfg)).toBe(0);
+    expect(await pendingCount()).toBe(0);
     const { rows } = await suite.admin.execute<{
       label: string;
       station_id: string;
@@ -456,7 +453,7 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
   it("a wrong number is 400 device.join_mismatch AND the request is gone on a FRESH request", async () => {
     const venue = await setupVenue(suite.admin);
     const app = mountApp(venue.cfg);
-    const profileId = await seedProfile(venue.cfg, "kds");
+    const profileId = await seedProfile("kds");
     const made = await knock(venue, {
       kind: "device",
       label: "Pantalla Cocina",
@@ -494,13 +491,13 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
     );
     expect(retry.status).toBe(404);
     expect((await errorOf(retry)).code).toBe("join_request.not_found");
-    expect(await pendingCount(venue.cfg)).toBe(0);
+    expect(await pendingCount()).toBe(0);
   });
 
   it("refuses a print_agent request with 404, which survives", async () => {
     const venue = await setupVenue(suite.admin);
     const app = mountApp(venue.cfg);
-    const profileId = await seedProfile(venue.cfg, "kds");
+    const profileId = await seedProfile("kds");
     const agent = await knock(venue, { kind: "print_agent", label: "Cocina agent" });
     const res = await send(
       app,
@@ -518,7 +515,7 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
     expect(res.status).toBe(404);
     expect((await errorOf(res)).code).toBe("join_request.not_found");
     // The agent's ask is untouched: a device.manage holder cannot turn it into a device.
-    expect(await pendingCount(venue.cfg)).toBe(1);
+    expect(await pendingCount()).toBe(1);
     const { rows } = await suite.admin.execute<{ n: number }>(
       sql`select count(*)::int as n from devices where id = ${agent.joinId}`,
     );
@@ -528,7 +525,7 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
   it("needs device.manage", async () => {
     const venue = await setupVenue(suite.admin);
     const app = mountApp(venue.cfg);
-    const profileId = await seedProfile(venue.cfg, "kds");
+    const profileId = await seedProfile("kds");
     const made = await knock(venue, { kind: "device", label: "Pantalla Cocina" });
     const res = await send(
       app,
@@ -545,13 +542,13 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
     );
     expect(res.status).toBe(403);
     expect((await errorOf(res)).params).toEqual({ permission: "device.manage" });
-    expect(await pendingCount(venue.cfg)).toBe(1);
+    expect(await pendingCount()).toBe(1);
   });
 
   it("a till profile auto-creates its register", async () => {
     const venue = await setupVenue(suite.admin);
     const app = mountApp(venue.cfg);
-    const profileId = await seedProfile(venue.cfg, "till");
+    const profileId = await seedProfile("till");
     const made = await knock(venue, { kind: "device", label: "Caja nueva" });
     const res = await send(
       app,
@@ -566,7 +563,7 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
     expect((await res.json()) as Record<string, unknown>).toMatchObject({ formFactor: "till" });
     const { rows } = await suite.admin.execute<{ name: string }>(sql`
       select t.name from tills t
-      join devices d on d.till_id = t.id and d.tenant_id = t.tenant_id
+      join devices d on d.till_id = t.id
       where d.id = ${made.joinId}`);
     expect(rows[0]!.name).toBe("Caja nueva");
   });
@@ -574,7 +571,7 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
   it("a kds profile with no station is 400, and the request survives for a genuine retry", async () => {
     const venue = await setupVenue(suite.admin);
     const app = mountApp(venue.cfg);
-    const profileId = await seedProfile(venue.cfg, "kds");
+    const profileId = await seedProfile("kds");
     const made = await knock(venue, { kind: "device", label: "Pantalla Cocina" });
     const res = await send(
       app,
@@ -588,7 +585,7 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
     expect(res.status).toBe(400);
     expect((await errorOf(res)).code).toBe("device.station_required");
     // The consuming delete rolled back with the throw: only a wrong number or a success sticks.
-    expect(await pendingCount(venue.cfg)).toBe(1);
+    expect(await pendingCount()).toBe(1);
   });
 
   it("screens the body, and refuses the request before any of it is acted on", async () => {
@@ -626,7 +623,7 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
     });
     expect((await errorOf(badRegister)).params).toEqual({ field: "registerId" });
 
-    expect(await pendingCount(venue.cfg)).toBe(1);
+    expect(await pendingCount()).toBe(1);
   });
 
   it("an unknown profile is 404 and the request survives", async () => {
@@ -644,7 +641,7 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
     );
     expect(res.status).toBe(404);
     expect((await errorOf(res)).code).toBe("device_profile.not_found");
-    expect(await pendingCount(venue.cfg)).toBe(1);
+    expect(await pendingCount()).toBe(1);
   });
 
   it("is 404 for a malformed id", async () => {
@@ -676,14 +673,14 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
       expect(res.status).toBe(403);
       expect((await errorOf(res)).code).toBe("authorization.not_permitted");
     }
-    expect(await pendingCount(venue.cfg)).toBe(1);
+    expect(await pendingCount()).toBe(1);
   });
 });
 
 describe("POST /management-api/print-agent-join-requests/:id/accept", () => {
-  async function agentCount(cfg: TillConfig): Promise<number> {
+  async function agentCount(): Promise<number> {
     const { rows } = await suite.admin.execute<{ n: number }>(
-      sql`select count(*)::int as n from print_agents where tenant_id = ${cfg.tenantId}`,
+      sql`select count(*)::int as n from print_agents `,
     );
     return rows[0]!.n;
   }
@@ -699,7 +696,7 @@ describe("POST /management-api/print-agent-join-requests/:id/accept", () => {
       { cookie: venue.managerCookie, body: { choice: made.verificationNumber } },
     );
     expect(res.status).toBe(204);
-    expect(await pendingCount(venue.cfg)).toBe(0);
+    expect(await pendingCount()).toBe(0);
     // The real row carries the request's own id (so the agent's Bearer keeps working) and its label.
     const { rows } = await suite.admin.execute<{ name: string; active: boolean }>(
       sql`select name, active from print_agents where id = ${made.joinId}`,
@@ -722,7 +719,7 @@ describe("POST /management-api/print-agent-join-requests/:id/accept", () => {
     });
     expect(wrong.status).toBe(400);
     expect((await errorOf(wrong)).code).toBe("device.join_mismatch");
-    expect(await agentCount(venue.cfg)).toBe(0);
+    expect(await agentCount()).toBe(0);
 
     // The consuming delete stuck (the mismatch is thrown AFTER the transaction commits) — a FRESH
     // request, even with the RIGHT number, finds nothing. Rolling the delete back would turn a wrong
@@ -733,7 +730,7 @@ describe("POST /management-api/print-agent-join-requests/:id/accept", () => {
     });
     expect(retry.status).toBe(404);
     expect((await errorOf(retry)).code).toBe("join_request.not_found");
-    expect(await pendingCount(venue.cfg)).toBe(0);
+    expect(await pendingCount()).toBe(0);
   });
 
   it("this route 404s a DEVICE request, and the device accept route 404s a print_agent request (kind filtering)", async () => {
@@ -752,7 +749,7 @@ describe("POST /management-api/print-agent-join-requests/:id/accept", () => {
 
     // The device accept route cannot consume a print_agent request (the mirror predicate).
     const agent = await knock(venue, { kind: "print_agent", label: "Cocina agent" });
-    const profileId = await seedProfile(venue.cfg, "till");
+    const profileId = await seedProfile("till");
     const asDevice = await send(
       app,
       "POST",
@@ -763,8 +760,8 @@ describe("POST /management-api/print-agent-join-requests/:id/accept", () => {
     expect((await errorOf(asDevice)).code).toBe("join_request.not_found");
 
     // Both asks survive, untouched.
-    expect(await pendingCount(venue.cfg)).toBe(2);
-    expect(await agentCount(venue.cfg)).toBe(0);
+    expect(await pendingCount()).toBe(2);
+    expect(await agentCount()).toBe(0);
   });
 
   it("needs printer.manage — a staff session is 403 and the request survives", async () => {
@@ -779,8 +776,8 @@ describe("POST /management-api/print-agent-join-requests/:id/accept", () => {
     );
     expect(res.status).toBe(403);
     expect((await errorOf(res)).params).toEqual({ permission: "printer.manage" });
-    expect(await pendingCount(venue.cfg)).toBe(1);
-    expect(await agentCount(venue.cfg)).toBe(0);
+    expect(await pendingCount()).toBe(1);
+    expect(await agentCount()).toBe(0);
   });
 
   it("is 404 for an unknown or malformed id, and screens a missing choice", async () => {

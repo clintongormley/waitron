@@ -16,9 +16,9 @@ const suite = useTemplateDb({ template: "manifest" });
 const noopLog: Logger = () => {};
 let nif = 74_000_000;
 
-async function setupVenue(): Promise<{ tenantId: string; manager: string; staff: string }> {
+async function setupVenue(): Promise<{ manager: string; staff: string }> {
   nif += 1;
-  const venue = await applyVenue(
+  await applyVenue(
     planVenue(
       {
         country: "ES",
@@ -55,18 +55,16 @@ async function setupVenue(): Promise<{ tenantId: string; manager: string; staff:
     await asAppUser(tx);
     const start = async (role: "manager" | "staff") => {
       const inserted = await tx.execute<{ id: string }>(sql`
-        insert into persons (tenant_id, display_name, pin_hash, role)
-        values (${venue.tenantId}, ${role}, ${hashPin("1234")}, ${role}) returning id
+        insert into persons (display_name, pin_hash, role)
+        values (${role}, ${hashPin("1234")}, ${role}) returning id
       `);
       return startManagementSession(tx, {
-        tenantId: venue.tenantId,
         personId: inserted.rows[0]!.id,
       });
     };
     return { manager: await start("manager"), staff: await start("staff") };
   });
   return {
-    tenantId: venue.tenantId,
     manager: `${MANAGEMENT_COOKIE}=${sessions.manager.id}`,
     staff: `${MANAGEMENT_COOKIE}=${sessions.staff.id}`,
   };
@@ -102,7 +100,6 @@ function inbox(): MailpitClient {
 }
 
 function mount(
-  tenantId: string,
   delivery: "local_capture" | "smtp" | "unconfigured",
   mailpit = inbox(),
 ): { app: Hono; mailpit: MailpitClient } {
@@ -111,7 +108,6 @@ function mount(
     app,
     {
       db: suite.admin,
-      cfg: { tenantId },
       resolveMode: () => Promise.resolve(delivery),
       mailpit,
     },
@@ -125,8 +121,7 @@ const get = (app: Hono, path: string, cookie?: string) =>
 
 describe("mountEmailInboxApi", () => {
   it("refuses unauthenticated inbox access before calling Mailpit", async () => {
-    const venue = await setupVenue();
-    const { app, mailpit } = mount(venue.tenantId, "local_capture");
+    const { app, mailpit } = mount("local_capture");
 
     const response = await get(app, "/management-api/email");
 
@@ -136,14 +131,14 @@ describe("mountEmailInboxApi", () => {
 
   it("refuses a staff session without person.manage", async () => {
     const venue = await setupVenue();
-    const { app } = mount(venue.tenantId, "local_capture");
+    const { app } = mount("local_capture");
 
     expect((await get(app, "/management-api/email", venue.staff)).status).toBe(403);
   });
 
   it("returns the captured inbox to a manager", async () => {
     const venue = await setupVenue();
-    const { app } = mount(venue.tenantId, "local_capture");
+    const { app } = mount("local_capture");
 
     const response = await get(app, "/management-api/email", venue.manager);
 
@@ -153,7 +148,7 @@ describe("mountEmailInboxApi", () => {
 
   it("reports configured SMTP without reading the local inbox", async () => {
     const venue = await setupVenue();
-    const { app, mailpit } = mount(venue.tenantId, "smtp");
+    const { app, mailpit } = mount("smtp");
 
     const response = await get(app, "/management-api/email", venue.manager);
 
@@ -163,7 +158,7 @@ describe("mountEmailInboxApi", () => {
 
   it("reads one captured message through the authenticated route", async () => {
     const venue = await setupVenue();
-    const { app, mailpit } = mount(venue.tenantId, "local_capture");
+    const { app, mailpit } = mount("local_capture");
 
     const response = await get(app, "/management-api/email/message/mail-1", venue.manager);
 
@@ -174,7 +169,7 @@ describe("mountEmailInboxApi", () => {
 
   it("does not expose the test inbox when SMTP is active", async () => {
     const venue = await setupVenue();
-    const { app } = mount(venue.tenantId, "smtp");
+    const { app } = mount("smtp");
 
     const response = await get(app, "/management-api/email/message/mail-1", venue.manager);
 

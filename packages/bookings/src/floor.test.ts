@@ -5,8 +5,8 @@ import { asAppUser, DEFAULT_TIME_ZONE, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
-import type { LocationId, TenantId } from "@waitron/shared";
+import { locationId as brandLocationId } from "@waitron/shared";
+import type { LocationId } from "@waitron/shared";
 import { BOOKINGS_FLOOR_ANNOTATIONS } from "./floor.js";
 import { BOOKINGS_TEST_MIGRATIONS } from "./testing/migrations.js";
 import "./errors.js";
@@ -22,20 +22,18 @@ beforeAll(() => {
 });
 
 interface Venue {
-  tenantId: TenantId;
   locationId: LocationId;
 }
 
 /** Stand up a fresh tenant + location (optionally with a pinned time zone) and its scoping ids. */
 async function setupVenue(opts: { timeZone?: string } = {}): Promise<Venue> {
-  const tenantId = await seedTenant(db);
+  await seedTenant(db);
   // The annotator derives venue-local "today"/"now" from this column (design §2b/§4); default the schema
   // default (Europe/Madrid) unless a test pins one.
   const timeZone = opts.timeZone ?? DEFAULT_TIME_ZONE;
   const loc = await db.execute<{ id: string }>(sql`
     insert into locations (name, invoice_locales, operation_description, time_zone) values ('Barra', array['es-ES'], 'Venta en establecimiento', ${timeZone}) returning id`);
   return {
-    tenantId: brandTenantId(tenantId),
     locationId: brandLocationId(loc.rows[0]!.id),
   };
 }

@@ -6,7 +6,7 @@ import {
   workingOrderId as brandWorkingOrderId,
   decimal,
 } from "@waitron/shared";
-import type { NodeId, SeriesId, TenantId, TillId, WorkingOrderId } from "@waitron/shared";
+import type { NodeId, SeriesId, TillId, WorkingOrderId } from "@waitron/shared";
 // **Deviation from the brief.** The brief imports `FakeFiscalBackend` from `@waitron/fiscal/testing`
 // — a subpath that does not exist (no `packages/fiscal/testing` folder, no `exports` map, and
 // `@waitron/fiscal`'s own `src/index.ts` re-export barrel explicitly does NOT carry the fake — see
@@ -39,7 +39,6 @@ import type { RecordSaleInput, RecordSaleTender } from "./record-sale.js";
 import { settleSale } from "./settle-sale.js";
 import { seedRectificativeSeries, seedTenant } from "../test/fixtures.js";
 
-let tenantId: TenantId;
 let tillId: TillId;
 let nodeId: NodeId;
 let seriesId: SeriesId;
@@ -69,7 +68,7 @@ const suite = usePgliteDb({
 });
 
 beforeEach(async () => {
-  ({ tenantId, tillId, nodeId, seriesId } = await seedTenant(suite.db));
+  ({ tillId, nodeId, seriesId } = await seedTenant(suite.db));
 });
 
 const BASE = new Date("2026-03-01T13:05:00+01:00");
@@ -111,7 +110,6 @@ const DEFAULT_TENDERS: RecordSaleTender[] = [
 
 function input(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
   return {
-    tenantId,
     tillId,
     nodeId,
     seriesId,
@@ -682,7 +680,6 @@ describe("recordSale — settlement modes", () => {
         tx,
         backend,
         input({
-          tenantId: other.tenantId,
           tillId: other.tillId,
           nodeId: other.nodeId,
           seriesId: other.seriesId,
@@ -692,7 +689,7 @@ describe("recordSale — settlement modes", () => {
     });
     await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
-      await settleSale(tx, { tenantId: other.tenantId, saleId: b.saleId, tenders: tendersInput });
+      await settleSale(tx, { saleId: b.saleId, tenders: tendersInput });
     });
 
     // Tenders, modulo id/sale_id, sorted for a position-independent compare.
@@ -852,10 +849,10 @@ describe("recordSale — series validation", () => {
   it("rejects a series belonging to another node", async () => {
     // A node may own N series, but a series belongs to exactly one node. Allocating from another
     // node's series would have two chains issuing from one counter, which no constraint
-    // downstream can detect. `seedTenant({ tenantId })` mints a SECOND node,
+    // downstream can detect. a second `seedTenant` call mints a SECOND node,
     // so `other.seriesId` is real but owned by a different node than the one under
     // test — the series↔node guard must reject it.
-    const other = await seedTenant(suite.db, { tenantId });
+    const other = await seedTenant(suite.db);
     await expect(
       run(new FakeFiscalBackend(suite.db), { seriesId: other.seriesId }),
     ).rejects.toMatchObject({ code: "sale.series_wrong_node" });

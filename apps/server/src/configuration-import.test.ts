@@ -26,7 +26,7 @@ afterEach(async () => {
 const bundle: ConfigurationBundle = {
   version: 1,
   createdAt: "2026-09-09T00:00:00.000Z",
-  sourceTenantId: "tenant",
+  // removed: sourceTenantId "tenant",
   sourceOperatorId: "source-admin",
   venue: {
     country: "ES",

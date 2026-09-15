@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
-import type { TenantId } from "@waitron/shared";
 import { SCHEDULER_MIGRATIONS } from "./migrations.js";
 import { dayPeriod } from "./derive.js";
 import {
@@ -19,13 +18,11 @@ const DUTY = "test.duty";
 const NOW = new Date("2026-07-25T04:00:00Z");
 const PERIOD = dayPeriod(new Date("2026-07-24T00:00:00Z"));
 
-let tenantId: TenantId;
-
 const suite = usePgliteDb({
   resetPerTest: false,
   migrations: [CORE_MIGRATIONS, SCHEDULER_MIGRATIONS],
   setup: async (db) => {
-    tenantId = await seedTenant(db);
+    await seedTenant(db);
   },
 });
 
@@ -58,7 +55,6 @@ describe("readSnapshot", () => {
   it("returns an empty snapshot for a duty with no rows", async () => {
     const snapshot = await withTransaction(suite.db, (tx) =>
       readSnapshot(tx, {
-        tenantId,
         duty: "test.duty.never-run",
         horizonStart: new Date("2026-07-01T00:00:00Z"),
       }),
@@ -85,7 +81,7 @@ describe("completeRun and readSnapshot", () => {
       }),
     );
     const snapshot = await withTransaction(suite.db, (tx) =>
-      readSnapshot(tx, { tenantId, duty: DUTY, horizonStart: new Date("2026-07-01T00:00:00Z") }),
+      readSnapshot(tx, { duty: DUTY, horizonStart: new Date("2026-07-01T00:00:00Z") }),
     );
     const row = snapshot.rows.find(
       (r) => new Date(r.periodFrom).toISOString() === "2026-07-23T00:00:00.000Z",
@@ -111,7 +107,7 @@ describe("completeRun and readSnapshot", () => {
       }),
     );
     const snapshot = await withTransaction(suite.db, (tx) =>
-      readSnapshot(tx, { tenantId, duty: DUTY, horizonStart: new Date("2026-07-01T00:00:00Z") }),
+      readSnapshot(tx, { duty: DUTY, horizonStart: new Date("2026-07-01T00:00:00Z") }),
     );
     const row = snapshot.rows.find(
       (r) => new Date(r.periodFrom).toISOString() === "2026-07-22T00:00:00.000Z",
@@ -124,7 +120,7 @@ describe("completeRun and readSnapshot", () => {
 describe("claimRow", () => {
   it("claims a failed row whose backoff has elapsed and increments attempts", async () => {
     const snapshot = await withTransaction(suite.db, (tx) =>
-      readSnapshot(tx, { tenantId, duty: DUTY, horizonStart: new Date("2026-07-01T00:00:00Z") }),
+      readSnapshot(tx, { duty: DUTY, horizonStart: new Date("2026-07-01T00:00:00Z") }),
     );
     const failed = snapshot.rows.find((r) => r.state === "failed")!;
     const later = new Date("2026-07-25T05:00:00Z");
@@ -187,7 +183,7 @@ describe("claimRow", () => {
     );
 
     const snapshot = await withTransaction(suite.db, (tx) =>
-      readSnapshot(tx, { tenantId, duty: DUTY, horizonStart: new Date("2026-07-01T00:00:00Z") }),
+      readSnapshot(tx, { duty: DUTY, horizonStart: new Date("2026-07-01T00:00:00Z") }),
     );
     const claimed = snapshot.rows.find((r) => r.id === gap!.id)!;
     expect(claimed).toMatchObject({ state: "running", nextAttemptAt: null });
@@ -195,7 +191,7 @@ describe("claimRow", () => {
 
   it("returns null for a row that is no longer claimable", async () => {
     const snapshot = await withTransaction(suite.db, (tx) =>
-      readSnapshot(tx, { tenantId, duty: DUTY, horizonStart: new Date("2026-07-01T00:00:00Z") }),
+      readSnapshot(tx, { duty: DUTY, horizonStart: new Date("2026-07-01T00:00:00Z") }),
     );
     const running = snapshot.rows.find((r) => r.state === "running")!;
     const claimed = await withTransaction(suite.db, (tx) =>
@@ -343,7 +339,7 @@ describe("completeRun's ownership fence", () => {
     // The row must still read exactly as B's reclaim left it: running, at B's attempt count — not
     // overwritten by A's (rejected) outcome.
     const snapshot = await withTransaction(suite.db, (tx) =>
-      readSnapshot(tx, { tenantId, duty: DUTY, horizonStart: new Date("2026-01-01T00:00:00Z") }),
+      readSnapshot(tx, { duty: DUTY, horizonStart: new Date("2026-01-01T00:00:00Z") }),
     );
     const row = snapshot.rows.find((r) => r.id === original!.id);
     expect(row).toMatchObject({ state: "running", attempts: 2 });
@@ -387,7 +383,7 @@ describe("completeRun's ownership fence", () => {
 
     // The row's recorded outcome must still be the FIRST completion's — untouched by the second.
     const snapshot = await withTransaction(suite.db, (tx) =>
-      readSnapshot(tx, { tenantId, duty: DUTY, horizonStart: new Date("2026-01-01T00:00:00Z") }),
+      readSnapshot(tx, { duty: DUTY, horizonStart: new Date("2026-01-01T00:00:00Z") }),
     );
     const row = snapshot.rows.find((r) => r.id === claimed!.id);
     expect(row).toMatchObject({ state: "succeeded", nextAttemptAt: null });
@@ -428,7 +424,7 @@ describe("enqueueSuccessor", () => {
     expect(inserted).toBe(false);
 
     const snapshot = await withTransaction(suite.db, (tx) =>
-      readSnapshot(tx, { tenantId, duty: DUTY, horizonStart: new Date("2026-01-01T00:00:00Z") }),
+      readSnapshot(tx, { duty: DUTY, horizonStart: new Date("2026-01-01T00:00:00Z") }),
     );
     expect(
       snapshot.rows.filter((r) => new Date(r.periodFrom).getTime() === period.from.getTime()),
@@ -495,7 +491,7 @@ describe("enqueueSuccessor", () => {
     );
 
     const afterFirst = await withTransaction(suite.db, (tx) =>
-      readSnapshot(tx, { tenantId, duty: DUTY, horizonStart: new Date("2026-01-01T00:00:00Z") }),
+      readSnapshot(tx, { duty: DUTY, horizonStart: new Date("2026-01-01T00:00:00Z") }),
     );
     const gen1Row = afterFirst.rows.find(
       (r) => new Date(r.periodFrom).getTime() === period.from.getTime() && r.generation === 1,
@@ -522,7 +518,7 @@ describe("enqueueSuccessor", () => {
     expect(insertedSecond).toBe(true);
 
     const finalSnapshot = await withTransaction(suite.db, (tx) =>
-      readSnapshot(tx, { tenantId, duty: DUTY, horizonStart: new Date("2026-01-01T00:00:00Z") }),
+      readSnapshot(tx, { duty: DUTY, horizonStart: new Date("2026-01-01T00:00:00Z") }),
     );
     const gen2Row = finalSnapshot.rows.find(
       (r) => new Date(r.periodFrom).getTime() === period.from.getTime() && r.state === "pending",

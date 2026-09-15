@@ -6,7 +6,7 @@ accounts, then runs a loop: `drain` (the fiscal submission duty), the Stripe pay
 per-tick card `resolvePending` sweep (this node's own `attempting` card rows), fold the result into
 a sleep duration, repeat. It also serves several HTTP routes on one Hono app:
 `GET /health` (unauthenticated), the till API under `/api/*`, the management-dashboard API under
-`/management-api/*`, and the inbound Stripe payments webhook at `POST /webhooks/stripe/:tenantId`.
+`/management-api/*`, and the inbound Stripe payments webhook at `POST /webhooks/stripe`.
 
 Design: [`docs/superpowers/specs/2026-07-26-server-host-design.md`](../../docs/superpowers/specs/2026-07-26-server-host-design.md).
 This document is the operational half of that spec — written for whoever deploys this process, not
@@ -217,8 +217,7 @@ against an unstamped database — it is refused with `provisioning.database_unst
 database per environment is a fiscal invariant and stamping is `instance`'s job. It connects to that
 target database as the **owner-admin** (the role that created the tables when it ran `instance`) over
 `WAITRON_ADMIN_DATABASE_URL`, the same admin connection string `instance` reads; there is no separate
-role and no grant to widen: `applyVenue` inserts as the table owner in one transaction, with
-explicit tenant ids.
+role and no grant to widen: `applyVenue` inserts as the table owner in one transaction.
 
 ```bash
 pnpm --filter @waitron/provisioning build   # once — produces dist/bin.js and copies the migrations
@@ -349,7 +348,8 @@ it:
 Provisioning and rotating credentials themselves (`fiscal.aeat`, `payments.stripe`, `payments.sumup`,
 `email.smtp`) is
 `packages/credentials`'s own CLI, not this process — e.g.
-`waitron-credentials set --tenant <uuid> --purpose fiscal.aeat` with the JSON payload on stdin. Run
+`waitron-credentials set --purpose fiscal.aeat` with the JSON payload on stdin (that CLI refuses a
+`--tenant` flag: one database holds one taxpayer). Run
 `waitron-credentials` with no arguments for its own usage text (`set` / `list` / `delete` /
 `rotate` — `packages/credentials/src/cli.ts`'s `USAGE` constant); there is no `get`, since that CLI
 never prints a decrypted credential.
@@ -377,7 +377,7 @@ payload to a permission-restricted file rather than putting its password in a sh
 ```
 
 ```bash
-waitron-credentials set --tenant <uuid> --purpose email.smtp --file /secure/path/smtp.json
+waitron-credentials set --purpose email.smtp --file /secure/path/smtp.json
 ```
 
 The server reads this credential when it sends, so rotating it does not require a restart. Configured
@@ -411,7 +411,7 @@ working when Google is unavailable.
 
 `GET /health` is unauthenticated — no metrics, no auth, no readiness/liveness split (spec §9). It is
 one of several routes the process serves (the till API under `/api/*`, the management-dashboard API
-under `/management-api/*`, and the Stripe webhook at `POST /webhooks/stripe/:tenantId` share the same
+under `/management-api/*`, and the Stripe webhook at `POST /webhooks/stripe` share the same
 Hono app); this endpoint answers `200` when every duty is within its staleness budget, `503`
 otherwise:
 

@@ -63,7 +63,7 @@ import { formatTestPage } from "./test-page.js";
 
 /**
  * The deployment holds one tenant per database. Everything `mountPrintApi` needs. `cfg` is the FULL
- * `TillConfig` (branded ids), not a `{ tenantId, locationId }` subset: the shared join verbs
+ * `TillConfig` (branded ids), not a `{ locationId }` subset: the shared join verbs
  * (`createJoinRequest`, `readAgentJoinStatus`, and the accept verb in join-api.ts) are typed `cfg:
  * TillConfig` and read `cfg.tenantId`/`cfg.locationId`, and the pull route echoes `cfg.nodeId` so the
  * agent can tell which node it is talking to. `readMembership` reads the venue's held chart so the pull
@@ -135,7 +135,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "print_job.not_resendable": 409,
   "printer.invalid_config": 422,
   // A second registration of a physical device already registered in this venue — the partial UNIQUE
-  // (tenant_id, location_id, local_key), mapped friendly by `createPrinter`/`updatePrinter` (§9).
+  // (location_id, local_key), mapped friendly by `createPrinter`/`updatePrinter` (§9).
   "printer.already_registered": 409,
   "agent.not_found": 404,
   "station.not_found": 404,
@@ -393,7 +393,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
   // location.
   app.post("/print-api/agent/jobs", (c) =>
     run(c, log, async () => {
-      const { agentId } = await requireAgent({ db: deps.db, cfg: deps.cfg }, c);
+      const { agentId } = await requireAgent({ db: deps.db }, c);
       const body = await readJsonBody<{ visible?: unknown; scanned?: unknown; host?: unknown }>(c);
       const reportedHost = optionalString(body.host, "host");
       const host = reportedHost === undefined ? undefined : reportedHost.trim() || null;
@@ -438,7 +438,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
               and(eq(printAgents.id, agentId), sql`${printAgents.host} is distinct from ${host}`),
             );
         }
-        return claimPrintJobs(tx, deps.cfg, agentId, {
+        return claimPrintJobs(tx, agentId, {
           locationId: deps.cfg.locationId,
           visibleKeys,
         });
@@ -472,7 +472,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
   // ── Report one job's delivery outcome (AGENT-GATED) ──────────────────────────────────────────────
   app.post("/print-api/agent/jobs/:id/result", (c) =>
     run(c, log, async () => {
-      const { agentId } = await requireAgent({ db: deps.db, cfg: deps.cfg }, c);
+      const { agentId } = await requireAgent({ db: deps.db }, c);
       // A non-uuid job id is a clear client bug (the agent builds this URL from a claimed job's id) →
       // a clean `shared.invalid_id` 400, never a `22P02` 500 in the `uuid` column.
       const jobId = requireUuidParam(c.req.param("id"), "PrintJobId");
@@ -491,7 +491,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       // unknown is a no-op), never disclosing which job ids exist. The agent-scope is proven by deletion.
       await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
-        return reportPrintJob(tx, deps.cfg, { agentId, jobId, outcome });
+        return reportPrintJob(tx, { agentId, jobId, outcome });
       });
       return c.body(null, 204);
     }),
@@ -882,11 +882,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requireUuidParam(c.req.param("id"), "PrintJobId");
-      const result = await gated(
-        sessionId,
-        (tx) => resendPrintJob(tx, deps.cfg, id),
-        "print.resend",
-      );
+      const result = await gated(sessionId, (tx) => resendPrintJob(tx, id), "print.resend");
       return c.json(result, 202);
     }),
   );
@@ -929,9 +925,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       const sessionId = requireManagementSession(c);
       const stationId = requireUuidParam(c.req.param("sid"), "StationId");
       const printerId = requireUuidParam(c.req.param("pid"), "PrinterId");
-      await gated(sessionId, (tx) =>
-        attachPrinterToStation(tx, deps.cfg, { stationId, printerId }),
-      );
+      await gated(sessionId, (tx) => attachPrinterToStation(tx, { stationId, printerId }));
       return c.body(null, 204);
     }),
   );

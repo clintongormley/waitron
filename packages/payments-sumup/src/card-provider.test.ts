@@ -4,7 +4,6 @@ import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { CREDENTIALS_MIGRATIONS, loadKeyRing, putCredential } from "@waitron/credentials";
 import type { IncidentSink } from "@waitron/payments";
 import { isAppError } from "@waitron/shared";
-import type { TenantId } from "@waitron/shared";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { SUMUP_CARD_PROVIDER, deferredClient, optionsFromSealed } from "./card-provider.js";
 
@@ -57,12 +56,11 @@ async function seedSumUp(value: {
   merchantCode: string;
   affiliateAppId: string;
   affiliateKey: string;
-}): Promise<TenantId> {
-  const tenantId = await seedTenant(suite.db);
+}): Promise<void> {
+  await seedTenant(suite.db);
   await withTransaction(suite.db, (tx) =>
     putCredential(tx, ring, { purpose: "payments.sumup", value }),
   );
-  return tenantId;
 }
 
 describe("SUMUP_CARD_PROVIDER seat metadata", () => {
@@ -201,7 +199,7 @@ describe("SUMUP_CARD_PROVIDER.connect", () => {
 
 describe("SUMUP_CARD_PROVIDER.build", () => {
   it("builds a SumUpCloudProvider from the sealed credential", async () => {
-    const tenantId = await seedSumUp({
+    await seedSumUp({
       apiKey: "sup_sk_x",
       merchantCode: "MABC123",
       affiliateAppId: "-",
@@ -211,7 +209,6 @@ describe("SUMUP_CARD_PROVIDER.build", () => {
     const provider = SUMUP_CARD_PROVIDER.build({
       db: suite.db,
       ring,
-      tenantId,
       nodeId: "node-1",
       environment: "preproduction",
       incidents,

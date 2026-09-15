@@ -29,7 +29,6 @@ import {
   percentOf,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tenantId as brandTenantId,
   tillId as brandTillId,
 } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
@@ -72,7 +71,7 @@ async function main(): Promise<void> {
   if (args.length !== 5) {
     usageError(`expected 5 arguments, got ${args.length}`);
   }
-  const [tenantArg, tillArg, nodeArg, stdSeriesArg, rectSeriesArg] = args;
+  const [tillArg, nodeArg, stdSeriesArg, rectSeriesArg] = args;
 
   const databaseUrl = process.env.DATABASE_URL;
   if (databaseUrl === undefined || databaseUrl === "") {
@@ -83,7 +82,6 @@ async function main(): Promise<void> {
     usageError("WAITRON_ENV must be set in the environment (production or preproduction)");
   }
 
-  const tenant = brandTenantId(tenantArg);
   const till = brandTillId(tillArg);
   const node = brandNodeId(nodeArg);
   const stdSeries = brandSeriesId(stdSeriesArg);
@@ -119,7 +117,6 @@ async function main(): Promise<void> {
 
     // 1. Issue invoice-first (deferred): the invoice is chained + filed, unpaid.
     const saleInput: RecordSaleInput = {
-      tenantId: tenant,
       tillId: till,
       nodeId: node,
       seriesId: stdSeries,
@@ -146,7 +143,7 @@ async function main(): Promise<void> {
     );
 
     // 2. Outstanding: the full total.
-    const before = await withTransaction(db, (tx) => listOutstandingSales(tx, tenant));
+    const before = await withTransaction(db, (tx) => listOutstandingSales(tx));
     console.log(`2. outstanding: ${formatOutstanding(before)}`);
 
     // Seed a supervisor (holds `sale.rectify`) and open a shift session — the authorizer
@@ -157,7 +154,6 @@ async function main(): Promise<void> {
       const [person] = await tx
         .insert(persons)
         .values({
-          tenantId: tenant,
           displayName: "Supervisora",
           email: "supervisor@invoice-first.demo",
           pinHash: hashPin("1234"),
@@ -165,7 +161,6 @@ async function main(): Promise<void> {
         })
         .returning({ id: persons.id });
       return loginWithPin(tx, {
-        tenantId: tenant,
         tillId: till,
         personId: person!.id,
         pin: "1234",
@@ -174,7 +169,6 @@ async function main(): Promise<void> {
 
     // 3. Correct it down by 11.00 (net 110.00 → 99.00) via a rectificativa on the rectificative series.
     const corrInput: RecordCorrectionInput = {
-      tenantId: tenant,
       tillId: till,
       nodeId: node,
       seriesId: rectSeries,
@@ -200,13 +194,12 @@ async function main(): Promise<void> {
     );
 
     // 4. Outstanding: now the net.
-    const afterCorrection = await withTransaction(db, (tx) => listOutstandingSales(tx, tenant));
+    const afterCorrection = await withTransaction(db, (tx) => listOutstandingSales(tx));
     console.log(`4. outstanding: ${formatOutstanding(afterCorrection)}`);
 
     // 5. Settle at the net.
     await withTransaction(db, (tx) =>
       settleSale(tx, {
-        tenantId: tenant,
         saleId: sale.saleId,
         tenders: [
           { method: "cash", amount: net, tipAmount: "0.00", settledAt: clock.now().instant },
@@ -216,7 +209,7 @@ async function main(): Promise<void> {
     console.log(`5. settled ${sale.saleId} at ${net}`);
 
     // 6. Outstanding: empty.
-    const afterSettle = await withTransaction(db, (tx) => listOutstandingSales(tx, tenant));
+    const afterSettle = await withTransaction(db, (tx) => listOutstandingSales(tx));
     console.log(`6. outstanding: ${formatOutstanding(afterSettle)}`);
   } finally {
     await db.close();

@@ -1,13 +1,11 @@
 import { sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
-import type { TenantId } from "@waitron/shared";
 import { addDecimal, compareDecimal, decimal } from "@waitron/shared";
 import { periodDateFilter, validatePeriod, type LiquidationPeriod } from "./period.js";
 import type { InputVatRateLine, InputVatReturn, PurchaseVatKind } from "./types.js";
 
 export interface InputVatInput {
   /** The obligado — aggregates ALL nodes of the legal entity (no node predicate), like the output side. */
-  tenantId: TenantId;
   /** Civil calendar year of the liquidation period. */
   year: number;
   /** The liquidation period (month/quarter/year); the deduction window over `received_on`. */
@@ -89,7 +87,6 @@ export async function computeInputVat(
   }
 
   return {
-    tenantId: input.tenantId,
     year: input.year,
     period: input.period,
     byRate: lines,

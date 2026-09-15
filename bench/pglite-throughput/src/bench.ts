@@ -186,8 +186,8 @@ async function writePath(exec: Exec, tenantId: string, tillId: string): Promise<
     .digest("hex");
 
   await exec(
-    `insert into bench_sales (id, tenant_id, till_id, invoice_number, issued_at, total)
-     values ($1, $2, $3, $4, now(), $5)`,
+    `insert into bench_sales (id, till_id, invoice_number, issued_at, total)
+     values ($1, $3, $4, now(), $5)`,
     [saleId, tenantId, tillId, sequence, "12.34"],
   );
   for (let lineNo = 1; lineNo <= 3; lineNo += 1) {
@@ -199,8 +199,8 @@ async function writePath(exec: Exec, tenantId: string, tillId: string): Promise<
   }
   const recordId = randomUUID();
   await exec(
-    `insert into bench_records (id, tenant_id, till_id, sequence, hash)
-     values ($1, $2, $3, $4, $5)`,
+    `insert into bench_records (id, till_id, sequence, hash)
+     values ($1, $3, $4, $5)`,
     [recordId, tenantId, tillId, sequence, hash],
   );
   await exec(
@@ -210,10 +210,10 @@ async function writePath(exec: Exec, tenantId: string, tillId: string): Promise<
 
   // Outbox/sidecar (backend.ts's `envios` insert, step 6): one row per registro, pendiente, never
   // touched again by this write path — the drainer that reads it back is a later plan.
-  await exec(
-    `insert into bench_envios (registro_id, tenant_id, estado) values ($1, $2, 'pendiente')`,
-    [recordId, tenantId],
-  );
+  await exec(`insert into bench_envios (registro_id, estado) values ($1, 'pendiente')`, [
+    recordId,
+    tenantId,
+  ]);
 }
 
 function percentile(sorted: number[], p: number): number {
@@ -274,10 +274,10 @@ async function measureThroughput(target: string, tx: RunInTx): Promise<Result> {
 async function seed(exec: Exec): Promise<void> {
   for (const statement of SCHEMA_SQL) await exec(statement, []);
   for (let index = 0; index < TILLS; index += 1) {
-    await exec(
-      "insert into bench_chains (tenant_id, till_id, sequence, last_hash) values ($1, $2, 0, '')",
-      ["tenant-1", `till-${index}`],
-    );
+    await exec("insert into bench_chains (till_id, sequence, last_hash) values ($2, 0, '')", [
+      "tenant-1",
+      `till-${index}`,
+    ]);
   }
 }
 

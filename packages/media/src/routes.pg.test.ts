@@ -11,7 +11,7 @@ import {
   startManagementSession,
 } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
-import { tenantId as brandTenantId, locationId } from "@waitron/shared";
+import { locationId } from "@waitron/shared";
 import { MEDIA_ROUTES } from "./routes.js";
 
 registerModulePermissions([{ permission: "image.manage", grantedFrom: "manager" }]);
@@ -67,7 +67,6 @@ async function fixture() {
     {
       db: suite.admin,
       cfg: {
-        tenantId: brandTenantId(tenantId),
         locationId: locationId("00000000-0000-4000-8000-000000000001"),
         contentDefaultLanguage: "en",
       },

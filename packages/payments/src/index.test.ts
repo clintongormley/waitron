@@ -168,7 +168,7 @@ describe("the reconcile surface", () => {
     // package's own reconciler has to satisfy, so it must be reachable and complete from here.
     const reconciler: PaymentReconciler = {
       provider: "fake",
-      reconcile: async (_tenantId, period): Promise<PaymentReconcileResult> => ({
+      reconcile: async (period): Promise<PaymentReconcileResult> => ({
         period,
         checked: 0,
         unsettled: [],
@@ -197,9 +197,9 @@ describe("the reconcile surface", () => {
     // Both arguments named, not elided: the tenant is what a real source has to filter its report
     // by, so the surface test has to prove the barrel still hands it one.
     const source: SettlementReportSource = {
-      fetch: async (tenantId, window): Promise<SettlementRecord[]> => [
+      fetch: async (window): Promise<SettlementRecord[]> => [
         {
-          references: [tenantId, window.from.toISOString()],
+          references: [window.from.toISOString()],
           amount: decimal("1.00"),
           settledAt: new Date(),
         },

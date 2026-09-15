@@ -1,7 +1,7 @@
 import { captureError, pgErrorCode } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode } from "@waitron/db/testing/seed.js";
-import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
+import { locationId as brandLocationId } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
@@ -35,13 +35,12 @@ function nextSecuencia(): number {
 
 // `seedNode` (`@waitron/db`) still takes a tenant id and ignores it; it goes when `apps/server`,
 // its last supplier, is converted.
-const INERT_TENANT_ID = brandTenantId("00000000-0000-4000-8000-000000000001");
 
 const BOGUS_NODE = "99999999-9999-4999-8999-999999999999";
 
 /** A fresh node under TENANT_A's seeded location. */
 async function seedNodeForA(): Promise<string> {
-  return seedNode(pg.db, INERT_TENANT_ID, brandLocationId(TENANT_A.locationId));
+  return seedNode(pg.db, brandLocationId(TENANT_A.locationId));
 }
 
 /** The `is_nullable` rows for a table's node_id column — `[{ is_nullable: "NO" }]` after the rekey. */

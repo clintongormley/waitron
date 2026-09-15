@@ -35,14 +35,13 @@ beforeAll(() => {
 const LOCALE = "es-ES";
 
 async function setupVenue(): Promise<TillConfig> {
-  const tenantId = await seedTenant(db);
+  await seedTenant(db);
   const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description, time_zone)
-    values (${tenantId}, 'Barra', array[${LOCALE}], 'Venta en establecimiento', ${DEFAULT_TIME_ZONE}) returning id`);
+    insert into locations (name, invoice_locales, operation_description, time_zone)
+    values ('Barra', array[${LOCALE}], 'Venta en establecimiento', ${DEFAULT_TIME_ZONE}) returning id`);
   const locationId = loc.rows[0]!.id;
-  const nodeId = await seedNode(db, tenantId, brandLocationId(locationId));
+  const nodeId = await seedNode(db, brandLocationId(locationId));
   return {
-    tenantId,
     tillId: brandTillId(randomUUID()),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),

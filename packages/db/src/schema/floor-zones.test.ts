@@ -11,7 +11,6 @@ import { tenants } from "./tenants.js";
 // Real Postgres (a template clone), not PGlite: every write below runs as the non-owner
 // `app_user`, the deployment role, which PGlite (every connection a superuser) cannot be. The
 // cases retain the role switch so the reads and writes still exercise app_user grants.
-const TENANT_A = "11111111-1111-4111-8111-111111111111";
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 
 describe("floor_zones schema (columns and the dining_tables.zone_id composite FK)", () => {
@@ -20,22 +19,21 @@ describe("floor_zones schema (columns and the dining_tables.zone_id composite FK
   beforeAll(async () => {
     await suite.admin
       .insert(tenants)
-      .values([{ id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
+      .values([{ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
     await suite.admin.execute(sql`
       insert into locations (id, name, invoice_locales, operation_description) values (${LOCATION_A}, 'Loc A', array['es'], 'Hostelería')
       on conflict (id) do nothing`);
   });
 
-  function asApp<T>(tenant: string, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-    void tenant;
+  function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
     return withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return fn(tx);
     });
   }
 
-  async function seedZone(tenant: string, location: string, name: string): Promise<string> {
-    return asApp(tenant, async (tx) => {
+  async function seedZone(location: string, name: string): Promise<string> {
+    return asApp(async (tx) => {
       const r = await tx.execute<{ id: string }>(
         sql`insert into floor_zones (location_id, name) values (${location}, ${name}) returning id`,
       );
@@ -44,13 +42,11 @@ describe("floor_zones schema (columns and the dining_tables.zone_id composite FK
   }
 
   it("maps display_order and name through the Drizzle export", async () => {
-    const id = await seedZone(TENANT_A, LOCATION_A, "Comedor");
-    await asApp(TENANT_A, (tx) =>
-      tx.execute(sql`update floor_zones set display_order = 5 where id = ${id}`),
-    );
+    const id = await seedZone(LOCATION_A, "Comedor");
+    await asApp((tx) => tx.execute(sql`update floor_zones set display_order = 5 where id = ${id}`));
     // Read back through the Drizzle `floorZones` export (not raw SQL) — exercises the produced table
     // export and its column mapping under the app role.
-    const [row] = await asApp(TENANT_A, (tx) =>
+    const [row] = await asApp((tx) =>
       tx
         .select()
         .from(floorZones)
@@ -62,18 +58,18 @@ describe("floor_zones schema (columns and the dining_tables.zone_id composite FK
 
   it("dining_tables.zone_id is writable/readable by the non-owner app_user and its FK rejects an absent zone", async () => {
     // Seed a dining table (TS-1) and point its new zone_id at a floor_zones row, as app_user.
-    const tableId = await asApp(TENANT_A, async (tx) =>
+    const tableId = await asApp(async (tx) =>
       tx
         .execute<{ id: string }>(
           sql`insert into dining_tables (location_id, label) values (${LOCATION_A}, 'T-zone') returning id`,
         )
         .then((r) => r.rows[0]!.id),
     );
-    const zoneId = await seedZone(TENANT_A, LOCATION_A, "Salon");
-    await asApp(TENANT_A, (tx) =>
+    const zoneId = await seedZone(LOCATION_A, "Salon");
+    await asApp((tx) =>
       tx.execute(sql`update dining_tables set zone_id = ${zoneId} where id = ${tableId}`),
     );
-    const [row] = await asApp(TENANT_A, (tx) =>
+    const [row] = await asApp((tx) =>
       tx
         .execute<{ zone_id: string | null }>(
           sql`select zone_id from dining_tables where id = ${tableId}`,
@@ -84,7 +80,7 @@ describe("floor_zones schema (columns and the dining_tables.zone_id composite FK
 
     // The FK rejects a zone_id that names no row at all (a random uuid) — 23503.
     const eRandom = await captureError(() =>
-      asApp(TENANT_A, (tx) =>
+      asApp((tx) =>
         tx.execute(
           sql`update dining_tables set zone_id = '99999999-9999-4999-8999-999999999999' where id = ${tableId}`,
         ),
@@ -94,8 +90,8 @@ describe("floor_zones schema (columns and the dining_tables.zone_id composite FK
   });
 
   it("working_order_lines.served_at is visible and writable by the non-owner app_user", async () => {
-    await asApp(TENANT_A, (tx) => tx.execute(sql`select served_at from working_order_lines`));
-    const updated = await asApp(TENANT_A, (tx) =>
+    await asApp((tx) => tx.execute(sql`select served_at from working_order_lines`));
+    const updated = await asApp((tx) =>
       tx
         .execute<{ served_at: string | null }>(
           sql`update working_order_lines set served_at = now() where id = '99999999-9999-4999-8999-999999999999' returning served_at`,

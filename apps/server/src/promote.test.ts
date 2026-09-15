@@ -59,7 +59,6 @@ const RING: KeyRing = loadKeyRing({
 // harmless to them.
 async function localSecondary(): Promise<{
   db: Database;
-  tenantId: string;
   nodeId: string;
   deps: (log: PromoteDeps["log"]) => PromoteDeps;
 }> {
@@ -68,18 +67,17 @@ async function localSecondary(): Promise<{
   await runMigrations(db, CREDENTIALS_MIGRATIONS);
   await stampDeployment(db, "preproduction");
   await setSingletonRole(db, "secondary"); // (primary, secondary) — a local secondary
-  const tenantId = await seedTenant(db);
+  await seedTenant(db);
   const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
-  const nodeId = await seedNode(db, tenantId, brandLocationId(loc.rows[0]!.id));
-  await establishNodeIdentity({ ownerDb: db, ring: RING }, tenantId, nodeId);
+    insert into locations (name, invoice_locales, operation_description)
+    values ('Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
+  const nodeId = await seedNode(db, brandLocationId(loc.rows[0]!.id));
+  await establishNodeIdentity({ ownerDb: db, ring: RING }, nodeId);
   const holders = createDeploymentHolders("primary", "secondary");
   return {
     db,
-    tenantId,
     nodeId,
-    deps: (log) => ({ appDb: db, ownerDb: db, holders, log, ring: RING, tenantId, nodeId }),
+    deps: (log) => ({ appDb: db, ownerDb: db, holders, log, ring: RING, nodeId }),
   };
 }
 
@@ -188,7 +186,7 @@ describe("promoteLocalSecondaryToPrimary", () => {
   });
 
   it("mints the next membership document atomically with the role flip", async () => {
-    const { db, deps, tenantId, nodeId } = await localSecondary();
+    const { db, deps, nodeId } = await localSecondary();
     const oldNodeId = "old-node-1";
     const bystanderId = "bystander-1";
     // A held term-3 chart with a third uninvolved node appended — so we assert the flip touches ONLY
@@ -225,7 +223,7 @@ describe("promoteLocalSecondaryToPrimary", () => {
 
     // The minted document is signed by THIS node's own directly-trusted key and verifies against the
     // setup-established trust set — proving a real mint, not just a term bump.
-    const trust = await readMembershipTrustSet(db, tenantId);
+    const trust = await readMembershipTrustSet(db);
     const verdict = verifyMembershipDocument(held!, trust);
     expect(verdict.valid).toBe(true);
     expect(held!.signerNodeId).toBe(nodeId);
@@ -237,7 +235,7 @@ describe("promoteLocalSecondaryToPrimary", () => {
     // A local secondary whose primary died before any membership document ever gossiped to it:
     // `readNodeMembership` returns null, so `nextStandings` gets an empty list and must APPEND this
     // node as serving-primary (rather than leaving the org chart with no serving-primary at all).
-    const { db, deps, tenantId, nodeId } = await localSecondary(); // NB: no writeNodeMembership seed
+    const { db, deps, nodeId } = await localSecondary(); // NB: no writeNodeMembership seed
 
     const result = await promoteLocalSecondaryToPrimary(deps(noopLog), {
       oldNodeNeutralised: true,
@@ -250,7 +248,7 @@ describe("promoteLocalSecondaryToPrimary", () => {
       { nodeId, contactUrl: "", standing: "serving-primary" }, // appended: the sole node, serving-primary
     ]);
     // It verifies against this node's own directly-trusted key — a real signed mint, not a stub.
-    const trust = await readMembershipTrustSet(db, tenantId);
+    const trust = await readMembershipTrustSet(db);
     expect(verifyMembershipDocument(held!, trust).valid).toBe(true);
     await db.close();
   });
@@ -310,7 +308,7 @@ describe("promoteLocalSecondaryToPrimary", () => {
     const error = await captureError(() =>
       promoteLocalSecondaryToPrimary(
         // The mirror guard returns before any identity read, so placeholder ring/ids are harmless here.
-        { appDb: db, ownerDb: db, holders, log: noopLog, ring: RING, tenantId: "t", nodeId: "n" },
+        { appDb: db, ownerDb: db, holders, log: noopLog, ring: RING, nodeId: "n" },
         { oldNodeNeutralised: true },
       ),
     );
@@ -342,7 +340,6 @@ function docAtTerm(term: number, nodeId: string): SignedMembershipDocument {
 // module lands on top of its dependencies in one ordered set — the production order.
 async function mirror(): Promise<{
   db: Database;
-  tenantId: string;
   nodeId: string;
   standardSeriesId: string;
   endorsement: Endorsement;
@@ -358,14 +355,12 @@ async function mirror(): Promise<{
   }
   await stampDeployment(db, "preproduction");
   await setDeploymentMode(db, "mirror"); // (mirror, secondary)
-  const tenantId = await seedTenant(db);
+  await seedTenant(db);
   const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
+    insert into locations (name, invoice_locales, operation_description)
+    values ('Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
   const locationId = loc.rows[0]!.id;
-  const t = await db.execute<{ tax_id: string }>(
-    sql`select tax_id from tenants where id = ${tenantId}`,
-  );
+  const t = await db.execute<{ tax_id: string }>(sql`select tax_id from tenants where id = 1`);
   const nif = t.rows[0]!.tax_id;
 
   const standby = generateStandbyIdentity();
@@ -380,7 +375,6 @@ async function mirror(): Promise<{
   await establishReservedStandbyIdentity(
     { ownerDb: db, ring: RING },
     {
-      tenantId,
       locationId,
       standby,
       nodeName: "cloud",
@@ -394,11 +388,10 @@ async function mirror(): Promise<{
       },
     },
   );
-  const standardSeriesId = await readStandardSeriesId(db, tenantId, standby.nodeId);
+  const standardSeriesId = await readStandardSeriesId(db, standby.nodeId);
   const holders = createDeploymentHolders("mirror", "secondary");
   return {
     db,
-    tenantId,
     nodeId: standby.nodeId,
     standardSeriesId,
     endorsement,
@@ -408,7 +401,6 @@ async function mirror(): Promise<{
       holders,
       log,
       ring: RING,
-      tenantId,
       nodeId: standby.nodeId,
       persistTradingEnv,
       narrowSubscription,

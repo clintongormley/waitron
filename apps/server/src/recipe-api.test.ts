@@ -1,4 +1,3 @@
-import { tenantId as brandTenantId } from "@waitron/shared";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -33,7 +32,6 @@ const noopLog: Logger = () => {};
 // production.
 const NODE_ID = "11111111-1111-4111-8111-111111111111";
 
-let tenantId: string;
 let managerCookie: string;
 let staffCookie: string;
 let productId: string;
@@ -43,7 +41,7 @@ const suite = usePgliteDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, IDENTITY_MIGRATIONS],
   timeoutMs: 60_000,
   setup: async (db) => {
-    tenantId = await seedTenant(db);
+    await seedTenant(db);
     // Seed a MANAGER (role `manager`, holds `recipe.manage`) and a STAFF person (role `staff`, holds
     // nothing) as the app role under the tenant, mint a live management session for each, and seed one
     // catalogue + product for the recipe routes to hang lines on. `pin_hash` is NOT NULL, so a value
@@ -51,20 +49,18 @@ const suite = usePgliteDb({
     const seeded = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       const mgr = await tx.execute<{ id: string }>(sql`
-        insert into persons (tenant_id, display_name, pin_hash, role)
-        values (${tenantId}, 'The Manager', ${hashPin("1234")}, 'manager') returning id`);
+        insert into persons (display_name, pin_hash, role)
+        values ('The Manager', ${hashPin("1234")}, 'manager') returning id`);
       const stf = await tx.execute<{ id: string }>(sql`
-        insert into persons (tenant_id, display_name, pin_hash, role)
-        values (${tenantId}, 'The Clerk', ${hashPin("1234")}, 'staff') returning id`);
+        insert into persons (display_name, pin_hash, role)
+        values ('The Clerk', ${hashPin("1234")}, 'staff') returning id`);
       const managerSession = await startManagementSession(tx, {
-        tenantId,
         personId: mgr.rows[0]!.id,
       });
       const staffSession = await startManagementSession(tx, {
-        tenantId,
         personId: stf.rows[0]!.id,
       });
-      const catalogue = await createCatalogue(tx, brandTenantId(tenantId), {
+      const catalogue = await createCatalogue(tx, {
         name: "Recipe catalogue",
       });
       const unit = await createUnit(
@@ -72,7 +68,7 @@ const suite = usePgliteDb({
         { name: { es: "unidad" }, precision: 0, abbreviation: { es: "ud" } },
         "es",
       );
-      const product = await createProduct(tx, brandTenantId(tenantId), {
+      const product = await createProduct(tx, {
         catalogueId: catalogue.id,
         categoryId: null,
         name: "Tostada",
@@ -90,7 +86,7 @@ const suite = usePgliteDb({
 
 function mountApp(): Hono {
   const app = new Hono();
-  mountRecipeApi(app, { db: suite.db, cfg: { tenantId, nodeId: NODE_ID } }, noopLog);
+  mountRecipeApi(app, { db: suite.db, cfg: { nodeId: NODE_ID } }, noopLog);
   return app;
 }
 

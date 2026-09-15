@@ -18,16 +18,15 @@ import type { PrintConfig } from "./printers.js";
 const suite = useTemplateDb({ template: "core" });
 
 async function setup(): Promise<PrintConfig> {
-  const tenantId = await seedTenant(suite.admin);
+  await seedTenant(suite.admin);
   const { rows } = await suite.admin.execute<{ id: string }>(sql`
     insert into locations (name, invoice_locales, operation_description) values ('Bar', array['es-ES'], 'Sale on premises') returning id`);
-  return { tenantId, locationId: rows[0]!.id };
+  return { locationId: rows[0]!.id };
 }
 
 /** Run `fn` as the real deployment role — a tenant-scoped tx that switches to `app_user` first, the
  * shape the Task-6 route wraps every runtime call in. */
-function asApp<T>(db: Database, cfg: PrintConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  void cfg;
+function asApp<T>(db: Database, fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTransaction(db, async (tx) => {
     await asAppUser(tx);
     return fn(tx);
@@ -46,14 +45,14 @@ describe("claim eligibility (real Postgres) — derived from venue + visible key
     // An agent that registered NOTHING — printers carry no agent binding now, so venue membership
     // (the locationId the agent reports) is the whole eligibility test for a network printer.
     const otherAgentId = await seedAgent(cfg, "Other");
-    await asApp(suite.admin, cfg, async (tx) => {
+    await asApp(suite.admin, async (tx) => {
       const p = await createPrinter(tx, cfg, {
         name: "IP",
         transport: "network_tcp",
         host: "10.0.0.5",
       });
       await enqueuePrintJob(tx, cfg, p.id, esc().line("x").bytes());
-      const claimed = await claimPrintJobs(tx, cfg, otherAgentId, {
+      const claimed = await claimPrintJobs(tx, otherAgentId, {
         locationId: cfg.locationId,
         visibleKeys: [],
       });
@@ -74,14 +73,14 @@ describe("claim eligibility (real Postgres) — derived from venue + visible key
     const { rows } = await suite.admin.execute<{ id: string }>(sql`
       insert into locations (name, invoice_locales, operation_description) values ('Terrace', array['es-ES'], 'Sale on premises') returning id`);
     const otherLocationId = rows[0]!.id;
-    await asApp(suite.admin, cfg, async (tx) => {
+    await asApp(suite.admin, async (tx) => {
       const p = await createPrinter(tx, cfg, {
         name: "IP",
         transport: "network_tcp",
         host: "10.0.0.5",
       });
       await enqueuePrintJob(tx, cfg, p.id, esc().line("x").bytes());
-      const claimed = await claimPrintJobs(tx, cfg, agentId, {
+      const claimed = await claimPrintJobs(tx, agentId, {
         locationId: otherLocationId,
         visibleKeys: [],
       });
@@ -92,7 +91,7 @@ describe("claim eligibility (real Postgres) — derived from venue + visible key
   it("claims a usb job only for an agent that reports its serial", async () => {
     const cfg = await setup();
     const agentId = await seedAgent(cfg, "Kitchen");
-    await asApp(suite.admin, cfg, async (tx) => {
+    await asApp(suite.admin, async (tx) => {
       const p = await createPrinter(tx, cfg, { name: "USB", transport: "usb", localKey: "SN-9" });
       const { jobId } = await enqueuePrintJob(tx, cfg, p.id, esc().line("x").bytes());
       // The agent that does NOT see SN-9 claims nothing — the empty-visibleKeys guard degenerates the
@@ -100,14 +99,14 @@ describe("claim eligibility (real Postgres) — derived from venue + visible key
       // matching a printer whose key nobody reported) would return the job and flip it to `printing`; so
       // the job must be claimed 0 times AND left `queued` for another box that CAN see the device.
       expect(
-        await claimPrintJobs(tx, cfg, agentId, { locationId: cfg.locationId, visibleKeys: [] }),
+        await claimPrintJobs(tx, agentId, { locationId: cfg.locationId, visibleKeys: [] }),
       ).toHaveLength(0);
       const afterMiss = await tx.execute<{ status: string }>(
         sql`select status from print_jobs where id = ${jobId}`,
       );
       expect(afterMiss.rows[0]!.status).toBe("queued");
       // The agent that reports SN-9 claims it, and the RETURNING carries the device key.
-      const claimed = await claimPrintJobs(tx, cfg, agentId, {
+      const claimed = await claimPrintJobs(tx, agentId, {
         locationId: cfg.locationId,
         visibleKeys: ["SN-9"],
       });
@@ -119,7 +118,7 @@ describe("claim eligibility (real Postgres) — derived from venue + visible key
   it("claims a bluetooth job by its visible key too (usb/bluetooth share the branch)", async () => {
     const cfg = await setup();
     const agentId = await seedAgent(cfg, "Kitchen");
-    await asApp(suite.admin, cfg, async (tx) => {
+    await asApp(suite.admin, async (tx) => {
       const p = await createPrinter(tx, cfg, {
         name: "BT",
         transport: "bluetooth",
@@ -127,9 +126,9 @@ describe("claim eligibility (real Postgres) — derived from venue + visible key
       });
       await enqueuePrintJob(tx, cfg, p.id, esc().line("x").bytes());
       expect(
-        await claimPrintJobs(tx, cfg, agentId, { locationId: cfg.locationId, visibleKeys: [] }),
+        await claimPrintJobs(tx, agentId, { locationId: cfg.locationId, visibleKeys: [] }),
       ).toHaveLength(0);
-      const claimed = await claimPrintJobs(tx, cfg, agentId, {
+      const claimed = await claimPrintJobs(tx, agentId, {
         locationId: cfg.locationId,
         visibleKeys: ["AA:BB:CC"],
       });
@@ -142,19 +141,19 @@ describe("claim eligibility (real Postgres) — derived from venue + visible key
     const cfg = await setup();
     const agentId = await seedAgent(cfg, "Kitchen");
     const otherAgentId = await seedAgent(cfg, "Other");
-    await asApp(suite.admin, cfg, async (tx) => {
+    await asApp(suite.admin, async (tx) => {
       const p = await createPrinter(tx, cfg, {
         name: "IP",
         transport: "network_tcp",
         host: "10.0.0.5",
       });
       const { jobId } = await enqueuePrintJob(tx, cfg, p.id, esc().line("x").bytes());
-      await claimPrintJobs(tx, cfg, agentId, { locationId: cfg.locationId, visibleKeys: [] });
+      await claimPrintJobs(tx, agentId, { locationId: cfg.locationId, visibleKeys: [] });
       // claimed_by scopes the report's UPDATE to the claimer: the non-claimer's report updates no row
       // (`updated === false`); the claimer's updates it (`true`).
       expect(
         (
-          await reportPrintJob(tx, cfg, {
+          await reportPrintJob(tx, {
             agentId: otherAgentId,
             jobId,
             outcome: { status: "done" },
@@ -163,7 +162,7 @@ describe("claim eligibility (real Postgres) — derived from venue + visible key
       ).toBe(false);
       // The claimer's report applies.
       expect(
-        (await reportPrintJob(tx, cfg, { agentId, jobId, outcome: { status: "done" } })).updated,
+        (await reportPrintJob(tx, { agentId, jobId, outcome: { status: "done" } })).updated,
       ).toBe(true);
     });
   });

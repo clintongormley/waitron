@@ -1,7 +1,7 @@
 import { CORE_MIGRATIONS, captureError, pgErrorCode } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode } from "@waitron/db/testing/seed.js";
-import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
+import { locationId as brandLocationId } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { PAYMENTS_MIGRATIONS } from "./migrations.js";
@@ -29,11 +29,7 @@ async function seedOrderWithNode(): Promise<{
   const { rows } = await pg.db.execute<{ location_id: string }>(
     sql`select location_id from tills where id = ${seeded.tillId}`,
   );
-  const node = await seedNode(
-    pg.db,
-    brandTenantId(seeded.tenantId),
-    brandLocationId(rows[0]!.location_id),
-  );
+  const node = await seedNode(pg.db, brandLocationId(rows[0]!.location_id));
   return { seeded, node };
 }
 

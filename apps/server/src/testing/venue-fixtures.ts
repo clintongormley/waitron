@@ -13,7 +13,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tenantId as brandTenantId,
   tillId as brandTillId,
 } from "@waitron/shared";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
@@ -42,7 +41,6 @@ export interface Venue {
 
 function tillConfigFromVenue(venue: VenueResult): TillConfig {
   return {
-    tenantId: brandTenantId(venue.tenantId),
     tillId: brandTillId(venue.tillId),
     nodeId: brandNodeId(venue.nodeId),
     seriesId: brandSeriesId(venue.seriesIds[0]!),
@@ -116,9 +114,9 @@ export async function setupVenue(db: Database): Promise<Venue> {
 
   const seeded = await withTransaction(db, async (tx) => {
     await asAppUser(tx);
-    const cat = await createCatalogue(tx, cfg.tenantId, { name: "Delicatessen" });
-    const bebidas = await createCategory(tx, cfg.tenantId, { name: { [LOCALE]: "Bebidas" } });
-    const cafe = await createProduct(tx, cfg.tenantId, {
+    const cat = await createCatalogue(tx, { name: "Delicatessen" });
+    const bebidas = await createCategory(tx, { name: { [LOCALE]: "Bebidas" } });
+    const cafe = await createProduct(tx, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
       name: "Café",
@@ -126,7 +124,7 @@ export async function setupVenue(db: Database): Promise<Venue> {
       unitPrice: "1.50",
       vatClass: "general",
     });
-    const agua = await createProduct(tx, cfg.tenantId, {
+    const agua = await createProduct(tx, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
       name: "Agua",
@@ -143,11 +141,9 @@ export async function setupVenue(db: Database): Promise<Venue> {
       insert into persons (display_name, pin_hash, role)
       values ('The Clerk', ${hashPin("1234")}, 'staff') returning id`);
     const managerSession = await startManagementSession(tx, {
-      tenantId: cfg.tenantId,
       personId: mgr.rows[0]!.id,
     });
     const staffSession = await startManagementSession(tx, {
-      tenantId: cfg.tenantId,
       personId: stf.rows[0]!.id,
     });
     return {

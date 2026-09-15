@@ -3,7 +3,6 @@ import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { withTransaction, type Database } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
-import type { TenantId } from "@waitron/shared";
 import { dayPeriod } from "./derive.js";
 import { claimGap, claimRow, completeRun, enqueueSuccessor, readSnapshot } from "./store.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -26,13 +25,12 @@ const suite = useTemplateDb({ template: "core_scheduler", resetPerTest: false })
 let a: Database;
 let b: Database;
 let probe: Database;
-let tenantId: TenantId;
 
 beforeAll(async () => {
   a = await suite.pg.connect();
   b = await suite.pg.connect();
   probe = await suite.pg.connect();
-  tenantId = await seedTenant(suite.admin);
+  await seedTenant(suite.admin);
 });
 
 // Guarded so a beforeAll failure cannot mask itself: each teardown runs only if its resource was
@@ -112,7 +110,7 @@ describe("two runners racing one failed row", () => {
     // The loser must not have inflated the attempt count — a conditional UPDATE that matched
     // nothing changes nothing, which is what bounds retries.
     const snapshot = await withTransaction(a, (tx) =>
-      readSnapshot(tx, { tenantId, duty: DUTY, horizonStart: new Date("2026-07-01T00:00:00Z") }),
+      readSnapshot(tx, { duty: DUTY, horizonStart: new Date("2026-07-01T00:00:00Z") }),
     );
     expect(snapshot.rows.find((r) => r.id === claimed!.id)?.attempts).toBe(2);
   });
@@ -171,7 +169,7 @@ describe("two runners racing one successor enqueue", () => {
     expect(await second).toBe(false);
 
     const rows = await withTransaction(a, (tx) =>
-      readSnapshot(tx, { tenantId, duty: DUTY, horizonStart: new Date("2026-07-01T00:00:00Z") }),
+      readSnapshot(tx, { duty: DUTY, horizonStart: new Date("2026-07-01T00:00:00Z") }),
     );
     expect(
       rows.rows.filter((r) => new Date(r.periodFrom).getTime() === period.from.getTime()),

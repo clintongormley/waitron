@@ -108,7 +108,6 @@ export async function createStation(
     const [row] = await tx
       .insert(kitchenStations)
       .values({
-        tenantId: cfg.tenantId,
         locationId: cfg.locationId,
         name: input.name,
         displayOrder: input.displayOrder ?? 0,
@@ -464,7 +463,6 @@ export async function createCourse(
     const [row] = await tx
       .insert(kitchenCourses)
       .values({
-        tenantId: cfg.tenantId,
         locationId: cfg.locationId,
         name: input.name,
         displayOrder: input.displayOrder ?? 0,

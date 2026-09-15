@@ -27,7 +27,6 @@ function nextNif(): string {
 }
 
 interface Venue {
-  tenantId: string;
   locationId: string;
   personId: string;
   managerCookie: string;
@@ -35,7 +34,7 @@ interface Venue {
 }
 
 async function setupVenue(): Promise<Venue> {
-  const venue = await applyVenue(
+  await applyVenue(
     planVenue(
       {
         country: "ES",
@@ -70,27 +69,22 @@ async function setupVenue(): Promise<Venue> {
   );
   const seeded = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
-    const loc = await tx.execute<{ id: string }>(
-      sql`select id from locations where tenant_id = ${venue.tenantId} limit 1`,
-    );
+    const loc = await tx.execute<{ id: string }>(sql`select id from locations  limit 1`);
     const mgr = await tx.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, role)
-      values (${venue.tenantId}, 'The Manager', ${hashPin("1234")}, 'manager') returning id`);
+      insert into persons (display_name, pin_hash, role)
+      values ('The Manager', ${hashPin("1234")}, 'manager') returning id`);
     const stf = await tx.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, role)
-      values (${venue.tenantId}, 'The Clerk', ${hashPin("1234")}, 'staff') returning id`);
+      insert into persons (display_name, pin_hash, role)
+      values ('The Clerk', ${hashPin("1234")}, 'staff') returning id`);
     const mSes = await startManagementSession(tx, {
-      tenantId: venue.tenantId,
       personId: mgr.rows[0]!.id,
     });
     const sSes = await startManagementSession(tx, {
-      tenantId: venue.tenantId,
       personId: stf.rows[0]!.id,
     });
     return { locationId: loc.rows[0]!.id, personId: mgr.rows[0]!.id, mSid: mSes.id, sSid: sSes.id };
   });
   return {
-    tenantId: venue.tenantId,
     locationId: seeded.locationId,
     personId: seeded.personId,
     managerCookie: `${MANAGEMENT_COOKIE}=${seeded.mSid}`,

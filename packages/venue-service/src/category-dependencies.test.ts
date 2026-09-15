@@ -22,18 +22,18 @@ const suite = usePgliteDb({
 });
 
 async function venue() {
-  const tenantId = await seedTenant(suite.db);
+  await seedTenant(suite.db);
   const location = await suite.db.execute<{ id: string }>(sql`
     insert into locations (name, invoice_locales, operation_description) values ('Main', array['en'], 'Restaurant') returning id
   `);
-  return { tenantId, locationId: location.rows[0]!.id as LocationId };
+  return { locationId: location.rows[0]!.id as LocationId };
 }
 
 it("deleting a category removes its preparation routes and the category", async () => {
-  const { tenantId, locationId } = await venue();
+  const { locationId } = await venue();
   await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
-    const category = await createCategory(tx, tenantId, { name: { en: "Drinks" } });
+    const category = await createCategory(tx, { name: { en: "Drinks" } });
     await createPreparationRoute(
       tx,
       { locationId },
@@ -51,20 +51,20 @@ it("deleting a category removes its preparation routes and the category", async 
 });
 
 it("an open order keeps its copied category label after the category is deleted", async () => {
-  const { tenantId, locationId } = await venue();
+  const { locationId } = await venue();
   await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     const till = await tx.execute<{ id: string }>(sql`
       insert into tills (location_id, name) values (${locationId}, 'Till') returning id
     `);
-    const catalogue = await createCatalogue(tx, tenantId, { name: "Menu" });
-    const category = await createCategory(tx, tenantId, { name: { en: "Bakery" } });
+    const catalogue = await createCatalogue(tx, { name: "Menu" });
+    const category = await createCategory(tx, { name: { en: "Bakery" } });
     const unit = await createUnit(
       tx,
       { name: { en: "each" }, precision: 0, abbreviation: { en: "ea" } },
       "en",
     );
-    const product = await createProduct(tx, tenantId, {
+    const product = await createProduct(tx, {
       catalogueId: catalogue.id,
       categoryId: category.id,
       name: "Bread",
@@ -89,10 +89,10 @@ it("an open order keeps its copied category label after the category is deleted"
 });
 
 it("dependants lists a category's preparation routes with station and zone names", async () => {
-  const { tenantId, locationId } = await venue();
+  const { locationId } = await venue();
   await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
-    const category = await createCategory(tx, tenantId, { name: { en: "Grill" } });
+    const category = await createCategory(tx, { name: { en: "Grill" } });
     const zone = await tx.execute<{ id: string }>(sql`
       insert into floor_zones (location_id, name) values (${locationId}, 'Terrace') returning id`);
     const station = await tx.execute<{ id: string }>(sql`
@@ -123,10 +123,10 @@ it("dependants lists a category's preparation routes with station and zone names
 });
 
 it("dependants reports a no-preparation route with a null station", async () => {
-  const { tenantId, locationId } = await venue();
+  const { locationId } = await venue();
   await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
-    const category = await createCategory(tx, tenantId, { name: { en: "Drinks" } });
+    const category = await createCategory(tx, { name: { en: "Drinks" } });
     const routeId = await createPreparationRoute(
       tx,
       { locationId },

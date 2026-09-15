@@ -95,25 +95,25 @@ function makeSupervisor(sc: Scenario): BackupSupervisor {
   return sup;
 }
 
-function buildApp(tenantId: string, sup: BackupSupervisor, stateDir: string): Hono {
+function buildApp(sup: BackupSupervisor, stateDir: string): Hono {
   const app = new Hono();
   mountManagementApi(
     app,
     {
       db: suite.admin,
-      cfg: { tenantId, nodeId: "00000000-0000-0000-0000-000000000000" },
+      cfg: { nodeId: "00000000-0000-0000-0000-000000000000" },
       secureCookies: false,
       rpId: "localhost",
       origin: "http://localhost",
     },
     () => {},
   );
-  mountBackupApi(app, { supervisor: sup, db: suite.admin, cfg: { tenantId }, stateDir }, () => {});
+  mountBackupApi(app, { supervisor: sup, db: suite.admin, stateDir }, () => {});
   return app;
 }
 
-async function setupTenant(): Promise<string> {
-  const venue = await applyVenue(
+async function setupTenant(): Promise<void> {
+  await applyVenue(
     planVenue(
       {
         country: "ES",
@@ -149,10 +149,9 @@ async function setupTenant(): Promise<string> {
   await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     await tx.execute(sql`
-      insert into persons (tenant_id, display_name, email, pin_hash, password_hash, role)
-      values (${venue.tenantId}, 'The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')`);
+      insert into persons (display_name, email, pin_hash, password_hash, role)
+      values ('The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')`);
   });
-  return venue.tenantId;
 }
 
 async function login(app: Hono): Promise<string> {
@@ -183,14 +182,13 @@ afterEach(async () => {
 });
 
 describe("backup admin routes (real postgres)", () => {
-  let tenantId: string;
   beforeAll(async () => {
-    tenantId = await setupTenant();
+    await setupTenant();
   }, 180_000);
 
   it("unauthenticated requests 401", async () => {
     const sc: Scenario = { stateDir: await makeStateDir(), base: {}, role: "primary" };
-    const app = buildApp(tenantId, makeSupervisor(sc), sc.stateDir);
+    const app = buildApp(makeSupervisor(sc), sc.stateDir);
     for (const path of ["/api/backup/status", "/api/backup/recovery-key"]) {
       const res = await app.request(path);
       expect(res.status).toBe(401);
@@ -203,7 +201,7 @@ describe("backup admin routes (real postgres)", () => {
   it("mint-key returns a strong key and stores nothing", async () => {
     const sc: Scenario = { stateDir: await makeStateDir(), base: {}, role: "primary" };
     const sup = makeSupervisor(sc);
-    const app = buildApp(tenantId, sup, sc.stateDir);
+    const app = buildApp(sup, sc.stateDir);
     const cookie = await login(app);
     const res = await app.request("/api/backup/mint-key", { method: "POST", headers: { cookie } });
     expect(res.status).toBe(200);
@@ -220,7 +218,7 @@ describe("backup admin routes (real postgres)", () => {
     const dest = makeDestDir();
     const sc: Scenario = { stateDir: await makeStateDir(), base: {}, role: "primary" };
     const sup = makeSupervisor(sc);
-    const app = buildApp(tenantId, sup, sc.stateDir);
+    const app = buildApp(sup, sc.stateDir);
     const cookie = await login(app);
     const res = await app.request("/api/backup/apply", {
       method: "POST",
@@ -254,7 +252,7 @@ describe("backup admin routes (real postgres)", () => {
 
   it("apply refuses a non-storable key (trailing space) before any write", async () => {
     const sc: Scenario = { stateDir: await makeStateDir(), base: {}, role: "primary" };
-    const app = buildApp(tenantId, makeSupervisor(sc), sc.stateDir);
+    const app = buildApp(makeSupervisor(sc), sc.stateDir);
     const cookie = await login(app);
     const res = await app.request("/api/backup/apply", {
       method: "POST",
@@ -278,7 +276,7 @@ describe("backup admin routes (real postgres)", () => {
       base: { WAITRON_BACKUP_DIR: makeDestDir() }, // an env var set → managed by environment
       role: "primary",
     };
-    const app = buildApp(tenantId, makeSupervisor(sc), sc.stateDir);
+    const app = buildApp(makeSupervisor(sc), sc.stateDir);
     const cookie = await login(app);
     const res = await app.request("/api/backup/apply", {
       method: "POST",
@@ -296,7 +294,7 @@ describe("backup admin routes (real postgres)", () => {
 
   it("apply refuses on a non-primary node", async () => {
     const sc: Scenario = { stateDir: await makeStateDir(), base: {}, role: "secondary" };
-    const app = buildApp(tenantId, makeSupervisor(sc), sc.stateDir);
+    const app = buildApp(makeSupervisor(sc), sc.stateDir);
     const cookie = await login(app);
     const res = await app.request("/api/backup/apply", {
       method: "POST",
@@ -338,7 +336,7 @@ describe("backup admin routes (real postgres)", () => {
     };
     const sup = makeSupervisor(sc);
     await sup.reload();
-    const app = buildApp(tenantId, sup, stateDir);
+    const app = buildApp(sup, stateDir);
     const cookie = await login(app);
 
     const res = await app.request("/api/backup/recovery-key", { headers: { cookie } });
@@ -361,7 +359,7 @@ describe("backup admin routes (real postgres)", () => {
     const dest = makeDestDir();
     const sc: Scenario = { stateDir: await makeStateDir(), base: {}, role: "primary" };
     const sup = makeSupervisor(sc);
-    const app = buildApp(tenantId, sup, sc.stateDir);
+    const app = buildApp(sup, sc.stateDir);
     const cookie = await login(app);
     // Enable first (KEY_1), then rotate to KEY_2.
     const applied = await app.request("/api/backup/apply", {
@@ -405,7 +403,7 @@ describe("backup admin routes (real postgres)", () => {
       { kind: "wall-clock", days: [1, 3, 5], at: "auto" },
     ] as const) {
       const sc: Scenario = { stateDir: await makeStateDir(), base: {}, role: "primary" };
-      const app = buildApp(tenantId, makeSupervisor(sc), sc.stateDir);
+      const app = buildApp(makeSupervisor(sc), sc.stateDir);
       const cookie = await login(app);
       const res = await app.request("/api/backup/apply", {
         method: "POST",
@@ -452,7 +450,7 @@ describe("backup admin routes (real postgres)", () => {
       runDump: fakeDump,
     });
     cleanup.push(() => sup.stop());
-    const app = buildApp(tenantId, sup, stateDir);
+    const app = buildApp(sup, stateDir);
     const cookie = await login(app);
     const res = await app.request("/api/backup/apply", {
       method: "POST",
@@ -470,7 +468,7 @@ describe("backup admin routes (real postgres)", () => {
 
   it("rejects malformed apply/rotate bodies and unconfigured rotate without touching disk", async () => {
     const sc: Scenario = { stateDir: await makeStateDir(), base: {}, role: "primary" };
-    const app = buildApp(tenantId, makeSupervisor(sc), sc.stateDir); // never reloaded → no config
+    const app = buildApp(makeSupervisor(sc), sc.stateDir); // never reloaded → no config
     const cookie = await login(app);
     const post = (path: string, body: unknown) =>
       app.request(path, {
@@ -516,7 +514,7 @@ describe("backup admin routes (real postgres)", () => {
   it("apply rejects a config the boot loader would reject (too-short key) before writing", async () => {
     const stateDir = await makeStateDir();
     const sc: Scenario = { stateDir, base: {}, role: "primary" };
-    const app = buildApp(tenantId, makeSupervisor(sc), stateDir);
+    const app = buildApp(makeSupervisor(sc), stateDir);
     const cookie = await login(app);
     const res = await app.request("/api/backup/apply", {
       method: "POST",
@@ -572,7 +570,7 @@ describe("backup admin routes (real postgres)", () => {
       runDump: fakeDump,
     });
     cleanup.push(() => sup.stop());
-    const app = buildApp(tenantId, sup, stateDir);
+    const app = buildApp(sup, stateDir);
     const cookie = await login(app);
     const body = JSON.stringify({
       destinationDir: dest,

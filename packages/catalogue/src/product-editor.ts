@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { catalogues, products, type Transaction } from "@waitron/db";
-import { AppError, type TenantId } from "@waitron/shared";
+import { AppError } from "@waitron/shared";
 import { readProductCategories, replaceProductCategories } from "./categories.js";
 import { validateContentTranslations } from "./content-languages.js";
 import { validateDietaryDeclarations } from "./dietary-declarations.js";
@@ -60,7 +60,6 @@ export async function readProductEditor(
 /** No section commits independently: a rejected association rolls back the complete product. */
 export async function saveProductEditor(
   tx: Transaction,
-  tenantId: TenantId,
   productId: string | null,
   catalogueId: string,
   input: unknown,
@@ -88,7 +87,7 @@ export async function saveProductEditor(
     if (!catalogue) throw new AppError("catalogue.not_found", { catalogueId });
   }
   if (productId === null) {
-    const created = await createProduct(tx, tenantId, {
+    const created = await createProduct(tx, {
       catalogueId,
       categoryId: null,
       name: value.name,
@@ -124,6 +123,6 @@ export async function saveProductEditor(
     primaryCategoryId: value.primaryCategoryId,
   });
   await setProductVariants(tx, productId, value.variants, fallbackLanguage);
-  await setProductOptionGroups(tx, tenantId, productId, value.modifierIds);
+  await setProductOptionGroups(tx, productId, value.modifierIds);
   return readProductEditor(tx, productId);
 }

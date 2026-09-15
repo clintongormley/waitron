@@ -1,6 +1,5 @@
 import type { Database } from "@waitron/db";
 import type { KeyRing } from "@waitron/credentials";
-import type { TenantId } from "@waitron/shared";
 import {
   cardProviderById,
   type CardProviderContribution,
@@ -31,7 +30,6 @@ export function createCardProviderPool(deps: {
   providers: readonly CardProviderContribution[];
   db: Database;
   ring: KeyRing;
-  tenantId: TenantId;
   nodeId: string;
   environment: DeploymentEnvironment;
   incidents: IncidentSink;
@@ -50,7 +48,6 @@ export function createCardProviderPool(deps: {
       const provider = contribution.build({
         db: deps.db,
         ring: deps.ring,
-        tenantId: deps.tenantId,
         nodeId: deps.nodeId,
         environment: deps.environment,
         incidents: deps.incidents,

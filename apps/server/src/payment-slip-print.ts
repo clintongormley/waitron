@@ -49,7 +49,7 @@ export async function printSalePaymentSlip(
     const [issuer] = await tx
       .select({ venueName: tenants.legalName, nif: tenants.taxId })
       .from(tenants)
-      .where(eq(tenants.id, cfg.tenantId));
+      .where(eq(tenants.id, 1));
     /* v8 ignore next -- sale tenant foreign key guarantees issuer; presentation still degrades */
     if (issuer === undefined) return;
     const card: CardDetails | null =
@@ -74,11 +74,6 @@ export async function printSalePaymentSlip(
       invoiceLocale: cfg.locale,
       printer: { paperWidth: printer.paperWidth, characterSet: printer.characterSet },
     });
-    await enqueuePrintJob(
-      tx,
-      { tenantId: cfg.tenantId, locationId: cfg.locationId },
-      printer.id,
-      payload,
-    );
+    await enqueuePrintJob(tx, { locationId: cfg.locationId }, printer.id, payload);
   });
 }

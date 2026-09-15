@@ -206,7 +206,7 @@ function toDeviceBinding(
  * carrying only `{ tenantId }` can gate on it without contriving a full config.
  */
 export async function tryReadDevice(
-  deps: { db: Database; cfg: { tenantId: string }; devMode?: boolean },
+  deps: { db: Database; devMode?: boolean },
   c: Context,
 ): Promise<DeviceBinding | null> {
   // SP-C dev override: in devMode ONLY, an `x-waitron-dev-device: <id>` header authenticates AS
@@ -297,7 +297,7 @@ export async function tryReadDevice(
  * All the authentication and the `last_seen_at` book-keeping live in `tryReadDevice`.
  */
 export async function requireDevice(
-  deps: { db: Database; cfg: { tenantId: string }; devMode?: boolean },
+  deps: { db: Database; devMode?: boolean },
   c: Context,
 ): Promise<DeviceBinding> {
   const device = await tryReadDevice(deps, c);
@@ -337,7 +337,7 @@ export async function requireDevice(
  * fail-closed null path is unchanged either way.
  */
 export async function requireSaleTillId(
-  deps: { db: Database; cfg: { tenantId: string }; devMode?: boolean },
+  deps: { db: Database; devMode?: boolean },
   c: Context,
   device?: DeviceBinding | null,
 ): Promise<TillId> {
@@ -368,7 +368,7 @@ export async function requireSaleTillId(
  * behaviour — this reads the binding itself.
  */
 export async function assertNotHandheld(
-  deps: { db: Database; cfg: { tenantId: string }; devMode?: boolean },
+  deps: { db: Database; devMode?: boolean },
   c: Context,
   action: string,
   device?: DeviceBinding | null,
@@ -416,7 +416,7 @@ export async function assertNotHandheld(
  * behaviour — this reads the binding itself.
  */
 export async function assertDeviceCapability(
-  deps: { db: Database; cfg: { tenantId: string }; devMode?: boolean },
+  deps: { db: Database; devMode?: boolean },
   c: Context,
   capability: CapabilityFlag,
   action: string,

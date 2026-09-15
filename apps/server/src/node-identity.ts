@@ -30,10 +30,8 @@ export interface EstablishIdentityDeps {
 
 export async function establishNodeIdentity(
   deps: EstablishIdentityDeps,
-  tenantId: string,
   nodeId: string,
 ): Promise<void> {
-  void tenantId;
   const { publicKey, privateKey } = generateNodeKeyPair();
   await withTransaction(deps.ownerDb, async (tx) => {
     await putCredential(tx, deps.ring, {
@@ -50,12 +48,7 @@ export async function establishNodeIdentity(
  * round-trip. Throws `credentials.decrypt_failed` (a key
  * sealed under a different box key) or `credentials.missing` (never established).
  */
-export function readNodeIdentityKey(
-  appDb: Database,
-  ring: KeyRing,
-  tenantId: string,
-): Promise<string> {
-  void tenantId;
+export function readNodeIdentityKey(appDb: Database, ring: KeyRing): Promise<string> {
   return withTransaction(appDb, async (tx) => {
     const c = await getCredential(tx, ring, { purpose: NODE_KEY_PURPOSE });
     return c.privateKey as string;

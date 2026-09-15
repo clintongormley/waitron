@@ -6,8 +6,7 @@ import type { Database, Transaction } from "@waitron/db";
 import type { CoreServices } from "@waitron/module";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
-import type { TenantId } from "@waitron/shared";
+import { locationId as brandLocationId } from "@waitron/shared";
 import { bookings } from "./schema/bookings.js";
 import { BOOKINGS_TEST_MIGRATIONS } from "./testing/migrations.js";
 import { fakeCore } from "./testing/fake-core.js";
@@ -26,7 +25,7 @@ import "./errors.js";
 
 /** A venue's booking config plus its tenant, which the core parent rows (locations, dining_tables,
  * tills, working_orders) still carry. */
-type VenueCfg = BookingConfig & { tenantId: TenantId };
+type VenueCfg = BookingConfig;
 
 // PGlite, not real Postgres: these verbs are plain CRUD + a conditional-UPDATE state machine over one
 // table — no privilege or concurrency behaviour that needs a genuine non-superuser backend (the CAS
@@ -54,12 +53,12 @@ interface Venue {
 
 /** Stand up a fresh tenant + location and a `BookingConfig` scoped to them. Each test gets its own. */
 async function setupVenue(): Promise<Venue> {
-  const tenantId = await seedTenant(db);
+  await seedTenant(db);
   const loc = await db.execute<{ id: string }>(sql`
     insert into locations (name, invoice_locales, operation_description) values ('Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
   const locationId = loc.rows[0]!.id;
   return {
-    cfg: { tenantId: brandTenantId(tenantId), locationId: brandLocationId(locationId) },
+    cfg: { locationId: brandLocationId(locationId) },
     createdBy: randomUUID(),
   };
 }
@@ -465,16 +464,16 @@ describe("seatBooking", () => {
     core: CoreServices;
     createdBy: string;
   }> {
-    const tenantId = await seedTenant(db);
+    await seedTenant(db);
     const loc = await db.execute<{ id: string }>(sql`
       insert into locations (name, invoice_locales, operation_description) values ('Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
     const locationId = loc.rows[0]!.id;
     const till = await db.execute<{ id: string }>(sql`
       insert into tills (location_id, name) values (${locationId}, 'Caja 1') returning id`);
-    const nodeId = await seedNode(db, tenantId, brandLocationId(locationId));
+    const nodeId = await seedNode(db, brandLocationId(locationId));
     return {
-      cfg: { tenantId: brandTenantId(tenantId), locationId: brandLocationId(locationId) },
-      core: fakeCore({ tenantId, tillId: till.rows[0]!.id, nodeId }),
+      cfg: { locationId: brandLocationId(locationId) },
+      core: fakeCore({ tillId: till.rows[0]!.id, nodeId }),
       createdBy: randomUUID(),
     };
   }

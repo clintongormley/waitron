@@ -127,7 +127,7 @@ interface SeededVenue {
  * is order-independent (CLAUDE.md §4).
  */
 async function setupVenue(orderFlow: TillConfig["orderFlow"] = "prepay"): Promise<SeededVenue> {
-  const tenantId = await seedTenant(db);
+  await seedTenant(db);
   const seededUnits = await db.execute<{ id: string; seed_key: "each" | "kg" }>(sql`
     insert into units (seed_key, name, abbreviation, precision, hardware_unit) values
       ('each', '{"en":"each"}'::jsonb, '{"en":"ea"}'::jsonb, 0, null),
@@ -136,20 +136,20 @@ async function setupVenue(orderFlow: TillConfig["orderFlow"] = "prepay"): Promis
   const eachUnitId = seededUnits.rows.find((unit) => unit.seed_key === "each")!.id;
   const kgUnitId = seededUnits.rows.find((unit) => unit.seed_key === "kg")!.id;
   const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
+    insert into locations (name, invoice_locales, operation_description)
+    values ('Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
   const locationId = loc.rows[0]!.id;
   const till = await db.execute<{ id: string }>(sql`
-    insert into tills (tenant_id, location_id, name)
-    values (${tenantId}, ${locationId}, 'Caja 1') returning id`);
-  const nodeId = await seedNode(db, tenantId, brandLocationId(locationId));
+    insert into tills (location_id, name)
+    values (${locationId}, 'Caja 1') returning id`);
+  const nodeId = await seedNode(db, brandLocationId(locationId));
 
   const { cafeId, aguaId, catalogueId, zoneId, cafeOfferId, premiumCafeOfferId } =
     await withTransaction(db, async (tx) => {
       await asAppUser(tx);
-      const cat = await createCatalogue(tx, tenantId, { name: "Carta" });
-      const bebidas = await createCategory(tx, tenantId, { name: { en: "Bebidas" } });
-      const cafe = await createProduct(tx, tenantId, {
+      const cat = await createCatalogue(tx, { name: "Carta" });
+      const bebidas = await createCategory(tx, { name: { en: "Bebidas" } });
+      const cafe = await createProduct(tx, {
         catalogueId: cat.id,
         categoryId: bebidas.id,
         name: "Café",
@@ -159,7 +159,7 @@ async function setupVenue(orderFlow: TillConfig["orderFlow"] = "prepay"): Promis
       });
       // Deliberately category-less: `listAvailableProducts` resolves its `category` to NULL (LEFT JOIN),
       // so its priced line snapshots `category: null` — the other side of `parkOrder`'s `?? null`.
-      const agua = await createProduct(tx, tenantId, {
+      const agua = await createProduct(tx, {
         catalogueId: cat.id,
         categoryId: null,
         name: "Agua",
@@ -168,7 +168,7 @@ async function setupVenue(orderFlow: TillConfig["orderFlow"] = "prepay"): Promis
         vatClass: "general",
       });
       await assignCatalogueToLocation(tx, locationId, cat.id);
-      const premium = await createCatalogue(tx, tenantId, { name: "Carta premium" });
+      const premium = await createCatalogue(tx, { name: "Carta premium" });
       const section = await createMenuSection(tx, {
         menuId: cat.id,
         name: { [LOCALE]: "Bebidas" },
@@ -194,8 +194,8 @@ async function setupVenue(orderFlow: TillConfig["orderFlow"] = "prepay"): Promis
         (location_id, name, trading_name, default_service_mode)
       values (${locationId}, 'Restaurant', 'Restaurant', ${orderFlow}) returning id`);
       const zone = await tx.execute<{ id: string }>(sql`
-      insert into floor_zones (tenant_id, location_id, name)
-      values (${tenantId}, ${locationId}, 'Counter') returning id`);
+      insert into floor_zones (location_id, name)
+      values (${locationId}, 'Counter') returning id`);
       await tx.execute(sql`
       insert into zone_service_policies
         (location_id, zone_id, department_id, default_menu_id, is_counter_default)
@@ -216,7 +216,6 @@ async function setupVenue(orderFlow: TillConfig["orderFlow"] = "prepay"): Promis
     });
 
   const cfg: TillConfig = {
-    tenantId,
     tillId: brandTillId(till.rows[0]!.id),
     nodeId: brandNodeId(nodeId),
     // `parkOrder` reads neither series nor locale/invoiceLocales; fresh values keep the shape whole.
@@ -615,7 +614,6 @@ describe("parkOrder", () => {
       orderNumber: 1,
       nodeId: cfg.nodeId,
       tillId: cfg.tillId,
-      tenantId: cfg.tenantId,
       settledAt: null,
     });
 
@@ -804,8 +802,8 @@ describe("openTab service context", () => {
         update departments set default_service_mode = 'table_tab'
         where location_id = ${cfg.locationId}`);
       const table = await tx.execute<{ id: string }>(sql`
-        insert into dining_tables (tenant_id, location_id, label, zone_id)
-        values (${cfg.tenantId}, ${cfg.locationId}, 'Offer table', ${zoneId}) returning id`);
+        insert into dining_tables (location_id, label, zone_id)
+        values (${cfg.locationId}, 'Offer table', ${zoneId}) returning id`);
 
       const { tabId } = await openTab(tx, cfg, {
         tableId: table.rows[0]!.id,
@@ -835,8 +833,8 @@ describe("openTab service context", () => {
         update departments set default_service_mode = 'table_tab'
         where location_id = ${cfg.locationId}`);
       const table = await tx.execute<{ id: string }>(sql`
-        insert into dining_tables (tenant_id, location_id, label, zone_id)
-        values (${cfg.tenantId}, ${cfg.locationId}, 'Round table', ${zoneId}) returning id`);
+        insert into dining_tables (location_id, label, zone_id)
+        values (${cfg.locationId}, 'Round table', ${zoneId}) returning id`);
       const { tabId } = await openTab(tx, cfg, { tableId: table.rows[0]!.id });
 
       await addTabRound(tx, cfg, tabId, [{ menuItemId: premiumCafeOfferId, quantity: "1" }]);
@@ -859,8 +857,8 @@ describe("openTab service context", () => {
         where location_id = ${cfg.locationId}
         returning id`);
       const downstairsZone = await tx.execute<{ id: string }>(sql`
-        insert into floor_zones (tenant_id, location_id, name)
-        values (${cfg.tenantId}, ${cfg.locationId}, 'Downstairs') returning id`);
+        insert into floor_zones (location_id, name)
+        values (${cfg.locationId}, 'Downstairs') returning id`);
       await tx.execute(sql`
         insert into zone_service_policies
           (location_id, zone_id, department_id, default_menu_id)
@@ -875,7 +873,7 @@ describe("openTab service context", () => {
       const upstairsBar = await createStation(tx, cfg, { name: "Upstairs bar" });
       const downstairsBar = await createStation(tx, cfg, { name: "Downstairs bar" });
       const product = await tx.execute<{ category_id: string }>(sql`
-        select category_id from products where tenant_id = ${cfg.tenantId} and id = ${cafeId}`);
+        select category_id from products where id = ${cafeId}`);
       await tx.execute(sql`
         insert into preparation_routes
           (location_id, zone_id, category_id, station_id)
@@ -884,11 +882,11 @@ describe("openTab service context", () => {
           (${cfg.locationId}, ${downstairsZone.rows[0]!.id}, ${product.rows[0]!.category_id}, ${downstairsBar.id})`);
 
       const upstairsTable = await tx.execute<{ id: string }>(sql`
-        insert into dining_tables (tenant_id, location_id, label, zone_id)
-        values (${cfg.tenantId}, ${cfg.locationId}, 'Upstairs', ${zoneId}) returning id`);
+        insert into dining_tables (location_id, label, zone_id)
+        values (${cfg.locationId}, 'Upstairs', ${zoneId}) returning id`);
       const downstairsTable = await tx.execute<{ id: string }>(sql`
-        insert into dining_tables (tenant_id, location_id, label, zone_id)
-        values (${cfg.tenantId}, ${cfg.locationId}, 'Downstairs', ${downstairsZone.rows[0]!.id}) returning id`);
+        insert into dining_tables (location_id, label, zone_id)
+        values (${cfg.locationId}, 'Downstairs', ${downstairsZone.rows[0]!.id}) returning id`);
       const upstairs = await openTab(tx, cfg, { tableId: upstairsTable.rows[0]!.id });
       const downstairs = await openTab(tx, cfg, { tableId: downstairsTable.rows[0]!.id });
 
@@ -924,8 +922,8 @@ describe("openTab service context", () => {
           (location_id, zone_id, product_id, no_preparation)
         values (${cfg.locationId}, ${zoneId}, ${cafeId}, true)`);
       const table = await tx.execute<{ id: string }>(sql`
-        insert into dining_tables (tenant_id, location_id, label, zone_id)
-        values (${cfg.tenantId}, ${cfg.locationId}, 'Deli shelf', ${zoneId}) returning id`);
+        insert into dining_tables (location_id, label, zone_id)
+        values (${cfg.locationId}, 'Deli shelf', ${zoneId}) returning id`);
       const { tabId } = await openTab(tx, cfg, { tableId: table.rows[0]!.id });
 
       await addTabRound(tx, cfg, tabId, [{ menuItemId: premiumCafeOfferId, quantity: "1" }]);
@@ -943,8 +941,8 @@ describe("openTab service context", () => {
     await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       const table = await tx.execute<{ id: string }>(sql`
-        insert into dining_tables (tenant_id, location_id, label, zone_id)
-        values (${cfg.tenantId}, ${cfg.locationId}, 'Counter table', ${zoneId}) returning id`);
+        insert into dining_tables (location_id, label, zone_id)
+        values (${cfg.locationId}, 'Counter table', ${zoneId}) returning id`);
       await expect(openTab(tx, cfg, { tableId: table.rows[0]!.id })).rejects.toMatchObject({
         code: "service_zone.mode_incompatible",
         params: { zoneId, expected: "table_tab", actual: "prepay" },
@@ -1031,7 +1029,6 @@ async function setStatus(id: string, status: "settled" | "abandoned"): Promise<v
 }
 
 // `setStatus` needs the tenant of the venue it is acting on; each test assigns this before using it.
-let testTenant: string;
 
 /**
  * Insert an open order on ANOTHER node at the same location. The row exists to prove reads are
@@ -1040,18 +1037,16 @@ let testTenant: string;
  */
 async function seedForeignNodeOrder(cfg: TillConfig): Promise<string> {
   const id = randomUUID();
-  const otherNode = await seedNode(db, cfg.tenantId, cfg.locationId);
+  const otherNode = await seedNode(db, cfg.locationId);
   await db.execute(sql`
-    insert into working_orders (id, tenant_id, till_id, node_id, order_number, status)
-    values (${id}, ${cfg.tenantId}, ${cfg.tillId}, ${otherNode}, 1, 'open')`);
+    insert into working_orders (id, till_id, node_id, order_number, status)
+    values (${id}, ${cfg.tillId}, ${otherNode}, 1, 'open')`);
   return id;
 }
 
 describe("listHeldOrders", () => {
   it("lists the node's open orders with itemCount, GROSS total and label, ordered by number", async () => {
     const { cfg, cafeId, aguaId } = await setupVenue();
-    testTenant = cfg.tenantId;
-    void testTenant;
     const idA = randomUUID();
     const idB = randomUUID();
 
@@ -1094,7 +1089,6 @@ describe("listHeldOrders", () => {
 
   it("omits settled and abandoned orders — the status filter is the only reason they are gone", async () => {
     const { cfg, cafeId } = await setupVenue();
-    testTenant = cfg.tenantId;
     const openId = randomUUID();
     const abandonedId = randomUUID();
     const settledId = randomUUID();
@@ -1132,7 +1126,7 @@ describe("getHeldOrder", () => {
         values (${JSON.stringify({ [LOCALE]: "kg" })}::jsonb, ${JSON.stringify({ [LOCALE]: "kg" })}::jsonb, 3, 'kg')
         returning id`);
       const unitId = inserted.rows[0]!.id;
-      const product = await createProduct(tx, cfg.tenantId, {
+      const product = await createProduct(tx, {
         catalogueId,
         categoryId: null,
         name: "Jamón",
@@ -1172,7 +1166,7 @@ describe("getHeldOrder", () => {
     }>(sql`
       select quantity, line_total, unit_name, unit_precision
       from working_order_lines
-      where tenant_id = ${cfg.tenantId} and working_order_id = ${id}`);
+      where working_order_id = ${id}`);
     expect(stored.rows).toEqual([
       {
         quantity: "0.375",
@@ -1197,17 +1191,16 @@ describe("getHeldOrder", () => {
     const { cfg, zoneId, cafeId, premiumCafeOfferId } = await setupVenue();
     const optionId = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
-      const group = await createOptionGroup(tx, cfg.tenantId, {
+      const group = await createOptionGroup(tx, {
         name: { [LOCALE]: "Extras" },
         maxSelect: 2,
       });
-      const option = await createOptionGroupItem(tx, cfg.tenantId, group.id, {
+      const option = await createOptionGroupItem(tx, group.id, {
         name: { [LOCALE]: "Leche extra" },
         priceDelta: "0.10",
         maxQuantity: 2,
       });
       await tx.insert(productOptionGroups).values({
-        tenantId: cfg.tenantId,
         productId: cafeId,
         groupId: group.id,
       });
@@ -1272,7 +1265,7 @@ describe("getHeldOrder", () => {
           customer_name = ${JSON.stringify({ [LOCALE]: "Renamed café de la casa" })}::jsonb,
           pricing_unit = 'weight', vat_class = 'reduced',
           allergens = ${JSON.stringify({ milk: { presence: "contains" } })}::jsonb
-      where tenant_id = ${cfg.tenantId} and id = ${cafeId}`);
+      where id = ${cafeId}`);
     await db.execute(sql`
       update menu_items set active = false where id = ${premiumCafeOfferId}`);
 
@@ -1343,7 +1336,6 @@ describe("getHeldOrder", () => {
 
   it("throws working_order.not_found for a settled (non-open) order — closed is not retrievable", async () => {
     const { cfg, cafeId } = await setupVenue();
-    testTenant = cfg.tenantId;
     const id = randomUUID();
     await parkOrder({ db }, cfg, { id, lines: [{ productId: cafeId, quantity: "1" }] });
     await setStatus(id, "settled");
@@ -1370,16 +1362,15 @@ describe("updateHeldOrder", () => {
     const { cfg, zoneId, cafeId, premiumCafeOfferId } = await setupVenue();
     const optionId = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
-      const group = await createOptionGroup(tx, cfg.tenantId, {
+      const group = await createOptionGroup(tx, {
         name: { [LOCALE]: "Extras" },
         maxSelect: 2,
       });
-      const option = await createOptionGroupItem(tx, cfg.tenantId, group.id, {
+      const option = await createOptionGroupItem(tx, group.id, {
         name: { [LOCALE]: "Leche extra" },
         maxQuantity: 2,
       });
       await tx.insert(productOptionGroups).values({
-        tenantId: cfg.tenantId,
         productId: cafeId,
         groupId: group.id,
       });
@@ -1408,7 +1399,7 @@ describe("updateHeldOrder", () => {
       unit_price_gross: string;
     }>(sql`
       select id, parent_line_id, unit_price_gross from working_order_lines
-      where tenant_id = ${cfg.tenantId} and working_order_id = ${id} order by line_no`);
+      where working_order_id = ${id} order by line_no`);
 
     await db.execute(sql`
       update menu_items set gross_price = 9.00 where id = ${premiumCafeOfferId}`);
@@ -1436,7 +1427,7 @@ describe("updateHeldOrder", () => {
     }>(sql`
       select id, parent_line_id, quantity, unit_price_gross, line_total
       from working_order_lines
-      where tenant_id = ${cfg.tenantId} and working_order_id = ${id} order by line_no`);
+      where working_order_id = ${id} order by line_no`);
     expect(after.rows).toEqual([
       {
         id: before.rows[0]!.id,
@@ -1465,7 +1456,7 @@ describe("updateHeldOrder", () => {
     });
     const before = await db.execute<{ id: string }>(sql`
       select id from working_order_lines
-      where tenant_id = ${cfg.tenantId} and working_order_id = ${id}`);
+      where working_order_id = ${id}`);
     const lineId = before.rows[0]!.id;
 
     await db.execute(sql`
@@ -1488,7 +1479,7 @@ describe("updateHeldOrder", () => {
     }>(sql`
       select id, quantity, unit_price_gross, line_total
       from working_order_lines
-      where tenant_id = ${cfg.tenantId} and working_order_id = ${id}`);
+      where working_order_id = ${id}`);
     expect(after.rows).toEqual([
       {
         id: lineId,
@@ -1520,7 +1511,7 @@ describe("updateHeldOrder", () => {
       select l.quantity, l.unit_price_gross, c.menu_item_id
       from working_order_lines l
       join working_line_contexts c on c.working_order_line_id = l.id
-      where l.tenant_id = ${cfg.tenantId} and l.working_order_id = ${id}`);
+      where l.working_order_id = ${id}`);
     expect(line.rows).toEqual([
       { quantity: "2.000", unit_price_gross: "3.25", menu_item_id: premiumCafeOfferId },
     ]);
@@ -1544,7 +1535,7 @@ describe("updateHeldOrder", () => {
     ];
     await updateHeldOrder({ db }, cfg, id, { lines: newLines, label: "Mesa 7" });
 
-    // order_number / node_id / till_id / tenant_id are untouched; only the label changed and the
+    // order_number / node_id / till_id are untouched; only the label changed and the
     // status stays open (the update ran over the enforce_transition trigger, not around it).
     const [wo] = await db.select().from(workingOrders).where(eq(workingOrders.id, id));
     expect(wo).toMatchObject({
@@ -1553,7 +1544,6 @@ describe("updateHeldOrder", () => {
       orderNumber: 1,
       nodeId: cfg.nodeId,
       tillId: cfg.tillId,
-      tenantId: cfg.tenantId,
       settledAt: null,
     });
 
@@ -1631,7 +1621,6 @@ describe("updateHeldOrder", () => {
 
   it("throws working_order.not_open on a settled order — a closed order can no longer be edited", async () => {
     const { cfg, cafeId } = await setupVenue();
-    testTenant = cfg.tenantId;
     const id = randomUUID();
     await parkOrder({ db }, cfg, { id, lines: [{ productId: cafeId, quantity: "1" }] });
     await setStatus(id, "settled");
@@ -1701,7 +1690,6 @@ describe("abandonHeldOrder", () => {
 
   it("throws working_order.not_open on a settled order and on an absent id", async () => {
     const { cfg, cafeId } = await setupVenue();
-    testTenant = cfg.tenantId;
     const id = randomUUID();
     await parkOrder({ db }, cfg, { id, lines: [{ productId: cafeId, quantity: "1" }] });
     await setStatus(id, "settled");
@@ -1761,7 +1749,7 @@ async function makeProduct(
   catalogueId: string,
   route: { categoryId?: string; stationId?: string },
 ): Promise<string> {
-  const { id } = await createProduct(tx, cfg.tenantId, {
+  const { id } = await createProduct(tx, {
     catalogueId,
     categoryId: route.categoryId ?? null,
     name: `P-${randomUUID().slice(0, 8)}`,
@@ -1784,22 +1772,22 @@ async function attachedPrinter(
   station: { name: string; isDefault?: boolean },
   printerName: string,
 ): Promise<{ station: Awaited<ReturnType<typeof createStation>>; printerId: string }> {
-  const printCfg: PrintConfig = { tenantId: cfg.tenantId, locationId: cfg.locationId };
+  const printCfg: PrintConfig = { locationId: cfg.locationId };
   const created = await createStation(tx, cfg, station);
   const { id: printerId } = await createPrinter(tx, printCfg, {
     name: printerName,
     transport: "cloud_poll",
     pollId: `poll-${randomUUID()}`,
   });
-  await attachPrinterToStation(tx, printCfg, { stationId: created.id, printerId });
+  await attachPrinterToStation(tx, { stationId: created.id, printerId });
   return { station: created, printerId };
 }
 
 /** Insert an active dining table in the venue and return its id (for the openTab → addTabRound path). */
 async function makeTable(tx: Transaction, cfg: TillConfig): Promise<string> {
   const { rows } = await tx.execute<{ id: string }>(sql`
-    insert into dining_tables (tenant_id, location_id, label)
-    values (${cfg.tenantId}, ${cfg.locationId}, ${`T-${randomUUID().slice(0, 8)}`}) returning id`);
+    insert into dining_tables (location_id, label)
+    values (${cfg.locationId}, ${`T-${randomUUID().slice(0, 8)}`}) returning id`);
   return rows[0]!.id;
 }
 
@@ -1841,7 +1829,6 @@ async function placeOrderWith(
  *  line's `options: [{ optionGroupItemId }]` selects, for the modifier sub-item tests. */
 async function addOption(
   tx: Transaction,
-  tenantId: TillConfig["tenantId"],
   productId: string,
   name: string,
   // The option's OWN allergens and positive dietary suitability. Omitted for a plain option (the modifier
@@ -1854,7 +1841,6 @@ async function addOption(
   const [group] = await tx
     .insert(optionGroups)
     .values({
-      tenantId,
       name: { [LOCALE]: `${name} group` },
       minSelect: 0,
       maxSelect: 1,
@@ -1865,7 +1851,6 @@ async function addOption(
   const [item] = await tx
     .insert(optionGroupItems)
     .values({
-      tenantId,
       groupId: group!.id,
       name: { [LOCALE]: name },
       priceDelta: "0.50",
@@ -1876,7 +1861,6 @@ async function addOption(
     })
     .returning({ id: optionGroupItems.id });
   await tx.insert(productOptionGroups).values({
-    tenantId,
     productId,
     groupId: group!.id,
     sort: 0,
@@ -1941,7 +1925,7 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
       await asAppUser(tx);
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const barra = await createStation(tx, cfg, { name: "Barra" });
-      const drinks = await createCategory(tx, cfg.tenantId, { name: { en: "Copas" } });
+      const drinks = await createCategory(tx, { name: { en: "Copas" } });
       await setCategoryStation(tx, cfg, drinks.id, barra.id);
       const cana = await makeProduct(tx, cfg, catalogueId, { categoryId: drinks.id }); // → barra (category)
       const cafe = await makeProduct(tx, cfg, catalogueId, {
@@ -1969,8 +1953,8 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
       await asAppUser(tx);
       const kitchen = await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
       const bar = await createStation(tx, cfg, { name: "Bar" });
-      const drinks = await createCategory(tx, cfg.tenantId, { name: { en: "Drinks" } });
-      const food = await createCategory(tx, cfg.tenantId, { name: { en: "Food" } });
+      const drinks = await createCategory(tx, { name: { en: "Drinks" } });
+      const food = await createCategory(tx, { name: { en: "Food" } });
       await setCategoryStation(tx, cfg, drinks.id, bar.id);
       await setCategoryStation(tx, cfg, food.id, kitchen.id);
       const product = await makeProduct(tx, cfg, catalogueId, { categoryId: drinks.id });
@@ -2083,7 +2067,7 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
       return id;
     });
     // A SECOND fire of the same lines collides on `ticket_items`' per-line
-    // `(tenant_id, working_order_line_id)` unique. `fireLines` maps that 23505 to the domain code
+    // `(working_order_line_id)` unique. `fireLines` maps that 23505 to the domain code
     // (naming the order) rather than leaking the raw constraint error as an opaque 500. The re-fire runs
     // in its OWN transaction so the 23505 poisons that one and the mapped AppError rolls it back cleanly.
     await expect(
@@ -2138,7 +2122,7 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
       const bar = await createStation(tx, cfg, { name: "Bar", isDefault: true });
       const kitchen = await createStation(tx, cfg, { name: "Kitchen" });
       const product = await tx.execute<{ category_id: string }>(sql`
-        select category_id from products where tenant_id = ${cfg.tenantId} and id = ${cafeId}`);
+        select category_id from products where id = ${cafeId}`);
       await tx.execute(sql`
         insert into preparation_routes (location_id, zone_id, category_id, station_id)
         values (${cfg.locationId}, ${zoneId}, ${product.rows[0]!.category_id}, ${bar.id})`);
@@ -2156,8 +2140,8 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
         grossPrice: "2.00",
       });
       const table = await tx.execute<{ id: string }>(sql`
-        insert into dining_tables (tenant_id, location_id, label, zone_id)
-        values (${cfg.tenantId}, ${cfg.locationId}, 'Two of a kind', ${zoneId}) returning id`);
+        insert into dining_tables (location_id, label, zone_id)
+        values (${cfg.locationId}, 'Two of a kind', ${zoneId}) returning id`);
       const { tabId } = await openTab(tx, cfg, { tableId: table.rows[0]!.id });
 
       const resolveRoutes = vi.spyOn(VENUE_SERVICE, "resolvePreparationRoutes");
@@ -2269,7 +2253,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
       // alone — it is no longer at the `queued` predecessor).
       await advanceTicket(tx, cfg, orderId, cocina.id, "preparing");
 
-      const queue = await listStationQueue(tx, cfg, cocina.id);
+      const queue = await listStationQueue(tx, cocina.id);
       const group = queue.find((g) => g.orderId === orderId)!;
       expect(group.items).toHaveLength(2);
       expect(group.items.map((i) => i.state).sort()).toEqual(["preparing", "ready"]);
@@ -2277,7 +2261,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
       // A second whole-ticket bump to `ready` advances the now-preparing item[1]; item[0] (already
       // `ready`) is skipped — the bulk UPDATE matches only the `preparing` predecessor.
       await advanceTicket(tx, cfg, orderId, cocina.id, "ready");
-      const readied = await listStationQueue(tx, cfg, cocina.id);
+      const readied = await listStationQueue(tx, cocina.id);
       expect(readied.find((g) => g.orderId === orderId)!.items.map((i) => i.state)).toEqual([
         "ready",
         "ready",
@@ -2368,14 +2352,14 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
       await tx.execute(
         sql`update ticket_items set queued_at = '2026-07-20T10:01:00Z' where working_order_id = ${order2}`,
       );
-      const cocinaQueue = await listStationQueue(tx, cfg, cocina.id);
+      const cocinaQueue = await listStationQueue(tx, cocina.id);
       // Two groups, oldest order first; order 1 has two Cocina lines, order 2 has one (its copa went
       // to Barra, so it is NOT in this station's group).
       expect(cocinaQueue.map((g) => g.orderId)).toEqual([order1, order2]);
       expect(cocinaQueue[0]!.items).toHaveLength(2);
       expect(cocinaQueue[1]!.items).toHaveLength(1);
       // The Barra station sees only order 2's copa line.
-      const barraQueue = await listStationQueue(tx, cfg, barra.id);
+      const barraQueue = await listStationQueue(tx, barra.id);
       expect(barraQueue.map((g) => g.orderId)).toEqual([order2]);
       expect(barraQueue[0]!.items).toHaveLength(1);
 
@@ -2384,14 +2368,14 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
         .update(workingOrders)
         .set({ collectedAt: sql`now()` })
         .where(eq(workingOrders.id, order1));
-      expect((await listStationQueue(tx, cfg, cocina.id)).map((g) => g.orderId)).toEqual([order2]);
+      expect((await listStationQueue(tx, cocina.id)).map((g) => g.orderId)).toEqual([order2]);
 
       // Abandoning order 2 drops it too — the queue is empty at Cocina.
       await tx
         .update(workingOrders)
         .set({ status: "abandoned" })
         .where(eq(workingOrders.id, order2));
-      expect(await listStationQueue(tx, cfg, cocina.id)).toEqual([]);
+      expect(await listStationQueue(tx, cocina.id)).toEqual([]);
     });
   });
 
@@ -2406,7 +2390,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
         { productId: aguaId, quantity: "3" },
       ]);
 
-      const [group] = await listStationQueue(tx, cfg, cocina.id);
+      const [group] = await listStationQueue(tx, cocina.id);
       expect(group!.orderId).toBe(orderId);
       expect(group!.items).toHaveLength(2);
       // Items in line_no order, each carrying the line's snapshotted kitchen name + quantity
@@ -2433,8 +2417,8 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
       await asAppUser(tx);
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       // Café with TWO selected options — each a child modifier line, never its own ticket item.
-      const grande = await addOption(tx, cfg.tenantId, cafeId, "Grande");
-      const avena = await addOption(tx, cfg.tenantId, cafeId, "Leche avena");
+      const grande = await addOption(tx, cafeId, "Grande");
+      const avena = await addOption(tx, cafeId, "Leche avena");
       const { id: orderId } = await placeOrderWith(tx, cfg, [
         {
           productId: cafeId,
@@ -2445,7 +2429,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
 
       // The station queue: ONE item (the parent dish), carrying both options as modifier sub-items, in
       // selection (line_no) order — localised client-side via each modifier's descriptions map.
-      const [group] = await listStationQueue(tx, cfg, cocina.id);
+      const [group] = await listStationQueue(tx, cocina.id);
       expect(group!.orderId).toBe(orderId);
       expect(group!.items).toHaveLength(1);
       // Each option declared no allergens/diet, so its own list is empty (`addAllergens: null`,
@@ -2477,7 +2461,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
         { productId: cafeId, quantity: "1", note: "sin cebolla", doneness: "medium_rare" },
       ]);
 
-      const [group] = await listStationQueue(tx, cfg, cocina.id);
+      const [group] = await listStationQueue(tx, cocina.id);
       expect(group!.orderId).toBe(orderId);
       expect(group!.items).toHaveLength(1);
       expect(group!.items[0]!.note).toBe("sin cebolla");
@@ -2502,7 +2486,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
         .update(workingOrderLines)
         .set({ note: "con cebolla", doneness: "well_done" })
         .where(eq(workingOrderLines.id, parent!.id));
-      const [afterEdit] = await listStationQueue(tx, cfg, cocina.id);
+      const [afterEdit] = await listStationQueue(tx, cocina.id);
       expect(afterEdit!.items[0]!.note).toBe("sin cebolla");
       expect(afterEdit!.items[0]!.doneness).toBe("medium_rare");
     });
@@ -2517,7 +2501,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       await placeOrderWith(tx, cfg, [{ productId: cafeId, quantity: "1" }]);
 
-      const [group] = await listStationQueue(tx, cfg, cocina.id);
+      const [group] = await listStationQueue(tx, cocina.id);
       expect(group!.items[0]!.note).toBeNull();
       expect(group!.items[0]!.doneness).toBeNull();
       const expo = await listExpoQueue(tx, cfg);
@@ -2536,7 +2520,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       // A gluten burger with a "gluten-free bun" option: base `{gluten: contains}`. The option states no
       // allergens of its own; the dish shows its OWN gluten (options are never folded into the dish).
-      const burger = await createProduct(tx, cfg.tenantId, {
+      const burger = await createProduct(tx, {
         catalogueId,
         categoryId: null,
         name: "Hamburguesa",
@@ -2545,7 +2529,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
         vatClass: "general",
         allergens: { gluten: { presence: "contains" } },
       });
-      const gfBun = await addOption(tx, cfg.tenantId, burger.id, "Pan sin gluten");
+      const gfBun = await addOption(tx, burger.id, "Pan sin gluten");
       const { id: orderId } = await placeOrderWith(tx, cfg, [
         { productId: burger.id, quantity: "1", options: [{ optionGroupItemId: gfBun }] },
       ]);
@@ -2561,7 +2545,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
         );
       const parentLineId = parent!.id;
 
-      const queue = await listStationQueue(tx, cfg, cocina.id);
+      const queue = await listStationQueue(tx, cocina.id);
       const item = queue
         .flatMap((g) => g.items)
         .find((i) => i.workingOrderLineId === parentLineId)!;
@@ -2583,11 +2567,11 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
       await asAppUser(tx);
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const dish = await makeProduct(tx, cfg, catalogueId, {}); // no allergens → published NULL
-      const opt = await addOption(tx, cfg.tenantId, dish, "Extra");
+      const opt = await addOption(tx, dish, "Extra");
       await placeOrderWith(tx, cfg, [
         { productId: dish, quantity: "1", options: [{ optionGroupItemId: opt }] },
       ]);
-      const item = (await listStationQueue(tx, cfg, cocina.id))[0]!.items[0]!;
+      const item = (await listStationQueue(tx, cocina.id))[0]!.items[0]!;
       expect(item.asServed.pending).toBe(true);
       expect(item.asServed.allergens).toEqual({});
     });
@@ -2604,7 +2588,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const dish = await makeProduct(tx, cfg, catalogueId, {}); // no allergens → published NULL
       await placeOrderWith(tx, cfg, [line(dish)]); // no options at all
-      const item = (await listStationQueue(tx, cfg, cocina.id))[0]!.items[0]!;
+      const item = (await listStationQueue(tx, cocina.id))[0]!.items[0]!;
       expect(item.modifiers).toEqual([]);
       expect(item.asServed.pending).toBe(true);
       expect(item.asServed.allergens).toEqual({});
@@ -2623,7 +2607,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
     await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
-      const dish = await createProduct(tx, cfg.tenantId, {
+      const dish = await createProduct(tx, {
         catalogueId,
         categoryId: null,
         name: "Ensalada",
@@ -2632,13 +2616,13 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
         vatClass: "general",
         allergens: { gluten: { presence: "contains" } },
       });
-      const nuts = await addOption(tx, cfg.tenantId, dish.id, "Con nueces", {
+      const nuts = await addOption(tx, dish.id, "Con nueces", {
         add: { nuts: { presence: "contains" } },
       });
       await placeOrderWith(tx, cfg, [
         { productId: dish.id, quantity: "1", options: [{ optionGroupItemId: nuts }] },
       ]);
-      const item = (await listStationQueue(tx, cfg, cocina.id))[0]!.items[0]!;
+      const item = (await listStationQueue(tx, cocina.id))[0]!.items[0]!;
       expect(item.asServed.allergens).toEqual({ gluten: { presence: "contains" } });
       expect(item.asServed.pending).toBe(false);
     });
@@ -2649,7 +2633,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
     await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
-      const dish = await createProduct(tx, cfg.tenantId, {
+      const dish = await createProduct(tx, {
         catalogueId,
         categoryId: null,
         name: "Crema",
@@ -2658,7 +2642,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
         vatClass: "general",
         dietaryDeclarations: ["vegan"],
       });
-      const dairyFree = await addOption(tx, cfg.tenantId, dish.id, "Sin lácteos", {
+      const dairyFree = await addOption(tx, dish.id, "Sin lácteos", {
         suitableFor: [],
       });
       const { id: orderId } = await placeOrderWith(tx, cfg, [
@@ -2675,7 +2659,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
         );
       const parentLineId = parent!.id;
 
-      const queue = await listStationQueue(tx, cfg, cocina.id);
+      const queue = await listStationQueue(tx, cocina.id);
       const item = queue
         .flatMap((g) => g.items)
         .find((i) => i.workingOrderLineId === parentLineId)!;
@@ -2695,7 +2679,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
     await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
-      const dish = await createProduct(tx, cfg.tenantId, {
+      const dish = await createProduct(tx, {
         catalogueId,
         categoryId: null,
         name: "Ensalada",
@@ -2704,7 +2688,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
         vatClass: "general",
         dietaryDeclarations: ["vegan"],
       });
-      const bacon = await addOption(tx, cfg.tenantId, dish.id, "Con bacon", {
+      const bacon = await addOption(tx, dish.id, "Con bacon", {
         add: { milk: { presence: "contains" } },
         suitableFor: ["halal"],
       });
@@ -2712,7 +2696,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
         { productId: dish.id, quantity: "1", options: [{ optionGroupItemId: bacon }] },
       ]);
 
-      const stationItem = (await listStationQueue(tx, cfg, cocina.id))[0]!.items[0]!;
+      const stationItem = (await listStationQueue(tx, cocina.id))[0]!.items[0]!;
       expect(stationItem.asServedDiet).toEqual({
         vegan: "yes",
         vegetarian: "yes",
@@ -2745,7 +2729,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
       const dish = await makeProduct(tx, cfg, catalogueId, {});
       await placeOrderWith(tx, cfg, [line(dish)]);
 
-      const item = (await listStationQueue(tx, cfg, cocina.id))[0]!.items[0]!;
+      const item = (await listStationQueue(tx, cocina.id))[0]!.items[0]!;
       expect(item.asServedDiet).toEqual({ vegan: "unknown", vegetarian: "unknown", contains: [] });
 
       const expoItem = (await listExpoQueue(tx, cfg))[0]!.courses[0]!.items[0]!;
@@ -2775,7 +2759,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
         sql`update ticket_items set queued_at = now() - interval '12 minutes' where id = ${items[0]!.id}`,
       );
 
-      const [group] = await listStationQueue(tx, cfg, cocina.id);
+      const [group] = await listStationQueue(tx, cocina.id);
       expect(group!.thresholds).toEqual({
         warmAfterMinutes: 5,
         overdueAfterMinutes: 10,
@@ -3546,7 +3530,7 @@ describe("correction slips on recall & void (A6)", () => {
     name: string,
     courseId?: string,
   ): Promise<string> {
-    const { id } = await createProduct(tx, cfg.tenantId, {
+    const { id } = await createProduct(tx, {
       catalogueId,
       categoryId: null,
       name: name,
@@ -3743,7 +3727,7 @@ describe("addTabRound hold-on-send (A3)", () => {
       );
       const modified = await makeProduct(tx, cfg, catalogueId, {});
       const plain = await makeProduct(tx, cfg, catalogueId, {});
-      const extra = await addOption(tx, cfg.tenantId, modified, "Extra");
+      const extra = await addOption(tx, modified, "Extra");
       const tableId = await makeTable(tx, cfg);
       const { tabId } = await openTab(tx, cfg, { tableId });
 
@@ -3921,8 +3905,8 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
 
       // A TAB at a known-labelled table: dining_tables.tab_id back-points at the order.
       const { rows } = await tx.execute<{ id: string }>(sql`
-        insert into dining_tables (tenant_id, location_id, label)
-        values (${cfg.tenantId}, ${cfg.locationId}, 'Mesa 5') returning id`);
+        insert into dining_tables (location_id, label)
+        values (${cfg.locationId}, 'Mesa 5') returning id`);
       const tableId = rows[0]!.id;
       const { tabId } = await openTab(tx, cfg, { tableId });
       await addTabRound(tx, cfg, tabId, [line(cafe)]);
@@ -4175,16 +4159,10 @@ describe("voidTabLine modifier cascade (FIX 2)", () => {
   /** Attach a maxSelect≥2 option group whose item allows ×2 to `productId`, returning the first item's
    *  id. A group that ACCEPTS a tally of two AND an item cap of two, so a doubled selection now SUMS to
    *  a per-option quantity of 2 (per-option quantity) rather than being dropped, and is valid. */
-  async function addMultiOption(
-    tx: Transaction,
-    tenantId: TillConfig["tenantId"],
-    productId: string,
-    name: string,
-  ): Promise<string> {
+  async function addMultiOption(tx: Transaction, productId: string, name: string): Promise<string> {
     const [group] = await tx
       .insert(optionGroups)
       .values({
-        tenantId,
         name: { [LOCALE]: `${name} group` },
         minSelect: 0,
         maxSelect: 2,
@@ -4195,7 +4173,6 @@ describe("voidTabLine modifier cascade (FIX 2)", () => {
     const [item] = await tx
       .insert(optionGroupItems)
       .values({
-        tenantId,
         groupId: group!.id,
         name: { [LOCALE]: name },
         priceDelta: "0.50",
@@ -4205,7 +4182,6 @@ describe("voidTabLine modifier cascade (FIX 2)", () => {
       })
       .returning({ id: optionGroupItems.id });
     await tx.insert(productOptionGroups).values({
-      tenantId,
       productId,
       groupId: group!.id,
       sort: 0,
@@ -4227,16 +4203,10 @@ describe("voidTabLine modifier cascade (FIX 2)", () => {
     return id;
   }
 
-  async function addOption(
-    tx: Transaction,
-    tenantId: TillConfig["tenantId"],
-    productId: string,
-    name: string,
-  ): Promise<string> {
+  async function addOption(tx: Transaction, productId: string, name: string): Promise<string> {
     const [group] = await tx
       .insert(optionGroups)
       .values({
-        tenantId,
         name: { [LOCALE]: `${name} group` },
         minSelect: 0,
         maxSelect: 1,
@@ -4247,7 +4217,6 @@ describe("voidTabLine modifier cascade (FIX 2)", () => {
     const [item] = await tx
       .insert(optionGroupItems)
       .values({
-        tenantId,
         groupId: group!.id,
         name: { [LOCALE]: name },
         priceDelta: "0.50",
@@ -4256,7 +4225,6 @@ describe("voidTabLine modifier cascade (FIX 2)", () => {
       })
       .returning({ id: optionGroupItems.id });
     await tx.insert(productOptionGroups).values({
-      tenantId,
       productId,
       groupId: group!.id,
       sort: 0,
@@ -4268,7 +4236,7 @@ describe("voidTabLine modifier cascade (FIX 2)", () => {
     const { cfg, cafeId, aguaId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       await asAppUser(tx);
-      const bacon = await addOption(tx, cfg.tenantId, cafeId, "Bacon");
+      const bacon = await addOption(tx, cafeId, "Bacon");
       const tableId = await makeTable(tx, cfg);
       // line 1 = café (parent), line 2 = bacon (child), line 3 = agua (plain).
       const tabId = await openModifierTab(tx, cfg, tableId, [
@@ -4295,7 +4263,7 @@ describe("voidTabLine modifier cascade (FIX 2)", () => {
     const { cfg, cafeId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       await asAppUser(tx);
-      const bacon = await addOption(tx, cfg.tenantId, cafeId, "Bacon");
+      const bacon = await addOption(tx, cafeId, "Bacon");
       const tableId = await makeTable(tx, cfg);
       // line 1 = café (parent), line 2 = bacon (child).
       const tabId = await openModifierTab(tx, cfg, tableId, [
@@ -4320,7 +4288,7 @@ describe("voidTabLine modifier cascade (FIX 2)", () => {
     const { cfg, cafeId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       await asAppUser(tx);
-      const bacon = await addMultiOption(tx, cfg.tenantId, cafeId, "Bacon"); // maxSelect 2, item maxQuantity 2
+      const bacon = await addMultiOption(tx, cafeId, "Bacon"); // maxSelect 2, item maxQuantity 2
       const id = randomUUID();
       await createOpenOrder(
         tx,
@@ -4365,7 +4333,6 @@ describe("priceOrderLines per-option quantity (resolve loop)", () => {
    *  max_quantity; returns the single item's id. `priceDelta` is 0.50 reduced, like the other helpers. */
   async function addQtyOption(
     tx: Transaction,
-    tenantId: TillConfig["tenantId"],
     productId: string,
     name: string,
     opts: {
@@ -4378,7 +4345,6 @@ describe("priceOrderLines per-option quantity (resolve loop)", () => {
     const [group] = await tx
       .insert(optionGroups)
       .values({
-        tenantId,
         name: { [LOCALE]: `${name} group` },
         minSelect: opts.minSelect ?? 0,
         maxSelect: opts.maxSelect ?? 1,
@@ -4389,7 +4355,6 @@ describe("priceOrderLines per-option quantity (resolve loop)", () => {
     const [item] = await tx
       .insert(optionGroupItems)
       .values({
-        tenantId,
         groupId: group!.id,
         name: { [LOCALE]: name },
         priceDelta: "0.50",
@@ -4399,7 +4364,6 @@ describe("priceOrderLines per-option quantity (resolve loop)", () => {
       })
       .returning({ id: optionGroupItems.id });
     await tx.insert(productOptionGroups).values({
-      tenantId,
       productId,
       groupId: group!.id,
       sort: 0,
@@ -4411,14 +4375,12 @@ describe("priceOrderLines per-option quantity (resolve loop)", () => {
    *  returns both item ids. For the max_select-tally cases with distinct picks. */
   async function addTwoItemGroup(
     tx: Transaction,
-    tenantId: TillConfig["tenantId"],
     productId: string,
     opts: { maxSelect?: number; maxQuantity?: number } = {},
   ): Promise<[string, string]> {
     const [group] = await tx
       .insert(optionGroups)
       .values({
-        tenantId,
         name: { [LOCALE]: "Extras group" },
         minSelect: 0,
         maxSelect: opts.maxSelect ?? 2,
@@ -4430,7 +4392,6 @@ describe("priceOrderLines per-option quantity (resolve loop)", () => {
       .insert(optionGroupItems)
       .values([
         {
-          tenantId,
           groupId: group!.id,
           name: { [LOCALE]: "Uno" },
           priceDelta: "0.50",
@@ -4439,7 +4400,6 @@ describe("priceOrderLines per-option quantity (resolve loop)", () => {
           sort: 0,
         },
         {
-          tenantId,
           groupId: group!.id,
           name: { [LOCALE]: "Dos" },
           priceDelta: "0.50",
@@ -4450,7 +4410,6 @@ describe("priceOrderLines per-option quantity (resolve loop)", () => {
       ])
       .returning({ id: optionGroupItems.id });
     await tx.insert(productOptionGroups).values({
-      tenantId,
       productId,
       groupId: group!.id,
       sort: 0,
@@ -4462,7 +4421,7 @@ describe("priceOrderLines per-option quantity (resolve loop)", () => {
     const { cfg, cafeId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       await asAppUser(tx);
-      const shot = await addQtyOption(tx, cfg.tenantId, cafeId, "Extra shot", {
+      const shot = await addQtyOption(tx, cafeId, "Extra shot", {
         maxSelect: 5,
         maxQuantity: 5,
       });
@@ -4510,7 +4469,7 @@ describe("priceOrderLines per-option quantity (resolve loop)", () => {
       await asAppUser(tx);
       // Cap 2, but max_select 5 so a tally of 3 does NOT trip above_max first — the quantity cap is what
       // must reject it.
-      const shot = await addQtyOption(tx, cfg.tenantId, cafeId, "Extra shot", {
+      const shot = await addQtyOption(tx, cafeId, "Extra shot", {
         maxSelect: 5,
         maxQuantity: 2,
       });
@@ -4539,7 +4498,7 @@ describe("priceOrderLines per-option quantity (resolve loop)", () => {
     const { cfg, cafeId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       await asAppUser(tx);
-      const shot = await addQtyOption(tx, cfg.tenantId, cafeId, "Extra shot", {
+      const shot = await addQtyOption(tx, cafeId, "Extra shot", {
         maxSelect: 5,
         maxQuantity: 5,
       });
@@ -4568,7 +4527,7 @@ describe("priceOrderLines per-option quantity (resolve loop)", () => {
     const { cfg, cafeId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       await asAppUser(tx);
-      const shot = await addQtyOption(tx, cfg.tenantId, cafeId, "Extra shot", {
+      const shot = await addQtyOption(tx, cafeId, "Extra shot", {
         maxSelect: 5,
         maxQuantity: 5,
       });
@@ -4597,7 +4556,7 @@ describe("priceOrderLines per-option quantity (resolve loop)", () => {
     const { cfg, cafeId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       await asAppUser(tx);
-      const shot = await addQtyOption(tx, cfg.tenantId, cafeId, "Extra shot", {
+      const shot = await addQtyOption(tx, cafeId, "Extra shot", {
         maxSelect: 5,
         maxQuantity: 5,
       });
@@ -4636,7 +4595,7 @@ describe("priceOrderLines per-option quantity (resolve loop)", () => {
       await asAppUser(tx);
       // max_quantity 5 so the ×3 passes the per-option cap; the group's max_select 2 is what the summed
       // tally (3) must exceed — proving the tally is the SUM of quantities, not the distinct-item count.
-      const shot = await addQtyOption(tx, cfg.tenantId, cafeId, "Extra shot", {
+      const shot = await addQtyOption(tx, cafeId, "Extra shot", {
         maxSelect: 2,
         maxQuantity: 5,
       });
@@ -4665,7 +4624,7 @@ describe("priceOrderLines per-option quantity (resolve loop)", () => {
     const { cfg, cafeId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       await asAppUser(tx);
-      const [uno, dos] = await addTwoItemGroup(tx, cfg.tenantId, cafeId, {
+      const [uno, dos] = await addTwoItemGroup(tx, cafeId, {
         maxSelect: 2,
         maxQuantity: 5,
       });
@@ -4722,7 +4681,7 @@ describe("priceOrderLines per-option quantity (resolve loop)", () => {
     const { cfg, cafeId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       await asAppUser(tx);
-      const shot = await addQtyOption(tx, cfg.tenantId, cafeId, "Extra shot", {
+      const shot = await addQtyOption(tx, cafeId, "Extra shot", {
         maxSelect: 1,
         maxQuantity: 1,
       });
@@ -4800,8 +4759,8 @@ describe("priceOrderLines course-override validation (KDS-2 A1)", () => {
       // working_order_lines.course_id would ACCEPT it (same tenant), but requireLiveCourse is
       // location-scoped, so the cross-venue override is refused — the exact silent-accept bug A1 closes.
       const loc2 = await tx.execute<{ id: string }>(sql`
-        insert into locations (tenant_id, name, invoice_locales, operation_description)
-        values (${cfg.tenantId}, 'Barra 2', array[${LOCALE}], 'Venta en establecimiento') returning id`);
+        insert into locations (name, invoice_locales, operation_description)
+        values ('Barra 2', array[${LOCALE}], 'Venta en establecimiento') returning id`);
       const cfg2: TillConfig = { ...cfg, locationId: brandLocationId(loc2.rows[0]!.id) };
       const foreign = await createCourse(tx, cfg2, { name: "Entrantes", displayOrder: 0 });
       await expect(
@@ -4855,7 +4814,7 @@ it("shows the dish's own allergens and diet for a nonprice option selection (no 
   await withTransaction(db, async (tx) => {
     await asAppUser(tx);
     const station = await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
-    const product = await createProduct(tx, cfg.tenantId, {
+    const product = await createProduct(tx, {
       catalogueId,
       categoryId: null,
       name: "Coffee",
@@ -4865,7 +4824,7 @@ it("shows the dish's own allergens and diet for a nonprice option selection (no 
       allergens: { milk: { presence: "contains" } },
       dietaryDeclarations: ["vegan"],
     });
-    const choiceId = await addOption(tx, cfg.tenantId, product.id, "Oat", {
+    const choiceId = await addOption(tx, product.id, "Oat", {
       suitableFor: [],
     });
     const { id: orderId } = await placeOrderWith(tx, cfg, [
@@ -4886,7 +4845,7 @@ it("shows the dish's own allergens and diet for a nonprice option selection (no 
       .where(eq(workingOrderLines.workingOrderId, orderId));
     const own = { allergens: { milk: { presence: "contains" } }, pending: false };
     const ownDiet = { vegan: "yes", vegetarian: "yes", contains: [] };
-    const queue = await listStationQueue(tx, cfg, station.id);
+    const queue = await listStationQueue(tx, station.id);
     expect(queue[0]!.items[0]!.asServed).toEqual(own);
     expect(queue[0]!.items[0]!.modifierSnapshots).toEqual(modifierSnapshots);
     expect(queue[0]!.items[0]!.asServedDiet).toEqual(ownDiet);
@@ -4925,10 +4884,9 @@ describe("canonical modifier selections", () => {
             choices: [{ id: choiceId, name: { es: "Bacon" }, priceDelta: "1.00", maxQuantity: 2 }],
           },
         ])
-          definitions.push(await catalogue.createModifier(tx, cfg.tenantId, input, "es"));
+          definitions.push(await catalogue.createModifier(tx, input, "es"));
         await catalogue.setProductOptionGroups(
           tx,
-          cfg.tenantId,
           cafeId,
           definitions.map((d) => d.id),
         );
@@ -4996,7 +4954,6 @@ describe("canonical modifier selections", () => {
         await asAppUser(tx);
         await catalogue.updateModifier(
           tx,
-          cfg.tenantId,
           definitions[3]!.id,
           {
             type: "extras",
@@ -5014,11 +4971,10 @@ describe("canonical modifier selections", () => {
           "es",
         );
         if (source === "product") {
-          await catalogue.setProductOptionGroups(tx, cfg.tenantId, cafeId, []);
+          await catalogue.setProductOptionGroups(tx, cafeId, []);
           await catalogue.setMenuItemOptionGroups(tx, cafeOfferId, []);
           await catalogue.updateModifier(
             tx,
-            cfg.tenantId,
             definitions[0]!.id,
             {
               type: "options",
@@ -5031,7 +4987,6 @@ describe("canonical modifier selections", () => {
           await expect(
             catalogue.updateModifier(
               tx,
-              cfg.tenantId,
               definitions[3]!.id,
               {
                 type: "extras",
@@ -5080,7 +5035,6 @@ it("does not let an omitted canonical payload waive an empty required menu extra
     await asAppUser(tx);
     const modifier = await catalogue.createModifier(
       tx,
-      cfg.tenantId,
       {
         type: "extras",
         name: { es: "Extras" },
@@ -5089,7 +5043,7 @@ it("does not let an omitted canonical payload waive an empty required menu extra
       },
       "es",
     );
-    await catalogue.setProductOptionGroups(tx, cfg.tenantId, cafeId, [modifier.id]);
+    await catalogue.setProductOptionGroups(tx, cafeId, [modifier.id]);
     await catalogue.setMenuItemOptionGroups(tx, cafeOfferId, [
       { groupId: modifier.id, options: [{ optionId: choiceId, priceDelta: "0.50" }] },
     ]);

@@ -1,4 +1,4 @@
-import type { Decimal, NodeId, TenantId, TillId } from "@waitron/shared";
+import type { Decimal, NodeId, TillId } from "@waitron/shared";
 import type { DailyClose } from "./types.js";
 
 /**
@@ -63,7 +63,6 @@ export interface CashCountInput {
  * uuid string — the person schema is a later slice, and the close must not depend on it).
  */
 export interface RecordDailyCloseInput {
-  tenantId: TenantId;
   nodeId: NodeId;
   /** Local calendar date of the business day, "YYYY-MM-DD". */
   businessDay: string;
@@ -83,7 +82,6 @@ export interface RecordDailyCloseInput {
  */
 export interface DailyCloseRecord {
   id: string;
-  tenantId: TenantId;
   nodeId: NodeId;
   businessDay: string;
   /** 1-based chain position within the (tenant, node) chain. */

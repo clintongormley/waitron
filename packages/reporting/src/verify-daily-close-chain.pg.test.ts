@@ -27,7 +27,6 @@ function record(businessDay: string, cashCounts: CashCountInput[]): Promise<Dail
   return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     return recordDailyClose(tx, {
-      tenantId: venue.tenantId,
       nodeId: venue.nodeId,
       businessDay,
       timeZone: "Europe/Madrid",
@@ -43,7 +42,7 @@ function record(businessDay: string, cashCounts: CashCountInput[]): Promise<Dail
 function verify() {
   return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
-    return verifyDailyCloseChain(tx, venue.tenantId, venue.nodeId);
+    return verifyDailyCloseChain(tx, venue.nodeId);
   });
 }
 

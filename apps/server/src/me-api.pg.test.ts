@@ -25,14 +25,13 @@ const noopLog: Logger = () => {};
 
 describe("your profile as app_user", () => {
   it("lets a staff session edit only itself", async () => {
-    const venue = await setupVenue();
-    const personId = await seedPerson(venue.tenantId, "Profile owner");
-    const colleagueId = await seedPerson(venue.tenantId, "Colleague");
+    const personId = await seedPerson("Profile owner");
+    const colleagueId = await seedPerson("Colleague");
     await suite.admin.execute(
       sql`update persons set email='profile@example.com', password_hash=${hashPassword("current password")} where id=${personId}`,
     );
-    const cookie = await cookieFor(venue.tenantId, personId);
-    const app = mountApp(venue.tenantId);
+    const cookie = await cookieFor(personId);
+    const app = mountApp();
     const get = await app.request("/management-api/session/me/profile", { headers: { cookie } });
     expect(get.status).toBe(200);
     expect(await get.json()).toEqual({
@@ -84,8 +83,8 @@ describe("your profile as app_user", () => {
     });
     expect(changed.status).toBe(204);
     const keys = await suite.admin.execute<{ id: string; person_id: string }>(sql`
-      insert into webauthn_credentials (tenant_id,person_id,credential_id,public_key)
-      values (${venue.tenantId},${personId},'profile-own','public'),(${venue.tenantId},${colleagueId},'profile-other','public')
+      insert into webauthn_credentials (person_id,credential_id,public_key)
+      values (${personId},'profile-own','public'),(${colleagueId},'profile-other','public')
       returning id,person_id`);
     const ownKey = keys.rows.find((key) => key.person_id === personId)!.id;
     const otherKey = keys.rows.find((key) => key.person_id === colleagueId)!.id;
@@ -98,7 +97,7 @@ describe("your profile as app_user", () => {
     expect((await remove(otherKey)).status).toBe(404);
     expect((await remove(ownKey)).status).toBe(204);
     const remaining = await suite.admin.execute<{ id: string }>(
-      sql`select id from webauthn_credentials where tenant_id=${venue.tenantId}`,
+      sql`select id from webauthn_credentials `,
     );
     expect(remaining.rows).toEqual([{ id: otherKey }]);
   });
@@ -147,22 +146,22 @@ async function setupVenue(): Promise<VenueResult> {
 }
 
 /** Seed a staff person under `tenantId` (on the app role, which holds INSERT on persons). Returns its id. */
-async function seedPerson(tenantId: string, name: string): Promise<string> {
+async function seedPerson(name: string): Promise<string> {
   return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const r = await tx.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, role)
-      values (${tenantId}, ${name}, ${hashPin("0000")}, 'staff') returning id`);
+      insert into persons (display_name, pin_hash, role)
+      values (${name}, ${hashPin("0000")}, 'staff') returning id`);
     return r.rows[0]!.id;
   });
 }
 
 /** Open a real management session (through `startManagementSession` on the app role) and return the
  * cookie header — the credential every me route gates on. */
-async function cookieFor(tenantId: string, personId: string): Promise<string> {
+async function cookieFor(personId: string): Promise<string> {
   const session = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
-    return startManagementSession(tx, { tenantId, personId });
+    return startManagementSession(tx, { personId });
   });
   return `${MANAGEMENT_COOKIE}=${session.id}`;
 }
@@ -180,14 +179,14 @@ async function seedShift(
   return r.rows[0]!.id;
 }
 
-function mountApp(tenantId: string): Hono {
+function mountApp(): Hono {
   const app = new Hono();
   // This fixture does not assert sync attribution, so use the default all-zero node id.
   mountMeApi(
     app,
     {
       db: suite.admin,
-      cfg: { tenantId, nodeId: "11111111-1111-4111-8111-111111111111" },
+      cfg: { nodeId: "11111111-1111-4111-8111-111111111111" },
       venueLocale: "es-ES",
       modules: [],
     },
@@ -223,16 +222,16 @@ describe("Me API over real Postgres (the identity property: the session's person
     // the offered shift is P's, so `requestSwap`'s ownership guard 403s where the session-based route
     // 201s (`expected 403 to be 201`). Restored, green. Run as the non-superuser app_user.
     const venue = await setupVenue();
-    const p = await seedPerson(venue.tenantId, "P");
-    const q = await seedPerson(venue.tenantId, "Q");
+    const p = await seedPerson("P");
+    const q = await seedPerson("Q");
     const pShift = await seedShift(
       p,
       venue.locationId,
       "2026-05-04T09:00:00Z",
       "2026-05-04T17:00:00Z",
     );
-    const app = mountApp(venue.tenantId);
-    const cookieP = await cookieFor(venue.tenantId, p);
+    const app = mountApp();
+    const cookieP = await cookieFor(p);
 
     const res = await send(app, "POST", "/management-api/me/schedule/swaps", cookieP, {
       fromShiftId: pShift,
@@ -254,10 +253,9 @@ describe("Me API over real Postgres (the identity property: the session's person
     // Same identity property as the swap above, on the route that retires the sign-in passkey offer.
     // P is signed in; the body hostilely names Q. The stamp must land on P and never on Q — a stamp on
     // Q would silently cancel an offer Q has not yet seen. Run as the non-superuser app_user.
-    const venue = await setupVenue();
-    const p = await seedPerson(venue.tenantId, "P");
-    const q = await seedPerson(venue.tenantId, "Q");
-    const app = mountApp(venue.tenantId);
+    const p = await seedPerson("P");
+    const q = await seedPerson("Q");
+    const app = mountApp();
 
     const anonymous = await send(app, "POST", "/management-api/session/me/passkey-offer", null);
     expect(anonymous.status).toBe(401);
@@ -269,7 +267,7 @@ describe("Me API over real Postgres (the identity property: the session's person
       app,
       "POST",
       "/management-api/session/me/passkey-offer",
-      await cookieFor(venue.tenantId, p),
+      await cookieFor(p),
       // Hostile: this must be IGNORED — identity comes from the session, not the body.
       { personId: q },
     );
@@ -288,8 +286,8 @@ describe("Me API over real Postgres (the identity property: the session's person
 
   it("whoami and the reads scope to the session's person — P sees only P's shifts, never Q's", async () => {
     const venue = await setupVenue();
-    const p = await seedPerson(venue.tenantId, "P");
-    const q = await seedPerson(venue.tenantId, "Q");
+    const p = await seedPerson("P");
+    const q = await seedPerson("Q");
     const pShift = await seedShift(
       p,
       venue.locationId,
@@ -297,8 +295,8 @@ describe("Me API over real Postgres (the identity property: the session's person
       "2026-06-01T17:00:00Z",
     );
     await seedShift(q, venue.locationId, "2026-06-01T10:00:00Z", "2026-06-01T18:00:00Z");
-    const app = mountApp(venue.tenantId);
-    const cookieP = await cookieFor(venue.tenantId, p);
+    const app = mountApp();
+    const cookieP = await cookieFor(p);
 
     // whoami echoes the session's own person + role + locale, never runs authorizeManager (a staff person
     // holds an empty permission set), so P's staff session resolves to `{ personId: P, role: "staff" }`.

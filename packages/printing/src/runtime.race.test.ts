@@ -23,16 +23,15 @@ const suite = useTemplateDb({ template: "core" });
 
 async function setup(): Promise<PrintConfig> {
   const admin = suite.admin;
-  const tenantId = await seedTenant(admin);
+  await seedTenant(admin);
   const { rows } = await admin.execute<{ id: string }>(sql`
     insert into locations (name, invoice_locales, operation_description) values ('Bar', array['es-ES'], 'Sale on premises') returning id`);
-  return { tenantId, locationId: rows[0]!.id };
+  return { locationId: rows[0]!.id };
 }
 
 /** Run `fn` as the real deployment role — a tenant-scoped tx that switches to `app_user` first, the
  * shape the Task-6 route wraps every runtime call in. */
-function asApp<T>(db: Database, cfg: PrintConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  void cfg;
+function asApp<T>(db: Database, fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTransaction(db, async (tx) => {
     await asAppUser(tx);
     return fn(tx);
@@ -85,14 +84,14 @@ describe("double-pull race (real Postgres)", () => {
       await suite.admin.execute<{ id: string }>(sql`
         insert into print_agents (location_id, name, token_hash) values (${cfg.locationId}, 'Kitchen', 'scrypt$fixture') returning id`)
     ).rows[0]!.id;
-    const printerId = await asApp(suite.admin, cfg, (tx) =>
+    const printerId = await asApp(suite.admin, (tx) =>
       createPrinter(tx, cfg, {
         name: "Kitchen",
         transport: "network_tcp",
         host: "10.0.0.9",
       }).then((p) => p.id),
     );
-    const { jobId } = await asApp(suite.admin, cfg, (tx) =>
+    const { jobId } = await asApp(suite.admin, (tx) =>
       enqueuePrintJob(tx, cfg, printerId, new Uint8Array([0x41])),
     );
 
@@ -110,10 +109,9 @@ describe("double-pull race (real Postgres)", () => {
       const sinkB = new FakeSink();
 
       // Agent A claims the job and PARKS mid-push, holding its row lock (tx still open).
-      const aDone = asApp(connA, cfg, (tx) =>
+      const aDone = asApp(connA, (tx) =>
         runAgentOnce({
           tx,
-          cfg,
           agentId,
           locationId: cfg.locationId,
           visibleKeys: [],
@@ -126,10 +124,9 @@ describe("double-pull race (real Postgres)", () => {
       // it settles quickly. WITHOUT the lock (proof-by-deletion), B blocks on A's row and shows up as
       // a lock waiter. Release A the moment EITHER is observed, so neither variant deadlocks.
       let bSettled = false;
-      const bDone = asApp(connB, cfg, (tx) =>
+      const bDone = asApp(connB, (tx) =>
         runAgentOnce({
           tx,
-          cfg,
           agentId,
           locationId: cfg.locationId,
           visibleKeys: [],
@@ -176,13 +173,13 @@ describe("double-pull race (real Postgres)", () => {
         return rows[0]!.id;
       }),
     );
-    const printerId = await asApp(suite.admin, cfg, (tx) =>
+    const printerId = await asApp(suite.admin, (tx) =>
       createPrinter(tx, cfg, { name: "Kitchen", transport: "network_tcp", host: "10.0.0.9" }).then(
         (p) => p.id,
       ),
     );
     const N = 8;
-    await asApp(suite.admin, cfg, async (tx) => {
+    await asApp(suite.admin, async (tx) => {
       for (let i = 0; i < N; i++) await enqueuePrintJob(tx, cfg, printerId, new Uint8Array([i]));
     });
 
@@ -197,7 +194,7 @@ describe("double-pull race (real Postgres)", () => {
       const aClaimed = new Promise<ClaimedJob[]>((resolve) => (aClaimedResolve = resolve));
       const aDone = withTransaction(connA, async (tx) => {
         await asAppUser(tx);
-        const claimed = await claimPrintJobs(tx, cfg, agentA, {
+        const claimed = await claimPrintJobs(tx, agentA, {
           locationId: cfg.locationId,
           visibleKeys: [],
         });
@@ -215,7 +212,7 @@ describe("double-pull race (real Postgres)", () => {
       let bSettled = false;
       const bDone = withTransaction(connB, async (tx) => {
         await asAppUser(tx);
-        return claimPrintJobs(tx, cfg, agentB, { locationId: cfg.locationId, visibleKeys: [] });
+        return claimPrintJobs(tx, agentB, { locationId: cfg.locationId, visibleKeys: [] });
       }).then((r) => {
         bSettled = true;
         return r;

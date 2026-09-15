@@ -18,7 +18,7 @@
 // Re-running this against an already-registered node is how a REIMAGED node is re-provisioned. It
 // closes the previous chain either way, so do not run it to "check" anything.
 import { createPostgresDb } from "@waitron/db";
-import { nodeId as brandNodeId, tenantId as brandTenantId } from "@waitron/shared";
+import { nodeId as brandNodeId } from "@waitron/shared";
 import { ALL_MODULES } from "../src/modules.js";
 import { provisionNode } from "../src/provision-till.js";
 
@@ -35,7 +35,7 @@ async function main(): Promise<void> {
   if (args.length !== 2) {
     usageError(`expected 2 arguments, got ${args.length}`);
   }
-  const [tenantArg, nodeArg] = args;
+  const [nodeArg] = args;
 
   const databaseUrl = process.env.DATABASE_URL;
   if (databaseUrl === undefined || databaseUrl === "") {
@@ -44,11 +44,7 @@ async function main(): Promise<void> {
 
   const db = await createPostgresDb(databaseUrl);
   try {
-    const seeded = await provisionNode(
-      db,
-      { tenantId: brandTenantId(tenantArg), nodeId: brandNodeId(nodeArg) },
-      ALL_MODULES,
-    );
+    const seeded = await provisionNode(db, { nodeId: brandNodeId(nodeArg) }, ALL_MODULES);
 
     for (const s of seeded) console.log(`${s.module}: ${s.report}`);
   } finally {

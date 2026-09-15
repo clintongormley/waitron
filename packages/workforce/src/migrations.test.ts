@@ -4,7 +4,7 @@ import { CORE_MIGRATIONS, captureError, pgErrorCode, pgErrorMessage } from "@wai
 import { IDENTITY_MIGRATIONS, hashPin } from "@waitron/identity";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
+import { locationId as brandLocationId } from "@waitron/shared";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import {
   insertAbsence,
@@ -17,8 +17,6 @@ import {
   seedPerson,
 } from "../test/fixtures.js";
 
-let tenantId: string;
-
 const suite = usePgliteDb({
   resetPerTest: false,
   // Core first (shifts point at its `locations`, `tills` and `nodes`), then identity (persons —
@@ -26,7 +24,7 @@ const suite = usePgliteDb({
   // and nothing enforces it, so it is explicit here.
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS],
   setup: async (db) => {
-    tenantId = await seedTenant(db);
+    await seedTenant(db);
   },
 });
 
@@ -103,8 +101,8 @@ describe("the D1a time & attendance tables", () => {
     nodeId: string;
   }> {
     const personId = await seedPerson(suite.db, `d1a-${crypto.randomUUID()}`);
-    const locationId = await seedLocation(suite.db, tenantId);
-    const nodeId = await seedNode(suite.db, brandTenantId(tenantId), brandLocationId(locationId));
+    const locationId = await seedLocation(suite.db);
+    const nodeId = await seedNode(suite.db, brandLocationId(locationId));
     return { personId, locationId, nodeId };
   }
 
@@ -171,8 +169,8 @@ describe("the D1b correction columns", () => {
     entryId: string;
   }> {
     const personId = await seedPerson(suite.db, `d1b-${crypto.randomUUID()}`);
-    const locationId = await seedLocation(suite.db, tenantId);
-    const nodeId = await seedNode(suite.db, brandTenantId(tenantId), brandLocationId(locationId));
+    const locationId = await seedLocation(suite.db);
+    const nodeId = await seedNode(suite.db, brandLocationId(locationId));
     // Genesis chain columns (node_id, recorded_at + the Slice-4 columns, all NOT NULL) so this base
     // event is a valid position-1 entry; the D1b tests below append their (deliberately malformed)
     // correction at position 2 of the SAME (node, location), so the chain columns never collide on
@@ -264,7 +262,7 @@ describe("the D1b correction columns", () => {
 describe("the D2 scheduling tables (shifts + roster_versions)", () => {
   async function seedPersonAndLocation(): Promise<{ personId: string; locationId: string }> {
     const personId = await seedPerson(suite.db, `d2-${crypto.randomUUID()}`);
-    const locationId = await seedLocation(suite.db, tenantId);
+    const locationId = await seedLocation(suite.db);
     return { personId, locationId };
   }
 
@@ -391,7 +389,7 @@ describe("the D2 scheduling tables (shifts + roster_versions)", () => {
 describe("the D2.2 planning tables (absences, availability, shift_templates, shift_swaps)", () => {
   async function seedPersonAndLocation(): Promise<{ personId: string; locationId: string }> {
     const personId = await seedPerson(suite.db, `d22-${crypto.randomUUID()}`);
-    const locationId = await seedLocation(suite.db, tenantId);
+    const locationId = await seedLocation(suite.db);
     return { personId, locationId };
   }
 

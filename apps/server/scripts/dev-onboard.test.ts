@@ -31,7 +31,7 @@ describe("renderSetupEnvFile", () => {
       "WAITRON_ENV=dev",
       "WAITRON_HTTP_PORT=8080",
     ]);
-    // The load-bearing setup-mode property: the file writes NEITHER the five WAITRON_TILL_*_ID (whose
+    // The load-bearing setup-mode property: the file writes NEITHER the four WAITRON_TILL_*_ID (whose
     // absence is what makes boot.ts choose setup mode, config.till === undefined) NOR the credentials
     // key (setup mode loads no key ring). A stray one here would silently push the box into trading
     // mode or a half-configured boot (CLAUDE.md §5, slice 1b).
@@ -133,7 +133,7 @@ describe("devOnboard against real Postgres", () => {
     expect(config.httpPort).toBe(8080);
     // The load-bearing property that makes this SETUP mode: no venue is bound, so `tryLoadTillConfig`
     // returns undefined and boot.ts takes its setup branch. dev-setup's .env resolves config.till to
-    // the five ids (trading mode); dev-onboard's must NOT — that is the whole point of this script.
+    // the four ids (trading mode); dev-onboard's must NOT — that is the whole point of this script.
     expect(config.till).toBeUndefined();
   });
 
@@ -144,7 +144,7 @@ describe("devOnboard against real Postgres", () => {
     // box that holds a fiscal chain into a setup box is precisely what CLAUDE.md §5 forbids. Runs
     // LAST so the fresh-DB assertions above saw the venue-less state.
     await suite.admin.execute(
-      sql`insert into tenants (country, tax_id, legal_name) values ('ES', '00000000T', 'Onboard Refuse SL')`,
+      sql`insert into tenants (id, country, tax_id, legal_name) values (1, 'ES', '00000000T', 'Onboard Refuse SL')`,
     );
     await expect(devOnboard({ databaseUrl: suite.pg.uri, envPath, log: () => {} })).rejects.toThrow(
       /already holds a venue/i,

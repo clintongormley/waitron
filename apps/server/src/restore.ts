@@ -6,7 +6,6 @@ import {
   isAppError,
   locationId as brandLocationId,
   nodeId as brandNodeId,
-  tenantId as brandTenantId,
 } from "@waitron/shared";
 import {
   createPostgresDb,
@@ -43,7 +42,6 @@ const TRADING_ENV_FILE = "trading.env";
 /** Retains only the last replaced identity, overwriting any prior copy; boot reads only `trading.env`. */
 const REPLACED_SUFFIX = ".replaced";
 const IDENTITY_KEYS = [
-  "WAITRON_TILL_TENANT_ID",
   "WAITRON_TILL_NODE_ID",
   "WAITRON_TILL_LOCATION_ID",
   "WAITRON_TILL_SERIES_ID",
@@ -341,7 +339,6 @@ export function readArtifactIdentity(secretEntries: readonly ArchiveEntry[]): {
   }
   return {
     node: {
-      tenantId: brandTenantId(env.WAITRON_TILL_TENANT_ID!),
       locationId: brandLocationId(env.WAITRON_TILL_LOCATION_ID!),
       nodeId: brandNodeId(env.WAITRON_TILL_NODE_ID!),
     },
@@ -398,7 +395,6 @@ export async function runRestoreHooks(args: {
       .limit(1);
     if (known === undefined) {
       throw new AppError("restore.identity_unknown", {
-        tenantId: node.tenantId,
         nodeId: node.nodeId,
       });
     }
@@ -430,10 +426,10 @@ export async function runRestoreHooks(args: {
     const owner = replacement?.module ?? "core";
     try {
       if (replacement !== undefined) {
-        await retireNodeSeriesTx(tx, node.tenantId, node.nodeId);
-        await insertNodeSeriesTx(tx, node.tenantId, node.nodeId, replacement.series);
+        await retireNodeSeriesTx(tx, node.nodeId);
+        await insertNodeSeriesTx(tx, node.nodeId, replacement.series);
       }
-      const seriesId = await readStandardSeriesIdTx(tx, node.tenantId, node.nodeId);
+      const seriesId = await readStandardSeriesIdTx(tx, node.nodeId);
       return { seriesId, reports };
     } catch (err) {
       throw wrapHookError(owner, err);

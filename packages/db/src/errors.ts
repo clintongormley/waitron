@@ -53,7 +53,7 @@ declare module "@waitron/shared" {
      * translatable rather than a raw empty-result crash — the shape `sif.not_registered` follows.
      * `series.*` names the domain concept; never renamed once shipped.
      */
-    "series.no_standard_for_node": { tenantId: string; nodeId: string };
+    "series.no_standard_for_node": { nodeId: string };
     /**
      * A series code being opened for a node is one the node already holds — live or retired: the
      * natural key `(node_id, code)` covers both, so a retired code can never be reopened.

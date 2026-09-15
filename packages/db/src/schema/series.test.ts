@@ -1,4 +1,4 @@
-import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
+import { locationId as brandLocationId } from "@waitron/shared";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
@@ -20,7 +20,6 @@ afterEach(async () => {
   await suite.db.execute(sql`delete from tenants`);
 });
 
-const TENANT_A = "11111111-1111-4111-8111-111111111111";
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const TILL_A1 = "aaaaaaaa-1111-4000-8000-000000000001";
 const TILL_A2 = "aaaaaaaa-1111-4000-8000-000000000002";
@@ -41,7 +40,7 @@ async function rows<T>(db: Database, query: ReturnType<typeof sql>): Promise<T[]
 async function seed(db: Database): Promise<void> {
   await db
     .insert(tenants)
-    .values([{ id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
+    .values([{ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
   await db.insert(locations).values([
     {
       id: LOCATION_A,
@@ -54,8 +53,8 @@ async function seed(db: Database): Promise<void> {
     { id: TILL_A1, locationId: LOCATION_A, name: "A1" },
     { id: TILL_A2, locationId: LOCATION_A, name: "A2" },
   ]);
-  nodeA1 = await seedNode(db, brandTenantId(TENANT_A), brandLocationId(LOCATION_A));
-  nodeA2 = await seedNode(db, brandTenantId(TENANT_A), brandLocationId(LOCATION_A));
+  nodeA1 = await seedNode(db, brandLocationId(LOCATION_A));
+  nodeA2 = await seedNode(db, brandLocationId(LOCATION_A));
 }
 
 describe("invoice_series schema", () => {
@@ -139,7 +138,7 @@ describe("invoice_series schema", () => {
     // This supersedes Task 3's scaffolding assertion that the column was nullable. Raw SQL for the
     // inserts so a mis-migrated run fails on the real cause rather than a drizzle column-object error
     // — the same reason sales.test.ts's corrective-link tests use a raw insert.
-    const node = await seedNode(db, brandTenantId(TENANT_A), brandLocationId(LOCATION_A));
+    const node = await seedNode(db, brandLocationId(LOCATION_A));
     const meta = await rows<{ is_nullable: string }>(
       db,
       sql`select is_nullable from information_schema.columns

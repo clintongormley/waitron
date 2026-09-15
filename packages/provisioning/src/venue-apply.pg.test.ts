@@ -144,7 +144,7 @@ describe("applyVenue against a real container, as the non-superuser owner", () =
         sif: number;
       }>(sql`
         select
-          (select count(*) from tenants where id = ${result.tenantId})::int as tenants,
+          (select count(*) from tenants where id = 1)::int as tenants,
           (select count(*) from nodes where id = ${result.nodeId})::int as nodes,
           (select count(*) from invoice_series where node_id = ${result.nodeId})::int as series,
           (select count(*) from registro_sif where node_id = ${result.nodeId} and revocado_en is null)::int as sif`);
@@ -165,7 +165,7 @@ describe("applyVenue against a real container, as the non-superuser owner", () =
       }>(sql`
         select name, form_factor, canvas_id, capabilities, inactivity_timeout_seconds
         from device_profiles
-        where tenant_id = ${result.tenantId} order by name`);
+         order by name`);
       return { counts, node, sif, profiles };
     });
 

@@ -8,12 +8,7 @@ import type { LocationId } from "@waitron/shared";
 
 const suite = useTemplateDb({ template: "manifest" });
 
-function app<T>(
-  db: Database,
-  tenantId: string,
-  action: (tx: Transaction) => Promise<T>,
-): Promise<T> {
-  void tenantId;
+function app<T>(db: Database, action: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTransaction(db, async (tx) => {
     await asAppUser(tx);
     return action(tx);
@@ -35,15 +30,13 @@ async function blocked(pid: number) {
 }
 
 it("waits for a route attachment, then cascades the route away with the category", async () => {
-  const tenantId = await seedTenant(suite.admin);
+  await seedTenant(suite.admin);
   const location = await suite.admin.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Main', array['en'], 'Restaurant') returning id
+    insert into locations (name, invoice_locales, operation_description)
+    values ('Main', array['en'], 'Restaurant') returning id
   `);
   const locationId = location.rows[0]!.id as LocationId;
-  const category = await app(suite.admin, tenantId, (tx) =>
-    createCategory(tx, tenantId, { name: { en: "Drinks" } }),
-  );
+  const category = await app(suite.admin, (tx) => createCategory(tx, { name: { en: "Drinks" } }));
   const [attach, remove] = await Promise.all([suite.pg.connect(), suite.pg.connect()]);
   let release!: () => void;
   const wait = new Promise<void>((resolve) => {
@@ -58,7 +51,7 @@ it("waits for a route attachment, then cascades the route away with the category
   try {
     const pid = (await remove.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`))
       .rows[0]!.pid;
-    const adding = app(attach, tenantId, async (tx) => {
+    const adding = app(attach, async (tx) => {
       const route = await tx.execute<{ id: string }>(sql`
         insert into preparation_routes (location_id, category_id, no_preparation)
         values (${locationId}, ${category.id}, true) returning id
@@ -69,7 +62,7 @@ it("waits for a route attachment, then cascades the route away with the category
     });
     void adding.catch(() => ready());
     await attached;
-    const deleting = app(remove, tenantId, (tx) => deleteCategory(tx, category.id));
+    const deleting = app(remove, (tx) => deleteCategory(tx, category.id));
     settled = Promise.allSettled([adding, deleting]);
     try {
       await blocked(pid);
@@ -87,7 +80,7 @@ it("waits for a route attachment, then cascades the route away with the category
     `);
     expect(routes.rows).toEqual([]);
     const remaining = await suite.admin.execute<{ id: string }>(sql`
-      select id from categories where tenant_id = ${tenantId} and id = ${category.id}
+      select id from categories where id = ${category.id}
     `);
     expect(remaining.rows).toEqual([]);
   } finally {

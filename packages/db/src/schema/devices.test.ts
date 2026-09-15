@@ -11,8 +11,6 @@ import { tenants } from "./tenants.js";
 // Real Postgres (a template clone), not PGlite: every write below runs as the non-owner
 // `app_user`, the deployment role, which PGlite (every connection a superuser) cannot be. The
 // cases retain the role switch so the reads and writes still exercise app_user grants.
-const TENANT_A = "11111111-1111-4111-8111-111111111111";
-const TENANT_B = "22222222-2222-4222-8222-222222222222";
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const LOCATION_B = "bbbbbbbb-0000-4000-8000-000000000001";
 const STATION_A = "cccccccc-0000-4000-8000-000000000001";
@@ -35,10 +33,9 @@ describe("devices schema (columns, FKs, unique)", () => {
   // default), so rows seeded once would be gone for every case after the first — and then every
   // foreign key below would fire for the wrong reason (CLAUDE.md §4).
   beforeEach(async () => {
-    await suite.admin.insert(tenants).values([
-      { id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" },
-      { id: TENANT_B, country: "ES", taxId: "B11111111", legalName: "Fixture Tenant B" },
-    ]);
+    await suite.admin
+      .insert(tenants)
+      .values([{ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
     // Two locations and a kitchen_station in each: a station-bound device needs a real station,
     // which itself needs an owning location. operation_description is Spanish test DATA, not a
     // schema identifier, exactly as the sibling kitchen-stations test uses 'Hostelería'.
@@ -58,35 +55,23 @@ describe("devices schema (columns, FKs, unique)", () => {
       on conflict (id) do nothing`);
   });
 
-  function asApp<T>(tenant: string, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-    void tenant;
+  function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
     return withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return fn(tx);
     });
   }
 
-  // A device/code lives in its tenant's own venue. location_id is NOT NULL (a required scope), so
-  // every seed supplies one; the default is the tenant's own location, overridable to prove the FK.
-  function locationOf(tenant: string): string {
-    return tenant === TENANT_A ? LOCATION_A : LOCATION_B;
-  }
-
-  function profileOf(tenant: string): string {
-    return tenant === TENANT_A ? KDS_PROFILE_A : KDS_PROFILE_B;
-  }
-
   // Seed a kds-profile device bound to `station` (a kds device binds a station and no register — the
   // binding rule, tested in devices.trigger.pg.test.ts). `profile`/`location` default to a real
   // seeded row, overridable to point a foreign key at a row that does not exist.
   async function seedDevice(
-    tenant: string,
     station: string | null,
     label: string,
-    location: string = locationOf(tenant),
-    profile: string = profileOf(tenant),
+    location: string = LOCATION_A,
+    profile: string = KDS_PROFILE_A,
   ): Promise<string> {
-    return asApp(tenant, async (tx) => {
+    return asApp(async (tx) => {
       const r = await tx.execute<{ id: string }>(
         sql`insert into devices (location_id, device_profile_id, station_id, label, token_hash) values (${location}, ${profile}, ${station}, ${label}, ${TOKEN_HASH}) returning id`,
       );
@@ -97,13 +82,11 @@ describe("devices schema (columns, FKs, unique)", () => {
   // ---- devices ------------------------------------------------------------------------------
 
   it("devices: exposes every column through the Drizzle export, with the active default", async () => {
-    const id = await seedDevice(TENANT_A, STATION_A, "Kitchen screen");
-    await asApp(TENANT_A, (tx) =>
-      tx.execute(sql`update devices set last_seen_at = now() where id = ${id}`),
-    );
+    const id = await seedDevice(STATION_A, "Kitchen screen");
+    await asApp((tx) => tx.execute(sql`update devices set last_seen_at = now() where id = ${id}`));
     // Read back through the Drizzle `devices` export (not raw SQL) — exercises the produced table
     // export and its column mapping under the app role.
-    const [row] = await asApp(TENANT_A, (tx) =>
+    const [row] = await asApp((tx) =>
       tx
         .select()
         .from(devices)
@@ -120,11 +103,11 @@ describe("devices schema (columns, FKs, unique)", () => {
   it("devices: the station FK rejects a station_id that names no kitchen_stations row", async () => {
     // Positive control first, so the rejection below is the station FK biting and not the row being
     // malformed: a station that EXISTS is accepted.
-    await seedDevice(TENANT_A, STATION_B, "Real station");
+    await seedDevice(STATION_B, "Real station");
     // A never-seeded station → 23503 on devices_station_fk. The kds profile satisfies the binding
     // rule (station present, no register), and the location is a real one, so this is the only
     // constraint that can fire.
-    const e = await captureError(() => seedDevice(TENANT_A, GHOST_STATION, "Ghost station"));
+    const e = await captureError(() => seedDevice(GHOST_STATION, "Ghost station"));
     expect(pgErrorCode(e)).toBe("23503"); // foreign_key_violation on station_id
   });
 
@@ -132,9 +115,7 @@ describe("devices schema (columns, FKs, unique)", () => {
     // The direct FK the spec's `shifts` shape uses guarantees referential integrity to `locations`.
     // A never-seeded location → 23503. A valid station (STATION_A) is supplied so the binding rule
     // is satisfied and the ONLY violated constraint is the location FK.
-    const e = await captureError(() =>
-      seedDevice(TENANT_A, STATION_A, "Ghost location", GHOST_LOCATION),
-    );
+    const e = await captureError(() => seedDevice(STATION_A, "Ghost location", GHOST_LOCATION));
     expect(pgErrorCode(e)).toBe("23503"); // foreign_key_violation on location_id
   });
 });

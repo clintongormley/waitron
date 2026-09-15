@@ -42,7 +42,7 @@ import type { Logger } from "./logger.js";
 /**
  * Everything the mirror-bundle route needs. `appDb` authenticates + authorizes (as `app_user`
  * under `withTransaction` + `asAppUser`, the dashboard-login shape) AND reads the venue's tenant +
- * designated-node identity inside `assembleMirrorBundle`. `designated` are the five ids the primary
+ * designated-node identity inside `assembleMirrorBundle`. `designated` are the four ids the primary
  * till was provisioned with (`config.till.*`) — its `tenantId` scopes the auth transaction.
  * `stateDir` locates the box CA; `boxHostname` is the box's TLS SAN. `relayUrl` is the primary's own
  * relay coordinates (`loadTunnelConfig`), `undefined` when no tunnel is configured — the endpoint then
@@ -174,7 +174,6 @@ export function mountMirrorBundleApi(
       await withTransaction(deps.appDb, async (tx) => {
         await asAppUser(tx);
         const session = await loginManagerById(tx, {
-          tenantId: deps.designated.tenantId,
           personId,
           password,
           totp,
@@ -255,7 +254,6 @@ async function appendStandbyToChart(
     const document = await mintNextMembershipDocument(
       { db: deps.appDb, ring: deps.ring },
       {
-        tenantId: deps.designated.tenantId,
         heldDocument: held,
         nodes: withMember(held?.body.nodes ?? [], standbyNodeId, standbyContactUrl),
         signerNodeId: deps.designated.nodeId,

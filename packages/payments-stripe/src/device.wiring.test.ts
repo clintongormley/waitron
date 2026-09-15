@@ -5,7 +5,6 @@ import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import {
   decimal,
   seriesId as brandSeriesId,
-  tenantId as brandTenantId,
   nodeId as brandNodeId,
   tillId as brandTillId,
   workingOrderId as brandWorkingOrderId,
@@ -42,7 +41,6 @@ const steadyClock: TrustedClock = {
 
 function buildInput(s: SeededForSale, settledAt: Date): RecordSaleInput {
   return {
-    tenantId: brandTenantId(s.tenantId),
     tillId: brandTillId(s.tillId),
     nodeId: brandNodeId(s.nodeId),
     seriesId: brandSeriesId(s.seriesId),
@@ -81,7 +79,6 @@ describe("on-device offline accept -> recordSale -> associate -> forward decline
     const provider = new StripeOnDeviceProvider({
       client,
       db: pg.db,
-      tenantId: brandTenantId(s.tenantId),
       nodeId: "11111111-1111-4111-8111-111111111111",
     });
     const paid = await provider.collect({

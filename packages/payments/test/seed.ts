@@ -4,7 +4,6 @@ import type { Database } from "@waitron/db";
 import type { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 
 export interface Seeded {
-  tenantId: string;
   tillId: string;
   nodeId: string;
   workingOrderId: string;
@@ -31,9 +30,9 @@ export function freshNif(): string {
  * is what the fiscal chain/series/SIF identity is keyed on; it is
  * created at the same (tenant, location) as the till. Uses the fixture connection directly. */
 export async function seedWorkingOrder(db: Database, nif = "B00000000"): Promise<Seeded> {
-  const t = await db.execute<{ id: string }>(sql`
-    insert into tenants (country, tax_id, legal_name) values ('ES', ${nif}, 'Test SL') returning id`);
-  const tenantId = t.rows[0].id;
+  await db.execute(sql`
+    insert into tenants (id, country, tax_id, legal_name) values (1, 'ES', ${nif}, 'Test SL')
+    on conflict (id) do nothing`);
   const l = await db.execute<{ id: string }>(sql`
     insert into locations (name, invoice_locales, operation_description) values ('Counter', array['es'], 'Retail') returning id`);
   const locationId = l.rows[0].id;
@@ -46,7 +45,7 @@ export async function seedWorkingOrder(db: Database, nif = "B00000000"): Promise
   // order_number is NOT NULL since park & retrieve (@waitron/db Task 1); this seed just needs a value.
   const wo = await db.execute<{ id: string }>(sql`
     insert into working_orders (till_id, order_number) values (${tillId}, 1) returning id`);
-  return { tenantId, tillId, nodeId, workingOrderId: wo.rows[0].id };
+  return { tillId, nodeId, workingOrderId: wo.rows[0].id };
 }
 
 /**

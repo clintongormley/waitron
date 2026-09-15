@@ -255,7 +255,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
           // than leaving a pending row nobody can approve. `listDeviceProfiles` is name-ordered, so the
           // first `till` is the deterministic default. The request's own number is always the match, so
           // accept can only return `{ ok: true }` here — the mismatch arm is unreachable in dev.
-          const till = (await listDeviceProfiles(tx, deps.cfg.tenantId)).find(
+          const till = (await listDeviceProfiles(tx)).find(
             (profile) => profile.formFactor === "till",
           );
           if (till === undefined) throw new AppError("device_profile.not_found", {});
@@ -305,7 +305,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
   // or invalid cookie folds through `requireDevice` to `device.unauthorized` (401) — no handling here.
   app.get("/api/device/me", (c) =>
     run(c, log, async () => {
-      const device = await requireDevice({ db: deps.db, cfg: deps.cfg, devMode: deps.devMode }, c);
+      const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
       // Echo the binding verbatim, incl. the SP-A.2 §16 till/hardware fields so the client can
       // (SP-B) boot into its hardware. The canvas is no longer a device field — it resolves through the
       // device profile (`GET /api/till`) after the Task 10 cutover. All non-secret config — the reader's
@@ -329,7 +329,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
   // ── The bound station's queue (DEVICE-GUARDED) ───────────────────────────────────────────────────────
   app.get("/api/device/station", (c) =>
     run(c, log, async () => {
-      const device = await requireDevice({ db: deps.db, cfg: deps.cfg, devMode: deps.devMode }, c);
+      const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
       // A `kds_station` device is ALWAYS station-bound: accepting one required its station and
       // `requireLiveStation` confirmed it live (`resolveDeviceBinding`). But `requireDevice`
       // authenticates ANY active
@@ -343,7 +343,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       const stationId = device.stationId;
       const queue = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
-        return listStationQueue(tx, deps.cfg, stationId);
+        return listStationQueue(tx, stationId);
       });
       return c.json({ station: { id: stationId, queue } });
     }),
@@ -359,7 +359,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
   // adds no protection here today; wiring it awaits KDS devices being provisioned with a kds profile.
   app.post("/api/device/ticket-items/:id/advance", (c) =>
     run(c, log, async () => {
-      const device = await requireDevice({ db: deps.db, cfg: deps.cfg, devMode: deps.devMode }, c);
+      const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
       const id = c.req.param("id");
       // A malformed id names no item exactly as an absent one does — screened to the SAME
       // `ticket.invalid_transition` the verb raises for an unknown item, never a `22P02` 500.
@@ -462,7 +462,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       const deviceProfileId = requireBodyUuid(body.deviceProfileId, "deviceProfileId");
       // A non-null target must be one of THIS tenant's own device profiles. Rather than
       // a read-then-write pre-check (which leaves a delete-between-check-and-update race surfacing a
-      // raw FK 500), let the composite FK `devices_device_profile_fk (tenant_id, device_profile_id)` be
+      // raw FK 500), let the composite FK `devices_device_profile_fk (device_profile_id)` be
       // the guard: tenant-isolated (a cross-tenant id looks for `(this_tenant, id)` and misses — never
       // binds, never leaks) AND atomic with the UPDATE (no window). A 23503 on it → `device.binding_invalid`
       // naming the field, the SAME code+shape the enrol path raises via the same `bindingFkField` helper.

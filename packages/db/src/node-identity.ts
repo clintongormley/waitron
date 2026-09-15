@@ -1,6 +1,5 @@
 import { eq } from "drizzle-orm";
 import type { TrustSet } from "@waitron/membership";
-import { tenantId as brandTenantId } from "@waitron/shared";
 import type { Database, Transaction } from "./client.js";
 import { nodes } from "./schema/nodes.js";
 import { withTransaction } from "./tenancy.js";
@@ -24,13 +23,7 @@ export async function setNodePublicKeyTx(
  * adopt proof); a caller that must stamp atomically alongside another write uses `setNodePublicKeyTx`
  * inside one shared `withTransaction` instead. Owner-role, per `setNodePublicKeyTx`.
  */
-export function setNodePublicKey(
-  db: Database,
-  tenantId: string,
-  nodeId: string,
-  publicKey: string,
-): Promise<void> {
-  void tenantId;
+export function setNodePublicKey(db: Database, nodeId: string, publicKey: string): Promise<void> {
   return withTransaction(db, (tx) => setNodePublicKeyTx(tx, nodeId, publicKey));
 }
 
@@ -40,9 +33,7 @@ export function setNodePublicKey(
  * (app_user holds SELECT on `nodes`). Boot reads this into `membershipTrustSet`: a fresh primary gets
  * `{ self }`; a cloud mirror gets `{ primary }` from the node row `adoptVenue` replicated.
  */
-export function readMembershipTrustSet(db: Database, tenantId: string): Promise<TrustSet> {
-  const tenant = brandTenantId(tenantId);
-  void tenant;
+export function readMembershipTrustSet(db: Database): Promise<TrustSet> {
   return withTransaction(db, async (tx) => {
     const rows = await tx.select({ id: nodes.id, publicKey: nodes.publicKey }).from(nodes);
     const trust: Record<string, string> = {};

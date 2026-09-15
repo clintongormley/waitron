@@ -12,7 +12,7 @@ import {
   startManagementSession,
 } from "@waitron/identity";
 import type { ModuleRouteContext } from "@waitron/module";
-import { locationId, tenantId } from "@waitron/shared";
+import { locationId } from "@waitron/shared";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { VENUE_SERVICE_PERMISSIONS } from "./permissions.js";
@@ -43,12 +43,10 @@ interface Fixture {
   stationId: string;
   menuId: string;
   categoryId: string;
-  tenantId: string;
 }
 
-async function fixture(existingTenantId?: string): Promise<Fixture> {
-  const rawTenantId = existingTenantId ?? (await seedTenant(db));
-  const scopedTenantId = tenantId(rawTenantId);
+async function fixture(): Promise<Fixture> {
+  await seedTenant(db);
   const location = await db.execute<{ id: string }>(sql`
     insert into locations (name, invoice_locales, operation_description) values ('Venue', array['en-GB'], 'Hospitality') returning id`);
   const scopedLocationId = locationId(location.rows[0]!.id);
@@ -59,8 +57,8 @@ async function fixture(existingTenantId?: string): Promise<Fixture> {
 
   const { menuId, categoryId, managerSessionId, staffSessionId } = await db.transaction(
     async (tx) => {
-      const menu = await createCatalogue(tx, scopedTenantId, { name: "Drinks" });
-      const category = await createCategory(tx, scopedTenantId, { name: { en: "Cocktails" } });
+      const menu = await createCatalogue(tx, { name: "Drinks" });
+      const category = await createCategory(tx, { name: { en: "Cocktails" } });
       const manager = await tx.execute<{ id: string }>(sql`
         insert into persons (display_name, pin_hash, role)
         values (${`Manager ${scopedLocationId}`}, ${hashPin("1234")}, 'manager') returning id`);
@@ -87,14 +85,13 @@ async function fixture(existingTenantId?: string): Promise<Fixture> {
     app,
     {
       db,
-      cfg: { tenantId: scopedTenantId, locationId: scopedLocationId },
+      cfg: { locationId: scopedLocationId },
       core: {} as ModuleRouteContext["core"],
     },
     noopLog,
   );
   return {
     app,
-    tenantId: rawTenantId,
     managerCookie: `${MANAGEMENT_COOKIE}=${managerSessionId}`,
     staffCookie: `${MANAGEMENT_COOKIE}=${staffSessionId}`,
     zoneId: zone.rows[0]!.id,
@@ -343,7 +340,7 @@ describe("venue service management routes", () => {
     // or references that live in `other`'s location (L2). (The cross-TENANT half of this probe was
     // dropped: with one tenant per database it asserts a property the schema no longer has.)
     const fx = await fixture();
-    const other = await fixture(fx.tenantId);
+    const other = await fixture();
     const department = (await (
       await send(
         other.app,
@@ -434,7 +431,7 @@ describe("venue service management routes", () => {
       })
     ).json()) as { id: string };
     const secondCategory = await db.transaction((tx) =>
-      createCategory(tx, tenantId(fx.tenantId), { name: { en: "Other" } }),
+      createCategory(tx, { name: { en: "Other" } }),
     );
     const route = (await (
       await send(fx.app, "POST", "/management-api/venue-service/routes", fx.managerCookie, {

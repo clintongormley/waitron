@@ -62,7 +62,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tenantId as brandTenantId,
   tillId as brandTillId,
 } from "@waitron/shared";
 import { deploymentEnvironment } from "../src/config.js";
@@ -156,7 +155,6 @@ async function main(): Promise<void> {
     // Caja 1 — the register the order is parked on. `seriesIds[0]` is the standard series (planVenue
     // emits it before the rectificative one).
     const caja1: TillConfig = {
-      tenantId: brandTenantId(venue.tenantId),
       tillId: brandTillId(venue.tillId),
       nodeId: brandNodeId(venue.nodeId),
       seriesId: brandSeriesId(venue.seriesIds[0]!),
@@ -175,8 +173,8 @@ async function main(): Promise<void> {
     const caja2TillId = randomUUID();
     await withTransaction(db, async (tx) => {
       await tx.execute(sql`
-        insert into tills (id, tenant_id, location_id, name)
-        values (${caja2TillId}, ${caja1.tenantId}, ${caja1.locationId}, 'Caja 2')`);
+        insert into tills (id, location_id, name)
+        values (${caja2TillId}, ${caja1.locationId}, 'Caja 2')`);
     });
     const caja2: TillConfig = { ...caja1, tillId: brandTillId(caja2TillId) };
 
@@ -186,10 +184,10 @@ async function main(): Promise<void> {
     // sale requests carry real product ids (the till never invents one).
     const available = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
-      const cat = await createCatalogue(tx, caja1.tenantId, { name: "Delicatessen" });
-      const comida = await createCategory(tx, caja1.tenantId, { name: { es: "Comida" } });
-      const bebidas = await createCategory(tx, caja1.tenantId, { name: { es: "Bebidas" } });
-      await createProduct(tx, caja1.tenantId, {
+      const cat = await createCatalogue(tx, { name: "Delicatessen" });
+      const comida = await createCategory(tx, { name: { es: "Comida" } });
+      const bebidas = await createCategory(tx, { name: { es: "Bebidas" } });
+      await createProduct(tx, {
         catalogueId: cat.id,
         categoryId: comida.id,
         name: "Jamón cortado",
@@ -197,7 +195,7 @@ async function main(): Promise<void> {
         unitPrice: "24.90", // €/kg, gross (VAT-inclusive), reduced (10%)
         vatClass: "reduced",
       });
-      await createProduct(tx, caja1.tenantId, {
+      await createProduct(tx, {
         catalogueId: cat.id,
         categoryId: bebidas.id,
         name: "Agua mineral",
@@ -273,9 +271,7 @@ async function main(): Promise<void> {
     });
 
     // CONFIRM THE CHAIN: both sales on this node verify as one intact huella chain.
-    const integrity = await withTransaction(db, (tx) =>
-      backend.checkIntegrity(tx, caja1.tenantId, caja1.nodeId),
-    );
+    const integrity = await withTransaction(db, (tx) => backend.checkIntegrity(tx, caja1.nodeId));
 
     const describe = (productId: string | null): string =>
       productId === null

@@ -58,11 +58,10 @@ vi.mock("undici", async (importOriginal) => {
   };
 });
 
-// The till's fiscal identity — the five WAITRON_TILL_*_ID that put boot into TRADING mode (which is
+// The till's fiscal identity — the four WAITRON_TILL_*_ID that put boot into TRADING mode (which is
 // what exposes the in-process promote method). Distinct per field. Seeded (tenant + location) in
 // `beforeAll` so boot's `readOrderFlow` / `readVenueLocale` reads resolve.
 const TILL_ENV = {
-  WAITRON_TILL_TENANT_ID: "11111111-1111-4111-8111-111111111111",
   WAITRON_TILL_TILL_ID: "22222222-2222-4222-8222-222222222222",
   WAITRON_TILL_NODE_ID: "33333333-3333-4333-8333-333333333333",
   WAITRON_TILL_SERIES_ID: "44444444-4444-4444-8444-444444444444",
@@ -125,26 +124,25 @@ const PROMOTE_RING = loadKeyRing({
 async function seedTillIdentity(admin: Database): Promise<void> {
   await admin.execute(sql`
     insert into tenants (id, country, tax_id, legal_name)
-    values (${TILL_ENV.WAITRON_TILL_TENANT_ID}, 'ES', '90111111H', 'Promote Till SL')
+    values (1, 'ES', '90111111H', 'Promote Till SL')
     on conflict do nothing`);
   await admin.execute(sql`
-    insert into locations (id, tenant_id, name, invoice_locales, operation_description)
-    values (${TILL_ENV.WAITRON_TILL_LOCATION_ID}, ${TILL_ENV.WAITRON_TILL_TENANT_ID}, 'Barra',
+    insert into locations (id, name, invoice_locales, operation_description)
+    values (${TILL_ENV.WAITRON_TILL_LOCATION_ID}, 'Barra',
             array['en']::text[], 'Hospitality')
     on conflict do nothing`);
   await admin.execute(sql`
-    insert into nodes (id, tenant_id, location_id, name)
-    values (${TILL_ENV.WAITRON_TILL_NODE_ID}, ${TILL_ENV.WAITRON_TILL_TENANT_ID},
+    insert into nodes (id, location_id, name)
+    values (${TILL_ENV.WAITRON_TILL_NODE_ID},
             ${TILL_ENV.WAITRON_TILL_LOCATION_ID}, 'Promote node')
     on conflict do nothing`);
   await admin.execute(sql`
-    insert into tills (id, tenant_id, location_id, name)
-    values (${TILL_ENV.WAITRON_TILL_TILL_ID}, ${TILL_ENV.WAITRON_TILL_TENANT_ID},
+    insert into tills (id, location_id, name)
+    values (${TILL_ENV.WAITRON_TILL_TILL_ID},
             ${TILL_ENV.WAITRON_TILL_LOCATION_ID}, 'Promote till')
     on conflict do nothing`);
   await establishNodeIdentity(
     { ownerDb: admin, ring: PROMOTE_RING },
-    TILL_ENV.WAITRON_TILL_TENANT_ID,
     TILL_ENV.WAITRON_TILL_NODE_ID,
   );
 }
@@ -216,11 +214,10 @@ async function waitForPass(state: { lastPassAt: Date | null }): Promise<void> {
  * so the drain ATTEMPTS the row (rather than skipping it for a missing credential) once this node
  * holds the singleton. Seeded against the SUPERUSER connection (as every setup here is).
  */
-async function seedFiscalWork(): Promise<{ registroIds: string[]; tenantId: string }> {
+async function seedFiscalWork(): Promise<{ registroIds: string[] }> {
   const seeded = await seedPendingEnvios(suite.admin, {
     count: 1,
     identity: {
-      tenantId: TILL_ENV.WAITRON_TILL_TENANT_ID,
       tillId: TILL_ENV.WAITRON_TILL_TILL_ID,
       nodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
       nif: "90111111H",
@@ -237,7 +234,7 @@ async function seedFiscalWork(): Promise<{ registroIds: string[]; tenantId: stri
       },
     }),
   );
-  return { registroIds: seeded.registroIds, tenantId: seeded.tenantId };
+  return { registroIds: seeded.registroIds };
 }
 
 /** Reads the seeded `envios` row's observable columns via the superuser connection. */
@@ -254,12 +251,9 @@ async function readEnvio(
  * `envios` (keyed by registro id) is what makes the tenant perpetually due; `incidents` (keyed by
  * tenant id — it carries no registro_id column, 0000_db_baseline.sql) is defensive against a failure
  * path that raises one, matching boot.test.ts's own drain-cleanup convention. */
-async function cleanupFiscalWork(seeded: {
-  registroIds: string[];
-  tenantId: string;
-}): Promise<void> {
+async function cleanupFiscalWork(seeded: { registroIds: string[] }): Promise<void> {
   await suite.admin.execute(sql`delete from envios where registro_id in ${seeded.registroIds}`);
-  await suite.admin.execute(sql`delete from incidents where tenant_id = ${seeded.tenantId}`);
+  await suite.admin.execute(sql`delete from incidents `);
 }
 
 // Short ticks so both the Phase A empty pass and the post-flip drain pass land inside the poll budget:
@@ -394,7 +388,6 @@ const mirrorSuite = useTemplateDb({ template: "manifest", resetPerTest: false })
 // is the generated standby's own id (filled in at seed time), and WAITRON_TILL_SERIES_ID boots as the
 // primary's INERT designated series — the value the promote must OVERWRITE with the cloud's own reserved
 // standard series.
-const MIRROR_TENANT_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const MIRROR_LOCATION_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const MIRROR_TILL_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const MIRROR_DESIGNATED_SERIES_ID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd"; // inert, must be overwritten
@@ -411,15 +404,13 @@ async function seedMirrorIdentity(
 ): Promise<{ nodeId: string; standardSeriesId: string }> {
   await admin.execute(sql`
     insert into tenants (id, country, tax_id, legal_name)
-    values (${MIRROR_TENANT_ID}, 'ES', '90222222H', 'Promote Cloud SL')
+    values (1, 'ES', '90222222H', 'Promote Cloud SL')
     on conflict do nothing`);
   await admin.execute(sql`
-    insert into locations (id, tenant_id, name, invoice_locales, operation_description)
-    values (${MIRROR_LOCATION_ID}, ${MIRROR_TENANT_ID}, 'Barra', array['en']::text[], 'Hospitality')
+    insert into locations (id, name, invoice_locales, operation_description)
+    values (${MIRROR_LOCATION_ID}, 'Barra', array['en']::text[], 'Hospitality')
     on conflict do nothing`);
-  const t = await admin.execute<{ tax_id: string }>(
-    sql`select tax_id from tenants where id = ${MIRROR_TENANT_ID}`,
-  );
+  const t = await admin.execute<{ tax_id: string }>(sql`select tax_id from tenants where id = 1`);
   const nif = t.rows[0]!.tax_id;
 
   const standby = generateStandbyIdentity();
@@ -435,7 +426,6 @@ async function seedMirrorIdentity(
   await establishReservedStandbyIdentity(
     { ownerDb: admin, ring: PROMOTE_RING },
     {
-      tenantId: MIRROR_TENANT_ID,
       locationId: MIRROR_LOCATION_ID,
       standby,
       nodeName: "cloud",
@@ -484,7 +474,7 @@ async function seedMirrorIdentity(
   // Deployment: production (matching WAITRON_ENV) then mode='mirror' (co-sets singleton_role='secondary').
   await stampDeployment(admin, "production");
   await setDeploymentMode(admin, "mirror");
-  const standardSeriesId = await readStandardSeriesId(admin, MIRROR_TENANT_ID, standby.nodeId);
+  const standardSeriesId = await readStandardSeriesId(admin, standby.nodeId);
   return { nodeId: standby.nodeId, standardSeriesId };
 }
 
@@ -503,7 +493,6 @@ describe("promote (real Postgres): mirror → primary, in-process, restart-into-
       ...TICK_ENV,
       // Override the local-secondary TILL_ENV that KEY_ENV carries with the mirror's own ids; the NODE id
       // is the cloud's OWN reserved id (R3a) and the series is the primary's INERT designated series.
-      WAITRON_TILL_TENANT_ID: MIRROR_TENANT_ID,
       WAITRON_TILL_TILL_ID: MIRROR_TILL_ID,
       WAITRON_TILL_NODE_ID: seed.nodeId,
       WAITRON_TILL_SERIES_ID: MIRROR_DESIGNATED_SERIES_ID,
@@ -546,7 +535,6 @@ describe("promote (real Postgres): mirror → primary, in-process, restart-into-
       expect(persisted.WAITRON_TILL_SERIES_ID).toBe(seed.standardSeriesId);
       expect(persisted.WAITRON_TILL_SERIES_ID).not.toBe(MIRROR_DESIGNATED_SERIES_ID);
       expect(persisted.WAITRON_TILL_NODE_ID).toBe(seed.nodeId);
-      expect(persisted.WAITRON_TILL_TENANT_ID).toBe(MIRROR_TENANT_ID);
       expect(persisted.WAITRON_ENV).toBe("production");
     } finally {
       await server.close();

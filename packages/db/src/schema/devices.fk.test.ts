@@ -5,7 +5,6 @@ import type { Database } from "../client.js";
 import { captureError, pgErrorCode } from "../testing/errors.js";
 import { usePgliteDb } from "../testing/lifecycle.js";
 
-const TENANT_A = "11111111-1111-4111-8111-111111111111";
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const TILL_A = "11111111-0000-4000-8000-0000000000a1";
 const PRINTER_A = "11111111-0000-4000-8000-0000000000a3";
@@ -26,7 +25,7 @@ describe("devices composite FKs (till / receipt_printer / device_profile)", () =
     admin = suite.db;
     await admin.execute(sql`
       insert into tenants (id, country, tax_id, legal_name) values
-        (${TENANT_A}, 'ES', 'B00000000', 'Fixture Tenant A')
+        (1, 'ES', 'B00000000', 'Fixture Tenant A')
       on conflict (id) do nothing`);
     await admin.execute(sql`
       insert into locations (id, name, invoice_locales, operation_description) values (${LOCATION_A}, 'Loc A', array['es'], 'Hostelería')

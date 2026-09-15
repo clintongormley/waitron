@@ -595,7 +595,6 @@ async function priceOrderLines(
     const meta = lineMeta[i]!;
     return {
       id: ids[i]!,
-      tenantId: cfg.tenantId,
       workingOrderId,
       lineNo: line.lineNo,
       // NULL for a top-level line; the parent dish's own pre-generated id for a child option line —
@@ -912,11 +911,10 @@ export async function createOpenOrder(
     lines,
     effectiveZoneId,
   );
-  const orderNumber = await allocateOrderNumber(tx, cfg.tenantId, cfg.nodeId);
+  const orderNumber = await allocateOrderNumber(tx, cfg.nodeId);
 
   await tx.insert(workingOrders).values({
     id,
-    tenantId: cfg.tenantId,
     tillId: cfg.tillId,
     nodeId: cfg.nodeId,
     orderNumber,
@@ -1120,7 +1118,7 @@ async function lockOpenTab(tx: Transaction, cfg: TillConfig, tabId: string): Pro
  * so later configuration changes never move an already-fired item.
  *
  * `node_id = cfg.nodeId` (node-scoped, as `order_prep` was); `working_order_id = orderId` is the
- * denormalised grouping key; `working_order_line_id` is the fired line, whose `(tenant_id,
+ * denormalised grouping key; `working_order_line_id` is the fired line, whose `(
  * working_order_line_id)` unique makes a double-fire collide (23505) rather than duplicate. The two
  * catalogue reads (the venue default once, then all lines' product/category routes in one batched
  * `inArray`) and the insert all run on the CALLER's transaction as app_user. An
@@ -1298,7 +1296,6 @@ export async function fireLines(
             firedCourseIds.has(courseId) ||
             displayOrderByCourse.get(courseId) === earliestDisplayOrder;
       return {
-        tenantId: cfg.tenantId,
         nodeId: cfg.nodeId,
         workingOrderId: orderId,
         workingOrderLineId: line.id,
@@ -1326,7 +1323,7 @@ export async function fireLines(
       firedAt: ticketItems.firedAt,
     });
   } catch (error) {
-    // A line already fired collides on `ticket_items`' per-line `(tenant_id, working_order_line_id)`
+    // A line already fired collides on `ticket_items`' per-line `(working_order_line_id)`
     // unique — a re-fire (the reachable case is a double `sendToPrep`). Map that 23505 to the domain
     // code naming the order, so the route surfaces a clean 409 instead of the raw constraint error
     // becoming an opaque `server.internal` 500. Caught HERE, the shared fire choke point, so every fire
@@ -2045,7 +2042,7 @@ export async function readTabLines(
   await assertTabOpen(tx, cfg, tabId);
   // LEFT JOIN each line's kitchen ticket item (KDS-2) to carry its `fired_at` AND `state` (coursing
   // corrections, C1) — one item per line at most (`ticket_items` is UNIQUE on
-  // `(tenant_id, working_order_line_id)`), so the join never multiplies rows. `course_id` is read from
+  // `(working_order_line_id)`), so the join never multiplies rows. `course_id` is read from
   // `working_order_lines` (the authoritative ring-time resolution), not the item snapshot, so a line with
   // no ticket item still reports its course; `fired_at`/`state` have no home but the item, so both are
   // null when the join finds none. A child modifier line ALWAYS has no ticket item (`fireLines` filters
@@ -2410,7 +2407,7 @@ export async function transferLines(
  * 2/4), so one bad entry leaves both orders untouched. The whole-line path delegates to
  * {@link moveTabLines} (which accepts any OPEN destination, so a table-less check is a valid target —
  * unlike `lockOpenTab`) and cascades a dish's modifier children along with it; the split path appends new
- * destination lines after the moves. `cfg` supplies the `tenant_id` stamped on each split-inserted line.
+ * destination lines after the moves.
  */
 async function carveOffLines(
   tx: Transaction,
@@ -2562,7 +2559,6 @@ async function carveOffLines(
       await tx.insert(workingOrderLines).values({
         id: splitLineId,
         // Stamp the destination line with the configured tenant id.
-        tenantId: cfg.tenantId,
         workingOrderId: toTabId,
         lineNo: maxLineNo! + i + 1,
         productId: line.productId,
@@ -2606,7 +2602,7 @@ async function carveOffLines(
  * (design §4), and it raises TS-4's inherited `tab.transfer_quantity_invalid` / `tab.line_not_found`.
  *
  * Pay the check with the EXISTING `payWorkingOrder` (till-sale.ts) — there is NO new pay verb, and the
- * `sales_working_order_id_key` UNIQUE (tenant_id, working_order_id) makes it file AT MOST ONE sale.
+ * `sales_working_order_id_key` UNIQUE (working_order_id) makes it file AT MOST ONE sale.
  * Called once per check; the origin holds the remainder (emptied ⇒ abandon it with the existing
  * `abandonHeldOrder`, or pay it as the last check — design §3). Runs on the CALLER's tx.
  *
@@ -3329,7 +3325,6 @@ export async function placeOrder(
       // `order_placed` amendment below records the box's CONFIGURED register (`cfg.tillId`). `nodeId`/
       // `seriesId` stay `cfg` — the chain is keyed by the node's SIF, not the device.
       const { saleId, fiscal } = await recordSale(tx, deps.backend, {
-        tenantId: cfg.tenantId,
         tillId: saleTillId,
         nodeId: cfg.nodeId,
         seriesId: cfg.seriesId,
@@ -3390,7 +3385,6 @@ export async function placeOrder(
     // box's `order_placed`/`order_cancelled` pair for one order stays on the same register.
     const now = deps.clock.now();
     await appendOrderAmendment(tx, {
-      tenantId: cfg.tenantId,
       workingOrderId: id,
       kind: "order_placed",
       actorId: operatorId,
@@ -3466,7 +3460,6 @@ export async function cancelPlacedOrder(
     // carrying the operator's reason, linked to the genesis via `appendOrderAmendment`'s per-order hash.
     const now = deps.clock.now();
     await appendOrderAmendment(tx, {
-      tenantId: cfg.tenantId,
       workingOrderId: id,
       kind: "order_cancelled",
       actorId: operatorId,
@@ -3807,7 +3800,6 @@ export interface StationQueueGroup {
  */
 async function readQueueSubItems(
   tx: Transaction,
-  tenantId: string,
   parentLineIds: string[],
 ): Promise<{
   modifiersByParent: Map<string, QueueModifier[]>;
@@ -3819,7 +3811,6 @@ async function readQueueSubItems(
     }
   >;
 }> {
-  void tenantId;
   const modifiersByParent = new Map<string, QueueModifier[]>();
   const asServedByParent = new Map<
     string,
@@ -3888,7 +3879,7 @@ async function readQueueSubItems(
 
 export async function listStationQueue(
   tx: Transaction,
-  cfg: TillConfig,
+
   stationId: string,
 ): Promise<StationQueueGroup[]> {
   const rows = await tx
@@ -3969,7 +3960,6 @@ export async function listStationQueue(
   // One child read + one base read, no N+1.
   const { modifiersByParent, asServedByParent } = await readQueueSubItems(
     tx,
-    cfg.tenantId,
     rows.map((row) => row.workingOrderLineId),
   );
 
@@ -4280,7 +4270,6 @@ export async function listExpoQueue(
   // One child read + one base read, no N+1.
   const { modifiersByParent, asServedByParent } = await readQueueSubItems(
     tx,
-    cfg.tenantId,
     rows.map((row) => row.lineId),
   );
 
@@ -4501,7 +4490,7 @@ export async function listTablesWithState(
              (count(wol.id) filter (where wol.served_at is null))::int as pending_to_serve,
              -- KDS-1 section 3d "N listos": lines the kitchen has bumped ready but the waiter has not
              -- yet carried out (served_at is null). The ticket item is joined 1:1 on the line -- its
-             -- (tenant_id, working_order_line_id) UNIQUE gives at most one ti per wol, so this LEFT JOIN
+             -- (working_order_line_id) UNIQUE gives at most one ti per wol, so this LEFT JOIN
              -- neither multiplies wol rows (line_count / tab_total stay correct) nor double-counts. An
              -- unfired or not-yet-ready line has ti.state null or != 'ready' and is excluded by the filter.
              (count(*) filter (where ti.state = 'ready' and wol.served_at is null))::int as ready_to_serve,
@@ -4610,7 +4599,7 @@ export async function listTablesWithState(
   // its own query to that location.
   if (annotators.length > 0) {
     const tableIds = states.map((s) => s.id);
-    const annCfg = { tenantId: cfg.tenantId, locationId: brandLocationId(loc) };
+    const annCfg = { locationId: brandLocationId(loc) };
     for (const annotator of annotators) {
       const annotations = await annotator.annotate(tx, annCfg, now, tableIds);
       for (const s of states) {

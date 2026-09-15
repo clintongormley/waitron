@@ -1,7 +1,7 @@
 import semver from "semver";
 import type { Hono } from "hono";
 import { AppError } from "@waitron/shared";
-import type { LocationId, TenantId } from "@waitron/shared";
+import type { LocationId } from "@waitron/shared";
 import type { ChangeSource } from "@waitron/shared";
 import type { Database, Transaction } from "@waitron/db";
 import type { Logger } from "@waitron/server-kit";
@@ -29,12 +29,12 @@ export interface CoreServices {
 
 /**
  * What a module's route handlers receive: the app `db`, the two `TillConfig` fields booking-shaped
- * routes actually read (`tenantId`/`locationId`, as their branded types), and `core`. `nodeId`/
+ * routes actually read (`locationId`, as its branded type), and `core`. `nodeId`/
  * `tillId` are read only INSIDE `core.openTab`, which boot binds, so they never enter `cfg`.
  */
 export interface ModuleRouteContext {
   db: Database;
-  cfg: { tenantId: TenantId; locationId: LocationId; contentDefaultLanguage?: string };
+  cfg: { locationId: LocationId; contentDefaultLanguage?: string };
   maxUploadBytes?: number;
   core: CoreServices;
 }
@@ -80,7 +80,7 @@ export type ModulePermission = { readonly permission: string; readonly grantedFr
 export interface FloorAnnotator {
   annotate(
     tx: Transaction,
-    cfg: { tenantId: TenantId; locationId: LocationId },
+    cfg: { locationId: LocationId },
     now: Date,
     tableIds: string[],
   ): Promise<Map<string, { reservedTime: string | null }>>;
@@ -173,11 +173,11 @@ export type PreparationRoute =
 export interface VenueServiceContribution {
   listServiceZones(
     tx: Transaction,
-    cfg: { tenantId: TenantId; locationId: LocationId },
+    cfg: { locationId: LocationId },
   ): Promise<readonly ServiceZoneSummary[]>;
   resolveZoneContext(
     tx: Transaction,
-    cfg: { tenantId: TenantId; locationId: LocationId },
+    cfg: { locationId: LocationId },
     zoneId: string,
   ): Promise<OrderServiceContext>;
   /** Resolves every product in one batch. An unknown zone throws `service_zone.not_found` before any
@@ -186,13 +186,13 @@ export interface VenueServiceContribution {
    *  returns an empty map without querying. */
   resolvePreparationRoutes(
     tx: Transaction,
-    cfg: { tenantId: TenantId; locationId: LocationId },
+    cfg: { locationId: LocationId },
     zoneId: string,
     productIds: readonly string[],
   ): Promise<ReadonlyMap<string, PreparationRoute>>;
   listZoneOffers(
     tx: Transaction,
-    cfg: { tenantId: TenantId; locationId: LocationId },
+    cfg: { locationId: LocationId },
     zoneId: string,
   ): Promise<{
     defaultMenuId: string | null;
@@ -201,40 +201,40 @@ export interface VenueServiceContribution {
   }>;
   resolveNewOrderZone(
     tx: Transaction,
-    cfg: { tenantId: TenantId; locationId: LocationId },
+    cfg: { locationId: LocationId },
     input: { zoneId?: string | null; deviceId?: string | null },
   ): Promise<OrderServiceContext>;
   resolveZoneOffer(
     tx: Transaction,
-    cfg: { tenantId: TenantId; locationId: LocationId },
+    cfg: { locationId: LocationId },
     zoneId: string,
     menuItemId: string,
   ): Promise<ZoneMenuOffer>;
   recordOrderContext(
     tx: Transaction,
-    cfg: { tenantId: TenantId; locationId: LocationId },
+    cfg: { locationId: LocationId },
     workingOrderId: string,
     zoneId: string,
   ): Promise<void>;
   retargetOrderContext(
     tx: Transaction,
-    cfg: { tenantId: TenantId; locationId: LocationId },
+    cfg: { locationId: LocationId },
     workingOrderId: string,
     zoneId: string,
   ): Promise<void>;
   getOrderContext(
     tx: Transaction,
-    cfg: { tenantId: TenantId; locationId: LocationId },
+    cfg: { locationId: LocationId },
     workingOrderId: string,
   ): Promise<OrderServiceContext>;
   findOrderContext(
     tx: Transaction,
-    cfg: { tenantId: TenantId; locationId: LocationId },
+    cfg: { locationId: LocationId },
     workingOrderId: string,
   ): Promise<OrderServiceContext | null>;
   listLineContexts(
     tx: Transaction,
-    cfg: { tenantId: TenantId; locationId: LocationId },
+    cfg: { locationId: LocationId },
     workingOrderId: string,
   ): Promise<
     readonly {
@@ -256,19 +256,19 @@ export interface VenueServiceContribution {
   >;
   recordLineContexts(
     tx: Transaction,
-    cfg: { tenantId: TenantId; locationId: LocationId },
+    cfg: { locationId: LocationId },
     workingOrderId: string,
     lines: readonly { workingOrderLineId: string; menuItemId: string }[],
   ): Promise<void>;
   copyOrderContext(
     tx: Transaction,
-    cfg: { tenantId: TenantId; locationId: LocationId },
+    cfg: { locationId: LocationId },
     fromWorkingOrderId: string,
     toWorkingOrderId: string,
   ): Promise<void>;
   copyLineContext(
     tx: Transaction,
-    cfg: { tenantId: TenantId; locationId: LocationId },
+    cfg: { locationId: LocationId },
     fromWorkingOrderLineId: string,
     toWorkingOrderLineId: string,
   ): Promise<void>;

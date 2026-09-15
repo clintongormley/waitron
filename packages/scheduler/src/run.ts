@@ -1,7 +1,6 @@
 import { isAppError } from "@waitron/shared";
 import { withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
-import type { TenantId } from "@waitron/shared";
 import { derive, horizonStartFor, type DueWork } from "./derive.js";
 import type { PeriodDuty, RunPeriod } from "./duty.js";
 import {
@@ -22,7 +21,7 @@ export interface SchedulerDeps {
   maxAttempts: number;
   backoffBaseMs: number;
   staleAfterMs: number;
-  /** How long after a skipped pair to report work due again. `DEFAULTS.skipRetryMs` owns the
+  /** How long after a skipped duty to report work due again. `DEFAULTS.skipRetryMs` owns the
    * default and its reasoning; required here so a caller that forgets is a compile error rather
    * than a silent cadence. */
   skipRetryMs: number;
@@ -30,7 +29,6 @@ export interface SchedulerDeps {
 
 /** One run this tick actually claimed and completed. */
 export interface RunRecord {
-  tenantId: TenantId;
   duty: string;
   period: RunPeriod;
   generation: number;
@@ -45,24 +43,24 @@ export interface TickResult {
   /** Never-swept days dropped permanently by the horizon. Never silent. */
   beyondHorizon: number;
   /**
-   * A (tenant, duty) abandoned part-way by an infrastructure failure — the snapshot read, or a
-   * claim — rather than by a duty failing. A duty failure has a ledger row to carry it; this does
-   * not, so it is reported here rather than swallowed.
+   * A duty abandoned part-way by an infrastructure failure — the snapshot read, or a claim —
+   * rather than by the duty failing. A duty failure has a ledger row to carry it; this does not,
+   * so it is reported here rather than swallowed.
    *
    * NOT "before any run could be recorded": the due-item loop runs inside the same `try`, so a
-   * throw on the third of five items leaves the first two in `ran` AND this pair here. The pair is
-   * what was abandoned, not necessarily the whole of its work.
+   * throw on the third of five items leaves the first two in `ran` AND this duty here. What is
+   * reported is the duty that was abandoned, not necessarily the whole of its work.
    */
-  skipped: { tenantId: TenantId; duty: string; errorCode: string }[];
+  skipped: { duty: string; errorCode: string }[];
   /**
    * `now` when work is available immediately — the per-tick cap deferred some. `now + skipRetryMs`
    * when a pair was skipped and nothing earlier is known, folded as a MINIMUM against the earliest
    * FUTURE time work appears as the ledger stands at the END of this tick: the derivation's own
    * answer, together with the backoff and re-sweep times this tick's own runs just wrote.
    *
-   * Null only when there is no (tenant, duty) pair at all — which stays true only because a
-   * skipped pair reports an interval rather than nothing. Mirrors `DrainResult.nextDueAt`, which
-   * folds its own skip time the same way and for the same reason.
+   * Null only when there is no duty at all — which stays true only because a skipped duty
+   * reports an interval rather than nothing. Mirrors `DrainResult.nextDueAt`, which folds its own
+   * skip time the same way and for the same reason.
    */
   nextDueAt: Date | null;
 }
@@ -71,16 +69,11 @@ export interface TickResult {
  * One pass. No loop and no timer: the host decides cron versus long-running, and `now` is injected
  * on exactly the contract `drain(now)` / `forward(now)` / `reconcile(…, now)` already use.
  *
- * The host supplies the tenants to run; the scheduler does not discover them.
- *
+
  * Transaction discipline mirrors `reconcilePayments`: a short read, then the duty OUTSIDE every
  * transaction because it makes network calls, then a short write.
  */
-export async function runDue(
-  deps: SchedulerDeps,
-  tenantIds: readonly TenantId[],
-  now: Date,
-): Promise<TickResult> {
+export async function runDue(deps: SchedulerDeps, now: Date): Promise<TickResult> {
   const result: TickResult = {
     ran: [],
     deferred: 0,
@@ -94,49 +87,47 @@ export async function runDue(
   const horizonStart = horizonStartFor(now, deps.horizonDays);
   let earliestFuture = Number.POSITIVE_INFINITY;
 
-  for (const tenantId of tenantIds) {
-    for (const duty of deps.duties) {
-      try {
-        const snapshot = await withTransaction(deps.db, (tx) =>
-          readSnapshot(tx, { tenantId, duty: duty.name, horizonStart }),
-        );
-        const derivation = derive(snapshot, now, deps);
-        result.deferred += derivation.deferred;
-        result.beyondHorizon += derivation.beyondHorizon;
-        earliestFuture = Math.min(earliestFuture, derivation.nextDueAt.getTime());
+  for (const duty of deps.duties) {
+    try {
+      const snapshot = await withTransaction(deps.db, (tx) =>
+        readSnapshot(tx, { duty: duty.name, horizonStart }),
+      );
+      const derivation = derive(snapshot, now, deps);
+      result.deferred += derivation.deferred;
+      result.beyondHorizon += derivation.beyondHorizon;
+      earliestFuture = Math.min(earliestFuture, derivation.nextDueAt.getTime());
 
-        for (const work of derivation.due) {
-          const completed = await runOne(deps, tenantId, duty, work, now);
-          if (completed === null) continue;
-          result.ran.push(completed.record);
-          // The derivation above was computed from a snapshot taken BEFORE any duty ran, so it
-          // cannot know about the backoff a failure just wrote or the re-sweep a success just
-          // enqueued. Folding them in is what makes `nextDueAt` mean what it says — the earliest
-          // time `runDue` would find work again — rather than the earliest time it would have
-          // found work had this tick done nothing.
-          if (completed.nextDueAt !== null) {
-            earliestFuture = Math.min(earliestFuture, completed.nextDueAt.getTime());
-          }
+      for (const work of derivation.due) {
+        const completed = await runOne(deps, duty, work, now);
+        if (completed === null) continue;
+        result.ran.push(completed.record);
+        // The derivation above was computed from a snapshot taken BEFORE any duty ran, so it
+        // cannot know about the backoff a failure just wrote or the re-sweep a success just
+        // enqueued. Folding them in is what makes `nextDueAt` mean what it says — the earliest
+        // time `runDue` would find work again — rather than the earliest time it would have
+        // found work had this tick done nothing.
+        if (completed.nextDueAt !== null) {
+          earliestFuture = Math.min(earliestFuture, completed.nextDueAt.getTime());
         }
-      } catch (error) {
-        result.skipped.push({ tenantId, duty: duty.name, errorCode: codeOf(error) });
       }
+    } catch (error) {
+      result.skipped.push({ duty: duty.name, errorCode: codeOf(error) });
     }
   }
 
-  // NOT "a skipped pair has nothing in `earliestFuture` of its own" (F4 of the 2026-07-27
+  // NOT "a skipped duty has nothing in `earliestFuture` of its own" (F4 of the 2026-07-27
   // pre-merge review corrected this claim; see lines 52-54 above for why): the due-item loop for a
-  // pair runs INSIDE the same `try` as the pair's own `catch`, so a throw on the third of five due
+  // duty runs INSIDE the same `try` as the duty's own `catch`, so a throw on the third of five due
   // items still leaves the first two claimed, in `ran`, and already folded into `earliestFuture`
-  // above — a pair that ends up in `skipped` can still have contributed to `earliestFuture` before
+  // above — a duty that ends up in `skipped` can still have contributed to `earliestFuture` before
   // the throw. What is genuinely true, and what this fold exists for, is the part that did NOT get
-  // that far: the items this pair's due-item loop never reached have no claim and no backoff, so
+  // that far: the items this duty's due-item loop never reached have no claim and no backoff, so
   // nothing else in this tick reports them. Reporting only the derivation's future answer — or,
   // when every pair threw before claiming anything, `null` — would tell a long-running host that
   // nothing is due, and one transient database blip would stop it polling for good.
   //
   // The consequence worth stating plainly: those never-reached, genuinely-due items of a
-  // partially-failed pair now wait up to `skipRetryMs`, not one `MIN_TICK` the way an unclaimed
+  // partially-failed duty now wait up to `skipRetryMs`, not one `MIN_TICK` the way an unclaimed
   // item used to be retried near-immediately. That is acceptable here — this is a daily duty with
   // a 26-hour staleness budget (`DUTY_BUDGET_MS`, `apps/server/src/health.ts`), so a few minutes'
   // extra delay on a partial failure costs nothing that budget was not already built to absorb.
@@ -184,7 +175,6 @@ interface CompletedRun {
  * reporting it in `ran` would claim an outcome the ledger does not show. */
 async function runOne(
   deps: SchedulerDeps,
-  tenantId: TenantId,
   duty: PeriodDuty,
   work: DueWork,
   now: Date,
@@ -208,7 +198,7 @@ async function runOne(
   let errorCode: string | null = null;
   let resweepAfter: Date | undefined;
   try {
-    const outcome = await duty.run(tenantId, period, now);
+    const outcome = await duty.run(period, now);
     summary = outcome.summary;
     resweepAfter = outcome.resweepAfter;
   } catch (error) {
@@ -250,7 +240,6 @@ async function runOne(
 
   return {
     record: {
-      tenantId,
       duty: duty.name,
       period,
       generation: claimed.generation,

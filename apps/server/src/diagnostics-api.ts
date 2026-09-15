@@ -21,7 +21,6 @@ import "./errors.js";
  */
 export interface DiagnosticsApiDeps {
   db: Database;
-  cfg: { tenantId: string };
   reader: LogReader;
   verbosity: VerbosityController;
 }

@@ -27,7 +27,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tenantId as brandTenantId,
   tillId as brandTillId,
 } from "@waitron/shared";
 import { insertCapturedPayment, SimulatorPaymentProvider } from "@waitron/payments";
@@ -100,7 +99,6 @@ function nextNif(): string {
 
 function tillConfigFromVenue(venue: VenueResult): TillConfig {
   return {
-    tenantId: brandTenantId(venue.tenantId),
     tillId: brandTillId(venue.tillId),
     nodeId: brandNodeId(venue.nodeId),
     seriesId: brandSeriesId(venue.seriesIds[0]!),
@@ -158,9 +156,9 @@ async function setupVenue(): Promise<SeededVenue> {
   const cfg = tillConfigFromVenue(venue);
   const available = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
-    const cat = await createCatalogue(tx, cfg.tenantId, { name: "Delicatessen" });
-    const bebidas = await createCategory(tx, cfg.tenantId, { name: { [LOCALE]: "Bebidas" } });
-    await createProduct(tx, cfg.tenantId, {
+    const cat = await createCatalogue(tx, { name: "Delicatessen" });
+    const bebidas = await createCategory(tx, { name: { [LOCALE]: "Bebidas" } });
+    await createProduct(tx, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
       name: "Café",
@@ -269,7 +267,7 @@ async function makeReceiptPrinter(cfg: TillConfig): Promise<string> {
     await asAppUser(tx);
     const { id } = await createPrinter(
       tx,
-      { tenantId: cfg.tenantId, locationId: cfg.locationId },
+      { locationId: cfg.locationId },
       { name: "Recibos", transport: "cloud_poll", pollId: `poll-${randomUUID()}` },
     );
     await tx.execute(sql`update tills set receipt_printer_id = ${id} where id = ${cfg.tillId}`);
@@ -329,10 +327,10 @@ async function defaultStationId(cfg: TillConfig): Promise<string> {
 
 /** The order ids on a station's queue (`listStationQueue`), read under the tenant + `app_user` scope the
  *  till runs it in. A COLLECTED order (`collected_at IS NOT NULL`) drops out — the read Task 6 wires. */
-async function stationQueueOrderIds(cfg: TillConfig, stationId: string): Promise<string[]> {
+async function stationQueueOrderIds(stationId: string): Promise<string[]> {
   return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
-    const groups = await listStationQueue(tx, cfg, stationId);
+    const groups = await listStationQueue(tx, stationId);
     return groups.map((g) => g.orderId);
   });
 }
@@ -403,12 +401,10 @@ async function saleIdFor(workingOrderId: string): Promise<string> {
 
 /** This tenant's outstanding (issued-but-unsettled) sales, read as the app role — the "what is owed?"
  *  list a decline must leave intact. Each test owns its tenant, so it lists only this test's sales. */
-async function outstandingSalesFor(
-  cfg: TillConfig,
-): Promise<{ saleId: string; amountDue: string }[]> {
+async function outstandingSalesFor(): Promise<{ saleId: string; amountDue: string }[]> {
   return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
-    const rows = await listOutstandingSales(tx, cfg.tenantId);
+    const rows = await listOutstandingSales(tx);
     return rows.map((r) => ({ saleId: String(r.saleId), amountDue: String(r.amountDue) }));
   });
 }
@@ -712,7 +708,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
       await placeOrder({ db: suite.admin, backend, clock }, cfg, id, OPERATOR, cfg.tillId);
       expect(await saleCount(id)).toBe(0);
       expect(await orderState(id)).toEqual({ status: "placed", settledAtSet: false });
-      expect(await stationQueueOrderIds(cfg, station)).toEqual([id]);
+      expect(await stationQueueOrderIds(station)).toEqual([id]);
       expect(await collectedAtSet(id)).toBe(false);
 
       const { deps } = integratedDeps(cfg, app);
@@ -730,7 +726,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
       // This IS a counter collect (a placed card collect over the terminal): `collected_at` is stamped in
       // the settle UPDATE, so the order leaves its station queue.
       expect(await collectedAtSet(id)).toBe(true);
-      expect(await stationQueueOrderIds(cfg, station)).toEqual([]);
+      expect(await stationQueueOrderIds(station)).toEqual([]);
     } finally {
       await app.close();
     }
@@ -858,7 +854,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     const fake = new FakeFiscalBackend(suite.admin);
     await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
-      await fake.registerNode(tx, cfg.nodeId, { tenantId: cfg.tenantId });
+      await fake.registerNode(tx, cfg.nodeId);
     });
     const app = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
@@ -990,7 +986,7 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
           externalRef: `pi_lost_${randomUUID()}`,
         });
       });
-      expect(await stationQueueOrderIds(cfg, station)).toEqual([id]);
+      expect(await stationQueueOrderIds(station)).toEqual([id]);
       expect(await collectedAtSet(id)).toBe(false);
 
       const { deps, client } = integratedDeps(cfg, app);
@@ -1005,7 +1001,7 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
       expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
       // A recovered PLACED collect leaves its station queue: collected_at stamped in the settle UPDATE.
       expect(await collectedAtSet(id)).toBe(true);
-      expect(await stationQueueOrderIds(cfg, station)).toEqual([]);
+      expect(await stationQueueOrderIds(station)).toEqual([]);
     } finally {
       await app.close();
     }
@@ -1181,8 +1177,8 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
       expect(await saleCount(id)).toBe(1);
       expect(await registroCount(id)).toBe(1);
       expect(await orderState(id)).toEqual({ status: "placed", settledAtSet: false });
-      expect(await outstandingSalesFor(cfg)).toEqual([{ saleId, amountDue: "1.50" }]);
-      expect(await stationQueueOrderIds(cfg, station)).toEqual([id]);
+      expect(await outstandingSalesFor()).toEqual([{ saleId, amountDue: "1.50" }]);
+      expect(await stationQueueOrderIds(station)).toEqual([id]);
       expect(await collectedAtSet(id)).toBe(false);
 
       const { deps, client } = integratedDeps(cfg, app);
@@ -1199,11 +1195,11 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
       expect(await saleCount(id)).toBe(1);
       expect(await registroCount(id)).toBe(1);
       expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
-      expect(await outstandingSalesFor(cfg)).toEqual([]);
+      expect(await outstandingSalesFor()).toEqual([]);
       // A settle IS a counter collect: `collected_at` stamped in the placed → settled UPDATE, so the
       // order leaves its station queue (the fiscal settle itself is byte-unchanged).
       expect(await collectedAtSet(id)).toBe(true);
-      expect(await stationQueueOrderIds(cfg, station)).toEqual([]);
+      expect(await stationQueueOrderIds(station)).toEqual([]);
       expect(await tendersFor(id)).toEqual([{ method: "card", amount: "1.50", tipAmount: "0.00" }]);
       const payments = await paymentsFor(id);
       expect(payments).toHaveLength(1);
@@ -1259,7 +1255,7 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
       expect(await saleCount(id)).toBe(1);
       expect(await registroCount(id)).toBe(1);
       expect(await orderState(id)).toEqual({ status: "placed", settledAtSet: false });
-      expect(await outstandingSalesFor(cfg)).toEqual([{ saleId, amountDue: "1.50" }]);
+      expect(await outstandingSalesFor()).toEqual([{ saleId, amountDue: "1.50" }]);
       // No tender was written (nothing settled); the provider's T2 wrote a `failed` audit row, unlinked.
       expect(await tendersFor(id)).toEqual([]);
       expect(await rawPaymentsFor(id)).toEqual([{ state: "failed", hasSale: false }]);
@@ -1323,7 +1319,7 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
       // The settlement rolled back: no tender, the order stays PLACED, the invoice is still outstanding.
       expect(await tendersFor(id)).toEqual([]);
       expect(await orderState(id)).toEqual({ status: "placed", settledAtSet: false });
-      expect(await outstandingSalesFor(cfg)).toEqual([{ saleId, amountDue: "1.50" }]);
+      expect(await outstandingSalesFor()).toEqual([{ saleId, amountDue: "1.50" }]);
     } finally {
       await app.close();
     }
@@ -1358,7 +1354,7 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
       try {
         const { id } = await placeInvoiceFirst(cfg, cafe); // placing fires the ticket item to the station
         const externalRef = await seedLostCaptureOnPlaced(id, "1.50"); // charged exactly the total
-        expect(await stationQueueOrderIds(cfg, station)).toEqual([id]);
+        expect(await stationQueueOrderIds(station)).toEqual([id]);
         expect(await collectedAtSet(id)).toBe(false);
 
         const { deps, client } = integratedDeps(cfg, app);
@@ -1373,11 +1369,11 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
         expect(await paymentCount(id)).toBe(1);
         expect(await filedSaleTotal(id)).toBe("1.50");
         expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
-        expect(await outstandingSalesFor(cfg)).toEqual([]);
+        expect(await outstandingSalesFor()).toEqual([]);
         // An invoice-first recovery is always a PLACED counter collect: collected_at stamped, order leaves
         // the station queue (settle files nothing new — fiscally byte-unchanged).
         expect(await collectedAtSet(id)).toBe(true);
-        expect(await stationQueueOrderIds(cfg, station)).toEqual([]);
+        expect(await stationQueueOrderIds(station)).toEqual([]);
         expect(await tendersFor(id)).toEqual([
           { method: "card", amount: "1.50", tipAmount: "0.00" },
         ]);
@@ -1430,7 +1426,7 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
         // captured payment is untouched (still a sale_id-NULL orphan for reconcile).
         expect(await tendersFor(id)).toEqual([]);
         expect(await orderState(id)).toEqual({ status: "placed", settledAtSet: false });
-        expect(await outstandingSalesFor(cfg)).toEqual([{ saleId, amountDue: "1.50" }]);
+        expect(await outstandingSalesFor()).toEqual([{ saleId, amountDue: "1.50" }]);
         expect(await rawPaymentsFor(id)).toEqual([{ state: "captured", hasSale: false }]);
       } finally {
         await app.close();

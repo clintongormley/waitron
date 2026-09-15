@@ -62,19 +62,18 @@ beforeAll(() => {
 });
 
 async function setupVenue(opts: { timeZone?: string } = {}): Promise<TillConfig> {
-  const tenantId = await seedTenant(db);
+  await seedTenant(db);
   // Default the location's time_zone from the schema default (Europe/Madrid) unless a test pins one —
   // the reserved-on-floor read derives venue-local "today"/"now" from this column (design §2b/§4).
   const timeZone = opts.timeZone ?? DEFAULT_TIME_ZONE;
   const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description, time_zone)
-    values (${tenantId}, 'Barra', array[${LOCALE}], 'Venta en establecimiento', ${timeZone}) returning id`);
+    insert into locations (name, invoice_locales, operation_description, time_zone)
+    values ('Barra', array[${LOCALE}], 'Venta en establecimiento', ${timeZone}) returning id`);
   const locationId = loc.rows[0]!.id;
   const till = await db.execute<{ id: string }>(sql`
-    insert into tills (tenant_id, location_id, name) values (${tenantId}, ${locationId}, 'Caja 1') returning id`);
-  const nodeId = await seedNode(db, tenantId, brandLocationId(locationId));
+    insert into tills (location_id, name) values (${locationId}, 'Caja 1') returning id`);
+  const nodeId = await seedNode(db, brandLocationId(locationId));
   return {
-    tenantId,
     tillId: brandTillId(till.rows[0]!.id),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
@@ -213,7 +212,7 @@ describe("table CRUD", () => {
 
   it("createTable rethrows a NON-unique DB error raw, not as table.label_taken", async () => {
     const cfg = await setupVenue();
-    // A location id that names no row: the composite (tenant_id, location_id) FK
+    // A location id that names no row: the composite (location_id) FK
     // `dining_tables_location_fk` rejects the insert with a 23503 foreign-key violation — NOT the
     // 23505 label unique NOR the `dining_tables_zone_fk` the zone check matches on. So both
     // `isUniqueViolation` and `isZoneFkViolation` are false and `createTable` must rethrow the raw
@@ -507,18 +506,17 @@ async function setupTabVenue(): Promise<{
   aguaId: string;
   tableId: string;
 }> {
-  const tenantId = await seedTenant(db);
+  await seedTenant(db);
   await seedLegacySellingUnits(db);
   const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
+    insert into locations (name, invoice_locales, operation_description)
+    values ('Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
   const locationId = loc.rows[0]!.id;
-  await seedKitchenStation(db, { tenantId, locationId: brandLocationId(locationId) });
+  await seedKitchenStation(db, { locationId: brandLocationId(locationId) });
   const till = await db.execute<{ id: string }>(sql`
-    insert into tills (tenant_id, location_id, name) values (${tenantId}, ${locationId}, 'Caja 1') returning id`);
-  const nodeId = await seedNode(db, tenantId, brandLocationId(locationId));
+    insert into tills (location_id, name) values (${locationId}, 'Caja 1') returning id`);
+  const nodeId = await seedNode(db, brandLocationId(locationId));
   const cfg: TillConfig = {
-    tenantId,
     tillId: brandTillId(till.rows[0]!.id),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
@@ -530,9 +528,9 @@ async function setupTabVenue(): Promise<{
   };
   const { cafeId, aguaId, tableId } = await withTransaction(db, async (tx) => {
     await asAppUser(tx);
-    const cat = await createCatalogue(tx, tenantId, { name: "Carta" });
-    const bebidas = await createCategory(tx, tenantId, { name: { en: "Bebidas" } });
-    const cafe = await createProduct(tx, tenantId, {
+    const cat = await createCatalogue(tx, { name: "Carta" });
+    const bebidas = await createCategory(tx, { name: { en: "Bebidas" } });
+    const cafe = await createProduct(tx, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
       name: "Café",
@@ -540,7 +538,7 @@ async function setupTabVenue(): Promise<{
       unitPrice: "1.50",
       vatClass: "general",
     });
-    const agua = await createProduct(tx, tenantId, {
+    const agua = await createProduct(tx, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
       name: "Agua",

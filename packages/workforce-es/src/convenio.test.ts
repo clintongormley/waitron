@@ -9,13 +9,11 @@ import { resolveWorkTimeRuleset } from "./convenio.js";
 import { WORKFORCE_ES_MIGRATIONS } from "./migrations.js";
 import { seedConvenioConfig, seedLocation } from "../test/fixtures.js";
 
-let tenantId: string;
-
 const suite = usePgliteDb({
   resetPerTest: false,
   migrations: [CORE_MIGRATIONS, WORKFORCE_ES_MIGRATIONS],
   setup: async (db) => {
-    tenantId = await seedTenant(db);
+    await seedTenant(db);
   },
 });
 
@@ -46,7 +44,7 @@ const DEFAULT_RULESET: WorkTimeRuleset = {
 
 describe("resolveWorkTimeRuleset", () => {
   it("resolves a default row to the ET/default ruleset", async () => {
-    const locationId = await seedLocation(suite.db, tenantId);
+    const locationId = await seedLocation(suite.db);
     await seedConvenioConfig(suite.db, { locationId });
     const ruleset = await resolveWorkTimeRuleset(suite.db, { locationId });
     expect(ruleset).toEqual(DEFAULT_RULESET);
@@ -56,7 +54,7 @@ describe("resolveWorkTimeRuleset", () => {
     // Every field set to a distinct non-default, so a mapping that dropped or crossed a column shows.
     // Proves the underscored DB enum maps to the hyphenated generic OvertimeModel and the numeric
     // premiums come back as numbers, not strings.
-    const locationId = await seedLocation(suite.db, tenantId);
+    const locationId = await seedLocation(suite.db);
     await suite.db.execute(sql`
       insert into convenio_config (
         location_id, working_days_per_week, overtime_model, reference_period_days,
@@ -89,7 +87,7 @@ describe("resolveWorkTimeRuleset", () => {
   });
 
   it("throws convenio.not_found when no convenio_config row exists for the location", async () => {
-    const locationId = await seedLocation(suite.db, tenantId);
+    const locationId = await seedLocation(suite.db);
     const error = await captureError(() => resolveWorkTimeRuleset(suite.db, { locationId }));
     expect(error).toBeInstanceOf(AppError);
     expect((error as AppError).code).toBe("convenio.not_found");

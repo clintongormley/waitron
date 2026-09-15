@@ -21,7 +21,7 @@ import type {
   CardProviderRuntimeDeps,
   ReaderStatus,
 } from "@waitron/payments";
-import { AppError, tillId as brandTillId, type TenantId, type TillId } from "@waitron/shared";
+import { AppError, tillId as brandTillId, type TillId } from "@waitron/shared";
 import { mountAlertsApi } from "./alerts-api.js";
 import {
   awaitingCertAlertSource,
@@ -62,7 +62,6 @@ const NOW = new Date("2026-09-14T12:00:00.000Z");
 const noopLog: Logger = () => {};
 
 interface Venue {
-  tenantId: TenantId;
   tillId: TillId;
   manager: string;
   supervisor: string;
@@ -70,24 +69,23 @@ interface Venue {
 }
 
 async function seedVenue(): Promise<Venue> {
-  const tenantId = await seedTenant(db);
+  await seedTenant(db);
   const location = await db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Sala', array['es-ES'], 'Venta en establecimiento') returning id`);
+    insert into locations (name, invoice_locales, operation_description)
+    values ('Sala', array['es-ES'], 'Venta en establecimiento') returning id`);
   const till = await db.execute<{ id: string }>(sql`
-    insert into tills (tenant_id, location_id, name)
-    values (${tenantId}, ${location.rows[0]!.id}, 'Caja 1') returning id`);
+    insert into tills (location_id, name)
+    values (${location.rows[0]!.id}, 'Caja 1') returning id`);
   const cookie = (role: string, name: string) =>
     withTransaction(db, async (tx) => {
       await asAppUser(tx);
       const p = await tx.execute<{ id: string }>(sql`
-        insert into persons (tenant_id, display_name, pin_hash, role)
-        values (${tenantId}, ${name}, ${hashPin("1234")}, ${role}) returning id`);
-      const session = await startManagementSession(tx, { tenantId, personId: p.rows[0]!.id });
+        insert into persons (display_name, pin_hash, role)
+        values (${name}, ${hashPin("1234")}, ${role}) returning id`);
+      const session = await startManagementSession(tx, { personId: p.rows[0]!.id });
       return `${MANAGEMENT_COOKIE}=${session.id}`;
     });
   return {
-    tenantId,
     tillId: brandTillId(till.rows[0]!.id),
     manager: await cookie("manager", "Marta"),
     supervisor: await cookie("supervisor", "Sergio"),
@@ -103,21 +101,17 @@ async function raise(
   return withTransaction(db, async (tx) => {
     await asAppUser(tx);
     await recordIncident(tx, {
-      tenantId: v.tenantId,
       tillId: v.tillId,
       error: new AppError(code as never, {} as never),
       severity,
       detectedAt: NOW,
     });
-    const open = await listOpenIncidents(tx, v.tenantId);
+    const open = await listOpenIncidents(tx);
     return open.find((i) => i.code === code)!.id;
   });
 }
 
-function appFor(
-  v: Pick<Venue, "tenantId">,
-  registry = createAlertRegistry({ claims: ALL_ALERT_CLAIMS, sources: [] }),
-): Hono {
+function appFor(registry = createAlertRegistry({ claims: ALL_ALERT_CLAIMS, sources: [] })): Hono {
   const app = new Hono();
   // Mirror boot.ts: a GET carrying `x-waitron-live: 1` runs under a passive read, so an automatic
   // dashboard poll verifies the session without sliding its idle window. Requests without the header
@@ -131,7 +125,6 @@ function appFor(
     app,
     {
       db,
-      cfg: { tenantId: v.tenantId },
       registry,
       now: () => NOW,
     },
@@ -147,8 +140,7 @@ const post = (app: Hono, path: string, cookie: string) =>
 
 describe("alert routes", () => {
   it("refuses a request with no session", async () => {
-    const v = await seedVenue();
-    const res = await get(appFor(v), "/management-api/alerts");
+    const res = await get(appFor(), "/management-api/alerts");
     expect(res.status).toBe(401);
     expect(((await res.json()) as { error: { code: string } }).error.code).toBe(
       "management_session.required",
@@ -159,7 +151,7 @@ describe("alert routes", () => {
     const v = await seedVenue();
     await raise(v, "payment.offline_forward_declined");
     await raise(v, "chain.verification_failed");
-    const res = await get(appFor(v), "/management-api/alerts", v.manager);
+    const res = await get(appFor(), "/management-api/alerts", v.manager);
     expect(res.status).toBe(200);
     const body = (await res.json()) as { visible: boolean; alerts: { code: string }[] };
     expect(body.visible).toBe(true);
@@ -172,7 +164,7 @@ describe("alert routes", () => {
   it("answers not visible and empty to a session holding no alert permission", async () => {
     const v = await seedVenue();
     await raise(v, "payment.offline_forward_declined");
-    const res = await get(appFor(v), "/management-api/alerts", v.supervisor);
+    const res = await get(appFor(), "/management-api/alerts", v.supervisor);
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ visible: false, alerts: [] });
   });
@@ -180,7 +172,7 @@ describe("alert routes", () => {
   it("marks an incident handled; it moves from open to handled with who and when", async () => {
     const v = await seedVenue();
     const id = await raise(v, "payment.offline_forward_declined");
-    const app = appFor(v);
+    const app = appFor();
     const res = await post(app, `/management-api/alerts/incidents/${id}/handled`, v.manager);
     expect(res.status).toBe(204);
     expect(
@@ -209,7 +201,7 @@ describe("alert routes", () => {
   it("succeeds when the incident is already handled", async () => {
     const v = await seedVenue();
     const id = await raise(v, "payment.offline_forward_declined");
-    const app = appFor(v);
+    const app = appFor();
     expect(
       (await post(app, `/management-api/alerts/incidents/${id}/handled`, v.manager)).status,
     ).toBe(204);
@@ -230,7 +222,7 @@ describe("alert routes", () => {
     });
     const v = await seedVenue();
     const id = await raise(v, "fiscal.registro_rechazado");
-    const app = appFor(v, registry);
+    const app = appFor(registry);
     const refused = await post(app, `/management-api/alerts/incidents/${id}/handled`, v.manager);
     expect(refused.status).toBe(403);
     expect(await refused.json()).toEqual({
@@ -251,7 +243,7 @@ describe("alert routes", () => {
       await raise(v, "clock.jump_detected"),
       await raise(v, "printing.mystery"),
     ];
-    const app = appFor(v);
+    const app = appFor();
     const codes = async (path: string) =>
       ((await (await get(app, path, v.supervisor)).json()) as { alerts: { code: string }[] }).alerts
         .map((a) => a.code)
@@ -290,7 +282,7 @@ describe("alert routes", () => {
     const v = await seedVenue();
     const id = await raise(v, "fiscal.registro_rechazado");
     const res = await post(
-      appFor(v),
+      appFor(),
       `/management-api/alerts/incidents/${id}/handled`,
       v.supervisor,
     );
@@ -300,7 +292,7 @@ describe("alert routes", () => {
 
   it("answers alert.not_found for an unknown and a malformed id", async () => {
     const a = await seedVenue();
-    const app = appFor(a);
+    const app = appFor();
     for (const id of ["00000000-0000-4000-8000-000000000000", "not-a-uuid"]) {
       const res = await post(app, `/management-api/alerts/incidents/${id}/handled`, a.manager);
       expect(res.status).toBe(404);
@@ -374,16 +366,16 @@ async function seedLowReader(name = "Datafono"): Promise<void> {
 
 /** A document print job old enough to count as stuck, on an active printer, so `printingAlertSource`
  * fires `printer.jobs_waiting` for this tenant. */
-async function seedStuckPrintJob(tenantId: TenantId): Promise<void> {
+async function seedStuckPrintJob(): Promise<void> {
   const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Barra', array['es-ES'], 'Retail') returning id`);
+    insert into locations (name, invoice_locales, operation_description)
+    values ('Barra', array['es-ES'], 'Retail') returning id`);
   const printer = await db.execute<{ id: string }>(sql`
-    insert into printers (tenant_id, location_id, name, transport, host, active)
-    values (${tenantId}, ${loc.rows[0]!.id}, 'Barra', 'network_tcp', '10.0.0.1', true) returning id`);
+    insert into printers (location_id, name, transport, host, active)
+    values (${loc.rows[0]!.id}, 'Barra', 'network_tcp', '10.0.0.1', true) returning id`);
   await db.execute(sql`
-    insert into print_jobs (tenant_id, location_id, printer_id, payload, kind, status, attempts, created_at)
-    values (${tenantId}, ${loc.rows[0]!.id}, ${printer.rows[0]!.id}, decode('01', 'hex'),
+    insert into print_jobs (location_id, printer_id, payload, kind, status, attempts, created_at)
+    values (${loc.rows[0]!.id}, ${printer.rows[0]!.id}, decode('01', 'hex'),
             'document', 'queued', 0, ${new Date(NOW.getTime() - 5 * 60_000).toISOString()})`);
 }
 
@@ -400,8 +392,8 @@ describe("ongoing alert sources through the route", () => {
     roleOverride.set("supervisor", ["payments.manage"]);
     const v = await seedVenue();
     await seedLowReader();
-    await seedStuckPrintJob(v.tenantId);
-    const app = appFor(v, ongoingRegistry({ backupDisabled: true, awaitingCert: true }));
+    await seedStuckPrintJob();
+    const app = appFor(ongoingRegistry({ backupDisabled: true, awaitingCert: true }));
 
     // Control: a manager holds every source permission, so all four areas actually fire — the
     // payments-only assertion below is filtering at work, not four empty sources.
@@ -445,7 +437,7 @@ describe("ongoing alert sources through the route", () => {
     };
     const registry = createAlertRegistry({ claims: ALL_ALERT_CLAIMS, sources: [working, failing] });
     const body = (await (
-      await get(appFor(v, registry), "/management-api/alerts", v.manager)
+      await get(appFor(registry), "/management-api/alerts", v.manager)
     ).json()) as { alerts: { code: string; area: string; params: unknown }[] };
 
     // The working source's alert is untouched by the other source's failure…
@@ -465,7 +457,7 @@ describe("ongoing alert sources through the route", () => {
 
   it("polls passively: the x-waitron-live GET does not extend the session, an ordinary GET does", async () => {
     const v = await seedVenue();
-    const app = appFor(v, ongoingRegistry());
+    const app = appFor(ongoingRegistry());
     const sid = v.manager.slice(MANAGEMENT_COOKIE.length + 1);
     // Age the session so a touch would visibly move its expiry away from the aged baseline.
     await db.execute(

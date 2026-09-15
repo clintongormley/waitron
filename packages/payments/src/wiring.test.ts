@@ -5,7 +5,6 @@ import {
   decimal,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tenantId as brandTenantId,
   tillId as brandTillId,
   workingOrderId as brandWorkingOrderId,
 } from "@waitron/shared";
@@ -79,7 +78,6 @@ function buildInput(
   tender: { amount: string; settledAt: Date | null },
 ): RecordSaleInput {
   return {
-    tenantId: brandTenantId(s.tenantId),
     tillId: brandTillId(s.tillId),
     nodeId: brandNodeId(s.nodeId),
     seriesId: brandSeriesId(s.seriesId),
@@ -116,7 +114,7 @@ describe("collect -> recordSale -> associate (the payment seam, end to end)", ()
   it("settles a tender, chains the sale, and associates the payment atomically", async () => {
     const backend = new FakeFiscalBackend(pg.db);
     const s = await seedForSale(pg.db, backend, freshNif());
-    const provider = new FakePaymentProvider(pg.db, s.tenantId);
+    const provider = new FakePaymentProvider(pg.db);
 
     // 1. The payment settles the tender.
     const paid = await provider.collect({
@@ -151,7 +149,7 @@ describe("collect -> recordSale -> associate (the payment seam, end to end)", ()
   it("refuses the sale when the payment failed and leaves the tender unsettled", async () => {
     const backend = new FakeFiscalBackend(pg.db);
     const s = await seedForSale(pg.db, backend, freshNif());
-    const provider = new FakePaymentProvider(pg.db, s.tenantId);
+    const provider = new FakePaymentProvider(pg.db);
     provider.failNextCollect();
 
     const paid = await provider.collect({

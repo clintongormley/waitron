@@ -3,15 +3,13 @@ import {
   nodeId as brandNodeId,
   saleId as brandSaleId,
   seriesId as brandSeriesId,
-  tenantId as brandTenantId,
   tillId as brandTillId,
 } from "@waitron/shared";
-import type { NodeId, SaleId, SeriesId, TenantId, TillId } from "@waitron/shared";
+import type { NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
 import { sales } from "@waitron/db";
 import type { Database } from "@waitron/db";
 
 export interface SeededTenant {
-  tenantId: TenantId;
   tillId: TillId;
   nodeId: NodeId;
   seriesId: SeriesId;
@@ -28,29 +26,22 @@ function freshNif(): string {
 }
 
 /**
- * Seeds tenant -> location -> till -> node -> invoice series for `record-sale.test.ts`
- * directly through the fixture connection.
+ * Makes sure the one taxpayer row is there, then seeds location -> till -> node -> invoice series
+ * for `record-sale.test.ts`, directly through the fixture connection.
  *
  * The invoice series is keyed to the NODE, not the till (node-id rekey, 2026-08-03: the SIF is the
- * node, #33). Each call also mints its own node, so `overrides.tenantId`, when supplied, adds a
- * SECOND till + node (+ location + series) under an EXISTING tenant rather than minting a new
- * tenant — exactly the shape `record-sale.test.ts`'s "rejects a series belonging to another node"
- * test needs: a series that is real, and real for the SAME tenant, but owned by a different node
- * than the one under test (the returned `nodeId` is genuinely different from the first call's).
+ * node, #33). Each call mints its own location, till and node, which is exactly the shape
+ * `record-sale.test.ts`'s "rejects a series belonging to another node" test needs: a series that is
+ * real but owned by a different node than the one under test (the returned `nodeId` is genuinely
+ * different from the first call's). The taxpayer row is a singleton, so only the first call
+ * inserts it.
  */
-export async function seedTenant(
-  db: Database,
-  overrides: { tenantId?: TenantId } = {},
-): Promise<SeededTenant> {
-  let tenantId: TenantId;
-  if (overrides.tenantId !== undefined) {
-    tenantId = overrides.tenantId;
-  } else {
-    const { rows } = await db.execute<{ id: string }>(sql`
-      insert into tenants (country, tax_id, legal_name) values ('ES', ${freshNif()}, 'Waitron SL') returning id
-    `);
-    tenantId = brandTenantId(rows[0]!.id);
-  }
+export async function seedTenant(db: Database): Promise<SeededTenant> {
+  await db.execute(sql`
+    insert into tenants (id, country, tax_id, legal_name)
+    values (1, 'ES', ${freshNif()}, 'Waitron SL')
+    on conflict (id) do nothing
+  `);
 
   const location = await db.execute<{ id: string }>(sql`
     insert into locations (name, invoice_locales, operation_description) values ('Sala principal', array['es-ES', 'ca-ES'], 'Venta en establecimiento')
@@ -82,7 +73,7 @@ export async function seedTenant(
   // records omit it and the column inserts NULL. A test that needs the linkage seeds its own real
   // `working_orders` row and passes its id explicitly (see record-sale.test.ts's "working order
   // linkage").
-  return { tenantId, tillId, nodeId, seriesId };
+  return { tillId, nodeId, seriesId };
 }
 
 /**
@@ -114,7 +105,7 @@ export async function seedRectificativeSeries(
  */
 export async function seedBareSale(
   db: Database,
-  seed: { tenantId: TenantId; tillId: TillId; nodeId: NodeId; seriesId: SeriesId },
+  seed: { tillId: TillId; nodeId: NodeId; seriesId: SeriesId },
   overrides: {
     total?: string;
     invoiceNumber?: number;

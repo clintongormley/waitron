@@ -41,13 +41,12 @@ const suite = useTemplateDb({ template: "manifest" });
 // shared, the same call this file's sibling suites make (module state — the counter — resets per file).
 let profileCounter = 0;
 async function seedProfile(
-  cfg: TillConfig,
   formFactor: "till" | "kds" | "phone-portrait" | "tablet-landscape",
 ): Promise<string> {
   profileCounter += 1;
   const { rows } = await suite.admin.execute<{ id: string }>(sql`
-    insert into device_profiles (tenant_id, name, form_factor, capabilities)
-    values (${cfg.tenantId}, ${`Profile ${profileCounter}`}, ${formFactor}, '[]'::jsonb)
+    insert into device_profiles (name, form_factor, capabilities)
+    values (${`Profile ${profileCounter}`}, ${formFactor}, '[]'::jsonb)
     returning id`);
   return rows[0]!.id;
 }
@@ -109,7 +108,7 @@ describe("createJoinRequest", () => {
     // free fallback, keeping this test about the REAL-number rule it is named for.
     const taken = await suite.admin.execute<{ n: string }>(
       sql`select unnest(decoy_numbers) as n from join_requests
-           where tenant_id = ${venue.cfg.tenantId}`,
+           `,
     );
     expect(taken.rows).toHaveLength(2);
     for (const r of taken.rows) expect(r.n).toMatch(/^\d{2}$/);
@@ -137,8 +136,8 @@ describe("createJoinRequest", () => {
     // if it were 13 too, a broken "real avoids existing reals" rule would make this pass for the
     // wrong reason.
     await suite.admin.execute(sql`
-      insert into join_requests (tenant_id, location_id, kind, label, token_hash, verification_number, decoy_numbers)
-      values (${venue.cfg.tenantId}, ${venue.cfg.locationId}, 'device'::join_request_kind, 'seeded', 'x', '77', '{13,86}'::text[])
+      insert into join_requests (location_id, kind, label, token_hash, verification_number, decoy_numbers)
+      values (${venue.cfg.locationId}, 'device'::join_request_kind, 'seeded', 'x', '77', '{13,86}'::text[])
     `);
     await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
@@ -155,8 +154,8 @@ describe("createJoinRequest", () => {
     // (design §1.2 rule 3), so they still count toward this request's forbidden set. "00" and "01"
     // are the only two values left free.
     await suite.admin.execute(sql`
-      insert into join_requests (tenant_id, location_id, kind, label, token_hash, verification_number, decoy_numbers)
-      select ${venue.cfg.tenantId}, ${venue.cfg.locationId}, 'print_agent'::join_request_kind,
+      insert into join_requests (location_id, kind, label, token_hash, verification_number, decoy_numbers)
+      select ${venue.cfg.locationId}, 'print_agent'::join_request_kind,
              'seed ' || n, 'x', lpad(n::text, 2, '0'), '{}'::text[]
       from generate_series(2, 99) as n
     `);
@@ -213,9 +212,7 @@ describe("createJoinRequest", () => {
       await createJoinRequest(tx, venue.cfg, { kind: "device", label: "fresh" });
       // Scoped to this venue's tenant — the suite shares one database clone across tests, so an
       // unscoped select would also see other tests' rows.
-      const { rows } = await tx.execute<{ label: string }>(
-        sql`select label from join_requests where tenant_id = ${venue.cfg.tenantId}`,
-      );
+      const { rows } = await tx.execute<{ label: string }>(sql`select label from join_requests `);
       expect(rows.map((r) => r.label)).toEqual(["fresh"]);
     });
   });
@@ -281,7 +278,7 @@ describe("createJoinRequest — per-tenant serialization of number allocation an
       // Read back EVERY committed request in this tenant and assert the cross-surface exclusion.
       const { rows } = await suite.admin.execute<{ real: string; decoys: string[] }>(sql`
         select verification_number as real, decoy_numbers as decoys from join_requests
-        where tenant_id = ${venue.cfg.tenantId}
+        
       `);
       const reals = rows.map((r) => r.real);
       // No two committed requests share a real number (the 50/50 collision the bug produces).
@@ -304,8 +301,8 @@ describe("createJoinRequest — per-tenant serialization of number allocation an
     const venue = await setupVenue(suite.admin);
     // Seed nine pending (tenant, device) directly — one shy of the cap. Reals 01..09, empty decoys.
     await suite.admin.execute(sql`
-      insert into join_requests (tenant_id, location_id, kind, label, token_hash, verification_number, decoy_numbers)
-      select ${venue.cfg.tenantId}, ${venue.cfg.locationId}, 'device'::join_request_kind,
+      insert into join_requests (location_id, kind, label, token_hash, verification_number, decoy_numbers)
+      select ${venue.cfg.locationId}, 'device'::join_request_kind,
              'seed ' || n, 'x', lpad(n::text, 2, '0'), '{}'::text[]
       from generate_series(1, 9) as n
     `);
@@ -341,7 +338,7 @@ describe("createJoinRequest — per-tenant serialization of number allocation an
 
       const { rows } = await suite.admin.execute<{ n: number }>(sql`
         select count(*)::int as n from join_requests
-        where tenant_id = ${venue.cfg.tenantId} and kind = 'device'
+        where kind = 'device'
       `);
       expect(rows[0]!.n).toBeLessThanOrEqual(PENDING_CAP);
       // Exactly one of the two overlapping creators is refused (which backend wins the lock is not
@@ -509,7 +506,7 @@ describe("challengeFor", () => {
 describe("acceptDeviceJoinRequest", () => {
   it("creates the device with the request's OWN id, so the joiner's cookie survives", async () => {
     const venue = await setupVenue(suite.admin);
-    const profileId = await seedProfile(venue.cfg, "till");
+    const profileId = await seedProfile("till");
     const { made, accepted, status } = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       const made = await createJoinRequest(tx, venue.cfg, { kind: "device", label: "Bar till" });
@@ -529,7 +526,7 @@ describe("acceptDeviceJoinRequest", () => {
 
   it("auto-creates the register for a till form factor, in the SAME transaction as the device", async () => {
     const venue = await setupVenue(suite.admin);
-    const profileId = await seedProfile(venue.cfg, "till");
+    const profileId = await seedProfile("till");
     const label = "Bar till";
     const accepted = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
@@ -543,7 +540,7 @@ describe("acceptDeviceJoinRequest", () => {
     const { rows } = await suite.admin.execute<{ id: string; till_id: string | null }>(sql`
       select t.id, d.till_id from tills t
       join devices d on d.till_id = t.id
-      where t.tenant_id = ${venue.cfg.tenantId} and t.name = ${label} and d.id = ${accepted.deviceId}
+      where t.name = ${label} and d.id = ${accepted.deviceId}
     `);
     expect(rows).toHaveLength(1);
     expect(rows[0]!.till_id).toBe(rows[0]!.id);
@@ -551,7 +548,7 @@ describe("acceptDeviceJoinRequest", () => {
 
   it("rolls the register back when the device insert fails", async () => {
     const venue = await setupVenue(suite.admin);
-    const profileId = await seedProfile(venue.cfg, "till");
+    const profileId = await seedProfile("till");
     const made = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return createJoinRequest(tx, venue.cfg, { kind: "device", label: "Blocked till" });
@@ -562,8 +559,8 @@ describe("acceptDeviceJoinRequest", () => {
     // depends on. `device_binding_rule` demands a till_id for this profile's form factor, so the
     // blocker borrows the venue's own provisioned register — any live till satisfies the trigger.
     await suite.admin.execute(sql`
-      insert into devices (id, tenant_id, location_id, till_id, device_profile_id, label, token_hash, active)
-      values (${made.joinId}, ${venue.cfg.tenantId}, ${venue.cfg.locationId}, ${venue.cfg.tillId}, ${profileId}, 'blocker', 'x', true)
+      insert into devices (id, location_id, till_id, device_profile_id, label, token_hash, active)
+      values (${made.joinId}, ${venue.cfg.locationId}, ${venue.cfg.tillId}, ${profileId}, 'blocker', 'x', true)
     `);
     await expect(
       withTransaction(suite.admin, async (tx) => {
@@ -575,15 +572,13 @@ describe("acceptDeviceJoinRequest", () => {
       }),
     ).rejects.toThrow();
     const { rows } = await suite.admin.execute<{ id: string }>(
-      sql`select id from tills where tenant_id = ${venue.cfg.tenantId} and name = 'Blocked till'`,
+      sql`select id from tills where name = 'Blocked till'`,
     );
     expect(rows).toHaveLength(0);
     // The consuming delete rides the SAME transaction as the register and device inserts (accept's
     // header comment) — a genuine retry must still find the request PENDING, not gone, once the
     // blocker device row (a fixture artefact, not a real collision) is cleared.
-    await suite.admin.execute(
-      sql`delete from devices where tenant_id = ${venue.cfg.tenantId} and id = ${made.joinId}`,
-    );
+    await suite.admin.execute(sql`delete from devices where id = ${made.joinId}`);
     await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       expect(await readJoinStatus(tx, venue.cfg, made.joinId, made.token)).toBe("pending");
@@ -592,7 +587,7 @@ describe("acceptDeviceJoinRequest", () => {
 
   it("DENIES on a wrong choice, and the deny SURVIVES THE TRANSACTION", async () => {
     const venue = await setupVenue(suite.admin);
-    const profileId = await seedProfile(venue.cfg, "till");
+    const profileId = await seedProfile("till");
     // Two SEPARATE withTransaction blocks on purpose. A single block that catches the rejection inside
     // itself never commits or rolls anything back, so it would pass against code that throws from
     // inside the transaction and loses the DELETE — the defect this test exists to catch.
@@ -621,7 +616,7 @@ describe("acceptDeviceJoinRequest", () => {
 
   it("refuses a print_agent request — a device accept cannot turn an agent's ask into a device", async () => {
     const venue = await setupVenue(suite.admin);
-    const profileId = await seedProfile(venue.cfg, "till");
+    const profileId = await seedProfile("till");
     await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       const made = await createJoinRequest(tx, venue.cfg, {
@@ -645,7 +640,7 @@ describe("acceptDeviceJoinRequest", () => {
     // mask the race this test targets, since both racers would derive the same register name from
     // the request's one label. This isolates the collision to the one write both racers actually
     // contend for: the `devices` INSERT that reuses the request's id.
-    const profileId = await seedProfile(venue.cfg, "kds");
+    const profileId = await seedProfile("kds");
     const made = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return createJoinRequest(tx, venue.cfg, { kind: "device", label: "Racer" });
@@ -681,7 +676,7 @@ describe("acceptDeviceJoinRequest", () => {
 
       const { rows } = await suite.admin.execute<{ n: number }>(sql`
         select count(*)::int as n from devices
-        where tenant_id = ${venue.cfg.tenantId} and id = ${made.joinId}
+        where id = ${made.joinId}
       `);
       expect(rows[0]!.n).toBe(1);
     } finally {
@@ -698,7 +693,7 @@ describe("acceptDeviceJoinRequest", () => {
     // the SAME name from the one request's label, and failed on `device.register_name_taken` (a
     // clean-looking but WRONG code that masks the real defect) rather than ever reaching the
     // `devices` INSERT. Delete-first must stop the loser before it writes anything at all.
-    const profileId = await seedProfile(venue.cfg, "till");
+    const profileId = await seedProfile("till");
     const made = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return createJoinRequest(tx, venue.cfg, { kind: "device", label: "Till racer" });
@@ -731,13 +726,13 @@ describe("acceptDeviceJoinRequest", () => {
 
       const { rows: deviceRows } = await suite.admin.execute<{ n: number }>(sql`
         select count(*)::int as n from devices
-        where tenant_id = ${venue.cfg.tenantId} and id = ${made.joinId}
+        where id = ${made.joinId}
       `);
       expect(deviceRows[0]!.n).toBe(1);
       // No orphan register from the loser: exactly the one the winner's accept created.
       const { rows: tillRows } = await suite.admin.execute<{ n: number }>(sql`
         select count(*)::int as n from tills
-        where tenant_id = ${venue.cfg.tenantId} and name = 'Till racer'
+        where name = 'Till racer'
       `);
       expect(tillRows[0]!.n).toBe(1);
     } finally {
@@ -893,7 +888,7 @@ describe("selfEnrolNodeAgent", () => {
       selfEnrolNodeAgent(tx, cfg, { nodeId, name: "box" }),
     );
     // The token is the accept-shape `${id}.${secret}` and authenticates as this agent.
-    const auth = await asApp(cfg, (tx) => authenticateAgent(tx, { tenantId: cfg.tenantId }, token));
+    const auth = await asApp(cfg, (tx) => authenticateAgent(tx, token));
     expect(auth.agentId).toBe(agentId);
   });
 
@@ -913,13 +908,12 @@ describe("selfEnrolNodeAgent", () => {
     expect(rows).toHaveLength(1);
 
     // The old token no longer authenticates; the new one does, as the same agent.
-    await expect(
-      asApp(cfg, (tx) => authenticateAgent(tx, { tenantId: cfg.tenantId }, first.token)),
-    ).rejects.toThrow(/unauthorized/);
-    expect(
-      (await asApp(cfg, (tx) => authenticateAgent(tx, { tenantId: cfg.tenantId }, second.token)))
-        .agentId,
-    ).toBe(first.agentId);
+    await expect(asApp(cfg, (tx) => authenticateAgent(tx, first.token))).rejects.toThrow(
+      /unauthorized/,
+    );
+    expect((await asApp(cfg, (tx) => authenticateAgent(tx, second.token))).agentId).toBe(
+      first.agentId,
+    );
   });
 
   it("refuses a revoked node's re-enrol with device.join_revoked and does NOT reactivate it", async () => {

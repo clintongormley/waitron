@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
+import { locationId as brandLocationId } from "@waitron/shared";
 import { appendOrderAmendment, type AppendAmendmentInput } from "./append-order-amendment.js";
 import type { Database, Transaction } from "./client.js";
 import { verifyAmendmentChain, type VerifiableAmendment } from "./order-amendment-hash.js";
@@ -24,8 +24,6 @@ import { locations, tenants, tills } from "./schema/tenants.js";
 //
 // A second tenant is seeded only to mint `nodeB`, the foreign node id the hash-tamper case swaps in.
 
-const TENANT_A = "11111111-1111-4111-8111-111111111111";
-const TENANT_B = "22222222-2222-4222-8222-222222222222";
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const LOCATION_B = "bbbbbbbb-0000-4000-8000-000000000001";
 const TILL_A1 = "aaaaaaaa-1111-4000-8000-000000000001";
@@ -46,10 +44,8 @@ class RollbackSignal extends Error {}
 
 async function rollBackAfter(
   admin: Database,
-  tenant: string,
   fn: (tx: Transaction) => Promise<void>,
 ): Promise<void> {
-  void tenant;
   await withTransaction(admin, async (tx) => {
     await fn(tx);
     throw new RollbackSignal();
@@ -69,10 +65,9 @@ describe("order_amendments append helper", () => {
   // Working orders are seeded per-test (see openOrder).
   beforeAll(async () => {
     const admin = suite.admin;
-    await admin.insert(tenants).values([
-      { id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" },
-      { id: TENANT_B, country: "ES", taxId: "B11111111", legalName: "Fixture Tenant B" },
-    ]);
+    await admin
+      .insert(tenants)
+      .values([{ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
     await admin.insert(locations).values([
       {
         id: LOCATION_A,
@@ -91,8 +86,8 @@ describe("order_amendments append helper", () => {
       { id: TILL_A1, locationId: LOCATION_A, name: "A1" },
       { id: TILL_B1, locationId: LOCATION_B, name: "B1" },
     ]);
-    nodeA = await seedNode(admin, brandTenantId(TENANT_A), brandLocationId(LOCATION_A));
-    nodeB = await seedNode(admin, brandTenantId(TENANT_B), brandLocationId(LOCATION_B));
+    nodeA = await seedNode(admin, brandLocationId(LOCATION_A));
+    nodeB = await seedNode(admin, brandLocationId(LOCATION_B));
   });
 
   /** Seeds one fresh open working order as the owner and returns its id. A fresh chain per test so
@@ -217,7 +212,7 @@ describe("order_amendments append helper", () => {
     // transaction (a later statement in it would return 25P02, in_failed_sql_transaction, not the
     // trigger's code), so testing both in one transaction would measure the poisoned-transaction
     // state for the second, not the trigger.
-    await rollBackAfter(suite.admin, TENANT_A, async (tx) => {
+    await rollBackAfter(suite.admin, async (tx) => {
       await tx.execute(sql`grant update on order_amendments to app_user`);
       await tx.execute(sql`set local role app_user`);
       const eU = await captureError(() =>
@@ -227,7 +222,7 @@ describe("order_amendments append helper", () => {
       );
       expect(pgErrorCode(eU)).toBe("WT001");
     });
-    await rollBackAfter(suite.admin, TENANT_A, async (tx) => {
+    await rollBackAfter(suite.admin, async (tx) => {
       await tx.execute(sql`grant delete on order_amendments to app_user`);
       await tx.execute(sql`set local role app_user`);
       const eD = await captureError(() =>

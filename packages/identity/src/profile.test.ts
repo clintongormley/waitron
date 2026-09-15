@@ -28,11 +28,11 @@ import {
 // PGlite covers profile behavior; the me API's real-PG suite exercises deployment-role writes.
 const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] });
 async function fixture() {
-  const tenantId = await seedTenant(suite.db);
+  await seedTenant(suite.db);
   const email = `${randomUUID()}@example.com`;
   const personId = await seedManager(suite.db, { email });
   const session = await withTransaction(suite.db, (tx) => startManagementSession(tx, { personId }));
-  return { tenantId, personId, email, managementSessionId: session.id };
+  return { personId, email, managementSessionId: session.id };
 }
 
 describe("your profile", () => {

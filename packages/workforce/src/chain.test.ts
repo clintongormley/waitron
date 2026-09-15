@@ -1,7 +1,7 @@
 import { CORE_MIGRATIONS, captureError, pgErrorCode, pgErrorMessage } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
+import { locationId as brandLocationId } from "@waitron/shared";
 import { AppError } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -30,16 +30,15 @@ const pg = usePgliteDb({
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS],
 });
 
-let tenantId: string;
 let personId: string;
 let locationId: string;
 let nodeId: string;
 
 beforeEach(async () => {
-  tenantId = await seedTenant(pg.db);
+  await seedTenant(pg.db);
   personId = await seedPerson(pg.db);
-  locationId = await seedLocation(pg.db, tenantId);
-  nodeId = await seedNode(pg.db, brandTenantId(tenantId), brandLocationId(locationId));
+  locationId = await seedLocation(pg.db);
+  nodeId = await seedNode(pg.db, brandLocationId(locationId));
 });
 
 /** The chain key for this suite's default (node, location). */
@@ -115,12 +114,8 @@ describe("appendToChain", () => {
   });
 
   it("keeps a separate, independent chain per (node, location)", async () => {
-    const otherLocation = await seedLocation(pg.db, tenantId);
-    const otherNode = await seedNode(
-      pg.db,
-      brandTenantId(tenantId),
-      brandLocationId(otherLocation),
-    );
+    const otherLocation = await seedLocation(pg.db);
+    const otherNode = await seedNode(pg.db, brandLocationId(otherLocation));
     await pg.db.transaction((tx) => appendToChain(tx, key(), inputAt("2026-01-05T09:00:00Z")));
     await pg.db.transaction((tx) =>
       appendToChain(tx, key(otherLocation, otherNode), inputAt("2026-01-05T09:00:00Z")),
@@ -135,7 +130,7 @@ describe("appendToChain", () => {
   it("keeps one chain per (node, location); two nodes at one location do not collide", async () => {
     // A location's chain is written by two nodes across a promotion (spec §2.1); their entries take
     // the same sequence_no values but ride different chains, so they never clash on the position uq.
-    const nodeB = await seedNode(pg.db, brandTenantId(tenantId), brandLocationId(locationId));
+    const nodeB = await seedNode(pg.db, brandLocationId(locationId));
     const k1 = key(locationId, nodeId);
     const k2 = key(locationId, nodeB);
     await pg.db.transaction((tx) => appendToChain(tx, k1, clockEvent()));

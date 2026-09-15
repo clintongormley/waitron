@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
-import { decimal, tenantId as brandTenantId } from "@waitron/shared";
+import { decimal } from "@waitron/shared";
 import { PAYMENTS_MIGRATIONS, insertCapturedPayment, insertInitiated } from "@waitron/payments";
 import { seedWorkingOrder, freshNif } from "@waitron/payments/test/seed.js";
 import { StripeReconciler } from "./reconciler.js";
@@ -33,7 +33,6 @@ function reconciler(
 /** A `captured` stripe payment on an ABANDONED working order — the auto-reversible orphan shape:
  * money we hold, no sale, and a working order that will never produce one. */
 async function abandonedOrphan(params: {
-  tenantId: string;
   workingOrderId: string;
   paymentRef: string;
   externalRef: string;
@@ -76,7 +75,7 @@ describe("StripeReconciler", () => {
         { paymentIntentId: "pi_terminal", chargeId: "ch_1", amountMinor: 1000, settledAt: OLD },
       ],
     });
-    const result = await reconciler(client).reconcile(brandTenantId(seeded.tenantId), PERIOD, NOW);
+    const result = await reconciler(client).reconcile(PERIOD, NOW);
     expect(result.checked).toBe(1);
     expect(result.unsettled).toEqual([]);
     expect(result.drift).toEqual([]);
@@ -101,21 +100,20 @@ describe("StripeReconciler", () => {
       ],
       sessions: [{ sessionId: "cs_hosted", paymentIntentId: "pi_hosted" }],
     });
-    const result = await reconciler(client).reconcile(brandTenantId(seeded.tenantId), now, NOW);
-    // The bridge worked: the local `initiated` row was matched, so this is the missed-webhook
+    const result = await reconciler(client).reconcile(now, NOW);
+    // so this is the missed-webhook
     // class rather than an unrecognised settlement.
     expect(result.lostSettlement).toHaveLength(1);
     expect(result.missingLocal).toEqual([]);
   });
 
   it("reports a settlement with no local row as missingLocal", async () => {
-    const seeded = await seedWorkingOrder(pg.db, freshNif());
     const client = new FakeStripeReport({
       settlements: [
         { paymentIntentId: "pi_ghost", chargeId: "ch_ghost", amountMinor: 1000, settledAt: OLD },
       ],
     });
-    const result = await reconciler(client).reconcile(brandTenantId(seeded.tenantId), PERIOD, NOW);
+    const result = await reconciler(client).reconcile(PERIOD, NOW);
     expect(result.missingLocal).toHaveLength(1);
     expect(result.missingLocal[0].references).toEqual(["pi_ghost", "ch_ghost"]);
   });
@@ -134,7 +132,6 @@ describe("StripeReconciler", () => {
     // would be set by the floor rather than by the lag and this test would stop proving that the one
     // value reached both consumers. Two days: not the seven-day default (so the override is really
     // honoured), comfortably above the floor (so the lag is what sets both edges).
-    const seeded = await seedWorkingOrder(pg.db, freshNif());
     const LAG_MS = 2 * 24 * 60 * 60 * 1000;
     const client = new FakeStripeReport();
     const r = new StripeReconciler({
@@ -143,7 +140,7 @@ describe("StripeReconciler", () => {
       resolveAccount: () => Promise.resolve({ report: client, refund: new FakeStripe() }),
       settlementLagMs: LAG_MS,
     });
-    await r.reconcile(brandTenantId(seeded.tenantId), PERIOD, NOW);
+    await r.reconcile(PERIOD, NOW);
 
     // Forward-widened ledger window, using the supplied lag rather than the seven-day default.
     expect(client.settlementWindows[0]).toEqual({
@@ -159,26 +156,25 @@ describe("StripeReconciler", () => {
     });
   });
 
-  it("resolves a per-tenant account for every sweep", async () => {
-    const seeded = await seedWorkingOrder(pg.db, freshNif());
-    const asked: string[] = [];
+  it("resolves the account on every sweep, so a rotated credential is picked up", async () => {
+    let resolved = 0;
     const client = new FakeStripeReport();
     const r = new StripeReconciler({
       db: pg.db,
       nodeId: "11111111-1111-4111-8111-111111111111", // origin not asserted here
-      resolveAccount: (tenantId) => {
-        asked.push(tenantId);
+      resolveAccount: () => {
+        resolved += 1;
         return Promise.resolve({ report: client, refund: new FakeStripe() });
       },
     });
-    await r.reconcile(brandTenantId(seeded.tenantId), PERIOD, NOW);
-    expect(asked).toEqual([seeded.tenantId]);
+    await r.reconcile(PERIOD, NOW);
+    await r.reconcile(PERIOD, NOW);
+    expect(resolved).toBe(2);
   });
 
   it("auto-reverses a hosted orphan by resolving its session to a payment intent", async () => {
     const seeded = await seedWorkingOrder(pg.db, freshNif());
     await abandonedOrphan({
-      tenantId: seeded.tenantId,
       workingOrderId: seeded.workingOrderId,
       paymentRef: "ref-hosted-orphan",
       externalRef: "cs_orphan",
@@ -190,11 +186,7 @@ describe("StripeReconciler", () => {
       sessions: [{ sessionId: "cs_orphan", paymentIntentId: "pi_orphan" }],
     });
     const refunder = new FakeStripe();
-    const result = await reconciler(client, refunder).reconcile(
-      brandTenantId(seeded.tenantId),
-      PERIOD,
-      NOW,
-    );
+    const result = await reconciler(client, refunder).reconcile(PERIOD, NOW);
     expect(result.orphan).toHaveLength(1);
     expect(result.remediated).toBe(1);
     expect(result.remediationFailures).toEqual([]);
@@ -208,7 +200,6 @@ describe("StripeReconciler", () => {
     // report carries no sessions at all, so a lookup would resolve to null and fail the reversal.
     const seeded = await seedWorkingOrder(pg.db, freshNif());
     await abandonedOrphan({
-      tenantId: seeded.tenantId,
       workingOrderId: seeded.workingOrderId,
       paymentRef: "ref-terminal-orphan",
       externalRef: "pi_terminal_orphan",
@@ -224,11 +215,7 @@ describe("StripeReconciler", () => {
       ],
     });
     const refunder = new FakeStripe();
-    const result = await reconciler(client, refunder).reconcile(
-      brandTenantId(seeded.tenantId),
-      PERIOD,
-      NOW,
-    );
+    const result = await reconciler(client, refunder).reconcile(PERIOD, NOW);
     expect(result.remediated).toBe(1);
     expect(result.remediationFailures).toEqual([]);
     expect(refunder.lastRefund?.paymentIntentId).toBe("pi_terminal_orphan");
@@ -240,7 +227,6 @@ describe("StripeReconciler", () => {
     // marker was stamped before the attempt) never attempted again.
     const seeded = await seedWorkingOrder(pg.db, freshNif());
     await abandonedOrphan({
-      tenantId: seeded.tenantId,
       workingOrderId: seeded.workingOrderId,
       paymentRef: "ref-unpaid-orphan",
       externalRef: "cs_unpaid",
@@ -248,14 +234,14 @@ describe("StripeReconciler", () => {
     const client = new FakeStripeReport({ sessions: [] });
     const refunder = new FakeStripe();
     const sweep = reconciler(client, refunder);
-    const result = await sweep.reconcile(brandTenantId(seeded.tenantId), PERIOD, NOW);
+    const result = await sweep.reconcile(PERIOD, NOW);
     expect(result.remediated).toBe(0);
     expect(result.remediationFailures).toEqual([
       { paymentRef: "ref-unpaid-orphan", reason: "payment.not_found" },
     ]);
     expect(refunder.lastRefund).toBeUndefined(); // no money moved
     // The marker is permanent by design: the next sweep still SEES the orphan but claims nothing.
-    const again = await sweep.reconcile(brandTenantId(seeded.tenantId), PERIOD, NOW);
+    const again = await sweep.reconcile(PERIOD, NOW);
     expect(again.orphan).toHaveLength(1);
     expect(again.remediated).toBe(0);
     expect(again.remediationFailures).toEqual([]);

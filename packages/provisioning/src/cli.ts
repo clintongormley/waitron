@@ -590,7 +590,6 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
         // resolves (design §4). After the apply commits; a no-op when the writer is not wired.
         if (deps.writeModuleConfig !== undefined) await deps.writeModuleConfig(fiscalConfig);
         deps.io.stdout("");
-        deps.io.stdout(`tenant:   ${result.tenantId}`);
         deps.io.stdout(`node:     ${result.nodeId}`);
         for (const s of result.seeded) deps.io.stdout(`seeded:   ${s.module} — ${s.report}`);
         return 0;

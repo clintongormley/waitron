@@ -71,7 +71,6 @@ describe("rejoinAsSecondary end-to-end wipe (real logical postgres)", () => {
     // A trading.env in a temp state dir — the wipe clears it so the next boot enters setup mode.
     const stateDir = mkdtempSync(join(tmpdir(), "rejoin-e2e-"));
     await writeTradingEnv(stateDir, {
-      tenantId: "t",
       tillId: "till",
       nodeId: NODE_ID,
       seriesId: "s",

@@ -2,11 +2,7 @@ import { CORE_MIGRATIONS, captureError, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import {
-  AppError,
-  locationId as brandLocationId,
-  tenantId as brandTenantId,
-} from "@waitron/shared";
+import { AppError, locationId as brandLocationId } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { WorkforceBackend, type ClockEventInput } from "./clocking.js";
@@ -20,7 +16,6 @@ import { seedEmployment, seedLocation, seedPerson } from "../test/fixtures.js";
 // covers every row of `time_entries`, corrections included; it is not re-proven here.
 const backend = new WorkforceBackend();
 
-let tenantId: string;
 let locationId: string;
 let nodeId: string;
 
@@ -28,9 +23,9 @@ const suite = usePgliteDb({
   resetPerTest: false,
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS],
   setup: async (db) => {
-    tenantId = await seedTenant(db);
-    locationId = await seedLocation(db, tenantId);
-    nodeId = await seedNode(db, brandTenantId(tenantId), brandLocationId(locationId));
+    await seedTenant(db);
+    locationId = await seedLocation(db);
+    nodeId = await seedNode(db, brandLocationId(locationId));
   },
 });
 
@@ -278,12 +273,8 @@ describe("cross-node correction precedence (§4.2, reprojection)", () => {
     // Two distinct chains (distinct nodes), neither the setup node whose chain already carries this
     // person's live in/out. The base `out` chains under the setup node; a correction chains under its
     // OWN recording node (§4.2), so all three differ.
-    const boxNode = await seedNode(suite.db, brandTenantId(tenantId), brandLocationId(locationId));
-    const cloudNode = await seedNode(
-      suite.db,
-      brandTenantId(tenantId),
-      brandLocationId(locationId),
-    );
+    const boxNode = await seedNode(suite.db, brandLocationId(locationId));
+    const cloudNode = await seedNode(suite.db, brandLocationId(locationId));
     const actor = await supervisor("xnode-1-sup");
     await insertApprovedCorrection({
       node: boxNode, // "the box"

@@ -21,8 +21,7 @@ import { seedLegacySellingUnits, seedVenue } from "../test/fixtures.js";
 
 // The read runs the same grants as the delete it previews, so it needs the real app_user session.
 const suite = useTemplateDb({ template: "core" });
-async function app<T>(tenantId: string, action: (tx: Transaction) => Promise<T>) {
-  void tenantId;
+async function app<T>(action: (tx: Transaction) => Promise<T>) {
   return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     return action(tx);
@@ -41,16 +40,16 @@ const optionsGroup = (choice: {
 });
 
 it("reports products, menus and the open-order count a delete would touch", async () => {
-  const { tenantId, tillId, nodeId } = await seedVenue(suite.admin);
+  const { tillId, nodeId } = await seedVenue(suite.admin);
   await seedLegacySellingUnits(suite.admin);
   const choice = { id: randomUUID(), name: { en: "Oat" }, available: true };
-  const seeded = await app(tenantId, async (tx) => {
-    const menu = await createCatalogue(tx, tenantId, { name: "Menu" });
+  const seeded = await app(async (tx) => {
+    const menu = await createCatalogue(tx, { name: "Menu" });
     const section = await createMenuSection(tx, {
       menuId: menu.id,
       name: { en: "Drinks" },
     });
-    const productP = await createProduct(tx, tenantId, {
+    const productP = await createProduct(tx, {
       catalogueId: menu.id,
       categoryId: null,
       name: "Coffee",
@@ -58,7 +57,7 @@ it("reports products, menus and the open-order count a delete would touch", asyn
       unitPrice: "2.00",
       vatClass: "reduced",
     });
-    const productQ = await createProduct(tx, tenantId, {
+    const productQ = await createProduct(tx, {
       catalogueId: menu.id,
       categoryId: null,
       name: "Tea",
@@ -72,11 +71,11 @@ it("reports products, menus and the open-order count a delete would touch", asyn
       productId: productQ.id,
       grossPrice: "2.00",
     });
-    const modifier = await createModifier(tx, tenantId, optionsGroup(choice), "en");
+    const modifier = await createModifier(tx, optionsGroup(choice), "en");
     // P carries the group only as an attachment; Q carries it as a published menu offer. Publishing
     // on Q's item requires the group attached to Q too, so both products appear as dependants.
-    await setProductOptionGroups(tx, tenantId, productP.id, [modifier.id]);
-    await setProductOptionGroups(tx, tenantId, productQ.id, [modifier.id]);
+    await setProductOptionGroups(tx, productP.id, [modifier.id]);
+    await setProductOptionGroups(tx, productQ.id, [modifier.id]);
     await setMenuItemOptionGroups(tx, itemQ.id, [
       { groupId: modifier.id, options: [{ optionId: choice.id, priceDelta: "0" }] },
     ]);
@@ -99,7 +98,7 @@ it("reports products, menus and the open-order count a delete would touch", asyn
     });
     return { modifierId: modifier.id, productP, productQ, itemQ };
   });
-  const dependants = await app(tenantId, (tx) => modifierDependants(tx, seeded.modifierId));
+  const dependants = await app((tx) => modifierDependants(tx, seeded.modifierId));
   expect(dependants.products.map((p) => p.id)).toContain(seeded.productP.id);
   expect(dependants.products.map((p) => p.id)).toContain(seeded.productQ.id);
   expect(dependants.products).toHaveLength(2);

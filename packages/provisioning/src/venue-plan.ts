@@ -7,7 +7,6 @@ import {
 } from "@waitron/layouts";
 import type { WaitronModule } from "@waitron/module";
 import { resolveFiscalModules } from "./fiscal-modules.js";
-import { deriveTenantId } from "./tenant-id.js";
 import "@waitron/fiscal"; // side-effect: registers fiscal.regime_not_implemented on ErrorParams
 import "./errors.js"; // side-effect: registers provisioning.invalid_locales on ErrorParams
 
@@ -16,7 +15,6 @@ import "./errors.js"; // side-effect: registers provisioning.invalid_locales on 
  * type is all that survives that seam: `assembleMirrorBundle` fills it and the mirror's boot-time
  * finish step reads it. */
 export interface AdoptResult {
-  tenantId: string;
   locationId: string;
   tillId: string;
   nodeId: string;
@@ -71,7 +69,7 @@ export interface VenueRequest {
 }
 
 export type VenueAction =
-  | { kind: "ensure-tenant"; tenantId: string; country: string; taxId: string; legalName: string }
+  | { kind: "ensure-tenant"; country: string; taxId: string; legalName: string }
   | {
       kind: "seed-admin";
       displayName: string;
@@ -124,33 +122,30 @@ export type VenueAction =
  * without a database is made here (spec D4's input half, the locale cardinality the DB CHECK also
  * enforces), where a unit test reaches it without a container. Mirrors planInstance.
  *
- * The location/till/node ids are NOT in the actions: they are generated at apply time and threaded
- * by order (ensure-tenant sets the scope; create-location makes a location; create-node makes the
- * node the following actions reference). Only the tenant id is here, and it is DERIVED — so a
- * re-run reuses the same tenant by its deterministic id without a tax_id lookup (spec D8).
+ * No ids are in the actions: they are generated at apply time and threaded by order
+ * (ensure-tenant makes sure the one taxpayer row is there; create-location makes a location;
+ * create-node makes the node the following actions reference).
  */
 export function planVenue(request: VenueRequest, modules: readonly WaitronModule[]): VenueAction[] {
-  // Canonicalize the fiscal identity ONCE, at the top, and use these values for BOTH the derived id
-  // AND the stored `tenants (country, tax_id)` row. This is the functional fix for the §5 footgun:
-  // both provisioning paths go through here — setup currently sends the pack's canonical country
-  // code and normalized tax id, while the CLI accepts operator-entered casing and surrounding space.
+  // Canonicalize the fiscal identity ONCE, at the top, and use these values for the stored
+  // `tenants (country, tax_id)` row. This is the functional fix for the §5 footgun: both
+  // provisioning paths go through here — setup currently sends the pack's canonical country code
+  // and normalized tax id, while the CLI accepts operator-entered casing and surrounding space.
   // Keeping canonicalization at this generic boundary prevents a future caller from bypassing that
-  // normalization. Deriving the id from a raw casing, OR storing a raw (country, tax_id) row, would let
-  // `es`/`ES` (or a taxId that differs only in letter case or in leading/trailing whitespace) for the
-  // same business mint a second, permanent, unmergeable tenant — a same-venue retry would then
-  // silently start a second SIF/hash chain. `.trim().toUpperCase()` collapses exactly those two
-  // differences; INTERNAL whitespace is deliberately left alone (a taxId's inner content is not ours
-  // to alter), so `"B123 45678"` stays a distinct identity. Canonicalizing makes the id AND the
-  // unique-index row match across case/surrounding-space variants, so applyVenue's `on conflict
-  // (country, tax_id) do nothing` reuses the one tenant. No data to preserve (pre-production, no
-  // backfill); ISO-3166 alpha-2 is upper-case by convention.
+  // normalization. Storing a raw (country, tax_id) row would let `es`/`ES` (or a taxId that differs
+  // only in letter case or in leading/trailing whitespace) read as a DIFFERENT business from the
+  // one already stored, so a same-venue retry would be refused
+  // (`provisioning.tenant_identity_mismatch`) instead of being the no-op it is.
+  // `.trim().toUpperCase()` collapses exactly those two differences; INTERNAL whitespace is
+  // deliberately left alone (a taxId's inner content is not ours to alter), so `"B123 45678"` stays
+  // a distinct identity. ISO-3166 alpha-2 is upper-case by convention.
   const country = request.country.trim().toUpperCase();
   const taxId = request.taxId.trim().toUpperCase();
   const locales = request.location.invoiceLocales;
   if (locales.length < 1 || locales.length > 2) {
     throw new AppError("provisioning.invalid_locales", { count: locales.length });
   }
-  // Equal codes collide on the series natural key (tenant, node, code): applyVenue's
+  // Equal codes collide on the series natural key (node, code): applyVenue's
   // `ON CONFLICT DO NOTHING` would drop the second series, leaving the venue unable to issue
   // rectificative invoices. Refuse here so no admin connection is spent on a malformed request.
   if (request.seriesCode === request.rectificativeSeriesCode) {
@@ -179,12 +174,10 @@ export function planVenue(request: VenueRequest, modules: readonly WaitronModule
   // them on the venue default — not an unsupported code.
   const adminLocale =
     request.admin.locale == null ? null : assertSupportedLocale(request.admin.locale);
-  const tenantId = deriveTenantId(country, taxId);
 
   return [
     {
       kind: "ensure-tenant",
-      tenantId,
       country,
       taxId,
       legalName: request.legalName,

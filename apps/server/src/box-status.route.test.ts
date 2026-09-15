@@ -38,14 +38,14 @@ function nextNif(): string {
 
 /** The suite's one venue. The clone holds one tenant (one tenant per database) and is not reset between
  *  tests, so every group shares the venue provisioned on first use rather than provisioning another. */
-let provisioned: Promise<{ tenantId: string; nodeId: string; managerId: string }> | undefined;
-function setupTenant(): Promise<{ tenantId: string; nodeId: string; managerId: string }> {
+let provisioned: Promise<{ nodeId: string; managerId: string }> | undefined;
+function setupTenant(): Promise<{ nodeId: string; managerId: string }> {
   provisioned ??= provisionTenant();
   return provisioned;
 }
 
 /** Provision a venue as owner and seed the people and sessions this route fixture needs. */
-async function provisionTenant(): Promise<{ tenantId: string; nodeId: string; managerId: string }> {
+async function provisionTenant(): Promise<{ nodeId: string; managerId: string }> {
   const venue = await applyVenue(
     planVenue(
       {
@@ -83,12 +83,12 @@ async function provisionTenant(): Promise<{ tenantId: string; nodeId: string; ma
   const managerId = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const manager = await tx.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, email, pin_hash, password_hash, role)
-      values (${venue.tenantId}, 'The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')
+      insert into persons (display_name, email, pin_hash, password_hash, role)
+      values ('The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')
       returning id`);
     return manager.rows[0]!.id;
   });
-  return { tenantId: venue.tenantId, nodeId: venue.nodeId, managerId };
+  return { nodeId: venue.nodeId, managerId };
 }
 
 /**
@@ -97,7 +97,6 @@ async function provisionTenant(): Promise<{ tenantId: string; nodeId: string; ma
  * feeds BOTH the cert reader and the duties snapshot; `tlsCertPath` toggles the cert branch.
  */
 function buildApp(
-  tenantId: string,
   nodeId: string,
   opts: {
     now: Date;
@@ -110,7 +109,7 @@ function buildApp(
     app,
     {
       db: suite.admin,
-      cfg: { tenantId, nodeId },
+      cfg: { nodeId },
       secureCookies: false,
       rpId: "localhost",
       origin: "http://localhost",
@@ -121,7 +120,7 @@ function buildApp(
     app,
     {
       db: suite.admin,
-      cfg: { tenantId, nodeId },
+      cfg: { nodeId },
       environment: "preproduction",
       health: createHealthState(opts.now),
       now: () => opts.now,
@@ -155,8 +154,8 @@ describe("GET /api/box/status (real postgres)", () => {
   let managerCookie: string;
 
   beforeAll(async () => {
-    const { tenantId, nodeId } = await setupTenant();
-    app = buildApp(tenantId, nodeId, {
+    const { nodeId } = await setupTenant();
+    app = buildApp(nodeId, {
       now: new Date("2026-08-29T10:00:00Z"),
       tlsCertPath: undefined,
     });
@@ -196,8 +195,8 @@ describe("GET /api/box/status (real postgres)", () => {
     utimesSync(artifact, mtime, mtime);
     const backend = buildBackend({ kind: "local-fs", id: "primary", dir });
 
-    const { tenantId, nodeId } = await setupTenant();
-    const backupApp = buildApp(tenantId, nodeId, {
+    const { nodeId } = await setupTenant();
+    const backupApp = buildApp(nodeId, {
       now,
       tlsCertPath: undefined,
       readBackup: () => readBackupStatus([backend], 60_000, now),
@@ -220,13 +219,13 @@ describe("GET /api/box/status with a configured TLS cert (real postgres)", () =>
   let managerCookie: string;
 
   beforeAll(async () => {
-    const { tenantId, nodeId } = await setupTenant();
+    const { nodeId } = await setupTenant();
     // A real leaf on disk exercises the cert-configured branch + `readCertExpiry` closure end-to-end
     // (the undefined-cert suite above never touches them). `now` is 30 days before the fixture's
     // notAfter, so `daysRemaining` is a deterministic 30.
     const certPath = join(mkdtempSync(join(tmpdir(), "box-status-cert-")), "server.crt");
     writeFileSync(certPath, FIXTURE_CERT_PEM);
-    app = buildApp(tenantId, nodeId, {
+    app = buildApp(nodeId, {
       now: new Date("2036-07-27T13:07:51.000Z"),
       tlsCertPath: certPath,
     });

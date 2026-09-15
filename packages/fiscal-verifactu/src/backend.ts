@@ -83,7 +83,7 @@ export interface VerifactuBackendOptions {
    * `issuedAt`/`offsetMinutes` by its caller instead and must not read the clock a second time
    * (see `record-sale.ts`'s own "one clock reading for the whole transaction" note in
    * `packages/core`). `recordVoid` has no caller-supplied timestamp on its signature at all
-   * (`recordVoid(tx, saleId, reason)`), so it reads this clock itself. `pendingCount(tenantId,
+   * (`recordVoid(tx, saleId, reason)`), so it reads this clock itself. `pendingCount(
    * nodeId)` takes no transaction at all, so it needs its OWN `db` handle below rather than one a
    * caller passes in.
    */

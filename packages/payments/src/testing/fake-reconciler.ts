@@ -1,6 +1,5 @@
 import type { Database } from "@waitron/db";
 import { recordIncidentOnce } from "@waitron/core";
-import type { TenantId } from "@waitron/shared";
 import { DEFAULT_SETTLEMENT_LAG_MS, reconcilePayments } from "../reconcile.js";
 import type {
   PaymentReconcileResult,
@@ -26,11 +25,7 @@ export class FakeReconciler implements PaymentReconciler {
     private readonly settlementLagMs: number = DEFAULT_SETTLEMENT_LAG_MS,
   ) {}
 
-  async reconcile(
-    tenantId: TenantId,
-    period: ReconcilePeriod,
-    now: Date,
-  ): Promise<PaymentReconcileResult> {
+  async reconcile(period: ReconcilePeriod, now: Date): Promise<PaymentReconcileResult> {
     return reconcilePayments(
       {
         db: this.db,
@@ -45,7 +40,6 @@ export class FakeReconciler implements PaymentReconciler {
         // using it asserts on captured origin (sync origin attribution is proven in the server suite).
         nodeId: "00000000-0000-0000-0000-000000000000",
       },
-      tenantId,
       period,
       now,
     );

@@ -4,12 +4,11 @@ import { eq, sql } from "drizzle-orm";
 import { isUniqueViolation, saleSettlements, saleVoids, sales, tenders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError, compareDecimal, decimal, sumDecimals } from "@waitron/shared";
-import type { SaleId, TenantId } from "@waitron/shared";
+import type { SaleId } from "@waitron/shared";
 import type { RecordSaleTender } from "./record-sale.js";
 
 export interface SettleSaleInput {
   /** Inert: nothing here reads it. apps/server still supplies it; the field goes when that does. */
-  tenantId?: TenantId;
   saleId: SaleId;
   tenders: RecordSaleTender[];
 }

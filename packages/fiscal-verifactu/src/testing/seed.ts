@@ -64,8 +64,8 @@ function freshNif(): string {
  */
 async function ensureTaxpayer(tx: Transaction, nif: string): Promise<void> {
   await tx.execute(sql`
-    insert into tenants (country, tax_id, legal_name)
-    select 'ES', ${nif}, ${"Waitron SL"} where not exists (select 1 from tenants)
+    insert into tenants (id, country, tax_id, legal_name)
+    select 1, 'ES', ${nif}, ${"Waitron SL"} where not exists (select 1 from tenants)
   `);
 }
 

@@ -69,9 +69,7 @@ export function translateWriteError(err: unknown): never {
 /** All canvases, in no defined order (the query has no ORDER BY). */
 export async function listCanvases(
   tx: Transaction,
-  tenantId: string,
 ): Promise<{ id: string; name: string; definition: CanvasDef }[]> {
-  void tenantId;
   const rows = await tx
     .select({
       id: canvases.id,
@@ -89,10 +87,8 @@ export async function listCanvases(
 /** One canvas by id, or `undefined` when no canvas carries that id. */
 export async function getCanvas(
   tx: Transaction,
-  tenantId: string,
   id: string,
 ): Promise<{ id: string; name: string; definition: CanvasDef } | undefined> {
-  void tenantId;
   const [row] = await tx
     .select({
       id: canvases.id,
@@ -108,7 +104,7 @@ export async function getCanvas(
 /** Create a canvas, returning its generated id. Manager/admin only (`layout.configure`). */
 export async function createCanvas(
   tx: Transaction,
-  input: { managementSessionId: string; tenantId?: string; name: string; definition: unknown },
+  input: { managementSessionId: string; name: string; definition: unknown },
 ): Promise<{ id: string }> {
   await authorizeManager(tx, {
     managementSessionId: input.managementSessionId,
@@ -140,7 +136,6 @@ export async function updateCanvas(
     managementSessionId: string;
     /** Inert: nothing here reads it. apps/server and provisioning still supply it; the field goes
      * when those callers do. */
-    tenantId?: string;
     id: string;
     name: string;
     definition: unknown;
@@ -177,7 +172,7 @@ export async function updateCanvas(
  */
 export async function deleteCanvas(
   tx: Transaction,
-  input: { managementSessionId: string; tenantId?: string; id: string },
+  input: { managementSessionId: string; id: string },
 ): Promise<void> {
   await authorizeManager(tx, {
     managementSessionId: input.managementSessionId,
@@ -205,10 +200,8 @@ export async function deleteCanvas(
  */
 export async function getCanvasForFormFactor(
   tx: Transaction,
-  tenantId: string,
   formFactor: FormFactor,
 ): Promise<CanvasDef> {
-  void tenantId;
   const [row] = await tx
     .select({ definition: canvases.definition })
     .from(canvases)

@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { captureError, pgErrorCode } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
+import { locationId as brandLocationId } from "@waitron/shared";
 import { appendToChain, readChain, type ChainKey, type TimeEntryAppend } from "./chain.js";
 import { verifyChain } from "./chain-hash.js";
 import { seedLocation, seedPerson } from "../test/fixtures.js";
@@ -21,7 +21,6 @@ const WRITERS = 20;
  */
 const suite = useTemplateDb({ template: "core_identity_workforce" });
 
-let tenantId: string;
 let personId: string;
 let locationId: string;
 let nodeId: string;
@@ -30,10 +29,10 @@ let nodeId: string;
 // its owner, so each test mints new rows in a new tenant rather than cleaning up. Everything below is
 // scoped to `locationId`, so a previous test's committed rows are simply out of scope.
 beforeEach(async () => {
-  tenantId = await seedTenant(suite.admin);
+  await seedTenant(suite.admin);
   personId = await seedPerson(suite.admin);
-  locationId = await seedLocation(suite.admin, tenantId);
-  nodeId = await seedNode(suite.admin, brandTenantId(tenantId), brandLocationId(locationId));
+  locationId = await seedLocation(suite.admin);
+  nodeId = await seedNode(suite.admin, brandLocationId(locationId));
 });
 
 /** The chain key for this suite's default (node, location). */
@@ -170,12 +169,8 @@ describe("appendToChain under real contention", () => {
   it("does not block an appender on a different location", async () => {
     // Per-(node, location) parallelism is the reason the lock is on a row rather than a global key: a busy
     // location must never stall a quiet one.
-    const otherLocation = await seedLocation(suite.admin, tenantId);
-    const otherNode = await seedNode(
-      suite.admin,
-      brandTenantId(tenantId),
-      brandLocationId(otherLocation),
-    );
+    const otherLocation = await seedLocation(suite.admin);
+    const otherNode = await seedNode(suite.admin, brandLocationId(otherLocation));
     const holder = await suite.pg.connect();
     const writer = await suite.pg.connect();
     let release: () => void = () => {};
@@ -218,7 +213,7 @@ describe("appendToChain under real contention", () => {
     // of them contend. This two-node case passes only because `node_id` is in
     // `time_entries_chain_position_uq`: drop it and the two nodes' equal sequence_no values collide
     // on (location, sequence_no).
-    const nodeB = await seedNode(suite.admin, brandTenantId(tenantId), brandLocationId(locationId));
+    const nodeB = await seedNode(suite.admin, brandLocationId(locationId));
     const perNode = WRITERS / 2;
     const dbs = await Promise.all(Array.from({ length: WRITERS }, () => suite.pg.connect()));
     try {

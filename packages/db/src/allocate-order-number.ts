@@ -29,13 +29,7 @@ import { workingOrderCounters } from "./schema/working-order-counters.js";
  * per-node counter starting at 1, not a fiscal series that may carry a
  * migrated starting point.
  */
-export async function allocateOrderNumber(
-  tx: Transaction,
-  tenantId: string,
-  nodeId: string,
-): Promise<number> {
-  // apps/server still passes the tenant; the parameter goes when that caller does.
-  void tenantId;
+export async function allocateOrderNumber(tx: Transaction, nodeId: string): Promise<number> {
   const [row] = await tx
     .insert(workingOrderCounters)
     .values({ nodeId, nextNumber: 1 })

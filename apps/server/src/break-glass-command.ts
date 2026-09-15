@@ -49,12 +49,6 @@ export async function runBreakGlassReset(deps: {
     "DATABASE_URL must be set to the box's database connection string",
   );
   if (databaseUrl === undefined) return 2;
-  const tenantId = requireEnv(
-    deps,
-    "WAITRON_TILL_TENANT_ID",
-    "WAITRON_TILL_TENANT_ID must be set to the box's tenant id",
-  );
-  if (tenantId === undefined) return 2;
   const newPassword = requireEnv(
     deps,
     "WAITRON_BREAKGLASS_PASSWORD",
@@ -104,22 +98,21 @@ export async function runBreakGlassReset(deps: {
   try {
     try {
       return await withTransaction(db, async (tx) => {
-        // The deployment holds one tenant per database. The read is unfiltered: these are the box's
-        // admins.
+        // The read is unfiltered: these are the box's admins.
         const admins = await tx
           .select({ id: persons.id })
           .from(persons)
           .where(eq(persons.role, "admin"));
 
         if (admins.length === 0) {
-          deps.out(`break-glass: no admin found for tenant ${tenantId}`);
+          deps.out("break-glass: no admin found on this box");
           return 1;
         }
 
         let targetId: string;
         if (personArg !== undefined) {
           if (!admins.some((a) => a.id === personArg)) {
-            deps.out(`break-glass: --person ${personArg} is not an admin of tenant ${tenantId}`);
+            deps.out(`break-glass: --person ${personArg} is not an admin of this box`);
             return 1;
           }
           targetId = personArg;

@@ -8,11 +8,7 @@ import {
   type Database,
 } from "@waitron/db";
 import type { WaitronModule } from "@waitron/module";
-import {
-  locationId as brandLocationId,
-  nodeId as brandNodeId,
-  tenantId as brandTenantId,
-} from "@waitron/shared";
+import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import { NODE_KEY_PURPOSE } from "./node-identity.js";
 import type { ReservedIdentity } from "./mirror-bundle.js";
 import "./errors.js";
@@ -53,7 +49,6 @@ export function generateStandbyIdentity(): StandbyIdentity {
 export async function establishReservedStandbyIdentity(
   deps: { ownerDb: Database; ring: KeyRing },
   args: {
-    tenantId: string;
     locationId: string;
     standby: StandbyIdentity;
     nodeName: string;
@@ -64,7 +59,6 @@ export async function establishReservedStandbyIdentity(
     reserved: ReservedIdentity;
   },
 ): Promise<void> {
-  const tenant = brandTenantId(args.tenantId);
   await withTransaction(deps.ownerDb, async (tx) => {
     const existing = await tryGetCredential(tx, deps.ring, { purpose: NODE_KEY_PURPOSE });
     if (existing !== null) return; // already established — idempotent no-op
@@ -75,7 +69,6 @@ export async function establishReservedStandbyIdentity(
     });
     await insertReservedNodeTx(tx, {
       id: args.standby.nodeId,
-      tenantId: args.tenantId,
       locationId: args.locationId,
       name: args.nodeName,
       filingModule: args.filingModule,
@@ -84,7 +77,6 @@ export async function establishReservedStandbyIdentity(
       endorsement: args.reserved.endorsement,
     });
     const standbyNode = {
-      tenantId: tenant,
       locationId: brandLocationId(args.locationId),
       nodeId: brandNodeId(args.standby.nodeId),
     };
@@ -95,7 +87,6 @@ export async function establishReservedStandbyIdentity(
     await insertReservedSeriesTx(
       tx,
       (args.reserved.series ?? []).map((s) => ({
-        tenantId: args.tenantId,
         nodeId: args.standby.nodeId,
         code: s.code,
         purpose: s.purpose,

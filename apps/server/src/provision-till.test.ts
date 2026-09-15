@@ -2,12 +2,8 @@ import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import {
-  nodeId as brandNodeId,
-  tenantId as brandTenantId,
-  tillId as brandTillId,
-} from "@waitron/shared";
-import type { NodeId, TenantId, TillId } from "@waitron/shared";
+import { nodeId as brandNodeId, tillId as brandTillId } from "@waitron/shared";
+import type { NodeId, TillId } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
 import { provisionNode } from "./provision-till.js";
 
@@ -28,7 +24,6 @@ const suite = usePgliteDb({
 });
 
 interface Bootstrapped {
-  tenantId: TenantId;
   tillId: TillId;
   nodeId: NodeId;
   nif: string;
@@ -61,35 +56,35 @@ function nextNif(): string {
  */
 async function bootstrapTenant(): Promise<Bootstrapped> {
   const nif = nextNif();
-  const tenant = await suite.db.execute<{ id: string }>(sql`
-    insert into tenants (country, tax_id, legal_name) values ('ES', ${nif}, 'Deli SL') returning id`);
-  const tenantId = brandTenantId(tenant.rows[0]!.id);
+  await suite.db.execute<{ id: string }>(sql`
+    insert into tenants (id, country, tax_id, legal_name) values (1, 'ES', ${nif}, 'Deli SL')
+    on conflict (id) do nothing`);
 
   const location = await suite.db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Mostrador', array['es-ES'], 'Venta en establecimiento') returning id`);
+    insert into locations (name, invoice_locales, operation_description)
+    values ('Mostrador', array['es-ES'], 'Venta en establecimiento') returning id`);
 
   const till = await suite.db.execute<{ id: string }>(sql`
-    insert into tills (tenant_id, location_id, name)
-    values (${tenantId}, ${location.rows[0]!.id}, 'Caja 1') returning id`);
+    insert into tills (location_id, name)
+    values (${location.rows[0]!.id}, 'Caja 1') returning id`);
   const tillId = brandTillId(till.rows[0]!.id);
 
   const node = await suite.db.execute<{ id: string }>(sql`
-    insert into nodes (tenant_id, location_id, name)
-    values (${tenantId}, ${location.rows[0]!.id}, 'Node 1') returning id`);
+    insert into nodes (location_id, name)
+    values (${location.rows[0]!.id}, 'Node 1') returning id`);
   const nodeId = brandNodeId(node.rows[0]!.id);
 
   await suite.db.execute(sql`
-    insert into invoice_series (tenant_id, node_id, code) values (${tenantId}, ${nodeId}, 'A')`);
+    insert into invoice_series (node_id, code) values (${nodeId}, 'A')`);
 
-  return { tenantId, tillId, nodeId, nif };
+  return { tillId, nodeId, nif };
 }
 
 describe("provisioning a node that has no SIF registration yet", () => {
   it("runs every module's seed for the node — fiscal registers it under the tenant's own NIF", async () => {
-    const { tenantId, nodeId, nif } = await bootstrapTenant();
+    const { nodeId, nif } = await bootstrapTenant();
 
-    const seeded = await provisionNode(suite.db, { tenantId, nodeId }, ALL_MODULES);
+    const seeded = await provisionNode(suite.db, { nodeId }, ALL_MODULES);
     expect(seeded.map((s) => s.module)).toEqual(["catalogue", "venue-service", "fiscal-verifactu"]);
     expect(seeded[2]!.report).toMatch(/^SIF .* \(installation 1\)$/);
 
@@ -99,15 +94,15 @@ describe("provisioning a node that has no SIF registration yet", () => {
       id_sistema_informatico: string;
       numero_instalacion: number;
     }>(sql`select nif, id_sistema_informatico, numero_instalacion from registro_sif
-           where tenant_id = ${tenantId} and node_id = ${nodeId} and revocado_en is null`);
+           where node_id = ${nodeId} and revocado_en is null`);
     expect(live.rows).toEqual([{ nif, id_sistema_informatico: "W1", numero_instalacion: 1 }]);
   });
 
   it("refuses a node id that names no node", async () => {
-    const { tenantId } = await bootstrapTenant();
+    await bootstrapTenant();
 
     await expect(
-      provisionNode(suite.db, { tenantId, nodeId: brandNodeId(ABSENT) }, ALL_MODULES),
+      provisionNode(suite.db, { nodeId: brandNodeId(ABSENT) }, ALL_MODULES),
     ).rejects.toMatchObject({ code: "node.not_found", params: { id: ABSENT } });
   });
 });

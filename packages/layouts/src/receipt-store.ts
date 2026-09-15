@@ -21,8 +21,7 @@ import { validateReceiptConfig } from "./validate.js";
  */
 
 /** The authored receipt trim, or DEFAULT_RECEIPT (`{}`) when nobody has authored one. */
-export async function getReceipt(tx: Transaction, tenantId: string): Promise<ReceiptConfig> {
-  void tenantId;
+export async function getReceipt(tx: Transaction): Promise<ReceiptConfig> {
   const [row] = await tx.select({ receipt: tenantReceipts.receipt }).from(tenantReceipts);
   if (row === undefined) return DEFAULT_RECEIPT;
   return row.receipt as ReceiptConfig;
@@ -31,7 +30,7 @@ export async function getReceipt(tx: Transaction, tenantId: string): Promise<Rec
 /** Author (create or replace) the receipt trim. Manager/admin only (`layout.configure`). */
 export async function putReceipt(
   tx: Transaction,
-  input: { managementSessionId: string; tenantId?: string; receipt: unknown },
+  input: { managementSessionId: string; receipt: unknown },
 ): Promise<void> {
   await authorizeManager(tx, {
     managementSessionId: input.managementSessionId,

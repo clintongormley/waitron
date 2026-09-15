@@ -8,8 +8,8 @@ import type { FormFactor } from "@waitron/layouts";
 import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
-  seriesId as brandSeriesId,
   tillId as brandTillId,
+  seriesId as brandSeriesId,
 } from "@waitron/shared";
 import type { TillConfig } from "./till-config.js";
 import { createStation } from "./kitchen.js";
@@ -33,16 +33,15 @@ interface SeededVenue {
  * so device/till counts are order-independent across the shared clone (CLAUDE.md §4). */
 async function setupVenue(): Promise<SeededVenue> {
   const admin = suite.admin;
-  const tenantId = await seedTenant(admin);
+  await seedTenant(admin);
   const loc = await admin.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
+    insert into locations (name, invoice_locales, operation_description)
+    values ('Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
   const locationId = loc.rows[0]!.id;
   const till = await admin.execute<{ id: string }>(sql`
-    insert into tills (tenant_id, location_id, name) values (${tenantId}, ${locationId}, 'Caja 1') returning id`);
-  const nodeId = await seedNode(admin, tenantId, brandLocationId(locationId));
+    insert into tills (location_id, name) values (${locationId}, 'Caja 1') returning id`);
+  const nodeId = await seedNode(admin, brandLocationId(locationId));
   const cfg: TillConfig = {
-    tenantId,
     tillId: brandTillId(till.rows[0]!.id),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
@@ -61,17 +60,17 @@ async function setupVenue(): Promise<SeededVenue> {
 
 /** Seed a device profile of the given form factor (owner SQL for setup). `name` is unique per tenant
  * (`device_profiles_tenant_name_key`), so a test seeding two profiles passes two distinct names. */
-async function seedProfile(cfg: TillConfig, formFactor: FormFactor, name: string): Promise<string> {
+async function seedProfile(formFactor: FormFactor, name: string): Promise<string> {
   const { rows } = await suite.admin.execute<{ id: string }>(sql`
-    insert into device_profiles (tenant_id, name, form_factor)
-    values (${cfg.tenantId}, ${name}, ${formFactor})
+    insert into device_profiles (name, form_factor)
+    values (${name}, ${formFactor})
     returning id`);
   return rows[0]!.id;
 }
 
-async function tillCount(cfg: TillConfig): Promise<number> {
+async function tillCount(): Promise<number> {
   const { rows } = await suite.admin.execute<{ n: number }>(
-    sql`select count(*)::int as n from tills where tenant_id = ${cfg.tenantId}`,
+    sql`select count(*)::int as n from tills `,
   );
   return rows[0]!.n;
 }
@@ -103,15 +102,15 @@ describe("device join-and-accept binds the device by its profile's form factor (
     // then rejects — but the load-bearing assertion here is that exactly ONE new till exists, named the
     // device's name, and the device points at it with a NULL station.
     const { cfg } = await setupVenue();
-    const profileId = await seedProfile(cfg, "till", "Perfil Caja");
-    const before = await tillCount(cfg);
+    const profileId = await seedProfile("till", "Perfil Caja");
+    const before = await tillCount();
 
     const dev = await enrolDeviceForTest(suite.admin, cfg, { name: "Caja Nueva", profileId });
 
     // Exactly ONE new till, named after the device.
-    expect(await tillCount(cfg)).toBe(before + 1);
+    expect(await tillCount()).toBe(before + 1);
     const { rows: created } = await suite.admin.execute<{ id: string }>(
-      sql`select id from tills where tenant_id = ${cfg.tenantId} and location_id = ${cfg.locationId} and name = 'Caja Nueva'`,
+      sql`select id from tills where location_id = ${cfg.locationId} and name = 'Caja Nueva'`,
     );
     expect(created).toHaveLength(1);
     // …and the device is bound to THAT register, with no station.
@@ -126,15 +125,15 @@ describe("device join-and-accept binds the device by its profile's form factor (
     // The else branch (phone-portrait / tablet-landscape): a handheld rings against an already-created
     // register, so resolveDeviceBinding binds the named `registerId` and mints NO till.
     const { cfg } = await setupVenue();
-    const profileId = await seedProfile(cfg, "phone-portrait", "Perfil Móvil");
-    const before = await tillCount(cfg);
+    const profileId = await seedProfile("phone-portrait", "Perfil Móvil");
+    const before = await tillCount();
 
     const dev = await enrolDeviceForTest(suite.admin, cfg, {
       name: "Camarero 1",
       profileId,
       registerId: cfg.tillId,
     });
-    expect(await tillCount(cfg)).toBe(before); // no register minted
+    expect(await tillCount()).toBe(before); // no register minted
 
     const row = await deviceRow(dev.deviceId);
     expect(row.till_id).toBe(cfg.tillId);
@@ -143,7 +142,7 @@ describe("device join-and-accept binds the device by its profile's form factor (
 
   it("a kds profile binds the named station (till NULL)", async () => {
     const { cfg, stationId } = await setupVenue();
-    const profileId = await seedProfile(cfg, "kds", "Perfil KDS");
+    const profileId = await seedProfile("kds", "Perfil KDS");
 
     const dev = await enrolDeviceForTest(suite.admin, cfg, {
       name: "Pantalla Cocina",
@@ -158,7 +157,7 @@ describe("device join-and-accept binds the device by its profile's form factor (
 
   it("a kds profile with NO station is device.station_required", async () => {
     const { cfg } = await setupVenue();
-    const profileId = await seedProfile(cfg, "kds", "Perfil KDS");
+    const profileId = await seedProfile("kds", "Perfil KDS");
     await expect(
       enrolDeviceForTest(suite.admin, cfg, { name: "Pantalla", profileId }),
     ).rejects.toMatchObject({ code: "device.station_required" });
@@ -166,7 +165,7 @@ describe("device join-and-accept binds the device by its profile's form factor (
 
   it("a handheld profile with NO register is device.register_required", async () => {
     const { cfg } = await setupVenue();
-    const profileId = await seedProfile(cfg, "phone-portrait", "Perfil Móvil");
+    const profileId = await seedProfile("phone-portrait", "Perfil Móvil");
     await expect(
       enrolDeviceForTest(suite.admin, cfg, { name: "Camarero", profileId }),
     ).rejects.toMatchObject({ code: "device.register_required" });
@@ -178,11 +177,11 @@ describe("device join-and-accept binds the device by its profile's form factor (
     // the SAME tenant) trips it.
     const { cfg } = await setupVenue();
     const other = await suite.admin.execute<{ id: string }>(sql`
-      insert into locations (tenant_id, name, invoice_locales, operation_description)
-      values (${cfg.tenantId}, 'Terraza', array[${LOCALE}], 'Venta en establecimiento') returning id`);
+      insert into locations (name, invoice_locales, operation_description)
+      values ('Terraza', array[${LOCALE}], 'Venta en establecimiento') returning id`);
     const foreignTill = await suite.admin.execute<{ id: string }>(sql`
-      insert into tills (tenant_id, location_id, name) values (${cfg.tenantId}, ${other.rows[0]!.id}, 'Caja 1') returning id`);
-    const profileId = await seedProfile(cfg, "phone-portrait", "Perfil Móvil");
+      insert into tills (location_id, name) values (${other.rows[0]!.id}, 'Caja 1') returning id`);
+    const profileId = await seedProfile("phone-portrait", "Perfil Móvil");
     await expect(
       enrolDeviceForTest(suite.admin, cfg, {
         name: "Camarero",
@@ -197,11 +196,11 @@ describe("device join-and-accept binds the device by its profile's form factor (
     // `tills_tenant_location_name_key` (migration 0006). Proven by DELETION: dropping the index (or the
     // 23505 translation) lets a SECOND 'Caja 1' insert succeed and this reject never fires.
     const { cfg } = await setupVenue();
-    const profileId = await seedProfile(cfg, "till", "Perfil Caja");
-    const before = await tillCount(cfg);
+    const profileId = await seedProfile("till", "Perfil Caja");
+    const before = await tillCount();
     await expect(
       enrolDeviceForTest(suite.admin, cfg, { name: "Caja 1", profileId }),
     ).rejects.toMatchObject({ code: "device.register_name_taken" });
-    expect(await tillCount(cfg)).toBe(before); // the colliding register did not land
+    expect(await tillCount()).toBe(before); // the colliding register did not land
   });
 });

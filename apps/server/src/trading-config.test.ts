@@ -15,7 +15,6 @@ const newDir = async () => {
 };
 
 const cfg: TradingConfig = {
-  tenantId: "tenant-1",
   tillId: "till-2",
   nodeId: "node-3",
   seriesId: "series-4",
@@ -43,8 +42,7 @@ describe("writeTradingEnv", () => {
     // subscription, not an outbox pull — and the exact-equality below pins that absence.
     const env = await readFile(await writeTradingEnv(d, cfg), "utf8");
     expect(env).toBe(
-      "WAITRON_TILL_TENANT_ID=tenant-1\n" +
-        "WAITRON_TILL_TILL_ID=till-2\n" +
+      "WAITRON_TILL_TILL_ID=till-2\n" +
         "WAITRON_TILL_NODE_ID=node-3\n" +
         "WAITRON_TILL_SERIES_ID=series-4\n" +
         "WAITRON_TILL_LOCATION_ID=location-5\n" +

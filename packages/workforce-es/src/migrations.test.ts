@@ -6,7 +6,6 @@ import { seedTenant } from "@waitron/db/testing/seed.js";
 import { WORKFORCE_ES_MIGRATIONS } from "./migrations.js";
 import { seedLocation } from "../test/fixtures.js";
 
-let tenantId: string;
 let locationId: string;
 
 const suite = usePgliteDb({
@@ -15,8 +14,8 @@ const suite = usePgliteDb({
   // and nothing enforces it, so it is explicit here; this proves convenio_config applies core-first.
   migrations: [CORE_MIGRATIONS, WORKFORCE_ES_MIGRATIONS],
   setup: async (db) => {
-    tenantId = await seedTenant(db);
-    locationId = await seedLocation(db, tenantId);
+    await seedTenant(db);
+    locationId = await seedLocation(db);
   },
 });
 
@@ -77,7 +76,7 @@ describe("the workforce-es (convenio_config) migration set", () => {
   });
 
   it("allows only one convenio_config per location", async () => {
-    const other = await seedLocation(suite.db, tenantId);
+    const other = await seedLocation(suite.db);
     await suite.db.execute(sql`
       insert into convenio_config (location_id) values (${other})`);
     const error = await captureError(() =>

@@ -54,11 +54,10 @@ const adopting = useTemplateDb({ template: "manifest", resetPerTest: false });
 // (server.config_invalid), never serve a mirror that can never reach its primary.
 const noConfig = useTemplateDb({ template: "manifest", resetPerTest: false });
 
-// The till's fiscal identity — the five WAITRON_TILL_*_ID that put boot into TRADING mode. Distinct
+// The till's fiscal identity — the four WAITRON_TILL_*_ID that put boot into TRADING mode. Distinct
 // per field. Seeded on BOTH clones in `beforeAll` (tenant/location/node/till/series) so a successful
 // boot's `readOrderFlow` / `readVenueLocale` reads resolve.
 const TILL_ENV = {
-  WAITRON_TILL_TENANT_ID: "11111111-1111-4111-8111-111111111111",
   WAITRON_TILL_TILL_ID: "22222222-2222-4222-8222-222222222222",
   WAITRON_TILL_NODE_ID: "33333333-3333-4333-8333-333333333333",
   WAITRON_TILL_SERIES_ID: "44444444-4444-4444-8444-444444444444",
@@ -118,18 +117,18 @@ let adoptingDatabaseUrl: string;
  */
 async function seedIdentity(admin: Database): Promise<void> {
   await admin.execute(sql`insert into tenants (id, country, tax_id, legal_name)
-    values (${TILL_ENV.WAITRON_TILL_TENANT_ID}, 'ES', '90222222J', 'Mirror SL') on conflict do nothing`);
-  await admin.execute(sql`insert into locations (id, tenant_id, name, invoice_locales, operation_description)
-    values (${TILL_ENV.WAITRON_TILL_LOCATION_ID}, ${TILL_ENV.WAITRON_TILL_TENANT_ID}, 'Loc',
+    values (1, 'ES', '90222222J', 'Mirror SL') on conflict do nothing`);
+  await admin.execute(sql`insert into locations (id, name, invoice_locales, operation_description)
+    values (${TILL_ENV.WAITRON_TILL_LOCATION_ID}, 'Loc',
             array['en']::text[], 'Hospitality') on conflict do nothing`);
-  await admin.execute(sql`insert into nodes (id, tenant_id, location_id, name)
-    values (${TILL_ENV.WAITRON_TILL_NODE_ID}, ${TILL_ENV.WAITRON_TILL_TENANT_ID},
+  await admin.execute(sql`insert into nodes (id, location_id, name)
+    values (${TILL_ENV.WAITRON_TILL_NODE_ID},
             ${TILL_ENV.WAITRON_TILL_LOCATION_ID}, 'Node') on conflict do nothing`);
-  await admin.execute(sql`insert into tills (id, tenant_id, location_id, name)
-    values (${TILL_ENV.WAITRON_TILL_TILL_ID}, ${TILL_ENV.WAITRON_TILL_TENANT_ID},
+  await admin.execute(sql`insert into tills (id, location_id, name)
+    values (${TILL_ENV.WAITRON_TILL_TILL_ID},
             ${TILL_ENV.WAITRON_TILL_LOCATION_ID}, 'Till') on conflict do nothing`);
-  await admin.execute(sql`insert into invoice_series (id, tenant_id, node_id, code)
-    values (${TILL_ENV.WAITRON_TILL_SERIES_ID}, ${TILL_ENV.WAITRON_TILL_TENANT_ID},
+  await admin.execute(sql`insert into invoice_series (id, node_id, code)
+    values (${TILL_ENV.WAITRON_TILL_SERIES_ID},
             ${TILL_ENV.WAITRON_TILL_NODE_ID}, 'A') on conflict do nothing`);
 }
 
@@ -316,7 +315,6 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
     // regardless (drain.ts:226), so the tripwire fires on the tenant either way.
     const seeded = await seedFiscalRegistro(mirror.admin, {
       ids: {
-        tenantId: TILL_ENV.WAITRON_TILL_TENANT_ID,
         locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
         tillId: TILL_ENV.WAITRON_TILL_TILL_ID,
         nodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
@@ -563,7 +561,7 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
     // adoption-pending branch and serve a minimal status surface WITHOUT touching tenant-scoped rows.
     //
     // FAILING CASE (proven by the empty database here): without the adoption-pending guard, boot would
-    // reach `ensureMirrorViewer(db, tenantId)`, whose `persons` insert FKs to a `tenants` row the copy
+    // reach `ensureMirrorViewer(db)`, whose `persons` insert FKs to a `tenants` row the copy
     // has not brought — a foreign-key violation that would throw out of `startServer`. That this boot
     // returns a serving box instead is the guard working: the identity was never seeded on `adopting`.
     const stateDir = mkdtempSync(join(tmpdir(), "waitron-adopting-state-"));
@@ -579,7 +577,6 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
     writeFileSync(
       join(stateDir, "pending-adoption.json"),
       JSON.stringify({
-        tenantId: TILL_ENV.WAITRON_TILL_TENANT_ID,
         locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
         standby: {
           nodeId: "88888888-8888-4888-8888-888888888888",

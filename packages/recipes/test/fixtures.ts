@@ -12,34 +12,32 @@ import {
   createUnit,
 } from "@waitron/catalogue";
 import { locationId as brandLocationId } from "@waitron/shared";
-import type { TenantId } from "@waitron/shared";
 
 export interface SeededVenue {
-  tenantId: TenantId;
   locationId: string;
 }
 
 // Seed tenant, location and node as the connection owner.
 export async function seedVenue(db: Database): Promise<SeededVenue> {
-  const tenantId = await seedTenant(db);
+  await seedTenant(db);
   const loc = await db.execute<{ id: string }>(sql`
     insert into locations (name, invoice_locales, operation_description) values ('Main', array['en-GB'], 'Test op') returning id`);
   const locationId = loc.rows[0]!.id;
-  await seedNode(db, tenantId, brandLocationId(locationId));
-  return { tenantId, locationId };
+  await seedNode(db, brandLocationId(locationId));
+  return { locationId };
 }
 
 /** Seed a catalogue + one product; returns the product id, for recipe tests. */
-export async function seedProduct(db: Database, tenantId: TenantId): Promise<string> {
+export async function seedProduct(db: Database): Promise<string> {
   return withTransaction(db, async (tx: Transaction) => {
     await asAppUser(tx);
-    const cat = await createCatalogue(tx, tenantId, { name: "Deli" });
+    const cat = await createCatalogue(tx, { name: "Deli" });
     const unit = await createUnit(
       tx,
       { name: { en: "each" }, precision: 0, abbreviation: { en: "ea" } },
       "en",
     );
-    const p = await createProduct(tx, tenantId, {
+    const p = await createProduct(tx, {
       catalogueId: cat.id,
       categoryId: null,
       name: "bocadillo",

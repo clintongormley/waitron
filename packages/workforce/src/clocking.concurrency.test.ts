@@ -1,11 +1,7 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { pgErrorCode, withTransaction } from "@waitron/db";
-import {
-  AppError,
-  locationId as brandLocationId,
-  tenantId as brandTenantId,
-} from "@waitron/shared";
+import { AppError, locationId as brandLocationId } from "@waitron/shared";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { WorkforceBackend, type ClockEventInput } from "./clocking.js";
@@ -39,7 +35,6 @@ const suite = useTemplateDb({ template: "core_identity_workforce" });
 
 const backend = new WorkforceBackend();
 
-let tenantId: string;
 let personId: string;
 let otherPersonId: string;
 let locationId: string;
@@ -48,11 +43,11 @@ let nodeId: string;
 // A FRESH tenant per test: time_entries' block-truncate trigger makes the table un-wipeable even by
 // its owner (chain.concurrency.test.ts's reasoning), so each test mints new rows in a new tenant.
 beforeEach(async () => {
-  tenantId = await seedTenant(suite.admin);
+  await seedTenant(suite.admin);
   personId = await seedPerson(suite.admin, "Ana");
   otherPersonId = await seedPerson(suite.admin, "Ben");
-  locationId = await seedLocation(suite.admin, tenantId);
-  nodeId = await seedNode(suite.admin, brandTenantId(tenantId), brandLocationId(locationId));
+  locationId = await seedLocation(suite.admin);
+  nodeId = await seedNode(suite.admin, brandLocationId(locationId));
 });
 
 function event(at: string): ClockEventInput {

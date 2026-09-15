@@ -17,7 +17,7 @@ export const DRAWER_KICK: Uint8Array = esc().kick().bytes();
 
 /** The tenant + location scope `enqueuePrintJob` runs under — `TillConfig` carries both. */
 function printConfig(cfg: TillConfig): PrintConfig {
-  return { tenantId: cfg.tenantId, locationId: cfg.locationId };
+  return { locationId: cfg.locationId };
 }
 
 /** The till's active receipt printer and the settings its receipts are laid out for. */
@@ -64,17 +64,17 @@ async function buildReceiptBytes(
   const [issuer] = await tx
     .select({ venueName: tenants.legalName, nif: tenants.taxId })
     .from(tenants)
-    .where(eq(tenants.id, cfg.tenantId));
+    .where(eq(tenants.id, 1));
   /* v8 ignore start */
   if (issuer === undefined) {
-    // Structurally unreachable: `cfg.tenantId` is this till's own tenant (provisioning stamped
-    // it), so the row always exists and the by-id lookup returns it. Degrade to NOT printing
+    // Structurally unreachable: the taxpayer row is the database's one row (provisioning wrote
+    // it), so the by-id lookup always returns it. Degrade to NOT printing
     // rather than throwing — a throw in the sale-tx hook would roll the filed sale back (§5). The
     // boot handler treats the same absence as corruption.
     return undefined;
   }
   /* v8 ignore stop */
-  const receipt = await getReceipt(tx, cfg.tenantId);
+  const receipt = await getReceipt(tx);
   return formatReceipt({
     result: ticket,
     issuer: ticket.issuer ?? issuer,
@@ -166,7 +166,6 @@ export async function enqueueManualDrawerOpen(
   viaOverride: boolean,
 ): Promise<void> {
   await tx.insert(drawerOpens).values({
-    tenantId: cfg.tenantId,
     tillId: cfg.tillId,
     personId: operatorId,
     reason: "manual",
@@ -198,7 +197,6 @@ export async function enqueueCashSaleDrawer(
   const printer = await resolveReceiptPrinter(tx, cfg);
   if (printer === undefined) return;
   await tx.insert(drawerOpens).values({
-    tenantId: cfg.tenantId,
     tillId: cfg.tillId,
     personId: operatorId,
     reason: "cash_sale",

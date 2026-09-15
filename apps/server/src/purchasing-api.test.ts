@@ -19,7 +19,6 @@ import "./errors.js";
 // a superuser holding every grant (CLAUDE.md §4).
 const noopLog: Logger = () => {};
 
-let tenantId: string;
 let managerCookie: string;
 let staffCookie: string;
 
@@ -28,7 +27,7 @@ const suite = usePgliteDb({
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
   timeoutMs: 60_000,
   setup: async (db) => {
-    tenantId = await seedTenant(db);
+    await seedTenant(db);
     // Seed a MANAGER (role `manager`, holds `purchase.manage`) and a STAFF person (role `staff`, holds
     // nothing) as the app role under the tenant, then mint a live management session for each so the
     // route tests can drive the gate through a real cookie. `pin_hash` is NOT NULL, so a value is
@@ -36,17 +35,15 @@ const suite = usePgliteDb({
     const { managerSid, staffSid } = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       const mgr = await tx.execute<{ id: string }>(sql`
-        insert into persons (tenant_id, display_name, pin_hash, role)
-        values (${tenantId}, 'The Manager', ${hashPin("1234")}, 'manager') returning id`);
+        insert into persons (display_name, pin_hash, role)
+        values ('The Manager', ${hashPin("1234")}, 'manager') returning id`);
       const stf = await tx.execute<{ id: string }>(sql`
-        insert into persons (tenant_id, display_name, pin_hash, role)
-        values (${tenantId}, 'The Clerk', ${hashPin("1234")}, 'staff') returning id`);
+        insert into persons (display_name, pin_hash, role)
+        values ('The Clerk', ${hashPin("1234")}, 'staff') returning id`);
       const managerSession = await startManagementSession(tx, {
-        tenantId,
         personId: mgr.rows[0]!.id,
       });
       const staffSession = await startManagementSession(tx, {
-        tenantId,
         personId: stf.rows[0]!.id,
       });
       return { managerSid: managerSession.id, staffSid: staffSession.id };
@@ -58,7 +55,7 @@ const suite = usePgliteDb({
 
 function mountApp(): Hono {
   const app = new Hono();
-  mountPurchasingApi(app, { db: suite.db, cfg: { tenantId } }, noopLog);
+  mountPurchasingApi(app, { db: suite.db }, noopLog);
   return app;
 }
 

@@ -6,11 +6,10 @@ import { nodes, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type { SeedReport, WaitronModule } from "@waitron/module";
 import { AppError, locationId as brandLocationId } from "@waitron/shared";
-import type { NodeId, TenantId } from "@waitron/shared";
+import type { NodeId } from "@waitron/shared";
 import "./errors.js";
 
 export interface ProvisionNodeParams {
-  tenantId: TenantId;
   nodeId: NodeId;
 }
 
@@ -40,7 +39,6 @@ export async function provisionNode(
   return withTransaction(db, async (tx) => {
     const locationId = await nodeLocation(tx, params.nodeId);
     const node = {
-      tenantId: params.tenantId,
       locationId: brandLocationId(locationId),
       nodeId: params.nodeId,
     };

@@ -27,7 +27,7 @@ import {
   workingOrders,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
-import type { Decimal, SaleId, TenantId } from "@waitron/shared";
+import type { Decimal, SaleId } from "@waitron/shared";
 import type { PricedLines } from "@waitron/catalogue";
 import {
   payments,
@@ -653,7 +653,6 @@ async function fileImmediateSale(
   const settledAt = deps.clock.now().instant;
 
   const { saleId, fiscal } = await recordSale(tx, deps.backend, {
-    tenantId: cfg.tenantId,
     tillId: cfg.tillId,
     nodeId: cfg.nodeId,
     seriesId: cfg.seriesId,
@@ -745,7 +744,7 @@ async function fileImmediateSale(
  * filed AT PLACING (`placeOrder`), so a `placed` invoice-first order already carries a chained,
  * unsettled `sales` row; every other flow files its sale at pay, so a non-settled order has none and
  * this returns `undefined`. The presence of that row — not `cfg.orderFlow` — is the discriminator (the
- * DB is the truth). `sales_working_order_id_key` (UNIQUE on `(tenant_id, working_order_id)`) makes the
+ * DB is the truth). `sales_working_order_id_key` (UNIQUE on `(working_order_id)`) makes the
  * lookup return at most one row.
  *
  * `amountDue` is `total + correctionTotal` — the printed total netted against every rectificativa
@@ -758,10 +757,8 @@ async function fileImmediateSale(
  */
 async function readOutstandingSaleForOrder(
   tx: Transaction,
-  tenantId: TenantId,
   workingOrderId: string,
 ): Promise<{ saleId: SaleId; amountDue: Decimal } | undefined> {
-  void tenantId;
   const [row] = await tx
     .select({
       id: sales.id,
@@ -868,7 +865,7 @@ export async function payWorkingOrderIntegrated(
       // invoice-first order already carries an unsettled `sales` row (ordering 2 files at pay, so its
       // non-settled order has none → `undefined`). Used both to route a live collect to a SETTLE and to
       // decide whether a lost-T2 recovery settles the existing invoice or files a fresh sale.
-      const outstanding = await readOutstandingSaleForOrder(tx, cfg.tenantId, req.id);
+      const outstanding = await readOutstandingSaleForOrder(tx, req.id);
 
       // §4 capture-idempotency pre-check. A captured (or offline-accepted) payment whose sale is not yet
       // filed (`sale_id` NULL) is the LOST-T2 RECOVERY WINDOW: `collect`'s T2 committed its capture but
@@ -1028,7 +1025,6 @@ async function finalizeCapture(
       await asAppUser(tx);
 
       const { saleId, fiscal } = await recordSale(tx, deps.backend, {
-        tenantId: cfg.tenantId,
         tillId: cfg.tillId,
         nodeId: cfg.nodeId,
         seriesId: cfg.seriesId,
@@ -1210,7 +1206,6 @@ async function finalizeRecovery(
     const settledAt = new Date(captured.settledAt);
 
     const { saleId, fiscal } = await recordSale(tx, deps.backend, {
-      tenantId: cfg.tenantId,
       tillId: cfg.tillId,
       nodeId: cfg.nodeId,
       seriesId: cfg.seriesId,
@@ -1362,7 +1357,6 @@ async function finalizeSettle(
       // charge (`amountDue + tip`) with the tip attributed on it (coverage identity above); `settleSale`
       // re-derives `due = total + corrections` itself and rejects a mismatch as `sale.tender_shortfall`.
       await settleSale(tx, {
-        tenantId: cfg.tenantId,
         saleId: outstanding.saleId,
         tenders: [
           {
@@ -1499,7 +1493,6 @@ async function finalizeSettleRecovery(
     // charge with the reconstructed tip attributed on it (coverage identity `charged = total +
     // corrections + Σtip`; `settleSale` re-derives `due` and rejects a mismatch).
     await settleSale(tx, {
-      tenantId: cfg.tenantId,
       saleId: outstanding.saleId,
       tenders: [{ method: "card", amount: capturedAmount, tipAmount: tip, settledAt }],
     });
@@ -1644,7 +1637,6 @@ export async function collectOrder(
       const settledAt = deps.clock.now().instant;
 
       await settleSale(tx, {
-        tenantId: cfg.tenantId,
         saleId: brandSaleId(sale.id),
         tenders: [
           {

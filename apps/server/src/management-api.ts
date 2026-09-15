@@ -140,7 +140,7 @@ export interface ManagementApiDeps {
   /** `cfg.tenantId` is the dashboard's own tenant, scoping every `withTransaction` below. `nodeId` is
    * this node's id, carried on the uniform write-path `cfg` shape every mounted API takes; it no
    * longer stamps a capture origin (the application outbox and its capture triggers were removed). */
-  cfg: { tenantId: string; nodeId: string };
+  cfg: { nodeId: string };
   /**
    * The venue's own config — the tenant + LOCATION the floor-zone and table config routes (FP-1) scope
    * their reads and writes to. The zone/table verbs are location-scoped (`floor_zones` / `dining_tables`
@@ -256,7 +256,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "passkey.verification_failed": 401,
   "passkey.challenge_expired": 400,
   // A duplicate credential on register/verify: `finishPasskeyRegistration` translated a
-  // `(tenant_id, credential_id)` 23505 into this code. 409 Conflict, the house convention for a
+  // `credential_id` 23505 into this code. 409 Conflict, the house convention for a
   // "already exists" collision (`table.label_taken`, `tab.already_open`, `roster.already_published`,
   // `purchase.duplicate` all → 409) — not the `?? 400` default, which would still be a 4xx but the
   // wrong one.
@@ -671,7 +671,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       const out = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         return beginGoogleLogin(tx, {
-          tenantId: deps.cfg.tenantId,
           clientId: deps.googleOidc!.clientId,
           redirectUri: deps.googleOidc!.redirectUri,
         });
@@ -688,7 +687,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       const body = await readJsonBody<Record<string, unknown>>(c);
       const out = await withCredentialChange(sessionId, async (tx) => {
         return beginGoogleLink(tx, {
-          tenantId: deps.cfg.tenantId,
           managementSessionId: sessionId,
           ...(typeof body.currentPassword === "string"
             ? { currentPassword: body.currentPassword }
@@ -717,7 +715,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       if (boundState !== state) throw new AppError("google.invalid", {});
       const claimed = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
-        return claimGoogleState(tx, { tenantId: deps.cfg.tenantId, state });
+        return claimGoogleState(tx, { state });
       });
       // The provider exchange is a network call, so it sits between the one-time state claim and
       // the account/session write instead of holding a database transaction open across the network.
@@ -736,7 +734,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         await withTransaction(deps.db, async (tx) => {
           await asAppUser(tx);
           await completeGoogleLink(tx, {
-            tenantId: deps.cfg.tenantId,
             personId: claimed.personId!,
             subject,
           });
@@ -745,7 +742,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       }
       const completion = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
-        return loginWithGoogle(tx, { tenantId: deps.cfg.tenantId, subject });
+        return loginWithGoogle(tx, { subject });
       });
       setManagementCookie(c, completion.id, deps.secureCookies);
       return c.redirect(`${deps.origin}/manage/?login=google`);
@@ -826,7 +823,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         session = await withTransaction(deps.db, async (tx) => {
           await asAppUser(tx);
           const opened = await loginManager(tx, {
-            tenantId: deps.cfg.tenantId,
             email,
             password,
             totp,
@@ -844,7 +840,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
           return {
             ...opened,
             offerPasskey: await shouldOfferPasskey(tx, {
-              tenantId: deps.cfg.tenantId,
               personId: opened.personId,
             }),
           };
@@ -878,7 +873,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         const issued = await withTransaction(deps.db, async (tx) => {
           await asAppUser(tx);
           return requestAccountRecoveryAction(tx, {
-            tenantId: deps.cfg.tenantId,
             email: body.email as string,
           });
         });
@@ -910,7 +904,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       const inspection = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         return inspectAccountAction(tx, {
-          tenantId: deps.cfg.tenantId,
           token: body.token as string,
           purpose,
         });
@@ -942,7 +935,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       const completion = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         const common = {
-          tenantId: deps.cfg.tenantId,
           purpose,
           password,
           ...(purpose === "invitation" ? { pin: body.pin as string } : {}),
@@ -1017,7 +1009,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         const session = await loginManagerById(tx, {
-          tenantId: deps.cfg.tenantId,
           personId,
           password,
           totp,
@@ -1082,7 +1073,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       const { created, issued } = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         const created = await invitePerson(tx, {
-          tenantId: deps.cfg.tenantId,
           managementSessionId: sessionId,
           displayName,
           firstNames,
@@ -1092,7 +1082,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
           email,
         });
         const issued = await issueAccountAction(tx, {
-          tenantId: deps.cfg.tenantId,
           personId: created.id,
           purpose: "invitation",
         });
@@ -1114,13 +1103,12 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
           permission: "person.manage",
         });
       });
-      if (!acceptInvitation(`${deps.cfg.tenantId}:${personId}`)) {
+      if (!acceptInvitation(personId)) {
         return c.json({ invitationSent: false });
       }
       const issued = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         return issueAccountAction(tx, {
-          tenantId: deps.cfg.tenantId,
           personId,
           purpose: "invitation",
         });
@@ -1207,14 +1195,13 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
           permission: "person.manage",
         });
       });
-      if (!acceptInvitation(`${deps.cfg.tenantId}:${personId}`)) {
+      if (!acceptInvitation(personId)) {
         return c.json({ invitationSent: false });
       }
       const issued = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         await resetPersonLogin(tx, { managementSessionId: sessionId, personId });
         return issueAccountAction(tx, {
-          tenantId: deps.cfg.tenantId,
           personId,
           purpose: "invitation",
         });
@@ -1234,14 +1221,13 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
           permission: "person.manage",
         });
       });
-      if (!acceptInvitation(`${deps.cfg.tenantId}:${personId}`)) {
+      if (!acceptInvitation(personId)) {
         return c.json({ invitationSent: false });
       }
       const issued = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         await reactivatePersonForInvitation(tx, { managementSessionId: sessionId, personId });
         return issueAccountAction(tx, {
-          tenantId: deps.cfg.tenantId,
           personId,
           purpose: "invitation",
         });
@@ -1276,7 +1262,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
           managementSessionId: sessionId,
           permission: "layout.configure",
         });
-        return getReceipt(tx, deps.cfg.tenantId);
+        return getReceipt(tx);
       });
       return c.json({ receipt });
     }),
@@ -1303,7 +1289,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         await asAppUser(tx);
         await putReceipt(tx, {
           managementSessionId: sessionId,
-          tenantId: deps.cfg.tenantId,
           receipt,
         });
       });
@@ -1335,7 +1320,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
           managementSessionId: sessionId,
           permission: "layout.configure",
         });
-        return listCanvases(tx, deps.cfg.tenantId);
+        return listCanvases(tx);
       });
       return c.json({ canvases });
     }),
@@ -1353,7 +1338,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
           managementSessionId: sessionId,
           permission: "layout.configure",
         });
-        return getCanvas(tx, deps.cfg.tenantId, id);
+        return getCanvas(tx, id);
       });
       if (canvas === undefined) throw new AppError("canvas.not_found", {});
       return c.json(canvas);
@@ -1385,7 +1370,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         await asAppUser(tx);
         return createCanvas(tx, {
           managementSessionId: sessionId,
-          tenantId: deps.cfg.tenantId,
           name,
           definition,
         });
@@ -1418,7 +1402,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         await asAppUser(tx);
         await updateCanvas(tx, {
           managementSessionId: sessionId,
-          tenantId: deps.cfg.tenantId,
           id,
           name,
           definition,
@@ -1439,7 +1422,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         await asAppUser(tx);
         await deleteCanvas(tx, {
           managementSessionId: sessionId,
-          tenantId: deps.cfg.tenantId,
           id,
         });
       });
@@ -1459,7 +1441,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
           managementSessionId: sessionId,
           permission: "layout.configure",
         });
-        return getTenantTheme(tx, deps.cfg.tenantId);
+        return getTenantTheme(tx);
       });
       return c.json({ theme: theme ?? null });
     }),
@@ -1482,7 +1464,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         await asAppUser(tx);
         await putTenantTheme(tx, {
           managementSessionId: sessionId,
-          tenantId: deps.cfg.tenantId,
           theme,
         });
       });
@@ -1516,7 +1497,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
           managementSessionId: sessionId,
           permission: "layout.configure",
         });
-        return listDeviceProfiles(tx, deps.cfg.tenantId);
+        return listDeviceProfiles(tx);
       });
       return c.json({ deviceProfiles });
     }),
@@ -1535,7 +1516,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
           managementSessionId: sessionId,
           permission: "layout.configure",
         });
-        return getDeviceProfile(tx, deps.cfg.tenantId, id);
+        return getDeviceProfile(tx, id);
       });
       if (profile === undefined) throw new AppError("device_profile.not_found", {});
       return c.json(profile);
@@ -1589,7 +1570,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         await asAppUser(tx);
         return createDeviceProfile(tx, {
           managementSessionId: sessionId,
-          tenantId: deps.cfg.tenantId,
           name,
           formFactor,
           canvasId,
@@ -1642,7 +1622,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         await asAppUser(tx);
         return updateDeviceProfile(tx, {
           managementSessionId: sessionId,
-          tenantId: deps.cfg.tenantId,
           id,
           name,
           formFactor,
@@ -1666,7 +1645,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         await asAppUser(tx);
         await deleteDeviceProfile(tx, {
           managementSessionId: sessionId,
-          tenantId: deps.cfg.tenantId,
           id,
         });
       });
@@ -1705,7 +1683,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         await asAppUser(tx);
         return createStatus(tx, {
           managementSessionId: sessionId,
-          tenantId: deps.cfg.tenantId,
           label,
           color,
           displayOrder,
@@ -1721,7 +1698,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       const sessionId = requireManagementSession(c);
       const statuses = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
-        return listStatuses(tx, { managementSessionId: sessionId, tenantId: deps.cfg.tenantId });
+        return listStatuses(tx, { managementSessionId: sessionId });
       });
       return c.json(statuses);
     }),
@@ -1744,7 +1721,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       }
       const patch: {
         managementSessionId: string;
-        tenantId: string;
         id: string;
         label?: string;
         color?: string;
@@ -1752,7 +1728,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         active?: boolean;
       } = {
         managementSessionId: sessionId,
-        tenantId: deps.cfg.tenantId,
         id,
       };
       if (body.label !== undefined) {
@@ -1806,7 +1781,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         await asAppUser(tx);
         await deactivateStatus(tx, {
           managementSessionId: sessionId,
-          tenantId: deps.cfg.tenantId,
           id,
         });
       });
@@ -2501,7 +2475,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       }
       const out = await withCredentialChange(sessionId, async (tx) => {
         await verifyOwnCredentials(tx, {
-          tenantId: deps.cfg.tenantId,
           managementSessionId: sessionId,
           currentPassword: body.currentPassword as string,
           ...(typeof body.totp === "string" ? { totp: body.totp } : {}),
@@ -2509,7 +2482,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         });
         return beginPasskeyRegistration(tx, {
           managementSessionId: sessionId,
-          tenantId: deps.cfg.tenantId,
           rpId: deps.rpId,
           rpName: "Waitron",
         });
@@ -2540,10 +2512,9 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       const { challengeHandle, response, name } = await parsePasskeyVerifyBody(c);
       const out = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
-        await readOwnProfile(tx, { tenantId: deps.cfg.tenantId, managementSessionId: sessionId });
+        await readOwnProfile(tx, { managementSessionId: sessionId });
         return finishPasskeyRegistration(tx, {
           managementSessionId: sessionId,
-          tenantId: deps.cfg.tenantId,
           challengeHandle,
           response: response as never,
           name,
@@ -2561,7 +2532,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     run(c, log, async () => {
       const out = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
-        return beginPasskeyAuthentication(tx, { tenantId: deps.cfg.tenantId, rpId: deps.rpId });
+        return beginPasskeyAuthentication(tx, { rpId: deps.rpId });
       });
       return c.json(out);
     }),
@@ -2588,7 +2559,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       const session = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
         return finishPasskeyAuthentication(tx, {
-          tenantId: deps.cfg.tenantId,
           challengeHandle,
           response: response as never,
           rpId: deps.rpId,

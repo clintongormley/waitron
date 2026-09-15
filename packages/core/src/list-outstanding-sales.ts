@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { addDecimal, decimal, saleId as brandSaleId, tillId as brandTillId } from "@waitron/shared";
-import type { Decimal, SaleId, TenantId, TillId } from "@waitron/shared";
+import type { Decimal, SaleId, TillId } from "@waitron/shared";
 
 /**
  * A sale issued (invoice printed, chained, filed) but not yet paid — the answer to "what is owed?"
@@ -24,13 +24,9 @@ export interface OutstandingSale {
 /**
  * Lists the outstanding sales: ordinary sales (`corrects_sale_id` NULL) that are neither an F3
  * canje substitute (already paid via their tickets — AEAT "no cobrar dos veces"), settled, nor
- * voided. This is a plain read; `tenantId` is not read, as the database holds one tenant.
+ * voided. This is a plain read over the database's one taxpayer.
  */
-export async function listOutstandingSales(
-  tx: Transaction,
-  tenantId: TenantId,
-): Promise<OutstandingSale[]> {
-  void tenantId;
+export async function listOutstandingSales(tx: Transaction): Promise<OutstandingSale[]> {
   const result = await tx.execute<{
     sale_id: string;
     invoice_number: number;

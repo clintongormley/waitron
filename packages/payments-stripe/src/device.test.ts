@@ -4,7 +4,6 @@ import { withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import {
   decimal,
-  tenantId as brandTenantId,
   tillId as brandTillId,
   workingOrderId as brandWorkingOrderId,
 } from "@waitron/shared";
@@ -52,7 +51,6 @@ describe("the stripe on-device adapter against a real database", () => {
       const provider = new StripeOnDeviceProvider({
         client,
         db: probe,
-        tenantId: brandTenantId(t.tenantId),
         nodeId: TEST_NODE_ID,
       });
 
@@ -78,7 +76,6 @@ describe("the stripe on-device adapter against a real database", () => {
       const provider = new StripeOnDeviceProvider({
         client: new FakeStripeDevice(),
         db: probe,
-        tenantId: brandTenantId(t.tenantId),
         nodeId: TEST_NODE_ID,
       });
       const r = await provider.collect({
@@ -112,7 +109,6 @@ describe("the stripe on-device adapter against a real database", () => {
       const provider = new StripeOnDeviceProvider({
         client: new FakeStripeDevice(),
         db: probe,
-        tenantId: brandTenantId(t.tenantId),
         nodeId: TEST_NODE_ID,
       });
       const r = await provider.refund("dev-rev-1");

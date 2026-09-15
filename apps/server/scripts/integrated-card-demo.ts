@@ -87,7 +87,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tenantId as brandTenantId,
   tillId as brandTillId,
 } from "@waitron/shared";
 import { deploymentEnvironment } from "../src/config.js";
@@ -288,7 +287,6 @@ async function main(): Promise<void> {
     // row resolved by `/api/pay` (added from the dashboard), not from the till config; this demo
     // pins the one fake reader id (`READER_ID`) directly into the pay deps below.
     const cfg: TillConfig = {
-      tenantId: brandTenantId(venue.tenantId),
       tillId: brandTillId(venue.tillId),
       nodeId: brandNodeId(venue.nodeId),
       seriesId: brandSeriesId(venue.seriesIds[0]!),
@@ -304,9 +302,9 @@ async function main(): Promise<void> {
     // apps/* is out of the english-only guard's scope.
     const cafe = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
-      const cat = await createCatalogue(tx, cfg.tenantId, { name: "Delicatessen" });
-      const bebidas = await createCategory(tx, cfg.tenantId, { name: { es: "Bebidas" } });
-      const product = await createProduct(tx, cfg.tenantId, {
+      const cat = await createCatalogue(tx, { name: "Delicatessen" });
+      const bebidas = await createCategory(tx, { name: { es: "Bebidas" } });
+      const product = await createProduct(tx, {
         catalogueId: cat.id,
         categoryId: bebidas.id,
         name: "Café",

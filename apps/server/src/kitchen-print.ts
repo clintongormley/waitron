@@ -96,7 +96,6 @@ function ticketName(text: Record<string, string>, locale: string): string {
  */
 async function lockActivePrinters(
   tx: Transaction,
-  tenantId: string,
   stationIds: string[],
 ): Promise<
   {
@@ -107,7 +106,6 @@ async function lockActivePrinters(
     characterSet: CharacterSet;
   }[]
 > {
-  void tenantId;
   return tx
     .select({
       stationId: stationPrinters.stationId,
@@ -240,10 +238,8 @@ async function buildTicketItems(
  */
 async function readStationNames(
   tx: Transaction,
-  tenantId: string,
   stationIds: string[],
 ): Promise<Map<string, string>> {
-  void tenantId;
   const rows = await tx
     .select({ id: kitchenStations.id, name: kitchenStations.name })
     .from(kitchenStations)
@@ -303,7 +299,7 @@ export async function enqueueKitchenTickets(
   // two never-block guards — see {@link lockActivePrinters} and this file's header). Read FIRST so a fire
   // whose stations map to NO printer can return before the detail reads below — the common case for a
   // venue not using kitchen printing (see the early return).
-  const mappingRows = await lockActivePrinters(tx, cfg.tenantId, stationIds);
+  const mappingRows = await lockActivePrinters(tx, stationIds);
 
   // No printer maps to any involved station → nothing to enqueue. Returning HERE, before the three
   // detail reads below, skips those reads on every no-kitchen-printer fire and takes no row lock (an empty
@@ -318,7 +314,7 @@ export async function enqueueKitchenTickets(
   // correction path formats an item byte-for-byte the same way (see the helpers above). `ruling R-D`: a
   // `RETURNING` on the fire only sees `ticket_items`, so these follow-up reads rebuild the display fields.
   const itemsByLine = await buildTicketItems(tx, cfg, lineIds);
-  const stationNames = await readStationNames(tx, cfg.tenantId, stationIds);
+  const stationNames = await readStationNames(tx, stationIds);
   const order = await readOrderHeader(tx, cfg, orderId);
 
   // This round's items grouped by station, each carrying its `line_no` for a stable within-station order
@@ -362,7 +358,7 @@ export async function enqueueKitchenTickets(
     printersByStation.set(mapping.stationId, bucket);
   }
 
-  const printCfg: PrintConfig = { tenantId: cfg.tenantId, locationId: cfg.locationId };
+  const printCfg: PrintConfig = { locationId: cfg.locationId };
   const firedAt = new Date();
   const tableLabel = order.tableLabel ?? "";
   const orderNumber = order.orderNumber;
@@ -452,13 +448,13 @@ export async function enqueueCorrectionSlips(
   if (items.length === 0) return;
 
   const stationIds = [...new Set(items.map((i) => i.stationId))];
-  const mappingRows = await lockActivePrinters(tx, cfg.tenantId, stationIds);
+  const mappingRows = await lockActivePrinters(tx, stationIds);
   // No active printer maps to any involved station → nothing to enqueue (skips the detail reads below).
   if (mappingRows.length === 0) return;
 
   const lineIds = [...new Set(items.map((i) => i.workingOrderLineId))];
   const itemsByLine = await buildTicketItems(tx, cfg, lineIds);
-  const stationNames = await readStationNames(tx, cfg.tenantId, stationIds);
+  const stationNames = await readStationNames(tx, stationIds);
   const header = await readOrderHeader(tx, cfg, orderId);
 
   // Every ACTIVE printer attached to a station, keyed by station id (station- and order-scope alike — a
@@ -474,7 +470,7 @@ export async function enqueueCorrectionSlips(
     printersByStation.set(mapping.stationId, bucket);
   }
 
-  const printCfg: PrintConfig = { tenantId: cfg.tenantId, locationId: cfg.locationId };
+  const printCfg: PrintConfig = { locationId: cfg.locationId };
   const at = new Date().toISOString();
 
   for (const target of items) {

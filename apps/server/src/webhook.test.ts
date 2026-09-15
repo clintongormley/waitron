@@ -8,7 +8,6 @@ import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { CREDENTIALS_MIGRATIONS, loadKeyRing, putCredential } from "@waitron/credentials";
 import { PAYMENTS_MIGRATIONS, insertInitiated } from "@waitron/payments";
 import { decimal } from "@waitron/shared";
-import type { TenantId } from "@waitron/shared";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import type { Logger, LogLevel } from "./logger.js";
 import { createHealthState, healthApp } from "./health.js";
@@ -53,7 +52,6 @@ function deps(db: Database): WebhookDeps {
 }
 
 interface SeededPayment {
-  tenantId: TenantId;
   sessionId: string;
   webhookSecret: string;
 }
@@ -67,16 +65,16 @@ async function seedInitiated(
   db: Database,
   opts: { webhookSecret: string; secretKey?: string; amount?: string; sessionId?: string },
 ): Promise<SeededPayment> {
-  const tenantId = await seedTenant(db);
+  await seedTenant(db);
   const sessionId = opts.sessionId ?? `cs_${randomUUID()}`;
   const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Counter', array['es'], 'Retail') returning id`);
+    insert into locations (name, invoice_locales, operation_description)
+    values ('Counter', array['es'], 'Retail') returning id`);
   const till = await db.execute<{ id: string }>(sql`
-    insert into tills (tenant_id, location_id, name)
-    values (${tenantId}, ${loc.rows[0]!.id}, 'Till 1') returning id`);
+    insert into tills (location_id, name)
+    values (${loc.rows[0]!.id}, 'Till 1') returning id`);
   const wo = await db.execute<{ id: string }>(sql`
-    insert into working_orders (tenant_id, till_id, order_number) values (${tenantId}, ${till.rows[0]!.id}, 1) returning id`);
+    insert into working_orders (till_id, order_number) values (${till.rows[0]!.id}, 1) returning id`);
   await withTransaction(db, (tx) =>
     insertInitiated(tx, {
       workingOrderId: wo.rows[0]!.id,
@@ -97,7 +95,7 @@ async function seedInitiated(
       },
     }),
   );
-  return { tenantId, sessionId, webhookSecret: opts.webhookSecret };
+  return { sessionId, webhookSecret: opts.webhookSecret };
 }
 
 function completedEvent(sessionId: string, amountTotalMinor = 1210): string {
@@ -124,22 +122,22 @@ async function settledAt(db: Database, sessionId: string): Promise<string | null
 }
 
 /** POSTs a webhook to a tenant's path with the given signature header. */
-async function post(app: Hono, tenant: string, body: string, signature: string): Promise<Response> {
-  return app.request(`/webhooks/stripe/${tenant}`, {
+async function post(app: Hono, body: string, signature: string): Promise<Response> {
+  return app.request("/webhooks/stripe", {
     method: "POST",
     body,
     headers: { "stripe-signature": signature },
   });
 }
 
-describe("POST /webhooks/stripe/:tenantId — a verified checkout.session.completed", () => {
+describe("POST /webhooks/stripe — a verified checkout.session.completed", () => {
   it("settles the initiated payment to captured and answers 2xx", async () => {
     const seeded = await seedInitiated(suite.db, { webhookSecret: "whsec_good" });
     const app = new Hono();
     mountWebhook(app, deps(suite.db), collect([]));
 
     const body = completedEvent(seeded.sessionId);
-    const res = await post(app, seeded.tenantId, body, signStripeBody(body, seeded.webhookSecret));
+    const res = await post(app, body, signStripeBody(body, seeded.webhookSecret));
 
     expect(res.status).toBe(200);
     expect(await paymentState(suite.db, seeded.sessionId)).toBe("captured");
@@ -156,7 +154,7 @@ describe("POST /webhooks/stripe/:tenantId — a verified checkout.session.comple
       amountTotalMinor: null,
       created: 1_740_000_000,
     });
-    const res = await post(app, seeded.tenantId, body, signStripeBody(body, seeded.webhookSecret));
+    const res = await post(app, body, signStripeBody(body, seeded.webhookSecret));
 
     expect(res.status).toBe(200);
     expect(await paymentState(suite.db, seeded.sessionId)).toBe("failed");
@@ -173,7 +171,7 @@ describe("POST /webhooks/stripe/:tenantId — a verified checkout.session.comple
       amountTotalMinor: 1210,
       created: 1_740_000_000,
     });
-    const res = await post(app, seeded.tenantId, body, signStripeBody(body, seeded.webhookSecret));
+    const res = await post(app, body, signStripeBody(body, seeded.webhookSecret));
 
     expect(res.status).toBe(200);
     expect(await paymentState(suite.db, seeded.sessionId)).toBe("initiated");
@@ -188,12 +186,7 @@ describe("the signature is the sole gate", () => {
 
     const body = completedEvent(seeded.sessionId);
     // A signature computed with the WRONG secret — the header a forger without the secret produces.
-    const res = await post(
-      app,
-      seeded.tenantId,
-      body,
-      signStripeBody(body, "whsec_not_the_secret"),
-    );
+    const res = await post(app, body, signStripeBody(body, "whsec_not_the_secret"));
 
     expect(res.status).toBe(400);
     expect(await paymentState(suite.db, seeded.sessionId)).toBe("initiated");
@@ -205,7 +198,7 @@ describe("the signature is the sole gate", () => {
     mountWebhook(app, deps(suite.db), collect([]));
 
     // No `stripe-signature` header — an empty signature can never verify.
-    const res = await app.request(`/webhooks/stripe/${seeded.tenantId}`, {
+    const res = await app.request("/webhooks/stripe", {
       method: "POST",
       body: completedEvent(seeded.sessionId),
     });
@@ -224,12 +217,7 @@ describe("the signature is the sole gate", () => {
     const spaced = `{"type":"checkout.session.completed",  "created":1740000000,  "data":{"object":{"id":"${seeded.sessionId}","amount_total":1210}}}`;
 
     // (a) signed over the exact spaced bytes → verifies, because the route reads them verbatim.
-    const ok = await post(
-      app,
-      seeded.tenantId,
-      spaced,
-      signStripeBody(spaced, seeded.webhookSecret),
-    );
+    const ok = await post(app, spaced, signStripeBody(spaced, seeded.webhookSecret));
     expect(ok.status).toBe(200);
     expect(await paymentState(suite.db, seeded.sessionId)).toBe("captured");
   });
@@ -244,12 +232,7 @@ describe("the signature is the sole gate", () => {
     // body, verifies only if the route normalised too. It does not, so this is a 400 — proving the
     // 200 above came from the raw read, not from an incidental match.
     const normalised = JSON.stringify(JSON.parse(spaced));
-    const res = await post(
-      app,
-      seeded.tenantId,
-      spaced,
-      signStripeBody(normalised, seeded.webhookSecret),
-    );
+    const res = await post(app, spaced, signStripeBody(normalised, seeded.webhookSecret));
 
     expect(res.status).toBe(400);
     expect(await paymentState(suite.db, seeded.sessionId)).toBe("initiated");
@@ -266,7 +249,7 @@ describe("no-op acknowledgements (2xx)", () => {
 
     const unknownSession = "cs_never_minted";
     const body = completedEvent(unknownSession);
-    const res = await post(app, seeded.tenantId, body, signStripeBody(body, seeded.webhookSecret));
+    const res = await post(app, body, signStripeBody(body, seeded.webhookSecret));
 
     expect(res.status).toBe(200);
     const unresolved = lines.find((l) => l.event === "payment.webhook_unresolved");
@@ -281,12 +264,12 @@ describe("no-op acknowledgements (2xx)", () => {
     const body = completedEvent(seeded.sessionId);
     const sig = signStripeBody(body, seeded.webhookSecret);
 
-    expect((await post(app, seeded.tenantId, body, sig)).status).toBe(200);
+    expect((await post(app, body, sig)).status).toBe(200);
     const firstSettledAt = await settledAt(suite.db, seeded.sessionId);
 
     // At-least-once redelivery: 2xx again, still captured, and `settled_at` untouched — the row was
     // already past `initiated`, so `settleInitiated` matched nothing (no second write).
-    expect((await post(app, seeded.tenantId, body, sig)).status).toBe(200);
+    expect((await post(app, body, sig)).status).toBe(200);
     expect(await paymentState(suite.db, seeded.sessionId)).toBe("captured");
     expect(await settledAt(suite.db, seeded.sessionId)).toBe(firstSettledAt);
   });
@@ -303,26 +286,27 @@ describe("the webhook shares the app with /health", () => {
     expect((await app.request("/health")).status).toBe(503);
 
     const body = completedEvent(seeded.sessionId);
-    expect(
-      (await post(app, seeded.tenantId, body, signStripeBody(body, seeded.webhookSecret))).status,
-    ).toBe(200);
+    expect((await post(app, body, signStripeBody(body, seeded.webhookSecret))).status).toBe(200);
     expect(await paymentState(suite.db, seeded.sessionId)).toBe("captured");
   });
 });
 
 describe("permanent client errors are 400 (a retry can never fix them)", () => {
-  it("answers 400 for a malformed :tenantId path and settles nothing", async () => {
+  it("answers 404 for the old per-taxpayer path — the segment is gone, not ignored", async () => {
+    // The route used to be `/webhooks/stripe/:tenantId`. A caller still posting to the old shape
+    // gets Hono's 404 for an unmounted path, which is what keeps this a deliberate URL change
+    // rather than a silently-accepted second spelling.
     const app = new Hono();
-    const lines: { level: LogLevel; event: string; fields: Record<string, unknown> }[] = [];
-    mountWebhook(app, deps(suite.db), collect(lines));
+    mountWebhook(app, deps(suite.db), collect([]));
 
-    // `brandTenantId` rejects a non-uuid segment before any DB access — the request is unroutable,
-    // not transient, so 400 (not the 5xx retry-bias) and nothing is touched.
-    const body = completedEvent("cs_bad_tenant");
-    const res = await post(app, "not-a-uuid", body, signStripeBody(body, "whsec_any"));
+    const body = completedEvent("cs_old_path");
+    const res = await app.request("/webhooks/stripe/anything", {
+      method: "POST",
+      body,
+      headers: { "stripe-signature": signStripeBody(body, "whsec_any") },
+    });
 
-    expect(res.status).toBe(400);
-    expect(lines.map((l) => l.event)).toContain("shared.invalid_id");
+    expect(res.status).toBe(404);
   });
 
   it("answers 400 for a wrong-environment key and settles nothing", async () => {
@@ -338,7 +322,7 @@ describe("permanent client errors are 400 (a retry can never fix them)", () => {
     mountWebhook(app, deps(suite.db), collect(lines));
 
     const body = completedEvent(seeded.sessionId);
-    const res = await post(app, seeded.tenantId, body, signStripeBody(body, seeded.webhookSecret));
+    const res = await post(app, body, signStripeBody(body, seeded.webhookSecret));
 
     expect(res.status).toBe(400);
     expect(await paymentState(suite.db, seeded.sessionId)).toBe("initiated");
@@ -351,13 +335,13 @@ describe("a transient failure is surfaced 5xx so Stripe retries — the distinct
     // A real tenant uuid with no Stripe credential: the vault's `credentials.missing` is a tenant
     // not-yet-provisioned — a mid-provisioning race that resolves itself on Stripe's retry, so 5xx
     // rather than a 400 that would drop the event. This is the control for the two 400 cases above.
-    const tenantId = await seedTenant(suite.db);
+    await seedTenant(suite.db);
     const app = new Hono();
     const lines: { level: LogLevel; event: string; fields: Record<string, unknown> }[] = [];
     mountWebhook(app, deps(suite.db), collect(lines));
 
     const body = completedEvent("cs_no_credential");
-    const res = await post(app, tenantId, body, signStripeBody(body, "whsec_whatever"));
+    const res = await post(app, body, signStripeBody(body, "whsec_whatever"));
 
     expect(res.status).toBe(500);
     const failed = lines.find((l) => l.event === "webhook.failed");
@@ -366,7 +350,7 @@ describe("a transient failure is surfaced 5xx so Stripe retries — the distinct
 });
 
 describe("hostedWebhookSecretFrom", () => {
-  const REF = { tenantId: "11111111-1111-1111-1111-111111111111", purpose: "payments.stripe" };
+  const REF = { purpose: "payments.stripe" };
 
   // Driven directly, not through a forged row: `putCredential` validates every required field is a
   // non-empty string, so a payload sealed without `webhookSecret` cannot be written through the

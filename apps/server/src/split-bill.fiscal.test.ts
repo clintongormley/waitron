@@ -18,7 +18,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tenantId as brandTenantId,
   tillId as brandTillId,
 } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
@@ -72,7 +71,6 @@ function nextNif(): string {
 
 function tillConfigFromVenue(venue: VenueResult): TillConfig {
   return {
-    tenantId: brandTenantId(venue.tenantId),
     tillId: brandTillId(venue.tillId),
     nodeId: brandNodeId(venue.nodeId),
     // planVenue emits the standard series first, then the rectificative one.
@@ -137,10 +135,10 @@ async function setupVenue(): Promise<Seeded> {
   const cfg = tillConfigFromVenue(venue);
   const seeded = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
-    const cat = await createCatalogue(tx, cfg.tenantId, { name: "Delicatessen" });
-    const comida = await createCategory(tx, cfg.tenantId, { name: { [LOCALE]: "Comida" } });
-    const bebidas = await createCategory(tx, cfg.tenantId, { name: { [LOCALE]: "Bebidas" } });
-    const jamon = await createProduct(tx, cfg.tenantId, {
+    const cat = await createCatalogue(tx, { name: "Delicatessen" });
+    const comida = await createCategory(tx, { name: { [LOCALE]: "Comida" } });
+    const bebidas = await createCategory(tx, { name: { [LOCALE]: "Bebidas" } });
+    const jamon = await createProduct(tx, {
       catalogueId: cat.id,
       categoryId: comida.id,
       name: "Jamón cortado",
@@ -148,7 +146,7 @@ async function setupVenue(): Promise<Seeded> {
       unitPrice: "24.90",
       vatClass: "reduced",
     });
-    const agua = await createProduct(tx, cfg.tenantId, {
+    const agua = await createProduct(tx, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
       name: "Agua mineral",
@@ -390,7 +388,7 @@ describe("split-bill: pay each check files its own registro", () => {
     // Pay the SAME check twice (a lost-response retry), SEQUENTIALLY. A check is a working order (it
     // already has a `working_orders` row), so the second pay locks it `FOR UPDATE`, sees `settled`, and
     // `payWorkingOrder` returns the EXISTING ticket (till-sale.ts ~line 290) — a replay, not a second
-    // filing. The #61 `sales_working_order_id_key` UNIQUE (tenant_id, working_order_id) is the
+    // filing. The #61 `sales_working_order_id_key` UNIQUE (working_order_id) is the
     // CONCURRENCY backstop for the shape that has no pre-existing row to lock (till-sale.ts ~line 356);
     // this sequential retry never reaches it. The whole point of the split-bill split is that a check
     // gets the same settled-status replay as any tab.

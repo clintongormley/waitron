@@ -78,7 +78,7 @@ let stateDir: string;
 let appDb: Database; // app_login → app_user: authentication and venue reads
 
 /** Provision a fresh venue (as the owner) with standard FA + rectificative RF series and an ESTABLISHED
- * node identity, returning the five designated ids in AdoptResult shape, the seeded admin's person id,
+ * node identity, returning the four designated ids in AdoptResult shape, the seeded admin's person id,
  * and the primary node's public key (the trust anchor its endorsement must verify against).
  * `applyVenue` seeds ONE `role='admin'` person carrying ADMIN_PASSWORD. */
 async function setupVenue(): Promise<{
@@ -120,7 +120,6 @@ async function setupVenue(): Promise<{
     { db: suite.admin, modules: ALL_MODULES },
   );
   const designated: AdoptResult = {
-    tenantId: venue.tenantId,
     locationId: venue.locationId,
     tillId: venue.tillId,
     nodeId: venue.nodeId,
@@ -128,20 +127,12 @@ async function setupVenue(): Promise<{
   };
   // Establish the primary's membership identity (owner-side seal + nodes.public_key stamp), so the
   // endpoint can unseal the private key and endorse the standby. Mirrors node-identity.test.ts.
-  await establishNodeIdentity(
-    { ownerDb: suite.admin, ring: RING },
-    designated.tenantId,
-    designated.nodeId,
-  );
-  const primaryPublicKey = (await readMembershipTrustSet(suite.admin, designated.tenantId))[
-    designated.nodeId
-  ]!;
+  await establishNodeIdentity({ ownerDb: suite.admin, ring: RING }, designated.nodeId);
+  const primaryPublicKey = (await readMembershipTrustSet(suite.admin))[designated.nodeId]!;
   // The admin person id — read back as app_user, the only role the endpoint ever uses.
   const adminPersonId = await withTransaction(appDb, async (tx) => {
     await asAppUser(tx);
-    const r = await tx.execute<{ id: string }>(
-      sql`select id from persons where tenant_id = ${venue.tenantId} and role = 'admin'`,
-    );
+    const r = await tx.execute<{ id: string }>(sql`select id from persons where role = 'admin'`);
     return r.rows[0]!.id;
   });
   return { designated, adminPersonId, primaryPublicKey };
@@ -149,12 +140,12 @@ async function setupVenue(): Promise<{
 
 /** Insert a second, NON-admin (staff) person carrying a dashboard password, returning its id. Staff
  * lacks `mirror.create` (admin-only), so it authenticates but fails authorization → 403. */
-async function seedStaff(tenantId: string): Promise<string> {
+async function seedStaff(): Promise<string> {
   return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const r = await tx.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, password_hash, role)
-      values (${tenantId}, 'Cajera', ${hashPin("4321")}, ${hashPassword(STAFF_PASSWORD)}, 'staff')
+      insert into persons (display_name, pin_hash, password_hash, role)
+      values ('Cajera', ${hashPin("4321")}, ${hashPassword(STAFF_PASSWORD)}, 'staff')
       returning id`);
     return r.rows[0]!.id;
   });
@@ -425,7 +416,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint, real Postgres)",
 
   it("refuses a non-admin (staff) credential with 403", async () => {
     const { designated } = await setupVenue();
-    const staffPersonId = await seedStaff(designated.tenantId);
+    const staffPersonId = await seedStaff();
     // No logger passed here — exercises the no-op default (mountMirrorBundleApi's `log?`).
     const app = mountApp(designated, "relay.example:9000");
 

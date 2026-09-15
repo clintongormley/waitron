@@ -7,7 +7,6 @@ import {
   listModifiers,
   modifierDependants,
 } from "@waitron/catalogue";
-import { tenantId as brandTenantId } from "@waitron/shared";
 import "./errors.js";
 import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
@@ -90,11 +89,11 @@ export interface CatalogueApiDeps {
    * node's id, carried on the uniform write-path `cfg` shape every mounted API takes; it no longer
    * stamps a capture origin — the application outbox and its capture triggers were removed (native
    * replication ships every row). */
-  cfg: { tenantId: string; nodeId: string };
+  cfg: { nodeId: string };
   /**
    * The venue whose kitchen stations and courses the product editor may route a product to. OPTIONAL
    * because `setProductStation`/`setProductCourse` check the id against `cfg.locationId`, which the
-   * tenant-only `cfg` above does not carry; `boot.ts` always supplies it for a real venue server.
+   * node-only `cfg` above does not carry; `boot.ts` always supplies it for a real venue server.
    */
   venueCfg?: TillConfig;
   venueLocale?: string;
@@ -344,7 +343,6 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
   // Brand the tenant id ONCE per mount rather than per write route — a stable value for the life
   // of the mount (cfg.tenantId is fixed), the low-risk form of the dedup (deps keeps cfg: { tenantId:
   // string }, the sibling convention).
-  const tenantId = brandTenantId(deps.cfg.tenantId);
   // Open a transaction as the app role, confirm the caller's management session carries
   // CATALOGUE_WRITE_PERMISSION, then run `fn`. Every route funnels its DB work through here so the gate
   // is applied identically and in exactly one place — the design §3 seam.
@@ -445,7 +443,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     run(c, log, async () => {
       const body = await readJsonBody(c);
       const modifier = await gated(requireManagementSession(c), (tx) =>
-        createModifier(tx, tenantId, body, deps.venueLocale ?? FALLBACK_LOCALE),
+        createModifier(tx, body, deps.venueLocale ?? FALLBACK_LOCALE),
       );
       return c.json({ modifier }, 201);
     }),
@@ -455,7 +453,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const id = requireUuidParam(c.req.param("id"), "ModifierId");
       const body = await readJsonBody(c);
       const modifier = await gated(requireManagementSession(c), (tx) =>
-        updateModifier(tx, tenantId, id, body, deps.venueLocale ?? FALLBACK_LOCALE),
+        updateModifier(tx, id, body, deps.venueLocale ?? FALLBACK_LOCALE),
       );
       return c.json({ modifier });
     }),
@@ -544,7 +542,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         throw new AppError("management.request_invalid", { field: "name" });
       }
       const { name } = body;
-      const created = await gated(sessionId, (tx) => createCatalogue(tx, tenantId, { name }));
+      const created = await gated(sessionId, (tx) => createCatalogue(tx, { name }));
       return c.json(created, 201);
     }),
   );
@@ -712,7 +710,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
   // add, PUT default) guard it with `catalogueExists` FIRST — an absent id is refused
   // `catalogue.not_found` (404). The lookup is by id. This is defense-in-depth, not the sole
   // protection: BOTH write targets carry a tenant-consistent composite FK —
-  // `locations.catalogue_id` → catalogues(tenant_id,id), `location_catalogues.catalogue_id` → catalogues(tenant_id,id) —
+  // `locations.catalogue_id` → catalogues(id), `location_catalogues.catalogue_id` → catalogues(id) —
   // that 23503-rejects a foreign-tenant id at the DATA layer. The guard gives an absent id a
   // clean error. A foreign row seeded into the same database passes that by-id lookup, but the
   // composite FK still rejects the write with 23503. DELETE needs no guard: removing a non-member
@@ -733,7 +731,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const catalogueId = await requireCatalogueIdBody(c);
       await gated(sessionId, async (tx) => {
         await assertCatalogueVisible(tx, catalogueId);
-        await addCatalogueToLocation(tx, tenantId, locationId, catalogueId);
+        await addCatalogueToLocation(tx, locationId, catalogueId);
       });
       return c.body(null, 204);
     }),
@@ -756,7 +754,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const catalogueId = await requireCatalogueIdBody(c);
       await gated(sessionId, async (tx) => {
         await assertCatalogueVisible(tx, catalogueId);
-        await setLocationDefaultCatalogue(tx, tenantId, locationId, catalogueId);
+        await setLocationDefaultCatalogue(tx, locationId, catalogueId);
       });
       return c.body(null, 204);
     }),
@@ -777,7 +775,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const body = await readJsonBody<Record<string, unknown>>(c);
       const input = categoryInput(body, true) as CategoryInput;
       const created = await gated(sessionId, (tx) =>
-        createCategory(tx, tenantId, input, deps.venueLocale ?? FALLBACK_LOCALE),
+        createCategory(tx, input, deps.venueLocale ?? FALLBACK_LOCALE),
       );
       return c.json(created, 201);
     }),
@@ -903,7 +901,6 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const saved = await gated(sessionId, async (tx) => {
         const product = await saveProductEditor(
           tx,
-          tenantId,
           null,
           catalogueId,
           body,
@@ -933,7 +930,6 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         await gated(sessionId, async (tx) => {
           const product = await saveProductEditor(
             tx,
-            tenantId,
             productId,
             "00000000-0000-0000-0000-000000000000",
             body,
@@ -1039,9 +1035,9 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
             deps.venueLocale ?? FALLBACK_LOCALE,
           );
         }
-        const product = await createProduct(tx, tenantId, input);
+        const product = await createProduct(tx, input);
         if (optionGroupIds !== undefined) {
-          await setProductOptionGroups(tx, tenantId, product.id, optionGroupIds);
+          await setProductOptionGroups(tx, product.id, optionGroupIds);
         }
         return { ...product, modifierIds: optionGroupIds ?? [] };
       });
@@ -1157,7 +1153,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
           );
         await updateProduct(tx, productId, patch);
         if (optionGroupIds !== undefined) {
-          await setProductOptionGroups(tx, tenantId, productId, optionGroupIds);
+          await setProductOptionGroups(tx, productId, optionGroupIds);
         }
       });
       return c.body(null, 204);
@@ -1224,7 +1220,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       };
       const created = await gated(sessionId, async (tx) => {
         await validateContentTranslations(tx, input.name, deps.venueLocale ?? FALLBACK_LOCALE);
-        return createOptionGroup(tx, tenantId, input);
+        return createOptionGroup(tx, input);
       });
       return c.json(created, 201);
     }),
@@ -1327,11 +1323,11 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
           : { addAllergens: body.addAllergens as ProductAllergens | null }),
       };
       // The group :id is screened for SHAPE only; a well-formed-but-missing/foreign group makes the
-      // tenant-consistent (tenant_id, group_id) FK raise 23503 → the opaque 500 the STATUS map documents
+      // tenant-consistent (group_id) FK raise 23503 → the opaque 500 the STATUS map documents
       // for a foreign id, the same posture the product routes take on a foreign catalogueId.
       const created = await gated(sessionId, async (tx) => {
         await validateContentTranslations(tx, input.name, deps.venueLocale ?? FALLBACK_LOCALE);
-        return createOptionGroupItem(tx, tenantId, groupId, input);
+        return createOptionGroupItem(tx, groupId, input);
       });
       return c.json(created, 201);
     }),

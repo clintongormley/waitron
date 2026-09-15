@@ -92,23 +92,20 @@ async function knock(
 let profileCounter = 0;
 /** Seed a `device_profiles` row of the given form factor, read back its id (superuser SQL, fixture
  *  setup). A per-suite counter keeps the tenant-unique name from colliding across the shared clone. */
-async function seedProfile(
-  cfg: TillConfig,
-  formFactor: "till" | "kds" | "phone-portrait",
-): Promise<string> {
+async function seedProfile(formFactor: "till" | "kds" | "phone-portrait"): Promise<string> {
   profileCounter += 1;
   const { rows } = await suite.admin.execute<{ id: string }>(sql`
-    insert into device_profiles (tenant_id, name, form_factor, capabilities)
-    values (${cfg.tenantId}, ${`Profile ${profileCounter}`}, ${formFactor}, '[]'::jsonb)
+    insert into device_profiles (name, form_factor, capabilities)
+    values (${`Profile ${profileCounter}`}, ${formFactor}, '[]'::jsonb)
     returning id`);
   return rows[0]!.id;
 }
 
 /** How many pending requests this tenant holds — read as the superuser, so the assertion is about the
  *  table and not about what a route chose to show. */
-async function pendingCount(cfg: TillConfig): Promise<number> {
+async function pendingCount(): Promise<number> {
   const { rows } = await suite.admin.execute<{ n: number }>(
-    sql`select count(*)::int as n from join_requests where tenant_id = ${cfg.tenantId}`,
+    sql`select count(*)::int as n from join_requests `,
   );
   return rows[0]!.n;
 }
@@ -117,7 +114,7 @@ describe("device join and accept, end to end (both surfaces, one window)", () =>
   it("open the window, knock, match the number, and the device is in", async () => {
     const venue = await setupVenue(suite.admin);
     const app = mountBoth(venue.cfg);
-    const profileId = await seedProfile(venue.cfg, "till");
+    const profileId = await seedProfile("till");
 
     // 1. The admin opens the venue's pairing window (join-api route).
     await openWindow(app, venue);
@@ -171,7 +168,7 @@ describe("device join and accept, end to end (both surfaces, one window)", () =>
       name: "Bar till",
       formFactor: "till",
     });
-    expect(await pendingCount(venue.cfg)).toBe(0);
+    expect(await pendingCount()).toBe(0);
 
     // 6. The device polls status on its ORIGINAL cookie and is now approved — the selector is the request
     //    id accept carried onto the devices row, so the cookie is set once at the knock and never
@@ -197,7 +194,7 @@ describe("device join and accept, end to end (both surfaces, one window)", () =>
   it("a wrong number denies, and the device is told to ask again", async () => {
     const venue = await setupVenue(suite.admin);
     const app = mountBoth(venue.cfg);
-    const profileId = await seedProfile(venue.cfg, "till");
+    const profileId = await seedProfile("till");
     await openWindow(app, venue);
 
     const { joinId, verificationNumber, jar } = await knock(app, "Bar till");
@@ -218,13 +215,13 @@ describe("device join and accept, end to end (both surfaces, one window)", () =>
     const statusRes = await send(app, "GET", "/api/device/join/status", { cookie: jar });
     expect(statusRes.status).toBe(200);
     expect(await statusRes.json()).toEqual({ status: "not_approved" });
-    expect(await pendingCount(venue.cfg)).toBe(0);
+    expect(await pendingCount()).toBe(0);
 
     // A follow-up knock starts afresh — the window is still open, and the new ask is a new pending row
     // the admin can now approve.
     const again = await knock(app, "Bar till, second try");
     expect(again.joinId).not.toBe(joinId);
-    expect(await pendingCount(venue.cfg)).toBe(1);
+    expect(await pendingCount()).toBe(1);
     const acceptAgain = await send(
       app,
       "POST",
@@ -251,7 +248,7 @@ describe("device join and accept, end to end (both surfaces, one window)", () =>
     expect(knockRes.status).toBe(403);
     expect((await errorOf(knockRes)).code).toBe("device.pairing_closed");
     expect(knockRes.headers.get("set-cookie")).toBeNull();
-    expect(await pendingCount(venue.cfg)).toBe(0);
+    expect(await pendingCount()).toBe(0);
 
     // The refusal was COUNTED, not RECORDED: the shut window's refused tally, which the dashboard renders
     // beside the toggle, went up by one, while the pending table stayed empty.

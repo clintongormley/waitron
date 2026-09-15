@@ -25,17 +25,17 @@ import { seedLegacySellingUnits, seedVenue, useCatalogueDb } from "../test/fixtu
 const suite = useCatalogueDb();
 
 it("publishes an attached text modifier without requiring choice rows", async () => {
-  const { tenantId, locationId } = await seedVenue(suite.db);
+  const { locationId } = await seedVenue(suite.db);
   await seedLegacySellingUnits(suite.db);
   await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
-    const menu = await createCatalogue(tx, tenantId, { name: "Menu" });
+    const menu = await createCatalogue(tx, { name: "Menu" });
     await assignCatalogueToLocation(tx, locationId, menu.id);
     const section = await createMenuSection(tx, {
       menuId: menu.id,
       name: { en: "Drinks" },
     });
-    const product = await createProduct(tx, tenantId, {
+    const product = await createProduct(tx, {
       catalogueId: menu.id,
       categoryId: null,
       name: "Coffee",
@@ -45,7 +45,6 @@ it("publishes an attached text modifier without requiring choice rows", async ()
     });
     const text = await createModifier(
       tx,
-      tenantId,
       { type: "text", name: { en: "Message" }, available: true },
       "en",
     );
@@ -68,16 +67,16 @@ it("publishes an attached text modifier without requiring choice rows", async ()
 });
 
 it("projects only published available choices, clears excluded defaults, and keeps empty required modifiers", async () => {
-  const { tenantId } = await seedVenue(suite.db);
+  await seedVenue(suite.db);
   await seedLegacySellingUnits(suite.db);
   await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
-    const menu = await createCatalogue(tx, tenantId, { name: "Menu" });
+    const menu = await createCatalogue(tx, { name: "Menu" });
     const section = await createMenuSection(tx, {
       menuId: menu.id,
       name: { en: "Drinks" },
     });
-    const product = await createProduct(tx, tenantId, {
+    const product = await createProduct(tx, {
       catalogueId: menu.id,
       categoryId: null,
       name: "Coffee",
@@ -89,7 +88,6 @@ it("projects only published available choices, clears excluded defaults, and kee
     const chosenId = randomUUID();
     const options = await createModifier(
       tx,
-      tenantId,
       {
         type: "options",
         name: { en: "Milk" },
@@ -105,7 +103,6 @@ it("projects only published available choices, clears excluded defaults, and kee
     const extraId = randomUUID();
     const extras = await createModifier(
       tx,
-      tenantId,
       {
         type: "extras",
         name: { en: "Extras" },

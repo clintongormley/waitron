@@ -42,7 +42,6 @@ function record(
   return withTransaction(db, async (tx) => {
     await asAppUser(tx);
     return recordDailyClose(tx, {
-      tenantId: venue.tenantId,
       nodeId: venue.nodeId,
       businessDay,
       timeZone: "Europe/Madrid",
@@ -153,7 +152,6 @@ describe("recordDailyClose under real contention", () => {
           await asAppUser(tx);
           await tx.execute(sql`set local lock_timeout = '250ms'`);
           return recordDailyClose(tx, {
-            tenantId: venue.tenantId,
             nodeId: venue.nodeId,
             businessDay: "2026-08-02",
             timeZone: "Europe/Madrid",

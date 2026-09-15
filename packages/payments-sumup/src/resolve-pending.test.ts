@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
-import { AppError, decimal, tenantId as brandTenantId } from "@waitron/shared";
+import { AppError, decimal } from "@waitron/shared";
 import {
   PAYMENTS_MIGRATIONS,
   getPaymentByRef,
@@ -31,7 +31,6 @@ async function setup() {
   const provider = new SumUpCloudProvider({
     client: fake,
     db: suite.db,
-    tenantId: brandTenantId(t.tenantId),
     nodeId: "11111111-1111-4111-8111-111111111111",
     incidents,
     poll: { maxAttempts: 1, intervalMs: 0, sleep: () => Promise.resolve() },
@@ -151,7 +150,7 @@ describe("SumUpCloudProvider.resolvePending", () => {
     expect(await provider.resolvePending(later)).toMatchObject({ declined: 1, incidentsRaised: 1 });
     expect((await state("ghost")).state).toBe("failed");
     expect(raised).toHaveLength(1);
-    expect(raised[0]).toMatchObject({ tenantId: t.tenantId, tillId: t.tillId, severity: "error" });
+    expect(raised[0]).toMatchObject({ tillId: t.tillId, severity: "error" });
     expect(raised[0]!.error.code).toBe("payment.pending_outcome_unactionable");
     expect(raised[0]!.error.params).toEqual({ paymentRef: "ghost", status: "not_found" });
   });
@@ -165,7 +164,6 @@ describe("SumUpCloudProvider.resolvePending", () => {
     // toEqual (not toMatchObject) so the incident input's FULL key set is pinned — in particular that
     // no `saleId` is passed (an attempting row has no sale; §4: toMatchObject checks only listed keys).
     expect(raised[0]).toEqual({
-      tenantId: t.tenantId,
       tillId: t.tillId,
       error: expect.any(AppError),
       severity: "error",

@@ -8,29 +8,24 @@ import { asAppUser } from "../testing/roles.js";
 import { withTransaction } from "../tenancy.js";
 import { tenants } from "./tenants.js";
 
-const TENANT_A = "11111111-1111-4111-8111-111111111111";
-const TENANT_B = "22222222-2222-4222-8222-222222222222";
-
 describe("table_service_statuses schema (the dining_tables.status_id composite FK)", () => {
   const suite = useTemplateDb({ template: "core" });
 
   beforeAll(async () => {
-    await suite.admin.insert(tenants).values([
-      { id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" },
-      { id: TENANT_B, country: "ES", taxId: "B11111111", legalName: "Fixture Tenant B" },
-    ]);
+    await suite.admin
+      .insert(tenants)
+      .values([{ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
   });
 
-  function asApp<T>(tenant: string, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-    void tenant;
+  function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
     return withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return fn(tx);
     });
   }
 
-  async function seedStatus(tenant: string, label: string): Promise<string> {
-    return asApp(tenant, async (tx) => {
+  async function seedStatus(label: string): Promise<string> {
+    return asApp(async (tx) => {
       const r = await tx.execute<{ id: string }>(
         sql`insert into table_service_statuses (label, color) values (${label}, '#ef4444') returning id`,
       );
@@ -44,18 +39,18 @@ describe("table_service_statuses schema (the dining_tables.status_id composite F
     await suite.admin.execute(sql`
       insert into locations (id, name, invoice_locales, operation_description) values (${LOCATION_A}, 'Loc A', array['es'], 'Hostelería')
       on conflict (id) do nothing`);
-    const tableId = await asApp(TENANT_A, async (tx) =>
+    const tableId = await asApp(async (tx) =>
       tx
         .execute<{ id: string }>(
           sql`insert into dining_tables (location_id, label) values (${LOCATION_A}, 'T-status') returning id`,
         )
         .then((r) => r.rows[0]!.id),
     );
-    const statusId = await seedStatus(TENANT_A, "Bill requested TS2");
-    await asApp(TENANT_A, (tx) =>
+    const statusId = await seedStatus("Bill requested TS2");
+    await asApp((tx) =>
       tx.execute(sql`update dining_tables set status_id = ${statusId} where id = ${tableId}`),
     );
-    const [row] = await asApp(TENANT_A, (tx) =>
+    const [row] = await asApp((tx) =>
       tx
         .execute<{ status_id: string | null }>(
           sql`select status_id from dining_tables where id = ${tableId}`,
@@ -66,7 +61,7 @@ describe("table_service_statuses schema (the dining_tables.status_id composite F
 
     // The FK rejects a status_id that names no row at all (a random uuid) — 23503.
     const eRandom = await captureError(() =>
-      asApp(TENANT_A, (tx) =>
+      asApp((tx) =>
         tx.execute(
           sql`update dining_tables set status_id = '99999999-9999-4999-8999-999999999999' where id = ${tableId}`,
         ),
@@ -75,10 +70,10 @@ describe("table_service_statuses schema (the dining_tables.status_id composite F
     expect(pgErrorCode(eRandom)).toBe("23503"); // foreign_key_violation
 
     // A deleted status is refused the same way: the reference must name a row that exists.
-    const goneStatusId = await seedStatus(TENANT_A, "Deleted status");
+    const goneStatusId = await seedStatus("Deleted status");
     await suite.admin.execute(sql`delete from table_service_statuses where id = ${goneStatusId}`);
     const eGone = await captureError(() =>
-      asApp(TENANT_A, (tx) =>
+      asApp((tx) =>
         tx.execute(sql`update dining_tables set status_id = ${goneStatusId} where id = ${tableId}`),
       ),
     );

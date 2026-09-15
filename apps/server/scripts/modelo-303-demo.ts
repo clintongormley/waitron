@@ -76,10 +76,9 @@ import {
   sumDecimals,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tenantId as brandTenantId,
   tillId as brandTillId,
 } from "@waitron/shared";
-import type { Decimal, NodeId, SaleId, SeriesId, TenantId, TillId } from "@waitron/shared";
+import type { Decimal, NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
 import type { InputVatRateLine } from "@waitron/reporting";
 
 const LOCALE = "es-ES";
@@ -274,7 +273,6 @@ interface SeededNode {
   rectificativeSeriesId: SeriesId;
 }
 interface Venue {
-  tenantId: TenantId;
   tillId: TillId;
   nodes: SeededNode[];
   // The supervisor (holds `sale.rectify`) whose session authorises the rectificativa.
@@ -287,32 +285,32 @@ interface Venue {
  * `app_user` holds no INSERT on `tenants` deliberately (a running POS cannot create tenants).
  */
 async function seedVenue(db: Database): Promise<Venue> {
-  const t = await db.execute<{ id: string }>(
-    sql`insert into tenants (country, tax_id, legal_name) values ('ES', '50000000K', 'Deli Demo SL') returning id`,
+  await db.execute(
+    sql`insert into tenants (id, country, tax_id, legal_name)
+          values (1, 'ES', '50000000K', 'Deli Demo SL') on conflict (id) do nothing`,
   );
-  const tenantId = brandTenantId(t.rows[0]!.id);
   const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Sala principal', array['es-ES'], 'Venta en establecimiento') returning id`);
+    insert into locations (name, invoice_locales, operation_description)
+    values ('Sala principal', array['es-ES'], 'Venta en establecimiento') returning id`);
   const locationId = loc.rows[0]!.id;
   const till = await db.execute<{ id: string }>(
-    sql`insert into tills (tenant_id, location_id, name) values (${tenantId}, ${locationId}, 'Caja 1') returning id`,
+    sql`insert into tills (location_id, name) values (${locationId}, 'Caja 1') returning id`,
   );
   const tillId = brandTillId(till.rows[0]!.id);
 
   const nodes: SeededNode[] = [];
   for (let i = 1; i <= 2; i++) {
     const node = await db.execute<{ id: string }>(
-      sql`insert into nodes (tenant_id, location_id, name) values (${tenantId}, ${locationId}, ${`Nodo ${i}`}) returning id`,
+      sql`insert into nodes (location_id, name) values (${locationId}, ${`Nodo ${i}`}) returning id`,
     );
     const nodeId = brandNodeId(node.rows[0]!.id);
     // Codes are unique per (tenant, node, code), so 'A'/'R' can repeat across the two nodes.
     const series = await db.execute<{ id: string }>(
-      sql`insert into invoice_series (tenant_id, node_id, code) values (${tenantId}, ${nodeId}, 'A') returning id`,
+      sql`insert into invoice_series (node_id, code) values (${nodeId}, 'A') returning id`,
     );
     const rSeries = await db.execute<{ id: string }>(sql`
-      insert into invoice_series (tenant_id, node_id, code, purpose)
-      values (${tenantId}, ${nodeId}, 'R', 'rectificative') returning id`);
+      insert into invoice_series (node_id, code, purpose)
+      values (${nodeId}, 'R', 'rectificative') returning id`);
     nodes.push({
       nodeId,
       seriesId: brandSeriesId(series.rows[0]!.id),
@@ -323,11 +321,11 @@ async function seedVenue(db: Database): Promise<Venue> {
   // A supervisor (holds `sale.rectify`), PIN "1234", inserted as the superuser like everything else
   // — the authorizer the rectificativa's gate requires.
   const person = await db.execute<{ id: string }>(sql`
-    insert into persons (tenant_id, display_name, email, pin_hash, role)
-    values (${tenantId}, 'Supervisora', 'supervisor@modelo-303.demo', ${hashPin("1234")}, 'supervisor') returning id`);
+    insert into persons (display_name, email, pin_hash, role)
+    values ('Supervisora', 'supervisor@modelo-303.demo', ${hashPin("1234")}, 'supervisor') returning id`);
   const authorizerId = person.rows[0]!.id;
 
-  return { tenantId, tillId, nodes, authorizerId };
+  return { tillId, nodes, authorizerId };
 }
 
 /** The expected *IVA devengado* per rate, summed independently from the seeded figures (corrections
@@ -377,18 +375,18 @@ function printPeriodSummary(label: string, summary: VatSummary): void {
  * Seeds the received supplier invoices directly (as the PGlite superuser), exactly as seedVenue
  * seeds the tenant — a received invoice is a plain accounting record, no fiscal write path.
  */
-async function seedPurchaseInvoices(db: Database, tenantId: TenantId): Promise<void> {
+async function seedPurchaseInvoices(db: Database): Promise<void> {
   for (const p of PURCHASE_INVOICES) {
     const total = addDecimal(decimal(p.base), decimal(p.tax));
     const inv = await db.execute<{ id: string }>(sql`
       insert into purchase_invoices
-        (tenant_id, supplier_tax_id, supplier_name, supplier_invoice_number, issued_on, received_on, total, regime)
-      values (${tenantId}, ${p.supplierTaxId}, ${p.supplierName}, ${p.number}, ${p.issuedOn}, ${p.receivedOn}, ${total}, ${p.regime})
+        (supplier_tax_id, supplier_name, supplier_invoice_number, issued_on, received_on, total, regime)
+      values (${p.supplierTaxId}, ${p.supplierName}, ${p.number}, ${p.issuedOn}, ${p.receivedOn}, ${total}, ${p.regime})
       returning id`);
     const id = inv.rows[0]!.id;
     await db.execute(sql`
-      insert into purchase_invoice_vat (tenant_id, purchase_invoice_id, rate, base, tax, kind)
-      values (${tenantId}, ${id}, ${p.rate}, ${p.base}, ${p.tax}, ${p.kind})`);
+      insert into purchase_invoice_vat (purchase_invoice_id, rate, base, tax, kind)
+      values (${id}, ${p.rate}, ${p.base}, ${p.tax}, ${p.kind})`);
   }
 }
 
@@ -488,7 +486,7 @@ async function main(): Promise<void> {
     for (const node of venue.nodes) {
       await withTransaction(db, async (tx) => {
         await asAppUser(tx);
-        await backend.registerNode(tx, node.nodeId, { tenantId: venue.tenantId });
+        await backend.registerNode(tx, node.nodeId);
       });
     }
 
@@ -501,7 +499,6 @@ async function main(): Promise<void> {
       const { instant, offsetMinutes } = issuanceAt(s.day);
       const total = addDecimal(decimal(s.base), decimal(s.tax));
       const input: RecordSaleInput = {
-        tenantId: venue.tenantId,
         tillId: venue.tillId,
         nodeId: node.nodeId,
         seriesId: node.seriesId,
@@ -535,7 +532,6 @@ async function main(): Promise<void> {
     const authorizerSession = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       return loginWithPin(tx, {
-        tenantId: venue.tenantId,
         tillId: venue.tillId,
         personId: venue.authorizerId,
         pin: "1234",
@@ -546,7 +542,6 @@ async function main(): Promise<void> {
     const node0 = venue.nodes[0]!;
     const rect = issuanceAt(RECTIFICATIVA.day);
     const correctionInput: RecordCorrectionInput = {
-      tenantId: venue.tenantId,
       tillId: venue.tillId,
       nodeId: node0.nodeId,
       seriesId: node0.rectificativeSeriesId,
@@ -573,7 +568,7 @@ async function main(): Promise<void> {
 
     // The IVA DEDUCIBLE side: received supplier invoices (facturas recibidas). A plain accounting
     // record — no fiscal write path — so seeded directly like the tenant itself.
-    await seedPurchaseInvoices(db, venue.tenantId);
+    await seedPurchaseInvoices(db);
 
     // The reads: as the application role, exactly as a report consumer would call them.
     const monthLabel = `${YEAR}-${String(MONTH).padStart(2, "0")}`;
@@ -583,7 +578,6 @@ async function main(): Promise<void> {
       async (tx) => {
         await asAppUser(tx);
         const base = {
-          tenantId: venue.tenantId,
           timeZone: TIME_ZONE,
           dayCutover: CUTOVER,
           ...period,
@@ -605,7 +599,6 @@ async function main(): Promise<void> {
             toBusinessDay: `${monthLabel}-09`,
           }),
           vatReturn: await computeVatReturn(tx, {
-            tenantId: venue.tenantId,
             year: YEAR,
             period: { kind: "month", month: MONTH },
           }),
@@ -624,7 +617,7 @@ async function main(): Promise<void> {
       async (tx) => {
         await asAppUser(tx);
         const forPeriod = (period: LiquidationPeriod): Promise<VatReturn> =>
-          computeVatReturn(tx, { tenantId: venue.tenantId, year: YEAR, period });
+          computeVatReturn(tx, { year: YEAR, period });
         return {
           monthlyReturns: [
             await forPeriod({ kind: "month", month: qm1 }),
@@ -656,7 +649,7 @@ async function main(): Promise<void> {
     );
     printPeriodSummary(`all nodes, one week ${monthLabel}-03 … ${monthLabel}-09`, weekOne);
 
-    console.log(`computeVatReturn — modelo 303, ${monthLabel} (obligado ${venue.tenantId})`);
+    console.log(`computeVatReturn — modelo 303, ${monthLabel}`);
     console.log("  IVA DEVENGADO (output side, casilla 27) — régimen general, corrections netted:");
     printRateTable(vatReturn.byRate);
     console.log(

@@ -57,7 +57,6 @@ import { deploymentEnvironment } from "../src/config.js";
 import {
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tenantId as brandTenantId,
   tillId as brandTillId,
 } from "@waitron/shared";
 
@@ -145,7 +144,6 @@ async function main(): Promise<void> {
       { db, modules: ALL_MODULES },
     );
 
-    const tenantId = brandTenantId(venue.tenantId);
     const tillId = brandTillId(venue.tillId);
     const nodeId = brandNodeId(venue.nodeId);
     // planVenue emits the standard series first, then the rectificative one; applyVenue returns them
@@ -157,10 +155,10 @@ async function main(): Promise<void> {
     // are fine here — apps/* is out of the english-only guard's scope.
     await withTransaction(db, async (tx) => {
       await asAppUser(tx);
-      const cat = await createCatalogue(tx, tenantId, { name: "Delicatessen" });
-      const comida = await createCategory(tx, tenantId, { name: { es: "Comida" } });
-      const bebidas = await createCategory(tx, tenantId, { name: { es: "Bebidas" } });
-      await createProduct(tx, tenantId, {
+      const cat = await createCatalogue(tx, { name: "Delicatessen" });
+      const comida = await createCategory(tx, { name: { es: "Comida" } });
+      const bebidas = await createCategory(tx, { name: { es: "Bebidas" } });
+      await createProduct(tx, {
         catalogueId: cat.id,
         categoryId: comida.id,
         name: "Jamón cortado",
@@ -168,7 +166,7 @@ async function main(): Promise<void> {
         unitPrice: "24.90", // €/kg, gross (VAT-inclusive)
         vatClass: "reduced",
       });
-      await createProduct(tx, tenantId, {
+      await createProduct(tx, {
         catalogueId: cat.id,
         categoryId: bebidas.id,
         name: "Agua mineral",
@@ -228,7 +226,6 @@ async function main(): Promise<void> {
         { product: toPriceable(available.find((p) => p.pricingUnit === "each")!), quantity: "2" },
       ]);
       const input: RecordSaleInput = {
-        tenantId,
         tillId,
         nodeId,
         seriesId,

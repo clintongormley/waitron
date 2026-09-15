@@ -23,15 +23,14 @@ import {
 // role's grants on shifts/shift_swaps/absences are in the privilege matrix, `packages/fiscal-verifactu/src/privileges.expected.ts`; the ROUTE that
 // passes the session's personId is proven against real Postgres in schedule-api.pg.test.ts.
 
-let tenantId: string;
 let locationId: string;
 
 const suite = usePgliteDb({
   resetPerTest: false,
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS],
   setup: async (db) => {
-    tenantId = await seedTenant(db);
-    locationId = await seedLocation(db, tenantId);
+    await seedTenant(db);
+    locationId = await seedLocation(db);
   },
 });
 

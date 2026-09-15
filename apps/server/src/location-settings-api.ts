@@ -27,7 +27,7 @@ const run = createErrorBoundary(
 
 export function mountLocationSettingsApi(
   app: Hono,
-  deps: { db: Database; cfg: { tenantId: string; locationId: string }; fiscal: FiscalContribution },
+  deps: { db: Database; cfg: { locationId: string }; fiscal: FiscalContribution },
   log: Logger,
 ): void {
   const scope = eq(locations.id, deps.cfg.locationId);

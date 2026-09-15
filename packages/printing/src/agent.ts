@@ -20,11 +20,10 @@ import { verifySecret } from "@waitron/identity";
 
 /**
  * The tenant + venue scope an agent is minted under. The route resolves it (single-tenant deli
- * deployment, `deps.tenantId` + the location) and passes it down, so this verb never derives scope
- * from client input. `authenticateAgent` takes only the `tenantId` shape and does not read it.
+ * deployment, the location) and passes it down, so this verb never derives scope from client
+ * input.
  */
 export interface PrintAgentConfig {
-  tenantId: string;
   locationId: string;
 }
 
@@ -62,10 +61,8 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  */
 export async function authenticateAgent(
   tx: Transaction,
-  cfg: { tenantId: string },
   token: string,
 ): Promise<{ agentId: string }> {
-  void cfg;
   // Split on the FIRST `.` only: the id is a uuid (no dots) and a base64url secret has none either,
   // but splitting on the first separator keeps a secret that somehow carried one intact rather than
   // truncated. `dot <= 0` rejects both a missing separator (indexOf → -1) and an empty selector (dot at

@@ -8,7 +8,7 @@ import {
   decimal,
   percentOf,
 } from "@waitron/shared";
-import type { NodeId, SaleId, SeriesId, TenantId, TillId } from "@waitron/shared";
+import type { NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
 import {
   catalogues,
   diningTables,
@@ -29,17 +29,16 @@ import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/se
 import type { TenderMethod } from "../src/types.js";
 
 export interface SeededVenue {
-  tenantId: TenantId;
   locationId: string;
   tillId: TillId;
   nodeId: NodeId;
   seriesId: SeriesId;
 }
 
-// Tenant + node use @waitron/db's own exported seeders (they own the NIF counter and the
-// tenants/nodes inserts); this file only adds the location/till/series that db has no seeder for.
+// The taxpayer row and the node use @waitron/db's own exported seeders (they own the NIF counter
+// and the tenants/nodes inserts); this file only adds the location/till/series db has no seeder for.
 export async function seedVenue(db: Database): Promise<SeededVenue> {
-  const tenantId = await seedTenant(db);
+  await seedTenant(db);
   const loc = await db.execute<{ id: string }>(sql`
     insert into locations (name, invoice_locales, operation_description) values ('Main', array['es-ES'], 'Test op') returning id`);
   const locationId = loc.rows[0]!.id;
@@ -47,25 +46,25 @@ export async function seedVenue(db: Database): Promise<SeededVenue> {
     sql`insert into tills (location_id, name) values (${locationId}, 'Till 1') returning id`,
   );
   const tillId = brandTillId(till.rows[0]!.id);
-  const nodeId = await seedNode(db, tenantId, brandLocationId(locationId));
+  const nodeId = await seedNode(db, brandLocationId(locationId));
   const series = await db.execute<{ id: string }>(
     sql`insert into invoice_series (node_id, code) values (${nodeId}, 'A') returning id`,
   );
   const seriesId = brandSeriesId(series.rows[0]!.id);
-  return { tenantId, locationId, tillId, nodeId, seriesId };
+  return { locationId, tillId, nodeId, seriesId };
 }
 
 /**
- * A SECOND node (with its own series) under an existing venue's tenant+location — for tests that need
- * two nodes in ONE tenant, which `seedVenue` (always a fresh tenant) cannot express. Two nodes in one
+ * A SECOND node (with its own series) under an existing venue's location — for tests that need
+ * two nodes in one venue, which `seedVenue` cannot express. Two nodes in one
  * database let a test tell a node-grain aggregate from a venue-wide one.
  */
 export async function seedNodeAndSeries(
   db: Database,
-  venue: { tenantId: TenantId; locationId: string },
+  venue: { locationId: string },
   seriesCode = "B",
 ): Promise<{ nodeId: NodeId; seriesId: SeriesId }> {
-  const nodeId = await seedNode(db, venue.tenantId, brandLocationId(venue.locationId));
+  const nodeId = await seedNode(db, brandLocationId(venue.locationId));
   const series = await db.execute<{ id: string }>(
     sql`insert into invoice_series (node_id, code) values (${nodeId}, ${seriesCode}) returning id`,
   );
@@ -78,12 +77,10 @@ let tillSeq = 1;
 
 export async function seedTill(
   db: Database,
-  tenantId: TenantId,
   locationId: string,
   name = `Till ${++tillSeq}`,
 ): Promise<TillId> {
   // apps/server and the sibling suites still pass the tenant; the parameter goes when they do.
-  void tenantId;
   const till = await db.execute<{ id: string }>(
     sql`insert into tills (location_id, name) values (${locationId}, ${name}) returning id`,
   );
@@ -118,7 +115,7 @@ function breakdownFromLines(
 
 export async function seedSale(
   db: Database,
-  seed: { tenantId: TenantId; tillId: TillId; nodeId: NodeId; seriesId: SeriesId },
+  seed: { tillId: TillId; nodeId: NodeId; seriesId: SeriesId },
   opts: {
     invoiceNumber: number;
     issuedAt: string;
@@ -187,7 +184,7 @@ export async function seedSale(
 
 export async function seedTender(
   db: Database,
-  ref: { tenantId: TenantId; saleId: SaleId },
+  ref: { saleId: SaleId },
   opts: { method: TenderMethod; amount: string; tipAmount?: string; settledAt: string },
 ): Promise<void> {
   await db.insert(tenders).values({
@@ -201,7 +198,7 @@ export async function seedTender(
 
 export async function seedVoid(
   db: Database,
-  ref: { tenantId: TenantId; saleId: SaleId },
+  ref: { saleId: SaleId },
   voidedAt: string,
 ): Promise<void> {
   await db.insert(saleVoids).values({
@@ -221,7 +218,6 @@ export async function seedVoid(
 export async function seedPurchaseInvoice(
   db: Database,
   // Inert: callers still pass the seeded venue; the parameter goes when they stop.
-  seed: { tenantId: TenantId },
   opts: {
     supplierTaxId?: string;
     supplierInvoiceNumber: string;
@@ -233,7 +229,6 @@ export async function seedPurchaseInvoice(
     lines: Array<{ rate: string; base: string; tax: string; kind?: "ordinary" | "capital" }>;
   },
 ): Promise<string> {
-  void seed;
   const [row] = await db
     .insert(purchaseInvoices)
     .values({
@@ -262,7 +257,7 @@ export async function seedPurchaseInvoice(
 
 export async function seedSubstitution(
   db: Database,
-  ref: { tenantId: TenantId; substitutionSaleId: SaleId; substitutedSaleId: SaleId },
+  ref: { substitutionSaleId: SaleId; substitutedSaleId: SaleId },
 ): Promise<void> {
   await db.insert(saleSubstitutions).values({
     substitutionSaleId: ref.substitutionSaleId,
@@ -281,7 +276,7 @@ export async function seedSubstitution(
  */
 export async function seedFiredLine(
   db: Database,
-  seed: { tenantId: TenantId; nodeId: NodeId; stationId: string },
+  seed: { nodeId: NodeId; stationId: string },
   opts: {
     orderId: string;
     lineNo: number;
@@ -343,7 +338,6 @@ export async function seedFiredLine(
  * `overdue-orders.test.ts` uses for the common one-order-one-line case.
  */
 export interface FiredOrderSeed {
-  tenantId: TenantId;
   tillId: TillId;
   nodeId: NodeId;
   locationId: string;
@@ -359,7 +353,7 @@ export interface FiredOrderSeed {
  */
 export async function seedOpenOrder(
   db: Database,
-  seed: { tenantId: TenantId; tillId: TillId; nodeId: NodeId },
+  seed: { tillId: TillId; nodeId: NodeId },
   orderNumber: number,
 ): Promise<{ orderId: string }> {
   const [order] = await db
@@ -397,7 +391,7 @@ export async function seedFiredOrder(
   const { orderId } = await seedOpenOrder(db, seed, opts.orderNumber);
   await seedFiredLine(
     db,
-    { tenantId: seed.tenantId, nodeId: seed.nodeId, stationId: seed.stationId },
+    { nodeId: seed.nodeId, stationId: seed.stationId },
     { orderId, lineNo: 1, ageMinutes: opts.ageMinutes, served: opts.served },
   );
   const status = opts.status ?? "open";

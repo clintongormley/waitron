@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
-import { AppError, tenantId as brandTenantId, tillId as brandTillId } from "@waitron/shared";
+import { AppError, tillId as brandTillId } from "@waitron/shared";
 import { recordIncidentOnce } from "@waitron/core";
 import { freshNif, seedWorkingOrder } from "../test/seed.js";
 
@@ -17,7 +17,6 @@ describe("recordIncidentOnce is race-safe: concurrent same-key raises collapse t
   it("an orphan (sale_id NULL) raise blocks a concurrent same-key raise, which then de-dups", async () => {
     const s = await seedWorkingOrder(postgres.admin, freshNif());
     const raiseInput = {
-      tenantId: brandTenantId(s.tenantId),
       tillId: brandTillId(s.tillId),
       // no saleId — orphan; exercises NULLS NOT DISTINCT
       error: new AppError("payment.offline_forward_declined", {

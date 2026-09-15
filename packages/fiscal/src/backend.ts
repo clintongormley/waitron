@@ -204,7 +204,7 @@ export interface ReconcileMismatch {
 }
 
 /**
- * The outcome of one `reconcile(tenantId, period)` pass — the read-side counterpart to
+ * The outcome of one `reconcile(period)` pass — the read-side counterpart to
  * `DrainResult` above. `lostAck`/`noTrace`/`drift` are non-overlapping: a record still awaiting
  * acknowledgement that the regime has simply not reported on yet is ordinary in-flight state, not
  * any of the three.

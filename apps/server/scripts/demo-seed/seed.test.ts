@@ -38,7 +38,6 @@ function nextNif(): string {
 }
 
 interface Venue {
-  tenantId: string;
   tillId: string;
   nodeId: string;
   seriesId: string;
@@ -81,7 +80,6 @@ async function provisionVenue(): Promise<Venue> {
     { db: suite.admin, modules: ALL_MODULES },
   );
   return {
-    tenantId: venue.tenantId,
     tillId: venue.tillId,
     nodeId: venue.nodeId,
     seriesId: venue.seriesIds[0]!,

@@ -6,7 +6,7 @@ import type { KeyRing } from "@waitron/credentials";
 import { StripeHostedProvider, stripeHostedClient } from "@waitron/payments-stripe";
 import { expireInitiated, hasPaymentWithExternalRef, settleInitiated } from "@waitron/payments";
 import type { InboundSettlement } from "@waitron/payments";
-import { AppError, isAppError, tenantId as brandTenantId } from "@waitron/shared";
+import { AppError, isAppError } from "@waitron/shared";
 import type { DeploymentEnvironment } from "./config.js";
 import { readCredential } from "./credentials.js";
 import { stripeSecretKeyFrom } from "./stripe-account.js";
@@ -21,13 +21,12 @@ const PURPOSE = "payments.stripe";
  * which deliberately break the endpoint's otherwise-5xx "never drop a settlement" bias:
  *
  * - `payment.webhook_signature_invalid` — the signature check, this route's one gate.
- * - `shared.invalid_id` — a malformed `:tenantId` path segment (`brandTenantId` throws it before any
  *   database access); the request is unroutable, not merely unlucky.
  * - `payment.credential_environment_mismatch` — a live key on a pre-production host (or vice versa):
  *   a provisioning MISTAKE, not a transient state, so retrying forever changes nothing.
  *
  * Everything else stays 5xx so Stripe retries: `server.credential_unusable` (a missing field can be a
- * transient mid-provisioning state), `credentials.missing` (a tenant not yet provisioned), and any DB
+ * transient mid-provisioning state), `credentials.missing` (a credential not yet provisioned), and any DB
  * fault are all recoverable on retry — and dropping a real settlement is the costlier failure.
  */
 const CLIENT_ERROR_CODES: ReadonlySet<string> = new Set([
@@ -42,12 +41,12 @@ export interface WebhookDeps {
   /** This node's id (`config.till.nodeId`), carried on the uniform write-path deps shape; it no
    * longer stamps a capture origin (the application outbox and its capture triggers were removed). */
   nodeId: string;
-  /** This host's own deployment environment, checked against the tenant's secret key exactly as
+  /** This host's own deployment environment, checked against the stored secret key exactly as
    * `stripeAccountResolver` does — see `stripeSecretKeyFrom`. */
   environment: DeploymentEnvironment;
   /** Injected exactly as `StripeAccountDeps.makeStripe` is, so a test never constructs a real SDK
-   * and the KEY selected per tenant is observable. Webhook verification is local HMAC; no network
-   * call is made through the returned client on this path. */
+   * and the KEY it was given is observable. Webhook verification is local HMAC; no network call is
+   * made through the returned client on this path. */
   makeStripe: (secretKey: string) => Stripe;
 }
 
@@ -60,13 +59,13 @@ export type WebhookOutcome = "settled" | "expired" | "redelivery" | "ignored" | 
 /**
  * Validates `webhookSecret` at the READ site, mirroring `stripeSecretKeyFrom`: a credential row
  * sealed before the field was required decrypts without it, and passing `undefined` into the SDK
- * would fail far away with nothing naming the tenant or the field. `webhookSecret` has been declared
+ * would fail far away with nothing naming the field. `webhookSecret` has been declared
  * on the `payments.stripe` purpose since it existed, so a stale row lacking it is unlikely — checked
  * rather than assumed, the same read-site discipline `stripe-account.ts` establishes.
  */
 export function hostedWebhookSecretFrom(
   payload: Record<string, string | undefined>,
-  ref: { tenantId: string; purpose: string },
+  ref: { purpose: string },
 ): string {
   const webhookSecret = payload.webhookSecret;
   if (webhookSecret === undefined) {
@@ -80,27 +79,26 @@ export function hostedWebhookSecretFrom(
  * `payments.stripe` signing secret, verifies the raw event as the SOLE gate, and advances the payment
  * state under `withTransaction`.
  *
- * The signature is the whole of the authorisation. The path `:tenantId` is attacker-controllable and
- * only labels the error payloads and logs; it selects nothing.
+ * The signature is the whole of the authorisation. The route carries no path segment naming the
+ * taxpayer: the database holds one, and the segment that used to be there was attacker-controlled
+ * and selected nothing.
  *
  * DEFERRED, by design: the `recordSale` + `associatePaymentWithSale` sale-chaining the wiring
  * capstone (`packages/payments/src/async.wiring.test.ts`) proves is NOT done here — it is blocked on
  * the till/working-orders model and the `server_id` rekey, neither of which exists yet. A payment
  * settled here therefore has no associated sale, which is exactly the `captured`-with-null-`sale_id`
- * state `reconcile`'s `missing_local`/orphan classes already model per tenant.
+ * state `reconcile`'s `missing_local`/orphan classes already model.
  */
 export async function settleWebhook(
   deps: WebhookDeps,
-  pathTenantId: string,
   rawBody: string,
   signature: string,
   log: Logger,
 ): Promise<WebhookOutcome> {
-  const tenant = brandTenantId(pathTenantId);
-  const ref = { tenantId: pathTenantId, purpose: PURPOSE };
-  // Secret selection: the database's one credential for this purpose. The path tenant plays no part
-  // in opening it; the signature check below is the gate.
-  const payload = await readCredential(deps.db, deps.ring, tenant, PURPOSE);
+  const ref = { purpose: PURPOSE };
+  // Secret selection: the database's one credential for this purpose. The signature check below is
+  // the gate.
+  const payload = await readCredential(deps.db, deps.ring, PURPOSE);
   const secretKey = stripeSecretKeyFrom(payload, ref, deps.environment);
   const webhookSecret = hostedWebhookSecretFrom(payload, ref);
   // `successUrl`/`cancelUrl` are carried through but never READ on this path — they belong to
@@ -124,7 +122,7 @@ export async function settleWebhook(
     // provider's documented-unreachable "settled event with no amount_total" guard, which for a
     // `mode: "payment"` session cannot fire — noted so a reader does not read this as ONLY a
     // signature check.)
-    throw new AppError("payment.webhook_signature_invalid", { tenantId: pathTenantId });
+    throw new AppError("payment.webhook_signature_invalid", {});
   }
   if (parsed === null) return "ignored"; // a verified event type we do not act on
   const event = parsed;
@@ -157,7 +155,7 @@ export async function settleWebhook(
 }
 
 /**
- * Registers `POST /webhooks/stripe/:tenantId` on an existing Hono app — the webhook cycle "attaches
+ * Registers `POST /webhooks/stripe` on an existing Hono app — the webhook cycle "attaches
  * to this app rather than creating a second one" (`health.ts`'s own note). The raw body is read via
  * `c.req.text()`; no JSON parser sits in front of this route, because a re-serialised body would
  * break the HMAC the signature is computed over.
@@ -169,24 +167,23 @@ export async function settleWebhook(
  * retries: a provisioning race then resolves itself, and no settlement is lost. Only the error CODE is ever logged, never a caught value's message.
  */
 export function mountWebhook(app: Hono, deps: WebhookDeps, log: Logger): void {
-  app.post("/webhooks/stripe/:tenantId", async (c) => {
-    const pathTenantId = c.req.param("tenantId");
+  app.post("/webhooks/stripe", async (c) => {
     try {
       // Read INSIDE the try: `c.req.text()` can reject on an aborted or mis-encoded body, and a read
       // that threw above the try would escape to Hono's default 500 — bypassing this route's
       // structured `webhook.failed` log and its status mapping. Guarding the reads routes such a
       // failure through the same 5xx-with-logging path as any other non-client error, so Stripe
-      // retries and the tenant is named in the log. `pathTenantId` stays out so the catch can name it.
+      // retries and the failure is logged.
       const signature = c.req.header("stripe-signature") ?? "";
       const rawBody = await c.req.text();
-      await settleWebhook(deps, pathTenantId, rawBody, signature, log);
+      await settleWebhook(deps, rawBody, signature, log);
       return c.body(null, 200);
     } catch (cause) {
       if (isAppError(cause) && CLIENT_ERROR_CODES.has(cause.code)) {
         log("warn", cause.code, cause.params);
         return c.body(null, 400);
       }
-      log("error", "webhook.failed", { tenantId: pathTenantId, errorCode: codeOf(cause) });
+      log("error", "webhook.failed", { errorCode: codeOf(cause) });
       return c.body(null, 500);
     }
   });

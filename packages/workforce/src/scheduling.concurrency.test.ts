@@ -20,12 +20,11 @@ const PUBLISHERS = 6;
 const backend = new WorkforceBackend();
 const suite = useTemplateDb({ template: "core_identity_workforce" });
 
-let tenantId: string;
 let locationId: string;
 
 beforeEach(async () => {
-  tenantId = await seedTenant(suite.admin);
-  locationId = await seedLocation(suite.admin, tenantId);
+  await seedTenant(suite.admin);
+  locationId = await seedLocation(suite.admin);
 });
 
 describe("publishRoster under real contention", () => {

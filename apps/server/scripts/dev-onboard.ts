@@ -85,7 +85,7 @@ export async function devOnboard(opts: DevOnboardOptions): Promise<DevOnboardRes
   await waitForPostgres(databaseUrl, log);
 
   // Refuse a venue-bearing database BEFORE migrating: setup mode is for an UNPROVISIONED box.
-  // `expectedTenantId` is `null` — there is no `.env` venue to match, so only `hasAny` matters here.
+  // The expected till id is `null` — there is no `.env` venue to match, so only `hasAny` matters here.
   // An unmigrated database (no `tenants` table) reads as "no venue" (`inspectVenues` maps
   // `42P01 undefined_table` → both-false), so a fresh volume falls straight through to migrate.
   const { hasAny } = await inspectVenues(databaseUrl, null);

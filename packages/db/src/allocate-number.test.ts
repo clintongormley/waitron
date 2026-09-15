@@ -1,10 +1,6 @@
 // Real PostgreSQL checks app_user allocation grants and competing backends.
 import { afterEach, beforeEach, expect, it } from "vitest";
-import {
-  AppError,
-  locationId as brandLocationId,
-  tenantId as brandTenantId,
-} from "@waitron/shared";
+import { AppError, locationId as brandLocationId } from "@waitron/shared";
 import { allocateInvoiceNumber } from "./allocate-number.js";
 import type { Database } from "./client.js";
 import { invoiceSeries } from "./schema/series.js";
@@ -14,8 +10,6 @@ import { asAppUser } from "./testing/roles.js";
 import { seedNode } from "./testing/seed.js";
 import { withTransaction } from "./tenancy.js";
 
-const TENANT_A = "11111111-1111-4111-8111-111111111111";
-const TENANT_B = "22222222-2222-4222-8222-222222222222";
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const LOCATION_B = "bbbbbbbb-0000-4000-8000-000000000001";
 const TILL_A1 = "aaaaaaaa-1111-4000-8000-000000000001";
@@ -28,10 +22,9 @@ const UNKNOWN_SERIES = "00000000-0000-4000-8000-000000000000";
 let nodeA1 = "";
 
 async function seed(db: Database): Promise<void> {
-  await db.insert(tenants).values([
-    { id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" },
-    { id: TENANT_B, country: "ES", taxId: "B11111111", legalName: "Fixture Tenant B" },
-  ]);
+  await db
+    .insert(tenants)
+    .values([{ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
   await db.insert(locations).values([
     {
       id: LOCATION_A,
@@ -50,8 +43,8 @@ async function seed(db: Database): Promise<void> {
     { id: TILL_A1, locationId: LOCATION_A, name: "A1" },
     { id: TILL_B1, locationId: LOCATION_B, name: "B1" },
   ]);
-  nodeA1 = await seedNode(db, brandTenantId(TENANT_A), brandLocationId(LOCATION_A));
-  await seedNode(db, brandTenantId(TENANT_B), brandLocationId(LOCATION_B));
+  nodeA1 = await seedNode(db, brandLocationId(LOCATION_A));
+  await seedNode(db, brandLocationId(LOCATION_B));
 }
 
 async function makeSeries(

@@ -172,7 +172,7 @@ declare module "@waitron/shared" {
     "provisioning.database_unstamped": { database: string };
     /** `applyVenue` hit a unique-key violation (SQLSTATE 23505, detected by `isUniqueViolation`
      * from `packages/db`, which walks the `cause` chain). `applyVenue` guards the natural keys it
-     * knows — the tenant `(country, tax_id)` and each series `(tenant_id, node_id, code)` — with
+     * knows — the tenant `(country, tax_id)` and each series `(node_id, code)` — with
      * `ON CONFLICT DO NOTHING`, so this is the residual case those clauses do not absorb: most
      * plausibly a second `venue` run racing between this run's plan and its apply. Named here rather
      * than left to reach the operator as `unexpected failure` (`bin.ts`'s catch-all).
@@ -202,6 +202,24 @@ declare module "@waitron/shared" {
      * `database` only, and never the driver's own error: the same discipline `venue_conflict` keeps
      * — `database` is operator-typed configuration and never a secret. */
     "provisioning.foreign_tenant": { database: string };
+    /** `applyVenue` was asked to stand a venue up in a database whose ONE taxpayer row already
+     * names a DIFFERENT country and tax id. The taxpayer is a single row keyed `id = 1`
+     * (`packages/db/src/schema/tenants.ts`), so the alternative to refusing is not "two taxpayers":
+     * it is a primary-key violation reported as a driver error nobody can act on. Refused by name
+     * instead, at the write boundary, so an operator who mistypes a NIF on a re-provision is told
+     * what happened. Comparison is on the canonical values — both sides trimmed and upper-cased,
+     * the same normalisation `planVenue` applies — so a casing or surrounding-space difference is
+     * the SAME identity and proceeds as an idempotent re-run.
+     *
+     * This is the last line rather than the first: `assertNoForeignTenant`
+     * (`packages/provisioning/src/tenant-guard.ts`) already refuses a foreign identity with
+     * `provisioning.foreign_tenant` at every caller that reads the existing identities first. This
+     * catches the caller that does not.
+     *
+     * No params, the shape `provisioning.second_venue` above keeps: this is a refusal INSIDE
+     * applyVenue's transaction, and the identity the operator supplied is the one they just typed.
+     */
+    "provisioning.tenant_identity_mismatch": Record<string, never>;
     /** A mirror-bundle adopt found one of the five DESIGNATED ids for `trading.env` absent from the
      * inserted rows — a malformed or incomplete bundle. DEPRECATED: its former thrower `adoptVenue`
      * was deleted when the initial copy went native (a native tablesync COPY cannot coexist with
@@ -227,7 +245,7 @@ declare module "@waitron/shared" {
      * that withheld it could not be acted on. */
     "provisioning.invalid_locales": { count: number };
     /** A venue request gave its standard and rectificative series the SAME code. The two series
-     * share the natural key `(tenant_id, node_id, code)`, so a venue built from such a request would
+     * share the natural key `(node_id, code)`, so a venue built from such a request would
      * insert one series and silently drop the other on `ON CONFLICT DO NOTHING` — leaving a venue
      * that can ring sales but cannot issue a rectificative invoice (a correction). Refused in the
      * pure planner (`planVenue`), like the locale and territory refusals, so the operator is not

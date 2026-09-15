@@ -21,7 +21,7 @@ export async function computeCloseCounts(
     from sales s
     where ${businessDayClause(sql`s.issued_at`, input)}
       ${nodeScopeClause(input.nodeId)}
-      and ${activeSalesClause(input)}
+      and ${activeSalesClause()}
   `);
 
   const voided = await tx.execute<{ voids: number }>(sql`

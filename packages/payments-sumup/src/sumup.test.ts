@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import {
   decimal,
-  tenantId as brandTenantId,
   tillId as brandTillId,
   workingOrderId as brandWorkingOrderId,
 } from "@waitron/shared";
@@ -34,7 +33,6 @@ describe("the sumup cloud adapter against a real database", () => {
       const provider = new SumUpCloudProvider({
         client: new FakeSumUp(),
         db: probe,
-        tenantId: brandTenantId(t.tenantId),
         nodeId: NODE,
         incidents: () => Promise.resolve(true),
         poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
@@ -60,7 +58,6 @@ describe("the sumup cloud adapter against a real database", () => {
     const provider = new SumUpCloudProvider({
       client: new FakeSumUp(),
       db: suite.admin,
-      tenantId: brandTenantId(t.tenantId),
       nodeId: NODE,
       incidents: () => Promise.resolve(true),
       poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },

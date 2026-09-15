@@ -112,7 +112,7 @@ declare module "@waitron/shared" {
       charged: string;
     };
     /** Thrown by `recordSale` when `RecordSaleInput.seriesId` names no row in `invoice_series`. */
-    "sale.series_not_found": { seriesId: string; tenantId: string };
+    "sale.series_not_found": { seriesId: string };
     /** Thrown by `recordSale` when `RecordSaleInput.seriesId` names a real series, but one that
      * belongs to a DIFFERENT node than `RecordSaleInput.nodeId` (node-id rekey, 2026-08-03: a
      * series is owned by a node — the SIF — not a till, #33). A node may own several series, but a

@@ -20,8 +20,8 @@ export interface NodeApiDeps {
    * a server that is not in the same environment it was provisioned into (CLAUDE.md §5). */
   environment: DeploymentEnvironment;
   /** Reads the held membership document, or `null` when this node holds none. Injected because these
-   * deps carry no `db`: the probe's one read is the whole-DB `node_membership` singleton, which has no
-   * `tenant_id` and so needs no `withTransaction` block. */
+   * deps carry no `db`: the probe's one read is the whole-DB `node_membership` singleton, so it needs
+   * no `withTransaction` block. */
   readMembership: () => Promise<SignedMembershipDocument | null>;
 }
 

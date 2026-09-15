@@ -12,7 +12,7 @@ import {
   startManagementSession,
 } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
-import { tenantId, locationId } from "@waitron/shared";
+import { locationId } from "@waitron/shared";
 import { MEDIA_MIGRATIONS } from "./migrations.js";
 import { MEDIA_ROUTES } from "./routes.js";
 
@@ -37,7 +37,6 @@ async function fixture(role = "manager") {
     {
       db: suite.db,
       cfg: {
-        tenantId: tenantId(id),
         locationId: locationId("00000000-0000-4000-8000-000000000001"),
         contentDefaultLanguage: "fr",
       },

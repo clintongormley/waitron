@@ -14,17 +14,16 @@ import type { PrintConfig } from "./printers.js";
 const suite = useTemplateDb({ template: "core" });
 
 async function setup(): Promise<PrintConfig> {
-  const tenantId = await seedTenant(suite.admin);
+  await seedTenant(suite.admin);
   const { rows } = await suite.admin.execute<{ id: string }>(sql`
     insert into locations (name, invoice_locales, operation_description) values ('Bar', array['es-ES'], 'Sale on premises') returning id`);
-  return { tenantId, locationId: rows[0]!.id };
+  return { locationId: rows[0]!.id };
 }
 
 /** Run `fn` as the real deployment role — a tenant-scoped tx that switches to `app_user` first, then
  * COMMITS when it returns. Each call is its own committed transaction, so a claim in one call is visible
  * and UNLOCKED to the next (the reclaim test's `asApp`, the committed-then-died shape). */
-function asApp<T>(db: Database, cfg: PrintConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  void cfg;
+function asApp<T>(db: Database, fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTransaction(db, async (tx) => {
     await asAppUser(tx);
     return fn(tx);
@@ -58,7 +57,7 @@ describe("claimPrintJobs respects printers.active (real Postgres)", () => {
 
     // Two network printers in the venue — both jobs enqueued while ACTIVE (enqueue itself now rejects
     // an inactive printer), then one printer is deactivated.
-    const seeded = await asApp(suite.admin, cfg, async (tx) => {
+    const seeded = await asApp(suite.admin, async (tx) => {
       const active = await createPrinter(tx, cfg, {
         name: "Active",
         transport: "network_tcp",
@@ -75,8 +74,8 @@ describe("claimPrintJobs respects printers.active (real Postgres)", () => {
     });
     await deactivate(seeded.dead);
 
-    const claimed = await asApp(suite.admin, cfg, (tx) =>
-      claimPrintJobs(tx, cfg, agentId, { locationId: cfg.locationId, visibleKeys: [] }),
+    const claimed = await asApp(suite.admin, (tx) =>
+      claimPrintJobs(tx, agentId, { locationId: cfg.locationId, visibleKeys: [] }),
     );
 
     // The active printer's job is claimed; the deactivated printer's queued job is left untouched — the
@@ -90,7 +89,7 @@ describe("claimPrintJobs respects printers.active (real Postgres)", () => {
     const cfg = await setup();
     const agentId = await seedAgent(cfg);
 
-    const jobId = await asApp(suite.admin, cfg, async (tx) => {
+    const jobId = await asApp(suite.admin, async (tx) => {
       const p = await createPrinter(tx, cfg, {
         name: "Kitchen",
         transport: "network_tcp",
@@ -102,8 +101,8 @@ describe("claimPrintJobs respects printers.active (real Postgres)", () => {
 
     // The agent CLAIMS the job (queued → printing, claimed_at stamped) in its own committed transaction,
     // then "dies": the row is left committed-and-unlocked in `printing`.
-    const claimed = await asApp(suite.admin, cfg, (tx) =>
-      claimPrintJobs(tx, cfg, agentId, { locationId: cfg.locationId, visibleKeys: [] }),
+    const claimed = await asApp(suite.admin, (tx) =>
+      claimPrintJobs(tx, agentId, { locationId: cfg.locationId, visibleKeys: [] }),
     );
     expect(claimed).toHaveLength(1);
     const printerId = claimed[0]!.printer_id;
@@ -117,8 +116,8 @@ describe("claimPrintJobs respects printers.active (real Postgres)", () => {
 
     // A later pull must NOT reclaim the stuck job: the printer is deactivated, so the lease reclaim is
     // suppressed and the job stays stranded in `printing` until the printer is reactivated.
-    const reclaimed = await asApp(suite.admin, cfg, (tx) =>
-      claimPrintJobs(tx, cfg, agentId, { locationId: cfg.locationId, visibleKeys: [] }),
+    const reclaimed = await asApp(suite.admin, (tx) =>
+      claimPrintJobs(tx, agentId, { locationId: cfg.locationId, visibleKeys: [] }),
     );
     expect(reclaimed).toEqual([]);
     expect(await jobStatus(jobId)).toBe("printing");

@@ -14,7 +14,6 @@ const suite = usePgliteDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, IDENTITY_MIGRATIONS],
 });
 const log: Logger = () => {};
-let tenantId: string;
 let cookie: string;
 
 beforeEach(async () => {
@@ -25,13 +24,13 @@ beforeEach(async () => {
   await suite.db.execute(sql`delete from catalogues`);
   await suite.db.execute(sql`delete from management_sessions`);
   await suite.db.execute(sql`delete from persons`);
-  tenantId = await seedTenant(suite.db);
+  await seedTenant(suite.db);
   await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     const person = await tx.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, role)
-      values (${tenantId}, 'Manager', ${hashPin("1234")}, 'manager') returning id`);
-    const session = await startManagementSession(tx, { tenantId, personId: person.rows[0]!.id });
+      insert into persons (display_name, pin_hash, role)
+      values ('Manager', ${hashPin("1234")}, 'manager') returning id`);
+    const session = await startManagementSession(tx, { personId: person.rows[0]!.id });
     cookie = `${MANAGEMENT_COOKIE}=${session.id}`;
   });
 });
@@ -173,12 +172,12 @@ describe("unit management routes", () => {
 
     const [a, b] = await withTransaction(suite.db, async (tx) => {
       const menu = await tx.execute<{ id: string }>(sql`
-        insert into catalogues (tenant_id, name) values (${tenantId}, 'Menu') returning id`);
+        insert into catalogues (name) values ('Menu') returning id`);
       const ids: string[] = [];
       for (const name of ["A", "B"]) {
         const product = await tx.execute<{ id: string }>(sql`
-          insert into products (tenant_id, catalogue_id, name, pricing_unit, unit_price, vat_class)
-          values (${tenantId}, ${menu.rows[0]!.id}, ${name}, 'each', '1', 'general')
+          insert into products (catalogue_id, name, pricing_unit, unit_price, vat_class)
+          values (${menu.rows[0]!.id}, ${name}, 'each', '1', 'general')
           returning id`);
         await tx.execute(sql`
           insert into product_units (product_id, unit_id)

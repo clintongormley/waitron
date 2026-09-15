@@ -13,7 +13,7 @@ describe("the public surface", () => {
         "isPurpose",
         "validatePayload",
         "loadKeyRing",
-        "credentialTenants",
+        "credentialProvisioned",
         "deleteCredential",
         "getCredential",
         "listCredentials",

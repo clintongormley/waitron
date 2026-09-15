@@ -16,7 +16,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tenantId as brandTenantId,
   tillId as brandTillId,
 } from "@waitron/shared";
 import type { Logger } from "./logger.js";
@@ -50,7 +49,6 @@ const BASE = "http://waitron.e2e";
 // match for the server to judge the usb job eligible for this box (§5).
 const USB_SERIAL = "USB-SN-E2E";
 
-let tenantId: string;
 let locationId: string;
 let cfg: TillConfig;
 let managerCookie: string;
@@ -60,16 +58,15 @@ const suite = usePgliteDb({
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
   timeoutMs: 60_000,
   setup: async (db) => {
-    tenantId = await seedTenant(db);
+    await seedTenant(db);
     const loc = await db.execute<{ id: string }>(sql`
-      insert into locations (tenant_id, name, invoice_locales, operation_description)
-      values (${tenantId}, 'Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
+      insert into locations (name, invoice_locales, operation_description)
+      values ('Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
     locationId = loc.rows[0]!.id;
     // The full TillConfig the print/join verbs are typed on. The routes read only tenantId/locationId
     // and echo nodeId on the pull; the fiscal ids are unused here, so a branded random uuid stands in —
     // and nodeId needs no `nodes` row, exactly as `print-api.test.ts` seeds none.
     cfg = {
-      tenantId: brandTenantId(tenantId),
       tillId: brandTillId(randomUUID()),
       nodeId: brandNodeId(randomUUID()),
       seriesId: brandSeriesId(randomUUID()),
@@ -82,11 +79,11 @@ const suite = usePgliteDb({
     const managerSid = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       const mgr = await tx.execute<{ id: string }>(sql`
-        insert into persons (tenant_id, display_name, pin_hash, role)
-        values (${tenantId}, 'The Manager', ${hashPin("1234")}, 'manager') returning id`);
+        insert into persons (display_name, pin_hash, role)
+        values ('The Manager', ${hashPin("1234")}, 'manager') returning id`);
       // A `manager` role carries `printer.manage`, the permission the shared list, the challenge and
       // the print-agent accept are gated on.
-      const session = await startManagementSession(tx, { tenantId, personId: mgr.rows[0]!.id });
+      const session = await startManagementSession(tx, { personId: mgr.rows[0]!.id });
       return session.id;
     });
     managerCookie = `${MANAGEMENT_COOKIE}=${managerSid}`;
@@ -371,11 +368,11 @@ describe("print-agent end to end", () => {
     const usbPayload = esc().text("Barra 2").cut().bytes();
     const { jobId } = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
-      return enqueuePrintJob(tx, { tenantId, locationId }, printerId, networkPayload);
+      return enqueuePrintJob(tx, { locationId }, printerId, networkPayload);
     });
     const { jobId: usbJobId } = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
-      return enqueuePrintJob(tx, { tenantId, locationId }, usbPrinterId, usbPayload);
+      return enqueuePrintJob(tx, { locationId }, usbPrinterId, usbPayload);
     });
 
     await agent.runOnce();
@@ -405,12 +402,7 @@ describe("print-agent end to end", () => {
     // A further tick is halted: it claims nothing (no new job appears, the printed one stays done).
     const enqueuedAfterRevoke = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
-      return enqueuePrintJob(
-        tx,
-        { tenantId, locationId },
-        printerId,
-        esc().text("Ignored").bytes(),
-      );
+      return enqueuePrintJob(tx, { locationId }, printerId, esc().text("Ignored").bytes());
     });
     await agent.runOnce();
     expect(agent.status.phase).toBe("unauthorized");

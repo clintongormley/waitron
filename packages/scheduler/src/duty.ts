@@ -1,5 +1,3 @@
-import type { TenantId } from "@waitron/shared";
-
 /** Half-open `[from, to)`. Structurally identical to payments' `ReconcilePeriod`, deliberately:
  * a `PaymentReconciler` must adapt to a `PeriodDuty` without either package importing the other. */
 export interface RunPeriod {
@@ -51,5 +49,5 @@ export interface PeriodDuty {
    * that duty's history and restarts derivation from the most recent complete period. */
   readonly name: string;
   readonly cadence: "daily";
-  run(tenantId: TenantId, period: RunPeriod, now: Date): Promise<DutyOutcome>;
+  run(period: RunPeriod, now: Date): Promise<DutyOutcome>;
 }

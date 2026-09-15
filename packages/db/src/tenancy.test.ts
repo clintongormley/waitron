@@ -1,5 +1,4 @@
 import { sql } from "drizzle-orm";
-import { randomUUID } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "./client.js";
 import { locations, tenants } from "./schema/tenants.js";
@@ -31,14 +30,13 @@ async function rejectsWithCauseMatching(promise: Promise<unknown>, pattern: RegE
 }
 
 describe("invoice_locales", () => {
-  const tenantId = randomUUID();
   let db: Database;
 
   beforeEach(async () => {
     db = suite.db;
     await db
       .insert(tenants)
-      .values({ id: tenantId, country: "ES", taxId: "B44444447", legalName: "Bar Gamma SL" });
+      .values({ id: 1, country: "ES", taxId: "B44444447", legalName: "Bar Gamma SL" });
   });
 
   const insertLocales = async (invoiceLocales: string[]): Promise<unknown> => {
@@ -82,8 +80,6 @@ describe("invoice_locales", () => {
 });
 
 describe("withTransaction transaction context", () => {
-  const tenantId = randomUUID();
-  void tenantId;
   let db: Database;
 
   beforeEach(async () => {

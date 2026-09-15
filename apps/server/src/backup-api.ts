@@ -20,7 +20,6 @@ import "./errors.js";
 export interface BackupApiDeps {
   supervisor: BackupSupervisor;
   db: Database;
-  cfg: { tenantId: string };
   stateDir: string;
 }
 

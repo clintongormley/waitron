@@ -37,16 +37,15 @@ interface Seeded {
 }
 
 async function setupVenue(): Promise<Seeded> {
-  const tenantId = await seedTenant(db);
+  await seedTenant(db);
   const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
+    insert into locations (name, invoice_locales, operation_description)
+    values ('Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
   const locationId = loc.rows[0]!.id;
   const till = await db.execute<{ id: string }>(sql`
-    insert into tills (tenant_id, location_id, name) values (${tenantId}, ${locationId}, 'Caja 1') returning id`);
-  const nodeId = await seedNode(db, tenantId, brandLocationId(locationId));
+    insert into tills (location_id, name) values (${locationId}, 'Caja 1') returning id`);
+  const nodeId = await seedNode(db, brandLocationId(locationId));
   const cfg: TillConfig = {
-    tenantId,
     tillId: brandTillId(till.rows[0]!.id),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
@@ -60,10 +59,10 @@ async function setupVenue(): Promise<Seeded> {
     await asAppUser(tx);
     const { id: tableId } = await createTable(tx, cfg, { label: "T1" });
     const active = await tx.execute<{ id: string }>(
-      sql`insert into table_service_statuses (tenant_id, label, color) values (${tenantId}, 'Bill requested', '#ef4444') returning id`,
+      sql`insert into table_service_statuses (label, color) values ('Bill requested', '#ef4444') returning id`,
     );
     const inactive = await tx.execute<{ id: string }>(
-      sql`insert into table_service_statuses (tenant_id, label, color, active) values (${tenantId}, 'Retired', '#000', false) returning id`,
+      sql`insert into table_service_statuses (label, color, active) values ('Retired', '#000', false) returning id`,
     );
     return { tableId, activeStatusId: active.rows[0]!.id, inactiveStatusId: inactive.rows[0]!.id };
   });

@@ -24,7 +24,6 @@ export const PENDING_ADOPTION_FILE = "pending-adoption.json";
  * Persisted on disk (not the DB) because the DB it targets is still being copied.
  */
 export interface PendingAdoption {
-  tenantId: string;
   locationId: string;
   standby: StandbyIdentity;
   nodeName: string;
@@ -60,7 +59,6 @@ export async function readPendingAdoption(stateDir: string): Promise<PendingAdop
 /** The argument shape `establishReservedStandbyIdentity` takes — hoisted so the injectable `establish`
  * seat below matches it exactly. */
 type EstablishArgs = {
-  tenantId: string;
   locationId: string;
   standby: StandbyIdentity;
   nodeName: string;
@@ -90,7 +88,7 @@ export async function runFinishAdoption(deps: {
   modules: readonly WaitronModule[];
   readStatus?: (name: string) => Promise<SubscriptionStatus>;
   establish?: (args: EstablishArgs) => Promise<void>;
-  ensureViewer?: (tenantId: string) => Promise<void>;
+  ensureViewer?: () => Promise<void>;
   sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
   log: Logger;
   signal: AbortSignal;
@@ -101,8 +99,7 @@ export async function runFinishAdoption(deps: {
     deps.establish ??
     ((args) =>
       establishReservedStandbyIdentity({ ownerDb: deps.replicationDb, ring: deps.ring }, args));
-  const ensureViewer =
-    deps.ensureViewer ?? ((tenantId) => ensureMirrorViewer(deps.replicationDb, tenantId));
+  const ensureViewer = deps.ensureViewer ?? (() => ensureMirrorViewer(deps.replicationDb));
   const sleep = deps.sleep ?? realSleep;
 
   while (!deps.signal.aborted) {
@@ -115,7 +112,6 @@ export async function runFinishAdoption(deps: {
         // viewer (its `persons` insert FKs to the same tenant), then clear the latch — order matters:
         // the file must survive a throw in either step so the next boot retries.
         await establish({
-          tenantId: pending.tenantId,
           locationId: pending.locationId,
           standby: pending.standby,
           nodeName: pending.nodeName,
@@ -124,7 +120,7 @@ export async function runFinishAdoption(deps: {
           modules: deps.modules,
           reserved: pending.reserved,
         });
-        await ensureViewer(pending.tenantId);
+        await ensureViewer();
         await rm(pendingPath(deps.stateDir), { force: true });
         deps.log("info", "adoption.established", { nodeId: pending.standby.nodeId });
         return;

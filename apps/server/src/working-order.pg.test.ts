@@ -23,7 +23,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tenantId as brandTenantId,
   tillId as brandTillId,
 } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
@@ -115,7 +114,6 @@ function nextNif(): string {
 
 function tillConfigFromVenue(venue: VenueResult): TillConfig {
   return {
-    tenantId: brandTenantId(venue.tenantId),
     tillId: brandTillId(venue.tillId),
     nodeId: brandNodeId(venue.nodeId),
     // planVenue emits the standard series first, then the rectificative one.
@@ -183,9 +181,9 @@ async function setupVenue(): Promise<SeededVenue> {
   const cfg = tillConfigFromVenue(venue);
   const available = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
-    const cat = await createCatalogue(tx, cfg.tenantId, { name: "Delicatessen" });
-    const bebidas = await createCategory(tx, cfg.tenantId, { name: { [LOCALE]: "Bebidas" } });
-    await createProduct(tx, cfg.tenantId, {
+    const cat = await createCatalogue(tx, { name: "Delicatessen" });
+    const bebidas = await createCategory(tx, { name: { [LOCALE]: "Bebidas" } });
+    await createProduct(tx, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
       name: "Café",
@@ -193,7 +191,7 @@ async function setupVenue(): Promise<SeededVenue> {
       unitPrice: "1.50",
       vatClass: "general",
     });
-    await createProduct(tx, cfg.tenantId, {
+    await createProduct(tx, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
       name: "Agua",
@@ -224,12 +222,12 @@ async function modeVenue(mode: OrderFlow): Promise<SeededVenue> {
   return { ...venue, cfg: { ...venue.cfg, orderFlow: mode } };
 }
 
-/** This tenant's OUTSTANDING (issued-but-unsettled) sales, read as the app role under the tenant —
- *  the surface an invoice-first order shows on between placing and collect. */
-async function outstandingFor(cfg: TillConfig): Promise<{ saleId: string; amountDue: string }[]> {
+/** The OUTSTANDING (issued-but-unsettled) sales, read as the app role — the surface an
+ *  invoice-first order shows on between placing and collect. */
+async function outstanding(): Promise<{ saleId: string; amountDue: string }[]> {
   return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
-    const rows = await listOutstandingSales(tx, cfg.tenantId);
+    const rows = await listOutstandingSales(tx);
     return rows.map((r) => ({ saleId: r.saleId, amountDue: r.amountDue }));
   });
 }
@@ -432,7 +430,7 @@ async function ticketItemIdsFor(orderId: string): Promise<string[]> {
     select ti.id
     from ticket_items ti
     join working_order_lines wol
-      on wol.id = ti.working_order_line_id and wol.tenant_id = ti.tenant_id
+      on wol.id = ti.working_order_line_id
     where ti.working_order_id = ${orderId}
     order by wol.line_no
   `);
@@ -454,9 +452,9 @@ async function asTenant<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>)
 }
 
 /**
- * A SECOND register on the SAME node — a `cfg` that shares `cfg`'s tenant, node, series and
- * location and differs only in `till_id`. The row is inserted as the OWNER under `withTransaction`,
- * exactly as `applyVenue` writes a till (the insert carries an explicit `tenant_id`). Proving
+ * A SECOND register on the SAME node — a `cfg` that shares `cfg`'s node, series and location and
+ * differs only in `till_id`. The row is inserted as the OWNER under `withTransaction`, exactly as
+ * `applyVenue` writes a till. Proving
  * cross-till retrieval needs a genuine second till row because both `working_orders.till_id` and
  * `sales.till_id` FK onto `tills` — a fabricated uuid would fail those.
  */
@@ -464,8 +462,8 @@ async function addTill(cfg: TillConfig, name: string): Promise<TillConfig> {
   const id = randomUUID();
   await withTransaction(suite.admin, async (tx) => {
     await tx.execute(sql`
-      insert into tills (id, tenant_id, location_id, name)
-      values (${id}, ${cfg.tenantId}, ${cfg.locationId}, ${name})`);
+      insert into tills (id, location_id, name)
+      values (${id}, ${cfg.locationId}, ${name})`);
   });
   return { ...cfg, tillId: brandTillId(id) };
 }
@@ -481,8 +479,8 @@ async function addNode(cfg: TillConfig, name: string): Promise<TillConfig> {
   const id = randomUUID();
   await withTransaction(suite.admin, async (tx) => {
     await tx.execute(sql`
-      insert into nodes (id, tenant_id, location_id, name)
-      values (${id}, ${cfg.tenantId}, ${cfg.locationId}, ${name})`);
+      insert into nodes (id, location_id, name)
+      values (${id}, ${cfg.locationId}, ${name})`);
   });
   return { ...cfg, nodeId: brandNodeId(id) };
 }
@@ -1154,7 +1152,7 @@ describe("cross-till end-to-end", () => {
     // THE CHAIN: the two sales on this node (A/1 walk-up on till A, A/2 cross-till on till B) verify as
     // one intact huella chain.
     const report = await withTransaction(suite.admin, (tx) =>
-      backend.checkIntegrity(tx, tillA.tenantId, tillA.nodeId),
+      backend.checkIntegrity(tx, tillA.nodeId),
     );
     expect(report.ok).toBe(true);
     expect(report.checked).toBe(2);
@@ -1458,7 +1456,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
     expect(await saleCount(id)).toBe(1);
     expect(await registroCount(id)).toBe(1);
     // Pay + issue are the same instant, so nothing is ever owed.
-    expect(await outstandingFor(cfg)).toEqual([]);
+    expect(await outstanding()).toEqual([]);
   });
 
   // The unit-abbreviation freeze, end to end. The café sits on the legacy `each` unit, whose NAME
@@ -1518,9 +1516,9 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
     // OUTSTANDING (what is owed).
     expect(await saleCount(id)).toBe(1);
     expect(await registroCount(id)).toBe(1);
-    const outstanding = await outstandingFor(cfg);
-    expect(outstanding).toHaveLength(1);
-    expect(outstanding[0]!.amountDue).toBe("3.50");
+    const due = await outstanding();
+    expect(due).toHaveLength(1);
+    expect(due[0]!.amountDue).toBe("3.50");
 
     // COLLECT → settle the EXISTING invoice, placed → settled, filing NOTHING new.
     const collected = await collectOrder({ db: suite.admin, backend, clock }, cfg, {
@@ -1554,7 +1552,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
     expect(await saleCount(id)).toBe(1); // STILL one sale — no second file at collect
     expect(await registroCount(id)).toBe(1); // STILL one registro
-    expect(await outstandingFor(cfg)).toEqual([]); // settled → no longer owed
+    expect(await outstanding()).toEqual([]); // settled → no longer owed
     expect(await tendersFor(id)).toEqual([{ method: "cash", amount: "3.50" }]);
   });
 
@@ -1688,7 +1686,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
     expect(await saleCount(id)).toBe(1);
     expect(await registroCount(id)).toBe(1);
     expect(await tendersFor(id)).toEqual([{ method: "cash", amount: "1.50" }]); // one settlement
-    expect(await outstandingFor(cfg)).toEqual([]);
+    expect(await outstanding()).toEqual([]);
   });
 
   // MODE T (ticket_then_pay): at PLACE no fiscal doc, open → placed; at COLLECT `recordSale` immediate
@@ -1713,7 +1711,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
     expect(placed.invoiceNumber).toBeUndefined(); // no invoice issued at placing
     expect(await orderState(id)).toEqual({ status: "placed", settledAtSet: false });
     expect(await saleCount(id)).toBe(0); // nothing filed yet
-    expect(await outstandingFor(cfg)).toEqual([]); // no issued invoice → nothing outstanding
+    expect(await outstanding()).toEqual([]); // no issued invoice → nothing outstanding
 
     // COLLECT → file `recordSale` IMMEDIATE, placed → settled.
     const collected = await collectOrder({ db: suite.admin, backend, clock }, cfg, {
@@ -1795,7 +1793,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
     // its handover marker is unset.
     await placeOrder({ db: suite.admin, backend, clock }, cfg, id, OPERATOR, cfg.tillId);
     expect(
-      (await asTenant(cfg, (tx) => listStationQueue(tx, cfg, station))).map((g) => g.orderId),
+      (await asTenant(cfg, (tx) => listStationQueue(tx, station))).map((g) => g.orderId),
     ).toEqual([id]);
     expect(await collectedAtSet(id)).toBe(false);
 
@@ -1817,7 +1815,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
 
     // The order-level handover marker is now set, so the default station drops the collected order.
     expect(await collectedAtSet(id)).toBe(true);
-    expect(await asTenant(cfg, (tx) => listStationQueue(tx, cfg, station))).toEqual([]);
+    expect(await asTenant(cfg, (tx) => listStationQueue(tx, station))).toEqual([]);
     // The ticket item ITSELF is untouched — collected_at is an ORDER marker, not a ticket kitchen state.
     expect(await ticketStateOf(id)).toBe("queued");
   });
@@ -1833,7 +1831,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
     // PLACE issues the deferred invoice AND fires the ticket item to the default station.
     await placeOrder({ db: suite.admin, backend, clock }, cfg, id, OPERATOR, cfg.tillId);
     expect(
-      (await asTenant(cfg, (tx) => listStationQueue(tx, cfg, station))).map((g) => g.orderId),
+      (await asTenant(cfg, (tx) => listStationQueue(tx, station))).map((g) => g.orderId),
     ).toEqual([id]);
     expect(await collectedAtSet(id)).toBe(false);
 
@@ -1851,7 +1849,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
 
     // Set, and the default station drops the collected order.
     expect(await collectedAtSet(id)).toBe(true);
-    expect(await asTenant(cfg, (tx) => listStationQueue(tx, cfg, station))).toEqual([]);
+    expect(await asTenant(cfg, (tx) => listStationQueue(tx, station))).toEqual([]);
   });
 
   it("collectOrder refuses a non-placed order (open, absent) and an unsupported tender, filing nothing", async () => {
@@ -1994,7 +1992,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
     // Whole-ticket bump to `preparing`: only the still-queued item[1] advances; item[0] (ready) is untouched.
     await asTenant(cfg, (tx) => advanceTicket(tx, cfg, id, station, "preparing"));
 
-    const queue = await asTenant(cfg, (tx) => listStationQueue(tx, cfg, station));
+    const queue = await asTenant(cfg, (tx) => listStationQueue(tx, station));
     const group = queue.find((g) => g.orderId === id)!;
     expect(group.items.map((i) => i.state).sort()).toEqual(["preparing", "ready"]);
   });
@@ -2021,7 +2019,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
     await placeOrder({ db: suite.admin, backend, clock }, cfg, id2, OPERATOR, cfg.tillId);
 
     // Both orders show, oldest first, each one line, at `queued`, carrying the order's label + queued_at.
-    const queue = await asTenant(cfg, (tx) => listStationQueue(tx, cfg, station));
+    const queue = await asTenant(cfg, (tx) => listStationQueue(tx, station));
     expect(queue.map((g) => g.orderId)).toEqual([id1, id2]);
     expect(queue[0]).toMatchObject({
       orderId: id1,
@@ -2036,9 +2034,8 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
     const [item1] = await ticketItemIdsFor(id1);
     await asTenant(cfg, (tx) => advanceTicketItem(tx, cfg, item1!, "preparing"));
     expect(
-      (await asTenant(cfg, (tx) => listStationQueue(tx, cfg, station))).find(
-        (g) => g.orderId === id1,
-      )?.items[0]?.state,
+      (await asTenant(cfg, (tx) => listStationQueue(tx, station))).find((g) => g.orderId === id1)
+        ?.items[0]?.state,
     ).toBe("preparing");
 
     // COLLECT order 1 — the collect flow settles a placed order AND stamps `collected_at` in the one
@@ -2048,7 +2045,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
       update working_orders set status = 'settled', settled_at = now(), collected_at = now()
       where id = ${id1}`);
     expect(
-      (await asTenant(cfg, (tx) => listStationQueue(tx, cfg, station))).map((g) => g.orderId),
+      (await asTenant(cfg, (tx) => listStationQueue(tx, station))).map((g) => g.orderId),
     ).toEqual([id2]);
 
     // CANCEL order 2 (placed → abandoned) — its ticket item is UNCHANGED (cancel never touches
@@ -2062,7 +2059,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
       OPERATOR,
     );
     expect(await ticketStateOf(id2)).toBe("queued"); // the ticket item itself is untouched by cancel
-    expect(await asTenant(cfg, (tx) => listStationQueue(tx, cfg, station))).toEqual([]);
+    expect(await asTenant(cfg, (tx) => listStationQueue(tx, station))).toEqual([]);
   });
 
   it("listStationQueue is VENUE-WIDE: each node sees the venue's items, regardless of node (till-reroute §3.6)", async () => {
@@ -2090,8 +2087,8 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
     });
     await placeOrder({ db: suite.admin, backend, clock }, nodeB, idB, OPERATOR, nodeB.tillId);
 
-    const queueA = await asTenant(nodeA, (tx) => listStationQueue(tx, nodeA, station));
-    const queueB = await asTenant(nodeB, (tx) => listStationQueue(tx, nodeB, station));
+    const queueA = await asTenant(nodeA, (tx) => listStationQueue(tx, station));
+    const queueB = await asTenant(nodeB, (tx) => listStationQueue(tx, station));
 
     // Same station on both sides, each holding BOTH orders (oldest-first: A fired before B) — the
     // reads no longer separate by node.
@@ -2190,7 +2187,7 @@ describe("markCollected (Mode-P kitchen-handover marker)", () => {
       OPERATOR,
     );
     expect(
-      (await asTenant(cfg, (tx) => listStationQueue(tx, cfg, station))).map((g) => g.orderId),
+      (await asTenant(cfg, (tx) => listStationQueue(tx, station))).map((g) => g.orderId),
     ).toEqual([id]);
 
     // Walk the line all the way to `ready` — a ready line STAYS on the queue until the order collects.
@@ -2198,7 +2195,7 @@ describe("markCollected (Mode-P kitchen-handover marker)", () => {
     await asTenant(cfg, (tx) => advanceTicketItem(tx, cfg, item!, "preparing"));
     await asTenant(cfg, (tx) => advanceTicketItem(tx, cfg, item!, "ready"));
     expect(await ticketStateOf(id)).toBe("ready");
-    const readyQueue = await asTenant(cfg, (tx) => listStationQueue(tx, cfg, station));
+    const readyQueue = await asTenant(cfg, (tx) => listStationQueue(tx, station));
     // Still listed — a ready-but-uncollected order lingers (the bug was that it could NEVER leave) — and
     // the group carries the order's `status`, so the till surfaces the collect action (collectable = settled).
     expect(readyQueue.map((g) => g.orderId)).toEqual([id]);
@@ -2208,7 +2205,7 @@ describe("markCollected (Mode-P kitchen-handover marker)", () => {
     await markCollected({ db: suite.admin }, cfg, id);
     expect(await collectedAtSet(id)).toBe(true);
     // GONE from the station queue — the regression is closed.
-    expect(await asTenant(cfg, (tx) => listStationQueue(tx, cfg, station))).toEqual([]);
+    expect(await asTenant(cfg, (tx) => listStationQueue(tx, station))).toEqual([]);
     // Its fiscal state is untouched — still settled with settled_at intact (only collected_at moved).
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
   });
@@ -2289,13 +2286,13 @@ describe("markCollected (Mode-P kitchen-handover marker)", () => {
 // lost update. Every write runs through `withTransaction` + `asAppUser`, as `app_user`; the owner reads
 // below use `suite.admin` (superuser) deliberately, to witness the committed state from outside.
 
-/** Insert an active dining table under `cfg`'s tenant + location as the owner and return its id — the
- *  `openTab` → `addTabRound` entry point. Written as an owner INSERT under `withTransaction` with an
- *  explicit `tenant_id`, the same shape `addTill`/`addNode` above use. */
+/** Insert an active dining table under `cfg`'s location as the owner and return its id — the
+ *  `openTab` → `addTabRound` entry point. Written as an owner INSERT under `withTransaction`, the
+ *  same shape `addTill`/`addNode` above use. */
 async function addTable(tx: Transaction, cfg: TillConfig): Promise<string> {
   const { rows } = await tx.execute<{ id: string }>(sql`
-    insert into dining_tables (tenant_id, location_id, label)
-    values (${cfg.tenantId}, ${cfg.locationId}, ${`T-${randomUUID().slice(0, 8)}`}) returning id`);
+    insert into dining_tables (location_id, label)
+    values (${cfg.locationId}, ${`T-${randomUUID().slice(0, 8)}`}) returning id`);
   return rows[0]!.id;
 }
 
@@ -2325,7 +2322,7 @@ async function tabSnapshot(tabId: string): Promise<
            ti.state
     from working_order_lines wol
     join ticket_items ti
-      on ti.working_order_line_id = wol.id and ti.tenant_id = wol.tenant_id
+      on ti.working_order_line_id = wol.id
     where wol.working_order_id = ${tabId}
     order by wol.line_no`);
   return rows.map((r) => ({
@@ -2337,21 +2334,19 @@ async function tabSnapshot(tabId: string): Promise<
   }));
 }
 
-/** The `print_jobs` ids belonging to a tenant (owner read) — the before-set the race diffs against to
- *  find slips enqueued by the two racing verbs. */
-async function tenantJobIds(tenantId: string): Promise<Set<string>> {
-  const { rows } = await suite.admin.execute<{ id: string }>(
-    sql`select id from print_jobs where tenant_id = ${tenantId}`,
-  );
+/** Every `print_jobs` id (owner read) — the before-set the race diffs against to find slips
+ *  enqueued by the two racing verbs. */
+async function printJobIds(): Promise<Set<string>> {
+  const { rows } = await suite.admin.execute<{ id: string }>(sql`select id from print_jobs `);
   return new Set(rows.map((r) => r.id));
 }
 
 /** Count the RECALLED correction slips a tenant gained since `before` — a print job whose decoded ESC/POS
  *  payload carries the "RECALLED" header `formatCorrectionSlip` writes. A `sendLines` fire enqueues a
  *  plain kitchen ticket (no such header); only a `recallLines` of a fired line enqueues a RECALLED slip. */
-async function recalledSlipsSince(tenantId: string, before: Set<string>): Promise<number> {
+async function recalledSlipsSince(before: Set<string>): Promise<number> {
   const { rows } = await suite.admin.execute<{ id: string; payload: Buffer }>(
-    sql`select id, payload from print_jobs where tenant_id = ${tenantId}`,
+    sql`select id, payload from print_jobs `,
   );
   return rows.filter((r) => !before.has(r.id) && decodeTicket(r.payload).includes("RECALLED"))
     .length;
@@ -2366,13 +2361,13 @@ describe("coursing editing verbs — sendLines racing recallLines (Task B1, two-
     const station = await defaultStationId(cfg);
     await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
-      const printCfg: PrintConfig = { tenantId: cfg.tenantId, locationId: cfg.locationId };
+      const printCfg: PrintConfig = { locationId: cfg.locationId };
       const { id: printerId } = await createPrinter(tx, printCfg, {
         name: "P-Cocina",
         transport: "cloud_poll",
         pollId: `poll-${randomUUID()}`,
       });
-      await attachPrinterToStation(tx, printCfg, { stationId: station, printerId });
+      await attachPrinterToStation(tx, { stationId: station, printerId });
     });
 
     // Open a tab whose ONE line is HELD (`hold: true`) — fired_at null, state queued, routed to the
@@ -2387,7 +2382,7 @@ describe("coursing editing verbs — sendLines racing recallLines (Task B1, two-
     expect(await tabSnapshot(tabId)).toEqual([
       { lineNo: 1, lineCourse: null, itemCourse: null, fired: false, state: "queued" },
     ]);
-    const jobsBefore = await tenantJobIds(cfg.tenantId);
+    const jobsBefore = await printJobIds();
 
     // TWO distinct backends racing the INVERSE verbs on the SAME held line. Load-bearing: distinct backend
     // PROCESSES — on PGlite they collapse onto one and the FOR UPDATE serialisation never happens (a false
@@ -2435,7 +2430,7 @@ describe("coursing editing verbs — sendLines racing recallLines (Task B1, two-
     // So `fired === false` ⟺ `≥1 RECALLED slip`. A held-line-with-no-slip pairing is exactly the lost
     // update the FOR UPDATE prevents (recall un-firing off a stale pre-send read, the paper kitchen never
     // told to pull the printed line) — this assertion fails on that torn state.
-    const recalledSlips = await recalledSlipsSince(cfg.tenantId, jobsBefore);
+    const recalledSlips = await recalledSlipsSince(jobsBefore);
     expect(after[0]!.fired === false).toBe(recalledSlips >= 1);
   });
 });
@@ -2450,13 +2445,13 @@ describe("coursing editing verbs — setLineCourse racing fireCourse (Copilot #1
     const station = await defaultStationId(cfg);
     await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
-      const printCfg: PrintConfig = { tenantId: cfg.tenantId, locationId: cfg.locationId };
+      const printCfg: PrintConfig = { locationId: cfg.locationId };
       const { id: printerId } = await createPrinter(tx, printCfg, {
         name: "P-Cocina",
         transport: "cloud_poll",
         pollId: `poll-${randomUUID()}`,
       });
-      await attachPrinterToStation(tx, printCfg, { stationId: station, printerId });
+      await attachPrinterToStation(tx, { stationId: station, printerId });
     });
 
     // Two live courses. `café` is routed to `postres`, so its HELD line 1 sits in `postres`; the racer
@@ -2550,13 +2545,13 @@ describe("coursing editing verbs — recallLines racing fireCourse (Copilot #191
     const station = await defaultStationId(cfg);
     await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
-      const printCfg: PrintConfig = { tenantId: cfg.tenantId, locationId: cfg.locationId };
+      const printCfg: PrintConfig = { locationId: cfg.locationId };
       const { id: printerId } = await createPrinter(tx, printCfg, {
         name: "P-Cocina",
         transport: "cloud_poll",
         pollId: `poll-${randomUUID()}`,
       });
-      await attachPrinterToStation(tx, printCfg, { stationId: station, printerId });
+      await attachPrinterToStation(tx, { stationId: station, printerId });
     });
 
     // `café` routed to `postres`, added HELD (line 1) — so `fireCourse(postres)` fires exactly that line
@@ -2573,7 +2568,7 @@ describe("coursing editing verbs — recallLines racing fireCourse (Copilot #191
     expect(await tabSnapshot(tabId)).toEqual([
       { lineNo: 1, lineCourse: postres.id, itemCourse: postres.id, fired: false, state: "queued" },
     ]);
-    const jobsBefore = await tenantJobIds(cfg.tenantId);
+    const jobsBefore = await printJobIds();
 
     // TWO distinct backends racing `recallLines([1])` (un-fire the line) against `fireCourse(postres)`
     // (fire it). Load-bearing: distinct backend PROCESSES — on PGlite they collapse onto one and the
@@ -2620,7 +2615,7 @@ describe("coursing editing verbs — recallLines racing fireCourse (Copilot #191
     // So `fired === false` ⟺ `≥1 RECALLED slip`. A held-line-with-no-slip pairing is exactly the torn state
     // the lock prevents (recall un-firing off a stale pre-fire read, the paper kitchen never told to pull
     // the ticket `fireCourse` printed) — this assertion fails on it.
-    const recalledSlips = await recalledSlipsSince(cfg.tenantId, jobsBefore);
+    const recalledSlips = await recalledSlipsSince(jobsBefore);
     expect(after[0]!.fired === false).toBe(recalledSlips >= 1);
   });
 });

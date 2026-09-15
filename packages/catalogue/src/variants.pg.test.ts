@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import { asAppUser, withTransaction, type Database, type Transaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { type TenantId } from "@waitron/shared";
 import { createCatalogue, createProduct, createMenuSection, createMenuItem } from "./operations.js";
 import {
   listProductVariants,
@@ -16,23 +15,22 @@ import { staffPresentationName, customerPresentationText } from "./product-prese
 import { createUnit } from "./units.js";
 
 const suite = useTemplateDb({ template: "core" });
-function app<T>(db: Database, tenantId: TenantId, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  void tenantId;
+function app<T>(db: Database, fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTransaction(db, async (tx) => {
     await asAppUser(tx);
     return fn(tx);
   });
 }
 async function fixture() {
-  const tenantId = await seedTenant(suite.admin);
-  return app(suite.admin, tenantId, async (tx) => {
-    const menu = await createCatalogue(tx, tenantId, { name: "Bar" });
+  await seedTenant(suite.admin);
+  return app(suite.admin, async (tx) => {
+    const menu = await createCatalogue(tx, { name: "Bar" });
     const unit = await createUnit(
       tx,
       { name: { en: "each" }, precision: 0, abbreviation: { en: "u" } },
       "en",
     );
-    const product = await createProduct(tx, tenantId, {
+    const product = await createProduct(tx, {
       catalogueId: menu.id,
       categoryId: null,
       name: "Coffee",
@@ -69,13 +67,13 @@ async function fixture() {
       ],
       "en",
     );
-    return { tenantId, productId: product.id, offerId: offer.id, variant: variants[0]! };
+    return { productId: product.id, offerId: offer.id, variant: variants[0]! };
   });
 }
 
 it("creates, reads, edits and deletes variants as the non-superuser app role", async () => {
-  const { tenantId, productId, variant } = await fixture();
-  await app(suite.admin, tenantId, async (tx) => {
+  const { productId, variant } = await fixture();
+  await app(suite.admin, async (tx) => {
     const role = await tx.execute<{ role: string; superuser: boolean }>(
       sql`select current_user as role, rolsuper as superuser from pg_roles where rolname = current_user`,
     );
@@ -94,7 +92,7 @@ it("creates, reads, edits and deletes variants as the non-superuser app role", a
 });
 
 it("a concurrent variant removal waits for publication and then reports the dependency", async () => {
-  const { tenantId, productId, offerId, variant } = await fixture();
+  const { productId, offerId, variant } = await fixture();
   const [publisher, remover] = await Promise.all([suite.pg.connect(), suite.pg.connect()]);
   let release!: () => void;
   let ready!: () => void;
@@ -109,7 +107,7 @@ it("a concurrent variant removal waits for publication and then reports the depe
   try {
     const pid = (await remover.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`))
       .rows[0]!.pid;
-    publishing = app(publisher, tenantId, async (tx) => {
+    publishing = app(publisher, async (tx) => {
       await setMenuVariants(tx, offerId, [
         { variantId: variant.id, unitPrice: "4.00", available: true },
       ]);
@@ -117,7 +115,7 @@ it("a concurrent variant removal waits for publication and then reports the depe
       await gate;
     });
     await Promise.race([published, publishing]);
-    removing = app(remover, tenantId, (tx) => setProductVariants(tx, productId, [], "en"));
+    removing = app(remover, (tx) => setProductVariants(tx, productId, [], "en"));
     const rejected = expect(removing).rejects.toMatchObject({
       code: "product.variant_in_use",
       params: { variantId: variant.id, menuItemIds: [offerId] },
@@ -135,9 +133,7 @@ it("a concurrent variant removal waits for publication and then reports the depe
     release();
     await publishing;
     await rejected;
-    expect(await app(suite.admin, tenantId, (tx) => listProductVariants(tx, productId))).toEqual([
-      variant,
-    ]);
+    expect(await app(suite.admin, (tx) => listProductVariants(tx, productId))).toEqual([variant]);
   } finally {
     release();
     await Promise.allSettled([publishing, removing]);

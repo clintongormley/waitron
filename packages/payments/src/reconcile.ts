@@ -5,7 +5,7 @@ import {
   isAppError,
   tillId as brandTillId,
 } from "@waitron/shared";
-import type { Decimal, SaleId, TenantId, TillId } from "@waitron/shared";
+import type { Decimal, SaleId, TillId } from "@waitron/shared";
 import { withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type { PaymentState } from "./provider.js";
@@ -49,7 +49,7 @@ export interface SettlementRecord {
  * The processor's settlement report for a window — the vendor half of the audit. The neutral seam
  * never names any vendor concept.
  *
- * An implementer MUST return only the settlements belonging to `tenantId`'s settlement identity.
+ * An implementer MUST return only the settlements belonging to this taxpayer's settlement identity.
  * The tenant is an ARGUMENT rather than something the source binds at construction because a
  * `ReconcileDeps` is built once and swept across many tenants, while a processor account may well be
  * shared between them (provisioning is not decided yet). A source that could not see the tenant
@@ -58,7 +58,7 @@ export interface SettlementRecord {
  * authoritative result with money that is not this tenant's, on every run.
  */
 export interface SettlementReportSource {
-  fetch(tenantId: TenantId, window: ReconcilePeriod): Promise<SettlementRecord[]>;
+  fetch(window: ReconcilePeriod): Promise<SettlementRecord[]>;
 }
 
 /** Reverse one payment in full at the processor — the orphan self-heal. The adapter chooses how.
@@ -73,7 +73,6 @@ export type ReversalFn = (paymentRef: string) => Promise<void>;
 export type IncidentSink = (
   tx: Transaction,
   input: {
-    tenantId: TenantId;
     tillId: TillId;
     saleId?: SaleId;
     error: AppError;
@@ -129,11 +128,7 @@ export interface PaymentReconcileResult {
  */
 export interface PaymentReconciler {
   readonly provider: string;
-  reconcile(
-    tenantId: TenantId,
-    period: ReconcilePeriod,
-    now: Date,
-  ): Promise<PaymentReconcileResult>;
+  reconcile(period: ReconcilePeriod, now: Date): Promise<PaymentReconcileResult>;
 }
 
 /** The four classes a LOCAL row can fall into. `missingLocal` is not here: it has no local row. */
@@ -275,7 +270,6 @@ const SEVERITY = {
  */
 export async function reconcilePayments(
   deps: ReconcileDeps,
-  tenantId: TenantId,
   period: ReconcilePeriod,
   now: Date,
 ): Promise<PaymentReconcileResult> {
@@ -284,7 +278,7 @@ export async function reconcilePayments(
 
   // Network — outside every transaction, over a window widened by the settlement lag, because a
   // payment captured at the end of the period settles days after it.
-  const records = await deps.report.fetch(tenantId, {
+  const records = await deps.report.fetch({
     from: period.from,
     to: new Date(period.to.getTime() + deps.settlementLagMs),
   });
@@ -403,15 +397,8 @@ export async function reconcilePayments(
       if (claimed) remediable.push(entry.row);
     }
 
-    result.incidentsRaised += await raiseRowIncidents(
-      tx,
-      deps,
-      tenantId,
-      classified,
-      remediation,
-      now,
-    );
-    result.incidentsRaised += await raiseMissingLocal(tx, deps, tenantId, missing, now);
+    result.incidentsRaised += await raiseRowIncidents(tx, deps, classified, remediation, now);
+    result.incidentsRaised += await raiseMissingLocal(tx, deps, missing, now);
   });
 
   // Reversals — outside every transaction. See the marker-ordering note above. One failure does
@@ -429,7 +416,7 @@ export async function reconcilePayments(
     }
   }
   if (failures.length > 0) {
-    result.incidentsRaised += await raiseRemediationFailures(deps, tenantId, failures, now);
+    result.incidentsRaised += await raiseRemediationFailures(deps, failures, now);
   }
   return result;
 }
@@ -442,7 +429,6 @@ export async function reconcilePayments(
 async function raiseRowIncidents(
   tx: Transaction,
   deps: ReconcileDeps,
-  tenantId: TenantId,
   classified: Classification,
   remediation: Map<string, OrphanRemediation>,
   now: Date,
@@ -459,7 +445,6 @@ async function raiseRowIncidents(
   for (const group of groups.values()) {
     const first = group[0]!;
     const inserted = await deps.incidents(tx, {
-      tenantId,
       tillId: brandTillId(first.row.tillId),
       error: incidentFor(first.klass, group, remediation),
       severity: SEVERITY[first.klass],
@@ -547,7 +532,6 @@ function incidentFor(
 async function raiseMissingLocal(
   tx: Transaction,
   deps: ReconcileDeps,
-  tenantId: TenantId,
   missing: SettlementRecord[],
   now: Date,
 ): Promise<number> {
@@ -571,7 +555,6 @@ async function raiseMissingLocal(
   let raised = 0;
   for (const [tillId, group] of byTill) {
     const inserted = await deps.incidents(tx, {
-      tenantId,
       tillId: brandTillId(tillId),
       error: new AppError(CODE.missingLocal, {
         count: group.length,
@@ -647,7 +630,6 @@ interface RemediationFailure {
  * transaction the failure path needs. Returns how many incidents were really inserted. */
 async function raiseRemediationFailures(
   deps: ReconcileDeps,
-  tenantId: TenantId,
   failures: RemediationFailure[],
   now: Date,
 ): Promise<number> {
@@ -662,7 +644,6 @@ async function raiseRemediationFailures(
   await withTransaction(deps.db, async (tx) => {
     for (const [tillId, group] of byTill) {
       const inserted = await deps.incidents(tx, {
-        tenantId,
         tillId: brandTillId(tillId),
         error: new AppError(CODE.remediationFailed, {
           count: group.length,

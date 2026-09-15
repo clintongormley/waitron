@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AppError, tenantId as brandTenantId } from "@waitron/shared";
+import { AppError } from "@waitron/shared";
 import type { DrainResult } from "@waitron/fiscal";
 import type { RunRecord, TickResult } from "@waitron/scheduler";
 import { DRAIN_DUTY, RECONCILE_DUTY, runPass, type PassDeps } from "./pass.js";
@@ -10,7 +10,6 @@ const LATER = new Date("2026-07-26T23:00:00Z");
 // Branded, never a bare `as TenantId`: the brand is what stops a raw string reaching a
 // tenant-scoped call site, and casting past it in a test teaches the wrong pattern (see
 // reconcile-duty.test.ts's identical comment).
-const TENANT = brandTenantId("22222222-2222-2222-2222-222222222222");
 const PERIOD = { from: new Date("2026-07-25T00:00:00Z"), to: new Date("2026-07-26T00:00:00Z") };
 
 function drainResult(over: Partial<DrainResult> = {}): DrainResult {
@@ -33,7 +32,6 @@ function tickResult(over: Partial<TickResult> = {}): TickResult {
 
 function runRecord(over: Partial<RunRecord> = {}): RunRecord {
   return {
-    tenantId: TENANT,
     duty: RECONCILE_DUTY,
     period: PERIOD,
     generation: 1,
@@ -128,7 +126,6 @@ describe("runPass", () => {
       drain: () =>
         Promise.reject(
           new AppError("server.credential_unusable", {
-            tenantId: "t",
             purpose: "fiscal.aeat",
             field: "certKind",
           }),
@@ -172,7 +169,7 @@ describe("runPass", () => {
           // matches that shape rather than teaching a producer-impossible one.
           drainResult({
             nextDueAt: NOW,
-            skipped: [{ tenantId: TENANT, errorCode: "credentials.missing" }],
+            skipped: [{ errorCode: "credentials.missing" }],
           }),
         ),
     });
@@ -191,7 +188,7 @@ describe("runPass", () => {
           drainResult({
             nextDueAt: NOW,
             tenantsWithWork: 1,
-            skipped: [{ tenantId: TENANT, errorCode: "credentials.missing" }],
+            skipped: [{ errorCode: "credentials.missing" }],
           }),
         ),
     });
@@ -212,7 +209,7 @@ describe("runPass", () => {
           drainResult({
             nextDueAt: NOW,
             tenantsWithWork: 1,
-            skipped: [{ tenantId: TENANT, errorCode: "credentials.missing" }],
+            skipped: [{ errorCode: "credentials.missing" }],
           }),
         ),
     });
@@ -233,7 +230,7 @@ describe("runPass", () => {
             ? drainResult({
                 nextDueAt: NOW,
                 tenantsWithWork: 1,
-                skipped: [{ tenantId: TENANT, errorCode: "credentials.missing" }],
+                skipped: [{ errorCode: "credentials.missing" }],
               })
             : drainResult({ nextDueAt: SOON, tenantsWithWork: 1, batchesSent: 1 }),
         ),
@@ -268,7 +265,7 @@ describe("runPass", () => {
             ? drainResult({
                 nextDueAt: NOW,
                 tenantsWithWork: 1,
-                skipped: [{ tenantId: TENANT, errorCode: "credentials.missing" }],
+                skipped: [{ errorCode: "credentials.missing" }],
               })
             : drainResult(),
         ),
@@ -295,7 +292,7 @@ describe("runPass", () => {
             ? drainResult({
                 nextDueAt: NOW,
                 tenantsWithWork: 1,
-                skipped: [{ tenantId: TENANT, errorCode: "credentials.missing" }],
+                skipped: [{ errorCode: "credentials.missing" }],
               })
             : drainResult({
                 nextDueAt: SOON,
@@ -346,7 +343,7 @@ describe("runPass", () => {
           tickResult({
             deferred: 4,
             beyondHorizon: 2,
-            skipped: [{ tenantId: TENANT, duty: RECONCILE_DUTY, errorCode: "unknown" }],
+            skipped: [{ duty: RECONCILE_DUTY, errorCode: "unknown" }],
           }),
         ),
     });
@@ -383,7 +380,7 @@ describe("runPass", () => {
       expect(fields.ran).toEqual({ succeeded: 1, failed: 1, parked: 2 });
     });
 
-    it("logs one warn line per failed run, and one error line per parked run, each with errorCode/tenant/duty/period", async () => {
+    it("logs one warn line per failed run, and one error line per parked run, each with errorCode/duty/period", async () => {
       const d = deps({
         reconcile: () =>
           Promise.resolve(
@@ -400,7 +397,6 @@ describe("runPass", () => {
 
       const failedLine = d.lines.find((l) => l.startsWith("warn reconcile.run_failed"));
       expect(failedLine).toBeDefined();
-      expect(failedLine).toContain('"tenantId":"22222222-2222-2222-2222-222222222222"');
       expect(failedLine).toContain(`"duty":"${RECONCILE_DUTY}"`);
       expect(failedLine).toContain('"errorCode":"server.unavailable"');
       expect(failedLine).toContain(PERIOD.from.toISOString());
@@ -491,7 +487,6 @@ describe("runPass", () => {
       drain: () =>
         Promise.reject(
           new AppError("server.credential_unusable", {
-            tenantId: "t",
             purpose: "fiscal.aeat",
             field: "certKind",
           }),

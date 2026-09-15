@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
-import type { NodeId, TenantId } from "@waitron/shared";
+import type { NodeId } from "@waitron/shared";
 import type { DailyCloseInput, PeriodVatInput } from "./types.js";
 
 const CUTOVER_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -149,11 +149,9 @@ export function businessDayRangeClause(column: SQL, input: PeriodVatInput): SQL 
  * substitutes (their VAT already lives in the substituted F2 tickets — design §4, confirmed against
  * *modelo 303* in the AEAT FAQ). Assumes the outer query aliases `sales` as `s`. Shared by the VAT
  * summary and the record counts so the two cannot drift on which sales are "active". No leading
- * `and` — the caller writes `and ${activeSalesClause(input)}`. `input` is not read: one tenant per
- * database, so the subqueries carry no tenant predicate.
+ * `and` — the caller writes `and ${activeSalesClause()}`.
  */
-export function activeSalesClause(input: { tenantId: TenantId }): SQL {
-  void input;
+export function activeSalesClause(): SQL {
   return sql`not exists (select 1 from sale_voids sv where sv.sale_id = s.id)
       and not exists (select 1 from sale_substitutions sub where sub.substitution_sale_id = s.id)`;
 }
@@ -161,7 +159,7 @@ export function activeSalesClause(input: { tenantId: TenantId }): SQL {
 /**
  * The optional node predicate every sales aggregate applies: `and s.node_id = <nodeId>` when a node is
  * fixed (a node-grain view — the dashboard overview/daily-close/period), an empty fragment when it is
- * omitted (a tenant-wide aggregate — e.g. modelo 303 — over the database's one tenant). Assumes
+ * omitted (a venue-wide aggregate — e.g. modelo 303 — over the database's one taxpayer). Assumes
  * the outer query aliases `sales` as `s`, and carries its own leading `and`, so the caller writes it
  * inline as `${nodeScopeClause(input.nodeId)}` — the `activeSalesClause` convention. Shared by
  * `aggregateVatByRate` and `computeTopSellers` so the two cannot drift on how a node is scoped.

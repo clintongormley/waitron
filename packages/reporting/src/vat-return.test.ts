@@ -31,10 +31,7 @@ beforeEach(async () => {
 // Month-only wrapper over `runPeriod` (below): the great majority of suites here file a single month,
 // so this keeps their call sites terse. Only the period construction differs from `runPeriod`.
 function run(opts: { year: number; month: number; tenantId?: TenantId }): Promise<VatReturn> {
-  return runPeriod(
-    { kind: "month", month: opts.month },
-    { year: opts.year, tenantId: opts.tenantId },
-  );
+  return runPeriod({ kind: "month", month: opts.month }, { year: opts.year });
 }
 
 // The period-threaded read the quarterly/annual suites need (`run` being month-only). Defaults to
@@ -43,10 +40,9 @@ function runPeriod(
   period: LiquidationPeriod,
   opts: { year?: number; tenantId?: TenantId } = {},
 ): Promise<VatReturn> {
-  const tenantId = opts.tenantId ?? venue.tenantId;
   return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
-    return computeVatReturn(tx, { tenantId, year: opts.year ?? 2026, period });
+    return computeVatReturn(tx, { year: opts.year ?? 2026, period });
   });
 }
 
@@ -87,7 +83,6 @@ describe("computeVatReturn", () => {
     ]);
     // taxTotal is the summed filed cuotas (46.99), not round(Σ base × rate) (47.00).
     expect(ret).toMatchObject({
-      tenantId: venue.tenantId,
       year: 2026,
       period: { kind: "month", month: 8 },
       baseTotal: "250.00",
@@ -124,7 +119,7 @@ describe("computeVatReturn", () => {
       total: "121.00",
       lines: [{ vatRate: "21.00", lineTotal: "100.00" }],
     });
-    await seedVoid(suite.db, { tenantId: venue.tenantId, saleId: s }, augNoonUtc);
+    await seedVoid(suite.db, { saleId: s }, augNoonUtc);
     expect((await run({ year: 2026, month: 8 })).byRate).toEqual([]);
   });
 
@@ -142,7 +137,6 @@ describe("computeVatReturn", () => {
       lines: [{ vatRate: "21.00", lineTotal: "100.00" }],
     });
     await seedSubstitution(suite.db, {
-      tenantId: venue.tenantId,
       substitutionSaleId: f3,
       substitutedSaleId: ticket,
     });
@@ -195,21 +189,21 @@ describe("computeVatReturn", () => {
       lines: [{ vatRate: "21.00", lineTotal: "100.00" }],
       vatBreakdown: [{ rate: "21.00", base: "100.00", tax: "21.00" }],
     });
-    await seedPurchaseInvoice(suite.db, venue, {
+    await seedPurchaseInvoice(suite.db, {
       supplierInvoiceNumber: "P1",
       issuedOn: "2026-08-01",
       receivedOn: "2026-08-02",
       total: "86.43",
       lines: [{ rate: "21.00", base: "71.43", tax: "15.00" }],
     });
-    await seedPurchaseInvoice(suite.db, venue, {
+    await seedPurchaseInvoice(suite.db, {
       supplierInvoiceNumber: "P2",
       issuedOn: "2026-08-01",
       receivedOn: "2026-08-03",
       total: "44.00",
       lines: [{ rate: "10.00", base: "40.00", tax: "4.00", kind: "capital" }],
     });
-    await seedPurchaseInvoice(suite.db, venue, {
+    await seedPurchaseInvoice(suite.db, {
       supplierInvoiceNumber: "RE",
       issuedOn: "2026-08-01",
       receivedOn: "2026-08-04",
@@ -254,7 +248,6 @@ describe("computeVatReturn", () => {
     // deducible aggregate is empty and the result is 0.00 − 0.00. The devengado fields
     // (byRate/baseTotal/taxTotal) keep their #76 shape and values.
     expect(await run({ year: 2026, month: 3 })).toEqual({
-      tenantId: venue.tenantId,
       year: 2026,
       period: { kind: "month", month: 3 },
       byRate: [],
@@ -293,7 +286,7 @@ describe("computeVatReturn — quarterly", () => {
       lines: [{ vatRate: "21.00", lineTotal: "200.00" }],
       vatBreakdown: [{ rate: "21.00", base: "200.00", tax: "42.00" }],
     });
-    await seedPurchaseInvoice(suite.db, venue, {
+    await seedPurchaseInvoice(suite.db, {
       supplierInvoiceNumber: "P1",
       issuedOn: "2026-02-19",
       receivedOn: "2026-02-20",
@@ -439,21 +432,21 @@ describe("computeVatReturn — quarter equals the sum of its months", () => {
       vatBreakdown: [{ rate: "21.00", base: "100.00", tax: "21.02" }],
     });
     // Purchases (all general → deductible), one per month, incl. the difference-method 41.99.
-    await seedPurchaseInvoice(suite.db, venue, {
+    await seedPurchaseInvoice(suite.db, {
       supplierInvoiceNumber: "P-APR",
       issuedOn: "2026-04-11",
       receivedOn: "2026-04-12",
       total: "241.99",
       lines: [{ rate: "21.00", base: "200.00", tax: "41.99", kind: "ordinary" }], // not 42.00
     });
-    await seedPurchaseInvoice(suite.db, venue, {
+    await seedPurchaseInvoice(suite.db, {
       supplierInvoiceNumber: "P-MAY",
       issuedOn: "2026-05-17",
       receivedOn: "2026-05-18",
       total: "110.00",
       lines: [{ rate: "10.00", base: "100.00", tax: "10.00", kind: "capital" }],
     });
-    await seedPurchaseInvoice(suite.db, venue, {
+    await seedPurchaseInvoice(suite.db, {
       supplierInvoiceNumber: "P-JUN",
       issuedOn: "2026-06-19",
       receivedOn: "2026-06-20",

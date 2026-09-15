@@ -2,7 +2,7 @@ import { asAppUser, captureError, pgErrorCode, withTransaction } from "@waitron/
 import type { Transaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
+import { locationId as brandLocationId } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { insertTimeEntry, seedLocation, seedPerson } from "../test/fixtures.js";
@@ -25,9 +25,9 @@ let ctx: { nodeId: string; personId: string; locationId: string };
 // database holding exactly its own tenant's row. Each `seedTenant` mints a fresh NIF, so the
 // reseeds never collide on `tenants_country_tax_id_key`.
 beforeEach(async () => {
-  const tenantId = await seedTenant(suite.admin);
-  const locationId = await seedLocation(suite.admin, tenantId);
-  const nodeId = await seedNode(suite.admin, brandTenantId(tenantId), brandLocationId(locationId));
+  await seedTenant(suite.admin);
+  const locationId = await seedLocation(suite.admin);
+  const nodeId = await seedNode(suite.admin, brandLocationId(locationId));
   const personId = await seedPerson(suite.admin);
   ctx = { nodeId, personId, locationId };
 });

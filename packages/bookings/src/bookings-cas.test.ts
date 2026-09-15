@@ -6,8 +6,7 @@ import type { Database, Transaction } from "@waitron/db";
 import type { CoreServices } from "@waitron/module";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
-import type { TenantId } from "@waitron/shared";
+import { locationId as brandLocationId } from "@waitron/shared";
 import { bookings } from "./schema/bookings.js";
 import { fakeCore } from "./testing/fake-core.js";
 import {
@@ -21,7 +20,7 @@ import "./errors.js";
 
 /** A venue's booking config plus its tenant, which the core parent rows (locations, dining_tables,
  * tills, working_orders) still carry. */
-type VenueCfg = BookingConfig & { tenantId: TenantId };
+type VenueCfg = BookingConfig;
 
 // Real PostgreSQL (a shared-container clone of the whole-manifest template), NOT PGlite. `seatBooking`'s terminal
 // write is a compare-and-swap — `update … where id = ? and status = 'booked'`, throwing
@@ -40,8 +39,7 @@ beforeAll(() => {
   db = suite.admin;
 });
 
-function asApp<T>(d: Database, cfg: VenueCfg, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  void cfg;
+function asApp<T>(d: Database, fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTransaction(d, async (tx) => {
     await asAppUser(tx);
     return fn(tx);
@@ -56,16 +54,16 @@ async function setupVenue(): Promise<{
   core: CoreServices;
   createdBy: string;
 }> {
-  const tenantId = await seedTenant(db);
+  await seedTenant(db);
   const loc = await db.execute<{ id: string }>(sql`
     insert into locations (name, invoice_locales, operation_description) values ('Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
   const locationId = loc.rows[0]!.id;
   const till = await db.execute<{ id: string }>(sql`
     insert into tills (location_id, name) values (${locationId}, 'Caja 1') returning id`);
-  const nodeId = await seedNode(db, tenantId, brandLocationId(locationId));
+  const nodeId = await seedNode(db, brandLocationId(locationId));
   return {
-    cfg: { tenantId: brandTenantId(tenantId), locationId: brandLocationId(locationId) },
-    core: fakeCore({ tenantId, tillId: till.rows[0]!.id, nodeId }),
+    cfg: { locationId: brandLocationId(locationId) },
+    core: fakeCore({ tillId: till.rows[0]!.id, nodeId }),
     createdBy: randomUUID(),
   };
 }
@@ -125,7 +123,7 @@ describe("seatBooking compare-and-swap guard (real Postgres, two backends)", () 
     // (and a tab survives). Verified 2026-08-31.
     const { cfg, core, createdBy } = await setupVenue();
     const tableId = await seedTable(cfg, "CAS-1");
-    const { id: bookingId } = await asApp(db, cfg, (tx) =>
+    const { id: bookingId } = await asApp(db, (tx) =>
       createBooking(tx, cfg, {
         bookingDate: "2026-08-20",
         bookingTime: "20:00",
@@ -149,7 +147,7 @@ describe("seatBooking compare-and-swap guard (real Postgres, two backends)", () 
       });
       let cancelCommitted = false;
 
-      const connBWork = asApp(connB, cfg, async (tx) => {
+      const connBWork = asApp(connB, async (tx) => {
         await tx
           .select({ id: diningTables.id })
           .from(diningTables)
@@ -163,7 +161,7 @@ describe("seatBooking compare-and-swap guard (real Postgres, two backends)", () 
       });
 
       await lockHeld;
-      const seatA = asApp(connA, cfg, (tx) => seatBooking(tx, cfg, bookingId, {}, core));
+      const seatA = asApp(connA, (tx) => seatBooking(tx, cfg, bookingId, {}, core));
 
       const [seatRes] = await Promise.allSettled([seatA, connBWork]);
       await connBWork; // surface any connB failure
@@ -177,7 +175,7 @@ describe("seatBooking compare-and-swap guard (real Postgres, two backends)", () 
 
       // The booking stayed `cancelled`, never linked a tab, and seatBooking's rolled-back tx left NO
       // working order behind — the CAS's throw rolls the whole caller tx back, so no orphan tab survives.
-      const after = await asApp(db, cfg, (tx) => getBooking(tx, cfg, bookingId));
+      const after = await asApp(db, (tx) => getBooking(tx, cfg, bookingId));
       expect(after).toMatchObject({ status: "cancelled", tabId: null });
       expect(await workingOrderCount()).toBe(0);
     } finally {
@@ -198,7 +196,7 @@ describe("seatBooking compare-and-swap guard (real Postgres, two backends)", () 
     // of the two.
     const { cfg, createdBy } = await setupVenue();
     const tableId = await seedTable(cfg, "CAS-2");
-    const { id: bookingId } = await asApp(db, cfg, (tx) =>
+    const { id: bookingId } = await asApp(db, (tx) =>
       createBooking(tx, cfg, {
         bookingDate: "2026-08-20",
         bookingTime: "20:00",
@@ -208,9 +206,9 @@ describe("seatBooking compare-and-swap guard (real Postgres, two backends)", () 
         createdBy,
       }),
     );
-    await asApp(db, cfg, (tx) => cancelBooking(tx, cfg, bookingId));
+    await asApp(db, (tx) => cancelBooking(tx, cfg, bookingId));
 
-    await asApp(db, cfg, async (tx) => {
+    await asApp(db, async (tx) => {
       // seatBooking's terminal WHERE verbatim: id AND status = 'booked'. The booking is `cancelled`, so
       // the guarded update matches nothing — the throw path.
       const guarded = await tx

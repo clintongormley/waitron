@@ -13,12 +13,10 @@ import "./errors.js";
  */
 export async function seedTermZeroMembership(
   deps: { db: Database; ring: KeyRing },
-  tenantId: string,
   nodeId: string,
   contactUrl: string,
 ): Promise<void> {
   const document = await mintNextMembershipDocument(deps, {
-    tenantId,
     heldDocument: null,
     nodes: [{ nodeId, contactUrl, standing: "serving-primary" }],
     signerNodeId: nodeId,

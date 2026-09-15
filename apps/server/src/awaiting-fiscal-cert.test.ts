@@ -49,24 +49,24 @@ afterAll(async () => {
 
 /** Insert a manager (with a dashboard login email) into a seeded tenant so the box-status route's
  * `authorizeManager("system.manage")` gate resolves — `app_user` holds INSERT on `persons`. */
-async function seedManager(tenantId: string): Promise<void> {
+async function seedManager(): Promise<void> {
   await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     await tx.execute(sql`
-      insert into persons (tenant_id, display_name, email, pin_hash, password_hash, role)
-      values (${tenantId}, 'The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')`);
+      insert into persons (display_name, email, pin_hash, password_hash, role)
+      values ('The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')`);
   });
 }
 
 /** A Hono app carrying the management API (for its login route) and the box-status route, both wired to
  * the SAME awaiting-cert holder the fiscal pass writes — exactly boot.ts's shared-holder wiring. */
-function buildApp(tenantId: string, nodeId: string, awaitingCert: { current: boolean }): Hono {
+function buildApp(nodeId: string, awaitingCert: { current: boolean }): Hono {
   const app = new Hono();
   mountManagementApi(
     app,
     {
       db: suite.admin,
-      cfg: { tenantId, nodeId },
+      cfg: { nodeId },
       secureCookies: false,
       rpId: "localhost",
       origin: "http://localhost",
@@ -77,7 +77,7 @@ function buildApp(tenantId: string, nodeId: string, awaitingCert: { current: boo
     app,
     {
       db: suite.admin,
-      cfg: { tenantId, nodeId },
+      cfg: { nodeId },
       environment: "production",
       health: createHealthState(NOW),
       now: () => NOW,
@@ -133,7 +133,7 @@ describe("promoted primary awaiting the fiscal certificate (real postgres)", () 
   it("surfaces awaiting-cert on box-status, does not crash the drain, does not submit, leaves the chain untouched", async () => {
     // A due registro + `envios` row, with NO `fiscal.aeat` credential sealed for the tenant.
     const seeded = await seedPendingEnvios(suite.admin, { count: 1 });
-    await seedManager(seeded.tenantId);
+    await seedManager();
     const registroId = seeded.registroIds[0]!;
     const registroBefore = await readRegistro(registroId);
 
@@ -190,7 +190,7 @@ describe("promoted primary awaiting the fiscal certificate (real postgres)", () 
     expect(await readRegistro(registroId)).toEqual(registroBefore);
 
     // box-status surfaces the flag to an authenticated manager — the operator-visible signal.
-    const app = buildApp(seeded.tenantId, seeded.nodeId, awaitingCert);
+    const app = buildApp(seeded.nodeId, awaitingCert);
     const cookie = await login(app);
     const res = await app.request("/api/box/status", { headers: { cookie } });
     expect(res.status).toBe(200);

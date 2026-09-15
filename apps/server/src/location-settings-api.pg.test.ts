@@ -74,7 +74,6 @@ describe("location invoice settings", () => {
       await sell();
       const descriptions = await suite.admin.execute<{ description: string }>(sql`
         select descripcion_operacion as description from registros_facturacion
-        where tenant_id = ${venue.cfg.tenantId}
         order by secuencia`);
       expect(descriptions.rows).toEqual([
         { description: "Venta en establecimiento" },

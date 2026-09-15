@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, asAppUser, ingredients, products, withTransaction } from "@waitron/db";
 import { eq } from "drizzle-orm";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
-import type { TenantId } from "@waitron/shared";
 import { CATALOGUE_MIGRATIONS, type DietaryOrigin } from "@waitron/catalogue";
 import { createIngredient, updateIngredient } from "./ingredients.js";
 import { getProductRecipe, setProductRecipe } from "./recipes.js";
@@ -10,8 +9,7 @@ import { seedProduct, seedVenue } from "../test/fixtures.js";
 
 const fx = usePgliteDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
 
-async function publishedAllergens(tenantId: TenantId, productId: string) {
-  void tenantId;
+async function publishedAllergens(productId: string) {
   return withTransaction(fx.db, async (tx) => {
     await asAppUser(tx);
     const [row] = await tx
@@ -23,25 +21,24 @@ async function publishedAllergens(tenantId: TenantId, productId: string) {
 }
 
 describe("recipe composition and allergen derivation", () => {
-  let tenantId: TenantId;
   let productId: string;
   beforeEach(async () => {
-    ({ tenantId } = await seedVenue(fx.db));
-    productId = await seedProduct(fx.db, tenantId);
+    await seedVenue(fx.db);
+    productId = await seedProduct(fx.db);
   });
 
   it("derives a product's allergens from its ingredients (the alioli scenario)", async () => {
     const published = await withTransaction(fx.db, async (tx) => {
       await asAppUser(tx);
-      const alioli = await createIngredient(tx, tenantId, {
+      const alioli = await createIngredient(tx, {
         name: "alioli",
         allergens: { eggs: { presence: "contains" } },
       });
-      const bread = await createIngredient(tx, tenantId, {
+      const bread = await createIngredient(tx, {
         name: "bread",
         allergens: { gluten: { presence: "contains" } },
       });
-      await setProductRecipe(tx, tenantId, productId, [alioli.id, bread.id]);
+      await setProductRecipe(tx, productId, [alioli.id, bread.id]);
       const [row] = await tx
         .select({ a: products.allergens })
         .from(products)
@@ -54,17 +51,17 @@ describe("recipe composition and allergen derivation", () => {
   it("keeps a product PENDING (null) when an ingredient is unreviewed", async () => {
     await withTransaction(fx.db, async (tx) => {
       await asAppUser(tx);
-      const mystery = await createIngredient(tx, tenantId, { name: "mystery" }); // allergens null → PENDING
-      await setProductRecipe(tx, tenantId, productId, [mystery.id]);
+      const mystery = await createIngredient(tx, { name: "mystery" }); // allergens null → PENDING
+      await setProductRecipe(tx, productId, [mystery.id]);
     });
-    expect(await publishedAllergens(tenantId, productId)).toBeNull();
+    expect(await publishedAllergens(productId)).toBeNull();
   });
 
   it("propagates an ingredient's allergen change to every product using it", async () => {
     const before = await withTransaction(fx.db, async (tx) => {
       await asAppUser(tx);
-      const alioli = await createIngredient(tx, tenantId, { name: "alioli" }); // unreviewed
-      await setProductRecipe(tx, tenantId, productId, [alioli.id]);
+      const alioli = await createIngredient(tx, { name: "alioli" }); // unreviewed
+      await setProductRecipe(tx, productId, [alioli.id]);
       const [r] = await tx
         .select({ a: products.allergens })
         .from(products)
@@ -74,7 +71,7 @@ describe("recipe composition and allergen derivation", () => {
       return r!.a;
     });
     expect(before).toBeNull(); // was PENDING before the ingredient was tagged
-    expect(await publishedAllergens(tenantId, productId)).toEqual({
+    expect(await publishedAllergens(productId)).toEqual({
       eggs: { presence: "contains" },
     });
   });
@@ -82,15 +79,15 @@ describe("recipe composition and allergen derivation", () => {
   it("clearing the recipe drops back to the manual overlay", async () => {
     await withTransaction(fx.db, async (tx) => {
       await asAppUser(tx);
-      const egg = await createIngredient(tx, tenantId, {
+      const egg = await createIngredient(tx, {
         name: "egg",
         allergens: { eggs: { presence: "contains" } },
       });
-      await setProductRecipe(tx, tenantId, productId, [egg.id]);
-      await setProductRecipe(tx, tenantId, productId, []); // clear
+      await setProductRecipe(tx, productId, [egg.id]);
+      await setProductRecipe(tx, productId, []); // clear
     });
     // seedProduct created the product with no manual allergens → PENDING again.
-    expect(await publishedAllergens(tenantId, productId)).toBeNull();
+    expect(await publishedAllergens(productId)).toBeNull();
   });
 
   // The diet roll-up mirrors the allergen roll-up: PGlite is enough here — the fold only reads
@@ -100,13 +97,13 @@ describe("recipe composition and allergen derivation", () => {
     const row = await withTransaction(fx.db, async (tx) => {
       await asAppUser(tx);
       // one plant ingredient (categorised) + one NULL-origin ingredient (uncategorised)
-      const spinach = await createIngredient(tx, tenantId, { name: "spinach" });
+      const spinach = await createIngredient(tx, { name: "spinach" });
       await tx
         .update(ingredients)
         .set({ dietaryOrigin: "plant" satisfies DietaryOrigin })
         .where(eq(ingredients.id, spinach.id));
-      const mystery = await createIngredient(tx, tenantId, { name: "mystery" }); // dietary_origin null
-      await setProductRecipe(tx, tenantId, productId, [spinach.id, mystery.id]);
+      const mystery = await createIngredient(tx, { name: "mystery" }); // dietary_origin null
+      await setProductRecipe(tx, productId, [spinach.id, mystery.id]);
       const [r] = await tx
         .select({ diet: products.diet, deriv: products.dietDerivation })
         .from(products)
@@ -125,11 +122,11 @@ describe("recipe composition and allergen derivation", () => {
   it("recomputeProductDerivations: allergen-pending and diet-pending are independent", async () => {
     const row = await withTransaction(fx.db, async (tx) => {
       await asAppUser(tx);
-      const reviewed = await createIngredient(tx, tenantId, {
+      const reviewed = await createIngredient(tx, {
         name: "reviewed-uncategorised",
         allergens: {},
       });
-      await setProductRecipe(tx, tenantId, productId, [reviewed.id]);
+      await setProductRecipe(tx, productId, [reviewed.id]);
       const [r] = await tx
         .select({ recipeDeriv: products.recipeDerivation, dietDeriv: products.dietDerivation })
         .from(products)
@@ -143,12 +140,12 @@ describe("recipe composition and allergen derivation", () => {
   it("recomputeProductDerivations (diet): all-plant reviewed → vegan", async () => {
     const row = await withTransaction(fx.db, async (tx) => {
       await asAppUser(tx);
-      const spinach = await createIngredient(tx, tenantId, { name: "spinach" });
+      const spinach = await createIngredient(tx, { name: "spinach" });
       await tx
         .update(ingredients)
         .set({ dietaryOrigin: "plant" satisfies DietaryOrigin })
         .where(eq(ingredients.id, spinach.id));
-      await setProductRecipe(tx, tenantId, productId, [spinach.id]);
+      await setProductRecipe(tx, productId, [spinach.id]);
       const [r] = await tx
         .select({ diet: products.diet })
         .from(products)
@@ -162,17 +159,17 @@ describe("recipe composition and allergen derivation", () => {
     const row = await withTransaction(fx.db, async (tx) => {
       await asAppUser(tx);
       // Insert in an order that is NOT already sorted (meat before dairy) so a missing sort shows.
-      const beef = await createIngredient(tx, tenantId, { name: "beef" });
+      const beef = await createIngredient(tx, { name: "beef" });
       await tx
         .update(ingredients)
         .set({ dietaryOrigin: "meat" satisfies DietaryOrigin })
         .where(eq(ingredients.id, beef.id));
-      const milk = await createIngredient(tx, tenantId, { name: "milk" });
+      const milk = await createIngredient(tx, { name: "milk" });
       await tx
         .update(ingredients)
         .set({ dietaryOrigin: "dairy" satisfies DietaryOrigin })
         .where(eq(ingredients.id, milk.id));
-      await setProductRecipe(tx, tenantId, productId, [beef.id, milk.id]);
+      await setProductRecipe(tx, productId, [beef.id, milk.id]);
       const [r] = await tx
         .select({ deriv: products.dietDerivation })
         .from(products)
@@ -185,13 +182,13 @@ describe("recipe composition and allergen derivation", () => {
   it("recomputeProductDerivations (diet): clearing the recipe resets the derivation to null", async () => {
     const cleared = await withTransaction(fx.db, async (tx) => {
       await asAppUser(tx);
-      const beef = await createIngredient(tx, tenantId, { name: "beef" });
+      const beef = await createIngredient(tx, { name: "beef" });
       await tx
         .update(ingredients)
         .set({ dietaryOrigin: "meat" satisfies DietaryOrigin })
         .where(eq(ingredients.id, beef.id));
-      await setProductRecipe(tx, tenantId, productId, [beef.id]);
-      await setProductRecipe(tx, tenantId, productId, []); // clear
+      await setProductRecipe(tx, productId, [beef.id]);
+      await setProductRecipe(tx, productId, []); // clear
       const [r] = await tx
         .select({ deriv: products.dietDerivation })
         .from(products)
@@ -204,12 +201,12 @@ describe("recipe composition and allergen derivation", () => {
   it("propagates an ingredient allergen change and re-derives the product diet", async () => {
     const diet = await withTransaction(fx.db, async (tx) => {
       await asAppUser(tx);
-      const spinach = await createIngredient(tx, tenantId, { name: "spinach" });
+      const spinach = await createIngredient(tx, { name: "spinach" });
       await tx
         .update(ingredients)
         .set({ dietaryOrigin: "plant" satisfies DietaryOrigin })
         .where(eq(ingredients.id, spinach.id));
-      await setProductRecipe(tx, tenantId, productId, [spinach.id]);
+      await setProductRecipe(tx, productId, [spinach.id]);
       // An allergen edit fans out over the products using this ingredient; the diet twin recomputes
       // alongside the allergen roll-up in the same loop (idempotent here — the origin is unchanged).
       await updateIngredient(tx, spinach.id, { allergens: {} });
@@ -229,8 +226,8 @@ describe("recipe composition and allergen derivation", () => {
   it("propagates an ORIGIN-ONLY ingredient edit and re-derives the product diet", async () => {
     const diet = await withTransaction(fx.db, async (tx) => {
       await asAppUser(tx);
-      const tofu = await createIngredient(tx, tenantId, { name: "tofu", dietaryOrigin: "plant" });
-      await setProductRecipe(tx, tenantId, productId, [tofu.id]);
+      const tofu = await createIngredient(tx, { name: "tofu", dietaryOrigin: "plant" });
+      await setProductRecipe(tx, productId, [tofu.id]);
       // Origin-only edit: no `allergens` key in the patch at all.
       await updateIngredient(tx, tofu.id, { dietaryOrigin: "meat" });
       const [r] = await tx
@@ -245,9 +242,9 @@ describe("recipe composition and allergen derivation", () => {
   it("getProductRecipe returns the ingredient list", async () => {
     const recipe = await withTransaction(fx.db, async (tx) => {
       await asAppUser(tx);
-      const a = await createIngredient(tx, tenantId, { name: "a", allergens: {} });
-      const b = await createIngredient(tx, tenantId, { name: "b", allergens: {} });
-      await setProductRecipe(tx, tenantId, productId, [a.id, b.id]);
+      const a = await createIngredient(tx, { name: "a", allergens: {} });
+      const b = await createIngredient(tx, { name: "b", allergens: {} });
+      await setProductRecipe(tx, productId, [a.id, b.id]);
       return getProductRecipe(tx, productId);
     });
     expect(recipe.map((i) => i.name).sort()).toEqual(["a", "b"]);

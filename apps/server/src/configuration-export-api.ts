@@ -21,7 +21,7 @@ const run = createErrorBoundary(STATUS, "configuration_export.failed");
 
 export interface ConfigurationExportDeps {
   db: Database;
-  cfg: { tenantId: string; locationId: string; tillId: string; nodeId: string };
+  cfg: { locationId: string; tillId: string; nodeId: string };
   modules: readonly WaitronModule[];
   moduleVersions: Record<string, number>;
   now?: () => Date;

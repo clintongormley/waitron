@@ -57,20 +57,19 @@ interface Seeded {
 
 /** A fresh tenant/location/till/node + a two-product catalogue (Café 1.50, Agua 2.00, both general). */
 async function setupVenue(): Promise<Seeded> {
-  const tenantId = await seedTenant(db);
+  await seedTenant(db);
   await db.execute(sql`
     insert into units (seed_key, name, abbreviation, precision, hardware_unit) values
       ('each', '{"en":"each"}'::jsonb, '{"en":"ea"}'::jsonb, 0, null),
       ('kg', '{"en":"kg"}'::jsonb, '{"en":"kg"}'::jsonb, 3, 'kg')`);
   const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
+    insert into locations (name, invoice_locales, operation_description)
+    values ('Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
   const locationId = loc.rows[0]!.id;
   const till = await db.execute<{ id: string }>(sql`
-    insert into tills (tenant_id, location_id, name) values (${tenantId}, ${locationId}, 'Caja 1') returning id`);
-  const nodeId = await seedNode(db, tenantId, brandLocationId(locationId));
+    insert into tills (location_id, name) values (${locationId}, 'Caja 1') returning id`);
+  const nodeId = await seedNode(db, brandLocationId(locationId));
   const cfg: TillConfig = {
-    tenantId,
     tillId: brandTillId(till.rows[0]!.id),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
@@ -82,9 +81,9 @@ async function setupVenue(): Promise<Seeded> {
   };
   const { cafeId, aguaId } = await withTransaction(db, async (tx) => {
     await asAppUser(tx);
-    const cat = await createCatalogue(tx, tenantId, { name: "Carta" });
-    const bebidas = await createCategory(tx, tenantId, { name: { en: "Bebidas" } });
-    const cafe = await createProduct(tx, tenantId, {
+    const cat = await createCatalogue(tx, { name: "Carta" });
+    const bebidas = await createCategory(tx, { name: { en: "Bebidas" } });
+    const cafe = await createProduct(tx, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
       name: "Café",
@@ -92,7 +91,7 @@ async function setupVenue(): Promise<Seeded> {
       unitPrice: "1.50",
       vatClass: "general",
     });
-    const agua = await createProduct(tx, tenantId, {
+    const agua = await createProduct(tx, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
       name: "Agua",
@@ -177,8 +176,8 @@ async function configureTableZone(
     values
       (${departmentId}, ${cfg.locationId}, ${name}, ${name}, ${serviceMode})`);
   await db.execute(sql`
-    insert into floor_zones (id, tenant_id, location_id, name)
-    values (${zoneId}, ${cfg.tenantId}, ${cfg.locationId}, ${name})`);
+    insert into floor_zones (id, location_id, name)
+    values (${zoneId}, ${cfg.locationId}, ${name})`);
   await db.execute(sql`
     insert into zone_service_policies
       (location_id, zone_id, department_id, service_mode)
@@ -189,10 +188,10 @@ async function configureTableZone(
 }
 
 /** Seed one active table_service_statuses row (TS-2 schema) as the owner; returns its id. */
-async function seedStatus(cfg: TillConfig, label: string): Promise<string> {
+async function seedStatus(label: string): Promise<string> {
   const { rows } = await db.execute<{ id: string }>(sql`
-    insert into table_service_statuses (tenant_id, label, color)
-    values (${cfg.tenantId}, ${label}, '#ff0000') returning id`);
+    insert into table_service_statuses (label, color)
+    values (${label}, '#ff0000') returning id`);
   return rows[0]!.id;
 }
 
@@ -275,10 +274,10 @@ describe("moveTabLines", () => {
       values (${cfg.locationId}, 'Flow test', 'Flow test', 'prepay')
       returning id`);
     const zones = await db.execute<{ id: string; name: string }>(sql`
-      insert into floor_zones (tenant_id, location_id, name)
+      insert into floor_zones (location_id, name)
       values
-        (${cfg.tenantId}, ${cfg.locationId}, 'Flow prepay'),
-        (${cfg.tenantId}, ${cfg.locationId}, 'Flow tab')
+        (${cfg.locationId}, 'Flow prepay'),
+        (${cfg.locationId}, 'Flow tab')
       returning id, name`);
     const prepayZone = zones.rows.find((zone) => zone.name === "Flow prepay")!;
     const tabZone = zones.rows.find((zone) => zone.name === "Flow tab")!;
@@ -363,7 +362,7 @@ describe("moveTab", () => {
     const dst = await seedTable(cfg, "Dst");
     const tabId = await openTabOn(cfg, src, [{ productId: cafeId, quantity: "1" }]);
     // A manual "bill requested" status on the source (TS-2 schema) must NOT linger onto the next party.
-    const status = await seedStatus(cfg, "Bill requested");
+    const status = await seedStatus("Bill requested");
     await db.execute(sql`update dining_tables set status_id = ${status} where id = ${src}`);
 
     await asApp(cfg, (tx) => moveTab(tx, cfg, tabId, dst));
@@ -382,7 +381,7 @@ describe("moveTab", () => {
     const tabId = await openTabOn(cfg, src, [{ productId: cafeId, quantity: "1" }]);
     // A stale manual status left on the free DESTINATION (TS-2 schema) — from its previous party —
     // must NOT linger onto the moved-in party; the move turns the target over, exactly as openTab does.
-    const status = await seedStatus(cfg, "Needs cleaning");
+    const status = await seedStatus("Needs cleaning");
     await db.execute(sql`update dining_tables set status_id = ${status} where id = ${dst}`);
 
     await asApp(cfg, (tx) => moveTab(tx, cfg, tabId, dst));
@@ -544,7 +543,7 @@ describe("mergeTabs consolidate (freeSourceTable: true)", () => {
     await asApp(cfg, (tx) => updateProduct(tx, cafeId, { unitPrice: "9.99" }));
     const fromTab = await openTabOn(cfg, tFrom, [{ productId: cafeId, quantity: "1" }]);
     // A manual status on the source (TS-2 schema) must clear when it is freed.
-    const status = await seedStatus(cfg, "Needs cleaning");
+    const status = await seedStatus("Needs cleaning");
     await db.execute(sql`update dining_tables set status_id = ${status} where id = ${tFrom}`);
 
     await asApp(cfg, (tx) => mergeTabs(tx, cfg, intoTab, fromTab, { freeSourceTable: true }));
@@ -567,7 +566,7 @@ describe("mergeTabs consolidate (freeSourceTable: true)", () => {
   it("preserves a moved modifier line's parent linkage on merge (child points at the moved parent, not NULL)", async () => {
     const { cfg, cafeId } = await setupVenue();
     // addTabRound fires the round (→ fireLines), which needs a default kitchen station to route to.
-    await seedKitchenStation(db, { tenantId: cfg.tenantId, locationId: cfg.locationId });
+    await seedKitchenStation(db, { locationId: cfg.locationId });
     const tInto = await seedTable(cfg, "MOD-into");
     const tFrom = await seedTable(cfg, "MOD-from");
 
@@ -577,7 +576,6 @@ describe("mergeTabs consolidate (freeSourceTable: true)", () => {
       const [group] = await tx
         .insert(optionGroups)
         .values({
-          tenantId: cfg.tenantId,
           name: { [LOCALE]: "Extras" },
           minSelect: 0,
           maxSelect: 2,
@@ -588,7 +586,6 @@ describe("mergeTabs consolidate (freeSourceTable: true)", () => {
       const [bacon] = await tx
         .insert(optionGroupItems)
         .values({
-          tenantId: cfg.tenantId,
           groupId: group!.id,
           name: { [LOCALE]: "Bacon" },
           priceDelta: "0.50",
@@ -597,7 +594,6 @@ describe("mergeTabs consolidate (freeSourceTable: true)", () => {
         })
         .returning({ id: optionGroupItems.id });
       await tx.insert(productOptionGroups).values({
-        tenantId: cfg.tenantId,
         productId: cafeId,
         groupId: group!.id,
         sort: 0,
@@ -619,7 +615,7 @@ describe("mergeTabs consolidate (freeSourceTable: true)", () => {
       working_order_line_id: string;
     }>(sql`
       select id, working_order_line_id from ticket_items
-      where tenant_id = ${cfg.tenantId} and working_order_id = ${fromTab}`);
+      where working_order_id = ${fromTab}`);
 
     await asApp(cfg, (tx) => mergeTabs(tx, cfg, intoTab, fromTab, { freeSourceTable: true }));
 
@@ -650,7 +646,7 @@ describe("mergeTabs consolidate (freeSourceTable: true)", () => {
       working_order_id: string;
     }>(sql`
       select id, working_order_line_id, working_order_id from ticket_items
-      where tenant_id = ${cfg.tenantId} and working_order_id = ${intoTab}`);
+      where working_order_id = ${intoTab}`);
     expect(ticketAfter.rows).toEqual([
       {
         ...ticketBefore.rows[0]!,
@@ -681,7 +677,7 @@ describe("mergeTabs join (freeSourceTable: false)", () => {
     const intoTab = await openTabOn(cfg, tInto, [{ productId: cafeId, quantity: "1" }]);
     const fromTab = await openTabOn(cfg, tFrom, [{ productId: aguaId, quantity: "1" }]);
     // A status on the source table (TS-2 schema): a JOINED table keeps its status (design §4).
-    const status = await seedStatus(cfg, "VIP");
+    const status = await seedStatus("VIP");
     await db.execute(sql`update dining_tables set status_id = ${status} where id = ${tFrom}`);
 
     await asApp(cfg, (tx) => mergeTabs(tx, cfg, intoTab, fromTab, { freeSourceTable: false }));

@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import type { WaitronModule } from "@waitron/module";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import { isAppError } from "@waitron/shared";
-import { deriveTenantId } from "./tenant-id.js";
 import { describeVenueAction, planVenue, type VenueRequest } from "./venue-plan.js";
 
 // planVenue is generic over the module list now, so these tests build their own: a seedless module
@@ -206,15 +205,11 @@ describe("planVenue", () => {
     });
   });
 
-  it("derives the deterministic tenant id and stamps the resolved modules on the node", () => {
+  it("carries the canonical fiscal identity and stamps the resolved modules on the node", () => {
     const actions = planVenue(request(), MODULES);
     const tenant = actions.find((a) => a.kind === "ensure-tenant");
     const node = actions.find((a) => a.kind === "create-node");
-    expect(tenant).toMatchObject({
-      tenantId: deriveTenantId("ES", "B12345678"),
-      country: "ES",
-      taxId: "B12345678",
-    });
+    expect(tenant).toMatchObject({ country: "ES", taxId: "B12345678" });
     expect(node).toMatchObject({ filingModule: "verifactu", taxModule: "vat" });
   });
 
@@ -330,11 +325,10 @@ describe("planVenue", () => {
     const messyTenant = planVenue(request({ country: "es", taxId: " b12345678 " }), MODULES).find(
       (a) => a.kind === "ensure-tenant",
     );
-    // The stored unique-index row is canonical (so applyVenue's ON CONFLICT (country, tax_id) fires)...
+    // The stored row is canonical, so applyVenue reads a messy re-run as the SAME taxpayer and the
+    // re-run is the no-op it should be, not `provisioning.tenant_identity_mismatch`.
     expect(messyTenant).toMatchObject({ kind: "ensure-tenant", country: "ES", taxId: "B12345678" });
-    // ...and the derived id matches the already-canonical run's id.
-    expect(messyTenant?.tenantId).toBe(canonicalTenant?.tenantId);
-    expect(messyTenant?.tenantId).toBe(deriveTenantId("ES", "B12345678"));
+    expect(messyTenant).toEqual(canonicalTenant);
   });
 
   it("accepts a country in a different case than the territory prefix (ES matches es-common)", () => {

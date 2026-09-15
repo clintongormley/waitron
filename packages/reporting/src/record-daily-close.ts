@@ -6,7 +6,7 @@
 import "./errors.js";
 import { eq } from "drizzle-orm";
 import { AppError, addDecimal, compareDecimal, decimal, subtractDecimal } from "@waitron/shared";
-import type { Decimal, NodeId, TenantId, TillId } from "@waitron/shared";
+import type { Decimal, NodeId, TillId } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
 import { dailyCloseChain, dailyCloses } from "@waitron/db";
 import { computeDailyClose } from "./daily-close.js";
@@ -44,11 +44,10 @@ export async function recordDailyClose(
 
   // 2. Serialise this node's closes on the chain head. FOR UPDATE, not FOR SHARE: two
   //    closers must not both read the same head and then both assign the same next sequence number.
-  const head = await lockChainHead(tx, input.tenantId, input.nodeId);
+  const head = await lockChainHead(tx, input.nodeId);
 
   // 3. Compute the VAT-exact close (8a): a deterministic read over the day's immutable records.
   const close = await computeDailyClose(tx, {
-    tenantId: input.tenantId,
     nodeId: input.nodeId,
     businessDay: input.businessDay,
     timeZone: input.timeZone,
@@ -67,7 +66,6 @@ export async function recordDailyClose(
   const closedAt = truncateToWholeSecond(new Date());
   const entryHash = computeCloseEntryHash(
     {
-      tenantId: input.tenantId,
       nodeId: input.nodeId,
       businessDay: input.businessDay,
       sequenceNo,
@@ -101,7 +99,6 @@ export async function recordDailyClose(
   // 8.
   return {
     id,
-    tenantId: input.tenantId,
     nodeId: input.nodeId,
     businessDay: input.businessDay,
     sequenceNo,
@@ -231,10 +228,8 @@ interface ChainHead {
 
 async function selectHeadForUpdate(
   tx: Transaction,
-  tenantId: TenantId,
   nodeId: NodeId,
 ): Promise<ChainHead | undefined> {
-  void tenantId;
   const [row] = await tx
     .select({
       sequenceNo: dailyCloseChain.sequenceNo,
@@ -253,12 +248,8 @@ async function selectHeadForUpdate(
  * nothing on the conflict, so the re-select observes the COMMITTED row rather than one that might roll
  * back. Same shape as workforce's `lockChainHead`, keyed by node.
  */
-async function lockChainHead(
-  tx: Transaction,
-  tenantId: TenantId,
-  nodeId: NodeId,
-): Promise<ChainHead> {
-  const existing = await selectHeadForUpdate(tx, tenantId, nodeId);
+async function lockChainHead(tx: Transaction, nodeId: NodeId): Promise<ChainHead> {
+  const existing = await selectHeadForUpdate(tx, nodeId);
   if (existing !== undefined) return existing;
 
   await tx
@@ -266,7 +257,7 @@ async function lockChainHead(
     .values({ nodeId })
     .onConflictDoNothing({ target: [dailyCloseChain.nodeId] });
 
-  const created = await selectHeadForUpdate(tx, tenantId, nodeId);
+  const created = await selectHeadForUpdate(tx, nodeId);
   /* v8 ignore start */
   if (created === undefined) {
     // Unreachable: the insert commits a fresh row or a concurrent insert wins the conflict and

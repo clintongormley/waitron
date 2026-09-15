@@ -1,7 +1,6 @@
 import { eq, sql } from "drizzle-orm";
 import { ingredients } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import type { TenantId } from "@waitron/shared";
 import {
   validateAllergens,
   validateOrigin,
@@ -43,10 +42,8 @@ export interface UpdateIngredientInput {
 
 export async function createIngredient(
   tx: Transaction,
-  tenantId: TenantId,
   input: CreateIngredientInput,
 ): Promise<Ingredient> {
-  void tenantId;
   // Validate before the write: an unreviewed ingredient stores null, a supplied map is checked
   // against the EU-14 taxonomy and rejected (throws `allergen.invalid_code`/`allergen.invalid_presence`)
   // before any row is inserted.

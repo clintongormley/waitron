@@ -54,7 +54,7 @@ export interface SetupDeps {
   devMode?: boolean;
   /** `provisionVenue({ ownerDb, moduleConfig, database, stateDir })` bound in boot: resolves the fiscal
    * slot from the request's territory (`venueModuleConfig`), refuses a foreign/existing tenant, stamps
-   * the environment, mints the venue, and persists the resolved `modules.json` — returning the five ids
+   * the environment, mints the venue, and persists the resolved `modules.json` — returning the four ids
    * the trading boot needs. Plaintext admin secrets never reach it — the provision route hashes them at
    * the boundary. */
   provision?: (req: ProvisionRequest) => Promise<VenueResult>;
@@ -72,7 +72,7 @@ export interface SetupDeps {
    * answered `503 setup.not_ready`. Returns the adopted `tenantId` plus the freshly minted
    * `breakGlassSecret` — the offline promote fallback, surfaced ONCE in the connect response below and
    * never logged (the mirror-bundle sync-token discipline). */
-  adopt?: (req: AdoptRequest) => Promise<{ tenantId: string; breakGlassSecret: string }>;
+  adopt?: (req: AdoptRequest) => Promise<{ breakGlassSecret: string }>;
   /** The owner DB connection and vault key ring, injected by boot (which already holds both). Used to
    * seal the fiscal regime's provision-time secret through the fiscal contribution's
    * `provisioningSecret.seal` seat — so BOOT imports no regime package. Needed only when the resolved
@@ -83,7 +83,7 @@ export interface SetupDeps {
    * keypair, seals the private key, stamps nodes.public_key. Bound in boot to
    * `establishNodeIdentity({ ownerDb, ring }, …)`. Optional like the other provision deps so an unwired
    * box refuses via the deps gate rather than half-provisioning. Provision path only — a mirror seals none. */
-  establishIdentity?: (tenantId: string, nodeId: string) => Promise<void>;
+  establishIdentity?: (nodeId: string) => Promise<void>;
   /** `seedTermZeroMembership({ db, ring }, …)` bound in boot: mints the venue's term-0 membership
    * document right after `establishIdentity` seals the identity key. A fresh primary signs its own
    * single-node org chart (design §6 R1), so a document exists before any promotion needs to bump one.
@@ -92,7 +92,7 @@ export interface SetupDeps {
    * membership reconciliation fetch (`GET /management-api/membership` → `persistNodeMembershipIfNewer`),
    * NOT the `packages/sync` replication lane (`node_membership` is not enrolled there), and mints
    * none. */
-  seedMembership?: (tenantId: string, nodeId: string) => Promise<void>;
+  seedMembership?: (nodeId: string) => Promise<void>;
   /** `writeTradingEnv(stateDir, …)` bound in boot: persists `<stateDir>/trading.env` so the next boot
    * enters trading mode. */
   persistTrading?: (cfg: TradingConfig) => Promise<void>;
@@ -727,7 +727,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         // public key is stamped on the node row) and before the trading config is persisted. A fresh
         // primary becomes its own sole trust anchor; boot reads it into membershipTrustSet.
         if (!setupPhaseReached(operation, "identity_established")) {
-          await establishIdentity(result.tenantId, result.nodeId);
+          await establishIdentity(result.nodeId);
           await operation?.advance("identity_established");
         }
 
@@ -735,7 +735,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         // before the trading config is persisted. The primary signs its own org chart; boot has
         // nothing to bump yet.
         if (!setupPhaseReached(operation, "membership_seeded")) {
-          await seedMembership(result.tenantId, result.nodeId);
+          await seedMembership(result.nodeId);
           await operation?.advance("membership_seeded");
         }
 
@@ -743,13 +743,12 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         // config is persisted. Reaches the regime only through the `seal` seat, so this host imports
         // no regime package.
         if (!setupPhaseReached(operation, "secret_sealed")) {
-          if (expected) await secret!.seal({ db, ring }, result.tenantId, rawSecret);
+          if (expected) await secret!.seal({ db, ring }, rawSecret);
           await operation?.advance("secret_sealed");
         }
 
         if (!setupPhaseReached(operation, "publishing")) {
           await persistTrading({
-            tenantId: result.tenantId,
             tillId: result.tillId,
             nodeId: result.nodeId,
             seriesId: result.seriesIds[0],
@@ -764,10 +763,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
           await operation?.advance("publishing");
         }
 
-        const response = c.json(
-          { provisioned: true, tenantId: result.tenantId, restarting: true },
-          200,
-        );
+        const response = c.json({ provisioned: true, restarting: true }, 200);
         // Flush the 200 FIRST, then restart on the next tick so the wizard sees success before the box
         // goes down (`setTimeout`, not `queueMicrotask`, so the response promise resolves before it).
         setTimeout(() => requestRestart(), 0);
@@ -784,9 +780,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
       if (deps.operations === undefined) return execute();
       return deps.operations.run("provision", requestHash, async (operation) => {
         if (operation.phase === "complete") {
-          return c.json(
-            operation.data as { provisioned: true; tenantId: string; restarting: true },
-          );
+          return c.json(operation.data as { provisioned: true; restarting: true });
         }
         const response = await execute(operation);
         if (response.ok) {
@@ -849,16 +843,13 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
             totp: cred.totp === undefined ? undefined : asString(cred.totp, "credential.totp"),
           };
 
-          const { tenantId, breakGlassSecret } = await adopt({ primaryUrl, credential });
+          const { breakGlassSecret } = await adopt({ primaryUrl, credential });
 
           // Surface the break-glass secret ONCE, here, in the connect response — the operator's only
           // chance to record the offline promote fallback. It is NEVER logged (mirroring the sync-token
           // discipline): no `log(...)` call on this success path carries it, and it is not put in the
           // `setup.adopt_failed` error branch either.
-          const response = c.json(
-            { adopted: true, tenantId, breakGlassSecret, restarting: true },
-            200,
-          );
+          const response = c.json({ adopted: true, breakGlassSecret, restarting: true }, 200);
           // Flush the 200 FIRST, then restart on the next tick so the wizard sees success before the box
           // goes down (`setTimeout`, not `queueMicrotask`, so the response promise resolves before it) —
           // the same persist-then-restart transition provision uses.
@@ -874,12 +865,11 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     if (deps.operations === undefined) return execute();
     return deps.operations.run("adopt", requestHash, async (operation) => {
       if (operation.phase === "complete") {
-        return c.json(operation.data as { adopted: true; tenantId: string; restarting: true });
+        return c.json(operation.data as { adopted: true; restarting: true });
       }
       const response = await execute();
       if (response.ok) {
-        const result = (await response.clone().json()) as { tenantId: string };
-        await operation.complete({ adopted: true, tenantId: result.tenantId, restarting: true });
+        await operation.complete({ adopted: true, restarting: true });
       }
       return response;
     });

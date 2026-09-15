@@ -113,7 +113,7 @@ function ownerDb(): Database {
 }
 
 describe("provisionVenue", () => {
-  it("stamps the environment and mints one venue with five ids and exactly one SIF + series set", async () => {
+  it("stamps the environment and mints one venue with four ids and exactly one SIF + series set", async () => {
     const db = ownerDb();
     expect(await fiscalCounts(db)).toEqual({ sif: 0, series: 0, nodes: 0, registros: 0 });
 
@@ -122,14 +122,8 @@ describe("provisionVenue", () => {
       { environment: "preproduction", venue: venueRequest(nextNif()) },
     );
 
-    // The five ids the trading boot needs, each a non-empty string.
-    for (const id of [
-      result.tenantId,
-      result.locationId,
-      result.tillId,
-      result.nodeId,
-      result.seriesIds[0],
-    ]) {
+    // The four ids the trading boot needs, each a non-empty string.
+    for (const id of [result.locationId, result.tillId, result.nodeId, result.seriesIds[0]]) {
       expect(typeof id).toBe("string");
       expect((id as string).length).toBeGreaterThan(0);
     }
@@ -141,7 +135,7 @@ describe("provisionVenue", () => {
     ]);
     const defaults = await db.execute<{ menus: number; zone_menus: number }>(sql`
       select
-        (select count(*)::int from catalogues where tenant_id = ${result.tenantId}) as menus,
+        (select count(*)::int from catalogues ) as menus,
         (select count(*)::int from zone_menus zm
           join zone_service_policies p on p.zone_id = zm.zone_id
           where p.location_id = ${result.locationId}) as zone_menus`);
@@ -250,7 +244,6 @@ describe("provisionVenue", () => {
     const recovered = await recoverProvisionedVenue(db, request);
 
     expect(recovered).toMatchObject({
-      tenantId: minted.tenantId,
       locationId: minted.locationId,
       tillId: minted.tillId,
       nodeId: minted.nodeId,

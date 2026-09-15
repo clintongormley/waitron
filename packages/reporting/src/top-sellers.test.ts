@@ -40,7 +40,6 @@ beforeEach(async () => {
 
 function run(overrides: Partial<TopSellersInput> = {}): Promise<TopSeller[]> {
   const input: TopSellersInput = {
-    tenantId: venue.tenantId,
     nodeId: venue.nodeId,
     fromBusinessDay: DAY,
     toBusinessDay: DAY,
@@ -271,7 +270,7 @@ describe("computeTopSellers", () => {
         },
       ],
     });
-    await seedVoid(suite.db, { tenantId: venue.tenantId, saleId: voided }, noonUtc);
+    await seedVoid(suite.db, { saleId: voided }, noonUtc);
     await seedSale(suite.db, venue, {
       invoiceNumber: 2,
       issuedAt: noonUtc,
@@ -321,7 +320,6 @@ describe("computeTopSellers", () => {
       ],
     });
     await seedSubstitution(suite.db, {
-      tenantId: venue.tenantId,
       substitutionSaleId: f3,
       substitutedSaleId: ticket,
     });

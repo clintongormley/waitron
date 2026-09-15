@@ -3,7 +3,7 @@ import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
+import { locationId as brandLocationId } from "@waitron/shared";
 import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { WorkforceBackend, WORKFORCE_MIGRATIONS } from "@waitron/workforce";
 import { resolveWorkTimeRuleset } from "./convenio.js";
@@ -11,7 +11,6 @@ import { WORKFORCE_ES_MIGRATIONS } from "./migrations.js";
 import { seedConvenioConfig, seedEmployment, seedLocation, seedPerson } from "../test/fixtures.js";
 
 const backend = new WorkforceBackend();
-let tenantId: string;
 
 const suite = usePgliteDb({
   resetPerTest: false,
@@ -20,7 +19,7 @@ const suite = usePgliteDb({
   // path reads all four.
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS, WORKFORCE_ES_MIGRATIONS],
   setup: async (db) => {
-    tenantId = await seedTenant(db);
+    await seedTenant(db);
   },
 });
 
@@ -63,8 +62,8 @@ describe("workSummary driven by a resolved convenio_config ruleset", () => {
     // hard-coded defaults produced. Five 9h days against a 40h week: 2700 worked, 300 overtime, each
     // day 60 over its 480 target. These are the identical figures clocking.test.ts pins for the
     // pre-D2 path.
-    const locationId = await seedLocation(suite.db, tenantId);
-    const nodeId = await seedNode(suite.db, brandTenantId(tenantId), brandLocationId(locationId));
+    const locationId = await seedLocation(suite.db);
+    const nodeId = await seedNode(suite.db, brandLocationId(locationId));
     const personId = await seedPerson(suite.db, "es-default");
     await seedEmployment(suite.db, { personId, contractedMinutesPerWeek: 2400 });
     await seedConvenioConfig(suite.db, { locationId });
@@ -103,9 +102,9 @@ describe("workSummary driven by a resolved convenio_config ruleset", () => {
     // day is 60 daily-accrual but 0 period-net against a full-week baseline. The two rulesets must
     // move ONLY the headline `overtimeMinutes`; both underlying figures are computed regardless and
     // stay identical between the two calls.
-    const dailyLoc = await seedLocation(suite.db, tenantId);
-    const dailyNode = await seedNode(suite.db, brandTenantId(tenantId), brandLocationId(dailyLoc));
-    const periodLoc = await seedLocation(suite.db, tenantId);
+    const dailyLoc = await seedLocation(suite.db);
+    const dailyNode = await seedNode(suite.db, brandLocationId(dailyLoc));
+    const periodLoc = await seedLocation(suite.db);
     const personId = await seedPerson(suite.db, "es-model");
     await seedEmployment(suite.db, { personId, contractedMinutesPerWeek: 2400 });
     await seedConvenioConfig(suite.db, {

@@ -52,16 +52,15 @@ interface Venue {
 }
 
 async function setupVenue(): Promise<Venue> {
-  const tenantId = await seedTenant(db);
+  await seedTenant(db);
   const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
+    insert into locations (name, invoice_locales, operation_description)
+    values ('Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
   const locationId = loc.rows[0]!.id;
   const till = await db.execute<{ id: string }>(sql`
-    insert into tills (tenant_id, location_id, name) values (${tenantId}, ${locationId}, 'Caja 1') returning id`);
-  const nodeId = await seedNode(db, tenantId, brandLocationId(locationId));
+    insert into tills (location_id, name) values (${locationId}, 'Caja 1') returning id`);
+  const nodeId = await seedNode(db, brandLocationId(locationId));
   const tillCfg: TillConfig = {
-    tenantId,
     tillId: brandTillId(till.rows[0]!.id),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
@@ -73,15 +72,15 @@ async function setupVenue(): Promise<Venue> {
   };
   const managerSid = await withTransaction(db, async (tx) => {
     await asAppUser(tx);
-    const mgr = await tx.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, role)
-      values (${tenantId}, 'The Manager', ${hashPin("1234")}, 'manager') returning id`);
-    const session = await startManagementSession(tx, { tenantId, personId: mgr.rows[0]!.id });
+    const p = await tx.execute<{ id: string }>(sql`
+      insert into persons (display_name, pin_hash, role)
+      values ('The Manager', ${hashPin("1234")}, 'manager') returning id`);
+    const session = await startManagementSession(tx, { personId: p.rows[0]!.id });
     return session.id;
   });
   const ctx: ModuleRouteContext = {
     db,
-    cfg: { tenantId, locationId: brandLocationId(locationId) },
+    cfg: { locationId: tillCfg.locationId },
     // The EXACT closure boot wires (boot.ts): the module reaches the tab verb ONLY through this seat.
     core: { openTab: (tx, req) => openTab(tx, tillCfg, req) },
   };

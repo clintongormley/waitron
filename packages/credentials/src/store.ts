@@ -1,7 +1,6 @@
 import { eq, sql } from "drizzle-orm";
 import { withTransaction, type Database, type Transaction } from "@waitron/db";
-import { AppError, tenantId as brandTenantId } from "@waitron/shared";
-import type { TenantId } from "@waitron/shared";
+import { AppError } from "@waitron/shared";
 import { aadFor, open, seal } from "./cipher.js";
 import { keyForVersion, type KeyRing } from "./keyring.js";
 import { isPurpose, validatePayload, type Purpose } from "./purposes.js";
@@ -166,19 +165,19 @@ export async function listCredentials(tx: Transaction): Promise<CredentialMeta[]
 }
 
 /**
- * The tenant ids to serve for `purpose`: the database's tenant when a credential for `purpose` is
- * provisioned, and none when it is not. Calls `credential_tenants` on the supplied database handle,
- * using the caller's privileges.
+ * Whether this database's taxpayer has a credential provisioned for `purpose`. Calls
+ * `credential_tenants` on the supplied database handle, using the caller's privileges, and reports
+ * whether it returned the taxpayer or nothing.
  *
- * This is what gives the host its tenant list, and it has a property worth naming: an unprovisioned
- * purpose enumerates nobody, so the vault IS the enrolment list for that duty — the host needs no
- * separate notion of "is Stripe configured".
+ * This is what tells the host which duties to run, and it has a property worth naming: an
+ * unprovisioned purpose enumerates nobody, so the vault IS the enrolment list for that duty — the
+ * host needs no separate notion of "is Stripe configured".
  */
-export async function credentialTenants(db: Database, purpose: string): Promise<TenantId[]> {
-  const rows = await db.execute<{ tenant_id: string }>(sql`
-    select credential_tenants(${purpose}) as tenant_id
+export async function credentialProvisioned(db: Database, purpose: string): Promise<boolean> {
+  const rows = await db.execute(sql`
+    select credential_tenants(${purpose}) as taxpayer
   `);
-  return rows.rows.map((r) => brandTenantId(r.tenant_id));
+  return rows.rows.length > 0;
 }
 
 export interface RotationResult {

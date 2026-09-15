@@ -23,20 +23,15 @@ const suite = useTemplateDb({ template: "core" });
  */
 async function setup(): Promise<PrintAgentConfig> {
   const admin = suite.admin;
-  const tenantId = await seedTenant(admin);
+  await seedTenant(admin);
   const loc = await admin.execute<{ id: string }>(sql`
     insert into locations (name, invoice_locales, operation_description) values ('Bar', array[${LOCALE}], 'Sale on premises') returning id`);
-  return { tenantId, locationId: loc.rows[0]!.id };
+  return { locationId: loc.rows[0]!.id };
 }
 
 /** Run `fn` as the real deployment role: a tenant-scoped transaction that first switches to
  * `app_user`, exactly the shape the Task-6 route wraps each core call in. */
-function asApp<T>(
-  db: Database,
-  cfg: { tenantId: string },
-  fn: (tx: Transaction) => Promise<T>,
-): Promise<T> {
-  void cfg;
+function asApp<T>(db: Database, fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTransaction(db, async (tx) => {
     await asAppUser(tx);
     return fn(tx);
@@ -68,13 +63,13 @@ describe("authenticateAgent", () => {
   }
 
   it("a valid token resolves to its agentId and stamps last_seen_at", async () => {
-    const { cfg, agentId, token } = await enrolled();
+    const { agentId, token } = await enrolled();
     const before = await suite.admin.execute<{ last_seen_at: string | null }>(
       sql`select last_seen_at from print_agents where id = ${agentId}`,
     );
     expect(before.rows[0]!.last_seen_at).toBeNull(); // NULL until first seen
 
-    const result = await asApp(suite.admin, cfg, (tx) => authenticateAgent(tx, cfg, token));
+    const result = await asApp(suite.admin, (tx) => authenticateAgent(tx, token));
     expect(result.agentId).toBe(agentId);
 
     const after = await suite.admin.execute<{ last_seen_at: string | null }>(
@@ -84,35 +79,33 @@ describe("authenticateAgent", () => {
   });
 
   it("a wrong token (tampered secret) → agent.unauthorized", async () => {
-    const { cfg, agentId } = await enrolled();
+    const { agentId } = await enrolled();
     const forged = `${agentId}.${randomBytes(32).toString("base64url")}`;
-    expect(
-      await codeOf(() => asApp(suite.admin, cfg, (tx) => authenticateAgent(tx, cfg, forged))),
-    ).toBe("agent.unauthorized");
+    expect(await codeOf(() => asApp(suite.admin, (tx) => authenticateAgent(tx, forged)))).toBe(
+      "agent.unauthorized",
+    );
   });
 
   it("a revoked (active=false) agent → agent.unauthorized", async () => {
-    const { cfg, agentId, token } = await enrolled();
+    const { agentId, token } = await enrolled();
     await suite.admin.execute(sql`update print_agents set active = false where id = ${agentId}`);
-    expect(
-      await codeOf(() => asApp(suite.admin, cfg, (tx) => authenticateAgent(tx, cfg, token))),
-    ).toBe("agent.unauthorized");
+    expect(await codeOf(() => asApp(suite.admin, (tx) => authenticateAgent(tx, token)))).toBe(
+      "agent.unauthorized",
+    );
   });
 
   it("an unknown agent id → agent.unauthorized", async () => {
-    const cfg = await setup();
     const token = `${randomUUID()}.${randomBytes(32).toString("base64url")}`;
-    expect(
-      await codeOf(() => asApp(suite.admin, cfg, (tx) => authenticateAgent(tx, cfg, token))),
-    ).toBe("agent.unauthorized");
+    expect(await codeOf(() => asApp(suite.admin, (tx) => authenticateAgent(tx, token)))).toBe(
+      "agent.unauthorized",
+    );
   });
 
   it("a malformed token — no separator, trailing dot, or non-uuid selector — → agent.unauthorized", async () => {
-    const cfg = await setup();
     for (const bad of ["nodothere", "abc.", "not-a-uuid.somesecret"]) {
-      expect(
-        await codeOf(() => asApp(suite.admin, cfg, (tx) => authenticateAgent(tx, cfg, bad))),
-      ).toBe("agent.unauthorized");
+      expect(await codeOf(() => asApp(suite.admin, (tx) => authenticateAgent(tx, bad)))).toBe(
+        "agent.unauthorized",
+      );
     }
   });
 });

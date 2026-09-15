@@ -11,7 +11,6 @@ import { tenants } from "./tenants.js";
 // Real Postgres (a template clone), not PGlite: every write below runs as the non-owner
 // `app_user`, the deployment role, which PGlite (every connection a superuser) cannot be. The
 // cases retain the role switch so the reads and writes still exercise app_user grants.
-const TENANT_A = "11111111-1111-4111-8111-111111111111";
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const TILL_A = "aaaaaaaa-0000-4000-8000-000000000011";
 const PRINTER_A = "aaaaaaaa-0000-4000-8000-000000000021";
@@ -25,10 +24,8 @@ const AUTHORIZER = "cccccccc-0000-4000-8000-000000000002";
 class RollbackSignal extends Error {}
 async function rollBackAfter(
   admin: Database,
-  tenant: string,
   fn: (tx: Transaction) => Promise<void>,
 ): Promise<void> {
-  void tenant;
   await withTransaction(admin, async (tx) => {
     await fn(tx);
     throw new RollbackSignal();
@@ -43,7 +40,7 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, c
   beforeAll(async () => {
     await suite.admin
       .insert(tenants)
-      .values([{ id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
+      .values([{ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
     await suite.admin.execute(sql`
       insert into locations (id, name, invoice_locales, operation_description) values (${LOCATION_A}, 'Loc A', array['es'], 'Hostelería')
       on conflict (id) do nothing`);
@@ -55,8 +52,7 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, c
       on conflict (id) do nothing`);
   });
 
-  function asApp<T>(tenant: string, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-    void tenant;
+  function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
     return withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return fn(tx);
@@ -64,11 +60,10 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, c
   }
 
   async function seedOpen(
-    tenant: string,
     reason: "cash_sale" | "manual",
     saleId: string | null = null,
   ): Promise<void> {
-    await asApp(tenant, (tx) =>
+    await asApp((tx) =>
       tx.execute(
         sql`insert into drawer_opens (till_id, person_id, reason, sale_id) values (${TILL_A}, ${PERSON}, ${reason}, ${saleId})`,
       ),
@@ -81,8 +76,8 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, c
     // (sale_id NULL), which is the common accountability case. Read back through the
     // Drizzle `drawerOpens` export (not raw SQL) — exercises the produced table export and its column
     // mapping under the app role.
-    await seedOpen(TENANT_A, "manual");
-    const [row] = await asApp(TENANT_A, (tx) =>
+    await seedOpen("manual");
+    const [row] = await asApp((tx) =>
       tx
         .select()
         .from(drawerOpens)
@@ -105,12 +100,12 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, c
     // behalf of an operator (PERSON) who lacks cash.drawer — authorized_by set, via_override true. app_user
     // holds INSERT (append-only), so this exercises the write grant AND the produced column mapping when
     // both are populated. Read back through the Drizzle `drawerOpens` export.
-    await asApp(TENANT_A, (tx) =>
+    await asApp((tx) =>
       tx.execute(
         sql`insert into drawer_opens (till_id, person_id, reason, authorized_by, via_override) values (${TILL_A}, ${PERSON}, 'manual', ${AUTHORIZER}, true)`,
       ),
     );
-    const [row] = await asApp(TENANT_A, (tx) =>
+    const [row] = await asApp((tx) =>
       tx
         .select()
         .from(drawerOpens)
@@ -123,9 +118,9 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, c
   it("the reason CHECK accepts 'cash_sale' and rejects an unknown reason (23514)", async () => {
     // 'manual' is exercised by the positive control above; this pins that 'cash_sale' is also accepted
     // and that the closed vocabulary bites — an unknown reason is refused by drawer_opens_reason_ck.
-    await seedOpen(TENANT_A, "cash_sale"); // accepted (reason CHECK allows it; sale_id is optional)
+    await seedOpen("cash_sale"); // accepted (reason CHECK allows it; sale_id is optional)
     const e = await captureError(() =>
-      asApp(TENANT_A, (tx) =>
+      asApp((tx) =>
         tx.execute(
           sql`insert into drawer_opens (till_id, person_id, reason) values (${TILL_A}, ${PERSON}, 'refund')`,
         ),
@@ -142,7 +137,7 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, c
     // manual case) is proven to skip it by the positive control above.
     const missingSale = "dddddddd-0000-4000-8000-0000000000ff";
     const e = await captureError(() =>
-      asApp(TENANT_A, (tx) =>
+      asApp((tx) =>
         tx.execute(
           sql`insert into drawer_opens (till_id, person_id, reason, sale_id) values (${TILL_A}, ${PERSON}, 'cash_sale', ${missingSale})`,
         ),
@@ -155,7 +150,7 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, c
     // The new bare column on tills, visible + writable under the app role (app_user holds UPDATE on
     // tills), and its hand-written (receipt_printer_id) → printers FK accepts a
     // printer of the same tenant. Rolled back so the shared template clone is untouched.
-    await rollBackAfter(suite.admin, TENANT_A, async (tx) => {
+    await rollBackAfter(suite.admin, async (tx) => {
       await asAppUser(tx);
       await tx.execute(
         sql`update tills set receipt_printer_id = ${PRINTER_A} where id = ${TILL_A}`,
@@ -171,7 +166,7 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, c
     // The new enum column: the seeded locations carry no explicit value, so they take the DEFAULT
     // 'auto'; and the app role (app_user holds UPDATE on locations) can move it. Rolled back so the
     // shared template clone keeps its default.
-    const mode = await asApp(TENANT_A, (tx) =>
+    const mode = await asApp((tx) =>
       tx
         .execute<{ receipt_print_mode: string }>(
           sql`select receipt_print_mode from locations where id = ${LOCATION_A}`,
@@ -179,7 +174,7 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, c
         .then((r) => r.rows[0]!.receipt_print_mode),
     );
     expect(mode).toBe("auto");
-    await rollBackAfter(suite.admin, TENANT_A, async (tx) => {
+    await rollBackAfter(suite.admin, async (tx) => {
       await asAppUser(tx);
       await tx.execute(
         sql`update locations set receipt_print_mode = 'on_request' where id = ${LOCATION_A}`,
@@ -196,7 +191,7 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, c
     // DEFAULT 'gated' — the SECURE default (an unconfigured venue gets cash accountability, not an open
     // drawer), deliberately unlike receipt_print_mode's inert 'auto'. The app role (app_user holds UPDATE
     // on locations) can move it to 'open'. Rolled back so the shared template clone keeps its default.
-    const policy = await asApp(TENANT_A, (tx) =>
+    const policy = await asApp((tx) =>
       tx
         .execute<{ drawer_open_policy: string }>(
           sql`select drawer_open_policy from locations where id = ${LOCATION_A}`,
@@ -204,7 +199,7 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, c
         .then((r) => r.rows[0]!.drawer_open_policy),
     );
     expect(policy).toBe("gated");
-    await rollBackAfter(suite.admin, TENANT_A, async (tx) => {
+    await rollBackAfter(suite.admin, async (tx) => {
       await asAppUser(tx);
       await tx.execute(
         sql`update locations set drawer_open_policy = 'open' where id = ${LOCATION_A}`,

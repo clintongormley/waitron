@@ -93,7 +93,7 @@ async function fireOrder(venue: Venue): Promise<{ orderId: string; items: string
   );
   const { rows } = await suite.admin.execute<{ id: string }>(sql`
     select ti.id from ticket_items ti
-    join working_order_lines wol on wol.id = ti.working_order_line_id and wol.tenant_id = ti.tenant_id
+    join working_order_lines wol on wol.id = ti.working_order_line_id
     where ti.working_order_id = ${orderId}
     order by wol.line_no`);
   return { orderId, items: rows.map((r) => r.id) };
@@ -108,11 +108,11 @@ async function moveItemToStation(itemId: string, stationId: string): Promise<voi
 }
 
 /** Seed a `cloud_poll` printer for the venue (owner SQL) — needs only a poll id, so no print agent has
- *  to be seeded to satisfy the transport CHECK. A real `(tenant_id, id)` a device binding can name. */
+ *  to be seeded to satisfy the transport CHECK. A real `(id)` a device binding can name. */
 async function seedPrinter(cfg: TillConfig): Promise<string> {
   const { rows } = await suite.admin.execute<{ id: string }>(sql`
-    insert into printers (tenant_id, location_id, name, transport, poll_id)
-    values (${cfg.tenantId}, ${cfg.locationId}, 'Recibos', 'cloud_poll', 'poll-abc')
+    insert into printers (location_id, name, transport, poll_id)
+    values (${cfg.locationId}, 'Recibos', 'cloud_poll', 'poll-abc')
     returning id`);
   return rows[0]!.id;
 }
@@ -194,14 +194,13 @@ function deviceCookieFrom(res: Response): string {
  *  7). A per-suite counter keeps the tenant-unique name from colliding across the shared clone. */
 let profileCounter = 0;
 async function seedProfile(
-  cfg: TillConfig,
   formFactor: "till" | "kds" | "phone-portrait" | "tablet-landscape",
   capabilities: string[] = [],
 ): Promise<string> {
   profileCounter += 1;
   const { rows } = await suite.admin.execute<{ id: string }>(sql`
-    insert into device_profiles (tenant_id, name, form_factor, capabilities)
-    values (${cfg.tenantId}, ${`Profile ${profileCounter}`}, ${formFactor}, ${JSON.stringify(capabilities)}::jsonb)
+    insert into device_profiles (name, form_factor, capabilities)
+    values (${`Profile ${profileCounter}`}, ${formFactor}, ${JSON.stringify(capabilities)}::jsonb)
     returning id`);
   return rows[0]!.id;
 }
@@ -244,7 +243,7 @@ async function enrolKds(
   venue: Venue,
   stationId: string,
 ): Promise<{ deviceId: string; jar: string; profileId: string }> {
-  const profileId = await seedProfile(venue.cfg, "kds");
+  const profileId = await seedProfile("kds");
   const { deviceId, jar } = await knockAndAccept(app, venue, {
     name: "Pantalla Cocina",
     profileId,
@@ -260,7 +259,7 @@ async function enrolTill(
   venue: Venue,
   name = "Caja nueva",
 ): Promise<{ deviceId: string; jar: string; profileId: string; formFactor: string }> {
-  const profileId = await seedProfile(venue.cfg, "till");
+  const profileId = await seedProfile("till");
   const { deviceId, jar, formFactor } = await knockAndAccept(app, venue, { name, profileId });
   return { deviceId, jar, profileId, formFactor };
 }
@@ -271,7 +270,7 @@ async function enrolHandheld(
   venue: Venue,
   registerId: string,
 ): Promise<{ deviceId: string; jar: string; profileId: string }> {
-  const profileId = await seedProfile(venue.cfg, "phone-portrait");
+  const profileId = await seedProfile("phone-portrait");
   const { deviceId, jar } = await knockAndAccept(app, venue, {
     name: "Waiter phone",
     profileId,
@@ -293,7 +292,7 @@ describe("POST /api/device/join", () => {
     // The refusal happens before any DB work: no row, so a flood cannot fill the pending cap or the
     // connection pool (CLAUDE.md §5 — nothing external may block a sale).
     const { rows } = await suite.admin.execute<{ n: number }>(
-      sql`select count(*)::int as n from join_requests where tenant_id = ${venue.cfg.tenantId}`,
+      sql`select count(*)::int as n from join_requests `,
     );
     expect(rows[0]!.n).toBe(0);
     expect(res.headers.get("set-cookie")).toBeNull();
@@ -321,7 +320,7 @@ describe("POST /api/device/join", () => {
     // The row is this tenant's, pending, and carries the number that came back.
     const { rows } = await suite.admin.execute<{ label: string; verification_number: string }>(
       sql`select label, verification_number from join_requests
-           where tenant_id = ${venue.cfg.tenantId} and id = ${body.joinId as string}`,
+           where id = ${body.joinId as string}`,
     );
     expect(rows[0]).toMatchObject({
       label: "Bar till",
@@ -380,7 +379,7 @@ describe("POST /api/device/join", () => {
     );
     expect(mode.refusedRecently()).toBe(0);
     const { rows } = await suite.admin.execute<{ n: number }>(
-      sql`select count(*)::int as n from join_requests where tenant_id = ${venue.cfg.tenantId}`,
+      sql`select count(*)::int as n from join_requests `,
     );
     expect(rows[0]!.n).toBe(0);
   });
@@ -447,7 +446,7 @@ describe("devMode auto-accept", () => {
 
     // The request row is CONSUMED by the accept — it is now a device, not a pending join.
     const { rows } = await suite.admin.execute<{ n: number }>(
-      sql`select count(*)::int as n from join_requests where tenant_id = ${venue.cfg.tenantId}`,
+      sql`select count(*)::int as n from join_requests `,
     );
     expect(rows[0]!.n).toBe(0);
   });
@@ -456,9 +455,7 @@ describe("devMode auto-accept", () => {
     const venue = await setupVenue(suite.admin);
     // Remove the provisioned default `till` profile (no device references it yet, so the RESTRICT FK is
     // not tripped). Auto-accept then has no default to resolve.
-    await suite.admin.execute(
-      sql`delete from device_profiles where tenant_id = ${venue.cfg.tenantId} and form_factor = 'till'`,
-    );
+    await suite.admin.execute(sql`delete from device_profiles where form_factor = 'till'`);
     const app = mountDevApp(venue.cfg, true);
     const res = await send(app, "POST", "/api/device/join", { body: { name: "Dev till" } });
     expect(res.status).toBe(404);
@@ -468,7 +465,7 @@ describe("devMode auto-accept", () => {
     // The throw is inside the same transaction as the mint, so the just-created request is rolled back —
     // no orphan pending row nobody can approve.
     const { rows } = await suite.admin.execute<{ n: number }>(
-      sql`select count(*)::int as n from join_requests where tenant_id = ${venue.cfg.tenantId}`,
+      sql`select count(*)::int as n from join_requests `,
     );
     expect(rows[0]!.n).toBe(0);
   });
@@ -503,7 +500,7 @@ describe("GET /api/device/join/status", () => {
     expect(pending.status).toBe(200);
     expect(await pending.json()).toEqual({ status: "pending" });
 
-    const profileId = await seedProfile(venue.cfg, "till");
+    const profileId = await seedProfile("till");
     await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return acceptDeviceJoinRequest(tx, venue.cfg, joinId, {
@@ -789,7 +786,7 @@ describe("Device management routes (device.manage)", () => {
       const venue = await setupVenue(suite.admin);
       const app = mountApp(venue.cfg);
       const { deviceId } = await enrolKds(app, venue, venue.defaultStationId);
-      const target = await seedProfile(venue.cfg, "kds");
+      const target = await seedProfile("kds");
 
       const assign = await send(
         app,
@@ -840,7 +837,7 @@ describe("Device management routes (device.manage)", () => {
     it("with an unknown or malformed device id → 404 device.not_found", async () => {
       const venue = await setupVenue(suite.admin);
       const app = mountApp(venue.cfg);
-      const profileId = await seedProfile(venue.cfg, "kds");
+      const profileId = await seedProfile("kds");
       const unknown = randomUUID();
       const res = await send(
         app,
@@ -1033,7 +1030,7 @@ describe("join rate limiter (spec §8)", () => {
     });
     // Refused before any DB work: only the two admitted knocks left rows.
     const { rows } = await suite.admin.execute<{ n: number }>(
-      sql`select count(*)::int as n from join_requests where tenant_id = ${venue.cfg.tenantId}`,
+      sql`select count(*)::int as n from join_requests `,
     );
     expect(rows[0]!.n).toBe(2);
 

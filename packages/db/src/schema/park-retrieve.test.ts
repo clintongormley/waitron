@@ -1,7 +1,7 @@
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
-import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
+import { locationId as brandLocationId } from "@waitron/shared";
 import type { Database } from "../client.js";
 import { captureError, pgErrorCode } from "../testing/errors.js";
 import { usePgliteDb } from "../testing/lifecycle.js";
@@ -10,7 +10,6 @@ import { catalogues, products } from "./catalogue.js";
 import { invoiceSeries } from "./series.js";
 import { locations, tenants, tills } from "./tenants.js";
 
-const TENANT_A = "11111111-1111-4111-8111-111111111111";
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const TILL_A1 = "aaaaaaaa-1111-4000-8000-000000000001";
 const BOGUS_PRODUCT = "99999999-9999-4999-8999-999999999999";
@@ -50,7 +49,7 @@ describe("park & retrieve schema", () => {
     const admin = suite.db;
     await admin
       .insert(tenants)
-      .values([{ id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
+      .values([{ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
     await admin.insert(locations).values([
       {
         id: LOCATION_A,
@@ -60,7 +59,7 @@ describe("park & retrieve schema", () => {
       },
     ]);
     await admin.insert(tills).values([{ id: TILL_A1, locationId: LOCATION_A, name: "A1" }]);
-    nodeA = await seedNode(admin, brandTenantId(TENANT_A), brandLocationId(LOCATION_A));
+    nodeA = await seedNode(admin, brandLocationId(LOCATION_A));
     const [series] = await admin
       .insert(invoiceSeries)
       .values({ nodeId: nodeA, code: "FA", purpose: "standard" })

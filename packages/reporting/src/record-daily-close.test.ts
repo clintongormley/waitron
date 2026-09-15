@@ -40,7 +40,6 @@ beforeEach(async () => {
 
 function closeInput(businessDay: string) {
   return {
-    tenantId: venue.tenantId,
     nodeId: venue.nodeId,
     businessDay,
     timeZone: "Europe/Madrid",
@@ -70,7 +69,7 @@ async function seedCashSale(till: TillId, amount: string): Promise<void> {
   const at = "2026-08-04T10:00:00Z"; // 12:00 Madrid, after the 05:00 cutover → business day 2026-08-04
   const saleId = await seedSale(
     suite.db,
-    { tenantId: venue.tenantId, tillId: till, nodeId: venue.nodeId, seriesId: venue.seriesId },
+    { tillId: till, nodeId: venue.nodeId, seriesId: venue.seriesId },
     {
       invoiceNumber: invoiceNo,
       issuedAt: at,
@@ -80,7 +79,7 @@ async function seedCashSale(till: TillId, amount: string): Promise<void> {
   );
   await seedTender(
     suite.db,
-    { tenantId: venue.tenantId, saleId },
+    { saleId },
     { method: "cash", amount, tipAmount: "0.00", settledAt: at },
   );
 }
@@ -96,8 +95,8 @@ describe("recordDailyClose — snapshot, reconciliation, chain", () => {
     // Three tills at one node, each with cash takings, crafted so the reconciliation exercises all
     // three signs: A over, B short, C exact.
     const tillA = venue.tillId;
-    const tillB = await seedTill(suite.db, venue.tenantId, venue.locationId);
-    const tillC = await seedTill(suite.db, venue.tenantId, venue.locationId);
+    const tillB = await seedTill(suite.db, venue.locationId);
+    const tillC = await seedTill(suite.db, venue.locationId);
     await seedCashSale(tillA, "123.45");
     await seedCashSale(tillB, "48.00");
     await seedCashSale(tillC, "20.00");
@@ -142,7 +141,6 @@ describe("recordDailyClose — snapshot, reconciliation, chain", () => {
       expect(rec.entryHash).toBe(
         computeCloseEntryHash(
           {
-            tenantId: rec.tenantId,
             nodeId: rec.nodeId,
             businessDay: rec.businessDay,
             sequenceNo: rec.sequenceNo,
@@ -252,7 +250,6 @@ describe("recordDailyClose — snapshot, reconciliation, chain", () => {
     const saleId = await seedSale(
       suite.db,
       {
-        tenantId: venue.tenantId,
         tillId: venue.tillId,
         nodeId: venue.nodeId,
         seriesId: venue.seriesId,
@@ -266,7 +263,7 @@ describe("recordDailyClose — snapshot, reconciliation, chain", () => {
     );
     await seedTender(
       suite.db,
-      { tenantId: venue.tenantId, saleId },
+      { saleId },
       { method: "card", amount: "60.50", tipAmount: "0.00", settledAt: at },
     );
 

@@ -2,7 +2,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
+import { locationId as brandLocationId } from "@waitron/shared";
 import type { Database, Transaction } from "../client.js";
 import { captureError, pgErrorCode } from "../testing/errors.js";
 import { useTemplateDb } from "../testing/lifecycle.js";
@@ -11,17 +11,14 @@ import { seedNode } from "../testing/seed.js";
 import { withTransaction } from "../tenancy.js";
 import { locations, tenants, tills } from "./tenants.js";
 
-const TENANT_A = "11111111-1111-4111-8111-111111111111";
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const TILL_A = "aaaaaaaa-1111-4000-8000-000000000001";
 
 class RollbackSignal extends Error {}
 async function rollBackAfter(
   admin: Database,
-  tenant: string,
   fn: (tx: Transaction) => Promise<void>,
 ): Promise<void> {
-  void tenant;
   await withTransaction(admin, async (tx) => {
     await fn(tx);
     throw new RollbackSignal();
@@ -47,7 +44,7 @@ describe("table↔tab link columns (mutual composite FKs)", () => {
     const admin = suite.admin;
     await admin
       .insert(tenants)
-      .values({ id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "T A" });
+      .values({ id: 1, country: "ES", taxId: "B00000000", legalName: "T A" });
     await admin.insert(locations).values({
       id: LOCATION_A,
       name: "Loc A",
@@ -55,7 +52,7 @@ describe("table↔tab link columns (mutual composite FKs)", () => {
       operationDescription: "Hostelería",
     });
     await admin.insert(tills).values({ id: TILL_A, locationId: LOCATION_A, name: "A1" });
-    nodeA = await seedNode(admin, brandTenantId(TENANT_A), brandLocationId(LOCATION_A));
+    nodeA = await seedNode(admin, brandLocationId(LOCATION_A));
   });
 
   /** Insert one active table as app_user; returns its id. */
@@ -118,7 +115,7 @@ describe("table↔tab link columns (mutual composite FKs)", () => {
     expect(pgErrorCode(e)).toBe("23503"); // foreign_key_violation
 
     // Prove-by-deletion: drop the FK in a rolled-back tx, and the same dangling pointer is accepted.
-    await rollBackAfter(suite.admin, TENANT_A, async (tx) => {
+    await rollBackAfter(suite.admin, async (tx) => {
       await tx.execute(sql`alter table dining_tables drop constraint dining_tables_tab_fk`);
       await tx.execute(sql`set local role app_user`);
       await tx.execute(
@@ -139,7 +136,7 @@ describe("table↔tab link columns (mutual composite FKs)", () => {
     );
     expect(pgErrorCode(e)).toBe("23503");
 
-    await rollBackAfter(suite.admin, TENANT_A, async (tx) => {
+    await rollBackAfter(suite.admin, async (tx) => {
       await tx.execute(
         sql`alter table working_orders drop constraint working_orders_delivery_table_fk`,
       );

@@ -6,7 +6,6 @@ import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import type { CapabilityFlag } from "@waitron/layouts";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { planVenue, type VenueAction, type VenueRequest } from "./venue-plan.js";
-import { deriveTenantId } from "./tenant-id.js";
 import { applyVenue } from "./venue-apply.js";
 
 // PGlite's default connection is a SUPERUSER holding every grant, so a privilege or trigger
@@ -51,6 +50,51 @@ function request(taxId = "B12345678"): VenueRequest {
   };
 }
 
+describe("applyVenue: the one taxpayer row", () => {
+  it("creates it with id 1 on a fresh database", async () => {
+    await applyVenue(planVenue(request("B10000001"), ALL_MODULES), {
+      db: suite.db,
+      modules: ALL_MODULES,
+    });
+
+    const rows = await suite.db.execute<{ id: number; country: string; tax_id: string }>(
+      sql`select id, country, tax_id from tenants`,
+    );
+    expect(rows.rows).toEqual([{ id: 1, country: "ES", tax_id: "B10000001" }]);
+  });
+
+  it("is an idempotent no-op when the same country and tax id are applied again", async () => {
+    const plan = planVenue(request("B10000002"), ALL_MODULES);
+    await applyVenue(plan, { db: suite.db, modules: ALL_MODULES });
+    await applyVenue(plan, { db: suite.db, modules: ALL_MODULES });
+
+    const rows = await suite.db.execute<{ id: number; country: string; tax_id: string }>(
+      sql`select id, country, tax_id from tenants`,
+    );
+    expect(rows.rows).toEqual([{ id: 1, country: "ES", tax_id: "B10000002" }]);
+  });
+
+  it("refuses a re-run whose tax id differs, by name", async () => {
+    // The domain code, never `toBeInstanceOf(Error)`: before this refusal existed, the second run
+    // failed on the taxpayer row's primary key, and a plain Error assertion would have passed while
+    // the operator got an unactionable driver message (CLAUDE.md §4).
+    await applyVenue(planVenue(request("B10000003"), ALL_MODULES), {
+      db: suite.db,
+      modules: ALL_MODULES,
+    });
+
+    await expect(
+      applyVenue(planVenue(request("B10000004"), ALL_MODULES), {
+        db: suite.db,
+        modules: ALL_MODULES,
+      }),
+    ).rejects.toMatchObject({ code: "provisioning.tenant_identity_mismatch" });
+
+    const rows = await suite.db.execute<{ tax_id: string }>(sql`select tax_id from tenants`);
+    expect(rows.rows).toEqual([{ tax_id: "B10000003" }]);
+  });
+});
+
 describe("applyVenue", () => {
   it("provisions a sellable venue: tenant, location, till, node, live SIF, two series", async () => {
     const result = await applyVenue(planVenue(request(), ALL_MODULES), {
@@ -68,7 +112,7 @@ describe("applyVenue", () => {
       counter_zones: number;
     }>(sql`
       select
-        (select count(*) from tenants where id = ${result.tenantId})::int as tenants,
+        (select count(*) from tenants where id = 1)::int as tenants,
         (select count(*) from nodes where id = ${result.nodeId})::int as nodes,
         (select count(*) from invoice_series where node_id = ${result.nodeId})::int as series,
         (select count(*) from registro_sif where node_id = ${result.nodeId} and revocado_en is null)::int as sif,
@@ -131,7 +175,7 @@ describe("applyVenue", () => {
       passwordHash: "scrypt$pwd$hash",
       email: "owner@example.test",
     };
-    const result = await applyVenue(planVenue(seedRequest, ALL_MODULES), {
+    await applyVenue(planVenue(seedRequest, ALL_MODULES), {
       db: suite.db,
       modules: ALL_MODULES,
     });
@@ -146,7 +190,7 @@ describe("applyVenue", () => {
       password_hash: string;
     }>(sql`
       select display_name, role, first_names, last_names, locale, pin_hash, password_hash
-      from persons where tenant_id = ${result.tenantId}`);
+      from persons `);
     expect(people.rows).toHaveLength(1);
     // This request carries no real names and no UI-language preference, so the insert binds null for
     // all three columns and the row stores null — the `is null or length > 0` checks accept that,
@@ -181,7 +225,7 @@ describe("applyVenue", () => {
       passwordHash: "scrypt$pwd$hash",
       email: "clinton@example.test",
     };
-    const result = await applyVenue(planVenue(seedRequest, ALL_MODULES), {
+    await applyVenue(planVenue(seedRequest, ALL_MODULES), {
       db: suite.db,
       modules: ALL_MODULES,
     });
@@ -193,7 +237,7 @@ describe("applyVenue", () => {
       locale: string | null;
     }>(sql`
       select display_name, first_names, last_names, locale
-      from persons where tenant_id = ${result.tenantId}`);
+      from persons `);
     expect(people.rows).toEqual([
       { display_name: "Clint", first_names: "Clinton", last_names: "Gormley", locale: "en-GB" },
     ]);
@@ -205,7 +249,7 @@ describe("applyVenue", () => {
     // carries the form-factor default capabilities. A distinct tenant so the profile set is this
     // run's alone (the suite shares one database). Proven by deletion: drop the seed-device-profiles
     // handler in applyVenue and this reads zero rows.
-    const result = await applyVenue(planVenue(request("B10101010"), ALL_MODULES), {
+    await applyVenue(planVenue(request("B10101010"), ALL_MODULES), {
       db: suite.db,
       modules: ALL_MODULES,
     });
@@ -217,7 +261,7 @@ describe("applyVenue", () => {
       inactivity_timeout_seconds: number | null;
     }>(sql`
       select name, canvas_id, capabilities, inactivity_timeout_seconds from device_profiles
-      where tenant_id = ${result.tenantId} order by name`);
+       order by name`);
     // The seeded inactivity timeout reaches the DB only through venue-plan → applyVenue: the counter
     // till and handheld each carry 300 s, the kitchen display none. Proven by deletion: drop the
     // `inactivityTimeoutSeconds` field from planVenue's profile mapping and the counter/handheld read
@@ -243,7 +287,7 @@ describe("applyVenue", () => {
     // The profiles belong to the tenant, so a same-venue re-run must not duplicate
     // them. applyVenue find-or-creates by name. Proven by deletion: drop the existing-name filter and
     // the second run throws device_profile.name_taken (the per-tenant name unique).
-    const first = await applyVenue(planVenue(request("B20202020"), ALL_MODULES), {
+    await applyVenue(planVenue(request("B20202020"), ALL_MODULES), {
       db: suite.db,
       modules: ALL_MODULES,
     });
@@ -252,7 +296,7 @@ describe("applyVenue", () => {
       modules: ALL_MODULES,
     });
     const count = await suite.db.execute<{ n: number }>(sql`
-      select count(*)::int as n from device_profiles where tenant_id = ${first.tenantId}`);
+      select count(*)::int as n from device_profiles `);
     expect(count.rows[0]?.n).toBe(3); // three, not six
   });
 
@@ -264,17 +308,17 @@ describe("applyVenue", () => {
       passwordHash: "scrypt$pwd$hash",
       email: "owner@x.com",
     };
-    const withEmailResult = await applyVenue(planVenue(withEmail, ALL_MODULES), {
+    await applyVenue(planVenue(withEmail, ALL_MODULES), {
       db: suite.db,
       modules: ALL_MODULES,
     });
 
     const seeded = await suite.db.execute<{ email: string | null }>(sql`
-      select email from persons where tenant_id = ${withEmailResult.tenantId} and role = 'admin'`);
+      select email from persons where role = 'admin'`);
     expect(seeded.rows[0]?.email).toBe("owner@x.com");
   });
 
-  it("reuses the tenant on a re-run rather than duplicating it (idempotent tenant, spec D8)", async () => {
+  it("reuses the taxpayer row on a re-run rather than duplicating it (spec D8)", async () => {
     const first = await applyVenue(planVenue(request("B99999999"), ALL_MODULES), {
       db: suite.db,
       modules: ALL_MODULES,
@@ -283,7 +327,6 @@ describe("applyVenue", () => {
       db: suite.db,
       modules: ALL_MODULES,
     });
-    expect(second.tenantId).toBe(first.tenantId); // same deterministic id, reused
 
     const tenants = await suite.db.execute<{ n: number }>(sql`
       select count(*)::int as n from tenants where country = 'ES' and tax_id = 'B99999999'`);
@@ -297,9 +340,9 @@ describe("applyVenue", () => {
       nodes: number;
     }>(sql`
       select
-        (select count(*) from locations where tenant_id = ${first.tenantId})::int as locations,
-        (select count(*) from tills where tenant_id = ${first.tenantId})::int as tills,
-        (select count(*) from nodes where tenant_id = ${first.tenantId})::int as nodes`);
+        (select count(*) from locations )::int as locations,
+        (select count(*) from tills )::int as tills,
+        (select count(*) from nodes )::int as nodes`);
     expect(venueRows.rows[0]).toEqual({ locations: 1, tills: 1, nodes: 1 });
   });
 
@@ -321,7 +364,7 @@ describe("applyVenue", () => {
 
     const locations = await suite.db.execute<{ n: number }>(sql`
       select count(*)::int as n from locations
-      where tenant_id = ${deriveTenantId("ES", "B12121212")}`);
+      `);
     expect(locations.rows[0]?.n).toBe(1);
   });
 
@@ -333,19 +376,14 @@ describe("applyVenue", () => {
     // `on conflict (country, tax_id) do nothing` fires. Proven by DELETION: strip planVenue's
     // normalization and the second run inserts a distinct row (different id AND different unique-index
     // key) → the equality reads false and the count reads 2.
-    const first = await applyVenue(planVenue(request("B88888888"), ALL_MODULES), {
+    await applyVenue(planVenue(request("B88888888"), ALL_MODULES), {
       db: suite.db,
       modules: ALL_MODULES,
     });
-    const second = await applyVenue(
-      planVenue({ ...request("b88888888"), country: "es" }, ALL_MODULES),
-      {
-        db: suite.db,
-        modules: ALL_MODULES,
-      },
-    );
-    expect(second.tenantId).toBe(first.tenantId); // same canonical tenant, reused
-    expect(first.tenantId).toBe(deriveTenantId("ES", "B88888888"));
+    await applyVenue(planVenue({ ...request("b88888888"), country: "es" }, ALL_MODULES), {
+      db: suite.db,
+      modules: ALL_MODULES,
+    });
 
     const tenants = await suite.db.execute<{ n: number }>(sql`
       select count(*)::int as n from tenants
@@ -358,7 +396,7 @@ describe("applyVenue", () => {
     // add a second role='admin' person every run; the conditional seed (insert-where-not-exists)
     // makes the re-run a no-op, mirroring ensure-tenant. Proven by DELETION: revert seed-admin to a
     // plain insert and this assertion reads 2.
-    const first = await applyVenue(planVenue(request("B77777777"), ALL_MODULES), {
+    await applyVenue(planVenue(request("B77777777"), ALL_MODULES), {
       db: suite.db,
       modules: ALL_MODULES,
     });
@@ -366,11 +404,10 @@ describe("applyVenue", () => {
       db: suite.db,
       modules: ALL_MODULES,
     });
-    expect(first.tenantId).toBe(deriveTenantId("ES", "B77777777"));
 
     const admins = await suite.db.execute<{ n: number }>(sql`
       select count(*)::int as n from persons
-      where tenant_id = ${first.tenantId} and role = 'admin'`);
+      where role = 'admin'`);
     expect(admins.rows[0]?.n).toBe(1); // exactly one admin, not one per run
   });
 
@@ -416,13 +453,12 @@ describe("applyVenue", () => {
 
   it("never returns a phantom series id when ON CONFLICT drops a colliding series", async () => {
     // planVenue rejects equal codes, so this hand-builds the colliding plan directly to prove the
-    // apply-side gate: two create-series sharing (tenant, node, code), the second dropped by
+    // apply-side gate: two create-series sharing (node, code), the second dropped by
     // ON CONFLICT DO NOTHING. Its id must NOT reach the result, and the venue must end with exactly
     // one series row — the honest reflection of what was written.
     const taxId = "B22222222";
-    const tenantId = deriveTenantId("ES", taxId);
     const collidingPlan: VenueAction[] = [
-      { kind: "ensure-tenant", tenantId, country: "ES", taxId, legalName: "Deli SL" },
+      { kind: "ensure-tenant", country: "ES", taxId, legalName: "Deli SL" },
       {
         kind: "create-location",
         name: "Mostrador",
@@ -459,9 +495,8 @@ describe("applyVenue", () => {
     // VenueResult with `tillId === ""` — a venue with no real till, which fails confusingly later
     // (recordSale needs one). A post-loop completeness guard names the missing step instead.
     const taxId = "B44444444";
-    const tenantId = deriveTenantId("ES", taxId);
     const planWithoutTill: VenueAction[] = [
-      { kind: "ensure-tenant", tenantId, country: "ES", taxId, legalName: "Deli SL" },
+      { kind: "ensure-tenant", country: "ES", taxId, legalName: "Deli SL" },
       {
         kind: "create-location",
         name: "Mostrador",
@@ -494,10 +529,8 @@ describe("applyVenue", () => {
     // guard turns that into a clear plan-integrity Error BEFORE any such write, not an operator-facing
     // AppError: a malformed plan is a programming bug, not operator input.
     const taxId = "B33333333";
-    const tenantId = deriveTenantId("ES", taxId);
     const ensure: VenueAction = {
       kind: "ensure-tenant",
-      tenantId,
       country: "ES",
       taxId,
       legalName: "Deli SL",
@@ -631,7 +664,7 @@ describe("applyVenue", () => {
         applyVenue(planVenue(request(taxId), modules), { db: suite.db, modules }),
       ).rejects.toThrow("seed failed");
       const tenant = await suite.db.execute(
-        sql`select 1 from tenants where id = ${deriveTenantId("ES", taxId)}`,
+        sql`select 1 from tenants where country = 'ES' and tax_id = ${taxId}`,
       );
       expect(tenant.rows).toEqual([]);
     });

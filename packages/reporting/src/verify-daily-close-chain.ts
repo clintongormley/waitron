@@ -1,7 +1,7 @@
 import { asc, eq } from "drizzle-orm";
 import { dailyCloseChain, dailyCloses } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import type { NodeId, TenantId } from "@waitron/shared";
+import type { NodeId } from "@waitron/shared";
 import { computeCloseEntryHash } from "./daily-close-hash.js";
 import type { CloseHashContent } from "./daily-close-hash.js";
 import type { DailyCloseSnapshot } from "./close-types.js";
@@ -23,7 +23,7 @@ export type CloseChainBreakReason =
   "sequence" | "genesis" | "broken_link" | "hash_mismatch" | "tail_truncation" | "missing_head";
 
 /**
- * The result of re-walking a whole `(tenant, node)` close chain: `ok: true`, or the FIRST break with
+ * The result of re-walking a whole node's close chain: `ok: true`, or the FIRST break with
  * the offending `brokenAt` sequence position and a stable English `reason`. Mirrors the workforce
  * time-entry `ChainVerification` shape (`packages/workforce/src/chain-hash.ts`).
  */
@@ -31,7 +31,7 @@ export type DailyCloseChainVerification =
   { ok: true } | { ok: false; brokenAt: number; reason: CloseChainBreakReason };
 
 /**
- * Re-walks a `(tenant, node)` frozen-daily-close chain end to end and reports the FIRST break, or
+ * Re-walks a node's frozen-daily-close chain end to end and reports the FIRST break, or
  * `ok: true` if every close is contiguous, correctly linked, and reproduces its own hash. Read-only:
  * an inspector's / demo's audit, NOT the sale-time predecessor check the fiscal chain runs — so it
  * takes no lock and returns a structured result rather than throwing.
@@ -49,7 +49,7 @@ export type DailyCloseChainVerification =
  * advances the head in ONE transaction, so the head is always exactly the true tip. So the last walked
  * close's `(sequence_no, entry_hash)` must equal the head's — a shortfall is `tail_truncation`.
  *
- * An ABSENT head is a never-closed `(tenant, node)` ONLY when there are no closes — then, and only
+ * An ABSENT head is a never-closed node ONLY when there are no closes — then, and only
  * then, `ok: true` vacuously (a fresh node's chain is not broken, it is unstarted). An absent head
  * WITH surviving closes is not benign: because the head and the first close are written in the same
  * transaction, closes without a head never occur naturally, so it is a deletion of the very authority
@@ -58,7 +58,6 @@ export type DailyCloseChainVerification =
  */
 export async function verifyDailyCloseChain(
   tx: Transaction,
-  tenantId: TenantId,
   nodeId: NodeId,
 ): Promise<DailyCloseChainVerification> {
   const rows = await tx
@@ -103,7 +102,6 @@ export async function verifyDailyCloseChain(
     //    truncates before storing), so the recompute matches. The content is reconstructed from the
     //    row's columns exactly as `recordDailyClose` built it.
     const content: CloseHashContent = {
-      tenantId,
       nodeId,
       businessDay: row.businessDay,
       sequenceNo: row.sequenceNo,

@@ -25,7 +25,6 @@ async function tempDir(): Promise<string> {
 
 const STANDBY_NODE_ID = "33333333-3333-4333-8333-333333333333";
 const PENDING: PendingAdoption = {
-  tenantId: "11111111-1111-4111-8111-111111111111",
   locationId: "55555555-5555-4555-8555-555555555555",
   standby: { nodeId: STANDBY_NODE_ID, publicKey: "pub", privateKey: "priv" },
   nodeName: "standby",
@@ -79,7 +78,6 @@ describe("runFinishAdoption", () => {
     const statuses = [status(3, 1), status(3, 2), status(3, 3)];
     let read = 0;
     let established: unknown;
-    let viewerTenant: string | undefined;
     await runFinishAdoption({
       replicationDb: dummyDb,
       ring: dummyRing,
@@ -91,17 +89,13 @@ describe("runFinishAdoption", () => {
         established = args;
         return Promise.resolve();
       },
-      ensureViewer: (tenantId) => {
-        viewerTenant = tenantId;
-        return Promise.resolve();
-      },
+      ensureViewer: () => Promise.resolve(),
       sleep: immediateSleep,
       log: noop as never,
       signal: new AbortController().signal,
     });
     expect(read).toBe(3); // two not-ready polls + the ready one
-    expect(established).toMatchObject({ tenantId: PENDING.tenantId, standby: PENDING.standby });
-    expect(viewerTenant).toBe(PENDING.tenantId);
+    expect(established).toMatchObject({ standby: PENDING.standby });
     expect(await readPendingAdoption(dir)).toBeNull(); // file unlinked
   });
 

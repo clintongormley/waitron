@@ -26,11 +26,7 @@ import { validateThemeOverride } from "./theme.js";
 
 /** The authored theme override, or `undefined` when nobody has picked one (get-with-default
  * = undefined; the caller falls back to the design-system defaults, no row is seeded — design §9). */
-export async function getTenantTheme(
-  tx: Transaction,
-  tenantId: string,
-): Promise<ThemeOverride | undefined> {
-  void tenantId;
+export async function getTenantTheme(tx: Transaction): Promise<ThemeOverride | undefined> {
   const [row] = await tx.select({ theme: tenantThemes.theme }).from(tenantThemes);
   if (row === undefined) return undefined;
   return row.theme as ThemeOverride;
@@ -39,7 +35,7 @@ export async function getTenantTheme(
 /** Author (create or replace) the base theme. Manager/admin only (`layout.configure`). */
 export async function putTenantTheme(
   tx: Transaction,
-  input: { managementSessionId: string; tenantId?: string; theme: unknown },
+  input: { managementSessionId: string; theme: unknown },
 ): Promise<void> {
   await authorizeManager(tx, {
     managementSessionId: input.managementSessionId,

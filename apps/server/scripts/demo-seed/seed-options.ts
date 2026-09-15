@@ -18,7 +18,6 @@ import {
   setMenuItemOptionGroups,
   setProductOptionGroups,
 } from "@waitron/catalogue";
-import type { TenantId } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
 import { PRODUCT_OPTION_GROUPS, type SeedLocale } from "./menu.js";
 
@@ -38,7 +37,6 @@ export interface SeedOptionsInput {
  */
 export async function seedOptions(
   tx: Transaction,
-  tenantId: TenantId,
   { productsByImage, menuItemsByProduct, locale }: SeedOptionsInput,
 ): Promise<void> {
   for (const { productImage, groups } of PRODUCT_OPTION_GROUPS) {
@@ -50,7 +48,7 @@ export async function seedOptions(
     const menuGroups: { groupId: string; options: { optionId: string; priceDelta: string }[] }[] =
       [];
     for (const group of groups) {
-      const created = await createOptionGroup(tx, tenantId, {
+      const created = await createOptionGroup(tx, {
         name: { [locale]: group.name[locale] },
         minSelect: group.minSelect,
         maxSelect: group.maxSelect,
@@ -62,7 +60,7 @@ export async function seedOptions(
       // "Large", "Rare" before "Medium" before "Well done", etc.
       const menuOptions: { optionId: string; priceDelta: string }[] = [];
       for (const [index, item] of group.items.entries()) {
-        const createdItem = await createOptionGroupItem(tx, tenantId, created.id, {
+        const createdItem = await createOptionGroupItem(tx, created.id, {
           name: { [locale]: item.name[locale] },
           priceDelta: item.priceDelta,
           vatClass: item.vatClass,
@@ -77,7 +75,6 @@ export async function seedOptions(
       const demoModifiers = [
         await createModifier(
           tx,
-          tenantId,
           {
             type: "text",
             name: { en: "Demo preparation note", es: "Nota de preparación demo" },
@@ -87,7 +84,6 @@ export async function seedOptions(
         ),
         await createModifier(
           tx,
-          tenantId,
           {
             type: "extras",
             name: { en: "Demo add-ons", es: "Extras demo" },
@@ -128,7 +124,6 @@ export async function seedOptions(
         ),
         await createModifier(
           tx,
-          tenantId,
           {
             type: "options",
             name: { en: "Demo cup", es: "Taza demo" },
@@ -173,7 +168,7 @@ export async function seedOptions(
         });
       }
     }
-    await setProductOptionGroups(tx, tenantId, productId, groupIds);
+    await setProductOptionGroups(tx, productId, groupIds);
     const menuItemId = menuItemsByProduct.get(productId);
     if (menuItemId === undefined) {
       throw new Error(`seedOptions: no menu item for product '${productId}'`);

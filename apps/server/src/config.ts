@@ -134,9 +134,9 @@ export interface ServerConfig {
    * per-LOCATION column, not an env var, so `boot.ts` reads it via `readOrderFlow` and spreads it in
    * to form the full `TillConfig` handed to the till API (see `till-config.ts`'s `orderFlow` note).
    *
-   * OPTIONAL (slice 1b): an unprovisioned box has no venue, so the five `WAITRON_TILL_*_ID` are
+   * OPTIONAL (slice 1b): an unprovisioned box has no venue, so the four `WAITRON_TILL_*_ID` are
    * absent and this is `undefined` — SETUP MODE. `tryLoadTillConfig` returns it undefined when NONE
-   * of the five are set, the loaded identity when ALL are, and throws on a PARTIAL set (a
+   * of the four are set, the loaded identity when ALL are, and throws on a PARTIAL set (a
    * half-configured server is a bug, never a setup box). Boot branches on `config.till === undefined`
    * to enter setup mode, and otherwise narrows it once (an early return) before its trading-only
    * consumers. */
@@ -821,7 +821,7 @@ export function loadConfig(
     // The till's own fiscal identity, resolved the same way every other caller does — see
     // `till-config.ts`. Loaded AFTER `required(env, "DATABASE_URL")` above so a host missing both
     // still reports the DATABASE_URL fault first, matching this file's existing ordering.
-    // `tryLoadTillConfig` (not `loadTillConfig`): NONE of the five ids set → undefined (setup mode),
+    // `tryLoadTillConfig` (not `loadTillConfig`): NONE of the four ids set → undefined (setup mode),
     // ALL set → the loaded identity, a PARTIAL set → throws (a half-configured server is a bug).
     till: tryLoadTillConfig(env),
     // The dashboard's passkey RP ID + origin: loopback defaults in preproduction/dev, but REQUIRED in

@@ -25,8 +25,9 @@ interface Seeded {
 async function seedDeviceAndReader(db: Database): Promise<Seeded> {
   // One `tenants` row so the database looks like a provisioned one; nothing below references it.
   await db.execute(sql`
-    insert into tenants (country, tax_id, legal_name)
-    values ('ES', ${freshNif()}, 'Test SL')`);
+    insert into tenants (id, country, tax_id, legal_name)
+    values (1, 'ES', ${freshNif()}, 'Test SL')
+    on conflict (id) do nothing`);
   const l = await db.execute<{ id: string }>(sql`
     insert into locations (name, invoice_locales, operation_description) values ('Counter', array['es'], 'Hostelería') returning id`);
   const locationId = l.rows[0]!.id;

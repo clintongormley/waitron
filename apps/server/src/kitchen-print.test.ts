@@ -67,24 +67,23 @@ interface Venue {
  *  gets its OWN tenant, so its print jobs and order numbers are its own and the suite is
  *  order-independent (CLAUDE.md §4). Mirrors working-order.test.ts / station-printers.test.ts setup. */
 async function setupVenue(): Promise<Venue> {
-  const tenantId = await seedTenant(db);
+  await seedTenant(db);
   await seedLegacySellingUnits(db);
   const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
+    insert into locations (name, invoice_locales, operation_description)
+    values ('Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
   const locationId = loc.rows[0]!.id;
   const till = await db.execute<{ id: string }>(sql`
-    insert into tills (tenant_id, location_id, name)
-    values (${tenantId}, ${locationId}, 'Caja 1') returning id`);
-  const nodeId = await seedNode(db, tenantId, brandLocationId(locationId));
+    insert into tills (location_id, name)
+    values (${locationId}, 'Caja 1') returning id`);
+  const nodeId = await seedNode(db, brandLocationId(locationId));
   const catalogueId = await withTransaction(db, async (tx) => {
     await asAppUser(tx);
-    const cat = await createCatalogue(tx, tenantId, { name: "Carta" });
+    const cat = await createCatalogue(tx, { name: "Carta" });
     await assignCatalogueToLocation(tx, locationId, cat.id);
     return cat.id;
   });
   const cfg: TillConfig = {
-    tenantId,
     tillId: brandTillId(till.rows[0]!.id),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
@@ -99,7 +98,7 @@ async function setupVenue(): Promise<Venue> {
 
 /** The tenant + location scope the printing verbs run under. */
 function printCfg(cfg: TillConfig): PrintConfig {
-  return { tenantId: cfg.tenantId, locationId: cfg.locationId };
+  return { locationId: cfg.locationId };
 }
 
 /** Run `fn` on a transaction scoped to the venue's tenant as `app_user`, the shape every
@@ -138,7 +137,7 @@ async function makeProduct(
   name: string,
   route: { stationId?: string; courseId?: string } = {},
 ): Promise<string> {
-  const { id } = await createProduct(tx, cfg.tenantId, {
+  const { id } = await createProduct(tx, {
     catalogueId,
     categoryId: null,
     name: name,
@@ -209,7 +208,6 @@ async function fireNewOrder(
  *  NO station — a modifier never routes to its own station (that is the point of the parent-only rule). */
 async function addOption(
   tx: Transaction,
-  tenantId: TillConfig["tenantId"],
   productId: string,
   name: string,
   maxQuantity = 1,
@@ -217,7 +215,6 @@ async function addOption(
   const [group] = await tx
     .insert(optionGroups)
     .values({
-      tenantId,
       name: { [LOCALE]: `${name} group` },
       minSelect: 0,
       // Per-option quantity counts toward maxSelect (working-order.ts), so a maxQuantity>1 option needs
@@ -230,7 +227,6 @@ async function addOption(
   const [item] = await tx
     .insert(optionGroupItems)
     .values({
-      tenantId,
       groupId: group!.id,
       name: { [LOCALE]: name },
       priceDelta: "0.50",
@@ -240,7 +236,6 @@ async function addOption(
     })
     .returning({ id: optionGroupItems.id });
   await tx.insert(productOptionGroups).values({
-    tenantId,
     productId,
     groupId: group!.id,
     sort: 0,
@@ -266,9 +261,9 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
       const pCocina = await makePrinter(tx, cfg, "Cocina printer", "station");
       const pGroup = await makePrinter(tx, cfg, "Pase", "order");
       // Station printer on Cocina; group printer on BOTH Cocina and Barra.
-      await attachPrinterToStation(tx, printCfg(cfg), { stationId: cocina.id, printerId: pCocina });
-      await attachPrinterToStation(tx, printCfg(cfg), { stationId: cocina.id, printerId: pGroup });
-      await attachPrinterToStation(tx, printCfg(cfg), { stationId: barra.id, printerId: pGroup });
+      await attachPrinterToStation(tx, { stationId: cocina.id, printerId: pCocina });
+      await attachPrinterToStation(tx, { stationId: cocina.id, printerId: pGroup });
+      await attachPrinterToStation(tx, { stationId: barra.id, printerId: pGroup });
       const steak = await makeProduct(tx, cfg, catalogueId, "Chuleton", { stationId: cocina.id });
       const beer = await makeProduct(tx, cfg, catalogueId, "Cerveza", { stationId: barra.id });
 
@@ -302,8 +297,8 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
       const barra = await createStation(tx, cfg, { name: "Barra" });
       const pActive = await makePrinter(tx, cfg, "Cocina printer", "station");
       const pDead = await makePrinter(tx, cfg, "Barra printer", "station");
-      await attachPrinterToStation(tx, printCfg(cfg), { stationId: cocina.id, printerId: pActive });
-      await attachPrinterToStation(tx, printCfg(cfg), { stationId: barra.id, printerId: pDead });
+      await attachPrinterToStation(tx, { stationId: cocina.id, printerId: pActive });
+      await attachPrinterToStation(tx, { stationId: barra.id, printerId: pDead });
       // Deactivate AFTER attaching (attach requires the printer live). The mapping now points at an
       // inactive printer, which enqueueKitchenTickets filters out — so Barra fires but enqueues nothing,
       // and enqueuePrintJob (which would throw printer.not_found on an inactive id, aborting the fire tx)
@@ -330,7 +325,7 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
     const { printerId, afterRound1, afterRound2, afterRefire } = await asApp(cfg, async (tx) => {
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const printerId = await makePrinter(tx, cfg, "Cocina printer", "station");
-      await attachPrinterToStation(tx, printCfg(cfg), { stationId: cocina.id, printerId });
+      await attachPrinterToStation(tx, { stationId: cocina.id, printerId });
       const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
       const pri = await createCourse(tx, cfg, { name: "Principales", displayOrder: 1 });
       const soup = await makeProduct(tx, cfg, catalogueId, "Sopa", {
@@ -384,14 +379,14 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
     const { printerId, jobs } = await asApp(cfg, async (tx) => {
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const printerId = await makePrinter(tx, cfg, "Cocina printer", "station");
-      await attachPrinterToStation(tx, printCfg(cfg), { stationId: cocina.id, printerId });
+      await attachPrinterToStation(tx, { stationId: cocina.id, printerId });
       const drink = await makeProduct(tx, cfg, catalogueId, "Cafe con leche", {
         stationId: cocina.id,
       });
       // A tab bound to a dining table → the order carries the table label the ticket header prints.
       const table = await tx.execute<{ id: string }>(sql`
-        insert into dining_tables (tenant_id, location_id, label)
-        values (${cfg.tenantId}, ${cfg.locationId}, 'Mesa 5') returning id`);
+        insert into dining_tables (location_id, label)
+        values (${cfg.locationId}, 'Mesa 5') returning id`);
       const { tabId } = await openTab(tx, cfg, { tableId: table.rows[0]!.id });
       // Fire the round with the FOREIGN-locale config so name resolution takes the fallback path.
       await addTabRound(tx, foreignCfg, tabId, [line(drink)]);
@@ -410,7 +405,7 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
     const setup = await asApp(cfg, async (tx) => {
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const printerId = await makePrinter(tx, cfg, "Cocina printer", "station");
-      await attachPrinterToStation(tx, printCfg(cfg), { stationId: cocina.id, printerId });
+      await attachPrinterToStation(tx, { stationId: cocina.id, printerId });
       const steak = await makeProduct(tx, cfg, catalogueId, "Chuleton", { stationId: cocina.id });
       return { printerId, steak };
     });
@@ -438,14 +433,14 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
     const { printerId, jobs } = await asApp(cfg, async (tx) => {
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const printerId = await makePrinter(tx, cfg, "Cocina printer", "station");
-      await attachPrinterToStation(tx, printCfg(cfg), { stationId: cocina.id, printerId });
+      await attachPrinterToStation(tx, { stationId: cocina.id, printerId });
       const drink = await makeProduct(tx, cfg, catalogueId, "Zumo", { stationId: cocina.id });
       const orderId = randomUUID();
       await createOpenOrder(tx, cfg, orderId, [line(drink)], null);
       // A counter-delivery table the order delivers to — the order points AT it (no tab back-pointer).
       const table = await tx.execute<{ id: string }>(sql`
-        insert into dining_tables (tenant_id, location_id, label)
-        values (${cfg.tenantId}, ${cfg.locationId}, 'Barra 3') returning id`);
+        insert into dining_tables (location_id, label)
+        values (${cfg.locationId}, 'Barra 3') returning id`);
       await tx.execute(sql`
         update working_orders set delivery_table_id = ${table.rows[0]!.id} where id = ${orderId}`);
       const [lineRow] = await tx
@@ -510,7 +505,7 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
       const passPc858 = await makePrinter(tx, cfg, "Pase 858", "order");
       await updatePrinter(tx, printCfg(cfg), passPc858, { characterSet: "pc858" });
       for (const printerId of [wide, wideTwin, narrow, pass, passPc858]) {
-        await attachPrinterToStation(tx, printCfg(cfg), { stationId: cocina.id, printerId });
+        await attachPrinterToStation(tx, { stationId: cocina.id, printerId });
       }
       const steak = await makeProduct(
         tx,
@@ -559,7 +554,7 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
       const narrow = await makePrinter(tx, cfg, "Cocina 58", "order");
       await updatePrinter(tx, printCfg(cfg), narrow, { paperWidth: "58mm" });
       for (const printerId of [wide, narrow]) {
-        await attachPrinterToStation(tx, printCfg(cfg), { stationId: cocina.id, printerId });
+        await attachPrinterToStation(tx, { stationId: cocina.id, printerId });
       }
       const steak = await makeProduct(
         tx,
@@ -602,12 +597,12 @@ describe("ordering modifiers on the kitchen ticket (parent-only ticket_items, ch
     const { orderId, parentLineId, ticketItemRows } = await asApp(cfg, async (tx) => {
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const printerId = await makePrinter(tx, cfg, "Cocina printer", "station");
-      await attachPrinterToStation(tx, printCfg(cfg), { stationId: cocina.id, printerId });
+      await attachPrinterToStation(tx, { stationId: cocina.id, printerId });
       // A dish with TWO options — even with a DEFAULT station present (so a child would otherwise route
       // to it), only the parent must become a ticket item.
       const cortado = await makeProduct(tx, cfg, catalogueId, "Cortado", { stationId: cocina.id });
-      const grande = await addOption(tx, cfg.tenantId, cortado, "Grande");
-      const avena = await addOption(tx, cfg.tenantId, cortado, "Leche avena");
+      const grande = await addOption(tx, cortado, "Grande");
+      const avena = await addOption(tx, cortado, "Leche avena");
 
       const orderId = await fireNewOrder(tx, cfg, [
         {
@@ -645,10 +640,10 @@ describe("ordering modifiers on the kitchen ticket (parent-only ticket_items, ch
     const { printerId, jobs } = await asApp(cfg, async (tx) => {
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const printerId = await makePrinter(tx, cfg, "Cocina printer", "station");
-      await attachPrinterToStation(tx, printCfg(cfg), { stationId: cocina.id, printerId });
+      await attachPrinterToStation(tx, { stationId: cocina.id, printerId });
       const cortado = await makeProduct(tx, cfg, catalogueId, "Cortado", { stationId: cocina.id });
-      const grande = await addOption(tx, cfg.tenantId, cortado, "Grande");
-      const avena = await addOption(tx, cfg.tenantId, cortado, "Leche avena");
+      const grande = await addOption(tx, cortado, "Grande");
+      const avena = await addOption(tx, cortado, "Leche avena");
 
       await fireNewOrder(tx, cfg, [
         {
@@ -676,7 +671,7 @@ describe("ordering modifiers on the kitchen ticket (parent-only ticket_items, ch
     const { printerId, jobs } = await asApp(cfg, async (tx) => {
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const printerId = await makePrinter(tx, cfg, "Cocina printer", "station");
-      await attachPrinterToStation(tx, printCfg(cfg), { stationId: cocina.id, printerId });
+      await attachPrinterToStation(tx, { stationId: cocina.id, printerId });
       const chuleton = await makeProduct(tx, cfg, catalogueId, "Chuleton", {
         stationId: cocina.id,
       });
@@ -706,10 +701,10 @@ describe("ordering modifiers on the kitchen ticket (parent-only ticket_items, ch
     const { printerId, jobs } = await asApp(cfg, async (tx) => {
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const printerId = await makePrinter(tx, cfg, "Cocina printer", "station");
-      await attachPrinterToStation(tx, printCfg(cfg), { stationId: cocina.id, printerId });
+      await attachPrinterToStation(tx, { stationId: cocina.id, printerId });
       const cortado = await makeProduct(tx, cfg, catalogueId, "Cortado", { stationId: cocina.id });
-      const grande = await addOption(tx, cfg.tenantId, cortado, "Grande", 3); // maxQuantity 3 admits a ×2
-      const avena = await addOption(tx, cfg.tenantId, cortado, "Leche avena"); // plain (max 1)
+      const grande = await addOption(tx, cortado, "Grande", 3); // maxQuantity 3 admits a ×2
+      const avena = await addOption(tx, cortado, "Leche avena"); // plain (max 1)
 
       // Dish quantity 1; the "Grande" option taken ×2 → child quantity 2 (per-dish 2 → "x2"); the
       // "Leche avena" option taken once → child quantity 1 (per-dish 1 → no suffix).
@@ -744,7 +739,7 @@ describe("ordering modifiers on the kitchen ticket (parent-only ticket_items, ch
       // line that resolves neither a product nor category route has nowhere to go (station.no_default).
       const barra = await createStation(tx, cfg, { name: "Barra", isDefault: false });
       const cafe = await makeProduct(tx, cfg, catalogueId, "Cafe", { stationId: barra.id });
-      const grande = await addOption(tx, cfg.tenantId, cafe, "Grande");
+      const grande = await addOption(tx, cafe, "Grande");
 
       // This must NOT throw station.no_default — the child is filtered before station resolution.
       const orderId = await fireNewOrder(tx, cfg, [
@@ -773,11 +768,11 @@ describe("reprintOrderTickets (re-enqueue the WHOLE current ticket for an order)
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const pStation = await makePrinter(tx, cfg, "Cocina printer", "station");
       const pGroup = await makePrinter(tx, cfg, "Pase", "order");
-      await attachPrinterToStation(tx, printCfg(cfg), {
+      await attachPrinterToStation(tx, {
         stationId: cocina.id,
         printerId: pStation,
       });
-      await attachPrinterToStation(tx, printCfg(cfg), { stationId: cocina.id, printerId: pGroup });
+      await attachPrinterToStation(tx, { stationId: cocina.id, printerId: pGroup });
       const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
       const pri = await createCourse(tx, cfg, { name: "Principales", displayOrder: 1 });
       const soup = await makeProduct(tx, cfg, catalogueId, "Sopa", {
@@ -832,7 +827,7 @@ describe("reprintOrderTickets (re-enqueue the WHOLE current ticket for an order)
     const jobs = await asApp(cfg, async (tx) => {
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const printerId = await makePrinter(tx, cfg, "Cocina printer", "station");
-      await attachPrinterToStation(tx, printCfg(cfg), { stationId: cocina.id, printerId });
+      await attachPrinterToStation(tx, { stationId: cocina.id, printerId });
       await makeProduct(tx, cfg, catalogueId, "Chuleton", { stationId: cocina.id });
 
       // An order id that has no fired ticket_items at all — a well-formed but unknown/never-fired order.
@@ -853,7 +848,7 @@ it("prints stored nonprice modifier facts when enqueueing a kitchen ticket", asy
   const jobs = await asApp(cfg, async (tx) => {
     const station = await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
     const printerId = await makePrinter(tx, cfg, "Kitchen printer", "station");
-    await attachPrinterToStation(tx, printCfg(cfg), { stationId: station.id, printerId });
+    await attachPrinterToStation(tx, { stationId: station.id, printerId });
     const productId = await makeProduct(tx, cfg, catalogueId, "Coffee", { stationId: station.id });
     const orderId = randomUUID();
     const { lineRows } = await createOpenOrder(tx, cfg, orderId, [line(productId)], null);
@@ -904,8 +899,8 @@ async function ticketWithNames(frozen: {
   const jobs = await asApp(cfg, async (tx) => {
     const station = await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
     const printerId = await makePrinter(tx, cfg, "Kitchen printer", "station");
-    await attachPrinterToStation(tx, printCfg(cfg), { stationId: station.id, printerId });
-    const { id: productId } = await createProduct(tx, cfg.tenantId, {
+    await attachPrinterToStation(tx, { stationId: station.id, printerId });
+    const { id: productId } = await createProduct(tx, {
       catalogueId,
       categoryId: null,
       name: "Coffee",

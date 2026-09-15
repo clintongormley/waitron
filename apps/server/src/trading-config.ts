@@ -15,7 +15,6 @@ export type OnboardingIntent = "demo" | "prepare" | "live";
  * sync-pool URL — a mirror applies through a native subscription, not an outbox pull.
  */
 export interface TradingConfig {
-  tenantId: string;
   tillId: string;
   nodeId: string;
   seriesId: string;
@@ -40,7 +39,6 @@ export interface TradingConfig {
 export async function writeTradingEnv(stateDir: string, cfg: TradingConfig): Promise<string> {
   const path = join(stateDir, "trading.env");
   const body = formatEnvFile({
-    WAITRON_TILL_TENANT_ID: cfg.tenantId,
     WAITRON_TILL_TILL_ID: cfg.tillId,
     WAITRON_TILL_NODE_ID: cfg.nodeId,
     WAITRON_TILL_SERIES_ID: cfg.seriesId,

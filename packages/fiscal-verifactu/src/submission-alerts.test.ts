@@ -13,7 +13,6 @@ const pg = usePgliteDb({ migrations: TEST_MIGRATIONS });
 
 // `AlertSource.read` (`@waitron/module`) still takes a tenant id and this source ignores it; it goes
 // when `apps/server`, its last supplier, is converted.
-const INERT_TENANT_ID = "00000000-0000-4000-8000-000000000001";
 
 const NOW = new Date("2026-09-15T12:00:00Z");
 const hoursAgo = (h: number): Date => new Date(NOW.getTime() - h * 3_600_000);
@@ -91,9 +90,7 @@ describe("fiscalSubmissionSource", () => {
     await seedWaiting(pg.db, id, hoursAgo(3), "pendiente");
     await withTransaction(pg.db, async (tx) => {
       await asAppUser(tx);
-      expect(
-        await fiscalSubmissionSource.read({ tx, tenantId: INERT_TENANT_ID as never, now: NOW }),
-      ).toEqual([]);
+      expect(await fiscalSubmissionSource.read({ tx, now: NOW })).toEqual([]);
     });
   });
 
@@ -104,7 +101,6 @@ describe("fiscalSubmissionSource", () => {
       await asAppUser(tx);
       const [a] = await fiscalSubmissionSource.read({
         tx,
-        tenantId: INERT_TENANT_ID as never,
         now: NOW,
       });
       expect(a).toMatchObject({
@@ -120,7 +116,6 @@ describe("fiscalSubmissionSource", () => {
       await asAppUser(tx);
       const [a] = await fiscalSubmissionSource.read({
         tx,
-        tenantId: INERT_TENANT_ID as never,
         now: NOW,
       });
       expect(a).toMatchObject({
@@ -139,7 +134,6 @@ describe("fiscalSubmissionSource", () => {
       await asAppUser(tx);
       const alerts = await fiscalSubmissionSource.read({
         tx,
-        tenantId: INERT_TENANT_ID as never,
         now: NOW,
       });
       const stopped = alerts.find((a) => a.code === "fiscal.submission_stopped");
@@ -160,7 +154,6 @@ describe("fiscalSubmissionSource", () => {
       await asAppUser(tx);
       const [a] = await fiscalSubmissionSource.read({
         tx,
-        tenantId: INERT_TENANT_ID as never,
         now: NOW,
       });
       expect(a).toMatchObject({
@@ -176,7 +169,6 @@ describe("fiscalSubmissionSource", () => {
       await asAppUser(tx);
       const [a] = await fiscalSubmissionSource.read({
         tx,
-        tenantId: INERT_TENANT_ID as never,
         now: NOW,
       });
       expect(a).toMatchObject({

@@ -19,7 +19,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tenantId as brandTenantId,
   tillId as brandTillId,
   type SupportedLocale,
 } from "@waitron/shared";
@@ -64,7 +63,6 @@ const EXPECTED_SERVERS = [
   { nodeId: "cloud", url: "https://cloud.deli.test", standing: "serving-secondary" },
 ];
 
-let tenantId: string;
 let locationId: string;
 let cfg: TillConfig;
 let managerCookie: string;
@@ -75,16 +73,15 @@ const suite = usePgliteDb({
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
   timeoutMs: 60_000,
   setup: async (db) => {
-    tenantId = await seedTenant(db);
+    await seedTenant(db);
     const loc = await db.execute<{ id: string }>(sql`
-      insert into locations (tenant_id, name, invoice_locales, operation_description)
-      values (${tenantId}, 'Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
+      insert into locations (name, invoice_locales, operation_description)
+      values ('Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
     locationId = loc.rows[0]!.id;
     // The FULL TillConfig the print verbs are typed on (branded ids). Only tenantId/locationId are read
     // by the join verbs and the routes; nodeId is echoed on the pull; the other fiscal ids are unused
     // here, so a branded random uuid stands in.
     cfg = {
-      tenantId: brandTenantId(tenantId),
       tillId: brandTillId(randomUUID()),
       nodeId: brandNodeId(randomUUID()),
       seriesId: brandSeriesId(randomUUID()),
@@ -97,17 +94,15 @@ const suite = usePgliteDb({
     const { managerSid, staffSid } = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       const mgr = await tx.execute<{ id: string }>(sql`
-        insert into persons (tenant_id, display_name, pin_hash, role)
-        values (${tenantId}, 'The Manager', ${hashPin("1234")}, 'manager') returning id`);
+        insert into persons (display_name, pin_hash, role)
+        values ('The Manager', ${hashPin("1234")}, 'manager') returning id`);
       const stf = await tx.execute<{ id: string }>(sql`
-        insert into persons (tenant_id, display_name, pin_hash, role)
-        values (${tenantId}, 'The Clerk', ${hashPin("1234")}, 'staff') returning id`);
+        insert into persons (display_name, pin_hash, role)
+        values ('The Clerk', ${hashPin("1234")}, 'staff') returning id`);
       const managerSession = await startManagementSession(tx, {
-        tenantId,
         personId: mgr.rows[0]!.id,
       });
       const staffSession = await startManagementSession(tx, {
-        tenantId,
         personId: stf.rows[0]!.id,
       });
       return { managerSid: managerSession.id, staffSid: staffSession.id };
@@ -269,7 +264,7 @@ async function pull(
 async function enqueue(printerId: string, payload: Uint8Array): Promise<string> {
   return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
-    const { jobId } = await enqueuePrintJob(tx, { tenantId, locationId }, printerId, payload);
+    const { jobId } = await enqueuePrintJob(tx, { locationId }, printerId, payload);
     return jobId;
   });
 }
@@ -645,7 +640,7 @@ describe("POST /print-api/agent/jobs — inventory pull + discovery window", () 
     const app = mountApp();
     const { token } = await joinAndAccept(app);
     // A unique serial per test — the suite shares one tenant/location and the partial UNIQUE is on
-    // (tenant_id, location_id, local_key), so a fixed key would clash with a sibling test's printer.
+    // (location_id, local_key), so a fixed key would clash with a sibling test's printer.
     const serial = `SN-${randomUUID()}`;
     const printerId = await createUsbPrinter(app, serial, "Cocina USB");
     const payload = esc().text("Mesa 4").cut().bytes();
@@ -1439,8 +1434,8 @@ describe("mountPrintApi — management: recent jobs", () => {
     const app = mountApp();
     const printerId = await createPrinterVia(app, "unused", "Timestamp printer");
     await suite.db.execute(sql`
-      insert into print_jobs (tenant_id, location_id, printer_id, payload, status, delivered_at)
-      values (${tenantId}, ${locationId}, ${printerId}, decode('01', 'hex'), 'done',
+      insert into print_jobs (location_id, printer_id, payload, status, delivered_at)
+      values (${locationId}, ${printerId}, decode('01', 'hex'), 'done',
         '2020-01-02T03:04:05.678+02:00')`);
     try {
       await suite.db.execute(sql`set datestyle = 'SQL, DMY'`);
@@ -1462,14 +1457,14 @@ describe("mountPrintApi — management: recent jobs", () => {
     const printerId = await createPrinterVia(app, "unused", "Summary printer");
     const emptyId = await createPrinterVia(app, "unused", "Empty printer");
     await suite.db.execute(sql`
-      insert into print_jobs (tenant_id, location_id, printer_id, payload)
-      select ${tenantId}, ${locationId}, ${printerId}, decode('01', 'hex') from generate_series(1, 101)`);
+      insert into print_jobs (location_id, printer_id, payload)
+      select ${locationId}, ${printerId}, decode('01', 'hex') from generate_series(1, 101)`);
     await suite.db.execute(sql`
-      insert into print_jobs (tenant_id, location_id, printer_id, payload, status, attempts, created_at, delivered_at)
-      values (${tenantId}, ${locationId}, ${printerId}, decode('01','hex'), 'done', 0, '2020-01-01T00:00:00Z', '2020-01-02T00:00:00Z'),
-             (${tenantId}, ${locationId}, ${printerId}, decode('01','hex'), 'failed', 4, now(), null),
-             (${tenantId}, ${locationId}, ${printerId}, decode('01','hex'), 'failed', 5, now(), null),
-             (${tenantId}, ${locationId}, ${printerId}, decode('01','hex'), 'printing', 0, now(), null)`);
+      insert into print_jobs (location_id, printer_id, payload, status, attempts, created_at, delivered_at)
+      values (${locationId}, ${printerId}, decode('01','hex'), 'done', 0, '2020-01-01T00:00:00Z', '2020-01-02T00:00:00Z'),
+             (${locationId}, ${printerId}, decode('01','hex'), 'failed', 4, now(), null),
+             (${locationId}, ${printerId}, decode('01','hex'), 'failed', 5, now(), null),
+             (${locationId}, ${printerId}, decode('01','hex'), 'printing', 0, now(), null)`);
     const result = await send(app, "GET", "/management-api/printers", { cookie: managerCookie });
     const printers = (await result.json()) as {
       id: string;
@@ -1499,14 +1494,14 @@ describe("mountPrintApi — management: recent jobs", () => {
       const existing = (await before.json()) as { id: string; status: string }[];
       const existingPending = existing.filter((job) => job.status !== "done");
       const pending = await suite.db.execute<{ id: string }>(sql`
-        insert into print_jobs (tenant_id, location_id, printer_id, payload, status, attempts, created_at)
-        select ${tenantId}, ${locationId}, ${printerId}, decode('01', 'hex'), status::print_job_status,
+        insert into print_jobs (location_id, printer_id, payload, status, attempts, created_at)
+        select ${locationId}, ${printerId}, decode('01', 'hex'), status::print_job_status,
           attempts, '2020-01-01T00:00:00Z'
         from (values ('queued', 0), ('printing', 0), ('failed', 4), ('failed', 5)) as jobs(status, attempts)
         returning id`);
       const completed = await suite.db.execute<{ id: string; delivered_at: string }>(sql`
-        insert into print_jobs (tenant_id, location_id, printer_id, payload, status, created_at, delivered_at)
-        select ${tenantId}, ${locationId}, ${printerId}, decode('01', 'hex'), 'done',
+        insert into print_jobs (location_id, printer_id, payload, status, created_at, delivered_at)
+        select ${locationId}, ${printerId}, decode('01', 'hex'), 'done',
           '2021-01-01T00:00:00Z'::timestamptz - n * interval '1 second',
           '2099-01-01T00:00:00Z'::timestamptz + n * interval '1 second'
         from generate_series(1, 101) as jobs(n)
@@ -1548,15 +1543,15 @@ describe("mountPrintApi — management: recent jobs", () => {
     const printerId = await createPrinterVia(app, "unused");
     try {
       const pending = await suite.db.execute<{ id: string }>(sql`
-        insert into print_jobs (tenant_id, location_id, printer_id, payload, status, attempts, created_at)
-        select ${tenantId}, ${locationId}, ${printerId}, decode('01', 'hex'), status::print_job_status,
+        insert into print_jobs (location_id, printer_id, payload, status, attempts, created_at)
+        select ${locationId}, ${printerId}, decode('01', 'hex'), status::print_job_status,
           attempts, '2020-01-01'
         from (values ('queued', 0), ('printing', 0), ('failed', 4)) as jobs(status, attempts)
         cross join generate_series(1, 101)
         returning id`);
       const failed = await suite.db.execute<{ id: string; created_at: string }>(sql`
-        insert into print_jobs (tenant_id, location_id, printer_id, payload, status, attempts, created_at)
-        select ${tenantId}, ${locationId}, ${printerId}, decode('01', 'hex'), 'failed', 5,
+        insert into print_jobs (location_id, printer_id, payload, status, attempts, created_at)
+        select ${locationId}, ${printerId}, decode('01', 'hex'), 'failed', 5,
           '2099-01-01'::timestamptz + n * interval '1 second'
         from generate_series(1, 101) as jobs(n)
         returning id, created_at`);
@@ -1600,12 +1595,12 @@ describe("mountPrintApi — management: recent jobs", () => {
     const printerId = await createPrinterVia(app, "unused");
     try {
       await suite.db.execute(sql`
-        insert into print_jobs (tenant_id, location_id, printer_id, payload, status)
-        select ${tenantId}, ${locationId}, ${printerId}, decode('01', 'hex'), 'done'
+        insert into print_jobs (location_id, printer_id, payload, status)
+        select ${locationId}, ${printerId}, decode('01', 'hex'), 'done'
         from generate_series(1, 101)`);
       const completed = await suite.db.execute<{ id: string }>(sql`
-        insert into print_jobs (tenant_id, location_id, printer_id, payload, status, delivered_at)
-        values (${tenantId}, ${locationId}, ${printerId}, decode('01', 'hex'), 'done', '2099-01-01')
+        insert into print_jobs (location_id, printer_id, payload, status, delivered_at)
+        values (${locationId}, ${printerId}, decode('01', 'hex'), 'done', '2099-01-01')
         returning id`);
       const response = await send(app, "GET", "/management-api/print-jobs", {
         cookie: managerCookie,

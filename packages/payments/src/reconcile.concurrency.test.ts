@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import type { Database } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
-import { decimal, tenantId as brandTenantId } from "@waitron/shared";
+import { decimal } from "@waitron/shared";
 import { recordIncidentOnce } from "@waitron/core";
 import { withTransaction } from "@waitron/db";
 import { reconcilePayments, DEFAULT_SETTLEMENT_LAG_MS } from "./reconcile.js";
@@ -90,8 +90,8 @@ describe("concurrent reconcile sweeps", () => {
 
     try {
       const [a, b] = await Promise.all([
-        reconcilePayments(make(one), brandTenantId(seeded.tenantId), PERIOD, NOW),
-        reconcilePayments(make(two), brandTenantId(seeded.tenantId), PERIOD, NOW),
+        reconcilePayments(make(one), PERIOD, NOW),
+        reconcilePayments(make(two), PERIOD, NOW),
       ]);
 
       // Both sweeps REPORT the orphan — the audit finding is not a claim on it. Only one stamped

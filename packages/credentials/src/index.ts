@@ -28,7 +28,7 @@ export type { KeyEntry, KeyRing } from "./keyring.js";
 // above — so a caller reaching for them directly would be bypassing `putCredential`/`getCredential`
 // rather than using the vault.
 export {
-  credentialTenants,
+  credentialProvisioned,
   deleteCredential,
   getCredential,
   listCredentials,

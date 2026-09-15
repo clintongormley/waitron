@@ -151,7 +151,7 @@ export interface AdoptDeps {
 export async function adoptFromPrimary(
   deps: AdoptDeps,
   req: AdoptRequest,
-): Promise<{ tenantId: string; breakGlassSecret: string }> {
+): Promise<{ breakGlassSecret: string }> {
   const replication = deps.replication ?? REAL_REPLICATION;
 
   // Mint the standby's own identity in memory BEFORE the fetch (design §6 R2): its public half + nodeId
@@ -246,7 +246,6 @@ export async function adoptFromPrimary(
     // Boot's `runFinishAdoption` reads this file, establishes once every `pg_subscription_rel` row
     // reaches `r`, then unlinks it.
     await writePendingAdoption(deps.stateDir, {
-      tenantId: designated.tenantId,
       locationId: designated.locationId,
       standby,
       nodeName: `${bundle.primaryNode.name} (standby)`,
@@ -256,7 +255,6 @@ export async function adoptFromPrimary(
       originNodeId: designated.nodeId,
     });
     await deps.persistTrading({
-      tenantId: designated.tenantId,
       locationId: designated.locationId,
       tillId: designated.tillId,
       // The mirror's OWN node id (the standby minted above), NOT `designated.nodeId` — from R3a the
@@ -282,5 +280,5 @@ export async function adoptFromPrimary(
   // Only now, with the mirror's config durable, ENABLE the subscription so the initial copy begins.
   await replication.enable(deps.replicationDb, name);
 
-  return { tenantId: designated.tenantId, breakGlassSecret };
+  return { breakGlassSecret };
 }

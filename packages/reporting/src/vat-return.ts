@@ -41,15 +41,13 @@ export async function computeVatReturn(tx: Transaction, input: VatReturnInput): 
   const filedDate = sql`((s.issued_at at time zone 'UTC') + make_interval(mins => s.issued_offset_minutes))::date`;
   const dateFilter = periodDateFilter(filedDate, input.year, input.period);
 
-  const summary = await aggregateVatByRate(tx, { tenantId: input.tenantId, dateFilter });
+  const summary = await aggregateVatByRate(tx, { dateFilter });
   const deducible = await computeInputVat(tx, {
-    tenantId: input.tenantId,
     year: input.year,
     period: input.period,
   });
 
   return {
-    tenantId: input.tenantId,
     year: input.year,
     period: input.period,
     byRate: summary.byRate,

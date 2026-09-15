@@ -8,7 +8,6 @@ import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
 import { hasPaymentWithExternalRef, insertInitiated } from "@waitron/payments";
 import { decimal } from "@waitron/shared";
-import type { TenantId } from "@waitron/shared";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { mountWebhook } from "./webhook.js";
 import type { WebhookDeps } from "./webhook.js";
@@ -43,7 +42,6 @@ function deps(db: Database, nodeId: string = NODE_A): WebhookDeps {
 }
 
 interface SeededPayment {
-  tenantId: TenantId;
   sessionId: string;
 }
 
@@ -51,16 +49,16 @@ interface SeededPayment {
  * session id) and a `payments.stripe` credential — all as the superuser admin (pure
  * setup). The route then acts on it as the non-superuser probe. */
 async function seedInitiated(admin: Database, webhookSecret: string): Promise<SeededPayment> {
-  const tenantId = await seedTenant(admin);
+  await seedTenant(admin);
   const sessionId = `cs_${randomUUID()}`;
   const loc = await admin.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Counter', array['es'], 'Retail') returning id`);
+    insert into locations (name, invoice_locales, operation_description)
+    values ('Counter', array['es'], 'Retail') returning id`);
   const till = await admin.execute<{ id: string }>(sql`
-    insert into tills (tenant_id, location_id, name)
-    values (${tenantId}, ${loc.rows[0]!.id}, 'Till 1') returning id`);
+    insert into tills (location_id, name)
+    values (${loc.rows[0]!.id}, 'Till 1') returning id`);
   const wo = await admin.execute<{ id: string }>(sql`
-    insert into working_orders (tenant_id, till_id, order_number) values (${tenantId}, ${till.rows[0]!.id}, 1) returning id`);
+    insert into working_orders (till_id, order_number) values (${till.rows[0]!.id}, 1) returning id`);
   await withTransaction(admin, (tx) =>
     insertInitiated(tx, {
       workingOrderId: wo.rows[0]!.id,
@@ -81,7 +79,7 @@ async function seedInitiated(admin: Database, webhookSecret: string): Promise<Se
       },
     }),
   );
-  return { tenantId, sessionId };
+  return { sessionId };
 }
 
 function completedEvent(sessionId: string): string {
@@ -117,7 +115,7 @@ describe("the webhook resolves and settles as the non-superuser deployment role"
 
       // The settle runs `readCredential` + `settleInitiated` under `withTransaction` as app_user: SELECT
       // on tenant_credentials and UPDATE on payments both had to succeed as the deployment role.
-      const first = await app.request(`/webhooks/stripe/${seeded.tenantId}`, {
+      const first = await app.request("/webhooks/stripe", {
         method: "POST",
         body,
         headers: { "stripe-signature": sig },
@@ -126,7 +124,7 @@ describe("the webhook resolves and settles as the non-superuser deployment role"
       expect(await stateOf(suite.admin, seeded.sessionId)).toBe("captured");
 
       // At-least-once redelivery, still as app_user: idempotent, 2xx, still captured.
-      const second = await app.request(`/webhooks/stripe/${seeded.tenantId}`, {
+      const second = await app.request("/webhooks/stripe", {
         method: "POST",
         body,
         headers: { "stripe-signature": sig },

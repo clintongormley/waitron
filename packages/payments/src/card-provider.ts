@@ -4,7 +4,7 @@
 import "./errors.js";
 import type { Database } from "@waitron/db";
 import type { KeyRing, Purpose } from "@waitron/credentials";
-import { AppError, type TenantId } from "@waitron/shared";
+import { AppError } from "@waitron/shared";
 import type { PaymentProvider } from "./provider.js";
 import type { IncidentSink } from "./reconcile.js";
 
@@ -107,7 +107,6 @@ export interface CardProviderBuildDeps {
   db: Database;
   ring: KeyRing;
   /** Stamped on the incidents a provider raises (the `incidents` table still carries a tenant). */
-  tenantId: TenantId;
   nodeId: string;
   environment: "preproduction" | "production";
   /** Where a provider raises `payment.pending_outcome_unactionable` (SumUp's resolvePending). */

@@ -18,7 +18,6 @@ import {
   tillId as brandTillId,
 } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import type { TenantId } from "@waitron/shared";
 import type { Logger } from "./logger.js";
 import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
@@ -49,29 +48,29 @@ const suite = usePgliteDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
   setup: async (db) => {
-    const tenantId = await seedTenant(db);
+    await seedTenant(db);
     await seedLegacySellingUnits(db);
     const loc = await db.execute<{ id: string }>(sql`
-      insert into locations (tenant_id, name, invoice_locales, operation_description)
-      values (${tenantId}, 'Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
+      insert into locations (name, invoice_locales, operation_description)
+      values ('Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
     const locationId = brandLocationId(loc.rows[0]!.id);
     // The default station a fire routes the (courseless, stationless) product to (fireLines fallback).
-    stationId = await seedKitchenStation(db, { tenantId, locationId });
+    stationId = await seedKitchenStation(db, { locationId });
     const till = await db.execute<{ id: string }>(sql`
-      insert into tills (tenant_id, location_id, name)
-      values (${tenantId}, ${loc.rows[0]!.id}, 'Caja 1') returning id`);
-    const nodeId = await seedNode(db, tenantId, locationId);
+      insert into tills (location_id, name)
+      values (${loc.rows[0]!.id}, 'Caja 1') returning id`);
+    const nodeId = await seedNode(db, locationId);
     const person = await db.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, role)
-      values (${tenantId}, 'Ana', ${hashPin("5555")}, 'staff') returning id`);
+      insert into persons (display_name, pin_hash, role)
+      values ('Ana', ${hashPin("5555")}, 'staff') returning id`);
     ana = { id: person.rows[0]!.id };
-    cfg = makeCfg(tenantId, till.rows[0]!.id, loc.rows[0]!.id, nodeId);
+    cfg = makeCfg(till.rows[0]!.id, loc.rows[0]!.id, nodeId);
 
     // One sellable product, routed to the default station by the fire fallback (no explicit station/course).
     await withTransaction(db, async (tx) => {
       await asAppUser(tx);
-      const catalogue = await createCatalogue(tx, tenantId, { name: "Carta" });
-      const cafe = await createProduct(tx, tenantId, {
+      const catalogue = await createCatalogue(tx, { name: "Carta" });
+      const cafe = await createProduct(tx, {
         catalogueId: catalogue.id,
         categoryId: null,
         name: CAFE,
@@ -85,14 +84,8 @@ const suite = usePgliteDb({
   },
 });
 
-function makeCfg(
-  tenantId: TenantId,
-  tillId: string,
-  locationId: string,
-  nodeId: string,
-): TillConfig {
+function makeCfg(tillId: string, locationId: string, nodeId: string): TillConfig {
   return {
-    tenantId,
     tillId: brandTillId(tillId),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
@@ -140,14 +133,13 @@ function deps(db: Database): TillApiDeps {
 
 /** The tenant + location scope the printing verbs run under. */
 function printCfg(): PrintConfig {
-  return { tenantId: cfg.tenantId, locationId: cfg.locationId };
+  return { locationId: cfg.locationId };
 }
 
 async function openSession(db: Database): Promise<string> {
   const session = await withTransaction(db, async (tx) => {
     await asAppUser(tx);
     return loginWithPin(tx, {
-      tenantId: cfg.tenantId,
       tillId: cfg.tillId,
       personId: ana.id,
       pin: "5555",
@@ -168,8 +160,8 @@ let tillDeviceCookie: string;
  *  `waitron_device=…` cookie. */
 async function enrolTillDeviceCookie(db: Database): Promise<string> {
   const { rows } = await db.execute<{ id: string }>(sql`
-      insert into device_profiles (tenant_id, name, form_factor)
-      values (${cfg.tenantId}, 'Counter till profile', 'till') returning id`);
+      insert into device_profiles (name, form_factor)
+      values ('Counter till profile', 'till') returning id`);
   const dev = await enrolDeviceForTest(db, cfg, { name: "Counter till", profileId: rows[0]!.id });
   return `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`;
 }
@@ -207,7 +199,7 @@ async function attachPrinterToDefaultStation(): Promise<string> {
       transport: "cloud_poll",
       pollId: `poll-${randomUUID()}`,
     });
-    await attachPrinterToStation(tx, printCfg(), { stationId, printerId: id });
+    await attachPrinterToStation(tx, { stationId, printerId: id });
     return id;
   });
 }

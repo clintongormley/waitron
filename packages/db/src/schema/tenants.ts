@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   check,
+  integer,
   pgEnum,
   pgTable,
   text,
@@ -70,13 +71,18 @@ export const drawerOpenPolicy = pgEnum("drawer_open_policy", ["gated", "open"]);
 export const tenants = pgTable(
   "tenants",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
+    // One row per database. id pinned to 1 (the deployment/mirror_config/node_membership precedent):
+    // a second insert violates the PK and the check.
+    id: integer("id").primaryKey(),
     country: text("country").notNull(),
     taxId: text("tax_id").notNull(),
     legalName: text("legal_name").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
   },
-  (t) => [uniqueIndex("tenants_country_tax_id_key").on(t.country, t.taxId)],
+  (t) => [
+    check("tenants_singleton_ck", sql`${t.id} = 1`),
+    uniqueIndex("tenants_country_tax_id_key").on(t.country, t.taxId),
+  ],
 );
 
 /**

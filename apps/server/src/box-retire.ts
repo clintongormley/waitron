@@ -17,7 +17,6 @@ export type BoxRetireDeps = {
   /** The box key ring — unseals this node's identity key so the minted eviction can be signed. */
   ring: KeyRing;
   /** This node's tenant — scopes the identity-key read the mint performs. */
-  tenantId: string;
   /** THIS (departing) node — the node that becomes `evicted`, and the eviction document's signer. */
   nodeId: string;
   /** The native slot-drain reader (the same slot box-status's `disposal` surface reads), or `undefined`
@@ -83,7 +82,6 @@ export function mountBoxRetireApi(app: Hono, deps: BoxRetireDeps, log: Logger): 
       const result = await retireSelf({
         appDb: deps.appDb,
         ring: deps.ring,
-        tenantId: deps.tenantId,
         nodeId: deps.nodeId,
         readSlotDrain: deps.readSlotDrain,
         fenceLsn: deps.fenceLsn,

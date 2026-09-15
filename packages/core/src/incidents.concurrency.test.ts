@@ -37,7 +37,6 @@ describe("markIncidentHandled — two managers at once", () => {
     await withTransaction(postgres.admin, async (tx) => {
       await asAppUser(tx);
       await recordIncident(tx, {
-        tenantId: seed.tenantId,
         tillId: seed.tillId,
         error: new AppError("chain.verification_failed", {
           tillId: seed.tillId,
@@ -49,7 +48,7 @@ describe("markIncidentHandled — two managers at once", () => {
     });
     const [open] = await withTransaction(postgres.admin, async (tx) => {
       await asAppUser(tx);
-      return listOpenIncidents(tx, seed.tenantId);
+      return listOpenIncidents(tx);
     });
     const first = { personId: "00000000-0000-4000-8000-000000000001", handledAt: BASE };
     const second = {
@@ -59,7 +58,7 @@ describe("markIncidentHandled — two managers at once", () => {
     const mark = (db: Database, by: typeof first) =>
       withTransaction(db, async (tx) => {
         await asAppUser(tx);
-        await markIncidentHandled(tx, { tenantId: seed.tenantId, id: open!.id, ...by });
+        await markIncidentHandled(tx, { id: open!.id, ...by });
       });
 
     let holder: Database | undefined;
@@ -78,7 +77,7 @@ describe("markIncidentHandled — two managers at once", () => {
       // wait for it and then re-check the row the holder committed.
       holderRun = withTransaction(holder, async (tx) => {
         await asAppUser(tx);
-        await markIncidentHandled(tx, { tenantId: seed.tenantId, id: open!.id, ...first });
+        await markIncidentHandled(tx, { id: open!.id, ...first });
         acquire();
         await held;
       });
@@ -99,7 +98,7 @@ describe("markIncidentHandled — two managers at once", () => {
 
     const stored = await withTransaction(postgres.admin, async (tx) => {
       await asAppUser(tx);
-      return findIncident(tx, seed.tenantId, open!.id);
+      return findIncident(tx, open!.id);
     });
     expect({
       personId: stored?.acknowledgedBy,

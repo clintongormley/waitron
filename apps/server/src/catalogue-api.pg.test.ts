@@ -33,7 +33,6 @@ function nextNif(): string {
 }
 
 interface Venue {
-  tenantId: string;
   /**
    * This venue's single location id — the `:locationId` the location-menu routes act on, and the
    * location-scoped read the till uses (`listAvailableProducts`).
@@ -84,24 +83,21 @@ async function setupVenue(): Promise<Venue> {
   const { managerSid, staffSid } = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const mgr = await tx.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, role)
-      values (${venue.tenantId}, 'The Manager', ${hashPin("1234")}, 'manager') returning id`);
+      insert into persons (display_name, pin_hash, role)
+      values ('The Manager', ${hashPin("1234")}, 'manager') returning id`);
     const stf = await tx.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, role)
-      values (${venue.tenantId}, 'The Clerk', ${hashPin("1234")}, 'staff') returning id`);
+      insert into persons (display_name, pin_hash, role)
+      values ('The Clerk', ${hashPin("1234")}, 'staff') returning id`);
     const managerSession = await startManagementSession(tx, {
-      tenantId: venue.tenantId,
       personId: mgr.rows[0]!.id,
     });
     const staffSession = await startManagementSession(tx, {
-      tenantId: venue.tenantId,
       personId: stf.rows[0]!.id,
     });
     return { managerSid: managerSession.id, staffSid: staffSession.id };
   });
 
   return {
-    tenantId: venue.tenantId,
     locationId: venue.locationId,
     managerCookie: `${MANAGEMENT_COOKIE}=${managerSid}`,
     staffCookie: `${MANAGEMENT_COOKIE}=${staffSid}`,
@@ -110,7 +106,7 @@ async function setupVenue(): Promise<Venue> {
 
 /** One Hono app per tenant — `mountCatalogueApi` binds ONE tenant via `cfg.tenantId`, so each venue's
  * routes need their own app (mirrors `management-api.pg.test.ts`). */
-function mountApp(tenantId: string): Hono {
+function mountApp(): Hono {
   const app = new Hono();
   mountCatalogueApi(
     app,
@@ -118,7 +114,7 @@ function mountApp(tenantId: string): Hono {
       db: suite.admin,
       // These suites assert the gate and the option-group FKs, never the captured origin; any valid node id
       // satisfies the (now required) cfg.nodeId. Origin attribution is proven in sync-origin.test.ts.
-      cfg: { tenantId, nodeId: "11111111-1111-4111-8111-111111111111" },
+      cfg: { nodeId: "11111111-1111-4111-8111-111111111111" },
     },
     noopLog,
   );
@@ -186,16 +182,16 @@ describe("category dependants and bulk add over real Postgres", () => {
     // on `preparation_routes`, `kitchen_stations` and `floor_zones` — grants PGlite's superuser
     // holds unconditionally — and its DELETE grant on the module's table when the category goes.
     const v = await setupVenue();
-    const app = mountApp(v.tenantId);
+    const app = mountApp();
     const categoryId = await createCategory(app, v.managerCookie, { [LOCALE]: "Frituras" });
     // Seeded as the OWNER, the way `setupVenue` seeds persons: these are fixture rows, not the
     // behaviour under test. The route reads them back as `app_user`.
     const zone = await suite.admin.execute<{ id: string }>(sql`
-      insert into floor_zones (tenant_id, location_id, name)
-      values (${v.tenantId}, ${v.locationId}, 'Terraza') returning id`);
+      insert into floor_zones (location_id, name)
+      values (${v.locationId}, 'Terraza') returning id`);
     const station = await suite.admin.execute<{ id: string }>(sql`
-      insert into kitchen_stations (tenant_id, location_id, name)
-      values (${v.tenantId}, ${v.locationId}, 'Plancha') returning id`);
+      insert into kitchen_stations (location_id, name)
+      values (${v.locationId}, 'Plancha') returning id`);
     const routed = await suite.admin.execute<{ id: string }>(sql`
       insert into preparation_routes (location_id, zone_id, category_id, station_id)
       values (${v.locationId}, ${zone.rows[0]!.id}, ${categoryId}, ${station.rows[0]!.id})
@@ -242,7 +238,7 @@ describe("category dependants and bulk add over real Postgres", () => {
     // The bulk add's INSERT on `product_categories` and UPDATE on `products` run as `app_user`,
     // whose grants only a real cluster enforces.
     const v = await setupVenue();
-    const app = mountApp(v.tenantId);
+    const app = mountApp();
     const catalogueId = await createCatalogue(app, v.managerCookie, "Carta");
     const categoryId = await createCategory(app, v.managerCookie, { [LOCALE]: "Tapas" });
     const first = await createProduct(app, v.managerCookie, catalogueId, "Croquetas");
@@ -260,7 +256,7 @@ describe("category dependants and bulk add over real Postgres", () => {
     // Neither product had a reporting category, so each took this one.
     const reporting = await suite.admin.execute<{ category_id: string | null }>(
       sql`select category_id from products
-          where tenant_id = ${v.tenantId} and id in (${first}, ${second})`,
+          where id in (${first}, ${second})`,
     );
     expect(reporting.rows.map((r) => r.category_id)).toEqual([categoryId, categoryId]);
     // A staff session holds no `person.manage`, so the gate refuses the write.
@@ -274,8 +270,8 @@ describe("Catalogue API over real Postgres (option groups, gates, tenant-consist
   it("refuses every catalogue write route to a staff-role session — 403 authorization.not_permitted", async () => {
     // Every write shares the permission gate; invalid resource ids must not reveal lookup results
     // to a staff session that cannot manage the catalogue.
-    const { tenantId, staffCookie } = await setupVenue();
-    const app = mountApp(tenantId);
+    const { staffCookie } = await setupVenue();
+    const app = mountApp();
 
     const expect403 = async (res: Response) => {
       expect(res.status).toBe(403);
@@ -338,7 +334,7 @@ describe("Catalogue API over real Postgres (option groups, gates, tenant-consist
     // on real Postgres because `listAvailableProducts` reads the location's accessible catalogue, which
     // provisioning set up here; the assign is via `assignCatalogueToLocation` under withTransaction+asAppUser.
     const v = await setupVenue();
-    const app = mountApp(v.tenantId);
+    const app = mountApp();
 
     const catId = await createCatalogue(app, v.managerCookie, "Menú de la casa");
     const groupRes = await send(app, "POST", "/management-api/option-groups", v.managerCookie, {
@@ -413,8 +409,8 @@ describe("Catalogue API over real Postgres (option groups, gates, tenant-consist
     // so `authorizeManager` inside `gated` throws before any option-group op runs. Dropping that
     // `authorizeManager` from `catalogue-api.ts`'s `gated` helper flips each `toBe(403)` green→red (the
     // same guard-by-deletion receipt the catalogue-write block records).
-    const { tenantId, staffCookie } = await setupVenue();
-    const app = mountApp(tenantId);
+    const { staffCookie } = await setupVenue();
+    const app = mountApp();
     const dummy = "00000000-0000-0000-0000-000000000000";
 
     const expect403 = async (res: Response) => {
@@ -452,7 +448,7 @@ describe("Catalogue API over real Postgres (option groups, gates, tenant-consist
 describe("canonical modifier routes", () => {
   it("saves and reads each type canonically, and keeps a failed multi-choice save atomic", async () => {
     const venue = await setupVenue();
-    const app = mountApp(venue.tenantId);
+    const app = mountApp();
     const name = { es: "Personalización" };
     const choiceId = crypto.randomUUID();
     const bodies = [
@@ -510,7 +506,7 @@ describe("canonical modifier routes", () => {
   });
   it("refuses a staff-role session", async () => {
     const venue = await setupVenue();
-    const app = mountApp(venue.tenantId);
+    const app = mountApp();
     expect((await send(app, "GET", "/management-api/modifiers", venue.staffCookie)).status).toBe(
       403,
     );
@@ -527,7 +523,7 @@ describe("canonical modifier routes", () => {
 
 it("accepts ordered modifierIds in the product contract and reads them back", async () => {
   const venue = await setupVenue();
-  const app = mountApp(venue.tenantId);
+  const app = mountApp();
   const cookie = venue.managerCookie;
   const modifierIds: string[] = [];
   for (const label of ["First", "Second"]) {

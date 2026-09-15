@@ -70,20 +70,19 @@ interface Seeded {
 }
 
 async function setupVenue(): Promise<Seeded> {
-  const tenantId = await seedTenant(db);
+  await seedTenant(db);
   await seedLegacySellingUnits(db);
   const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
+    insert into locations (name, invoice_locales, operation_description)
+    values ('Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
   const locationId = loc.rows[0]!.id;
   // KDS-1: a default kitchen station so addTabRound's fire (→ fireLines) has a fallback. Seeded as the
   // superuser here, as the surrounding venue rows are (fixture setup).
-  await seedKitchenStation(db, { tenantId, locationId: brandLocationId(locationId) });
+  await seedKitchenStation(db, { locationId: brandLocationId(locationId) });
   const till = await db.execute<{ id: string }>(sql`
-    insert into tills (tenant_id, location_id, name) values (${tenantId}, ${locationId}, 'Caja 1') returning id`);
-  const nodeId = await seedNode(db, tenantId, brandLocationId(locationId));
+    insert into tills (location_id, name) values (${locationId}, 'Caja 1') returning id`);
+  const nodeId = await seedNode(db, brandLocationId(locationId));
   const cfg: TillConfig = {
-    tenantId,
     tillId: brandTillId(till.rows[0]!.id),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
@@ -96,9 +95,9 @@ async function setupVenue(): Promise<Seeded> {
   const { cafeId, aguaId, cafeMenuItemId, aguaMenuItemId, menuId, categoryId, tableId } =
     await withTransaction(db, async (tx) => {
       await asAppUser(tx);
-      const cat = await createCatalogue(tx, tenantId, { name: "Carta" });
-      const bebidas = await createCategory(tx, tenantId, { name: { en: "Bebidas" } });
-      const cafe = await createProduct(tx, tenantId, {
+      const cat = await createCatalogue(tx, { name: "Carta" });
+      const bebidas = await createCategory(tx, { name: { en: "Bebidas" } });
+      const cafe = await createProduct(tx, {
         catalogueId: cat.id,
         categoryId: bebidas.id,
         name: "Café",
@@ -106,7 +105,7 @@ async function setupVenue(): Promise<Seeded> {
         unitPrice: "1.50",
         vatClass: "general",
       });
-      const agua = await createProduct(tx, tenantId, {
+      const agua = await createProduct(tx, {
         catalogueId: cat.id,
         categoryId: bebidas.id,
         name: "Agua",
@@ -273,8 +272,8 @@ describe("openTab", () => {
 /** Insert a bare OPEN working order that NO table points at (a walk-up) — for the "not a tab" case. */
 async function bareOpenOrder(cfg: TillConfig, id: string): Promise<void> {
   await db.execute(sql`
-    insert into working_orders (id, tenant_id, till_id, node_id, order_number, status)
-    values (${id}, ${cfg.tenantId}, ${cfg.tillId}, ${cfg.nodeId}, 999, 'open')`);
+    insert into working_orders (id, till_id, node_id, order_number, status)
+    values (${id}, ${cfg.tillId}, ${cfg.nodeId}, 999, 'open')`);
 }
 
 describe("addTabRound (append-only, no re-price)", () => {
@@ -315,7 +314,6 @@ describe("addTabRound (append-only, no re-price)", () => {
       const [group] = await tx
         .insert(optionGroups)
         .values({
-          tenantId: cfg.tenantId,
           name: { [LOCALE]: "Extras" },
           minSelect: 0,
           maxSelect: 2,
@@ -326,7 +324,6 @@ describe("addTabRound (append-only, no re-price)", () => {
       const [bacon] = await tx
         .insert(optionGroupItems)
         .values({
-          tenantId: cfg.tenantId,
           groupId: group!.id,
           name: { [LOCALE]: "Bacon" },
           priceDelta: "0.50",
@@ -335,7 +332,6 @@ describe("addTabRound (append-only, no re-price)", () => {
         })
         .returning({ id: optionGroupItems.id });
       await tx.insert(productOptionGroups).values({
-        tenantId: cfg.tenantId,
         productId: cafeId,
         groupId: group!.id,
         sort: 0,
@@ -707,7 +703,6 @@ describe("readTabLines", () => {
       const [group] = await tx
         .insert(optionGroups)
         .values({
-          tenantId: cfg.tenantId,
           name: { [LOCALE]: "Extras" },
           minSelect: 0,
           maxSelect: 2,
@@ -718,7 +713,6 @@ describe("readTabLines", () => {
       const [bacon] = await tx
         .insert(optionGroupItems)
         .values({
-          tenantId: cfg.tenantId,
           groupId: group!.id,
           name: { [LOCALE]: "Bacon" },
           priceDelta: "0.50",
@@ -727,7 +721,6 @@ describe("readTabLines", () => {
         })
         .returning({ id: optionGroupItems.id });
       await tx.insert(productOptionGroups).values({
-        tenantId: cfg.tenantId,
         productId: cafeId,
         groupId: group!.id,
         sort: 0,

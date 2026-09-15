@@ -9,7 +9,6 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
-import type { TenantId } from "@waitron/shared";
 import { seedLegacySellingUnits, seedVenue } from "../test/fixtures.js";
 import { menuItemOptionGroups, menuItemOptions } from "./schema/menu.js";
 import { createModifier } from "./modifiers.js";
@@ -28,12 +27,7 @@ import {
 // deleteModifier does — no owner privilege is needed, so this proves the app_user cascade itself.
 const suite = useTemplateDb({ template: "core" });
 
-function app<T>(
-  db: Database,
-  tenantId: TenantId,
-  action: (tx: Transaction) => Promise<T>,
-): Promise<T> {
-  void tenantId;
+function app<T>(db: Database, action: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTransaction(db, async (tx) => {
     await asAppUser(tx);
     return action(tx);
@@ -41,18 +35,17 @@ function app<T>(
 }
 
 it("cascades an option_groups delete through the published menu link rows", async () => {
-  const venue = await seedVenue(suite.admin);
-  const { tenantId } = venue;
+  await seedVenue(suite.admin);
   await seedLegacySellingUnits(suite.admin);
 
   const choice = { id: randomUUID(), name: { en: "Oat" }, available: true };
-  const { groupId, optionId } = await app(suite.admin, tenantId, async (tx) => {
-    const menu = await createCatalogue(tx, tenantId, { name: "Menu" });
+  const { groupId, optionId } = await app(suite.admin, async (tx) => {
+    const menu = await createCatalogue(tx, { name: "Menu" });
     const section = await createMenuSection(tx, {
       menuId: menu.id,
       name: { en: "Drinks" },
     });
-    const product = await createProduct(tx, tenantId, {
+    const product = await createProduct(tx, {
       catalogueId: menu.id,
       categoryId: null,
       name: "Coffee",
@@ -68,13 +61,12 @@ it("cascades an option_groups delete through the published menu link rows", asyn
     });
     const modifier = await createModifier(
       tx,
-      tenantId,
       { type: "options", name: { en: "Milk" }, choices: [choice], defaultChoiceId: choice.id },
       "en",
     );
     // Attach to the product, then publish the group on the menu item with one priced option — this
     // writes the menu_item_option_groups row and the menu_item_options row the delete must reach.
-    await setProductOptionGroups(tx, tenantId, product.id, [modifier.id]);
+    await setProductOptionGroups(tx, product.id, [modifier.id]);
     await setMenuItemOptionGroups(tx, item.id, [
       { groupId: modifier.id, options: [{ optionId: choice.id, priceDelta: "0" }] },
     ]);
@@ -98,9 +90,7 @@ it("cascades an option_groups delete through the published menu link rows", asyn
   // Both menu foreign keys cascade (0000_catalogue_baseline.sql). With them RESTRICT this same delete
   // threw SQLSTATE 23001 (foreign-key RESTRICT violation), watched red on 2026-09-14. That red run
   // is the control — it proves the delete reaches the constraint rather than a no-op.
-  await app(suite.admin, tenantId, (tx) =>
-    tx.execute(sql`delete from option_groups where id = ${groupId}`),
-  );
+  await app(suite.admin, (tx) => tx.execute(sql`delete from option_groups where id = ${groupId}`));
 
   const groupsAfter = await suite.admin
     .select()

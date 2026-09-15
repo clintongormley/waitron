@@ -1,5 +1,5 @@
 // Real PostgreSQL: checks node-postgres monetary decoding alongside the PGlite driver.
-import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
+import { locationId as brandLocationId } from "@waitron/shared";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import type { Database } from "../client.js";
@@ -10,7 +10,6 @@ import { saleLines, sales, tenders } from "./sales.js";
 import { invoiceSeries } from "./series.js";
 import { locations, tenants, tills } from "./tenants.js";
 
-const TENANT_A = "11111111-1111-4111-8111-111111111111";
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const TILL_A1 = "aaaaaaaa-1111-4000-8000-000000000001";
 const AT = "2026-07-20T19:20:30+00:00";
@@ -29,7 +28,7 @@ async function rows<T>(db: Database, query: ReturnType<typeof sql>): Promise<T[]
 async function seed(db: Database): Promise<void> {
   await db
     .insert(tenants)
-    .values([{ id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
+    .values([{ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
   await db.insert(locations).values([
     {
       id: LOCATION_A,
@@ -39,7 +38,7 @@ async function seed(db: Database): Promise<void> {
     },
   ]);
   await db.insert(tills).values([{ id: TILL_A1, locationId: LOCATION_A, name: "A1" }]);
-  nodeA = await seedNode(db, brandTenantId(TENANT_A), brandLocationId(LOCATION_A));
+  nodeA = await seedNode(db, brandLocationId(LOCATION_A));
   const [a] = await db
     .insert(invoiceSeries)
     .values({ nodeId: nodeA, code: "FA", purpose: "standard" })
@@ -668,7 +667,6 @@ describeEachTarget("sales — corrective link and negative total", (target) => {
     total: string;
     correctsSaleId: string | null;
     invoiceNumber: number;
-    tenantId?: string;
     tillId?: string;
     nodeId?: string;
     seriesId?: string;

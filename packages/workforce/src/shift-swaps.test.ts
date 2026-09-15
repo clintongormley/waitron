@@ -14,15 +14,14 @@ import { insertDraftShift, insertShiftSwap, seedLocation, seedPerson } from "../
 // and existence checks, a status flip) — there is no privilege decision to prove here. The app role's
 // grants on `shift_swaps` are `shift_swaps: "SIUD"` in the privilege matrix, `packages/fiscal-verifactu/src/privileges.expected.ts`.
 
-let tenantId: string;
 let locationId: string;
 
 const suite = usePgliteDb({
   resetPerTest: false,
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS],
   setup: async (db) => {
-    tenantId = await seedTenant(db);
-    locationId = await seedLocation(db, tenantId);
+    await seedTenant(db);
+    locationId = await seedLocation(db);
   },
 });
 

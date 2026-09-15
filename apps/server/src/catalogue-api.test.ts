@@ -31,7 +31,6 @@ import "./errors.js";
 // grant (CLAUDE.md §4).
 const noopLog: Logger = () => {};
 
-let tenantId: string;
 let locationId: string;
 let managerCookie: string;
 let staffCookie: string;
@@ -41,13 +40,13 @@ const suite = usePgliteDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, IDENTITY_MIGRATIONS],
   timeoutMs: 60_000,
   setup: async (db) => {
-    tenantId = await seedTenant(db);
+    await seedTenant(db);
     await seedLegacySellingUnits(db);
     // One location for the tenant, seeded as the owner (fixture setup like seedTenant) so
     // the location↔menu membership routes have a `:locationId` to act on. Minimal required columns only.
     const loc = await db.execute<{ id: string }>(sql`
-      insert into locations (tenant_id, name, invoice_locales, operation_description)
-      values (${tenantId}, 'Main', array['es-ES'], 'Venta') returning id`);
+      insert into locations (name, invoice_locales, operation_description)
+      values ('Main', array['es-ES'], 'Venta') returning id`);
     locationId = loc.rows[0]!.id;
     // Seed a MANAGER (role `manager`, holds `person.manage`) and a STAFF person (role `staff`, holds
     // nothing) as the app role under the tenant, then mint a live management session for each so the
@@ -56,17 +55,15 @@ const suite = usePgliteDb({
     const { managerSid, staffSid } = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       const mgr = await tx.execute<{ id: string }>(sql`
-        insert into persons (tenant_id, display_name, pin_hash, role)
-        values (${tenantId}, 'The Manager', ${hashPin("1234")}, 'manager') returning id`);
+        insert into persons (display_name, pin_hash, role)
+        values ('The Manager', ${hashPin("1234")}, 'manager') returning id`);
       const stf = await tx.execute<{ id: string }>(sql`
-        insert into persons (tenant_id, display_name, pin_hash, role)
-        values (${tenantId}, 'The Clerk', ${hashPin("1234")}, 'staff') returning id`);
+        insert into persons (display_name, pin_hash, role)
+        values ('The Clerk', ${hashPin("1234")}, 'staff') returning id`);
       const managerSession = await startManagementSession(tx, {
-        tenantId,
         personId: mgr.rows[0]!.id,
       });
       const staffSession = await startManagementSession(tx, {
-        tenantId,
         personId: stf.rows[0]!.id,
       });
       return { managerSid: managerSession.id, staffSid: staffSession.id };
@@ -77,13 +74,12 @@ const suite = usePgliteDb({
 });
 
 /**
- * The venue the product editor's kitchen routing is checked against. Only `tenantId` and `locationId`
- * are read by `setProductStation`/`setProductCourse`; the fiscal ids are shape-fillers, as they are in
- * the other route suites.
+ * The venue the product editor's kitchen routing is checked against. Only `locationId` is read by
+ * `setProductStation`/`setProductCourse`; the fiscal ids are shape-fillers, as they are in the other
+ * route suites.
  */
-function venueCfgFor(mountedTenantId: string): TillConfig {
+function venueCfg(): TillConfig {
   return {
-    tenantId: brandTenantId(mountedTenantId),
     tillId: brandTillId(crypto.randomUUID()),
     nodeId: brandNodeId("11111111-1111-4111-8111-111111111111"),
     seriesId: brandSeriesId(crypto.randomUUID()),
@@ -95,7 +91,7 @@ function venueCfgFor(mountedTenantId: string): TillConfig {
   };
 }
 
-function mountApp(venueLocale = "es-ES", mountedTenantId = tenantId): Hono {
+function mountApp(venueLocale = "es-ES"): Hono {
   const app = new Hono();
   mountCatalogueApi(
     app,
@@ -103,8 +99,8 @@ function mountApp(venueLocale = "es-ES", mountedTenantId = tenantId): Hono {
     // origin (that is sync-origin.test.ts's job); any valid node id satisfies the type.
     {
       db: suite.db,
-      cfg: { tenantId: mountedTenantId, nodeId: "11111111-1111-4111-8111-111111111111" },
-      venueCfg: venueCfgFor(mountedTenantId),
+      cfg: { nodeId: "11111111-1111-4111-8111-111111111111" },
+      venueCfg: venueCfg(),
       venueLocale,
     },
     noopLog,
@@ -116,7 +112,7 @@ function mountApp(venueLocale = "es-ES", mountedTenantId = tenantId): Hono {
 async function seedRouting(): Promise<{ stationId: string; courseId: string }> {
   return withTenant(suite.db, tenantId, async (tx) => {
     await asAppUser(tx);
-    const cfg = venueCfgFor(tenantId);
+    const cfg = venueCfg();
     const station = await createStation(tx, cfg, { name: `Pass ${crypto.randomUUID()}` });
     const course = await createCourse(tx, cfg, { name: `Course ${crypto.randomUUID()}` });
     return { stationId: station.id, courseId: course.id };
@@ -2275,16 +2271,16 @@ describe("menu name edits", () => {
 describe("menu-section translations", () => {
   it("updates translations with default-language validation and rejects unknown section ids", async () => {
     const app = mountApp("en-GB");
-    const seedSection = async (ownerId: string) => {
+    const seedSection = async () => {
       const menu = await suite.db.execute<{ id: string }>(sql`
-        insert into catalogues (tenant_id, name) values (${ownerId}, 'Section edit') returning id`);
+        insert into catalogues (name) values ('Section edit') returning id`);
       return (
         await suite.db.execute<{ id: string }>(sql`
         insert into menu_sections (menu_id, name)
         values (${menu.rows[0]!.id}, '{"en":"Cocktails","de":"Getränke"}'::jsonb) returning id`)
       ).rows[0]!.id;
     };
-    const sectionId = await seedSection(tenantId);
+    const sectionId = await seedSection();
     await suite.db.execute(sql`
       insert into content_languages (default_language, languages) values ('en', array['en','fr'])
       on conflict (id) do update set default_language = 'en', languages = array['en','fr']`);
@@ -2361,7 +2357,7 @@ describe("catalogue API tenant authorization", () => {
     const ownA = await createGroupVia(app, { name: { es: "A" } });
     const ownB = await createGroupVia(app, { name: { es: "B" } });
     const ownItem = await suite.db.execute<{ id: string }>(
-      sql`insert into option_group_items (tenant_id, group_id, name) values (${tenantId}, ${ownA.id}, '{"es":"Original"}'::jsonb) returning id`,
+      sql`insert into option_group_items (group_id, name) values (${ownA.id}, '{"es":"Original"}'::jsonb) returning id`,
     );
     expect(
       (

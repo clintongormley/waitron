@@ -20,7 +20,7 @@ const ring = loadKeyRing(KEY_ENV);
 
 describe("stripeAccountResolver", () => {
   it("builds the account from the tenant's own secret key", async () => {
-    const tenantId = await seedTenant(suite.db);
+    await seedTenant(suite.db);
     await withTransaction(suite.db, (tx) =>
       putCredential(tx, ring, {
         purpose: "payments.stripe",
@@ -44,7 +44,7 @@ describe("stripeAccountResolver", () => {
       },
     });
 
-    const account = await resolve(tenantId);
+    const account = await resolve();
     // The KEY is the tenant scoping: a Stripe account is standalone (one per merchant, no Connect),
     // so building the client from the wrong tenant's key settles real money against the wrong
     // merchant with no error anywhere.
@@ -54,20 +54,20 @@ describe("stripeAccountResolver", () => {
   });
 
   it("surfaces the vault's own code when the tenant has no Stripe credential", async () => {
-    const tenantId = await seedTenant(suite.db);
+    await seedTenant(suite.db);
     const resolve = stripeAccountResolver({
       db: suite.db,
       ring,
       environment: "preproduction",
       makeStripe: () => ({}) as Stripe,
     });
-    const error = await captureError(() => resolve(tenantId));
+    const error = await captureError(() => resolve());
     expect(isAppError(error) && error.code).toBe("credentials.missing");
   });
 });
 
 describe("stripeSecretKeyFrom", () => {
-  const REF = { tenantId: "11111111-1111-1111-1111-111111111111", purpose: "payments.stripe" };
+  const REF = { purpose: "payments.stripe" };
 
   // Driven directly rather than through a forged database row, the same reasoning as
   // aeat-transport.test.ts's certMaterialFrom cases: `putCredential` validates every required field

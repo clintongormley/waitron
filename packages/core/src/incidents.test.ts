@@ -1,7 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
-import type { NodeId, SeriesId, TenantId, TillId } from "@waitron/shared";
+import type { NodeId, SeriesId, TillId } from "@waitron/shared";
 // See record-sale.test.ts's identical deviation note: there is no `@waitron/fiscal/testing`
 // subpath. `packages/fiscal/src/index.ts`'s own closing comment states the real path.
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
@@ -31,7 +31,6 @@ import { recordSale } from "./record-sale.js";
 import type { RecordSaleInput } from "./record-sale.js";
 import { seedTenant } from "../test/fixtures.js";
 
-let tenantId: TenantId;
 let tillId: TillId;
 let nodeId: NodeId;
 let seriesId: SeriesId;
@@ -46,7 +45,7 @@ const suite = usePgliteDb({
 });
 
 beforeEach(async () => {
-  ({ tenantId, tillId, nodeId, seriesId } = await seedTenant(suite.db));
+  ({ tillId, nodeId, seriesId } = await seedTenant(suite.db));
 });
 
 const BASE = new Date("2026-03-01T13:05:00+01:00");
@@ -95,7 +94,6 @@ const degradedClock: TrustedClock = fixedClock(() => ({
 
 function input(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
   return {
-    tenantId,
     tillId,
     nodeId,
     seriesId,
@@ -181,12 +179,12 @@ async function incidentsForTill(till: TillId) {
 /**
  * The open-dedup suite below needs its own till per test (rather than the module-level
  * `tillId` `beforeEach` already seeds) purely so each test's assertions read against
- * an isolated till — reuses `seedTenant`'s exact seeding path, just narrowed to the two ids these
+ * an isolated till — reuses `seedTenant`'s exact seeding path, narrowed to the one id these
  * tests care about.
  */
-async function seedTillForIncidents(): Promise<{ tenantId: TenantId; tillId: TillId }> {
+async function seedTillForIncidents(): Promise<{ tillId: TillId }> {
   const seeded = await seedTenant(suite.db);
-  return { tenantId: seeded.tenantId, tillId: seeded.tillId };
+  return { tillId: seeded.tillId };
 }
 
 describe("incidents — chain verification failure", () => {
@@ -330,7 +328,6 @@ describe("recordIncident — no sale attached", () => {
     await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       await recordIncident(tx, {
-        tenantId,
         tillId,
         error: new AppError("clock.degraded", { tillId, anchorAgeSeconds: 999 }),
         severity: "warning",
@@ -379,7 +376,7 @@ describe("openIncidents", () => {
   });
 
   it("scopes incidents to one till", async () => {
-    const other = await seedTenant(suite.db, { tenantId });
+    const other = await seedTenant(suite.db);
     await sell(failingChain());
     const rows = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
@@ -445,7 +442,6 @@ describe("recordIncidentOnce", () => {
     await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       const inserted = await recordIncidentOnce(tx, {
-        tenantId,
         tillId,
         saleId: undefined,
         error: chainFailed(),
@@ -461,7 +457,6 @@ describe("recordIncidentOnce", () => {
     await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       const input: RecordIncidentInput = {
-        tenantId,
         tillId,
         saleId: undefined,
         error: chainFailed(),
@@ -483,7 +478,6 @@ describe("recordIncidentOnce", () => {
     await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       const input: RecordIncidentInput = {
-        tenantId,
         tillId,
         saleId: undefined,
         error: chainFailed(),
@@ -506,7 +500,6 @@ describe("recordIncidentOnce", () => {
     await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       const base = {
-        tenantId,
         tillId,
         saleId: undefined,
         severity: "error" as const,
@@ -535,7 +528,6 @@ describe("recordIncidentOnce", () => {
       await asAppUser(tx);
       const error = new AppError("clock.degraded", { tillId, anchorAgeSeconds: 999 });
       const forSaleA = await recordIncidentOnce(tx, {
-        tenantId,
         tillId,
         saleId: saleA,
         error,
@@ -544,7 +536,6 @@ describe("recordIncidentOnce", () => {
       });
       expect(forSaleA).toBe(true);
       const forSaleB = await recordIncidentOnce(tx, {
-        tenantId,
         tillId,
         saleId: saleB,
         error,
@@ -575,9 +566,8 @@ describe("incidents open-dedup invariant (partial unique index)", () => {
   // in its place — the dedup key only cares that it is a real, distinct code.
 
   it("recordIncident (unconditional) de-dups a second OPEN same-key raise to one row", async () => {
-    const { tenantId, tillId } = await seedTillForIncidents(); // reuse the suite's existing seeding
+    const { tillId } = await seedTillForIncidents(); // reuse the suite's existing seeding
     const input: RecordIncidentInput = {
-      tenantId,
       tillId,
       error: new AppError("chain.verification_failed", {
         tillId,
@@ -605,12 +595,11 @@ describe("incidents open-dedup invariant (partial unique index)", () => {
   });
 
   it("de-dups two orphan (sale_id NULL) raises via NULLS NOT DISTINCT", async () => {
-    const { tenantId, tillId } = await seedTillForIncidents();
+    const { tillId } = await seedTillForIncidents();
     const raise = () =>
       withTransaction(suite.db, async (tx) => {
         await asAppUser(tx);
         return recordIncidentOnce(tx, {
-          tenantId,
           tillId,
           // no saleId — orphan
           error: new AppError("clock.degraded", { tillId, anchorAgeSeconds: 999 }),
@@ -627,9 +616,8 @@ describe("incidents open-dedup invariant (partial unique index)", () => {
   });
 
   it("frees the key after acknowledgement (a recurring condition resurfaces)", async () => {
-    const { tenantId, tillId } = await seedTillForIncidents();
+    const { tillId } = await seedTillForIncidents();
     const input: RecordIncidentInput = {
-      tenantId,
       tillId,
       error: new AppError("clock.degraded", { tillId, anchorAgeSeconds: 999 }),
       severity: "error",
@@ -656,11 +644,10 @@ describe("tenant incident reads", () => {
     });
   }
 
-  async function raise(forTenant: TenantId, forTill: TillId, detectedAt: Date): Promise<void> {
+  async function raise(forTill: TillId, detectedAt: Date): Promise<void> {
     await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       await recordIncident(tx, {
-        tenantId: forTenant,
         tillId: forTill,
         error: chainFailed(forTill),
         severity: "error",
@@ -677,58 +664,56 @@ describe("tenant incident reads", () => {
   }
 
   it("lists this tenant's open incidents across tills, newest first", async () => {
-    const secondTill = await seedTenant(suite.db, { tenantId });
-    await raise(tenantId, tillId, BASE);
-    await raise(tenantId, secondTill.tillId, new Date(BASE.getTime() + 60_000));
-    const rows = await asApp((tx) => listOpenIncidents(tx, tenantId));
+    const secondTill = await seedTenant(suite.db);
+    await raise(tillId, BASE);
+    await raise(secondTill.tillId, new Date(BASE.getTime() + 60_000));
+    const rows = await asApp((tx) => listOpenIncidents(tx));
     expect(rows.map((r) => r.tillId)).toEqual([secondTill.tillId, tillId]);
     expect(rows[0]).toMatchObject({ acknowledgedAt: null, acknowledgedBy: null });
   });
 
   it("finds an incident by id, and reads an unknown id as null", async () => {
-    await raise(tenantId, tillId, BASE);
-    const [mine] = await asApp((tx) => listOpenIncidents(tx, tenantId));
-    expect((await asApp((tx) => findIncident(tx, tenantId, mine!.id)))?.id).toBe(mine!.id);
+    await raise(tillId, BASE);
+    const [mine] = await asApp((tx) => listOpenIncidents(tx));
+    expect((await asApp((tx) => findIncident(tx, mine!.id)))?.id).toBe(mine!.id);
     expect(
-      await asApp((tx) => findIncident(tx, tenantId, "00000000-0000-4000-8000-000000000000")),
+      await asApp((tx) => findIncident(tx, "00000000-0000-4000-8000-000000000000")),
     ).toBeNull();
   });
 
   it("marks an incident handled once; a second mark keeps the first time and person", async () => {
-    await raise(tenantId, tillId, BASE);
-    const [open] = await asApp((tx) => listOpenIncidents(tx, tenantId));
+    await raise(tillId, BASE);
+    const [open] = await asApp((tx) => listOpenIncidents(tx));
     const first = new Date(BASE.getTime() + 1_000);
     const firstPerson = "00000000-0000-4000-8000-000000000001";
     await asApp((tx) =>
-      markIncidentHandled(tx, { tenantId, id: open!.id, personId: firstPerson, handledAt: first }),
+      markIncidentHandled(tx, { id: open!.id, personId: firstPerson, handledAt: first }),
     );
     await asApp((tx) =>
       markIncidentHandled(tx, {
-        tenantId,
         id: open!.id,
         personId: "00000000-0000-4000-8000-000000000002",
         handledAt: new Date(BASE.getTime() + 9_000),
       }),
     );
-    expect(await asApp((tx) => listOpenIncidents(tx, tenantId))).toEqual([]);
-    const handled = await asApp((tx) => findIncident(tx, tenantId, open!.id));
+    expect(await asApp((tx) => listOpenIncidents(tx))).toEqual([]);
+    const handled = await asApp((tx) => findIncident(tx, open!.id));
     expect(handled?.acknowledgedAt?.toISOString()).toBe(first.toISOString());
     expect(handled?.acknowledgedBy).toBe(firstPerson);
   });
 
   it("lists handled incidents inside the window, newest handled first", async () => {
-    const secondTill = await seedTenant(suite.db, { tenantId });
-    const thirdTill = await seedTenant(suite.db, { tenantId });
-    await raise(tenantId, tillId, BASE);
-    await raise(tenantId, secondTill.tillId, BASE);
-    await raise(tenantId, thirdTill.tillId, BASE);
-    const open = await asApp((tx) => listOpenIncidents(tx, tenantId));
+    const secondTill = await seedTenant(suite.db);
+    const thirdTill = await seedTenant(suite.db);
+    await raise(tillId, BASE);
+    await raise(secondTill.tillId, BASE);
+    await raise(thirdTill.tillId, BASE);
+    const open = await asApp((tx) => listOpenIncidents(tx));
     const byTill = new Map(open.map((r) => [r.tillId, r.id]));
     const person = "00000000-0000-4000-8000-000000000001";
     const mark = (till: TillId, at: Date) =>
       asApp((tx) =>
         markIncidentHandled(tx, {
-          tenantId,
           id: byTill.get(till)!,
           personId: person,
           handledAt: at,
@@ -737,9 +722,7 @@ describe("tenant incident reads", () => {
     await mark(tillId, new Date("2026-03-10T10:00:00Z"));
     await mark(secondTill.tillId, new Date("2026-03-12T10:00:00Z"));
     await mark(thirdTill.tillId, new Date("2026-02-01T10:00:00Z"));
-    const rows = await asApp((tx) =>
-      listHandledIncidents(tx, tenantId, new Date("2026-03-01T00:00:00Z")),
-    );
+    const rows = await asApp((tx) => listHandledIncidents(tx, new Date("2026-03-01T00:00:00Z")));
     expect(rows.map((r) => r.tillId)).toEqual([secondTill.tillId, tillId]);
   });
 
@@ -765,29 +748,26 @@ describe("tenant incident reads", () => {
 
   it("orders open incidents detected at the same instant by id, highest first", async () => {
     const ids = await insertTied(null);
-    const rows = await asApp((tx) => listOpenIncidents(tx, tenantId));
+    const rows = await asApp((tx) => listOpenIncidents(tx));
     expect(rows.map((r) => r.id)).toEqual(ids.reverse());
   });
 
   it("orders incidents handled at the same instant by id, highest first", async () => {
     const ids = await insertTied("2026-03-10T10:00:00.000Z");
-    const rows = await asApp((tx) =>
-      listHandledIncidents(tx, tenantId, new Date("2026-03-01T00:00:00Z")),
-    );
+    const rows = await asApp((tx) => listHandledIncidents(tx, new Date("2026-03-01T00:00:00Z")));
     expect(rows.map((r) => r.id)).toEqual(ids.reverse());
   });
 
   it("includes an incident handled exactly at the cut-off and excludes one a millisecond before", async () => {
     const cutOff = new Date("2026-03-10T10:00:00.000Z");
-    await raise(tenantId, tillId, BASE);
-    const secondTill = await seedTenant(suite.db, { tenantId });
-    await raise(tenantId, secondTill.tillId, BASE);
-    const open = await asApp((tx) => listOpenIncidents(tx, tenantId));
+    await raise(tillId, BASE);
+    const secondTill = await seedTenant(suite.db);
+    await raise(secondTill.tillId, BASE);
+    const open = await asApp((tx) => listOpenIncidents(tx));
     const byTill = new Map(open.map((r) => [r.tillId, r.id]));
     const person = "00000000-0000-4000-8000-000000000001";
     await asApp((tx) =>
       markIncidentHandled(tx, {
-        tenantId,
         id: byTill.get(tillId)!,
         personId: person,
         handledAt: cutOff,
@@ -795,13 +775,12 @@ describe("tenant incident reads", () => {
     );
     await asApp((tx) =>
       markIncidentHandled(tx, {
-        tenantId,
         id: byTill.get(secondTill.tillId)!,
         personId: person,
         handledAt: new Date(cutOff.getTime() - 1),
       }),
     );
-    const rows = await asApp((tx) => listHandledIncidents(tx, tenantId, cutOff));
+    const rows = await asApp((tx) => listHandledIncidents(tx, cutOff));
     expect(rows.map((r) => r.tillId)).toEqual([tillId]);
   });
 });

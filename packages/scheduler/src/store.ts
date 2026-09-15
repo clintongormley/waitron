@@ -1,6 +1,5 @@
 import { and, asc, eq, gte, inArray, lt, notInArray, or, sql, type AnyColumn } from "drizzle-orm";
 import { isUniqueViolation, type Transaction } from "@waitron/db";
-import type { TenantId } from "@waitron/shared";
 import { TERMINAL, type LedgerSnapshot } from "./derive.js";
 import type { RunPeriod } from "./duty.js";
 import { scheduledRuns, type RunState } from "./schema/scheduled-runs.js";
@@ -46,17 +45,17 @@ const CLAIMED = {
 } as const;
 
 /**
- * Everything derivation needs about one (tenant, duty).
+ * Everything derivation needs about one duty.
  *
  * The row read spans two ranges deliberately (see `LedgerSnapshot`): at-or-above the horizon start,
  * OR non-terminal at any age, so a re-sweep chain older than the horizon stays claimable. The
  * below-horizon MISSING-day count would be an unbounded read, so it is aggregated in SQL instead.
  *
- * The read scopes to the duty alone; with one tenant per database every row is this tenant's.
+ * The read scopes to the duty alone; the database holds one taxpayer, so every row is its own.
  */
 export async function readSnapshot(
   tx: Transaction,
-  params: { tenantId: TenantId; duty: string; horizonStart: Date },
+  params: { duty: string; horizonStart: Date },
 ): Promise<LedgerSnapshot> {
   const horizon = params.horizonStart.toISOString();
   const scope = eq(scheduledRuns.duty, params.duty);

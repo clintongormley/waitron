@@ -89,7 +89,7 @@ const clock: TrustedClock = {
 
 describe("catalogue → priceBasket → recordSale (end-to-end)", () => {
   it("rings a sale entirely from catalogue data", async () => {
-    const { tenantId, locationId, tillId, nodeId, seriesId } = await seedVenue(suite.db);
+    const { locationId, tillId, nodeId, seriesId } = await seedVenue(suite.db);
     const backend = new CapturingFakeBackend(suite.db);
 
     let priced: ReturnType<typeof priceBasket>;
@@ -100,12 +100,12 @@ describe("catalogue → priceBasket → recordSale (end-to-end)", () => {
 
       // Seed a catalogue: one weight-priced product ("sliced ham") in a "Food" category. English
       // strings only — this is a generic package under the english-only guard.
-      const cat = await createCatalogue(tx, tenantId, { name: "Deli" });
-      const food = await createCategory(tx, tenantId, { name: { en: "Food" } });
+      const cat = await createCatalogue(tx, { name: "Deli" });
+      const food = await createCategory(tx, { name: { en: "Food" } });
       const kgUnitId = (
         await createUnit(tx, { name: { en: "kg" }, precision: 3, abbreviation: { en: "u" } }, "en")
       ).id;
-      const product = await createProduct(tx, tenantId, {
+      const product = await createProduct(tx, {
         catalogueId: cat.id,
         categoryId: food.id,
         name: "sliced ham",
@@ -113,7 +113,7 @@ describe("catalogue → priceBasket → recordSale (end-to-end)", () => {
         unitPrice: "24.90",
         vatClass: "reduced",
       });
-      const breakfast = await createCategory(tx, tenantId, { name: { en: "Breakfast" } });
+      const breakfast = await createCategory(tx, { name: { en: "Breakfast" } });
       await replaceProductCategories(tx, product.id, {
         categoryIds: [food.id, breakfast.id],
         primaryCategoryId: food.id,
@@ -147,7 +147,6 @@ describe("catalogue → priceBasket → recordSale (end-to-end)", () => {
       expect(priced.total).toBe("7.97");
 
       return recordSale(tx, backend, {
-        tenantId,
         tillId,
         nodeId,
         seriesId,

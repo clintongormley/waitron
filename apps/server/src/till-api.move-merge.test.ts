@@ -15,7 +15,6 @@ import {
   tillId as brandTillId,
 } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import type { TenantId } from "@waitron/shared";
 import type { Logger, LogLevel } from "./logger.js";
 import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
@@ -39,25 +38,25 @@ const suite = usePgliteDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
   setup: async (db) => {
-    const tenantId = await seedTenant(db);
+    await seedTenant(db);
     // A location → till the session cookie references: `loginWithPin` inserts a `sessions` row
     // with a FK to `tills`, so the till `cfg.tillId` names must exist. Seeded as the PGlite
     // superuser — pure setup, as `@waitron/db`'s own seed helpers document.
     const loc = await db.execute<{ id: string }>(sql`
-      insert into locations (tenant_id, name, invoice_locales, operation_description)
-      values (${tenantId}, 'Counter', array['es-ES'], 'Retail') returning id`);
+      insert into locations (name, invoice_locales, operation_description)
+      values ('Counter', array['es-ES'], 'Retail') returning id`);
     const till = await db.execute<{ id: string }>(sql`
-      insert into tills (tenant_id, location_id, name)
-      values (${tenantId}, ${loc.rows[0]!.id}, 'Till 1') returning id`);
+      insert into tills (location_id, name)
+      values (${loc.rows[0]!.id}, 'Till 1') returning id`);
     // A node the tab lives on: `openTab` writes `working_orders.node_id` (its composite FK
-    // `(tenant_id, node_id) → nodes(tenant_id, id)` requires a real row). `cfg.nodeId` names THIS row.
-    const nodeId = await seedNode(db, tenantId, brandLocationId(loc.rows[0]!.id));
+    // `(node_id) → nodes(id)` requires a real row). `cfg.nodeId` names THIS row.
+    const nodeId = await seedNode(db, brandLocationId(loc.rows[0]!.id));
     // Ana's PIN is "5555"; `openSession` logs her in over the app role, exactly as the login route does.
     const person = await db.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, role)
-      values (${tenantId}, 'Ana', ${hashPin("5555")}, 'staff') returning id`);
+      insert into persons (display_name, pin_hash, role)
+      values ('Ana', ${hashPin("5555")}, 'staff') returning id`);
     ana = { id: person.rows[0]!.id };
-    cfg = makeCfg(tenantId, till.rows[0]!.id, loc.rows[0]!.id, nodeId);
+    cfg = makeCfg(till.rows[0]!.id, loc.rows[0]!.id, nodeId);
   },
 });
 
@@ -71,14 +70,8 @@ function collect(
 /** The till's config for the seeded tenant. `nodeId` is the seeded node the tab is written on;
  * `seriesId` is unused by the move/join/merge routes, so it carries a fresh uuid; `locationId` is the
  * seeded one `createTable` writes into. */
-function makeCfg(
-  tenantId: TenantId,
-  tillId: string,
-  locationId: string,
-  nodeId: string,
-): TillConfig {
+function makeCfg(tillId: string, locationId: string, nodeId: string): TillConfig {
   return {
-    tenantId,
     tillId: brandTillId(tillId),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
@@ -133,7 +126,6 @@ async function openSession(db: Database): Promise<string> {
   const session = await withTransaction(db, async (tx) => {
     await asAppUser(tx);
     return loginWithPin(tx, {
-      tenantId: cfg.tenantId,
       tillId: cfg.tillId,
       personId: ana.id,
       pin: "5555",
@@ -310,8 +302,8 @@ describe("POST /api/tabs/:id/{move,join,merge}", () => {
           values (${d.cfg.locationId}, 'Restaurant', 'Restaurant', 'table_tab')
           returning id`);
       const zone = await tx.execute<{ id: string }>(sql`
-          insert into floor_zones (tenant_id, location_id, name)
-          values (${d.cfg.tenantId}, ${d.cfg.locationId}, 'Dining room') returning id`);
+          insert into floor_zones (location_id, name)
+          values (${d.cfg.locationId}, 'Dining room') returning id`);
       await tx.execute(sql`
           insert into order_service_contexts
             (working_order_id, location_id, zone_id, department_id, service_mode)

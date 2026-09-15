@@ -1078,7 +1078,6 @@ async function seedSecondTill(seeded: Seeded): Promise<Seeded> {
   const wo2 = await pg.db.execute<{ id: string }>(sql`
     insert into working_orders (till_id, order_number) values (${tillId}, 1) returning id`);
   return {
-    tenantId: seeded.tenantId,
     tillId,
     nodeId: node2.rows[0].id,
     workingOrderId: wo2.rows[0].id,

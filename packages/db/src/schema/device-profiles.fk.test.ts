@@ -5,7 +5,6 @@ import type { Database } from "../client.js";
 import { captureError, pgErrorCode } from "../testing/errors.js";
 import { usePgliteDb } from "../testing/lifecycle.js";
 
-const TENANT_A = "11111111-1111-4111-8111-111111111111";
 const CANVAS_A = "11111111-0000-4000-8000-0000000000a2";
 
 describe("device_profiles canvas FK (canvas_id) → canvases", () => {
@@ -16,7 +15,7 @@ describe("device_profiles canvas FK (canvas_id) → canvases", () => {
     admin = suite.db;
     await admin.execute(sql`
       insert into tenants (id, country, tax_id, legal_name) values
-        (${TENANT_A}, 'ES', 'B00000000', 'Fixture Tenant A')
+        (1, 'ES', 'B00000000', 'Fixture Tenant A')
       on conflict (id) do nothing`);
     await admin.execute(sql`
       insert into canvases (id, name, definition) values (${CANVAS_A}, 'Canvas A', '{}'::jsonb)

@@ -21,7 +21,6 @@ import {
   tillId as brandTillId,
 } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import type { TenantId } from "@waitron/shared";
 import type { Logger, LogLevel } from "./logger.js";
 import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
@@ -52,38 +51,38 @@ const suite = usePgliteDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
   setup: async (db) => {
-    const tenantId = await seedTenant(db);
+    await seedTenant(db);
     await seedLegacySellingUnits(db);
     // invoice_locales is `es-ES` (full-tag, fiscal). The product is authored under the BARE `es` key;
     // `priceOrderLines` re-keys its descriptions to the location's `es-ES` before the tab
     // line-insert fires `check_locales`, which demands a line's `descriptions` keys equal the
     // location's locales exactly — the same constraint the park route's harness documents.
     const loc = await db.execute<{ id: string }>(sql`
-      insert into locations (tenant_id, name, invoice_locales, operation_description)
-      values (${tenantId}, 'Counter', array['es-ES'], 'Retail') returning id`);
+      insert into locations (name, invoice_locales, operation_description)
+      values ('Counter', array['es-ES'], 'Retail') returning id`);
     // KDS-1: a default kitchen station so addTabRound's fire (→ fireLines) has a fallback. Seeded
     // as the PGlite superuser here, as the surrounding venue rows are.
-    await seedKitchenStation(db, { tenantId, locationId: brandLocationId(loc.rows[0]!.id) });
+    await seedKitchenStation(db, { locationId: brandLocationId(loc.rows[0]!.id) });
     const till = await db.execute<{ id: string }>(sql`
-      insert into tills (tenant_id, location_id, name)
-      values (${tenantId}, ${loc.rows[0]!.id}, 'Till 1') returning id`);
+      insert into tills (location_id, name)
+      values (${loc.rows[0]!.id}, 'Till 1') returning id`);
     // A node the tab's working-order write needs: `openTab`/`addTabRound` create an `open`
-    // working_orders row whose composite FK `(tenant_id, node_id) → nodes(tenant_id, id)` requires a
+    // working_orders row whose composite FK `(node_id) → nodes(id)` requires a
     // real row; `cfg.nodeId` names THIS one.
-    const nodeId = await seedNode(db, tenantId, brandLocationId(loc.rows[0]!.id));
+    const nodeId = await seedNode(db, brandLocationId(loc.rows[0]!.id));
     // Ana logs in with PIN "5555"; the session cookie the routes require names her shift.
     const person = await db.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, role)
-      values (${tenantId}, 'Ana', ${hashPin("5555")}, 'staff') returning id`);
+      insert into persons (display_name, pin_hash, role)
+      values ('Ana', ${hashPin("5555")}, 'staff') returning id`);
     ana = { id: person.rows[0]!.id };
     // One product in a catalogue assigned to the counter location, seeded on the APP role via the
     // catalogue helpers — the same `withTransaction` + `asAppUser` path the tab verbs price it through, so
     // the active/assignment filters are real, not bypassed by a superuser insert.
     const product = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
-      const cat = await createCatalogue(tx, tenantId, { name: "Carta" });
-      const bebidas = await createCategory(tx, tenantId, { name: { en: "Bebidas" } });
-      const p = await createProduct(tx, tenantId, {
+      const cat = await createCatalogue(tx, { name: "Carta" });
+      const bebidas = await createCategory(tx, { name: { en: "Bebidas" } });
+      const p = await createProduct(tx, {
         catalogueId: cat.id,
         categoryId: bebidas.id,
         name: "Agua mineral",
@@ -96,10 +95,10 @@ const suite = usePgliteDb({
     });
     productId = product.id;
     const zone = await db.execute<{ id: string }>(sql`
-      insert into floor_zones (tenant_id, location_id, name)
-      values (${tenantId}, ${loc.rows[0]!.id}, 'Terraza') returning id`);
+      insert into floor_zones (location_id, name)
+      values (${loc.rows[0]!.id}, 'Terraza') returning id`);
     seededZoneId = zone.rows[0]!.id;
-    cfg = makeCfg(tenantId, till.rows[0]!.id, loc.rows[0]!.id, nodeId);
+    cfg = makeCfg(till.rows[0]!.id, loc.rows[0]!.id, nodeId);
   },
 });
 
@@ -113,14 +112,8 @@ function collect(
 /** The till's config for the seeded tenant. `seriesId` is unused by these routes (no fiscal write on
  *  the tab/table path) so it carries a fresh uuid; `nodeId`/`locationId` are the seeded rows the tab
  *  and table reads write/scope by. */
-function makeCfg(
-  tenantId: TenantId,
-  tillId: string,
-  locationId: string,
-  nodeId: string,
-): TillConfig {
+function makeCfg(tillId: string, locationId: string, nodeId: string): TillConfig {
   return {
-    tenantId,
     tillId: brandTillId(tillId),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
@@ -171,7 +164,6 @@ async function openSession(db: Database): Promise<string> {
   const session = await withTransaction(db, async (tx) => {
     await asAppUser(tx);
     return loginWithPin(tx, {
-      tenantId: cfg.tenantId,
       tillId: cfg.tillId,
       personId: ana.id,
       pin: "5555",

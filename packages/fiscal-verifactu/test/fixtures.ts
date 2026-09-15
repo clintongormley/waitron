@@ -62,7 +62,8 @@ export const TENANT_B = {
  */
 export async function seedTenantTillSif(db: Database): Promise<void> {
   await db.execute(sql`
-    insert into tenants (country, tax_id, legal_name) values ('ES', '89890001K', 'Waitron SL')
+    insert into tenants (id, country, tax_id, legal_name) values (1, 'ES', '89890001K', 'Waitron SL')
+    on conflict (id) do nothing
   `);
   await db.execute(sql`
     insert into locations (id, name, invoice_locales, operation_description) values (${TENANT_A.locationId}, 'Local principal', array['es'], 'Venta en establecimiento')
@@ -103,7 +104,8 @@ export async function seedTenantTillSif(db: Database): Promise<void> {
  */
 export async function seedTenants(db: Database): Promise<void> {
   await db.execute(sql`
-    insert into tenants (country, tax_id, legal_name) values ('ES', '89890001K', 'Waitron SL')
+    insert into tenants (id, country, tax_id, legal_name) values (1, 'ES', '89890001K', 'Waitron SL')
+    on conflict (id) do nothing
   `);
   await db.execute(sql`
     insert into locations (id, name, invoice_locales, operation_description) values (${TENANT_A.locationId}, 'Local principal', array['es'], 'Venta en establecimiento'),
@@ -248,8 +250,8 @@ export async function seedTenantWithSif(db: Database): Promise<SeededTillWithSif
   const nif = freshNif();
   return db.transaction(async (tx) => {
     await tx.execute(sql`
-      insert into tenants (country, tax_id, legal_name)
-      select 'ES', ${nif}, 'Waitron SL' where not exists (select 1 from tenants)
+      insert into tenants (id, country, tax_id, legal_name)
+      select 1, 'ES', ${nif}, 'Waitron SL' where not exists (select 1 from tenants)
     `);
     const { tillId, nodeId, seriesId } = await insertLocationTillSeries(tx);
     await registerSif(tx, { nodeId, nif, idSistemaInformatico: "WT" });

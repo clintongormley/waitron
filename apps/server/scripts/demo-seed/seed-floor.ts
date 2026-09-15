@@ -9,7 +9,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tenantId as brandTenantId,
   tillId as brandTillId,
 } from "@waitron/shared";
 import { createTable, createZone, setTablePlacement } from "../../src/tables.js";
@@ -18,7 +17,6 @@ import { DEMO_STATUSES, DEMO_TABLES, DEMO_ZONES } from "./floor.js";
 import { SEED_INVOICE_LOCALE, type SeedLocale } from "./menu.js";
 
 export interface SeedFloorInput {
-  tenantId: string;
   locationId: string;
   locale: SeedLocale;
   menuIds?: { restaurant: string; lunch: string; deli: string };
@@ -26,22 +24,21 @@ export interface SeedFloorInput {
 
 /**
  * Bridge the plain-string venue ids `applyVenue` returns into the branded `TillConfig` shape
- * `createZone`/`createTable`/`setTablePlacement` are typed to take. Only `tenantId`/`locationId` are
+ * `createZone`/`createTable`/`setTablePlacement` are typed to take. Only `locationId` is
  * ever READ by those three (confirmed by inspection of `apps/server/src/tables.ts`: `createZone`/
- * `createTable` insert `cfg.tenantId`/`cfg.locationId` as literal column values, and
+ * `createTable` insert `cfg.locationId` as a literal column value, and
  * `setTablePlacement` reads `cfg.locationId` alone to scope its lookups) — every other field here is
  * a placeholder that satisfies the type and is never touched, the same shape `tables.test.ts`'s own
  * `setupVenue` fixture uses for its unrelated `seriesId` (a random uuid, no real series row).
  */
-function toTableCfg(tenantId: string, locationId: string, locale: SeedLocale): TillConfig {
+function toTableCfg(locationId: string, locale: SeedLocale): TillConfig {
   return {
-    tenantId: brandTenantId(tenantId),
     tillId: brandTillId(randomUUID()),
     nodeId: brandNodeId(randomUUID()),
     seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(locationId),
     // `locale` is the BARE content key; the fiscal/display fields take the FULL tag it files under.
-    // Both are placeholders here (only tenantId/locationId are read — see this function's doc), kept
+    // Both are placeholders here (only locationId is read — see this function's doc), kept
     // full-tag so the throwaway cfg is a VALID `TillConfig` shape rather than a bare-locale one.
     locale: SEED_INVOICE_LOCALE[locale],
     invoiceLocales: [SEED_INVOICE_LOCALE[locale]],
@@ -59,9 +56,9 @@ function toTableCfg(tenantId: string, locationId: string, locale: SeedLocale): T
  */
 export async function seedFloor(
   tx: Transaction,
-  { tenantId, locationId, locale, menuIds }: SeedFloorInput,
+  { locationId, locale, menuIds }: SeedFloorInput,
 ): Promise<void> {
-  const cfg = toTableCfg(tenantId, locationId, locale);
+  const cfg = toTableCfg(locationId, locale);
 
   const { rows: defaults } = await tx.execute<{ department_id: string; zone_id: string }>(sql`
     select department_id, zone_id from zone_service_policies
@@ -181,9 +178,9 @@ export async function seedFloor(
   }
 
   const { rows: deliZoneRows } = await tx.execute<{ id: string }>(sql`
-    insert into floor_zones (tenant_id, location_id, name, display_order, active)
+    insert into floor_zones (location_id, name, display_order, active)
     values (
-      ${tenantId}, ${locationId},
+      ${locationId},
       ${locale === "en" ? "Deli counter" : "Mostrador de charcutería"}, 4, true
     ) returning id`);
   const deliZoneId = deliZoneRows[0]?.id;
@@ -233,8 +230,8 @@ export async function seedFloor(
 
   for (const [index, status] of DEMO_STATUSES.entries()) {
     await tx.execute(
-      sql`insert into table_service_statuses (tenant_id, label, color, display_order)
-          values (${tenantId}, ${status.label[locale]}, ${status.color}, ${index})`,
+      sql`insert into table_service_statuses (label, color, display_order)
+          values (${status.label[locale]}, ${status.color}, ${index})`,
     );
   }
 }

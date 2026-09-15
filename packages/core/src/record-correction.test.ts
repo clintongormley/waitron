@@ -1,7 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { AppError, seriesId as brandSeriesId } from "@waitron/shared";
-import type { NodeId, SaleId, SeriesId, TenantId, TillId } from "@waitron/shared";
+import type { NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
 // See record-sale.test.ts's own deviation note: there is no `@waitron/fiscal/testing` subpath. The
 // real import path — stated verbatim in `packages/fiscal/src/index.ts`'s closing comment — is
 // `@waitron/fiscal/src/testing/fake-backend.js`, used in test files only.
@@ -25,7 +25,6 @@ import type { RecordSaleInput } from "./record-sale.js";
 import { recordVoid } from "./record-void.js";
 import { seedBareSale, seedRectificativeSeries, seedTenant } from "../test/fixtures.js";
 
-let tenantId: TenantId;
 let tillId: TillId;
 let nodeId: NodeId;
 let seriesId: SeriesId; // the ordinary (purpose='standard') series seedTenant creates
@@ -55,7 +54,7 @@ const suite = usePgliteDb({
 });
 
 beforeEach(async () => {
-  ({ tenantId, tillId, nodeId, seriesId } = await seedTenant(suite.db));
+  ({ tillId, nodeId, seriesId } = await seedTenant(suite.db));
   rectSeriesId = await seedRectificativeSeries(suite.db, nodeId);
   // A supervisor and a manager (both hold `sale.rectify`), and a staff member (holds nothing).
   // Seeded on the fixture connection, like the record-void suite.
@@ -115,7 +114,6 @@ const steadyClock: TrustedClock = fixedClock(() => ({
  * which makes "the CORRECTIVE is unsettled" a real assertion rather than a vacuous one. */
 function saleInput(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
   return {
-    tenantId,
     tillId,
     nodeId,
     seriesId,
@@ -160,7 +158,6 @@ function correctionInput(
   overrides: Partial<RecordCorrectionInput> = {},
 ): RecordCorrectionInput {
   return {
-    tenantId,
     tillId,
     nodeId,
     seriesId: rectSeriesId,
@@ -290,7 +287,7 @@ describe("recordCorrection — series purpose guard (§5)", () => {
     // another node's counter would let two chains issue from one series.
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId } = await sell(backend);
-    const other = await seedTenant(suite.db, { tenantId });
+    const other = await seedTenant(suite.db);
     const otherRect = await seedRectificativeSeries(suite.db, other.nodeId, "R2");
     await expect(correct(backend, saleId, { seriesId: otherRect })).rejects.toMatchObject({
       code: "sale.series_wrong_node",
@@ -312,7 +309,7 @@ describe("recordCorrection — the sale being corrected", () => {
     // there is nothing to reference: the backend throws `fiscal.sale_not_recorded`, mirroring the
     // same precondition `recordVoid` enforces.
     const backend = new FakeFiscalBackend(suite.db);
-    const bareOriginal = await seedBareSale(suite.db, { tenantId, tillId, nodeId, seriesId });
+    const bareOriginal = await seedBareSale(suite.db, { tillId, nodeId, seriesId });
     await expect(correct(backend, bareOriginal)).rejects.toMatchObject({
       code: "fiscal.sale_not_recorded",
       params: { saleId: bareOriginal },

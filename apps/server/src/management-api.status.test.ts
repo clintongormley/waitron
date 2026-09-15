@@ -39,8 +39,8 @@ function uniqueLabel(base: string): string {
 }
 
 /** Provision a venue as owner and seed the people and sessions this route fixture needs. */
-async function setupTenant(): Promise<{ tenantId: string; managerId: string; staffId: string }> {
-  const venue = await applyVenue(
+export async function setupTenant(): Promise<{ managerId: string; staffId: string }> {
+  await applyVenue(
     planVenue(
       {
         country: "ES",
@@ -77,19 +77,19 @@ async function setupTenant(): Promise<{ tenantId: string; managerId: string; sta
   const { managerId, staffId } = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const manager = await tx.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, email, pin_hash, password_hash, role)
-      values (${venue.tenantId}, 'The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')
+      insert into persons (display_name, email, pin_hash, password_hash, role)
+      values ('The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')
       returning id`);
     const staff = await tx.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, email, pin_hash, password_hash, role)
-      values (${venue.tenantId}, 'The Clerk', ${STAFF_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'staff')
+      insert into persons (display_name, email, pin_hash, password_hash, role)
+      values ('The Clerk', ${STAFF_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'staff')
       returning id`);
     return { managerId: manager.rows[0]!.id, staffId: staff.rows[0]!.id };
   });
-  return { tenantId: venue.tenantId, managerId, staffId };
+  return { managerId, staffId };
 }
 
-function mountApp(tenantId: string): Hono {
+function mountApp(): Hono {
   const app = new Hono();
   mountManagementApi(
     app,
@@ -97,7 +97,7 @@ function mountApp(tenantId: string): Hono {
       db: suite.admin,
       // The all-zero node id (the capture default): this suite exercises the staff-status routes, not
       // origin attribution, so the sentinel keeps its enrolled writes' origin exactly as before Task 6.
-      cfg: { tenantId, nodeId: "00000000-0000-0000-0000-000000000000" },
+      cfg: { nodeId: "00000000-0000-0000-0000-000000000000" },
       secureCookies: false,
       rpId: "localhost",
       origin: "http://localhost",
@@ -127,8 +127,8 @@ let staffCookie: string;
 const json = { "content-type": "application/json" };
 
 beforeAll(async () => {
-  const { tenantId } = await setupTenant();
-  app = mountApp(tenantId);
+  await setupTenant();
+  app = mountApp();
   managerCookie = await login(app, MANAGER_EMAIL);
   staffCookie = await login(app, STAFF_EMAIL);
 });

@@ -13,7 +13,6 @@ import "./errors.js";
 
 export type RecoveryBundleDeps = {
   db: Database;
-  cfg: { tenantId: string };
   /** The box's persisted state dir — the secret files the bundle packs live here (`config.stateDir`). */
   stateDir: string;
   now: () => Date;

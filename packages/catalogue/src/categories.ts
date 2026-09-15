@@ -93,11 +93,9 @@ function validateColor(color: string | null | undefined): void {
 }
 export async function createCategory(
   tx: Transaction,
-  tenantId: string,
   input: CategoryInput,
   fallbackLanguage: string = FALLBACK_LOCALE,
 ): Promise<Category> {
-  void tenantId;
   await validateContentTranslations(tx, input.name, fallbackLanguage);
   validateColor(input.color);
   await lockCategories(tx);

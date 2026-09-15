@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { withTransaction } from "@waitron/db";
 import { loadKeyRing } from "./keyring.js";
-import { credentialTenants, getCredential, putCredential } from "./store.js";
+import { credentialProvisioned, getCredential, putCredential } from "./store.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 
@@ -43,9 +43,9 @@ describe("the vault through a non-superuser LOGIN", () => {
   });
 });
 
-describe("credentialTenants", () => {
-  it("enumerates the tenant only once THAT purpose is provisioned", async () => {
-    const tenant = await seedTenant(suite.admin);
+describe("credentialProvisioned", () => {
+  it("reports the purpose provisioned only once THAT purpose has a credential", async () => {
+    await seedTenant(suite.admin);
     // A credential for a DIFFERENT purpose first: an empty vault would also enumerate nobody, so it
     // could not show that the function looks at the purpose rather than at whether any row exists.
     const probe = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
@@ -56,39 +56,39 @@ describe("credentialTenants", () => {
           value: { pfxBase64: "AAAA", passphrase: "p", certKind: "sello" },
         }),
       );
-      expect(await credentialTenants(probe, "payments.stripe")).toEqual([]);
+      expect(await credentialProvisioned(probe, "payments.stripe")).toBe(false);
 
       await withTransaction(probe, (tx) =>
         putCredential(tx, RING, { purpose: "payments.stripe", value: STRIPE }),
       );
-      expect(await credentialTenants(probe, "payments.stripe")).toEqual([tenant]);
+      expect(await credentialProvisioned(probe, "payments.stripe")).toBe(true);
     } finally {
       await probe.close();
     }
   });
 
-  it("returns tenant ids and nothing else — `setof uuid`", async () => {
+  it("returns taxpayer ids and nothing else — `setof integer`", async () => {
     // The seam returns ONE identifier per row and no column of the credential itself; if it ever
     // grew a ciphertext or key_version column, this is the test that should have stopped it. Exact
-    // match, not a text-or-uuid pattern: `tenants.id` is a uuid, so a silent change of the declared
+    // match, not a pattern: `tenants.id` is the integer 1 now, so a silent change of the declared
     // return type must fail this test, not pass it.
     const probe = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
       const described = await probe.execute<{ result_type: string }>(sql`
         select pg_get_function_result(oid) as result_type
         from pg_proc where proname = 'credential_tenants'`);
-      expect(described.rows[0]!.result_type.toLowerCase()).toBe("setof uuid");
+      expect(described.rows[0]!.result_type.toLowerCase()).toBe("setof integer");
     } finally {
       await probe.close();
     }
   });
 
-  it("returns an empty list for a purpose nobody has provisioned, never a throw", async () => {
+  it("reports false for a purpose nobody has provisioned, never a throw", async () => {
     await seedTenant(suite.admin);
     const probe = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
-      const found = await credentialTenants(probe, "credentials-vault-test.never-provisioned");
-      expect(found).toEqual([]);
+      const found = await credentialProvisioned(probe, "credentials-vault-test.never-provisioned");
+      expect(found).toBe(false);
     } finally {
       await probe.close();
     }

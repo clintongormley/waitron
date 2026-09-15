@@ -1,5 +1,4 @@
 import type { Transaction } from "@waitron/db";
-import type { TenantId } from "@waitron/shared";
 
 export type AlertSeverity = "warning" | "error";
 
@@ -23,7 +22,6 @@ export type OngoingAlert = Pick<Alert, "key" | "code" | "params" | "severity" | 
 
 export interface AlertReadContext {
   readonly tx: Transaction;
-  readonly tenantId: TenantId;
   readonly now: Date;
 }
 

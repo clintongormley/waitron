@@ -13,7 +13,6 @@ import { tenants } from "./tenants.js";
 // Real Postgres (a template clone), not PGlite: every write below runs as the non-owner
 // `app_user`, the deployment role, which PGlite (every connection a superuser) cannot be. The
 // cases retain the role switch so the reads and writes still exercise app_user grants.
-const TENANT_A = "11111111-1111-4111-8111-111111111111";
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 // A location id that is never seeded — the negative for the direct location_id → locations.id FK.
 const GHOST_LOCATION = "dddddddd-0000-4000-8000-000000000099";
@@ -27,7 +26,7 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
   beforeAll(async () => {
     await suite.admin
       .insert(tenants)
-      .values([{ id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
+      .values([{ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
     // The location — the direct location_id → locations.id FK target. operation_description
     // is Spanish test DATA, not a schema identifier, exactly as the sibling tests use 'Hostelería'.
     await suite.admin.execute(sql`
@@ -35,16 +34,15 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
       on conflict (id) do nothing`);
   });
 
-  function asApp<T>(tenant: string, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-    void tenant;
+  function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
     return withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return fn(tx);
     });
   }
 
-  async function seedAgent(tenant: string, name: string): Promise<string> {
-    return asApp(tenant, async (tx) => {
+  async function seedAgent(name: string): Promise<string> {
+    return asApp(async (tx) => {
       const r = await tx.execute<{ id: string }>(
         sql`insert into print_agents (location_id, name, token_hash) values (${LOCATION_A}, ${name}, ${TOKEN_HASH}) returning id`,
       );
@@ -54,8 +52,8 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
 
   // A network_tcp printer (host satisfies the transport CHECK). No stored agent binding — an agent is
   // discovered at run time, so a printer names none.
-  async function seedPrinter(tenant: string, name: string): Promise<string> {
-    return asApp(tenant, async (tx) => {
+  async function seedPrinter(name: string): Promise<string> {
+    return asApp(async (tx) => {
       const r = await tx.execute<{ id: string }>(
         sql`insert into printers (location_id, name, transport, host) values (${LOCATION_A}, ${name}, 'network_tcp', '10.0.0.5')
             returning id`,
@@ -64,8 +62,8 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
     });
   }
 
-  async function seedJob(tenant: string, printer: string): Promise<string> {
-    return asApp(tenant, async (tx) => {
+  async function seedJob(printer: string): Promise<string> {
+    return asApp(async (tx) => {
       const r = await tx.execute<{ id: string }>(
         sql`insert into print_jobs (location_id, printer_id, payload) values (${LOCATION_A}, ${printer}, decode('48656c6c6f', 'hex'))
             returning id`,
@@ -79,21 +77,18 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
   // fields relevant to a transport are supplied; the rest stay NULL. `transport` is a bound param
   // coerced into the print_transport column in assignment context (so an unknown enum value raises
   // the enum's own error, not a syntax error).
-  function insertPrinter(
-    tenant: string,
-    opts: {
-      transport: string;
-      name?: string;
-      localKey?: string | null;
-      host?: string | null;
-      pollId?: string | null;
-    },
-  ): Promise<{ id: string }[]> {
+  function insertPrinter(opts: {
+    transport: string;
+    name?: string;
+    localKey?: string | null;
+    host?: string | null;
+    pollId?: string | null;
+  }): Promise<{ id: string }[]> {
     const name = opts.name ?? "Probe printer";
     const localKey = opts.localKey ?? null;
     const host = opts.host ?? null;
     const pollId = opts.pollId ?? null;
-    return asApp(tenant, (tx) =>
+    return asApp((tx) =>
       tx
         .execute<{ id: string }>(
           sql`insert into printers (location_id, name, transport, local_key, host, poll_id) values (${LOCATION_A}, ${name}, ${opts.transport}, ${localKey}, ${host}, ${pollId})
@@ -106,13 +101,13 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
   // ---- print_agents -------------------------------------------------------------------------
 
   it("print_agents: exposes every column through the Drizzle export, with the active default", async () => {
-    const id = await seedAgent(TENANT_A, "Kitchen USB agent");
-    await asApp(TENANT_A, (tx) =>
+    const id = await seedAgent("Kitchen USB agent");
+    await asApp((tx) =>
       tx.execute(sql`update print_agents set last_seen_at = now() where id = ${id}`),
     );
     // Read back through the Drizzle `printAgents` export — exercises the produced table export and its
     // column mapping under the app role.
-    const [row] = await asApp(TENANT_A, (tx) =>
+    const [row] = await asApp((tx) =>
       tx
         .select()
         .from(printAgents)
@@ -126,7 +121,7 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
 
   it("print_agents: the location FK rejects a non-existent location (direct location_id → locations.id)", async () => {
     const e = await captureError(() =>
-      asApp(TENANT_A, (tx) =>
+      asApp((tx) =>
         tx.execute(
           sql`insert into print_agents (location_id, name, token_hash) values (${GHOST_LOCATION}, 'Ghost location', ${TOKEN_HASH})`,
         ),
@@ -140,24 +135,24 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
     // above do — drizzle's own `.message` is "Failed query: …", so the real Postgres code lives on
     // `.cause` (pgErrorCode unwraps it).
     const e = await captureError(() =>
-      asApp(TENANT_A, (tx) => tx.execute(sql`select 1 from print_agent_pairing_codes limit 1`)),
+      asApp((tx) => tx.execute(sql`select 1 from print_agent_pairing_codes limit 1`)),
     );
     expect(pgErrorCode(e)).toBe("42P01");
   });
 
   it("allows many NULL node_id agents but at most one per (tenant, node_id)", async () => {
     // Two manual agents (node_id NULL) coexist — NULLS DISTINCT is the Postgres default.
-    await seedAgent(TENANT_A, "till A");
-    await seedAgent(TENANT_A, "till B");
+    await seedAgent("till A");
+    await seedAgent("till B");
 
     const node = "cccccccc-0000-4000-8000-000000000001";
-    await asApp(TENANT_A, (tx) =>
+    await asApp((tx) =>
       tx.execute(
         sql`insert into print_agents (location_id, name, token_hash, node_id) values (${LOCATION_A}, 'box', ${TOKEN_HASH}, ${node})`,
       ),
     );
     const err = await captureError(() =>
-      asApp(TENANT_A, (tx) =>
+      asApp((tx) =>
         tx.execute(
           sql`insert into print_agents (location_id, name, token_hash, node_id) values (${LOCATION_A}, 'box dup', ${TOKEN_HASH}, ${node})`,
         ),
@@ -169,11 +164,9 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
   // ---- printers -----------------------------------------------------------------------------
 
   it("printers: exposes every column through the Drizzle export, with the port and ticket_scope defaults", async () => {
-    const id = await seedPrinter(TENANT_A, "Kitchen printer");
-    await asApp(TENANT_A, (tx) =>
-      tx.execute(sql`update printers set active = false where id = ${id}`),
-    );
-    const [row] = await asApp(TENANT_A, (tx) =>
+    const id = await seedPrinter("Kitchen printer");
+    await asApp((tx) => tx.execute(sql`update printers set active = false where id = ${id}`));
+    const [row] = await asApp((tx) =>
       tx
         .select()
         .from(printers)
@@ -193,7 +186,7 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
 
   it("printers: the transport-fields CHECK admits a well-formed cloud_poll printer", async () => {
     // cloud_poll needs only poll_id (it self-polls; usb/bluetooth/network_tcp are covered below).
-    const cloudId = await asApp(TENANT_A, (tx) =>
+    const cloudId = await asApp((tx) =>
       tx
         .execute<{ id: string }>(
           sql`insert into printers (location_id, name, transport, poll_id) values (${LOCATION_A}, 'Cloud printer', 'cloud_poll', 'poll-abc')
@@ -207,15 +200,15 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
   // ---- print_jobs ---------------------------------------------------------------------------
 
   it("print_jobs: round-trips the bytea payload and the delivery lifecycle columns", async () => {
-    const printer = await seedPrinter(TENANT_A, "Printer for job");
-    const id = await seedJob(TENANT_A, printer);
+    const printer = await seedPrinter("Printer for job");
+    const id = await seedJob(printer);
     // The agent runtime transitions queued → printing → done via UPDATE (app_user holds UPDATE).
-    await asApp(TENANT_A, (tx) =>
+    await asApp((tx) =>
       tx.execute(
         sql`update print_jobs set status = 'done', delivered_at = now(), attempts = attempts + 1 where id = ${id}`,
       ),
     );
-    const [row] = await asApp(TENANT_A, (tx) =>
+    const [row] = await asApp((tx) =>
       tx
         .select()
         .from(printJobs)
@@ -232,8 +225,8 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
   });
 
   it("print_jobs: the app role stores a drawer command kind", async () => {
-    const printer = await seedPrinter(TENANT_A, "Drawer command");
-    const [job] = await asApp(TENANT_A, (tx) =>
+    const printer = await seedPrinter("Drawer command");
+    const [job] = await asApp((tx) =>
       tx
         .insert(printJobs)
         .values({
@@ -251,9 +244,9 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
     { kind: "unknown", code: "23514" },
     { kind: null, code: "23502" },
   ])("print_jobs: refuses kind $kind", async ({ kind, code }) => {
-    const printer = await seedPrinter(TENANT_A, `Bad kind ${kind}`);
+    const printer = await seedPrinter(`Bad kind ${kind}`);
     const error = await captureError(() =>
-      asApp(TENANT_A, (tx) =>
+      asApp((tx) =>
         tx.execute(
           sql`insert into print_jobs (location_id, printer_id, payload, kind) values (${LOCATION_A}, ${printer}, decode('1b700019fa', 'hex'), ${kind})`,
         ),
@@ -265,16 +258,14 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
   // ---- central-printer-provisioning: local_key / bluetooth / claimed_by ---------------------
 
   it("printers: rejects a usb printer with no local_key (CHECK 23514)", async () => {
-    const e = await captureError(() =>
-      insertPrinter(TENANT_A, { transport: "usb", localKey: null }),
-    );
+    const e = await captureError(() => insertPrinter({ transport: "usb", localKey: null }));
     expect(pgErrorCode(e)).toBe("23514"); // printers_transport_fields_ck
   });
 
   it("printers: accepts usb keyed on a serial and bluetooth keyed on a MAC", async () => {
-    const usb = await insertPrinter(TENANT_A, { transport: "usb", localKey: "SN-ABC123" });
+    const usb = await insertPrinter({ transport: "usb", localKey: "SN-ABC123" });
     expect(usb[0]!.id).toBeDefined();
-    const bt = await insertPrinter(TENANT_A, {
+    const bt = await insertPrinter({
       transport: "bluetooth",
       localKey: "AA:BB:CC:DD:EE:FF",
     });
@@ -282,24 +273,20 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
   });
 
   it("printers: rejects a network_tcp printer with no host (CHECK 23514)", async () => {
-    const e = await captureError(() =>
-      insertPrinter(TENANT_A, { transport: "network_tcp", host: null }),
-    );
+    const e = await captureError(() => insertPrinter({ transport: "network_tcp", host: null }));
     expect(pgErrorCode(e)).toBe("23514"); // printers_transport_fields_ck
   });
 
   it("printers: rejects a second registration of the same (location, local_key) (UNIQUE 23505)", async () => {
-    await insertPrinter(TENANT_A, { transport: "usb", localKey: "SN-DUP" });
-    const e = await captureError(() =>
-      insertPrinter(TENANT_A, { transport: "usb", localKey: "SN-DUP" }),
-    );
+    await insertPrinter({ transport: "usb", localKey: "SN-DUP" });
+    const e = await captureError(() => insertPrinter({ transport: "usb", localKey: "SN-DUP" }));
     expect(pgErrorCode(e)).toBe("23505"); // printers_local_key_key partial UNIQUE
   });
 
   it("printers: allows two NULL-local_key printers in one location (partial index)", async () => {
-    const a = await insertPrinter(TENANT_A, { transport: "network_tcp", host: "10.0.0.1" });
+    const a = await insertPrinter({ transport: "network_tcp", host: "10.0.0.1" });
     expect(a[0]!.id).toBeDefined();
-    const b = await insertPrinter(TENANT_A, { transport: "network_tcp", host: "10.0.0.2" });
+    const b = await insertPrinter({ transport: "network_tcp", host: "10.0.0.2" });
     expect(b[0]!.id).toBeDefined();
   });
 
@@ -325,9 +312,9 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
   });
 
   it("print_jobs: accepts claimed_by naming an agent in the same tenant, and NULL", async () => {
-    const agentA = await seedAgent(TENANT_A, "Agent A claim ok");
-    const printerA = await seedPrinter(TENANT_A, "Printer A claim ok");
-    const claimed = await asApp(TENANT_A, (tx) =>
+    const agentA = await seedAgent("Agent A claim ok");
+    const printerA = await seedPrinter("Printer A claim ok");
+    const claimed = await asApp((tx) =>
       tx
         .execute<{ id: string }>(
           sql`insert into print_jobs (location_id, printer_id, payload, claimed_by) values (${LOCATION_A}, ${printerA}, decode('00', 'hex'), ${agentA})
@@ -337,7 +324,7 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
     );
     expect(claimed[0]!.id).toBeDefined();
     // NULL claimed_by is skipped by MATCH SIMPLE (a queued job).
-    const queued = await seedJob(TENANT_A, printerA);
+    const queued = await seedJob(printerA);
     expect(queued).toBeDefined();
   });
 });

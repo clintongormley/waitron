@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
-import type { NodeId, TenantId } from "@waitron/shared";
+import type { NodeId } from "@waitron/shared";
 import { addDecimal, compareDecimal, decimal } from "@waitron/shared";
 import {
   activeSalesClause,
@@ -28,7 +28,7 @@ import type { DailyCloseInput, PeriodVatInput, VatSummary } from "./types.js";
  */
 export async function aggregateVatByRate(
   tx: Transaction,
-  scope: { tenantId: TenantId; nodeId?: NodeId; dateFilter: SQL },
+  scope: { nodeId?: NodeId; dateFilter: SQL },
 ): Promise<VatSummary> {
   const nodeClause = nodeScopeClause(scope.nodeId);
   // The rate is grouped as `numeric(5,2)::text`, not the raw jsonb string, so two spellings of the
@@ -43,7 +43,7 @@ export async function aggregateVatByRate(
     cross join lateral jsonb_array_elements(s.vat_breakdown) as b
     where ${scope.dateFilter}
       ${nodeClause}
-      and ${activeSalesClause({ tenantId: scope.tenantId })}
+      and ${activeSalesClause()}
     group by (b->>'rate')::numeric(5, 2)::text
   `);
 
@@ -78,7 +78,6 @@ export async function computeVatSummary(
   input: DailyCloseInput,
 ): Promise<VatSummary> {
   return aggregateVatByRate(tx, {
-    tenantId: input.tenantId,
     nodeId: input.nodeId,
     dateFilter: businessDayClause(sql`s.issued_at`, input),
   });
@@ -100,7 +99,6 @@ export async function computeVatSummaryForPeriod(
   validateCutover(input.dayCutover);
   validateBusinessDayRange(input);
   return aggregateVatByRate(tx, {
-    tenantId: input.tenantId,
     nodeId: input.nodeId,
     dateFilter: businessDayRangeClause(sql`s.issued_at`, input),
   });

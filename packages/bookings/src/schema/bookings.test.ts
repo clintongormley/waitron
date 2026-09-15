@@ -42,7 +42,6 @@ describe("the bookings Drizzle table config", () => {
 // Real Postgres (a whole-manifest template clone), not PGlite: every write below runs as the non-owner
 // `app_user`, the deployment role, which PGlite (every connection a superuser) cannot be. The
 // `manifest` template (not [core, bookings]) is the shared ordered set — bookings FKs into core.
-const TENANT = "11111111-1111-4111-8111-111111111111";
 const LOCATION = "aaaaaaaa-0000-4000-8000-000000000001";
 // A dining_tables row — the target of bookings.table_id.
 const TABLE = "aaaaaaaa-0000-4000-8000-000000000009";
@@ -57,7 +56,7 @@ describe("bookings schema (staff reservations — columns, CHECK, FKs)", () => {
     // The core parents still carry their own tenant column, so they are seeded with one.
     await suite.admin
       .insert(tenants)
-      .values({ id: TENANT, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant" });
+      .values({ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant" });
     await suite.admin.execute(sql`
       insert into locations (id, name, invoice_locales, operation_description) values (${LOCATION}, 'Loc A', array['es'], 'Hostelería')`);
     await suite.admin.execute(sql`

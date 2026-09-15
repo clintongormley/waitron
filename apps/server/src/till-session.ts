@@ -88,7 +88,7 @@ export function readSessionId(c: Context): string | null {
  * `{ tenantId }`) can gate their routes on it without contriving a full till config.
  */
 export async function requireSession(
-  deps: { db: Database; cfg: { tenantId: string } },
+  deps: { db: Database },
   c: Context,
 ): Promise<{ personId: string; sessionId: string }> {
   const id = readSessionId(c);

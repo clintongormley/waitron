@@ -2,7 +2,6 @@
 // because each sale opens its own transaction and reads the committed products.
 // Image bytes share the database transaction. Fiscal sales are preproduction.
 
-import { tenantId as brandTenantId } from "@waitron/shared";
 import { asAppUser, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { listAvailableProducts } from "@waitron/catalogue";
@@ -18,7 +17,6 @@ import type { SeedLocale } from "./menu.js";
 /** The provisioned venue's ids the orchestrator threads into the sub-seeds — the shape `applyVenue`
  *  returns (with `seriesId` picked from its `seriesIds`, the standard series being first). */
 export interface SeedDemoVenue {
-  tenantId: string;
   tillId: string;
   nodeId: string;
   seriesId: string;
@@ -43,27 +41,23 @@ export async function seedDemoRestaurant(
   db: Database,
   { venue, locale, salesDays }: SeedDemoInput,
 ): Promise<void> {
-  const { tenantId, locationId } = venue;
+  const { locationId } = venue;
 
   // One app_user tx for the four in-transaction sub-seeds. `listAvailableProducts` is read at
   // the end, inside the SAME tx, so the sales generator draws from exactly what was just seeded.
   const products = await withTransaction(db, async (tx) => {
     await asAppUser(tx);
-    const { productsByImage, menuItemsByProduct, menuIds } = await seedCatalogues(
-      tx,
-      brandTenantId(tenantId),
-      {
-        locationId,
-        locale,
-      },
-    );
-    await seedOptions(tx, brandTenantId(tenantId), {
+    const { productsByImage, menuItemsByProduct, menuIds } = await seedCatalogues(tx, {
+      locationId,
+      locale,
+    });
+    await seedOptions(tx, {
       productsByImage,
       menuItemsByProduct,
       locale,
     });
-    await seedFloor(tx, { tenantId, locationId, locale, menuIds });
-    await seedStaff(tx, brandTenantId(tenantId));
+    await seedFloor(tx, { locationId, locale, menuIds });
+    await seedStaff(tx);
     await seedMedia(tx, { productsByImage });
     return (await listAvailableProducts(tx, locationId)).products;
   });
@@ -84,7 +78,6 @@ export async function seedDemoRestaurant(
 
   await seedSales(db, {
     venue: {
-      tenantId: venue.tenantId,
       tillId: venue.tillId,
       nodeId: venue.nodeId,
       seriesId: venue.seriesId,

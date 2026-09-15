@@ -91,10 +91,9 @@ const RING = loadKeyRing({
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
 });
 
-// The non-mirror (primary/fenced) till identity — the five WAITRON_TILL_*_ID that put boot into TRADING
+// The non-mirror (primary/fenced) till identity — the four WAITRON_TILL_*_ID that put boot into TRADING
 // mode. The NODE id is the one the fence read (`isFenced(held, config.till.nodeId)`) looks up.
 const TILL_ENV = {
-  WAITRON_TILL_TENANT_ID: "11111111-1111-4111-8111-111111111111",
   WAITRON_TILL_TILL_ID: "22222222-2222-4222-8222-222222222222",
   WAITRON_TILL_NODE_ID: "33333333-3333-4333-8333-333333333333",
   WAITRON_TILL_SERIES_ID: "44444444-4444-4444-8444-444444444444",
@@ -108,7 +107,6 @@ const ADMIN_ID = "99999999-9999-4999-8999-999999999999";
 const ADMIN_PW = "correct-horse-battery-staple";
 
 // The mirror's OWN venue ids, distinct from TILL_ENV so the two clones' seeds never collide.
-const MIRROR_TENANT_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const MIRROR_LOCATION_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const MIRROR_TILL_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const MIRROR_DESIGNATED_SERIES_ID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
@@ -146,28 +144,24 @@ function selfDoc(standing: "sell-only" | "serving-primary"): SignedMembershipDoc
 async function seedTillIdentity(admin: Database): Promise<void> {
   await admin.execute(sql`
     insert into tenants (id, country, tax_id, legal_name)
-    values (${TILL_ENV.WAITRON_TILL_TENANT_ID}, 'ES', '90111111H', 'Promote Endpoint Till SL')
+    values (1, 'ES', '90111111H', 'Promote Endpoint Till SL')
     on conflict do nothing`);
   await admin.execute(sql`
-    insert into locations (id, tenant_id, name, invoice_locales, operation_description)
-    values (${TILL_ENV.WAITRON_TILL_LOCATION_ID}, ${TILL_ENV.WAITRON_TILL_TENANT_ID}, 'Barra',
+    insert into locations (id, name, invoice_locales, operation_description)
+    values (${TILL_ENV.WAITRON_TILL_LOCATION_ID}, 'Barra',
             array['en']::text[], 'Hospitality')
     on conflict do nothing`);
   await admin.execute(sql`
-    insert into nodes (id, tenant_id, location_id, name)
-    values (${TILL_ENV.WAITRON_TILL_NODE_ID}, ${TILL_ENV.WAITRON_TILL_TENANT_ID},
+    insert into nodes (id, location_id, name)
+    values (${TILL_ENV.WAITRON_TILL_NODE_ID},
             ${TILL_ENV.WAITRON_TILL_LOCATION_ID}, 'Promote Endpoint node')
     on conflict do nothing`);
   await admin.execute(sql`
-    insert into persons (id, tenant_id, display_name, pin_hash, password_hash, role)
-    values (${ADMIN_ID}, ${TILL_ENV.WAITRON_TILL_TENANT_ID}, 'Promote Admin', ${hashPin("1234")},
+    insert into persons (id, display_name, pin_hash, password_hash, role)
+    values (${ADMIN_ID}, 'Promote Admin', ${hashPin("1234")},
             ${hashPassword(ADMIN_PW)}, 'admin')
     on conflict do nothing`);
-  await establishNodeIdentity(
-    { ownerDb: admin, ring: RING },
-    TILL_ENV.WAITRON_TILL_TENANT_ID,
-    TILL_ENV.WAITRON_TILL_NODE_ID,
-  );
+  await establishNodeIdentity({ ownerDb: admin, ring: RING }, TILL_ENV.WAITRON_TILL_NODE_ID);
 }
 
 /** Seed a fresh clone as a read-only mirror holding its OWN dormant identity (R2/R3a) — the shape
@@ -177,15 +171,13 @@ async function seedTillIdentity(admin: Database): Promise<void> {
 async function seedMirrorIdentity(admin: Database): Promise<{ nodeId: string }> {
   await admin.execute(sql`
     insert into tenants (id, country, tax_id, legal_name)
-    values (${MIRROR_TENANT_ID}, 'ES', '90222222H', 'Promote Endpoint Cloud SL')
+    values (1, 'ES', '90222222H', 'Promote Endpoint Cloud SL')
     on conflict do nothing`);
   await admin.execute(sql`
-    insert into locations (id, tenant_id, name, invoice_locales, operation_description)
-    values (${MIRROR_LOCATION_ID}, ${MIRROR_TENANT_ID}, 'Barra', array['en']::text[], 'Hospitality')
+    insert into locations (id, name, invoice_locales, operation_description)
+    values (${MIRROR_LOCATION_ID}, 'Barra', array['en']::text[], 'Hospitality')
     on conflict do nothing`);
-  const t = await admin.execute<{ tax_id: string }>(
-    sql`select tax_id from tenants where id = ${MIRROR_TENANT_ID}`,
-  );
+  const t = await admin.execute<{ tax_id: string }>(sql`select tax_id from tenants where id = 1`);
   const nif = t.rows[0]!.tax_id;
 
   const standby = generateStandbyIdentity();
@@ -198,7 +190,6 @@ async function seedMirrorIdentity(admin: Database): Promise<{ nodeId: string }> 
   await establishReservedStandbyIdentity(
     { ownerDb: admin, ring: RING },
     {
-      tenantId: MIRROR_TENANT_ID,
       locationId: MIRROR_LOCATION_ID,
       standby,
       nodeName: "cloud",
@@ -244,7 +235,7 @@ async function seedMirrorIdentity(admin: Database): Promise<{ nodeId: string }> 
   await setDeploymentMode(admin, "mirror");
   // Prove the reserved series exists (the value a real promote would correct trading.env to) — not
   // asserted here (the mirror case never reaches the promote), but a cheap invariant on the seed.
-  await readStandardSeriesId(admin, MIRROR_TENANT_ID, standby.nodeId);
+  await readStandardSeriesId(admin, standby.nodeId);
   return { nodeId: standby.nodeId };
 }
 
@@ -314,7 +305,6 @@ describe("boot promote endpoint (real Postgres): mounted on both modes, exempt f
     const server = await startServer({
       ...KEY_ENV,
       ...TICK_ENV,
-      WAITRON_TILL_TENANT_ID: MIRROR_TENANT_ID,
       WAITRON_TILL_TILL_ID: MIRROR_TILL_ID,
       // The NODE id is the cloud's OWN reserved id (R3a); the series is the primary's INERT designated one.
       WAITRON_TILL_NODE_ID: seed.nodeId,

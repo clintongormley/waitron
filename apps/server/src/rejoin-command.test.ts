@@ -16,7 +16,6 @@ const MIGRATIONS_URL = "postgres://waitron_migrator@localhost/app_db";
 const MAINTENANCE_URL = "postgres://admin:hunter2@localhost/postgres";
 const STATE_DIR = mkdtempSync(join(tmpdir(), "rejoin-cmd-"));
 
-const TENANT = "11111111-1111-4111-8111-111111111111";
 const TILL = "22222222-2222-4222-8222-222222222222";
 const NODE = "33333333-3333-4333-8333-333333333333";
 const SERIES = "44444444-4444-4444-8444-444444444444";
@@ -27,7 +26,6 @@ const base: Record<string, string | undefined> = {
   WAITRON_MIGRATIONS_DATABASE_URL: MIGRATIONS_URL,
   WAITRON_MAINTENANCE_DATABASE_URL: MAINTENANCE_URL,
   WAITRON_STATE_DIR: STATE_DIR,
-  WAITRON_TILL_TENANT_ID: TENANT,
   WAITRON_TILL_TILL_ID: TILL,
   WAITRON_TILL_NODE_ID: NODE,
   WAITRON_TILL_SERIES_ID: SERIES,
@@ -124,7 +122,6 @@ describe("waitron-rejoin rejoin", () => {
 
   it("refuses when the WAITRON_TILL_*_ID are absent (unprovisioned box)", async () => {
     const { code, out } = await run({
-      WAITRON_TILL_TENANT_ID: undefined,
       WAITRON_TILL_TILL_ID: undefined,
       WAITRON_TILL_NODE_ID: undefined,
       WAITRON_TILL_SERIES_ID: undefined,

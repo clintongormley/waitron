@@ -6,15 +6,14 @@ import type { Database, Transaction } from "@waitron/db";
 // its consumers do (boot.mirror's fidelity seeding). Coverage-excluded (this package's vitest.config.ts
 // `exclude`). Spanish fiscal column names are used verbatim because apps/* is english-only-exempt.
 //
-// Column shapes are the current migrated schema (country/tax_id on tenants, vat_breakdown on sales,
-// node-keyed series/sif/registro).
+// Column shapes are the current migrated schema (the one taxpayer row keyed 1, vat_breakdown on
+// sales, node-keyed series/sif/registro).
 
 /** Deployment-environment stamp carried on a registro (never HASHED, but replicated verbatim). */
 export type Entorno = "production" | "preproduction";
 
 /** The FK closure a `registros_facturacion` row hangs off. */
 export interface FiscalIds {
-  tenantId: string;
   locationId: string;
   tillId: string;
   nodeId: string;
@@ -31,16 +30,16 @@ export interface SeededFiscalRegistro extends FiscalIds {
   secuencia: number;
 }
 
-// tenants carries UNIQUE (country, tax_id) and registro_sif UNIQUE (nif, id_sistema_informatico,
-// numero_instalacion). Suites share ONE cloned database (one useTemplateDb clone per file), so each
-// seed call must be collision-free against every earlier one in the same file. A per-module counter
-// gives each call a distinct-but-deterministic tax_id / numero_instalacion; callers may override.
+// registro_sif carries UNIQUE (nif, id_sistema_informatico, numero_instalacion). Suites share ONE
+// cloned database (one useTemplateDb clone per file), so each seed call must be collision-free against
+// every earlier one in the same file. A per-module counter gives each call a
+// distinct-but-deterministic tax_id / numero_instalacion; callers may override. The taxpayer row
+// itself is a singleton, so only the FIRST call in a database sets its tax id.
 let seedSeq = 0;
 
 /** Fresh random ids for one FK closure. Each test seeds its own so nothing collides on a fixed id. */
 export function freshFiscalIds(overrides: Partial<FiscalIds> = {}): FiscalIds {
   return {
-    tenantId: overrides.tenantId ?? randomUUID(),
     locationId: overrides.locationId ?? randomUUID(),
     tillId: overrides.tillId ?? randomUUID(),
     nodeId: overrides.nodeId ?? randomUUID(),
@@ -72,11 +71,11 @@ export interface SeedParentsOptions {
 export async function insertFiscalSale(db: Database, ids: FiscalIds): Promise<void> {
   await db.execute(sql`
     insert into sales (
-      id, tenant_id, till_id, node_id, series_id, invoice_number,
+      id, till_id, node_id, series_id, invoice_number,
       issued_at, issued_offset_minutes, total, vat_breakdown,
       locale, invoice_locales, fiscal_backend, fiscal_state
     ) values (
-      ${ids.saleId}, ${ids.tenantId}, ${ids.tillId}, ${ids.nodeId}, ${ids.seriesId}, 1,
+      ${ids.saleId}, ${ids.tillId}, ${ids.nodeId}, ${ids.seriesId}, 1,
       '2026-07-20T19:20:30+01:00', 60, '0.00', '[]'::jsonb,
       'es', array['es'], 'verifactu', 'recorded'
     )`);
@@ -100,26 +99,29 @@ export async function seedFiscalParents(
   const numeroInstalacion = opts.numeroInstalacion ?? n + 1;
 
   if (opts.reuseExistingParents !== true) {
+    // The taxpayer row is a singleton keyed 1, so repeated seeding in one database is a no-op
+    // rather than a second taxpayer.
     await db.execute(sql`
       insert into tenants (id, country, tax_id, legal_name)
-      values (${ids.tenantId}, 'ES', ${taxId}, 'Waitron SL')`);
+      values (1, 'ES', ${taxId}, 'Waitron SL')
+      on conflict (id) do nothing`);
     await db.execute(sql`
-      insert into locations (id, tenant_id, name, invoice_locales, operation_description)
-      values (${ids.locationId}, ${ids.tenantId}, 'Local principal', array['es'], 'Venta en establecimiento')`);
+      insert into locations (id, name, invoice_locales, operation_description)
+      values (${ids.locationId}, 'Local principal', array['es'], 'Venta en establecimiento')`);
     await db.execute(sql`
-      insert into tills (id, tenant_id, location_id, name)
-      values (${ids.tillId}, ${ids.tenantId}, ${ids.locationId}, 'Caja 1')`);
+      insert into tills (id, location_id, name)
+      values (${ids.tillId}, ${ids.locationId}, 'Caja 1')`);
     await db.execute(sql`
-      insert into nodes (id, tenant_id, location_id, name)
-      values (${ids.nodeId}, ${ids.tenantId}, ${ids.locationId}, 'Node 1')`);
+      insert into nodes (id, location_id, name)
+      values (${ids.nodeId}, ${ids.locationId}, 'Node 1')`);
     await db.execute(sql`
-      insert into invoice_series (id, tenant_id, node_id, code)
-      values (${ids.seriesId}, ${ids.tenantId}, ${ids.nodeId}, 'A')`);
+      insert into invoice_series (id, node_id, code)
+      values (${ids.seriesId}, ${ids.nodeId}, 'A')`);
   }
   if (!opts.skipSale) await insertFiscalSale(db, ids);
   await db.execute(sql`
-    insert into registro_sif (id, tenant_id, node_id, nif, id_sistema_informatico, numero_instalacion)
-    values (${ids.sifId}, ${ids.tenantId}, ${ids.nodeId}, '89890001K', 'WAITRON01', ${numeroInstalacion})`);
+    insert into registro_sif (id, node_id, nif, id_sistema_informatico, numero_instalacion)
+    values (${ids.sifId}, ${ids.nodeId}, '89890001K', 'WAITRON01', ${numeroInstalacion})`);
   return ids;
 }
 
@@ -178,7 +180,7 @@ export async function insertFiscalRegistro(
   const a = opts.anterior;
   const { rows } = await conn.execute<{ id: string }>(sql`
     insert into registros_facturacion (
-      id, tenant_id, till_id, node_id, sif_id, sale_id, secuencia, tipo_registro,
+      id, till_id, node_id, sif_id, sale_id, secuencia, tipo_registro,
       id_emisor_factura, num_serie_factura, fecha_expedicion_factura, nombre_razon_emisor,
       tipo_factura, descripcion_operacion, desglose, cuota_total, importe_total,
       primer_registro, sistema_informatico,
@@ -186,7 +188,7 @@ export async function insertFiscalRegistro(
       anterior_fecha_expedicion_factura, anterior_huella,
       fecha_hora_huso_gen_registro, offset_minutos, tipo_huella, huella, entorno
     ) values (
-      ${registroId}, ${ids.tenantId}, ${ids.tillId}, ${ids.nodeId}, ${ids.sifId}, ${ids.saleId}, ${secuencia}, 'alta',
+      ${registroId}, ${ids.tillId}, ${ids.nodeId}, ${ids.sifId}, ${ids.saleId}, ${secuencia}, 'alta',
       '89890001K', ${numSerie}, '2026-07-20', 'Waitron SL',
       'F2', 'Venta en establecimiento', '[]'::jsonb, '12.35', '123.45',
       ${a === undefined}, '{}'::jsonb,
@@ -221,15 +223,15 @@ export async function seedFiscalRegistro(
 
   if (opts.cadena) {
     await db.execute(sql`
-      insert into cadenas (tenant_id, node_id, secuencia, ultimo_registro_id, ultima_huella)
-      values (${ids.tenantId}, ${ids.nodeId}, ${registro.secuencia}, ${registro.registroId}, ${registro.huella})`);
+      insert into cadenas (node_id, secuencia, ultimo_registro_id, ultima_huella)
+      values (${ids.nodeId}, ${registro.secuencia}, ${registro.registroId}, ${registro.huella})`);
   }
   if (opts.envio) {
     const estado =
       typeof opts.envio === "object" ? (opts.envio.estado ?? "pendiente") : "pendiente";
     await db.execute(sql`
-      insert into envios (registro_id, tenant_id, estado)
-      values (${registro.registroId}, ${ids.tenantId}, ${estado})`);
+      insert into envios (registro_id, estado)
+      values (${registro.registroId}, ${estado})`);
   }
 
   return { ...ids, ...registro };

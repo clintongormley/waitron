@@ -58,7 +58,7 @@ let appDb: Database; // app_login → app_user: reads the venue rows in this dat
 // accumulate tenants in a database whose vault holds one credential per purpose.
 let designated: AdoptResult;
 
-/** Provision a fresh venue (as the owner), stamp its database `preproduction`, and return the five
+/** Provision a fresh venue (as the owner), stamp its database `preproduction`, and return the four
  * designated ids in AdoptResult shape. */
 async function setupVenue(): Promise<AdoptResult> {
   const venue = await applyVenue(
@@ -95,17 +95,12 @@ async function setupVenue(): Promise<AdoptResult> {
     { db: suite.admin, modules: ALL_MODULES },
   );
   const designated: AdoptResult = {
-    tenantId: venue.tenantId,
     locationId: venue.locationId,
     tillId: venue.tillId,
     nodeId: venue.nodeId,
     seriesId: venue.seriesIds[0]!,
   };
-  await establishNodeIdentity(
-    { ownerDb: suite.admin, ring: RING },
-    designated.tenantId,
-    designated.nodeId,
-  );
+  await establishNodeIdentity({ ownerDb: suite.admin, ring: RING }, designated.nodeId);
   return designated;
 }
 
@@ -190,9 +185,7 @@ describe("assembleMirrorBundle (primary side, real Postgres)", () => {
     );
     expect(r.endorsement.nodeId).toBe(standby.nodeId);
     expect(r.endorsement.endorsedBy).toBe(designated.nodeId);
-    const primaryPub = (await readMembershipTrustSet(suite.admin, designated.tenantId))[
-      designated.nodeId
-    ]!;
+    const primaryPub = (await readMembershipTrustSet(suite.admin))[designated.nodeId]!;
     expect(
       verifyBytes(
         canonicalize({ nodeId: standby.nodeId, publicKey: standby.publicKey }),

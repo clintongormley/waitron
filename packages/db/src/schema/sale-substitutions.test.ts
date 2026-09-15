@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { freshNif } from "../testing/seed.js";
-import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
+import { locationId as brandLocationId } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
@@ -16,7 +16,6 @@ const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS] });
 
 // Append-only links and sales retain their FK parents; each case uses a fresh fixture identity.
 beforeEach(() => {
-  TENANT_A = randomUUID();
   LOCATION_A = randomUUID();
   TILL_A1 = randomUUID();
 });
@@ -26,7 +25,6 @@ beforeEach(() => {
  * columns on `sales` (`counterparty_*`). docs/superpowers/plans/2026-08-02-f3-canje.md §2.1.
  */
 
-let TENANT_A = randomUUID();
 let LOCATION_A = randomUUID();
 let TILL_A1 = randomUUID();
 const AT = "2026-07-20T19:20:30+00:00";
@@ -44,7 +42,7 @@ async function rows<T>(db: Database, query: ReturnType<typeof sql>): Promise<T[]
 async function seed(db: Database): Promise<void> {
   await db
     .insert(tenants)
-    .values([{ id: TENANT_A, country: "ES", taxId: freshNif(), legalName: "Fixture Tenant A" }]);
+    .values([{ id: 1, country: "ES", taxId: freshNif(), legalName: "Fixture Tenant A" }]);
   await db.insert(locations).values([
     {
       id: LOCATION_A,
@@ -54,7 +52,7 @@ async function seed(db: Database): Promise<void> {
     },
   ]);
   await db.insert(tills).values([{ id: TILL_A1, locationId: LOCATION_A, name: "A1" }]);
-  nodeA = await seedNode(db, brandTenantId(TENANT_A), brandLocationId(LOCATION_A));
+  nodeA = await seedNode(db, brandLocationId(LOCATION_A));
   const [a] = await db
     .insert(invoiceSeries)
     .values({ nodeId: nodeA, code: "FA", purpose: "standard" })
@@ -69,7 +67,6 @@ let invoiceCounter = 0;
 async function insertSale(
   db: Database,
   opts: {
-    tenantId?: string;
     tillId?: string;
     nodeId?: string;
     seriesId?: string;

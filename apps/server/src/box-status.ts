@@ -202,7 +202,7 @@ export async function collectBoxStatus(readers: BoxStatusReaders): Promise<BoxSt
 
 export type BoxStatusDeps = {
   db: Database;
-  cfg: { tenantId: string; nodeId: string };
+  cfg: { nodeId: string };
   environment: DeploymentEnvironment;
   health: HealthState;
   now: () => Date;

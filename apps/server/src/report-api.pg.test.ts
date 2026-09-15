@@ -35,7 +35,6 @@ function nextNif(): string {
 }
 
 interface Venue {
-  tenantId: string;
   nodeId: string;
   /** A live MANAGEMENT session cookie for a `manager` (holds `report.export`). */
   managerCookie: string;
@@ -83,24 +82,21 @@ async function setupVenue(): Promise<Venue> {
   const { managerSid, staffSid } = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const mgr = await tx.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, role)
-      values (${venue.tenantId}, 'The Manager', ${hashPin("1234")}, 'manager') returning id`);
+      insert into persons (display_name, pin_hash, role)
+      values ('The Manager', ${hashPin("1234")}, 'manager') returning id`);
     const stf = await tx.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, role)
-      values (${venue.tenantId}, 'The Clerk', ${hashPin("1234")}, 'staff') returning id`);
+      insert into persons (display_name, pin_hash, role)
+      values ('The Clerk', ${hashPin("1234")}, 'staff') returning id`);
     const managerSession = await startManagementSession(tx, {
-      tenantId: venue.tenantId,
       personId: mgr.rows[0]!.id,
     });
     const staffSession = await startManagementSession(tx, {
-      tenantId: venue.tenantId,
       personId: stf.rows[0]!.id,
     });
     return { managerSid: managerSession.id, staffSid: staffSession.id };
   });
 
   return {
-    tenantId: venue.tenantId,
     nodeId: venue.nodeId,
     managerCookie: `${MANAGEMENT_COOKIE}=${managerSid}`,
     staffCookie: `${MANAGEMENT_COOKIE}=${staffSid}`,
@@ -110,13 +106,9 @@ async function setupVenue(): Promise<Venue> {
 /** One Hono app per venue — `mountReportApi` binds ONE (tenant, node) via `cfg`, so each venue's route
  * needs its own app (mirrors `purchasing-api.pg.test.ts`). The `nodeId` scopes the overview route; the
  * modelo 303 export ignores it. */
-function mountApp(v: Pick<Venue, "tenantId" | "nodeId">): Hono {
+function mountApp(v: Pick<Venue, "nodeId">): Hono {
   const app = new Hono();
-  mountReportApi(
-    app,
-    { db: suite.admin, cfg: { tenantId: v.tenantId, nodeId: v.nodeId } },
-    noopLog,
-  );
+  mountReportApi(app, { db: suite.admin, cfg: { nodeId: v.nodeId } }, noopLog);
   return app;
 }
 

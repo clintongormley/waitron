@@ -77,7 +77,7 @@ declare module "@waitron/shared" {
      * is the read-side half of `rotate`'s coupling to the registry, and it fails one tenant loudly
      * rather than defaulting to a wrong AEAT host in silence.
      */
-    "server.credential_unusable": { tenantId: string; purpose: string; field: string };
+    "server.credential_unusable": { purpose: string; field: string };
     /**
      * No such tenant. `id` is echoed because it is an operator-supplied argument and not a secret —
      * a mistyped UUID identifies nothing on its own, so an error that withheld it would be
@@ -264,15 +264,14 @@ declare module "@waitron/shared" {
     /**
      * An inbound hosted-payment webhook failed signature verification. The signature is the sole
      * gate (design §2): nothing acts on the event until the database's `payments.stripe`
-     * `webhookSecret` verifies the raw bytes. `tenantId` echoes the attacker-controllable path
-     * segment. Answered with HTTP 400.
+     * `webhookSecret` verifies the raw bytes. Answered with HTTP 400.
      *
      * `payment.*`, not `server.*`: a signature failure is a fact about a payment event, not about
-     * the process (`tenant.not_found`'s note above gives the rule). Carries ONLY the `tenantId` —
-     * never the signature, the raw body or the secret, the same no-leak discipline
+     * the process (`tenant.not_found`'s note above gives the rule). Carries NOTHING — never the
+     * signature, the raw body or the secret, the same no-leak discipline
      * `server.credential_unusable` follows.
      */
-    "payment.webhook_signature_invalid": { tenantId: string };
+    "payment.webhook_signature_invalid": Record<string, never>;
     /**
      * A verified webhook whose `external_ref` resolves to no local `initiated` payment — a crash
      * between minting the Checkout Session and writing its row, or an event for a session this host
@@ -529,7 +528,7 @@ declare module "@waitron/shared" {
     // `table.not_found` is declared in @waitron/db's errors.ts (dining_tables is a core table with a
     // cross-package thrower). Codes are never renamed, only relocated.
     /**
-     * A dining table label already exists in this venue — the `(tenant_id, location_id, label)` unique
+     * A dining table label already exists in this venue — the `(location_id, label)` unique
      * (`dining_tables_location_label_key`) rejected the insert/update. `label` is the operator-supplied
      * human id ("12", "Terraza 3"), not a secret, so echoing it is what makes the error actionable.
      * `table.*`, not `server.*`, for the reason `tenant.not_found`'s note gives.
@@ -703,7 +702,7 @@ declare module "@waitron/shared" {
      */
     "status.inactive": { statusId: string };
     /**
-     * A service-status label already exists in this venue — the `(tenant_id, label)` unique
+     * A service-status label already exists in this venue — the `(label)` unique
      * (`table_service_statuses_tenant_label_key`) rejected the insert/update. `label` is the
      * operator-supplied human name ("Bill requested"), not a secret, so echoing it is what makes the
      * error actionable. `status.*`, not `server.*`, for the reason `tenant.not_found`'s note gives.
@@ -725,7 +724,7 @@ declare module "@waitron/shared" {
     "zone.not_found": { zoneId: string };
     /**
      * A floor-plan zone (FP-1) name already exists in this venue — the
-     * `(tenant_id, location_id, name)` unique (`floor_zones_name_key`, `floor-zones.ts`) rejects the
+     * `(location_id, name)` unique (`floor_zones_name_key`, `floor-zones.ts`) rejects the
      * insert/update. `name` is the operator-supplied human label ("Comedor", "Terraza"), not a
      * secret, so echoing it is what makes the error actionable — the same shape `table.label_taken`'s
      * `label` and `status.label_taken`'s `label` use, renamed here to match the column
@@ -735,7 +734,7 @@ declare module "@waitron/shared" {
      */
     "zone.name_taken": { name: string };
     /**
-     * A kitchen-station name already exists in this venue (KDS-1) — the `(tenant_id, location_id, name)`
+     * A kitchen-station name already exists in this venue (KDS-1) — the `(location_id, name)`
      * unique (`kitchen_stations_name_key`) rejected the insert/update. `name` is the operator-supplied
      * human label ("Cocina", "Plancha", "Barra"), not a secret, so echoing it is what makes the error
      * actionable — the same shape `zone.name_taken`'s `name` and `table.label_taken`'s `label` use,
@@ -809,7 +808,7 @@ declare module "@waitron/shared" {
      * A line was fired to the kitchen that ALREADY has a ticket item (KDS-1) — a re-fire. Every fire
      * point funnels through `fireLines` (`working-order.ts`), which inserts one `ticket_items` row per
      * line; a second fire of a line already sent collides on `ticket_items`' per-line
-     * `(tenant_id, working_order_line_id)` unique (23505). `fireLines` catches that violation
+     * `(working_order_line_id)` unique (23505). `fireLines` catches that violation
      * (`isUniqueViolation`) and throws THIS instead of letting the raw constraint error surface as an
      * opaque `server.internal` 500. The reachable path is a double `sendToPrep` (Mode-P's pickup fires a
      * settled order's lines; sending the same order twice re-fires them); `placeOrder` can't re-fire (its
@@ -888,7 +887,7 @@ declare module "@waitron/shared" {
      */
     "ticket.already_started": { ticketItemId: string };
     /**
-     * A kitchen-course name already exists in this venue (KDS-2) — the `(tenant_id, location_id, name)`
+     * A kitchen-course name already exists in this venue (KDS-2) — the `(location_id, name)`
      * unique (`kitchen_courses_name_key`) rejected the insert/update. `name` is the operator-supplied
      * human label ("Entrantes", "Principales", "Postres"), not a secret, so echoing it is what makes the
      * error actionable — the same shape `station.name_taken`'s `name` and `zone.name_taken`'s `name` use,
@@ -1172,16 +1171,15 @@ declare module "@waitron/shared" {
     "setup.cert_hostnames_empty": Record<string, never>;
     /**
      * A setup-mode provision was asked to run on a box that ALREADY holds this tenant — a second
-     * `provisionVenue` for the same tenant (country + NIF, which derives a deterministic tenant id).
+     * `provisionVenue` for the same taxpayer (country + NIF).
      * `applyVenue`'s location/till/node/SIF carry no business key, so a re-run would ADD a shop and
      * mint a FRESH SIF/hash chain rather than resume the existing venue (venue-apply.ts's own header),
      * and a stray fiscal chain is unrecoverable (CLAUDE.md §5). So `provisionVenue` refuses here,
      * BEFORE stamping or minting anything — the double-POST guard the boot-mode flip only protects
      * across a restart, not within one setup session.
      *
-     * `tenantId` is the DERIVED tenant id (a deterministic uuid, not a secret) and is echoed because
-     * it is what makes the refusal actionable — it names exactly which tenant the box is already bound
-     * to; the same non-leaking, id-echoing discipline `tenant.not_found` follows.
+     * Carries nothing: the box holds ONE taxpayer, so there is no id that would tell the operator
+     * anything their own request did not already say.
      *
      * `setup.*` names the DOMAIN CONCEPT (the box's first-boot setup/onboarding, the same concept
      * `setup.cert_hostnames_empty` and `setup-api.ts` name), never the throwing file — `server.*` is
@@ -1189,7 +1187,7 @@ declare module "@waitron/shared" {
      * about the setup, not the process (the rule `tenant.not_found`'s note above gives). Never renamed
      * once shipped.
      */
-    "setup.already_provisioned": { tenantId: string };
+    "setup.already_provisioned": Record<string, never>;
     /** A setup or provisioning field cannot be used. Fiscal venue validators also raise this code;
      * editing routes translate it to their own request error. `field` carries only the field name,
      * never its value, because certificate fields can contain credentials. */
@@ -1787,14 +1785,14 @@ declare module "@waitron/shared" {
      */
     "restore.unexpected_entry": { name: string };
     /** The artifact's `secrets/trading.env` is absent or lacks one of the identity keys the restore
-     * hooks need (`WAITRON_TILL_TENANT_ID`/`NODE_ID`/`LOCATION_ID`/`SERIES_ID`; an empty value is
+     * hooks need (`WAITRON_TILL_NODE_ID`/`LOCATION_ID`/`SERIES_ID`; an empty value is
      * missing). Validation refuses with the target intact, before identity set-aside or database
      * restore. A backup of a box that never finished provisioning has no node to re-register.
      * `missing` is the fixed key or file name. Never renamed once shipped. */
     "restore.identity_incomplete": { missing: string };
     /** The artifact's identity names a node the restored database does not hold: the identity must
      * be one this backup knows. Both ids are uuids, not secrets. Never renamed once shipped. */
-    "restore.identity_unknown": { tenantId: string; nodeId: string };
+    "restore.identity_unknown": { nodeId: string };
     /** More than one module's restore hook returned replacement series; only one may own the node's
      * numbering. `modules` is the comma-joined list of their names. Never renamed once shipped. */
     "restore.series_conflict": { modules: string };

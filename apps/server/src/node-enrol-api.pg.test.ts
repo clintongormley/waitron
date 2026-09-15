@@ -10,7 +10,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tenantId as brandTenantId,
   tillId as brandTillId,
 } from "@waitron/shared";
 import { mountNodeEnrolApi } from "./node-enrol-api.js";
@@ -28,7 +27,6 @@ const noopLog: Logger = () => {};
 const suite = useTemplateDb({ template: "manifest", resetPerTest: false });
 
 interface Tenant {
-  tenantId: string;
   locationId: string;
 }
 
@@ -41,14 +39,13 @@ function nextNif(): string {
 }
 
 async function seedTenantWithLocation(): Promise<Tenant> {
-  const tenantId = randomUUID();
   await suite.admin.execute(sql`
     insert into tenants (id, country, tax_id, legal_name)
-    values (${tenantId}, 'ES', ${nextNif()}, 'Deli Test SL')`);
+    values (1, 'ES', ${nextNif()}, 'Deli Test SL')`);
   const loc = await suite.admin.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
-  return { tenantId, locationId: loc.rows[0]!.id };
+    insert into locations (name, invoice_locales, operation_description)
+    values ('Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
+  return { locationId: loc.rows[0]!.id };
 }
 
 let tenantA: Tenant;
@@ -62,7 +59,6 @@ beforeAll(async () => {
  * A FRESH nodeId per call keeps each mounted app's enrol row independent across the shared clone. */
 function cfgOf(tenant: Tenant): TillConfig {
   return {
-    tenantId: brandTenantId(tenant.tenantId),
     tillId: brandTillId(randomUUID()),
     nodeId: brandNodeId(randomUUID()),
     seriesId: brandSeriesId(randomUUID()),
@@ -119,10 +115,10 @@ async function errorCodeOf(res: Response): Promise<string> {
 }
 
 /** Resolve a minted agent token to its row id under the tenant — the production auth path. */
-async function authenticate(cfg: TillConfig, token: string): Promise<{ agentId: string }> {
+async function authenticate(token: string): Promise<{ agentId: string }> {
   return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
-    return authenticateAgent(tx, { tenantId: cfg.tenantId }, token);
+    return authenticateAgent(tx, token);
   });
 }
 
@@ -130,20 +126,20 @@ async function authenticate(cfg: TillConfig, token: string): Promise<{ agentId: 
  *  table and not about what the route chose to return. */
 async function agentRowCount(cfg: TillConfig): Promise<number> {
   const { rows } = await suite.admin.execute<{ n: number }>(
-    sql`select count(*)::int as n from print_agents where tenant_id = ${cfg.tenantId} and node_id = ${cfg.nodeId}`,
+    sql`select count(*)::int as n from print_agents where node_id = ${cfg.nodeId}`,
   );
   return rows[0]!.n;
 }
 
 describe("POST /api/node/enrol-self", () => {
   it("enrols the caller as a print agent over loopback on the primary", async () => {
-    const { app, cfg } = buildApp();
+    const { app } = buildApp();
     const res = await post(app, { name: "box" }, "127.0.0.1");
     expect(res.status).toBe(201);
     const { token } = (await res.json()) as { token: string };
     expect(typeof token).toBe("string");
     // The token authenticates as a real agent — the row was truly written under `app_user`.
-    const auth = await authenticate(cfg, token);
+    const auth = await authenticate(token);
     expect(auth.agentId).toBeDefined();
   });
 

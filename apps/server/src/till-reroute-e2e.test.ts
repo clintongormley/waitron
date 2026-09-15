@@ -48,7 +48,6 @@ import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 // One venue: shared tenant/location/till, DISTINCT nodes (so B reading a NODE_A-tagged tab is a genuine
 // cross-node, venue-wide read) each with its own series. Fixed ids so `/api/node.nodeId` is deterministic
 // and matches the committed fixture.
-const TENANT = "11111111-1111-4111-8111-111111111111";
 const LOCATION = "55555555-5555-4555-8555-555555555555";
 const TILL = "22222222-2222-4222-8222-222222222222";
 const NODE_A = "33333333-3333-4333-8333-333333333333";
@@ -114,25 +113,25 @@ let migrationsRoot: string;
  * design names. */
 async function seedVenue(admin: Database): Promise<void> {
   await admin.execute(sql`insert into tenants (id, country, tax_id, legal_name)
-    values (${TENANT}, 'ES', '90444444A', 'Reroute E2E SL') on conflict do nothing`);
-  await admin.execute(sql`insert into locations (id, tenant_id, name, invoice_locales, operation_description)
-    values (${LOCATION}, ${TENANT}, 'Loc', array['en']::text[], 'Hospitality') on conflict do nothing`);
+    values (1, 'ES', '90444444A', 'Reroute E2E SL') on conflict do nothing`);
+  await admin.execute(sql`insert into locations (id, name, invoice_locales, operation_description)
+    values (${LOCATION}, 'Loc', array['en']::text[], 'Hospitality') on conflict do nothing`);
   for (const node of [NODE_A, NODE_B]) {
-    await admin.execute(sql`insert into nodes (id, tenant_id, location_id, name)
-      values (${node}, ${TENANT}, ${LOCATION}, 'Node') on conflict do nothing`);
+    await admin.execute(sql`insert into nodes (id, location_id, name)
+      values (${node}, ${LOCATION}, 'Node') on conflict do nothing`);
   }
-  await admin.execute(sql`insert into tills (id, tenant_id, location_id, name)
-    values (${TILL}, ${TENANT}, ${LOCATION}, 'Till') on conflict do nothing`);
-  await admin.execute(sql`insert into invoice_series (id, tenant_id, node_id, code)
-    values (${SERIES_A}, ${TENANT}, ${NODE_A}, 'A') on conflict do nothing`);
-  await admin.execute(sql`insert into invoice_series (id, tenant_id, node_id, code)
-    values (${SERIES_B}, ${TENANT}, ${NODE_B}, 'B') on conflict do nothing`);
-  await admin.execute(sql`insert into persons (id, tenant_id, display_name, pin_hash, role)
-    values (${PERSON}, ${TENANT}, 'Cajera', ${hashPin("5555")}, 'staff') on conflict do nothing`);
-  await admin.execute(sql`insert into device_profiles (id, tenant_id, name, form_factor, capabilities)
-    values (${DEVICE_PROFILE}, ${TENANT}, 'Counter', 'till', '[]'::jsonb) on conflict do nothing`);
-  await admin.execute(sql`insert into devices (id, tenant_id, location_id, device_profile_id, till_id, label, token_hash)
-    values (${DEVICE_ID}, ${TENANT}, ${LOCATION}, ${DEVICE_PROFILE}, ${TILL}, 'Counter till', ${hashSecret(DEVICE_TOKEN)})
+  await admin.execute(sql`insert into tills (id, location_id, name)
+    values (${TILL}, ${LOCATION}, 'Till') on conflict do nothing`);
+  await admin.execute(sql`insert into invoice_series (id, node_id, code)
+    values (${SERIES_A}, ${NODE_A}, 'A') on conflict do nothing`);
+  await admin.execute(sql`insert into invoice_series (id, node_id, code)
+    values (${SERIES_B}, ${NODE_B}, 'B') on conflict do nothing`);
+  await admin.execute(sql`insert into persons (id, display_name, pin_hash, role)
+    values (${PERSON}, 'Cajera', ${hashPin("5555")}, 'staff') on conflict do nothing`);
+  await admin.execute(sql`insert into device_profiles (id, name, form_factor, capabilities)
+    values (${DEVICE_PROFILE}, 'Counter', 'till', '[]'::jsonb) on conflict do nothing`);
+  await admin.execute(sql`insert into devices (id, location_id, device_profile_id, till_id, label, token_hash)
+    values (${DEVICE_ID}, ${LOCATION}, ${DEVICE_PROFILE}, ${TILL}, 'Counter till', ${hashSecret(DEVICE_TOKEN)})
     on conflict do nothing`);
 }
 
@@ -159,7 +158,6 @@ function primaryEnv(
 ): Record<string, string> {
   return {
     ...KEY_ENV,
-    WAITRON_TILL_TENANT_ID: TENANT,
     WAITRON_TILL_TILL_ID: TILL,
     WAITRON_TILL_NODE_ID: nodeId,
     WAITRON_TILL_SERIES_ID: seriesId,
@@ -176,7 +174,6 @@ function primaryEnv(
 function mirrorEnv(clone: { pg: { uri: string } }, port: number): Record<string, string> {
   return {
     ...KEY_ENV,
-    WAITRON_TILL_TENANT_ID: TENANT,
     WAITRON_TILL_TILL_ID: TILL,
     WAITRON_TILL_NODE_ID: NODE_B,
     WAITRON_TILL_SERIES_ID: SERIES_B,
@@ -241,9 +238,8 @@ beforeAll(async () => {
   });
 
   // The inherited tab: an open working order in B's database tagged with the DEAD node's id (A's).
-  await b.admin
-    .execute(sql`insert into working_orders (id, tenant_id, till_id, node_id, order_number, status)
-    values (${TAB_ID}, ${TENANT}, ${TILL}, ${NODE_A}, 1, 'open') on conflict do nothing`);
+  await b.admin.execute(sql`insert into working_orders (id, till_id, node_id, order_number, status)
+    values (${TAB_ID}, ${TILL}, ${NODE_A}, 1, 'open') on conflict do nothing`);
 }, 180_000);
 
 afterAll(async () => {

@@ -27,7 +27,6 @@ beforeEach(async () => {
 
 function run(overrides: Partial<DailyCloseInput> = {}): Promise<import("./types.js").VatSummary> {
   const input: DailyCloseInput = {
-    tenantId: venue.tenantId,
     nodeId: venue.nodeId,
     businessDay: DAY,
     timeZone: TZ,
@@ -96,7 +95,7 @@ describe("computeVatSummary", () => {
       total: "121.00",
       lines: [{ vatRate: "21.00", lineTotal: "100.00" }],
     });
-    await seedVoid(suite.db, { tenantId: venue.tenantId, saleId: s }, noonUtc);
+    await seedVoid(suite.db, { saleId: s }, noonUtc);
     expect((await run()).byRate).toEqual([]);
   });
 
@@ -114,7 +113,6 @@ describe("computeVatSummary", () => {
       lines: [{ vatRate: "21.00", lineTotal: "100.00" }],
     });
     await seedSubstitution(suite.db, {
-      tenantId: venue.tenantId,
       substitutionSaleId: f3,
       substitutedSaleId: ticket,
     });

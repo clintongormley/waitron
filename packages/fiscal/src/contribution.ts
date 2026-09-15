@@ -61,9 +61,8 @@ export interface FiscalContribution {
     /** Seal the (validated) secret into the venue's vault under `withTransaction`, re-validating as
      * defence in depth. Runs after the taxpayer row is written, though nothing in the schema ties
      * the vault row to it: `tenant_credentials` is keyed by `purpose` alone and references no other
-     * table. `tenantId` is passed and read by no implementation; it goes when `packages/provisioning`,
      * its last supplier, is converted. */
-    seal(deps: { db: Database; ring: KeyRing }, tenantId: string, raw: unknown): Promise<void>;
+    seal(deps: { db: Database; ring: KeyRing }, raw: unknown): Promise<void>;
   };
   /** The operator-typed venue fields this regime puts on the wire verbatim. The host collects them
    * and does not know the regime's rules, so — exactly as `provisioningSecret` does for the signing

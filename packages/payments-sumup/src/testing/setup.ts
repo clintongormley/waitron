@@ -2,11 +2,9 @@ import { withTransaction } from "@waitron/db";
 import type { PgliteSuite } from "@waitron/db/testing/lifecycle.js";
 import {
   decimal,
-  tenantId as brandTenantId,
   tillId as brandTillId,
   workingOrderId as brandWorkingOrderId,
 } from "@waitron/shared";
-import type { TenantId } from "@waitron/shared";
 import { getPaymentByRef } from "@waitron/payments";
 import { freshNif, seedWorkingOrder } from "@waitron/payments/test/seed.js";
 import { FakeSumUp } from "./fake-sumup.js";
@@ -22,16 +20,15 @@ export async function setup(suite: PgliteSuite, tune?: (f: FakeSumUp) => void) {
   const t = await seedWorkingOrder(suite.db, freshNif());
   const fake = new FakeSumUp();
   tune?.(fake);
-  const makeProvider = (tenantId: TenantId): SumUpCloudProvider =>
+  const makeProvider = (): SumUpCloudProvider =>
     new SumUpCloudProvider({
       client: fake,
       db: suite.db,
-      tenantId,
       nodeId: NODE,
       incidents: () => Promise.resolve(true),
       poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
     });
-  const provider = makeProvider(brandTenantId(t.tenantId));
+  const provider = makeProvider();
   const params = {
     tillId: brandTillId(t.tillId),
     workingOrderId: brandWorkingOrderId(t.workingOrderId),

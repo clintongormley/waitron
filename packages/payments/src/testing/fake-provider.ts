@@ -2,11 +2,7 @@ import { eq } from "drizzle-orm";
 import { AppError, decimal } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
 import { recordIncidentOnce } from "@waitron/core";
-import {
-  saleId as brandSaleId,
-  tenantId as brandTenantId,
-  tillId as brandTillId,
-} from "@waitron/shared";
+import { saleId as brandSaleId, tillId as brandTillId } from "@waitron/shared";
 import type { Database, Transaction } from "@waitron/db";
 import { workingOrders } from "@waitron/db";
 import type {
@@ -48,11 +44,7 @@ export class FakePaymentProvider implements PaymentProvider {
   private offlineNext = false;
   private readonly declineForwardRefs = new Set<string>();
 
-  /** `tenantId` is stamped on the incident `forward` raises for a declined payment. */
-  constructor(
-    private readonly db: Database,
-    private readonly tenantId: string,
-  ) {}
+  constructor(private readonly db: Database) {}
 
   /** Test affordance: makes the next `collect` return a `failed` result. */
   failNextCollect(): void {
@@ -126,7 +118,6 @@ export class FakePaymentProvider implements PaymentProvider {
             .from(workingOrders)
             .where(eq(workingOrders.id, p.workingOrderId));
           const raised = await recordIncidentOnce(tx, {
-            tenantId: brandTenantId(this.tenantId),
             tillId: brandTillId(wo.tillId),
             ...(p.saleId === null ? {} : { saleId: brandSaleId(p.saleId) }),
             error: new AppError("payment.offline_forward_declined", {

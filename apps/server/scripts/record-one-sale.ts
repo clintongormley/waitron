@@ -46,7 +46,6 @@ import {
   percentOf,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tenantId as brandTenantId,
   tillId as brandTillId,
 } from "@waitron/shared";
 
@@ -99,8 +98,7 @@ async function main(): Promise<void> {
   if (args.length !== 7 && args.length !== 8) {
     usageError(`expected 7 or 8 arguments, got ${args.length}`);
   }
-  const [tenantArg, tillArg, nodeArg, seriesArg, description, baseAmountArg, vatRateArg, tipArg] =
-    args;
+  const [tillArg, nodeArg, seriesArg, description, baseAmountArg, vatRateArg, tipArg] = args;
 
   const databaseUrl = process.env.DATABASE_URL;
   if (databaseUrl === undefined || databaseUrl === "") {
@@ -117,7 +115,6 @@ async function main(): Promise<void> {
     usageError("WAITRON_ENV must be set in the environment (production or preproduction)");
   }
 
-  const tenant = brandTenantId(tenantArg);
   const till = brandTillId(tillArg);
   const node = brandNodeId(nodeArg);
   const series = brandSeriesId(seriesArg);
@@ -167,7 +164,6 @@ async function main(): Promise<void> {
     });
 
     const input: RecordSaleInput = {
-      tenantId: tenant,
       tillId: till,
       nodeId: node,
       seriesId: series,

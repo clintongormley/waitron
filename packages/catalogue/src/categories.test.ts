@@ -18,17 +18,15 @@ import { writeContentLanguages, listContentTranslationGaps } from "./content-lan
 // PGlite covers authoring results; the sibling PostgreSQL suite covers grants and contention.
 const fx = useCatalogueDb();
 async function fixture() {
-  const tenantId = await seedTenant(fx.db);
+  await seedTenant(fx.db);
   await seedLegacySellingUnits(fx.db);
   const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
   await app((tx) => writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "fr"] }));
-  const food = await app((tx) =>
-    createCategory(tx, tenantId, { name: { en: "Food", fr: "Cuisine" } }),
-  );
-  const drinks = await app((tx) => createCategory(tx, tenantId, { name: { en: "Drinks" } }));
-  const menu = await app((tx) => createCatalogue(tx, tenantId, { name: "Lunch" }));
+  const food = await app((tx) => createCategory(tx, { name: { en: "Food", fr: "Cuisine" } }));
+  const drinks = await app((tx) => createCategory(tx, { name: { en: "Drinks" } }));
+  const menu = await app((tx) => createCatalogue(tx, { name: "Lunch" }));
   const product = await app((tx) =>
-    createProduct(tx, tenantId, {
+    createProduct(tx, {
       catalogueId: menu.id,
       categoryId: null,
       name: "Toast",
@@ -37,7 +35,7 @@ async function fixture() {
       vatClass: "general",
     }),
   );
-  return { tenantId, app, food, drinks, menu, product };
+  return { app, food, drinks, menu, product };
 }
 describe("category authoring", () => {
   it("keeps translated names, direct membership and one stable product row", async () => {
@@ -142,12 +140,12 @@ describe("category authoring", () => {
     ).toEqual({ categoryIds: [food.id, drinks.id].sort(), primaryCategoryId: null });
   });
   it("rejects deep cycles, and cascades a delete through children and memberships", async () => {
-    const { tenantId, app, food, drinks, product } = await fixture();
+    const { app, food, drinks, product } = await fixture();
     const child = await app((tx) =>
-      createCategory(tx, tenantId, { name: { en: "Sandwiches" }, parentId: food.id }),
+      createCategory(tx, { name: { en: "Sandwiches" }, parentId: food.id }),
     );
     const leaf = await app((tx) =>
-      createCategory(tx, tenantId, { name: { en: "Toast" }, parentId: child.id }),
+      createCategory(tx, { name: { en: "Toast" }, parentId: child.id }),
     );
     for (const parentId of [food.id, leaf.id])
       await expect(app((tx) => updateCategory(tx, food.id, { parentId }))).rejects.toMatchObject({
@@ -173,10 +171,10 @@ describe("category authoring", () => {
     ).rejects.toMatchObject({ code: "category.not_found" });
   });
   it("validates the default name and includes category gaps without dropping disabled translations", async () => {
-    const { tenantId, app, food, drinks } = await fixture();
-    await expect(
-      app((tx) => createCategory(tx, tenantId, { name: { fr: "Pain" } })),
-    ).rejects.toMatchObject({ code: "content.translation_required" });
+    const { app, food, drinks } = await fixture();
+    await expect(app((tx) => createCategory(tx, { name: { fr: "Pain" } }))).rejects.toMatchObject({
+      code: "content.translation_required",
+    });
     expect(await app((tx) => listContentTranslationGaps(tx, "fr"))).toContainEqual({
       kind: "category",
       id: drinks.id,
@@ -209,9 +207,9 @@ it("an old single-category editor cannot silently clear additional memberships",
 });
 
 it("returns each product's own membership set when reading the unfiltered library", async () => {
-  const { tenantId, app, food, drinks, product, menu } = await fixture();
+  const { app, food, drinks, product, menu } = await fixture();
   const second = await app((tx) =>
-    createProduct(tx, tenantId, {
+    createProduct(tx, {
       catalogueId: menu.id,
       categoryId: drinks.id,
       name: "Coffee",
@@ -234,10 +232,10 @@ it("returns each product's own membership set when reading the unfiltered librar
 });
 
 it("rejects an image reference with a category error when media is not installed", async () => {
-  const { tenantId, app, food } = await fixture();
+  const { app, food } = await fixture();
   await expect(
     app((tx) =>
-      createCategory(tx, tenantId, {
+      createCategory(tx, {
         name: { en: "New" },
         image: "missing.jpg",
       }),

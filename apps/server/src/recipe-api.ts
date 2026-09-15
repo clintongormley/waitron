@@ -9,7 +9,7 @@
 import "./errors.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { AppError, tenantId as brandTenantId } from "@waitron/shared";
+import { AppError } from "@waitron/shared";
 import { asAppUser, withTransaction, type Database, type Transaction } from "@waitron/db";
 import {
   createIngredient,
@@ -42,7 +42,7 @@ import type { Logger } from "./logger.js";
  */
 export interface RecipeApiDeps {
   db: Database;
-  cfg: { tenantId: string; nodeId: string };
+  cfg: { nodeId: string };
 }
 
 /**
@@ -90,7 +90,6 @@ export function mountRecipeApi(app: Hono, deps: RecipeApiDeps, log: Logger): voi
   // Brand the tenant id ONCE per mount rather than per write route — a stable value for the life
   // of the mount (cfg.tenantId is fixed), the low-risk form of the dedup (deps keeps cfg: { tenantId:
   // string }, the sibling convention).
-  const tenantId = brandTenantId(deps.cfg.tenantId);
   // Open a transaction as the app role, confirm the caller's management session carries
   // RECIPE_WRITE_PERMISSION, then run `fn`. Every route funnels its DB work through here so the gate is
   // applied identically and in exactly one place — the catalogue §3 seam.
@@ -138,7 +137,7 @@ export function mountRecipeApi(app: Hono, deps: RecipeApiDeps, log: Logger): voi
           ? {}
           : { dietaryOrigin: body.dietaryOrigin as DietaryOrigin | null }),
       };
-      const created = await gated(sessionId, (tx) => createIngredient(tx, tenantId, input));
+      const created = await gated(sessionId, (tx) => createIngredient(tx, input));
       return c.json(created, 201);
     }),
   );
@@ -214,7 +213,7 @@ export function mountRecipeApi(app: Hono, deps: RecipeApiDeps, log: Logger): voi
       // `requireBodyUuid` maps a malformed element to `management.request_invalid { field }` (a valid but
       // nonexistent id is the separate FK case — `recipe.*_not_found` is deferred by the spec §8).
       const ingredientIds = body.ingredientIds.map((x) => requireBodyUuid(x, "ingredientIds"));
-      await gated(sessionId, (tx) => setProductRecipe(tx, tenantId, productId, ingredientIds));
+      await gated(sessionId, (tx) => setProductRecipe(tx, productId, ingredientIds));
       return c.body(null, 204);
     }),
   );

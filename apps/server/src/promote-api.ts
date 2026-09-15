@@ -46,7 +46,6 @@ export interface PromoteRunResult {
  */
 export interface PromoteApiDeps {
   appDb: Database;
-  tenantId: string;
   run: (attestation: FenceAttestation) => Promise<PromoteRunResult>;
 }
 
@@ -114,7 +113,6 @@ export function mountPromoteApi(app: Hono, deps: PromoteApiDeps, log: Logger = (
         await withTransaction(deps.appDb, async (tx) => {
           await asAppUser(tx);
           const session = await loginManagerById(tx, {
-            tenantId: deps.tenantId,
             personId,
             password,
             totp,

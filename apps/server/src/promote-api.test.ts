@@ -14,7 +14,6 @@ import type { PromoteRunResult } from "./promote-api.js";
 // reached, how a thrown code maps to a status) — never the promote functions themselves (Task 7's
 // closure wires those; the endpoint never calls them directly, spec §2).
 
-const TENANT = "11111111-1111-1111-1111-111111111111";
 const PERSON = "22222222-2222-2222-2222-222222222222";
 const GOOD_SECRET = "correct-break-glass-secret";
 const SESSION_ID = "33333333-3333-3333-3333-333333333333";
@@ -60,7 +59,7 @@ function appWith(
   })),
 ): { app: Hono; run: typeof run } {
   const app = new Hono();
-  mountPromoteApi(app, { appDb: fakeDb, tenantId: TENANT, run });
+  mountPromoteApi(app, { appDb: fakeDb, run });
   return { app, run };
 }
 

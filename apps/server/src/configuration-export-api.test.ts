@@ -55,10 +55,9 @@ const suite = usePgliteDb({
     cookie = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       const admin = await tx.execute<{ id: string }>(sql`
-        select id from persons where tenant_id = ${venue.tenantId} and role = 'admin'
+        select id from persons where role = 'admin'
       `);
       const session = await startManagementSession(tx, {
-        tenantId: venue.tenantId,
         personId: admin.rows[0]!.id,
       });
       return `${MANAGEMENT_COOKIE}=${session.id}`;

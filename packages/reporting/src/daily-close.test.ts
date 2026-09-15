@@ -13,7 +13,6 @@ beforeEach(async () => {
 });
 function input(overrides: Partial<DailyCloseInput> = {}): DailyCloseInput {
   return {
-    tenantId: venue.tenantId,
     nodeId: venue.nodeId,
     businessDay: "2026-08-04",
     timeZone: "Europe/Madrid",
@@ -47,7 +46,7 @@ describe("computeDailyClose", () => {
     });
     await seedTender(
       suite.db,
-      { tenantId: venue.tenantId, saleId },
+      { saleId },
       { method: "card", amount: "121.00", settledAt: settled },
     );
 
@@ -88,7 +87,7 @@ describe("computeDailyClose", () => {
     });
     await seedTender(
       suite.db,
-      { tenantId: venue.tenantId, saleId },
+      { saleId },
       { method: "card", amount: "121.00", settledAt: settled },
     );
 
@@ -116,12 +115,11 @@ describe("computeDailyClose", () => {
     });
     await seedTender(
       suite.db,
-      { tenantId: venue.tenantId, saleId },
+      { saleId },
       { method: "cash", amount: "121.00", tipAmount: "0.00", settledAt: issued },
     );
     const close = await run(input());
     expect(close).toMatchObject({
-      tenantId: venue.tenantId,
       nodeId: venue.nodeId,
       businessDay: "2026-08-04",
       timeZone: "Europe/Madrid",

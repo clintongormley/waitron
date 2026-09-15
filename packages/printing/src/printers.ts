@@ -43,12 +43,11 @@ function translatePrinterWriteError(error: unknown, localKey: string | undefined
 
 /**
  * The tenant + venue scope every central printing verb (`createPrinter`, `enqueuePrintJob`) runs
- * under. The route resolves it (single-tenant deli deployment, `deps.tenantId` + the location) and
+ * under. The route resolves it (single-venue deli deployment, the location) and
  * passes it down, so these verbs never derive scope from client input — the same discipline
  * `PrintAgentConfig` (agent.ts) states for the agent verbs, and structurally identical to it.
  */
 export interface PrintConfig {
-  tenantId: string;
   locationId: string;
 }
 

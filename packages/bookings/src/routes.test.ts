@@ -5,7 +5,7 @@ import { asAppUser, withTransaction, type Database } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { hashPin, registerModulePermissions, startManagementSession } from "@waitron/identity";
-import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
+import { locationId as brandLocationId } from "@waitron/shared";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import type { ModuleRouteContext } from "@waitron/module";
 import { fakeCore } from "./testing/fake-core.js";
@@ -47,13 +47,13 @@ interface Venue {
  * closing a composition → bookings → composition cycle. The tables come from the `manifest` template. */
 async function setupVenue(): Promise<Venue> {
   const db: Database = suite.admin;
-  const tenantId = await seedTenant(db);
+  await seedTenant(db);
   const loc = await db.execute<{ id: string }>(sql`
     insert into locations (name, invoice_locales, operation_description) values ('Sala principal', array['es-ES'], 'Venta en establecimiento') returning id`);
   const locationId = loc.rows[0]!.id;
   const till = await db.execute<{ id: string }>(sql`
     insert into tills (location_id, name) values (${locationId}, 'Caja 1') returning id`);
-  const nodeId = await seedNode(db, tenantId, brandLocationId(locationId));
+  const nodeId = await seedNode(db, brandLocationId(locationId));
 
   const { managerSid, staffSid } = await withTransaction(db, async (tx) => {
     await asAppUser(tx);
@@ -71,12 +71,11 @@ async function setupVenue(): Promise<Venue> {
   });
 
   const cfg: ModuleRouteContext["cfg"] = {
-    tenantId: brandTenantId(tenantId),
     locationId: brandLocationId(locationId),
   };
   return {
     cfg,
-    ctx: { db, cfg, core: fakeCore({ tenantId, tillId: till.rows[0]!.id, nodeId }) },
+    ctx: { db, cfg, core: fakeCore({ tillId: till.rows[0]!.id, nodeId }) },
     managerCookie: `${MANAGEMENT_COOKIE}=${managerSid}`,
     staffCookie: `${MANAGEMENT_COOKIE}=${staffSid}`,
   };

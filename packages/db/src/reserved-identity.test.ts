@@ -1,7 +1,7 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { isAppError, locationId as brandLocationId } from "@waitron/shared";
-import type { LocationId, TenantId } from "@waitron/shared";
+import type { LocationId } from "@waitron/shared";
 import type { Endorsement } from "@waitron/membership";
 import type { Database } from "./client.js";
 import {
@@ -50,11 +50,10 @@ describe("reserved-identity accessors", () => {
     resetPerTest: false,
   });
 
-  let tenantId: TenantId;
   let locationId: LocationId;
 
   beforeAll(async () => {
-    tenantId = await seedTenant(suite.db);
+    await seedTenant(suite.db);
     locationId = await seedLocation(suite.db);
   });
 
@@ -70,15 +69,15 @@ describe("reserved-identity accessors", () => {
         endorsement: ENDORSEMENT,
       }),
     );
-    expect(await readNodeEndorsement(suite.db, tenantId, CLOUD_NODE)).toEqual(ENDORSEMENT);
+    expect(await readNodeEndorsement(suite.db, CLOUD_NODE)).toEqual(ENDORSEMENT);
     // the dormant node's public key joins the trust set (readMembershipTrustSet reads public_key)
-    const trust = await readMembershipTrustSet(suite.db, tenantId);
+    const trust = await readMembershipTrustSet(suite.db);
     expect(trust[CLOUD_NODE]).toBe("cloudpub");
   });
 
   it("readNodeEndorsement returns null for a node with no endorsement (a primary)", async () => {
-    const bare = await seedNode(suite.db, tenantId, locationId);
-    expect(await readNodeEndorsement(suite.db, tenantId, bare)).toBeNull();
+    const bare = await seedNode(suite.db, locationId);
+    expect(await readNodeEndorsement(suite.db, bare)).toBeNull();
   });
 
   it("insertReservedSeriesTx inserts the reserved series at next_number 1", async () => {
@@ -102,14 +101,14 @@ describe("reserved-identity accessors", () => {
   it("readStandardSeriesId returns the node's standard series id, not the rectificative", async () => {
     // A node with both purposes reserved (R2's real shape): the standard series is the one R3b's
     // promote points config.till.seriesId at, never the rectificative sitting beside it.
-    const node = await seedNode(suite.db, tenantId, locationId);
+    const node = await seedNode(suite.db, locationId);
     await withTransaction(suite.db, (tx) =>
       insertReservedSeriesTx(tx, [
         { nodeId: node, code: "F-42", purpose: "standard" },
         { nodeId: node, code: "R-42", purpose: "rectificative" },
       ]),
     );
-    const id = await readStandardSeriesId(suite.db, tenantId, node);
+    const id = await readStandardSeriesId(suite.db, node);
     // it is a real series row, of purpose 'standard'
     const [row] = await withTransaction(suite.db, (tx) =>
       tx
@@ -121,13 +120,13 @@ describe("reserved-identity accessors", () => {
   });
 
   it("readStandardSeriesId throws series.no_standard_for_node when the node has none", async () => {
-    const bareNode = await seedNode(suite.db, tenantId, locationId);
-    const err = await captureError(() => readStandardSeriesId(suite.db, tenantId, bareNode));
+    const bareNode = await seedNode(suite.db, locationId);
+    const err = await captureError(() => readStandardSeriesId(suite.db, bareNode));
     expect(isAppError(err) && err.code).toBe("series.no_standard_for_node");
   });
 
   it("readStandardSeriesId ignores a RETIRED standard series (a cold restore retires the old one)", async () => {
-    const node = await seedNode(suite.db, tenantId, locationId);
+    const node = await seedNode(suite.db, locationId);
     await withTransaction(suite.db, (tx) =>
       insertReservedSeriesTx(tx, [
         { nodeId: node, code: "FA", purpose: "standard" },
@@ -138,7 +137,7 @@ describe("reserved-identity accessors", () => {
       .update(invoiceSeries)
       .set({ retiredAt: new Date() })
       .where(and(eq(invoiceSeries.nodeId, node), eq(invoiceSeries.code, "FA")));
-    const id = await readStandardSeriesId(suite.db, tenantId, node);
+    const id = await readStandardSeriesId(suite.db, node);
     const [row] = await suite.db
       .select({ code: invoiceSeries.code })
       .from(invoiceSeries)
@@ -147,21 +146,21 @@ describe("reserved-identity accessors", () => {
   });
 
   it("readStandardSeriesId is LOUD on two live standard series (a data-integrity corruption)", async () => {
-    const node = await seedNode(suite.db, tenantId, locationId);
+    const node = await seedNode(suite.db, locationId);
     await withTransaction(suite.db, (tx) =>
       insertReservedSeriesTx(tx, [
         { nodeId: node, code: "X1", purpose: "standard" },
         { nodeId: node, code: "X2", purpose: "standard" },
       ]),
     );
-    await expect(readStandardSeriesId(suite.db, tenantId, node)).rejects.toThrow(
+    await expect(readStandardSeriesId(suite.db, node)).rejects.toThrow(
       /more than one standard series/,
     );
   });
 
   it("retireNodeSeriesTx retires every LIVE series of the node and only those", async () => {
-    const node = await seedNode(suite.db, tenantId, locationId);
-    const other = await seedNode(suite.db, tenantId, locationId);
+    const node = await seedNode(suite.db, locationId);
+    const other = await seedNode(suite.db, locationId);
     await withTransaction(suite.db, (tx) =>
       insertReservedSeriesTx(tx, [
         { nodeId: node, code: "FA", purpose: "standard" },
@@ -169,7 +168,7 @@ describe("reserved-identity accessors", () => {
         { nodeId: other, code: "FA", purpose: "standard" },
       ]),
     );
-    const retired = await withTransaction(suite.db, (tx) => retireNodeSeriesTx(tx, tenantId, node));
+    const retired = await withTransaction(suite.db, (tx) => retireNodeSeriesTx(tx, node));
     expect(retired).toBe(2);
     const rows = await suite.db
       .select({ nodeId: invoiceSeries.nodeId, retiredAt: invoiceSeries.retiredAt })
@@ -178,14 +177,14 @@ describe("reserved-identity accessors", () => {
     expect(rows.filter((r) => r.nodeId === node).every((r) => r.retiredAt !== null)).toBe(true);
     expect(rows.filter((r) => r.nodeId === other).every((r) => r.retiredAt === null)).toBe(true);
     // Idempotent on the already-retired: nothing left to retire.
-    expect(await withTransaction(suite.db, (tx) => retireNodeSeriesTx(tx, tenantId, node))).toBe(0);
+    expect(await withTransaction(suite.db, (tx) => retireNodeSeriesTx(tx, node))).toBe(0);
   });
 
   it("insertNodeSeriesTx refuses duplicate codes within a batch with a domain error", async () => {
-    const node = await seedNode(suite.db, tenantId, locationId);
+    const node = await seedNode(suite.db, locationId);
     await expect(
       withTransaction(suite.db, (tx) =>
-        insertNodeSeriesTx(tx, tenantId, node, [
+        insertNodeSeriesTx(tx, node, [
           { code: "FA-7", purpose: "standard" },
           { code: "FA-7", purpose: "rectificative" },
         ]),
@@ -194,13 +193,13 @@ describe("reserved-identity accessors", () => {
   });
 
   it("insertNodeSeriesTx inserts at next_number 1 and refuses a code the node holds, live OR retired", async () => {
-    const node = await seedNode(suite.db, tenantId, locationId);
+    const node = await seedNode(suite.db, locationId);
     await withTransaction(suite.db, (tx) =>
       insertReservedSeriesTx(tx, [{ nodeId: node, code: "FA", purpose: "standard" }]),
     );
-    await withTransaction(suite.db, (tx) => retireNodeSeriesTx(tx, tenantId, node));
+    await withTransaction(suite.db, (tx) => retireNodeSeriesTx(tx, node));
     await withTransaction(suite.db, (tx) =>
-      insertNodeSeriesTx(tx, tenantId, node, [{ code: "FA-7", purpose: "standard" }]),
+      insertNodeSeriesTx(tx, node, [{ code: "FA-7", purpose: "standard" }]),
     );
     const [fresh] = await suite.db
       .select({ nextNumber: invoiceSeries.nextNumber, retiredAt: invoiceSeries.retiredAt })
@@ -211,13 +210,13 @@ describe("reserved-identity accessors", () => {
     for (const code of ["FA", "FA-7"]) {
       const err = await captureError(() =>
         withTransaction(suite.db, (tx) =>
-          insertNodeSeriesTx(tx, tenantId, node, [{ code, purpose: "standard" }]),
+          insertNodeSeriesTx(tx, node, [{ code, purpose: "standard" }]),
         ),
       );
       expect(isAppError(err) && err.code).toBe("series.code_collision");
       expect(isAppError(err) && err.params).toEqual({ code });
     }
     // An empty list is a no-op, not an INSERT with no rows.
-    await withTransaction(suite.db, (tx) => insertNodeSeriesTx(tx, tenantId, node, []));
+    await withTransaction(suite.db, (tx) => insertNodeSeriesTx(tx, node, []));
   });
 });

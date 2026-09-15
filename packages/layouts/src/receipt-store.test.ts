@@ -20,8 +20,7 @@ import type { ReceiptConfig } from "./types.js";
 
 const suite = useTemplateDb({ template: "core_identity" });
 
-function asApp<T>(tenantId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  void tenantId;
+function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     return fn(tx);
@@ -54,44 +53,42 @@ describe("tenant receipt store on real Postgres, as the app role", () => {
   it("returns DEFAULT_RECEIPT ({}) for a tenant that has never authored a receipt", async () => {
     // Unlike getTenantTheme (which returns undefined on absence), getReceipt returns the built-in
     // DEFAULT_RECEIPT so the till boot always has a trim to render around the mandated fiscal art.
-    const fresh = await seedTenant(suite.admin);
-    expect(await asApp(fresh, (tx) => getReceipt(tx, fresh))).toEqual(DEFAULT_RECEIPT);
+    await seedTenant(suite.admin);
+    expect(await asApp((tx) => getReceipt(tx))).toEqual(DEFAULT_RECEIPT);
   });
 
   it("round-trips a manager-authored receipt through put → get", async () => {
-    const managerTenant = await seedTenant(suite.admin);
+    await seedTenant(suite.admin);
     const managerSession = await seedSession("manager");
     const receipt: ReceiptConfig = { headerSubtitle: "Hola" };
-    await asApp(managerTenant, (tx) =>
-      putReceipt(tx, { managementSessionId: managerSession, receipt }),
-    );
-    expect(await asApp(managerTenant, (tx) => getReceipt(tx, managerTenant))).toEqual(receipt);
+    await asApp((tx) => putReceipt(tx, { managementSessionId: managerSession, receipt }));
+    expect(await asApp((tx) => getReceipt(tx))).toEqual(receipt);
   });
 
   it("upserts the single per-tenant row on a second put — no duplicate", async () => {
-    const tenantId = await seedTenant(suite.admin);
+    await seedTenant(suite.admin);
     const session = await seedSession("manager");
-    await asApp(tenantId, (tx) =>
+    await asApp((tx) =>
       putReceipt(tx, {
         managementSessionId: session,
         receipt: { headerSubtitle: "Calle Mayor 1" },
       }),
     );
     const next: ReceiptConfig = { footerMessage: "Gracias por su visita" };
-    await asApp(tenantId, (tx) => putReceipt(tx, { managementSessionId: session, receipt: next }));
+    await asApp((tx) => putReceipt(tx, { managementSessionId: session, receipt: next }));
     // ON CONFLICT (id) DO UPDATE — the second write replaces the row, never adds one.
     expect(await rowCount()).toBe(1);
-    expect(await asApp(tenantId, (tx) => getReceipt(tx, tenantId))).toEqual(next);
+    expect(await asApp((tx) => getReceipt(tx))).toEqual(next);
   });
 
   it("refuses a put from a staff-role session — the authorizeManager gate (differential)", async () => {
     // The by-deletion proof: staff holds no layout.configure, so authorizeManager throws
     // authorization.not_permitted BEFORE any write. Deleting the authorizeManager call from putReceipt
     // makes this succeed → codeOf returns "did not throw…" and a row lands, failing both assertions.
-    const staffTenant = await seedTenant(suite.admin);
+    await seedTenant(suite.admin);
     const staffSession = await seedSession("staff");
     const code = await codeOf(() =>
-      asApp(staffTenant, (tx) =>
+      asApp((tx) =>
         putReceipt(tx, {
           managementSessionId: staffSession,
           receipt: { footerMessage: "Gracias" },
@@ -103,12 +100,12 @@ describe("tenant receipt store on real Postgres, as the app role", () => {
   });
 
   it("rejects an invalid receipt with receipt.invalid before any INSERT", async () => {
-    const tenantId = await seedTenant(suite.admin);
+    await seedTenant(suite.admin);
     const session = await seedSession("manager");
     // authorize FIRST (manager is permitted), THEN validate — so an invalid receipt from an AUTHORISED
     // actor proves validate runs before the write. An unknown field fails validateReceiptConfig.
     const code = await codeOf(() =>
-      asApp(tenantId, (tx) =>
+      asApp((tx) =>
         putReceipt(tx, {
           managementSessionId: session,
           receipt: { unknownField: "x" },

@@ -76,16 +76,11 @@ export function canResendPrintJob(job: {
 /** Resend the opaque document to its original printer and location, preserving delivery history. */
 export async function resendPrintJob(
   tx: Transaction,
-  cfg: PrintConfig,
+
   jobId: string,
 ): Promise<{ jobId: string }> {
   const [job] = await tx.select().from(printJobs).where(eq(printJobs.id, jobId));
   if (job === undefined) throw new AppError("print_job.not_found", { id: jobId });
   if (!canResendPrintJob(job)) throw new AppError("print_job.not_resendable", { id: jobId });
-  return enqueuePrintJob(
-    tx,
-    { tenantId: cfg.tenantId, locationId: job.locationId },
-    job.printerId,
-    job.payload,
-  );
+  return enqueuePrintJob(tx, { locationId: job.locationId }, job.printerId, job.payload);
 }

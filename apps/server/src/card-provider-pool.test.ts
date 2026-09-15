@@ -4,7 +4,6 @@ import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { CREDENTIALS_MIGRATIONS, loadKeyRing, putCredential } from "@waitron/credentials";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { isAppError } from "@waitron/shared";
-import type { TenantId } from "@waitron/shared";
 import type { CardProviderContribution, IncidentSink, PaymentProvider } from "@waitron/payments";
 import { SUMUP_CARD_PROVIDER } from "@waitron/payments-sumup";
 import { SumUpCloudProvider } from "@waitron/payments-sumup";
@@ -84,8 +83,8 @@ function fakeProvider(name: string): PaymentProvider {
   };
 }
 
-async function seedTenantWithSumUpKey(): Promise<TenantId> {
-  const tenantId = await seedTenant(suite.db);
+export async function seedTenantWithSumUpKey(): Promise<void> {
+  await seedTenant(suite.db);
   await withTransaction(suite.db, (tx) =>
     putCredential(tx, ring, {
       purpose: "payments.sumup",
@@ -97,7 +96,6 @@ async function seedTenantWithSumUpKey(): Promise<TenantId> {
       },
     }),
   );
-  return tenantId;
 }
 
 describe("createCardProviderPool", () => {
@@ -107,7 +105,6 @@ describe("createCardProviderPool", () => {
       providers: [fakeContribution("sumup", build)],
       db: suite.db,
       ring,
-      tenantId: await seedTenant(suite.db),
       nodeId: "node-1",
       environment: "preproduction",
       incidents,
@@ -126,7 +123,6 @@ describe("createCardProviderPool", () => {
       providers: [fakeContribution("sumup", build)],
       db: suite.db,
       ring,
-      tenantId: await seedTenant(suite.db),
       nodeId: "node-1",
       environment: "preproduction",
       incidents,
@@ -151,7 +147,6 @@ describe("createCardProviderPool", () => {
       providers: [fakeContribution("sumup", () => fakeProvider("sumup"))],
       db: suite.db,
       ring,
-      tenantId: await seedTenant(suite.db),
       nodeId: "node-1",
       environment: "preproduction",
       incidents,
@@ -172,7 +167,6 @@ describe("createCardProviderPool", () => {
       providers: [fakeContribution("sumup", build)],
       db: suite.db,
       ring,
-      tenantId: await seedTenant(suite.db),
       nodeId: "node-1",
       environment: "preproduction",
       incidents,
@@ -186,12 +180,10 @@ describe("createCardProviderPool", () => {
   });
 
   it("wires the real SumUp seat: get returns a live SumUpCloudProvider built from the sealed credential", async () => {
-    const tenantId = await seedTenantWithSumUpKey();
     const pool = createCardProviderPool({
       providers: [SUMUP_CARD_PROVIDER],
       db: suite.db,
       ring,
-      tenantId,
       nodeId: "node-1",
       environment: "preproduction",
       incidents,
@@ -209,7 +201,6 @@ describe("createCardProviderPool", () => {
       providers: [],
       db: suite.db,
       ring,
-      tenantId: await seedTenant(suite.db),
       nodeId: "node-1",
       environment: "preproduction",
       incidents,

@@ -13,7 +13,6 @@ import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import "./errors.js";
 
 const noopLog: Logger = () => {};
-let tenantId: string;
 let locationId: string;
 let personId: string;
 let managerCookie: string;
@@ -24,20 +23,20 @@ const suite = usePgliteDb({
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS, WORKFORCE_ES_MIGRATIONS],
   timeoutMs: 60_000,
   setup: async (db) => {
-    tenantId = await seedTenant(db);
+    await seedTenant(db);
     const seeded = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       const loc = await tx.execute<{ id: string }>(sql`
-        insert into locations (tenant_id, name, invoice_locales, operation_description)
-        values (${tenantId}, 'Main', array['es-ES'], 'Sale on premises') returning id`);
+        insert into locations (name, invoice_locales, operation_description)
+        values ('Main', array['es-ES'], 'Sale on premises') returning id`);
       const mgr = await tx.execute<{ id: string }>(sql`
-        insert into persons (tenant_id, display_name, pin_hash, role)
-        values (${tenantId}, 'The Manager', ${hashPin("1234")}, 'manager') returning id`);
+        insert into persons (display_name, pin_hash, role)
+        values ('The Manager', ${hashPin("1234")}, 'manager') returning id`);
       const stf = await tx.execute<{ id: string }>(sql`
-        insert into persons (tenant_id, display_name, pin_hash, role)
-        values (${tenantId}, 'The Clerk', ${hashPin("1234")}, 'staff') returning id`);
-      const mSes = await startManagementSession(tx, { tenantId, personId: mgr.rows[0]!.id });
-      const sSes = await startManagementSession(tx, { tenantId, personId: stf.rows[0]!.id });
+        insert into persons (display_name, pin_hash, role)
+        values ('The Clerk', ${hashPin("1234")}, 'staff') returning id`);
+      const mSes = await startManagementSession(tx, { personId: mgr.rows[0]!.id });
+      const sSes = await startManagementSession(tx, { personId: stf.rows[0]!.id });
       return {
         locationId: loc.rows[0]!.id,
         personId: mgr.rows[0]!.id,
@@ -367,8 +366,8 @@ describe("mountWorkforceApi — publish", () => {
     const otherLoc = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       const r = await tx.execute<{ id: string }>(sql`
-        insert into locations (tenant_id, name, invoice_locales, operation_description)
-        values (${tenantId}, 'Annex', array['es-ES'], 'Sale on premises') returning id`);
+        insert into locations (name, invoice_locales, operation_description)
+        values ('Annex', array['es-ES'], 'Sale on premises') returning id`);
       return r.rows[0]!.id;
     });
     const create = await send(app, "POST", "/management-api/roster", {

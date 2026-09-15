@@ -87,7 +87,7 @@ export async function createJoinRequest(
   },
 ): Promise<{ joinId: string; verificationNumber: string; token: string }> {
   await tx.execute(
-    sql`select pg_advisory_xact_lock(${JOIN_ALLOC_LOCK_NAMESPACE}, hashtext(${cfg.tenantId}))`,
+    sql`select pg_advisory_xact_lock(${JOIN_ALLOC_LOCK_NAMESPACE}, hashtext(${cfg.locationId}))`,
   );
   await sweepLapsed(tx, cfg);
 
@@ -134,7 +134,6 @@ export async function createJoinRequest(
   const [row] = await tx
     .insert(joinRequests)
     .values({
-      tenantId: cfg.tenantId,
       locationId: cfg.locationId,
       kind: input.kind,
       label: input.label,
@@ -360,7 +359,6 @@ export async function acceptDeviceJoinRequest(
 
   await tx.insert(devices).values({
     id: row.id,
-    tenantId: cfg.tenantId,
     locationId: row.locationId,
     stationId: binding.stationId,
     tillId: binding.tillId,
@@ -412,7 +410,6 @@ export async function acceptPrintAgentJoinRequest(
 
   await tx.insert(printAgents).values({
     id: row.id,
-    tenantId: cfg.tenantId,
     locationId: row.locationId,
     name: row.label,
     tokenHash: row.tokenHash,
@@ -503,7 +500,6 @@ export async function selfEnrolNodeAgent(
   const agentId = randomUUID();
   await tx.insert(printAgents).values({
     id: agentId,
-    tenantId: cfg.tenantId,
     locationId: cfg.locationId,
     nodeId: input.nodeId,
     name: input.name,

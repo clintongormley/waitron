@@ -4,7 +4,6 @@ import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { CREDENTIALS_MIGRATIONS, loadKeyRing, putCredential } from "@waitron/credentials";
 import type { IncidentSink } from "@waitron/payments";
-import type { TenantId } from "@waitron/shared";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import {
   STRIPE_CARD_PROVIDER,
@@ -86,12 +85,11 @@ function fakeMakeStripe(
   };
 }
 
-async function seedStripe(value: Record<string, string>): Promise<TenantId> {
-  const tenantId = await seedTenant(suite.db);
+async function seedStripe(value: Record<string, string>): Promise<void> {
+  await seedTenant(suite.db);
   await withTransaction(suite.db, (tx) =>
     putCredential(tx, ring, { purpose: "payments.stripe", value }),
   );
-  return tenantId;
 }
 
 describe("STRIPE_CARD_PROVIDER seat metadata", () => {
@@ -190,13 +188,11 @@ describe("STRIPE_CARD_PROVIDER.connect", () => {
 
 describe("STRIPE_CARD_PROVIDER.build", () => {
   it("builds a StripeTerminalProvider from the sealed credential", async () => {
-    const tenantId = await seedStripe(FOUR_FIELDS);
     const incidents: IncidentSink = () => Promise.resolve(true);
     const seat = createStripeCardProvider(fakeMakeStripe({}, freshCalls()));
     const provider = seat.build({
       db: suite.db,
       ring,
-      tenantId,
       nodeId: "11111111-1111-4111-8111-111111111111",
       environment: "preproduction",
       incidents,

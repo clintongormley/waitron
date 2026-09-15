@@ -42,8 +42,7 @@ export function makeRuleset(overrides: Partial<WorkTimeRuleset> = {}): WorkTimeR
  */
 
 /** A location (centro de trabajo) for the tenant. Returns its id. */
-export async function seedLocation(db: Database, tenantId: string): Promise<string> {
-  void tenantId;
+export async function seedLocation(db: Database): Promise<string> {
   const result = await db.execute<{ id: string }>(sql`
     insert into locations (name, invoice_locales, operation_description) values ('Main', array['en'], 'Sale on premises')
     returning id`);

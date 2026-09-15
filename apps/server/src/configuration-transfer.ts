@@ -42,7 +42,6 @@ export interface PreparedVenue {
 export async function buildConfigurationBundle(
   db: Database | Transaction,
   source: {
-    tenantId: string;
     locationId: string;
     tillId: string;
     nodeId: string;
@@ -75,11 +74,10 @@ export async function buildConfigurationBundle(
       max(s.code) filter (where s.purpose = 'standard') as "seriesCode",
       max(s.code) filter (where s.purpose = 'rectificative') as "rectificativeSeriesCode"
     from tenants t
-    join locations l on l.tenant_id = t.id and l.id = ${source.locationId}
-    join tills till on till.tenant_id = t.id and till.id = ${source.tillId}
-    join nodes n on n.tenant_id = t.id and n.id = ${source.nodeId}
-    join invoice_series s on s.tenant_id = t.id and s.node_id = n.id and s.retired_at is null
-    where t.id = ${source.tenantId}
+    join locations l on l.id = ${source.locationId}
+    join tills till on till.id = ${source.tillId}
+    join nodes n on n.id = ${source.nodeId}
+    join invoice_series s on s.node_id = n.id and s.retired_at is null
     group by t.id, l.id, till.id
   `);
   const row = venue.rows[0];
@@ -88,11 +86,10 @@ export async function buildConfigurationBundle(
   }
   const { country, taxId, legalName, tillName, seriesCode, rectificativeSeriesCode, ...location } =
     row;
-  const transferred = await exportConfigurationTables(db, source.tenantId, modules);
+  const transferred = await exportConfigurationTables(db, modules);
   return {
     version: 1,
     createdAt: now.toISOString(),
-    sourceTenantId: source.tenantId,
     sourceOperatorId: source.sourceOperatorId ?? "",
     venue: {
       country,
@@ -110,7 +107,7 @@ export async function buildConfigurationBundle(
 
 export async function applyPreparedLocation(
   tx: Transaction,
-  target: { tenantId: string; locationId: string },
+  target: { locationId: string },
   location: PreparedVenue["location"],
 ): Promise<void> {
   const invoiceLocales = sql`array[${sql.join(
@@ -134,7 +131,6 @@ export async function applyPreparedLocation(
 export interface ConfigurationBundle {
   version: 1;
   createdAt: string;
-  sourceTenantId: string;
   sourceOperatorId: string;
   venue: PreparedVenue;
   modules: Record<string, number>;
@@ -184,10 +180,8 @@ function declarations(modules: readonly WaitronModule[]): ConfigurationTransferT
 /** Read every row of the explicitly declared configuration tables (one tenant per database). */
 export async function exportConfigurationTables(
   db: Database | Transaction,
-  tenantId: string,
   modules: readonly WaitronModule[],
 ): Promise<{ tables: ConfigurationBundle["tables"]; reconnect: string[] }> {
-  void tenantId;
   const tables: ConfigurationBundle["tables"] = {};
   const reconnect: string[] = [];
   for (const declaration of declarations(modules)) {
@@ -231,7 +225,6 @@ function parseConfigurationBundle(value: unknown): ConfigurationBundle {
   if (
     typeof value.createdAt !== "string" ||
     Number.isNaN(Date.parse(value.createdAt)) ||
-    typeof value.sourceTenantId !== "string" ||
     typeof value.sourceOperatorId !== "string" ||
     !isRecord(venue) ||
     !isRecord(location) ||
@@ -351,7 +344,7 @@ export function validateConfigurationBundle(
 export async function importConfigurationTables(
   tx: Transaction,
   bundle: ConfigurationBundle,
-  target: { tenantId: string; locationId: string },
+  target: { locationId: string },
   modules: readonly WaitronModule[],
   targetVersions: Readonly<Record<string, number>>,
 ): Promise<void> {
@@ -403,10 +396,7 @@ export async function importConfigurationTables(
   const sourceOperatorIds = new Set(
     bundle.sourceOperatorId === "" ? [] : [bundle.sourceOperatorId],
   );
-  const idMap = new Map<string, string>([
-    [bundle.sourceTenantId, target.tenantId],
-    [bundle.venue.location.id, target.locationId],
-  ]);
+  const idMap = new Map<string, string>([[bundle.venue.location.id, target.locationId]]);
   for (const [, rows] of checked) {
     for (const row of rows) {
       if (typeof row.id === "string") idMap.set(row.id, randomUUID());
@@ -416,7 +406,7 @@ export async function importConfigurationTables(
     for (const source of rows) {
       if (declaration.name === "persons" && source.id === bundle.sourceOperatorId) continue;
       if (typeof source.person_id === "string" && sourceOperatorIds.has(source.person_id)) continue;
-      const row: Record<string, unknown> = { ...source, tenant_id: target.tenantId };
+      const row: Record<string, unknown> = { ...source };
       for (const [field, value] of Object.entries(row)) {
         if (typeof value === "string" && idMap.has(value)) row[field] = idMap.get(value)!;
       }

@@ -52,7 +52,6 @@ import {
   MONEY_SCALE,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tenantId as brandTenantId,
   tillId as brandTillId,
 } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
@@ -62,7 +61,6 @@ import { SEED_INVOICE_LOCALE, type SeedLocale } from "./menu.js";
 /** The venue a seed run files against — the ids `applyVenue` returns (with `seriesId` picked from
  *  its `seriesIds`, the standard series being first). */
 export interface SeedSalesVenue {
-  tenantId: string;
   tillId: string;
   nodeId: string;
   seriesId: string;
@@ -270,7 +268,6 @@ export async function seedSales(
       Promise.reject(new Error("seed-sales: resolveClient must never be called by recordSale")),
   });
 
-  const tenantId = brandTenantId(venue.tenantId);
   const tillId = brandTillId(venue.tillId);
   const nodeId = brandNodeId(venue.nodeId);
   const seriesId = brandSeriesId(venue.seriesId);
@@ -371,7 +368,6 @@ export async function seedSales(
       backDating.set(instant, -instant.getTimezoneOffset());
 
       const input: RecordSaleInput = {
-        tenantId,
         tillId,
         nodeId,
         seriesId,

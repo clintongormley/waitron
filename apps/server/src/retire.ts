@@ -22,8 +22,6 @@ export interface RetireDeps {
   readonly appDb: Database;
   /** The box key ring — unseals this node's identity private key to sign the minted document. */
   readonly ring: KeyRing;
-  /** This node's tenant — scopes the identity-key read. */
-  readonly tenantId: string;
   /** THIS (departing) node — the node that becomes `evicted`, and the document's `signerNodeId`. */
   readonly nodeId: string;
   /**
@@ -140,7 +138,6 @@ export async function retireSelf(deps: RetireDeps): Promise<RetireResult> {
   const document = await mintNextMembershipDocument(
     { db: deps.appDb, ring: deps.ring },
     {
-      tenantId: deps.tenantId,
       heldDocument: held,
       nodes: evictNode(held!.body.nodes, deps.nodeId),
       signerNodeId: deps.nodeId,

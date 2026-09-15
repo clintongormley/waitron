@@ -1,6 +1,5 @@
 import type { RecordSaleInput } from "@waitron/core";
 import type { TrustedClock } from "@waitron/fiscal";
-import { tenantId as brandTenantId } from "@waitron/shared";
 import type { NodeId, SeriesId, TillId } from "@waitron/shared";
 import { createFakeAeat } from "@waitron/verifactu/src/testing/fake-aeat.js";
 import type { VerifactuClient } from "@waitron/verifactu";
@@ -8,7 +7,6 @@ import type { VerifactuClient } from "@waitron/verifactu";
 const BASE = new Date("2026-03-01T13:05:00+01:00");
 
 /** See `saleInput` below: an inert value for a core input field nothing reads any more. */
-const INERT_TENANT_ID = brandTenantId("00000000-0000-4000-8000-000000000001");
 
 /**
  * `VerifactuBackendOptions.resolveClient` (Task 5) is required by the constructor, and is read by
@@ -67,10 +65,8 @@ export function saleInput(
 ): RecordSaleInput {
   const { tillId, nodeId, seriesId, ...overrides } = params;
   return {
-    // `RecordSaleInput.tenantId` (`@waitron/core`) still declares a tenant id and nothing reads it:
     // the only remaining use is the `sale.series_not_found` error's params. It goes when
     // `apps/server`, its last supplier, is converted — until then this fixed value stands in.
-    tenantId: INERT_TENANT_ID,
     tillId,
     nodeId,
     seriesId,

@@ -27,7 +27,6 @@ export async function computeDailyClose(
   const counts = await computeCloseCounts(tx, input);
 
   return {
-    tenantId: input.tenantId,
     nodeId: input.nodeId,
     businessDay: input.businessDay,
     timeZone: input.timeZone,

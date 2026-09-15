@@ -29,7 +29,6 @@ import "./errors.js";
 // request-shape 400s and the not-logged-in 401.
 
 const noopLog: Logger = () => {};
-let tenantId: string;
 let me: string;
 let colleague: string;
 let manager: string;
@@ -45,27 +44,27 @@ const suite = usePgliteDb({
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS],
   timeoutMs: 60_000,
   setup: async (db) => {
-    tenantId = await seedTenant(db);
+    await seedTenant(db);
     const loc = await db.execute<{ id: string }>(sql`
-      insert into locations (tenant_id, name, invoice_locales, operation_description)
-      values (${tenantId}, 'Counter', array['es-ES'], 'Retail') returning id`);
+      insert into locations (name, invoice_locales, operation_description)
+      values ('Counter', array['es-ES'], 'Retail') returning id`);
     locationId = loc.rows[0]!.id;
     const meRow = await db.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, role)
-      values (${tenantId}, 'Me', ${hashPin("1111")}, 'staff') returning id`);
+      insert into persons (display_name, pin_hash, role)
+      values ('Me', ${hashPin("1111")}, 'staff') returning id`);
     me = meRow.rows[0]!.id;
     const colRow = await db.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, role)
-      values (${tenantId}, 'Colleague', ${hashPin("2222")}, 'staff') returning id`);
+      insert into persons (display_name, pin_hash, role)
+      values ('Colleague', ${hashPin("2222")}, 'staff') returning id`);
     colleague = colRow.rows[0]!.id;
     const mgrRow = await db.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, role)
-      values (${tenantId}, 'Manager', ${hashPin("3333")}, 'manager') returning id`);
+      insert into persons (display_name, pin_hash, role)
+      values ('Manager', ${hashPin("3333")}, 'manager') returning id`);
     manager = mgrRow.rows[0]!.id;
     // A staff person with an explicit `locale` preference (es-ES), distinct from VENUE_LOCALE (en-GB).
     const localedRow = await db.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, role, locale)
-      values (${tenantId}, 'Localed', ${hashPin("4444")}, 'staff', 'es-ES') returning id`);
+      insert into persons (display_name, pin_hash, role, locale)
+      values ('Localed', ${hashPin("4444")}, 'staff', 'es-ES') returning id`);
     localed = localedRow.rows[0]!.id;
   },
 });
@@ -77,7 +76,7 @@ const VENUE_LOCALE = "en-GB";
 
 // A fixed sentinel node id: this hermetic suite runs on PGlite WITHOUT the sync migrations, so no
 // `persons` capture trigger fires and no test here asserts a sync origin — the value only has to be
-// present so the widened `MeApiDeps.cfg` (`{ tenantId, nodeId }`) is satisfied. The origin-attribution
+// present so the widened `MeApiDeps.cfg` (`{ nodeId }`) is satisfied. The origin-attribution
 // proof for this route lives in `sync-origin.test.ts` (real Postgres, manifest template).
 const NODE_ID = "11111111-1111-4111-8111-111111111111";
 
@@ -98,7 +97,7 @@ function mountApp(overrides: Partial<MeApiDeps> = {}): Hono {
     app,
     {
       db: suite.db,
-      cfg: { tenantId, nodeId: NODE_ID },
+      cfg: { nodeId: NODE_ID },
       venueLocale: VENUE_LOCALE,
       onboardingIntent: "prepare",
       modules: MODULES,
@@ -115,7 +114,7 @@ function mountApp(overrides: Partial<MeApiDeps> = {}): Hono {
 async function cookieFor(personId: string): Promise<string> {
   const session = await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
-    return startManagementSession(tx, { tenantId, personId });
+    return startManagementSession(tx, { personId });
   });
   return `${MANAGEMENT_COOKIE}=${session.id}`;
 }
@@ -808,8 +807,8 @@ describe("mountMeApi — set your own locale", () => {
   // opened via `cookieFor` (the production `startManagementSession` path). Cleaned up in a finally (§4).
   async function freshPerson(pin: string): Promise<string> {
     const row = await suite.db.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, role)
-      values (${tenantId}, 'Locale User', ${hashPin(pin)}, 'staff') returning id`);
+      insert into persons (display_name, pin_hash, role)
+      values ('Locale User', ${hashPin(pin)}, 'staff') returning id`);
     return row.rows[0]!.id;
   }
   async function cleanup(personId: string): Promise<void> {

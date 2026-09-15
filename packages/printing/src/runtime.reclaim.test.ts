@@ -15,17 +15,16 @@ import type { PrintConfig } from "./printers.js";
 const suite = useTemplateDb({ template: "core" });
 
 async function setup(): Promise<PrintConfig> {
-  const tenantId = await seedTenant(suite.admin);
+  await seedTenant(suite.admin);
   const { rows } = await suite.admin.execute<{ id: string }>(sql`
     insert into locations (name, invoice_locales, operation_description) values ('Bar', array['es-ES'], 'Sale on premises') returning id`);
-  return { tenantId, locationId: rows[0]!.id };
+  return { locationId: rows[0]!.id };
 }
 
 /** Run `fn` as the real deployment role — a tenant-scoped tx that switches to `app_user` first, then
  * COMMITS when it returns. Each call is its own committed transaction, so a claim in one call is visible
  * and UNLOCKED to the next — the "claimed, committed, then the agent died" state the lease reclaims. */
-function asApp<T>(db: Database, cfg: PrintConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  void cfg;
+function asApp<T>(db: Database, fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTransaction(db, async (tx) => {
     await asAppUser(tx);
     return fn(tx);
@@ -58,7 +57,7 @@ async function jobRow(jobId: string): Promise<{
 }
 
 async function seedPrinterAndJob(cfg: PrintConfig): Promise<string> {
-  return asApp(suite.admin, cfg, async (tx) => {
+  return asApp(suite.admin, async (tx) => {
     const printer = await createPrinter(tx, cfg, {
       name: "Kitchen",
       transport: "network_tcp",
@@ -77,8 +76,8 @@ describe("print-job lease reclaim (real Postgres)", () => {
 
     // The agent CLAIMS the job (queued → printing, claimed_at stamped) in its own committed transaction,
     // then "dies": it never reports, so the row is left committed-and-unlocked in `printing`.
-    const claimed = await asApp(suite.admin, cfg, (tx) =>
-      claimPrintJobs(tx, cfg, agentId, { locationId: cfg.locationId, visibleKeys: [] }),
+    const claimed = await asApp(suite.admin, (tx) =>
+      claimPrintJobs(tx, agentId, { locationId: cfg.locationId, visibleKeys: [] }),
     );
     expect(claimed).toHaveLength(1);
     expect(claimed[0]!.id).toBe(jobId);
@@ -96,10 +95,9 @@ describe("print-job lease reclaim (real Postgres)", () => {
     // committed printing row is unlocked, so SKIP LOCKED does not skip it once the lease predicate makes
     // it eligible — and delivers it.
     const sink = new FakeSink();
-    const result = await asApp(suite.admin, cfg, (tx) =>
+    const result = await asApp(suite.admin, (tx) =>
       runAgentOnce({
         tx,
-        cfg,
         agentId,
         locationId: cfg.locationId,
         visibleKeys: [],
@@ -141,10 +139,9 @@ describe("print-job lease reclaim (real Postgres)", () => {
     // PROVEN load-bearing by deletion: remove it and this row is never re-selected and stays stuck in
     // `printing`; restore it and the run reclaims and delivers it (see copilot-null-claimedat-fix-report.md).
     const sink = new FakeSink();
-    const result = await asApp(suite.admin, cfg, (tx) =>
+    const result = await asApp(suite.admin, (tx) =>
       runAgentOnce({
         tx,
-        cfg,
         agentId,
         locationId: cfg.locationId,
         visibleKeys: [],
@@ -166,8 +163,8 @@ describe("print-job lease reclaim (real Postgres)", () => {
 
     // The agent claims the job and is STILL WORKING — a slow-but-live push. The claim is committed
     // (printing, claimed_at = now()) but the lease has NOT expired.
-    const claimed = await asApp(suite.admin, cfg, (tx) =>
-      claimPrintJobs(tx, cfg, agentId, { locationId: cfg.locationId, visibleKeys: [] }),
+    const claimed = await asApp(suite.admin, (tx) =>
+      claimPrintJobs(tx, agentId, { locationId: cfg.locationId, visibleKeys: [] }),
     );
     expect(claimed).toHaveLength(1);
     const firstClaimedAt = (await jobRow(jobId)).claimed_at;
@@ -175,8 +172,8 @@ describe("print-job lease reclaim (real Postgres)", () => {
 
     // A concurrent claim (a second agent, or the same agent's next batch) must NOT reclaim it: the
     // visibility timeout does not fire on a live claim, so the fresh printing row is left alone.
-    const second = await asApp(suite.admin, cfg, (tx) =>
-      claimPrintJobs(tx, cfg, agentId, { locationId: cfg.locationId, visibleKeys: [] }),
+    const second = await asApp(suite.admin, (tx) =>
+      claimPrintJobs(tx, agentId, { locationId: cfg.locationId, visibleKeys: [] }),
     );
     expect(second).toEqual([]);
 

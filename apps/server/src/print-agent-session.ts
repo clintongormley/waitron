@@ -17,7 +17,6 @@ import { authenticateAgent } from "@waitron/printing";
  */
 export interface PrintAgentSessionDeps {
   db: Database;
-  cfg: { tenantId: string };
 }
 
 /**
@@ -46,6 +45,6 @@ export async function requireAgent(
   if (token.length === 0) throw new AppError("agent.unauthorized", {});
   return withTransaction(deps.db, async (tx) => {
     await asAppUser(tx);
-    return authenticateAgent(tx, { tenantId: deps.cfg.tenantId }, token);
+    return authenticateAgent(tx, token);
   });
 }

@@ -13,12 +13,7 @@
 import "./errors.js";
 import { readFile } from "node:fs/promises";
 import { eq } from "drizzle-orm";
-import {
-  AppError,
-  locationId as brandLocationId,
-  nodeId as brandNodeId,
-  tenantId as brandTenantId,
-} from "@waitron/shared";
+import { AppError, locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import {
   nodes,
   readDeploymentEnvironment,
@@ -53,7 +48,7 @@ export interface ReservedIdentity {
 
 /**
  * Everything the mirror needs to adopt this venue and establish a native subscription to the primary.
- * `designated` are the five ids the primary till was provisioned with (`config.till.*`), so the
+ * `designated` are the four ids the primary till was provisioned with (`config.till.*`), so the
  * mirror knows which node/tenant it mirrors; the venue's parent rows are NOT carried — the native
  * initial COPY brings them (swap step 4). `tenant` is the venue's `(country, taxId)` identity, for the
  * mirror-side foreign-tenant + environment guards. `primaryNode` is the designated node's descriptor
@@ -100,7 +95,7 @@ export interface MirrorBundle {
  * SELECT/INSERT/UPDATE on `contadores_instalacion`/`registro_sif`/`cadenas`, and SELECT on
  * `invoice_series`), so no broader connection is used (CLAUDE.md §3: never widen a grant). `ring`
  * unseals the primary's identity PRIVATE key (`readNodeIdentityKey`, as `app_user`) to sign the
- * standby's endorsement; `standby` is the node the primary vouches for. `designated` are the five ids
+ * standby's endorsement; `standby` is the node the primary vouches for. `designated` are the four ids
  * the till was provisioned with (`config.till.*`); `stateDir` locates the box CA;
  * `relayUrl`/`boxHostname` are the box's dial-in. `replication` is this primary's own
  * native-replication credential + advertise address (`config.replication`); `database` is the name of
@@ -139,7 +134,7 @@ export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBu
       await tx
         .select({ country: tenants.country, taxId: tenants.taxId })
         .from(tenants)
-        .where(eq(tenants.id, deps.designated.tenantId))
+        .where(eq(tenants.id, 1))
     )[0]!;
     const n = (
       await tx
@@ -175,7 +170,6 @@ export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBu
   const [reserved, primaryPrivateKey, boxCaPem] = await Promise.all([
     withTransaction(deps.appDb, async (tx) => {
       const primary = {
-        tenantId: brandTenantId(deps.designated.tenantId),
         locationId: brandLocationId(deps.designated.locationId),
         nodeId: brandNodeId(deps.designated.nodeId),
       };
@@ -189,7 +183,7 @@ export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBu
       }
       return { modules: states, series };
     }),
-    readNodeIdentityKey(deps.appDb, deps.ring, deps.designated.tenantId),
+    readNodeIdentityKey(deps.appDb, deps.ring),
     readFile(caCertPath(deps.stateDir), "utf8"),
   ]);
 

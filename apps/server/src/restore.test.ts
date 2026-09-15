@@ -6,7 +6,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { sql } from "drizzle-orm";
 import { withTransaction } from "@waitron/db";
-import { nodeId as brandNodeId, tenantId as brandTenantId } from "@waitron/shared";
+import { nodeId as brandNodeId } from "@waitron/shared";
 import { FISCAL_RESTORE, currentSif, registerSif } from "@waitron/fiscal-verifactu";
 import { AppError, isAppError } from "@waitron/shared";
 import { enabledModules, fiscalSlot } from "@waitron/module";
@@ -36,14 +36,12 @@ const suite = usePgliteDb({
 });
 
 const T = {
-  tenantId: "c0000000-0000-4000-8000-000000000001",
   locationId: "c0000000-0000-4000-8000-000000000002",
   tillId: "c0000000-0000-4000-8000-000000000003",
   seriesId: "c0000000-0000-4000-8000-000000000004",
   nodeId: "c0000000-0000-4000-8000-000000000008",
 };
 const TRADING_ENV = formatEnvFile({
-  WAITRON_TILL_TENANT_ID: T.tenantId,
   WAITRON_TILL_TILL_ID: T.tillId,
   WAITRON_TILL_NODE_ID: T.nodeId,
   WAITRON_TILL_SERIES_ID: T.seriesId,
@@ -56,19 +54,19 @@ const TRADING_ENV = formatEnvFile({
 beforeAll(async () => {
   const db = suite.db;
   await db.execute(
-    sql`insert into tenants (id, country, tax_id, legal_name) values (${T.tenantId}, 'ES', '89890001K', 'Waitron SL')`,
+    sql`insert into tenants (id, country, tax_id, legal_name) values (1, 'ES', '89890001K', 'Waitron SL')`,
   );
   await db.execute(
-    sql`insert into locations (id, tenant_id, name, invoice_locales, operation_description) values (${T.locationId}, ${T.tenantId}, 'Local', array['es'], 'Venta')`,
+    sql`insert into locations (id, name, invoice_locales, operation_description) values (${T.locationId}, 'Local', array['es'], 'Venta')`,
   );
   await db.execute(
-    sql`insert into tills (id, tenant_id, location_id, name) values (${T.tillId}, ${T.tenantId}, ${T.locationId}, 'Caja 1')`,
+    sql`insert into tills (id, location_id, name) values (${T.tillId}, ${T.locationId}, 'Caja 1')`,
   );
   await db.execute(
-    sql`insert into nodes (id, tenant_id, location_id, name) values (${T.nodeId}, ${T.tenantId}, ${T.locationId}, 'Node 1')`,
+    sql`insert into nodes (id, location_id, name) values (${T.nodeId}, ${T.locationId}, 'Node 1')`,
   );
   await db.execute(
-    sql`insert into invoice_series (id, tenant_id, node_id, code) values (${T.seriesId}, ${T.tenantId}, ${T.nodeId}, 'FA')`,
+    sql`insert into invoice_series (id, node_id, code) values (${T.seriesId}, ${T.nodeId}, 'FA')`,
   );
 });
 
@@ -452,21 +450,18 @@ describe("restore hooks (identity phase)", () => {
     await withTransaction(suite.db, async (tx) => {
       const sif = await registerSif(tx, {
         ...T,
-        tenantId: brandTenantId(T.tenantId),
         nodeId: brandNodeId(T.nodeId),
         nif: "89890001K",
         idSistemaInformatico: "WT",
       });
       expect(sif.numeroInstalacion).toBe(1);
-      await tx.execute(sql`insert into invoice_series (tenant_id, node_id, code, purpose)
-        values (${T.tenantId}, ${T.nodeId}, 'FA-1', 'rectificative')`);
+      await tx.execute(sql`insert into invoice_series (node_id, code, purpose)
+        values (${T.nodeId}, 'FA-1', 'rectificative')`);
     });
     await restoreFromArtifact(
       makeRestoreDeps({ modules: withHooks({ "fiscal-verifactu": FISCAL_RESTORE }) }),
     );
-    const sif = await withTransaction(suite.db, (tx) =>
-      currentSif(tx, brandTenantId(T.tenantId), brandNodeId(T.nodeId)),
-    );
+    const sif = await withTransaction(suite.db, (tx) => currentSif(tx, brandNodeId(T.nodeId)));
     const { rows } = await suite.db.execute<{ id: string; code: string; purpose: string }>(sql`
       select id, code, purpose from invoice_series where node_id = ${T.nodeId} and retired_at is null order by purpose desc
     `);
@@ -584,7 +579,6 @@ describe("restore hooks (identity phase)", () => {
     await writeFile(
       join(stateDir, "trading.env"),
       formatEnvFile({
-        WAITRON_TILL_TENANT_ID: "stale",
         WAITRON_TILL_NODE_ID: "stale",
         WAITRON_TILL_LOCATION_ID: "stale",
         WAITRON_TILL_SERIES_ID: "stale",
@@ -595,7 +589,6 @@ describe("restore hooks (identity phase)", () => {
       makeRestoreDeps({ modules: withHooks({ "fiscal-verifactu": hook }) }),
     );
     expect(hook).toHaveBeenCalledWith(expect.anything(), {
-      tenantId: T.tenantId,
       locationId: T.locationId,
       nodeId: T.nodeId,
     });
@@ -688,7 +681,7 @@ describe("restore hooks (identity phase)", () => {
 
   it("no series returned but the artifact's series id is not the live standard one → env is corrected", async () => {
     await suite.db.execute(
-      sql`insert into invoice_series (tenant_id, node_id, code) values (${T.tenantId}, ${T.nodeId}, 'FB')`,
+      sql`insert into invoice_series (node_id, code) values (${T.nodeId}, 'FB')`,
     );
     await suite.db.execute(
       sql`update invoice_series set retired_at = now() where id = ${T.seriesId}`,
@@ -703,7 +696,7 @@ describe("restore hooks (identity phase)", () => {
 
   it("no series returned and TWO live standard series in the restored db → refused (loud), no identity written", async () => {
     await suite.db.execute(
-      sql`insert into invoice_series (tenant_id, node_id, code) values (${T.tenantId}, ${T.nodeId}, 'FB')`,
+      sql`insert into invoice_series (node_id, code) values (${T.nodeId}, 'FB')`,
     );
     await expect(restoreFromArtifact(makeRestoreDeps({ modules: withHooks({}) }))).rejects.toThrow(
       /more than one standard series/,

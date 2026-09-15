@@ -41,16 +41,15 @@ beforeAll(() => {
  *  `TillConfig`; the station→printer verbs take the narrower `PrintConfig` (its tenant + location),
  *  derived by {@link printCfg}. Mirrors kitchen.test.ts's `setupVenue`. */
 async function setupVenue(): Promise<TillConfig> {
-  const tenantId = await seedTenant(db);
+  await seedTenant(db);
   const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
+    insert into locations (name, invoice_locales, operation_description)
+    values ('Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
   const locationId = loc.rows[0]!.id;
   const till = await db.execute<{ id: string }>(sql`
-    insert into tills (tenant_id, location_id, name) values (${tenantId}, ${locationId}, 'Caja 1') returning id`);
-  const nodeId = await seedNode(db, tenantId, brandLocationId(locationId));
+    insert into tills (location_id, name) values (${locationId}, 'Caja 1') returning id`);
+  const nodeId = await seedNode(db, brandLocationId(locationId));
   return {
-    tenantId,
     tillId: brandTillId(till.rows[0]!.id),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
@@ -64,7 +63,7 @@ async function setupVenue(): Promise<TillConfig> {
 
 /** The station→printer verbs' scope — the tenant + location the till carries. */
 function printCfg(cfg: TillConfig): PrintConfig {
-  return { tenantId: cfg.tenantId, locationId: cfg.locationId };
+  return { locationId: cfg.locationId };
 }
 
 function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
@@ -94,18 +93,14 @@ describe("station→printer mapping verbs", () => {
     const s1 = await station(cfg, "Cocina");
     const p1 = await printer(cfg, "Kitchen");
 
-    await asApp(cfg, (tx) =>
-      attachPrinterToStation(tx, printCfg(cfg), { stationId: s1, printerId: p1 }),
-    );
+    await asApp(cfg, (tx) => attachPrinterToStation(tx, { stationId: s1, printerId: p1 }));
     expect(await asApp(cfg, (tx) => listStationPrinters(tx, printCfg(cfg)))).toEqual([
       { stationId: s1, printerId: p1 },
     ]);
 
     // Re-attaching the SAME pair is a silent no-op (ON CONFLICT DO NOTHING), not a duplicate row nor a
     // throw — the idempotency the config UI relies on.
-    await asApp(cfg, (tx) =>
-      attachPrinterToStation(tx, printCfg(cfg), { stationId: s1, printerId: p1 }),
-    );
+    await asApp(cfg, (tx) => attachPrinterToStation(tx, { stationId: s1, printerId: p1 }));
     expect(await asApp(cfg, (tx) => listStationPrinters(tx, printCfg(cfg)))).toEqual([
       { stationId: s1, printerId: p1 },
     ]);
@@ -115,9 +110,7 @@ describe("station→printer mapping verbs", () => {
     const cfg = await setupVenue();
     const s1 = await station(cfg, "Cocina");
     const p1 = await printer(cfg, "Kitchen");
-    await asApp(cfg, (tx) =>
-      attachPrinterToStation(tx, printCfg(cfg), { stationId: s1, printerId: p1 }),
-    );
+    await asApp(cfg, (tx) => attachPrinterToStation(tx, { stationId: s1, printerId: p1 }));
 
     await asApp(cfg, (tx) =>
       detachPrinterFromStation(tx, printCfg(cfg), { stationId: s1, printerId: p1 }),
@@ -136,9 +129,7 @@ describe("station→printer mapping verbs", () => {
     const p1 = await printer(cfg, "Kitchen");
     const missing = randomUUID();
     await expect(
-      asApp(cfg, (tx) =>
-        attachPrinterToStation(tx, printCfg(cfg), { stationId: missing, printerId: p1 }),
-      ),
+      asApp(cfg, (tx) => attachPrinterToStation(tx, { stationId: missing, printerId: p1 })),
     ).rejects.toMatchObject({ code: "station.not_found", params: { stationId: missing } });
   });
 
@@ -147,9 +138,7 @@ describe("station→printer mapping verbs", () => {
     const s1 = await station(cfg, "Cocina");
     const missing = randomUUID();
     await expect(
-      asApp(cfg, (tx) =>
-        attachPrinterToStation(tx, printCfg(cfg), { stationId: s1, printerId: missing }),
-      ),
+      asApp(cfg, (tx) => attachPrinterToStation(tx, { stationId: s1, printerId: missing })),
     ).rejects.toMatchObject({ code: "printer.not_found", params: { id: missing } });
   });
 
@@ -165,7 +154,7 @@ describe("station→printer mapping verbs", () => {
       [s1, p2],
       [s2, p1],
     ] as const) {
-      await asApp(cfg, (tx) => attachPrinterToStation(tx, printCfg(cfg), { stationId, printerId }));
+      await asApp(cfg, (tx) => attachPrinterToStation(tx, { stationId, printerId }));
     }
 
     // No filter → every mapping in the tenant.

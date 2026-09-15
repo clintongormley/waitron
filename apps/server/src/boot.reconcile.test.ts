@@ -46,9 +46,8 @@ import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 const superseded = useTemplateDb({ template: "manifest", resetPerTest: false });
 const proceeds = useTemplateDb({ template: "manifest", resetPerTest: false });
 
-// The box's own fiscal identity — the five WAITRON_TILL_*_ID that put boot into TRADING + PRIMARY mode.
+// The box's own fiscal identity — the four WAITRON_TILL_*_ID that put boot into TRADING + PRIMARY mode.
 const TILL_ENV = {
-  WAITRON_TILL_TENANT_ID: "11111111-1111-4111-8111-111111111111",
   WAITRON_TILL_TILL_ID: "22222222-2222-4222-8222-222222222222",
   WAITRON_TILL_NODE_ID: "33333333-3333-4333-8333-333333333333",
   WAITRON_TILL_SERIES_ID: "44444444-4444-4444-8444-444444444444",
@@ -92,22 +91,22 @@ let proceedsDatabaseUrl: string;
  * the peer's public key (the trust anchor the fetched chart's signature verifies against). */
 async function seed(admin: Database): Promise<void> {
   await admin.execute(sql`insert into tenants (id, country, tax_id, legal_name)
-    values (${TILL_ENV.WAITRON_TILL_TENANT_ID}, 'ES', '90333333J', 'Reconcile SL') on conflict do nothing`);
-  await admin.execute(sql`insert into locations (id, tenant_id, name, invoice_locales, operation_description)
-    values (${TILL_ENV.WAITRON_TILL_LOCATION_ID}, ${TILL_ENV.WAITRON_TILL_TENANT_ID}, 'Loc',
+    values (1, 'ES', '90333333J', 'Reconcile SL') on conflict do nothing`);
+  await admin.execute(sql`insert into locations (id, name, invoice_locales, operation_description)
+    values (${TILL_ENV.WAITRON_TILL_LOCATION_ID}, 'Loc',
             array['en']::text[], 'Hospitality') on conflict do nothing`);
-  await admin.execute(sql`insert into nodes (id, tenant_id, location_id, name)
-    values (${TILL_ENV.WAITRON_TILL_NODE_ID}, ${TILL_ENV.WAITRON_TILL_TENANT_ID},
+  await admin.execute(sql`insert into nodes (id, location_id, name)
+    values (${TILL_ENV.WAITRON_TILL_NODE_ID},
             ${TILL_ENV.WAITRON_TILL_LOCATION_ID}, 'Box') on conflict do nothing`);
   // The peer node, with its identity public key — this is what puts the peer's key in the box's trust set.
-  await admin.execute(sql`insert into nodes (id, tenant_id, location_id, name, public_key)
-    values (${PEER_NODE}, ${TILL_ENV.WAITRON_TILL_TENANT_ID}, ${TILL_ENV.WAITRON_TILL_LOCATION_ID},
+  await admin.execute(sql`insert into nodes (id, location_id, name, public_key)
+    values (${PEER_NODE}, ${TILL_ENV.WAITRON_TILL_LOCATION_ID},
             'Cloud', ${PEER_KEY.publicKey}) on conflict do nothing`);
-  await admin.execute(sql`insert into tills (id, tenant_id, location_id, name)
-    values (${TILL_ENV.WAITRON_TILL_TILL_ID}, ${TILL_ENV.WAITRON_TILL_TENANT_ID},
+  await admin.execute(sql`insert into tills (id, location_id, name)
+    values (${TILL_ENV.WAITRON_TILL_TILL_ID},
             ${TILL_ENV.WAITRON_TILL_LOCATION_ID}, 'Till') on conflict do nothing`);
-  await admin.execute(sql`insert into invoice_series (id, tenant_id, node_id, code)
-    values (${TILL_ENV.WAITRON_TILL_SERIES_ID}, ${TILL_ENV.WAITRON_TILL_TENANT_ID},
+  await admin.execute(sql`insert into invoice_series (id, node_id, code)
+    values (${TILL_ENV.WAITRON_TILL_SERIES_ID},
             ${TILL_ENV.WAITRON_TILL_NODE_ID}, 'A') on conflict do nothing`);
 }
 

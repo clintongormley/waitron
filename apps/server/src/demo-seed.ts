@@ -19,7 +19,6 @@ export async function seedInstalledDemo(
 ): Promise<void> {
   await seedDemoRestaurant(db, {
     venue: {
-      tenantId: result.tenantId,
       tillId: result.tillId,
       nodeId: result.nodeId,
       seriesId: result.seriesIds[0]!,

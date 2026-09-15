@@ -31,7 +31,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tenantId as brandTenantId,
   tillId as brandTillId,
 } from "@waitron/shared";
 import type { TillConfig } from "../../src/till-config.js";
@@ -57,7 +56,6 @@ function nextNif(): string {
 }
 
 interface Venue {
-  tenantId: string;
   tillId: string;
   nodeId: string;
   seriesId: string;
@@ -100,7 +98,6 @@ async function provisionVenue(): Promise<Venue> {
     { db: suite.admin, modules: ALL_MODULES },
   );
   return {
-    tenantId: venue.tenantId,
     tillId: venue.tillId,
     nodeId: venue.nodeId,
     // planVenue emits the standard series first, then the rectificative one.
@@ -112,7 +109,6 @@ async function provisionVenue(): Promise<Venue> {
 /** The till dependency bundle for the park/retrieve path — the same shape `boot.ts` assembles. */
 function tillConfigFor(venue: Venue): TillConfig {
   return {
-    tenantId: brandTenantId(venue.tenantId),
     tillId: brandTillId(venue.tillId),
     nodeId: brandNodeId(venue.nodeId),
     seriesId: brandSeriesId(venue.seriesId),
@@ -145,7 +141,6 @@ describe("demo seed end-to-end", () => {
       // Business day = yesterday (UTC), which the generator always fills fully and in the past.
       const businessDay = new Date(start - DAY_MS).toISOString().slice(0, 10);
       const close = await computeDailyClose(tx, {
-        tenantId: brandTenantId(venue.tenantId),
         nodeId: brandNodeId(venue.nodeId),
         businessDay,
         timeZone: "Europe/Madrid",

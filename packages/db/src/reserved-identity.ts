@@ -55,12 +55,7 @@ export async function insertReservedSeriesTx(
  * A provisioned primary with no endorsement trusts its own key; mirror promotion includes a
  * stored endorsement when signing its new membership document.
  */
-export function readNodeEndorsement(
-  db: Database,
-  tenantId: string,
-  nodeId: string,
-): Promise<Endorsement | null> {
-  void tenantId;
+export function readNodeEndorsement(db: Database, nodeId: string): Promise<Endorsement | null> {
   return withTransaction(db, async (tx) => {
     const [row] = await tx
       .select({ endorsement: nodes.endorsement })
@@ -79,11 +74,7 @@ export function readNodeEndorsement(
  * code)`, not purpose), and two would make the invoice number non-deterministic. Reachable only by a
  * corrupt write; a plain `Error`, not a code, because it is a programming-level invariant.
  */
-export async function readStandardSeriesIdTx(
-  tx: Transaction,
-  tenantId: string,
-  nodeId: string,
-): Promise<string> {
+export async function readStandardSeriesIdTx(tx: Transaction, nodeId: string): Promise<string> {
   const rows = await tx
     .select({ id: invoiceSeries.id })
     .from(invoiceSeries)
@@ -97,7 +88,7 @@ export async function readStandardSeriesIdTx(
     .limit(2);
   const [row, extra] = rows;
   if (row === undefined) {
-    throw new AppError("series.no_standard_for_node", { tenantId, nodeId });
+    throw new AppError("series.no_standard_for_node", { nodeId });
   }
   if (extra !== undefined) {
     throw new Error(`invoice_series: node ${nodeId} has more than one standard series`);
@@ -106,12 +97,8 @@ export async function readStandardSeriesIdTx(
 }
 
 /** {@link readStandardSeriesIdTx} under its own `withTransaction` (app_user SELECT suffices). */
-export function readStandardSeriesId(
-  db: Database,
-  tenantId: string,
-  nodeId: string,
-): Promise<string> {
-  return withTransaction(db, (tx) => readStandardSeriesIdTx(tx, tenantId, nodeId));
+export function readStandardSeriesId(db: Database, nodeId: string): Promise<string> {
+  return withTransaction(db, (tx) => readStandardSeriesIdTx(tx, nodeId));
 }
 
 /**
@@ -120,12 +107,7 @@ export function readStandardSeriesId(
  * (`drizzle/0001_db_baseline_sql.sql`), and no runtime path retires a series — a restore does, on its
  * privileged connection, before opening the node's replacement series.
  */
-export async function retireNodeSeriesTx(
-  tx: Transaction,
-  tenantId: string,
-  nodeId: string,
-): Promise<number> {
-  void tenantId;
+export async function retireNodeSeriesTx(tx: Transaction, nodeId: string): Promise<number> {
   const rows = await tx
     .update(invoiceSeries)
     .set({ retiredAt: sql`now()` })
@@ -142,12 +124,9 @@ export async function retireNodeSeriesTx(
  */
 export async function insertNodeSeriesTx(
   tx: Transaction,
-  tenantId: string,
   nodeId: string,
   series: readonly { code: string; purpose: string }[],
 ): Promise<void> {
-  // apps/server and packages/provisioning still pass the tenant; the parameter goes when they do.
-  void tenantId;
   if (series.length === 0) return;
   const codes = new Set<string>();
   for (const { code } of series) {

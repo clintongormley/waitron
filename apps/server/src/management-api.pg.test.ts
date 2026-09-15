@@ -58,8 +58,8 @@ function invitationBody(
 }
 
 /** Provision a venue as owner and seed the people and sessions this route fixture needs. */
-async function setupTenant(): Promise<{ tenantId: string; managerId: string; staffId: string }> {
-  const venue = await applyVenue(
+async function setupTenant(): Promise<{ managerId: string; staffId: string }> {
+  await applyVenue(
     planVenue(
       {
         country: "ES",
@@ -96,20 +96,19 @@ async function setupTenant(): Promise<{ tenantId: string; managerId: string; sta
   const { managerId, staffId } = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const manager = await tx.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, email, pin_hash, password_hash, role)
-      values (${venue.tenantId}, 'The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')
+      insert into persons (display_name, email, pin_hash, password_hash, role)
+      values ('The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')
       returning id`);
     const staff = await tx.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, email, pin_hash, password_hash, role)
-      values (${venue.tenantId}, 'The Clerk', ${STAFF_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'staff')
+      insert into persons (display_name, email, pin_hash, password_hash, role)
+      values ('The Clerk', ${STAFF_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'staff')
       returning id`);
     return { managerId: manager.rows[0]!.id, staffId: staff.rows[0]!.id };
   });
-  return { tenantId: venue.tenantId, managerId, staffId };
+  return { managerId, staffId };
 }
 
 function mountApp(
-  tenantId: string,
   sendAccountEmail?: AccountEmailSender,
   passwordThrottle?: PasswordThrottle,
   google?: {
@@ -127,7 +126,7 @@ function mountApp(
     {
       db: suite.admin,
       // These cases do not assert sync attribution, so use the default all-zero origin.
-      cfg: { tenantId, nodeId: "00000000-0000-0000-0000-000000000000" },
+      cfg: { nodeId: "00000000-0000-0000-0000-000000000000" },
       secureCookies: false,
       rpId: "localhost",
       origin: "http://localhost",
@@ -165,8 +164,7 @@ async function login(app: Hono, email: string, password = PASSWORD): Promise<str
 
 /** Count the tenant's persons named `displayName`, read back as the app role — the proof a
  * genuine tenant-scoped row landed, not merely that a route returned a success status. */
-async function countPersonsNamed(tenantId: string, displayName: string): Promise<number> {
-  void tenantId;
+async function countPersonsNamed(displayName: string): Promise<number> {
   const rows = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const r = await tx.execute<{ display_name: string }>(
@@ -179,8 +177,8 @@ async function countPersonsNamed(tenantId: string, displayName: string): Promise
 
 describe("Management API staff + session routes over real Postgres", () => {
   it("lets only one concurrent invitation claim a live display name", async () => {
-    const { tenantId } = await setupTenant();
-    const app = mountApp(tenantId);
+    await setupTenant();
+    const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
     const responses = await Promise.all([
       app.request("/management-api/staff", {
@@ -197,18 +195,18 @@ describe("Management API staff + session routes over real Postgres", () => {
     expect(responses.map((response) => response.status).sort()).toEqual([201, 409]);
     const matching = await suite.admin.execute<{ count: number }>(sql`
       select count(*)::int as count from persons
-      where tenant_id=${tenantId} and lower(display_name)='same till name'`);
+      where lower(display_name)='same till name'`);
     expect(matching.rows[0]!.count).toBe(1);
   });
 
   it("preserves one active admin when two admins concurrently demote themselves", async () => {
-    const { tenantId, managerId } = await setupTenant();
+    const { managerId } = await setupTenant();
     await suite.admin.execute(sql`update persons set role='admin' where id=${managerId}`);
-    const app = mountApp(tenantId);
+    const app = mountApp();
     const ownerCookie = await login(app, "owner@example.test", "dashPass123");
     const managerCookie = await login(app, MANAGER_EMAIL);
     const owner = await suite.admin.execute<{ id: string }>(
-      sql`select id from persons where tenant_id=${tenantId} and email='owner@example.test'`,
+      sql`select id from persons where email='owner@example.test'`,
     );
     const edit = (id: string, cookie: string, displayName: string, email: string) =>
       app.request(`/management-api/staff/${id}`, {
@@ -231,13 +229,13 @@ describe("Management API staff + session routes over real Postgres", () => {
     expect(responses.map((response) => response.status).sort()).toEqual([204, 409]);
     const remaining = await suite.admin.execute<{ count: number }>(sql`
       select count(*)::int as count from persons
-      where tenant_id=${tenantId} and role='admin' and status='active'`);
+      where role='admin' and status='active'`);
     expect(remaining.rows[0]!.count).toBe(1);
   });
   it("links and then signs in with a configured Google account", async () => {
-    const { tenantId } = await setupTenant();
+    await setupTenant();
     const exchange = vi.fn().mockResolvedValue({ subject: "google-subject-1" });
-    const app = mountApp(tenantId, undefined, undefined, {
+    const app = mountApp(undefined, undefined, {
       exchange,
     });
     const cookie = await login(app, MANAGER_EMAIL);
@@ -277,8 +275,8 @@ describe("Management API staff + session routes over real Postgres", () => {
   });
 
   it("refuses a Google callback that did not start in the same browser", async () => {
-    const { tenantId } = await setupTenant();
-    const app = mountApp(tenantId, undefined, undefined, {
+    await setupTenant();
+    const app = mountApp(undefined, undefined, {
       exchange: vi.fn().mockResolvedValue({ subject: "google-subject" }),
     });
     const started = await app.request("/management-api/google/login", { method: "POST" });
@@ -291,10 +289,9 @@ describe("Management API staff + session routes over real Postgres", () => {
   });
 
   it("backs off identically for wrong passwords and unknown emails, then clears after success", async () => {
-    const { tenantId } = await setupTenant();
+    await setupTenant();
     let now = 0;
     const app = mountApp(
-      tenantId,
       undefined,
       createPasswordThrottle(() => now),
     );
@@ -320,18 +317,18 @@ describe("Management API staff + session routes over real Postgres", () => {
   });
 
   it("does not count the expected authenticator transition as a failed password", async () => {
-    const { tenantId } = await setupTenant();
+    await setupTenant();
     await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       await tx.execute(sql`
-        insert into persons (tenant_id, display_name, email, pin_hash, password_hash, role, totp_secret)
-        values (${tenantId}, 'Factor Manager', 'factor@example.com', ${hashPin("1234")},
+        insert into persons (display_name, email, pin_hash, password_hash, role, totp_secret)
+        values ('Factor Manager', 'factor@example.com', ${hashPin("1234")},
           ${hashPassword(PASSWORD)}, 'manager',
           ${encryptTotpSecret("JBSWY3DPEHPK3PXP", { version: 1, key: ACCOUNT_ACTION_CODE_KEY })})
       `);
     });
     const finish = vi.fn();
-    const app = mountApp(tenantId, undefined, { begin: vi.fn(() => finish) });
+    const app = mountApp(undefined, { begin: vi.fn(() => finish) });
     const response = await app.request("/management-api/session", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -344,8 +341,8 @@ describe("Management API staff + session routes over real Postgres", () => {
   // ── The four required core assertions (task-6 brief) ───────────────────────────────────────────
 
   it("login → list → create → verify persistence", async () => {
-    const { tenantId } = await setupTenant();
-    const app = mountApp(tenantId);
+    await setupTenant();
+    const app = mountApp();
 
     // Log in through the HTTP surface and capture the session cookie the route sets.
     const loginRes = await app.request("/management-api/session", {
@@ -374,12 +371,12 @@ describe("Management API staff + session routes over real Postgres", () => {
 
     // Re-read as the app role: exactly one 'Ada' row landed under this tenant through the route — proving a
     // genuine tenant-scoped write, not just a 201.
-    expect(await countPersonsNamed(tenantId, "Ada")).toBe(1);
+    expect(await countPersonsNamed("Ada")).toBe(1);
   });
 
   it("rejects an unauthenticated staff list with 401", async () => {
-    const { tenantId } = await setupTenant();
-    const app = mountApp(tenantId);
+    await setupTenant();
+    const app = mountApp();
 
     const res = await app.request("/management-api/staff");
     expect(res.status).toBe(401);
@@ -389,8 +386,8 @@ describe("Management API staff + session routes over real Postgres", () => {
   });
 
   it("rejects a wrong password with 401 and sets no cookie", async () => {
-    const { tenantId } = await setupTenant();
-    const app = mountApp(tenantId);
+    await setupTenant();
+    const app = mountApp();
 
     const res = await app.request("/management-api/session", {
       method: "POST",
@@ -406,8 +403,8 @@ describe("Management API staff + session routes over real Postgres", () => {
   });
 
   it("refuses staff-role creation with 403", async () => {
-    const { tenantId } = await setupTenant();
-    const app = mountApp(tenantId);
+    await setupTenant();
+    const app = mountApp();
 
     // The staff-role person CAN log in (login checks the credential, not the role)…
     const cookie = await login(app, STAFF_EMAIL);
@@ -422,14 +419,14 @@ describe("Management API staff + session routes over real Postgres", () => {
       error: { code: "authorization.not_permitted" },
     });
     // The refusal was before any write: nobody named 'Nope' landed.
-    expect(await countPersonsNamed(tenantId, "Nope")).toBe(0);
+    expect(await countPersonsNamed("Nope")).toBe(0);
   });
 
   // ── Additional coverage: the remaining routes + guard branches ─────────────────────────────────
 
   it("logs out — ends the session, clears the cookie, and a reused cookie is refused", async () => {
-    const { tenantId } = await setupTenant();
-    const app = mountApp(tenantId);
+    await setupTenant();
+    const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
 
     // The cookie works before logout.
@@ -449,16 +446,16 @@ describe("Management API staff + session routes over real Postgres", () => {
   });
 
   it("logout with no cookie is idempotent (204)", async () => {
-    const { tenantId } = await setupTenant();
-    const app = mountApp(tenantId);
+    await setupTenant();
+    const app = mountApp();
 
     const res = await app.request("/management-api/session", { method: "DELETE" });
     expect(res.status).toBe(204);
   });
 
   it("serves the unauthenticated pre-login roster", async () => {
-    const { tenantId } = await setupTenant();
-    const app = mountApp(tenantId);
+    await setupTenant();
+    const app = mountApp();
 
     const res = await app.request("/management-api/staff-roster");
     expect(res.status).toBe(200);
@@ -473,8 +470,8 @@ describe("Management API staff + session routes over real Postgres", () => {
   });
 
   it("requires an email when creating a person", async () => {
-    const { tenantId } = await setupTenant();
-    const app = mountApp(tenantId);
+    await setupTenant();
+    const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
     const res = await app.request("/management-api/staff", {
       method: "POST",
@@ -485,13 +482,13 @@ describe("Management API staff + session routes over real Postgres", () => {
     expect((await res.json()) as { error: { params: { field: string } } }).toMatchObject({
       error: { params: { field: "email" } },
     });
-    expect(await countPersonsNamed(tenantId, "No email")).toBe(0);
+    expect(await countPersonsNamed("No email")).toBe(0);
   });
 
   it("emails a single-use setup link after creating a person", async () => {
     const sent: Parameters<AccountEmailSender>[0][] = [];
-    const { tenantId } = await setupTenant();
-    const app = mountApp(tenantId, async (message) => {
+    await setupTenant();
+    const app = mountApp(async (message) => {
       sent.push(message);
     });
     const cookie = await login(app, MANAGER_EMAIL);
@@ -518,8 +515,8 @@ describe("Management API staff + session routes over real Postgres", () => {
 
   it("requests and completes a password reset without revealing unknown emails", async () => {
     const sent: Parameters<AccountEmailSender>[0][] = [];
-    const { tenantId, staffId } = await setupTenant();
-    const app = mountApp(tenantId, async (message) => {
+    const { staffId } = await setupTenant();
+    const app = mountApp(async (message) => {
       sent.push(message);
     });
     const unknown = await app.request("/management-api/password-reset", {
@@ -563,11 +560,11 @@ describe("Management API staff + session routes over real Postgres", () => {
 
   it("uses the same recovery acknowledgement for pending and unknown accounts", async () => {
     const sent: Parameters<AccountEmailSender>[0][] = [];
-    const { tenantId, staffId } = await setupTenant();
+    const { staffId } = await setupTenant();
     await suite.admin.execute(
       sql`update persons set status = 'pending', password_hash = null, pin_hash = null where id = ${staffId}`,
     );
-    const app = mountApp(tenantId, async (message) => {
+    const app = mountApp(async (message) => {
       sent.push(message);
     });
     const request = (email: string) =>
@@ -593,8 +590,8 @@ describe("Management API staff + session routes over real Postgres", () => {
 
   it("removes public invitation replacement and rejects code-only account actions", async () => {
     const sent: Parameters<AccountEmailSender>[0][] = [];
-    const { tenantId } = await setupTenant();
-    const app = mountApp(tenantId, async (message) => {
+    await setupTenant();
+    const app = mountApp(async (message) => {
       sent.push(message);
     });
     const cookie = await login(app, MANAGER_EMAIL);
@@ -632,8 +629,8 @@ describe("Management API staff + session routes over real Postgres", () => {
 
   it("inspects an invitation token without consuming it and allows manager resends for pending accounts", async () => {
     const sent: Parameters<AccountEmailSender>[0][] = [];
-    const { tenantId } = await setupTenant();
-    const app = mountApp(tenantId, async (message) => {
+    await setupTenant();
+    const app = mountApp(async (message) => {
       sent.push(message);
     });
     const cookie = await login(app, MANAGER_EMAIL);
@@ -690,14 +687,14 @@ describe("Management API staff + session routes over real Postgres", () => {
     expect(sent[2]!.email).toBe("pending-resend@x.com");
     expect(sent[2]!.code).toBeUndefined();
     const hiddenCodes = await suite.admin.execute<{ count: string }>(
-      sql`select count(*) as count from management_account_actions where tenant_id=${tenantId} and purpose='invitation' and (code_hash is not null or code_expires_at is not null)`,
+      sql`select count(*) as count from management_account_actions where purpose='invitation' and (code_hash is not null or code_expires_at is not null)`,
     );
     expect(hiddenCodes.rows[0]!.count).toBe("0");
   });
 
   it("creates a person with an email and lists it back", async () => {
-    const { tenantId } = await setupTenant();
-    const app = mountApp(tenantId);
+    await setupTenant();
+    const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
 
     const created = await app.request("/management-api/staff", {
@@ -715,8 +712,8 @@ describe("Management API staff + session routes over real Postgres", () => {
   });
 
   it("PUT saves a complete administrative edit atomically", async () => {
-    const { tenantId, staffId } = await setupTenant();
-    const app = mountApp(tenantId);
+    const { staffId } = await setupTenant();
+    const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
     const details = {
       displayName: "Grace",
@@ -741,8 +738,8 @@ describe("Management API staff + session routes over real Postgres", () => {
   it("create with a duplicate email → 409 person.email_taken, no row lands", async () => {
     // The seeded manager already holds MANAGER_EMAIL, so a second person in the SAME tenant claiming
     // it collides on `persons_tenant_email_uq` → `person.email_taken` (409), before the row lands.
-    const { tenantId } = await setupTenant();
-    const app = mountApp(tenantId);
+    await setupTenant();
+    const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
 
     const res = await app.request("/management-api/staff", {
@@ -754,12 +751,12 @@ describe("Management API staff + session routes over real Postgres", () => {
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
       error: { code: "person.email_taken" },
     });
-    expect(await countPersonsNamed(tenantId, "Dup")).toBe(0);
+    expect(await countPersonsNamed("Dup")).toBe(0);
   });
 
   it("create with a malformed email → 400 person.email_invalid, no row lands", async () => {
-    const { tenantId } = await setupTenant();
-    const app = mountApp(tenantId);
+    await setupTenant();
+    const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
 
     const res = await app.request("/management-api/staff", {
@@ -771,14 +768,14 @@ describe("Management API staff + session routes over real Postgres", () => {
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
       error: { code: "person.email_invalid" },
     });
-    expect(await countPersonsNamed(tenantId, "Bad")).toBe(0);
+    expect(await countPersonsNamed("Bad")).toBe(0);
   });
 
   it("create with a non-string email → 400 management.request_invalid (field email)", async () => {
     // A PRESENT-but-non-string email is refused by the route's typeof screen naming the FIELD (never
     // the value), the same shape as the sibling create/PATCH field screens — it never reaches identity.
-    const { tenantId } = await setupTenant();
-    const app = mountApp(tenantId);
+    await setupTenant();
+    const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
 
     const badCreate = await app.request("/management-api/staff", {
@@ -790,12 +787,12 @@ describe("Management API staff + session routes over real Postgres", () => {
     expect(
       (await badCreate.json()) as { error: { code: string; params: { field: string } } },
     ).toMatchObject({ error: { code: "management.request_invalid", params: { field: "email" } } });
-    expect(await countPersonsNamed(tenantId, "Nope")).toBe(0);
+    expect(await countPersonsNamed("Nope")).toBe(0);
   });
 
   it("resets a PIN without allowing the administrator to choose its replacement", async () => {
-    const { tenantId, staffId } = await setupTenant();
-    const app = mountApp(tenantId);
+    const { staffId } = await setupTenant();
+    const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
 
     const resetPin = await app.request(`/management-api/staff/${staffId}/reset-pin`, {
@@ -804,15 +801,15 @@ describe("Management API staff + session routes over real Postgres", () => {
     });
     expect(resetPin.status).toBe(204);
     const row = await suite.admin.execute<{ pin_hash: string | null }>(
-      sql`select pin_hash from persons where tenant_id = ${tenantId} and id = ${staffId}`,
+      sql`select pin_hash from persons where id = ${staffId}`,
     );
     expect(row.rows[0]!.pin_hash).toBeNull();
   });
 
   it("reset login clears credentials, moves the user to Pending, and sends a new invitation", async () => {
     const sent: Parameters<AccountEmailSender>[0][] = [];
-    const { tenantId, staffId } = await setupTenant();
-    const app = mountApp(tenantId, async (message) => {
+    const { staffId } = await setupTenant();
+    const app = mountApp(async (message) => {
       sent.push(message);
     });
     const cookie = await login(app, MANAGER_EMAIL);
@@ -829,7 +826,7 @@ describe("Management API staff + session routes over real Postgres", () => {
       pin_hash: string | null;
       password_hash: string | null;
     }>(sql`select status, pin_hash, password_hash from persons
-           where tenant_id = ${tenantId} and id = ${staffId}`);
+           where id = ${staffId}`);
     expect(row.rows[0]).toEqual({ status: "pending", pin_hash: null, password_hash: null });
     const repeated = await app.request(`/management-api/staff/${staffId}/reset-login`, {
       method: "POST",
@@ -840,8 +837,8 @@ describe("Management API staff + session routes over real Postgres", () => {
   });
 
   it("screens malformed bodies and ids on the gated write routes", async () => {
-    const { tenantId, staffId } = await setupTenant();
-    const app = mountApp(tenantId);
+    const { staffId } = await setupTenant();
+    const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
 
     // POST /staff missing fields → management.request_invalid (400).
@@ -879,8 +876,8 @@ describe("Management API staff + session routes over real Postgres", () => {
   });
 
   it("refuses a login with an unknown email as password.invalid (leaking no field)", async () => {
-    const { tenantId } = await setupTenant();
-    const app = mountApp(tenantId);
+    await setupTenant();
+    const app = mountApp();
 
     // An email that resolves to no person is indistinguishable from a wrong password — both throw
     // `password.invalid`, so nothing in the response reveals whether the address has an account.
@@ -904,8 +901,8 @@ describe("Management API staff + session routes over real Postgres", () => {
   // against Hono here that `c.req.json()` returns `null` for it, the exact shape these guards defend.
 
   it("login with a null JSON body → 401 password.invalid, no cookie", async () => {
-    const { tenantId } = await setupTenant();
-    const app = mountApp(tenantId);
+    await setupTenant();
+    const app = mountApp();
 
     const res = await app.request("/management-api/session", {
       method: "POST",
@@ -921,8 +918,8 @@ describe("Management API staff + session routes over real Postgres", () => {
   });
 
   it("login with a non-string totp → 401 password.invalid (screened before loginManager)", async () => {
-    const { tenantId } = await setupTenant();
-    const app = mountApp(tenantId);
+    await setupTenant();
+    const app = mountApp();
 
     // The seeded manager has a correct password and is NOT TOTP-enrolled, so `loginManager` would
     // otherwise ignore `totp` entirely and mint a session (200). This proves the new typecheck
@@ -941,8 +938,8 @@ describe("Management API staff + session routes over real Postgres", () => {
   });
 
   it("create with a null JSON body → 400 management.request_invalid", async () => {
-    const { tenantId } = await setupTenant();
-    const app = mountApp(tenantId);
+    await setupTenant();
+    const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
 
     const res = await app.request("/management-api/staff", {
@@ -957,8 +954,8 @@ describe("Management API staff + session routes over real Postgres", () => {
   });
 
   it("reset-pin accepts no body while the retired password route remains unavailable", async () => {
-    const { tenantId, staffId } = await setupTenant();
-    const app = mountApp(tenantId);
+    const { staffId } = await setupTenant();
+    const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
 
     const resetPin = await app.request(`/management-api/staff/${staffId}/reset-pin`, {
@@ -977,8 +974,8 @@ describe("Management API staff + session routes over real Postgres", () => {
   });
 
   it("maps an unparseable request body to the route's own 4xx (guarded parse, never a 500)", async () => {
-    const { tenantId, staffId } = await setupTenant();
-    const app = mountApp(tenantId);
+    const { staffId } = await setupTenant();
+    const app = mountApp();
 
     // `c.req.json()` throws a SyntaxError on a malformed body; the shared `readJsonBody` coerces that
     // throw to `{}`, exactly as a literal JSON `null` body is coerced, so each route answers its own
@@ -1032,8 +1029,8 @@ async function getReceiptOverHttp(app: Hono, cookie: string): Promise<{ receipt:
 
 describe("Management API — receipt routes (Task 7)", () => {
   it("refuses both routes unauthenticated with 401 management_session.required", async () => {
-    const { tenantId } = await setupTenant();
-    const app = mountApp(tenantId);
+    await setupTenant();
+    const app = mountApp();
     const json = { "content-type": "application/json" };
 
     // requireManagementSession runs FIRST on each route, so an unauthenticated request is refused
@@ -1055,8 +1052,8 @@ describe("Management API — receipt routes (Task 7)", () => {
   });
 
   it("refuses both routes for a STAFF-role session with 403 (the authorizeManager gate — differential)", async () => {
-    const { tenantId } = await setupTenant();
-    const app = mountApp(tenantId);
+    await setupTenant();
+    const app = mountApp();
     // A staff person CAN log in (login checks the credential, not the role) but holds no
     // `layout.configure`, so each route is refused 403 before any read/write.
     const cookie = await login(app, STAFF_EMAIL);
@@ -1080,8 +1077,8 @@ describe("Management API — receipt routes (Task 7)", () => {
   });
 
   it("GET /management-api/receipt returns DEFAULT_RECEIPT for a tenant that has never authored one", async () => {
-    const { tenantId } = await setupTenant();
-    const app = mountApp(tenantId);
+    await setupTenant();
+    const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
 
     // A fresh tenant has no `tenant_receipts` row — getReceipt returns DEFAULT_RECEIPT (`{}`), the
@@ -1091,8 +1088,8 @@ describe("Management API — receipt routes (Task 7)", () => {
   });
 
   it("manager PUT /management-api/receipt → 204, then GET /management-api/receipt reads it back (round-trip)", async () => {
-    const { tenantId } = await setupTenant();
-    const app = mountApp(tenantId);
+    await setupTenant();
+    const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
     const receipt = { footerMessage: "Gracias por su visita" };
 
@@ -1109,8 +1106,8 @@ describe("Management API — receipt routes (Task 7)", () => {
   });
 
   it("PUT /management-api/receipt with an unknown field → 400 receipt.invalid", async () => {
-    const { tenantId } = await setupTenant();
-    const app = mountApp(tenantId);
+    await setupTenant();
+    const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
 
     // An unknown receipt field is rejected fail-closed (design D8) as `receipt.invalid`, 400.
@@ -1126,8 +1123,8 @@ describe("Management API — receipt routes (Task 7)", () => {
   });
 
   it("PUT with a body that is not an object / omits the required key → 400 management.request_invalid", async () => {
-    const { tenantId } = await setupTenant();
-    const app = mountApp(tenantId);
+    await setupTenant();
+    const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
     const json = { "content-type": "application/json" };
 

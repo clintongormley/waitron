@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { captureError, pgErrorCode, pgErrorMessage } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
+import { locationId as brandLocationId } from "@waitron/shared";
 import { appendToChain, readChain, type ChainKey, type TimeEntryAppend } from "./chain.js";
 import { verifyChain } from "./chain-hash.js";
 import { seedLocation, seedPerson } from "../test/fixtures.js";
@@ -25,7 +25,6 @@ import { seedLocation, seedPerson } from "../test/fixtures.js";
  */
 const suite = useTemplateDb({ template: "core_identity_workforce" });
 
-let tenantId: string;
 let personId: string;
 let locationId: string;
 let nodeId: string;
@@ -34,10 +33,10 @@ let nodeId: string;
 // makes the table un-wipeable even by its owner, so each test mints new rows in a new tenant and
 // relies on the location scope to keep a previous test's committed rows out of view.
 beforeEach(async () => {
-  tenantId = await seedTenant(suite.admin);
+  await seedTenant(suite.admin);
   personId = await seedPerson(suite.admin);
-  locationId = await seedLocation(suite.admin, tenantId);
-  nodeId = await seedNode(suite.admin, brandTenantId(tenantId), brandLocationId(locationId));
+  locationId = await seedLocation(suite.admin);
+  nodeId = await seedNode(suite.admin, brandLocationId(locationId));
 });
 
 /** The chain key for this suite's default (node, location). */

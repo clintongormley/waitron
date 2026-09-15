@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
+import { locationId as brandLocationId } from "@waitron/shared";
 import type { Transaction } from "../client.js";
 import { captureError, pgErrorCode } from "../testing/errors.js";
 import { useTemplateDb } from "../testing/lifecycle.js";
@@ -17,7 +17,6 @@ import { ticketItems } from "./ticket-items.js";
 // away_at/note/doneness columns, the per-line UNIQUE that stops a concurrent double-fire, and the
 // working_order_lines ON DELETE CASCADE. `app_user`'s grants on ticket_items are pinned by the
 // privilege matrix (packages/fiscal-verifactu/src/privileges.expected.ts).
-const TENANT_A = "11111111-1111-4111-8111-111111111111";
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const TILL_A1 = "aaaaaaaa-1111-4000-8000-000000000001";
 const AT = "2026-07-20T19:20:30+00:00";
@@ -39,7 +38,7 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
     const admin = suite.admin;
     await admin
       .insert(tenants)
-      .values([{ id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
+      .values([{ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
     await admin.insert(locations).values([
       {
         id: LOCATION_A,
@@ -49,7 +48,7 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
       },
     ]);
     await admin.insert(tills).values([{ id: TILL_A1, locationId: LOCATION_A, name: "A1" }]);
-    nodeA = await seedNode(admin, brandTenantId(TENANT_A), brandLocationId(LOCATION_A));
+    nodeA = await seedNode(admin, brandLocationId(LOCATION_A));
     const [catA] = await admin
       .insert(catalogues)
       .values({ name: "Deli A" })
@@ -93,8 +92,7 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
     return { orderId, lineId: line.rows[0]!.id };
   }
 
-  function asApp<T>(tenant: string, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-    void tenant;
+  function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
     return withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return fn(tx);
@@ -102,14 +100,13 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
   }
 
   function seedTicket(
-    tenant: string,
     node: string,
     orderId: string,
     lineId: string,
     station: string,
     state = "queued",
   ): Promise<string> {
-    return asApp(tenant, async (tx) => {
+    return asApp(async (tx) => {
       const r = await tx.execute<{ id: string }>(
         sql`insert into ticket_items (node_id, working_order_id, working_order_line_id, station_id, state) values (${node}, ${orderId}, ${lineId}, ${station}, ${state}) returning id`,
       );
@@ -119,20 +116,20 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
 
   it("exposes every column through the Drizzle export across the queued → preparing → ready lifecycle", async () => {
     const { orderId, lineId } = await seedOrderLine(TILL_A1, nodeA, productA);
-    const id = await seedTicket(TENANT_A, nodeA, orderId, lineId, stationA);
+    const id = await seedTicket(nodeA, orderId, lineId, stationA);
     // Advance queued → preparing → ready as app_user — the per-line kitchen lifecycle (§2d).
-    await asApp(TENANT_A, (tx) =>
+    await asApp((tx) =>
       tx.execute(
         sql`update ticket_items set state = 'preparing', preparing_at = now() where id = ${id}`,
       ),
     );
-    await asApp(TENANT_A, (tx) =>
+    await asApp((tx) =>
       tx.execute(sql`update ticket_items set state = 'ready', ready_at = now() where id = ${id}`),
     );
     // Read back through the Drizzle `ticketItems` export — exercises the produced table export and its
     // column mapping under the app role, and resolves every column (a missing grant would be 42501, an
     // undefined column 42703).
-    const [row] = await asApp(TENANT_A, (tx) =>
+    const [row] = await asApp((tx) =>
       tx
         .select()
         .from(ticketItems)
@@ -157,11 +154,9 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
     // was somehow outside the table grant, and a read that raised 42703 would mean the migration's ADD
     // COLUMN never applied. This is the Task-1 receipt that the added column is visible AND writable.
     const { orderId, lineId } = await seedOrderLine(TILL_A1, nodeA, productA);
-    const id = await seedTicket(TENANT_A, nodeA, orderId, lineId, stationA);
-    await asApp(TENANT_A, (tx) =>
-      tx.execute(sql`update ticket_items set away_at = now() where id = ${id}`),
-    );
-    const [row] = await asApp(TENANT_A, (tx) =>
+    const id = await seedTicket(nodeA, orderId, lineId, stationA);
+    await asApp((tx) => tx.execute(sql`update ticket_items set away_at = now() where id = ${id}`));
+    const [row] = await asApp((tx) =>
       tx
         .select()
         .from(ticketItems)
@@ -198,13 +193,13 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
     ]);
     // app_user stamps both (additive columns, existing grant) and reads them back.
     const { orderId, lineId } = await seedOrderLine(TILL_A1, nodeA, productA);
-    const id = await seedTicket(TENANT_A, nodeA, orderId, lineId, stationA);
-    await asApp(TENANT_A, (tx) =>
+    const id = await seedTicket(nodeA, orderId, lineId, stationA);
+    await asApp((tx) =>
       tx.execute(
         sql`update ticket_items set note = 'sin sal', doneness = 'medium_rare' where id = ${id}`,
       ),
     );
-    const [row] = await asApp(TENANT_A, (tx) =>
+    const [row] = await asApp((tx) =>
       tx
         .execute<{ note: string; doneness: string }>(
           sql`select note, doneness from ticket_items where id = ${id}`,
@@ -220,8 +215,8 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
     // (23505). This is the guard §7 names for a concurrent double-fire — two rounds firing at once
     // collide here rather than duplicating the item.
     const { orderId, lineId } = await seedOrderLine(TILL_A1, nodeA, productA);
-    await seedTicket(TENANT_A, nodeA, orderId, lineId, stationA);
-    const e = await captureError(() => seedTicket(TENANT_A, nodeA, orderId, lineId, stationA));
+    await seedTicket(nodeA, orderId, lineId, stationA);
+    const e = await captureError(() => seedTicket(nodeA, orderId, lineId, stationA));
     expect(pgErrorCode(e)).toBe("23505");
   });
 
@@ -231,7 +226,7 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
     // working_order_lines_require_open_parent permits it) removes the ticket item with it, which is how
     // a cancelled/abandoned line's item is cleaned up without any DELETE grant on ticket_items.
     const { orderId, lineId } = await seedOrderLine(TILL_A1, nodeA, productA);
-    const id = await seedTicket(TENANT_A, nodeA, orderId, lineId, stationA);
+    const id = await seedTicket(nodeA, orderId, lineId, stationA);
     const before = await countTicket(id);
     expect(before).toBe(1);
     await suite.admin.execute(sql`delete from working_order_lines where id = ${lineId}`);

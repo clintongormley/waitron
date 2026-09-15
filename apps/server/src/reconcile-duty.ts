@@ -1,5 +1,4 @@
 import type { PaymentReconcileResult, PaymentReconciler } from "@waitron/payments";
-import type { TenantId } from "@waitron/shared";
 import type { DutyOutcome, PeriodDuty, RunPeriod } from "@waitron/scheduler";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -17,8 +16,8 @@ export function reconcilerAsDuty(reconciler: PaymentReconciler): PeriodDuty {
   return {
     name: `payments.reconcile.${reconciler.provider}`,
     cadence: "daily",
-    async run(tenantId: TenantId, period: RunPeriod, now: Date): Promise<DutyOutcome> {
-      const result = await reconciler.reconcile(tenantId, period, now);
+    async run(period: RunPeriod, now: Date): Promise<DutyOutcome> {
+      const result = await reconciler.reconcile(period, now);
       return {
         summary: summaryOf(result),
         // A paymentRef in BOTH lists is an orphan whose amount also drifted. This is a SUPERSET of

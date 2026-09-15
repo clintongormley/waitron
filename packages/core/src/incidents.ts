@@ -8,13 +8,12 @@ import { and, desc, eq, gte, isNull, sql } from "drizzle-orm";
 import { incidents } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type { AppError } from "@waitron/shared";
-import type { SaleId, TenantId, TillId } from "@waitron/shared";
+import type { SaleId, TillId } from "@waitron/shared";
 
 export type IncidentSeverity = "warning" | "error";
 
 export interface RecordIncidentInput {
   /** Inert: nothing here reads it. apps/server still supplies it; the field goes when that does. */
-  tenantId?: TenantId;
   tillId: TillId;
   saleId?: SaleId;
   /** The structured error itself. `code` and `params` are taken from it, never re-derived —
@@ -167,11 +166,7 @@ function toTenantIncident(row: TenantIncidentRow): TenantIncident {
 }
 
 /** Every open incident, newest first; ties break on id so the order is stable. */
-export async function listOpenIncidents(
-  tx: Transaction,
-  tenantId: TenantId,
-): Promise<TenantIncident[]> {
-  void tenantId;
+export async function listOpenIncidents(tx: Transaction): Promise<TenantIncident[]> {
   const rows = await tx
     .select(tenantIncidentColumns)
     .from(incidents)
@@ -183,10 +178,8 @@ export async function listOpenIncidents(
 /** Incidents handled at or after `handledSince`, most recently handled first, ties by id. */
 export async function listHandledIncidents(
   tx: Transaction,
-  tenantId: TenantId,
   handledSince: Date,
 ): Promise<TenantIncident[]> {
-  void tenantId;
   const rows = await tx
     .select(tenantIncidentColumns)
     .from(incidents)
@@ -196,12 +189,7 @@ export async function listHandledIncidents(
 }
 
 /** One incident by id, or `null` when no incident has that id. */
-export async function findIncident(
-  tx: Transaction,
-  tenantId: TenantId,
-  id: string,
-): Promise<TenantIncident | null> {
-  void tenantId;
+export async function findIncident(tx: Transaction, id: string): Promise<TenantIncident | null> {
   const [row] = await tx.select(tenantIncidentColumns).from(incidents).where(eq(incidents.id, id));
   return row === undefined ? null : toTenantIncident(row);
 }
@@ -213,8 +201,7 @@ export async function findIncident(
  */
 export async function markIncidentHandled(
   tx: Transaction,
-  // `tenantId` is inert: apps/server still supplies it, and it goes when that caller does.
-  input: { tenantId?: TenantId; id: string; personId: string; handledAt: Date },
+  input: { id: string; personId: string; handledAt: Date },
 ): Promise<void> {
   await tx
     .update(incidents)

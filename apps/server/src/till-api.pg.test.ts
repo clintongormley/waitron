@@ -28,7 +28,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tenantId as brandTenantId,
   tillId as brandTillId,
 } from "@waitron/shared";
 import { MANUAL_PROVIDER, SimulatorPaymentProvider } from "@waitron/payments";
@@ -119,7 +118,6 @@ function nextNif(): string {
 
 function tillConfigFromVenue(venue: VenueResult): TillConfig {
   return {
-    tenantId: brandTenantId(venue.tenantId),
     tillId: brandTillId(venue.tillId),
     nodeId: brandNodeId(venue.nodeId),
     // planVenue emits the standard series first, then the rectificative one.
@@ -183,13 +181,13 @@ async function setupVenue(): Promise<{
   const cfg = tillConfigFromVenue(venue);
   const { available, operatorId } = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
-    const cat = await createCatalogue(tx, cfg.tenantId, { name: "Delicatessen" });
-    const comida = await createCategory(tx, cfg.tenantId, { name: { [LOCALE]: "Comida" } });
-    const bebidas = await createCategory(tx, cfg.tenantId, { name: { [LOCALE]: "Bebidas" } });
+    const cat = await createCatalogue(tx, { name: "Delicatessen" });
+    const comida = await createCategory(tx, { name: { [LOCALE]: "Comida" } });
+    const bebidas = await createCategory(tx, { name: { [LOCALE]: "Bebidas" } });
     const seededUnits = await tx.execute<{ id: string; seed_key: string }>(sql`
       select id, seed_key from units where seed_key = 'kg'`);
     const kgId = seededUnits.rows.find((unit) => unit.seed_key === "kg")!.id;
-    const jamon = await createProduct(tx, cfg.tenantId, {
+    const jamon = await createProduct(tx, {
       catalogueId: cat.id,
       categoryId: comida.id,
       name: "Jamón cortado",
@@ -197,7 +195,7 @@ async function setupVenue(): Promise<{
       unitPrice: "24.90",
       vatClass: "reduced",
     });
-    const agua = await createProduct(tx, cfg.tenantId, {
+    const agua = await createProduct(tx, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
       name: "Agua mineral",
@@ -237,15 +235,15 @@ async function setupVenue(): Promise<{
       values
         (${cfg.locationId}, ${comida.id},
           (select id from kitchen_stations
-           where tenant_id = ${cfg.tenantId} and location_id = ${cfg.locationId} and is_default)),
+           where location_id = ${cfg.locationId} and is_default)),
         (${cfg.locationId}, ${bebidas.id},
           (select id from kitchen_stations
-           where tenant_id = ${cfg.tenantId} and location_id = ${cfg.locationId} and is_default))`);
+           where location_id = ${cfg.locationId} and is_default))`);
     // A staff person with a KNOWN PIN ("5555"), inserted on the app role (which holds INSERT on
     // `persons`), so the login route can verify their credential and the sale is attributed to them.
     const person = await tx.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, role)
-      values (${cfg.tenantId}, 'Cajera', ${hashPin("5555")}, 'staff') returning id`);
+      insert into persons (display_name, pin_hash, role)
+      values ('Cajera', ${hashPin("5555")}, 'staff') returning id`);
     const menuItems = new Map([
       [jamon.id, jamonItem.id],
       [agua.id, aguaItem.id],
@@ -402,7 +400,7 @@ async function enrolTillCookie(
   // A `till` device is DEFINED by a `till`-form-factor profile (Task 7): the device describes itself
   // at accept, and `resolveDeviceBinding` AUTO-CREATES the register it rings against (named after the
   // device). Each call names the device uniquely so its auto-created register cannot collide.
-  const profileId = deviceProfileId ?? (await seedProfileFF(cfg, "till"));
+  const profileId = deviceProfileId ?? (await seedProfileFF("till"));
   const dev = await enrolDeviceForTest(suite.admin, cfg, {
     name: `Counter till ${tillDeviceCounter}`,
     profileId,
@@ -426,10 +424,10 @@ async function loginSession(app: Hono, cfg: TillConfig, operatorId: string): Pro
 }
 
 /** Create a till profile with the reader and drawer capabilities needed by payment tests. */
-async function createTillProfile(cfg: TillConfig): Promise<string> {
+async function createTillProfile(): Promise<string> {
   const prof = await suite.admin.execute<{ id: string }>(sql`
-    insert into device_profiles (tenant_id, name, form_factor, capabilities)
-    values (${cfg.tenantId}, 'Counter till', 'till', ${JSON.stringify(["integrated-card-payment", "open-cash-drawer"])}::jsonb)
+    insert into device_profiles (name, form_factor, capabilities)
+    values ('Counter till', 'till', ${JSON.stringify(["integrated-card-payment", "open-cash-drawer"])}::jsonb)
     returning id`);
   return prof.rows[0]!.id;
 }
@@ -438,14 +436,13 @@ async function createTillProfile(cfg: TillConfig): Promise<string> {
  *  7). A per-suite counter keeps the tenant-unique name from colliding across repeated seeds. */
 let profileCounter = 0;
 async function seedProfileFF(
-  cfg: TillConfig,
   formFactor: "till" | "kds" | "phone-portrait" | "tablet-landscape",
   capabilities: string[] = [],
 ): Promise<string> {
   profileCounter += 1;
   const prof = await suite.admin.execute<{ id: string }>(sql`
-    insert into device_profiles (tenant_id, name, form_factor, capabilities)
-    values (${cfg.tenantId}, ${`Profile ${formFactor} ${profileCounter}`}, ${formFactor}, ${JSON.stringify(capabilities)}::jsonb)
+    insert into device_profiles (name, form_factor, capabilities)
+    values (${`Profile ${formFactor} ${profileCounter}`}, ${formFactor}, ${JSON.stringify(capabilities)}::jsonb)
     returning id`);
   return prof.rows[0]!.id;
 }
@@ -533,7 +530,6 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
       return tx.select().from(registrosFacturacion);
     });
     expect(registros.length).toBe(1);
-    expect(registros[0]!.tenantId).toBe(cfg.tenantId);
     expect(registros[0]!.nodeId).toBe(cfg.nodeId);
     expect(registros[0]!.huella).toMatch(/^[0-9A-F]{64}$/);
 
@@ -640,7 +636,7 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
       unit_precision: number;
     }>(sql`
       select quantity, unit_name, unit_precision from sale_lines
-      where tenant_id = ${cfg.tenantId} and quantity = 0.200`);
+      where quantity = 0.200`);
     expect(snapshottedLine.rows).toEqual([
       {
         quantity: "0.200",
@@ -681,14 +677,11 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
     expect(registros).toHaveLength(2);
 
     const [first, second] = registros;
-    expect(first!.tenantId).toBe(cfg.tenantId);
     expect(first!.nodeId).toBe(cfg.nodeId);
     expect(first!.secuencia).toBe(1);
     expect(first!.primerRegistro).toBe(true);
     expect(first!.anteriorHuella).toBeNull();
     expect(first!.huella).toMatch(/^[0-9A-F]{64}$/);
-
-    expect(second!.tenantId).toBe(cfg.tenantId);
     expect(second!.nodeId).toBe(cfg.nodeId);
     expect(second!.secuencia).toBe(2); // the per-node sequence increments
     expect(second!.primerRegistro).toBe(false);
@@ -750,7 +743,7 @@ describe("sale-time till_id from the authenticated device (SP-A.2 cutover)", () 
       await asAppUser(tx);
       return createStation(tx, cfg, { name: "Pase", isDefault: false });
     });
-    const profileId = await seedProfileFF(cfg, "kds");
+    const profileId = await seedProfileFF("kds");
     const dev = await enrolDeviceForTest(suite.admin, cfg, {
       name: "Pantalla",
       profileId,
@@ -900,7 +893,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       const app = new Hono();
       mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, providerDb, new FakeStripe())), noopLog);
       const cookie = await loginSession(app, cfg, operatorId);
-      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile(cfg));
+      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
       await connectStripe();
       const reader = await seedReader();
       await setDefaultReader(deviceIdOf(deviceCookie), reader.id);
@@ -934,7 +927,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       const app = new Hono();
       mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, providerDb, new FakeStripe())), noopLog);
       const cookie = await loginSession(app, cfg, operatorId);
-      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile(cfg));
+      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
       await connectStripe();
       const dflt = await seedReader({ name: "Default" });
       const other = await seedReader({ name: "Other" });
@@ -976,7 +969,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       // the SAME cached provider, so the only thing distinguishing the two collects is `readerRef`.
       mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, providerDb, client)), noopLog);
       const cookie = await loginSession(app, cfg, operatorId);
-      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile(cfg));
+      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
       await connectStripe();
       const readerA = await seedReader({ name: "Reader A" });
       const readerB = await seedReader({ name: "Reader B" });
@@ -1020,7 +1013,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       const app = new Hono();
       mountTillApi(app, apiDepsWithPool(cfg, pool), noopLog);
       const cookie = await loginSession(app, cfg, operatorId);
-      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile(cfg));
+      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
       await connectStripe();
       const reader = await seedReader();
       await setDefaultReader(deviceIdOf(deviceCookie), reader.id);
@@ -1056,7 +1049,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       const app = new Hono();
       mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, providerDb, new FakeStripe())), noopLog);
       const cookie = await loginSession(app, cfg, operatorId);
-      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile(cfg));
+      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
       // No `device_card_readers` row and no `readerId` in the body → nothing resolves.
 
       const payRes = await app.request("/api/pay", {
@@ -1086,7 +1079,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       const app = new Hono();
       mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, providerDb, new FakeStripe())), noopLog);
       const cookie = await loginSession(app, cfg, operatorId);
-      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile(cfg));
+      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
       const reader = await seedReader(); // active reader, but provider not connected
       await setDefaultReader(deviceIdOf(deviceCookie), reader.id);
 
@@ -1118,7 +1111,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       const app = new Hono();
       mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, providerDb, client)), noopLog);
       const cookie = await loginSession(app, cfg, operatorId);
-      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile(cfg));
+      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
       await connectStripe();
       const reader = await seedReader();
       await setDefaultReader(deviceIdOf(deviceCookie), reader.id);
@@ -1174,7 +1167,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
         noopLog,
       );
       const cookie = await loginSession(app, cfg, operatorId);
-      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile(cfg));
+      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
 
       const workingOrderId = randomUUID();
       const payRes = await app.request("/api/pay", {
@@ -1203,7 +1196,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       const app = new Hono();
       mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, providerDb, new FakeStripe())), noopLog);
       const cookie = await loginSession(app, cfg, operatorId);
-      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile(cfg));
+      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
       await connectStripe();
       const reader = await seedReader();
       await setDefaultReader(deviceIdOf(deviceCookie), reader.id);
@@ -1230,7 +1223,7 @@ describe("GET /api/till (per-device card provider, over HTTP)", () => {
     try {
       const app = new Hono();
       mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, providerDb, new FakeStripe())), noopLog);
-      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile(cfg));
+      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
       const reader = await seedReader(); // provider "stripe"
       await setDefaultReader(deviceIdOf(deviceCookie), reader.id);
 
@@ -1260,7 +1253,7 @@ describe("GET /api/till (per-device card provider, over HTTP)", () => {
     try {
       const app = new Hono();
       mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, providerDb, new FakeStripe())), noopLog);
-      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile(cfg));
+      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
 
       const res = await app.request("/api/till", { headers: { cookie: deviceCookie } });
       expect(res.status).toBe(200);
@@ -1290,7 +1283,7 @@ describe("GET /api/till (per-device card provider, over HTTP)", () => {
         },
         noopLog,
       );
-      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile(cfg));
+      const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
       const reader = await seedReader();
       await setDefaultReader(deviceIdOf(deviceCookie), reader.id);
 
@@ -1693,7 +1686,7 @@ describe("handheld sales and device capability gates", () => {
   ): Promise<string> {
     // A handheld is DEFINED by a `phone-portrait`/`tablet-landscape` profile (Task 7) and, being
     // sale-capable, binds an EXISTING register at enrol — the venue's own till (SP-A.2 §16.4).
-    const profileId = await seedProfileFF(cfg, "phone-portrait", capabilities);
+    const profileId = await seedProfileFF("phone-portrait", capabilities);
     const dev = await enrolDeviceForTest(suite.admin, cfg, {
       name: "Waiter phone",
       profileId,
@@ -1807,9 +1800,7 @@ describe("handheld sales and device capability gates", () => {
       }),
     });
     expect(res.status).toBe(200);
-    const opens = await suite.admin.execute(
-      sql`select id from drawer_opens where tenant_id = ${cfg.tenantId}`,
-    );
+    const opens = await suite.admin.execute(sql`select id from drawer_opens `);
     expect(opens.rows).toHaveLength(0);
 
     const ticket = await res.json();
@@ -1830,7 +1821,6 @@ describe("handheld sales and device capability gates", () => {
     });
     expect(registros).toHaveLength(1);
     const [only] = registros;
-    expect(only!.tenantId).toBe(cfg.tenantId);
     expect(only!.nodeId).toBe(cfg.nodeId);
     expect(only!.secuencia).toBe(1);
     expect(only!.primerRegistro).toBe(true);
@@ -1883,7 +1873,6 @@ describe("handheld sales and device capability gates", () => {
     });
     expect(registros).toHaveLength(1);
     const [only] = registros;
-    expect(only!.tenantId).toBe(cfg.tenantId);
     expect(only!.nodeId).toBe(cfg.nodeId);
     expect(only!.secuencia).toBe(1);
     expect(only!.primerRegistro).toBe(true);
@@ -1971,8 +1960,8 @@ describe("handheld sales and device capability gates", () => {
 
     // Author a capability-less handheld device profile and enrol a device bound to it.
     const prof = await suite.admin.execute<{ id: string }>(sql`
-      insert into device_profiles (tenant_id, name, form_factor, capabilities)
-      values (${cfg.tenantId}, 'Waiter phone', 'phone-portrait', ${JSON.stringify([])}::jsonb)
+      insert into device_profiles (name, form_factor, capabilities)
+      values ('Waiter phone', 'phone-portrait', ${JSON.stringify([])}::jsonb)
       returning id`);
     const deviceProfileId = prof.rows[0]!.id;
     const dev = await enrolDeviceForTest(suite.admin, cfg, {
@@ -2214,13 +2203,11 @@ it("files every modifier mode through cash checkout and reprints their saved fac
     await asAppUser(tx);
     const note = await createModifier(
       tx,
-      cfg.tenantId,
       { type: "text", name: { es: "Nota" }, available: true },
       "es",
     );
     const option = await createModifier(
       tx,
-      cfg.tenantId,
       {
         type: "options",
         name: { es: "Preparación" },
@@ -2232,7 +2219,6 @@ it("files every modifier mode through cash checkout and reprints their saved fac
     );
     const extra = await createModifier(
       tx,
-      cfg.tenantId,
       {
         type: "extras",
         name: { es: "Extras" },
@@ -2253,7 +2239,7 @@ it("files every modifier mode through cash checkout and reprints their saved fac
       },
       "es",
     );
-    await setProductOptionGroups(tx, cfg.tenantId, product.id, [note.id, option.id, extra.id]);
+    await setProductOptionGroups(tx, product.id, [note.id, option.id, extra.id]);
     await setMenuItemOptionGroups(tx, product.menuItemId, [
       { groupId: note.id, options: [] },
       { groupId: option.id, options: [{ optionId, priceDelta: "0.00" }] },
@@ -2285,7 +2271,7 @@ it("files every modifier mode through cash checkout and reprints their saved fac
   const app = new Hono();
   mountTillApi(app, apiDeps(cfg), noopLog);
   const cookie = await loginSession(app, cfg, operatorId);
-  const profileId = await seedProfileFF(cfg, "till", ["print-receipt"]);
+  const profileId = await seedProfileFF("till", ["print-receipt"]);
   const deviceCookie = await enrolTillCookie(cfg, profileId);
   const headers = { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` };
   const printerId = await withTransaction(suite.admin, async (tx) => {
@@ -2295,11 +2281,9 @@ it("files every modifier mode through cash checkout and reprints their saved fac
       transport: "cloud_poll",
       pollId: `modifiers-${randomUUID()}`,
     });
+    await tx.execute(sql`update tills set receipt_printer_id=${printer.id} `);
     await tx.execute(
-      sql`update tills set receipt_printer_id=${printer.id} where tenant_id=${cfg.tenantId}`,
-    );
-    await tx.execute(
-      sql`update locations set receipt_print_mode='never' where tenant_id=${cfg.tenantId} and id=${cfg.locationId}`,
+      sql`update locations set receipt_print_mode='never' where id=${cfg.locationId}`,
     );
     return printer.id;
   });
@@ -2351,7 +2335,7 @@ it("files every modifier mode through cash checkout and reprints their saved fac
       unit_name: Record<string, string> | null;
       unit_precision: number | null;
     }>(
-      sql`select quantity,vat_rate,modifier_snapshots,unit_name,unit_precision from sale_lines where tenant_id=${cfg.tenantId} order by line_no`,
+      sql`select quantity,vat_rate,modifier_snapshots,unit_name,unit_precision from sale_lines  order by line_no`,
     );
     const records = await tx.select().from(registrosFacturacion);
     return { rows: rows.rows, records };
@@ -2378,7 +2362,6 @@ it("files every modifier mode through cash checkout and reprints their saved fac
     await asAppUser(tx);
     await updateModifier(
       tx,
-      cfg.tenantId,
       option.id,
       {
         type: "options",
@@ -2408,7 +2391,7 @@ it("files every modifier mode through cash checkout and reprints their saved fac
   const printed = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     return tx.execute<{ payload: Buffer }>(
-      sql`select payload from print_jobs where tenant_id=${cfg.tenantId} and printer_id=${printerId} and kind='document'`,
+      sql`select payload from print_jobs where printer_id=${printerId} and kind='document'`,
     );
   });
   expect(printed.rows).toHaveLength(1);

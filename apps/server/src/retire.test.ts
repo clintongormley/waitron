@@ -45,7 +45,6 @@ const CARRIER_ID = "carrier-1";
 // harmless to it.
 async function fencedNode(): Promise<{
   db: Database;
-  tenantId: string;
   nodeId: string;
   deps: (
     log: RetireDeps["log"],
@@ -57,15 +56,14 @@ async function fencedNode(): Promise<{
   await runMigrations(db, CORE_MIGRATIONS);
   await runMigrations(db, CREDENTIALS_MIGRATIONS);
   await stampDeployment(db, "preproduction");
-  const tenantId = await seedTenant(db);
+  await seedTenant(db);
   const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
-  const nodeId = await seedNode(db, tenantId, brandLocationId(loc.rows[0]!.id));
-  await establishNodeIdentity({ ownerDb: db, ring: RING }, tenantId, nodeId);
+    insert into locations (name, invoice_locales, operation_description)
+    values ('Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
+  const nodeId = await seedNode(db, brandLocationId(loc.rows[0]!.id));
+  await establishNodeIdentity({ ownerDb: db, ring: RING }, nodeId);
   return {
     db,
-    tenantId,
     nodeId,
     // `carrierNodeId` defaults to CARRIER_ID — the serving-primary the default `heldDoc` names — so the
     // request-time carrier-freshness guard passes for every test whose held chart carries CARRIER_ID.
@@ -73,7 +71,6 @@ async function fencedNode(): Promise<{
     deps: (log, readSlotDrain, carrierNodeId = CARRIER_ID) => ({
       appDb: db,
       ring: RING,
-      tenantId,
       nodeId,
       readSlotDrain,
       fenceLsn: FENCE_LSN,
@@ -124,7 +121,7 @@ const notFlushed: SlotDrain = { ...drained, confirmedFlushLsn: "0/1400000", reta
 
 describe("retireSelf", () => {
   it("self-evicts a drained sell-only node, minting a bumped doc that verifies against its own key", async () => {
-    const { db, deps, tenantId, nodeId } = await fencedNode();
+    const { db, deps, nodeId } = await fencedNode();
     await writeNodeMembership(db, heldDoc(nodeId, "sell-only"));
 
     const result = await retireSelf(deps(noopLog, async () => drained));
@@ -140,7 +137,7 @@ describe("retireSelf", () => {
 
     // The self-eviction verifies against a trust set holding the departing node's own public key —
     // proving a carrier that trusts that key (from setup/adopt) would accept the document.
-    const trust = await readMembershipTrustSet(db, tenantId);
+    const trust = await readMembershipTrustSet(db);
     expect(verifyMembershipDocument(held!, trust).valid).toBe(true);
     await db.close();
   });

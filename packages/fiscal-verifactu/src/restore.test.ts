@@ -1,11 +1,7 @@
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createPgliteDb, runMigrations, withTransaction } from "@waitron/db";
-import {
-  isAppError,
-  locationId as brandLocationId,
-  tenantId as brandTenantId,
-} from "@waitron/shared";
+import { isAppError, locationId as brandLocationId } from "@waitron/shared";
 import type { ProvisionedNode } from "@waitron/module";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { TENANT_A, seedSoldRegistro, seedTenants } from "../test/fixtures.js";
@@ -21,10 +17,8 @@ let db: Awaited<ReturnType<typeof createPgliteDb>>;
 // `ProvisionedNode` (`@waitron/module`) still declares a `tenantId` and nothing in this package
 // reads one; it goes when `packages/provisioning`, its last supplier, is converted. This fixed
 // value stands in until then.
-const INERT_TENANT_ID = brandTenantId("00000000-0000-4000-8000-000000000001");
 
 const NODE: ProvisionedNode = {
-  tenantId: INERT_TENANT_ID,
   locationId: brandLocationId(TENANT_A.locationId),
   nodeId: TENANT_A.nodeId,
 };
@@ -219,7 +213,6 @@ describe("restoreFiscal", () => {
       sql`select location_id from nodes where id = ${till.nodeId}`,
     );
     const node: ProvisionedNode = {
-      tenantId: INERT_TENANT_ID,
       locationId: brandLocationId(rows[0]!.location_id),
       nodeId: till.nodeId,
     };

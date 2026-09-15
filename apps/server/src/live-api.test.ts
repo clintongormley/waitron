@@ -17,19 +17,19 @@ import { LiveEvents, mountLiveApi } from "./live-api.js";
 const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] });
 
 async function fixture() {
-  const tenantId = await seedTenant(suite.db);
+  await seedTenant(suite.db);
   const session = await withTransaction(suite.db, async (tx) => {
-    const person = await tx.execute<{ id: string }>(
-      sql`insert into persons (tenant_id, display_name, pin_hash, role) values (${tenantId}, 'Manager', ${hashPin("1234")}, 'manager') returning id`,
+    const p = await tx.execute<{ id: string }>(
+      sql`insert into persons (display_name, pin_hash, role) values ('Manager', ${hashPin("1234")}, 'manager') returning id`,
     );
-    return startManagementSession(tx, { tenantId, personId: person.rows[0]!.id });
+    return startManagementSession(tx, { personId: p.rows[0]!.id });
   });
   const bus = new LiveEvents();
   const app = new Hono();
   mountLiveApi(app, { db: suite.db, bus, resourceTypes: ["printers", "print_jobs"] }, () => {});
   const path = `/management-api/events?resources=${encodeURIComponent(JSON.stringify([{ type: "printers", id: "p1" }]))}`;
   const cookie = `${MANAGEMENT_COOKIE}=${session.id}`;
-  return { app, bus, path, cookie, tenantId, session };
+  return { app, bus, path, cookie, session };
 }
 
 describe("management live events", () => {

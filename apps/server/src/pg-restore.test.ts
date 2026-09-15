@@ -122,7 +122,6 @@ describe("pgRestoreWith", () => {
 // Fixed literal ids for the one seeded tenant/till/node/SIF/sale/registro, mirroring
 // packages/fiscal-verifactu/test/fixtures.ts's TENANT_A so a failing assertion's id is recognisable.
 const F = {
-  tenantId: "c0000000-0000-4000-8000-000000000001",
   locationId: "c0000000-0000-4000-8000-000000000002",
   tillId: "c0000000-0000-4000-8000-000000000003",
   seriesId: "c0000000-0000-4000-8000-000000000004",
@@ -139,50 +138,50 @@ const F = {
 async function seedFiscalRegistro(admin: Database): Promise<void> {
   await admin.execute(sql`
     insert into tenants (id, country, tax_id, legal_name)
-    values (${F.tenantId}, 'ES', '89890001K', 'Waitron SL')
+    values (1, 'ES', '89890001K', 'Waitron SL')
   `);
   await admin.execute(sql`
-    insert into locations (id, tenant_id, name, invoice_locales, operation_description)
-    values (${F.locationId}, ${F.tenantId}, 'Local principal', array['es'], 'Venta en establecimiento')
+    insert into locations (id, name, invoice_locales, operation_description)
+    values (${F.locationId}, 'Local principal', array['es'], 'Venta en establecimiento')
   `);
   await admin.execute(sql`
-    insert into tills (id, tenant_id, location_id, name)
-    values (${F.tillId}, ${F.tenantId}, ${F.locationId}, 'Caja 1')
+    insert into tills (id, location_id, name)
+    values (${F.tillId}, ${F.locationId}, 'Caja 1')
   `);
   await admin.execute(sql`
-    insert into nodes (id, tenant_id, location_id, name)
-    values (${F.nodeId}, ${F.tenantId}, ${F.locationId}, 'Node 1')
+    insert into nodes (id, location_id, name)
+    values (${F.nodeId}, ${F.locationId}, 'Node 1')
   `);
   await admin.execute(sql`
-    insert into invoice_series (id, tenant_id, node_id, code)
-    values (${F.seriesId}, ${F.tenantId}, ${F.nodeId}, 'A')
+    insert into invoice_series (id, node_id, code)
+    values (${F.seriesId}, ${F.nodeId}, 'A')
   `);
   await admin.execute(sql`
     insert into sales (
-      id, tenant_id, till_id, node_id, series_id, invoice_number,
+      id, till_id, node_id, series_id, invoice_number,
       issued_at, issued_offset_minutes,
       total, vat_breakdown,
       locale, invoice_locales, fiscal_backend, fiscal_state
     ) values (
-      ${F.saleId}, ${F.tenantId}, ${F.tillId}, ${F.nodeId}, ${F.seriesId}, 1,
+      ${F.saleId}, ${F.tillId}, ${F.nodeId}, ${F.seriesId}, 1,
       '2026-07-20T19:20:30+01:00', 60,
       '0.00', '[]'::jsonb,
       'es', array['es'], 'verifactu', 'recorded'
     )
   `);
   await admin.execute(sql`
-    insert into registro_sif (id, tenant_id, node_id, nif, id_sistema_informatico, numero_instalacion)
-    values (${F.sifId}, ${F.tenantId}, ${F.nodeId}, '89890001K', 'WAITRON01', 1)
+    insert into registro_sif (id, node_id, nif, id_sistema_informatico, numero_instalacion)
+    values (${F.sifId}, ${F.nodeId}, '89890001K', 'WAITRON01', 1)
   `);
   await admin.execute(sql`
     insert into registros_facturacion (
-      tenant_id, till_id, node_id, sif_id, sale_id, secuencia, tipo_registro,
+      till_id, node_id, sif_id, sale_id, secuencia, tipo_registro,
       id_emisor_factura, num_serie_factura, fecha_expedicion_factura, nombre_razon_emisor,
       tipo_factura, descripcion_operacion, desglose, cuota_total, importe_total,
       primer_registro, sistema_informatico,
       fecha_hora_huso_gen_registro, offset_minutos, tipo_huella, huella
     ) values (
-      ${F.tenantId}, ${F.tillId}, ${F.nodeId}, ${F.sifId}, ${F.saleId}, 1, 'alta',
+      ${F.tillId}, ${F.nodeId}, ${F.sifId}, ${F.saleId}, 1, 'alta',
       '89890001K', 'A/1', '2026-07-20', 'Waitron SL',
       'F2', 'Venta en establecimiento', '[]'::jsonb, '12.35', '123.45',
       true, '{}'::jsonb,

@@ -12,7 +12,6 @@ import { tenants } from "./tenants.js";
 // Real Postgres (a template clone), not PGlite: every write below runs as the non-owner
 // `app_user`, the deployment role, which PGlite (every connection a superuser) cannot be. The
 // cases retain the role switch so the reads and writes still exercise app_user grants.
-const TENANT_A = "11111111-1111-4111-8111-111111111111";
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const LOCATION_A2 = "aaaaaaaa-0000-4000-8000-000000000002";
 const RANDOM_UUID = "99999999-9999-4999-8999-999999999999";
@@ -28,12 +27,12 @@ describe("kitchen_courses schema (columns, defaults, course FKs)", () => {
   beforeAll(async () => {
     await suite.admin
       .insert(tenants)
-      .values([{ id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
+      .values([{ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
     await suite.admin.execute(sql`
       insert into locations (id, name, invoice_locales, operation_description) values (${LOCATION_A}, 'Loc A', array['es'], 'Hostelería'),
         (${LOCATION_A2}, 'Loc A2', array['es'], 'Hostelería')
       on conflict (id) do nothing`);
-    courseA = await seedCourse(TENANT_A, LOCATION_A, "Entrantes");
+    courseA = await seedCourse(LOCATION_A, "Entrantes");
     // A catalogue + product of tenant A, so the products.course_id FK proof has an own-tenant product
     // to route. Seeded as admin (a catalogue fixture, not the thing under test) — same as routing-station.
     const [cat] = await suite.admin
@@ -53,21 +52,15 @@ describe("kitchen_courses schema (columns, defaults, course FKs)", () => {
     productA = prod!.id;
   });
 
-  function asApp<T>(tenant: string, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-    void tenant;
+  function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
     return withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return fn(tx);
     });
   }
 
-  async function seedCourse(
-    tenant: string,
-    location: string,
-    name: string,
-    displayOrder = 0,
-  ): Promise<string> {
-    return asApp(tenant, async (tx) => {
+  async function seedCourse(location: string, name: string, displayOrder = 0): Promise<string> {
+    return asApp(async (tx) => {
       const r = await tx.execute<{ id: string }>(
         sql`insert into kitchen_courses (location_id, name, display_order) values (${location}, ${name}, ${displayOrder}) returning id`,
       );
@@ -76,13 +69,13 @@ describe("kitchen_courses schema (columns, defaults, course FKs)", () => {
   }
 
   it("maps display_order and name through the Drizzle export, with the active default", async () => {
-    const id = await seedCourse(TENANT_A, LOCATION_A, "Principales", 1);
-    await asApp(TENANT_A, (tx) =>
+    const id = await seedCourse(LOCATION_A, "Principales", 1);
+    await asApp((tx) =>
       tx.execute(sql`update kitchen_courses set display_order = 5 where id = ${id}`),
     );
     // Read back through the Drizzle `kitchenCourses` export (not raw SQL) — exercises the produced
     // table export and its column mapping under the app role.
-    const [row] = await asApp(TENANT_A, (tx) =>
+    const [row] = await asApp((tx) =>
       tx
         .select()
         .from(kitchenCourses)
@@ -97,7 +90,7 @@ describe("kitchen_courses schema (columns, defaults, course FKs)", () => {
     // The additive fire_control column lands NOT NULL DEFAULT 'waiter' and is readable under the app
     // role (locations' SELECT grant covers it). Writing it is a config verb (Task 3),
     // not exercised here.
-    const [row] = await asApp(TENANT_A, (tx) =>
+    const [row] = await asApp((tx) =>
       tx
         .execute<{ fire_control: string }>(
           sql`select fire_control from locations where id = ${LOCATION_A}`,
@@ -133,10 +126,10 @@ describe("kitchen_courses schema (columns, defaults, course FKs)", () => {
   it("lets the app role route a product to an own-tenant course and rejects a missing one", async () => {
     // The app role writes and reads back products.course_id (the additive column, under products'
     // existing grant) …
-    await asApp(TENANT_A, (tx) =>
+    await asApp((tx) =>
       tx.execute(sql`update products set course_id = ${courseA} where id = ${productA}`),
     );
-    const [row] = await asApp(TENANT_A, (tx) =>
+    const [row] = await asApp((tx) =>
       tx
         .execute<{ course_id: string | null }>(
           sql`select course_id from products where id = ${productA}`,
@@ -147,7 +140,7 @@ describe("kitchen_courses schema (columns, defaults, course FKs)", () => {
 
     // … a course that names no row at all is refused (FK existence) …
     const eRandom = await captureError(() =>
-      asApp(TENANT_A, (tx) =>
+      asApp((tx) =>
         tx.execute(sql`update products set course_id = ${RANDOM_UUID} where id = ${productA}`),
       ),
     );

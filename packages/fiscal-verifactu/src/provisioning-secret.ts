@@ -99,12 +99,10 @@ export function parseAeatCert(raw: unknown): AeatCert {
  */
 export async function sealAeatSecret(
   deps: { db: Database; ring: KeyRing },
-  tenantId: string,
   raw: unknown,
 ): Promise<void> {
   const cert = parseAeatCert(raw);
 
-  void tenantId;
   await withTransaction(deps.db, (tx) =>
     putCredential(tx, deps.ring, {
       purpose: "fiscal.aeat",

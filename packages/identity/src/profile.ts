@@ -208,7 +208,6 @@ export async function saveOwnProfile(
   tx: Transaction,
   input: Owner &
     Credentials & {
-      tenantId: string;
       displayName: string;
       firstNames?: string;
       lastNames?: string;
@@ -258,7 +257,6 @@ export async function saveOwnProfile(
   }
   await invalidateLinks(tx, person.id);
   return issueAccountAction(tx, {
-    tenantId: input.tenantId,
     personId: person.id,
     purpose: "email_change",
     targetEmail: email,
@@ -268,11 +266,10 @@ export async function saveOwnProfile(
 
 export async function confirmOwnEmailChange(
   tx: Transaction,
-  input: Owner & { tenantId: string; code: string; codeKey: Buffer },
+  input: Owner & { code: string; codeKey: Buffer },
 ): Promise<string | null> {
   const person = await ownPerson(tx, input);
   const email = await confirmEmailChangeByCode(tx, {
-    tenantId: input.tenantId,
     personId: person.id,
     code: input.code,
     codeKey: input.codeKey,

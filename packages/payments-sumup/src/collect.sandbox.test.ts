@@ -3,7 +3,6 @@ import { CORE_MIGRATIONS } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import {
   decimal,
-  tenantId as brandTenantId,
   tillId as brandTillId,
   workingOrderId as brandWorkingOrderId,
 } from "@waitron/shared";
@@ -62,7 +61,6 @@ d("SumUp live sandbox: collect against the paired Solo", () => {
     const provider = new SumUpCloudProvider({
       client,
       db: pg.db,
-      tenantId: brandTenantId(s.tenantId),
       nodeId: "11111111-1111-4111-8111-111111111111",
       incidents: () => Promise.resolve(true),
       // Default poll (120 attempts × 1s = 2 minutes) — the real window a tap needs, not the

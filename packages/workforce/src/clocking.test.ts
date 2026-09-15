@@ -2,11 +2,7 @@ import { CORE_MIGRATIONS, captureError, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import {
-  AppError,
-  locationId as brandLocationId,
-  tenantId as brandTenantId,
-} from "@waitron/shared";
+import { AppError, locationId as brandLocationId } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { WorkforceBackend, type ClockEventInput } from "./clocking.js";
@@ -26,7 +22,6 @@ const DEFAULT_RULESET = {
   dailyTargetMinutes: null,
 } as const;
 
-let tenantId: string;
 let locationId: string;
 let nodeId: string;
 
@@ -34,9 +29,9 @@ const suite = usePgliteDb({
   resetPerTest: false,
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS],
   setup: async (db) => {
-    tenantId = await seedTenant(db);
-    locationId = await seedLocation(db, tenantId);
-    nodeId = await seedNode(db, brandTenantId(tenantId), brandLocationId(locationId));
+    await seedTenant(db);
+    locationId = await seedLocation(db);
+    nodeId = await seedNode(db, brandLocationId(locationId));
   },
 });
 

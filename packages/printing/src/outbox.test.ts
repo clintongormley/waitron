@@ -24,10 +24,10 @@ afterEach(() => {
 });
 
 async function setup(): Promise<PrintConfig> {
-  const tenantId = await seedTenant(suite.db);
+  await seedTenant(suite.db);
   const { rows } = await suite.db.execute<{ id: string }>(sql`
     insert into locations (name, invoice_locales, operation_description) values ('Bar', array['es-ES'], 'Sale on premises') returning id`);
-  return { tenantId, locationId: rows[0]!.id };
+  return { locationId: rows[0]!.id };
 }
 
 /** Read one job row back (the brief's `jobRow`). Uses the drizzle `printJobs` model so `payload`
@@ -146,7 +146,7 @@ describe("resendPrintJob", () => {
         .update(printJobs)
         .set({ status, attempts: 5 })
         .where(eq(printJobs.id, original.jobId));
-      await expect(resendPrintJob(tx, cfg, original.jobId)).rejects.toMatchObject({
+      await expect(resendPrintJob(tx, original.jobId)).rejects.toMatchObject({
         code: "print_job.not_resendable",
       });
       const jobs = await tx.select().from(printJobs).where(eq(printJobs.printerId, printer.id));
@@ -178,14 +178,9 @@ describe("resendPrintJob", () => {
           })
           .where(eq(printJobs.id, original.jobId));
         const [before] = await tx.select().from(printJobs).where(eq(printJobs.id, original.jobId));
-        const otherLocation = await tx.execute<{ id: string }>(
-          sql`insert into locations (name, invoice_locales, operation_description) values ('Other', array['es-ES'], 'Sale') returning id`,
-        );
-        const result = await resendPrintJob(
-          tx,
-          { ...cfg, locationId: otherLocation.rows[0]!.id },
-          original.jobId,
-        );
+        // The copy goes back to the ORIGINAL job's location, which `resendPrintJob` reads off the
+        // job row itself — the caller no longer supplies a location at all.
+        const result = await resendPrintJob(tx, original.jobId);
         expect(result.jobId).not.toBe(original.jobId);
         const [copy] = await tx.select().from(printJobs).where(eq(printJobs.id, result.jobId));
         expect(copy).toMatchObject({
@@ -221,7 +216,7 @@ describe("resendPrintJob", () => {
       });
       const original = await enqueuePrintJob(tx, cfg, printer.id, new Uint8Array([1]));
       await tx.update(printJobs).set({ status, attempts }).where(eq(printJobs.id, original.jobId));
-      await expect(resendPrintJob(tx, cfg, original.jobId)).rejects.toMatchObject({
+      await expect(resendPrintJob(tx, original.jobId)).rejects.toMatchObject({
         code: "print_job.not_resendable",
       });
       expect(
@@ -240,11 +235,11 @@ describe("resendPrintJob", () => {
       });
       const original = await enqueuePrintJob(tx, cfg, printer.id, new Uint8Array([1]));
       await tx.update(printJobs).set({ status: "done" }).where(eq(printJobs.id, original.jobId));
-      await expect(resendPrintJob(tx, cfg, randomUUID())).rejects.toMatchObject({
+      await expect(resendPrintJob(tx, randomUUID())).rejects.toMatchObject({
         code: "print_job.not_found",
       });
       await deactivatePrinter(tx, cfg, printer.id);
-      await expect(resendPrintJob(tx, cfg, original.jobId)).rejects.toMatchObject({
+      await expect(resendPrintJob(tx, original.jobId)).rejects.toMatchObject({
         code: "printer.not_found",
       });
     });

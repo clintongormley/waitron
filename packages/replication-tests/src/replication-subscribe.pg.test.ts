@@ -56,13 +56,15 @@ const DRAIN_SUB = "waitron_sub_drain";
 const PREPROD_PUBS = ["waitron_preproduction_ledger", "waitron_preproduction_state"];
 const PROD_PUBS = ["waitron_production_ledger", "waitron_production_state"];
 
-// A distinctive `tenants` row (a root state table — no FK parents). `tax_id` is the marker we poll
-// for on B, so it is unique per assertion. Bound, not interpolated (CLAUDE.md §3): an insert/select
-// is a statement PostgreSQL binds, so the marker travels as a parameter.
-const insertTenant = (marker: string) =>
-  sql`insert into tenants (country, tax_id, legal_name) values ('ES', ${marker}, 'Probe SL')`;
-const countTenant = (marker: string) =>
-  sql`select count(*)::int as c from tenants where tax_id = ${marker}`;
+// A distinctive `locations` row (a root state table — no FK parents; the taxpayer row cannot serve
+// here any more, because there is exactly one of it per database). `name` is the marker we poll for
+// on B, so it is unique per assertion. Bound, not interpolated (CLAUDE.md §3): an insert/select is a
+// statement PostgreSQL binds, so the marker travels as a parameter.
+const insertProbe = (marker: string) =>
+  sql`insert into locations (name, invoice_locales, operation_description)
+      values (${marker}, array['es-ES'], 'Hospitality')`;
+const countProbe = (marker: string) =>
+  sql`select count(*)::int as c from locations where name = ${marker}`;
 
 // No Docker gate: without Docker, `startTwoNodeCluster` throws before starting anything
 // (packages/db/src/testing/two-node.ts:177), so this describe's `beforeAll` throws and the run fails.
@@ -135,12 +137,11 @@ describe("two-node native replication subscription (swap S2)", () => {
       enabled: true,
     });
 
-    // One `tenants` row inserted on A must appear on B through native replication.
-    await nodeA.ownerDb.execute(insertTenant(marker));
+    // One `locations` row inserted on A must appear on B through native replication.
+    await nodeA.ownerDb.execute(insertProbe(marker));
     await expect
       .poll(
-        async () =>
-          (await nodeB.superuserDb.execute<{ c: number }>(countTenant(marker))).rows[0]?.c,
+        async () => (await nodeB.superuserDb.execute<{ c: number }>(countProbe(marker))).rows[0]?.c,
         { timeout: 30_000 },
       )
       .toBe(1);
@@ -187,7 +188,7 @@ describe("two-node native replication subscription (swap S2)", () => {
     // A marker row on A. With the working subscription dropped (assertion 1) and only this wrong-env
     // subscription present, it must NEVER reach B.
     const marker = "PROD_ONLY_MARKER";
-    await nodeA.ownerDb.execute(insertTenant(marker));
+    await nodeA.ownerDb.execute(insertProbe(marker));
 
     // No table was ever synced under this subscription: `pg_subscription_rel` is empty, because the
     // named publications resolve to no tables on A.
@@ -200,7 +201,7 @@ describe("two-node native replication subscription (swap S2)", () => {
 
     // Give any (non-existent) copy a bounded window, then confirm the marker never arrived on B.
     await new Promise((resolve) => setTimeout(resolve, 3_000));
-    const copied = await nodeB.superuserDb.execute<{ c: number }>(countTenant(marker));
+    const copied = await nodeB.superuserDb.execute<{ c: number }>(countProbe(marker));
     expect(copied.rows[0]?.c).toBe(0);
   });
 
@@ -237,7 +238,7 @@ describe("two-node native replication subscription (swap S2)", () => {
 
   it("drains and reads status, then detaches B and drops A's orphaned slot as waitron_repl (S4)", async () => {
     // B subscribes to A afresh (its own slot on A, named DRAIN_SUB). copy_data = FALSE: assertion 1
-    // already copied a `tenants` row to B under WORKING_SUB, and dropping a subscription leaves the
+    // already copied a `locations` row to B under WORKING_SUB, and dropping a subscription leaves the
     // copied rows behind, so a second initial COPY would conflict on that row's PK and wedge tablesync
     // forever (the C6 "initial copy cannot coexist with pre-existing rows" fact). Without a copy every
     // table reaches `r` at once (tablesReady === tablesTotal === 4) and streaming carries the marker.
@@ -252,7 +253,7 @@ describe("two-node native replication subscription (swap S2)", () => {
     // A marker on A, and A's WAL position just after it — the FENCE LSN the drain watermark compares
     // against (Ruling C2), NOT pg_current_wal_lsn() at read time.
     const marker = "DRAIN_MARKER";
-    await nodeA.ownerDb.execute(insertTenant(marker));
+    await nodeA.ownerDb.execute(insertProbe(marker));
     const fenceLsn = (
       await nodeA.ownerDb.execute<{ lsn: string }>(sql`select pg_current_wal_lsn()::text as lsn`)
     ).rows[0]?.lsn;
@@ -281,8 +282,8 @@ describe("two-node native replication subscription (swap S2)", () => {
     // Disable B, bulk-insert on A: the now-inactive slot RETAINS WAL (receipt D).
     await disableSubscription(nodeB.ownerDb, DRAIN_SUB);
     await nodeA.ownerDb.execute(
-      sql`insert into tenants (country, tax_id, legal_name)
-          select 'ES', 'BULK_' || g, 'Bulk SL' from generate_series(1, 200) g`,
+      sql`insert into locations (name, invoice_locales, operation_description)
+          select 'BULK_' || g, array['es-ES'], 'Hospitality' from generate_series(1, 200) g`,
     );
     await expect
       .poll(async () => (await readSlotDrain(nodeA.ownerDb, DRAIN_SUB)).active, { timeout: 30_000 })

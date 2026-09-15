@@ -99,7 +99,7 @@ describe("readCertMaterial", () => {
 });
 
 describe("certMaterialFrom", () => {
-  const REF = { tenantId: "11111111-1111-1111-1111-111111111111", purpose: "fiscal.aeat" };
+  const REF = { purpose: "fiscal.aeat" };
 
   // Driven directly rather than through a forged database row. `putCredential` validates, so a
   // two-field payload cannot be written through the vault's own API — and re-sealing one by hand

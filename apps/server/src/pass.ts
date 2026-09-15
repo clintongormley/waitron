@@ -289,7 +289,6 @@ function noteAwaitingCert(deps: PassDeps, awaiting: boolean): void {
 function logNonSucceededRun(log: Logger, record: RunRecord): void {
   if (record.outcome === "succeeded") return;
   log(record.outcome === "parked" ? "error" : "warn", `reconcile.run_${record.outcome}`, {
-    tenantId: record.tenantId,
     duty: record.duty,
     period: { from: record.period.from.toISOString(), to: record.period.to.toISOString() },
     errorCode: record.errorCode,

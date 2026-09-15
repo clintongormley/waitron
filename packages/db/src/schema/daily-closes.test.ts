@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
+import { locationId as brandLocationId } from "@waitron/shared";
 import { captureError, pgErrorCode } from "../testing/errors.js";
 import { useTemplateDb } from "../testing/lifecycle.js";
 import { asAppUser } from "../testing/roles.js";
@@ -17,7 +17,6 @@ import { locations, tenants } from "./tenants.js";
 // withheld UPDATE/DELETE — the first layer, which fires before the trigger — is pinned by the
 // privilege matrix (packages/fiscal-verifactu/src/privileges.expected.ts).
 
-const TENANT_A = "11111111-1111-4111-8111-111111111111";
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 // The counting actor recorded in `closed_by` — an identity person id, plain uuid, no FK (D3 in the
 // design owns the person schema; a raw uuid keeps this table independent of it).
@@ -72,7 +71,7 @@ describe("frozen daily close schema (append-only triggers, columns, composite FK
     const admin = suite.admin;
     await admin
       .insert(tenants)
-      .values([{ id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
+      .values([{ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
     await admin.insert(locations).values([
       {
         id: LOCATION_A,
@@ -81,7 +80,7 @@ describe("frozen daily close schema (append-only triggers, columns, composite FK
         operationDescription: "Hosteleria",
       },
     ]);
-    nodeA = await seedNode(admin, brandTenantId(TENANT_A), brandLocationId(LOCATION_A));
+    nodeA = await seedNode(admin, brandLocationId(LOCATION_A));
   });
 
   it("writes and reads back a daily_closes row (the column list, and the snapshot jsonb)", async () => {

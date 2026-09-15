@@ -17,7 +17,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tenantId as brandTenantId,
   tillId as brandTillId,
 } from "@waitron/shared";
 import { mountPrintApi } from "./print-api.js";
@@ -38,7 +37,6 @@ import "./errors.js";
 const noopLog: Logger = () => {};
 
 interface Tenant {
-  tenantId: string;
   locationId: string;
 }
 
@@ -57,14 +55,13 @@ function nextNif(): string {
 }
 
 async function seedTenantWithLocation(): Promise<Tenant> {
-  const tenantId = randomUUID();
   await suite.admin.execute(sql`
     insert into tenants (id, country, tax_id, legal_name)
-    values (${tenantId}, 'ES', ${nextNif()}, 'Deli Test SL')`);
+    values (1, 'ES', ${nextNif()}, 'Deli Test SL')`);
   const loc = await suite.admin.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
-  return { tenantId, locationId: loc.rows[0]!.id };
+    insert into locations (name, invoice_locales, operation_description)
+    values ('Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
+  return { locationId: loc.rows[0]!.id };
 }
 
 beforeAll(async () => {
@@ -72,17 +69,15 @@ beforeAll(async () => {
   const { managerSid, staffSid } = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const mgr = await tx.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, role)
-      values (${tenantA.tenantId}, 'The Manager', ${hashPin("1234")}, 'manager') returning id`);
+      insert into persons (display_name, pin_hash, role)
+      values ('The Manager', ${hashPin("1234")}, 'manager') returning id`);
     const stf = await tx.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, role)
-      values (${tenantA.tenantId}, 'The Clerk', ${hashPin("1234")}, 'staff') returning id`);
+      insert into persons (display_name, pin_hash, role)
+      values ('The Clerk', ${hashPin("1234")}, 'staff') returning id`);
     const managerSession = await startManagementSession(tx, {
-      tenantId: tenantA.tenantId,
       personId: mgr.rows[0]!.id,
     });
     const staffSession = await startManagementSession(tx, {
-      tenantId: tenantA.tenantId,
       personId: stf.rows[0]!.id,
     });
     return { managerSid: managerSession.id, staffSid: staffSession.id };
@@ -95,7 +90,6 @@ beforeAll(async () => {
  * routes here; nodeId is echoed on the pull and the rest are unused, so branded random uuids stand in. */
 function cfgOf(tenant: Tenant): TillConfig {
   return {
-    tenantId: brandTenantId(tenant.tenantId),
     tillId: brandTillId(randomUUID()),
     nodeId: brandNodeId(randomUUID()),
     seriesId: brandSeriesId(randomUUID()),
@@ -202,8 +196,8 @@ async function enqueue(tenant: Tenant, printerId: string, payload: Uint8Array): 
  * shared clone. */
 async function seedStation(tenant: Tenant, name: string): Promise<string> {
   const row = await suite.admin.execute<{ id: string }>(sql`
-    insert into kitchen_stations (tenant_id, location_id, name, is_default, active)
-    values (${tenant.tenantId}, ${tenant.locationId}, ${name}, false, true) returning id`);
+    insert into kitchen_stations (location_id, name, is_default, active)
+    values (${tenant.locationId}, ${name}, false, true) returning id`);
   return row.rows[0]!.id;
 }
 
@@ -222,8 +216,8 @@ async function agentActive(agentId: string): Promise<boolean> {
  * (unique on the non-NULL node) happy across the shared clone. */
 async function seedNodeAgent(tenant: Tenant, nodeId: string): Promise<string> {
   const row = await suite.admin.execute<{ id: string }>(sql`
-    insert into print_agents (tenant_id, location_id, name, node_id, token_hash)
-    values (${tenant.tenantId}, ${tenant.locationId}, 'Self-enrolled', ${nodeId}, 'x') returning id`);
+    insert into print_agents (location_id, name, node_id, token_hash)
+    values (${tenant.locationId}, 'Self-enrolled', ${nodeId}, 'x') returning id`);
   return row.rows[0]!.id;
 }
 
@@ -573,8 +567,8 @@ describe("Station ↔ printer mapping routes over real Postgres (printer.manage)
 /** Seed one till for `tenant` directly (owner SQL) — the target the receipt-printer route configures. */
 async function seedTill(tenant: Tenant, name: string): Promise<string> {
   const row = await suite.admin.execute<{ id: string }>(sql`
-    insert into tills (tenant_id, location_id, name)
-    values (${tenant.tenantId}, ${tenant.locationId}, ${name}) returning id`);
+    insert into tills (location_id, name)
+    values (${tenant.locationId}, ${name}) returning id`);
   return row.rows[0]!.id;
 }
 

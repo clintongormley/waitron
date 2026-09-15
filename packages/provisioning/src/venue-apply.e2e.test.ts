@@ -12,7 +12,6 @@ import type { TrustedClock } from "@waitron/fiscal";
 import {
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tenantId as brandTenantId,
   tillId as brandTillId,
 } from "@waitron/shared";
 import { createFakeAeat } from "@waitron/verifactu/src/testing/fake-aeat.js";
@@ -84,14 +83,8 @@ function request(taxId = "B12345678", adminEmail = "owner@example.test"): VenueR
 }
 
 /** A well-formed sale — the reconciled figures from `write-path-fixtures.ts`'s `saleInput`. */
-function saleInput(ids: {
-  tenantId: string;
-  tillId: string;
-  nodeId: string;
-  seriesId: string;
-}): RecordSaleInput {
+function saleInput(ids: { tillId: string; nodeId: string; seriesId: string }): RecordSaleInput {
   return {
-    tenantId: brandTenantId(ids.tenantId),
     tillId: brandTillId(ids.tillId),
     nodeId: brandNodeId(ids.nodeId),
     seriesId: brandSeriesId(ids.seriesId),
@@ -159,7 +152,6 @@ describe("a venue provisioned by applyVenue is immediately sellable", () => {
         tx,
         backend,
         saleInput({
-          tenantId: venue.tenantId,
           tillId: venue.tillId,
           nodeId: venue.nodeId,
           seriesId: standardSeriesId,
@@ -192,14 +184,14 @@ describe("the provisioned admin authenticates by id with its password", () => {
     // the email the venue also requires.
     // A distinct tenant (B33333333) so this test's admin is its own (the PGlite suite shares one
     // database).
-    const venue = await applyVenue(planVenue(request("B33333333"), ALL_MODULES), {
+    await applyVenue(planVenue(request("B33333333"), ALL_MODULES), {
       db: suite.db,
       modules: ALL_MODULES,
     });
 
     // The admin's id is generated at seed time, so fetch it by tenant + role rather than assume one.
     const admin = await suite.db.execute<{ id: string }>(sql`
-      select id from persons where tenant_id = ${venue.tenantId} and role = 'admin'`);
+      select id from persons where role = 'admin'`);
     const personId = admin.rows[0]?.id;
     expect(personId).toBeDefined();
 
@@ -209,7 +201,6 @@ describe("the provisioned admin authenticates by id with its password", () => {
     const session = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       return loginManagerById(tx, {
-        tenantId: venue.tenantId,
         personId: personId!,
         password: "dashPass123",
       });
@@ -221,7 +212,6 @@ describe("the provisioned admin authenticates by id with its password", () => {
       withTransaction(suite.db, async (tx) => {
         await asAppUser(tx);
         return loginManagerById(tx, {
-          tenantId: venue.tenantId,
           personId: personId!,
           password: "wrongpass1",
         });
@@ -239,7 +229,7 @@ describe("the onboarding-provisioned admin authenticates by email", () => {
     // setup-api boundary produces. A distinct tenant (B44444444) so this admin is its own in the
     // shared PGlite database.
     const adminEmail = "owner@venue.example";
-    const venue = await applyVenue(planVenue(request("B44444444", adminEmail), ALL_MODULES), {
+    await applyVenue(planVenue(request("B44444444", adminEmail), ALL_MODULES), {
       db: suite.db,
       modules: ALL_MODULES,
     });
@@ -247,7 +237,7 @@ describe("the onboarding-provisioned admin authenticates by email", () => {
     // The admin's id is generated at seed time; fetch it so we can prove the email login resolves the
     // SAME provisioned admin, not just some person.
     const admin = await suite.db.execute<{ id: string }>(sql`
-      select id from persons where tenant_id = ${venue.tenantId} and role = 'admin'`);
+      select id from persons where role = 'admin'`);
     const personId = admin.rows[0]?.id;
     expect(personId).toBeDefined();
 
@@ -256,7 +246,6 @@ describe("the onboarding-provisioned admin authenticates by email", () => {
     const session = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       return loginManager(tx, {
-        tenantId: venue.tenantId,
         email: adminEmail,
         password: "dashPass123",
       });
@@ -268,7 +257,6 @@ describe("the onboarding-provisioned admin authenticates by email", () => {
       withTransaction(suite.db, async (tx) => {
         await asAppUser(tx);
         return loginManager(tx, {
-          tenantId: venue.tenantId,
           email: adminEmail,
           password: "wrongpass1",
         });

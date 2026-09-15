@@ -31,7 +31,6 @@ function nextNif(): string {
 }
 
 interface Venue {
-  tenantId: string;
   /** A live MANAGEMENT session cookie for a `manager` (holds `diagnostics.view`). */
   managerCookie: string;
   /** A live MANAGEMENT session cookie for a `staff` person (holds nothing — the gate refuses it). */
@@ -43,7 +42,7 @@ interface Venue {
 /** Provision a venue as owner and seed the people and sessions this route fixture needs. */
 async function setupVenue(): Promise<Venue> {
   const taxId = nextNif();
-  const venue = await applyVenue(
+  await applyVenue(
     planVenue(
       {
         country: "ES",
@@ -81,10 +80,9 @@ async function setupVenue(): Promise<Venue> {
     await asAppUser(tx);
     const seedPerson = async (role: string): Promise<string> => {
       const p = await tx.execute<{ id: string }>(sql`
-          insert into persons (tenant_id, display_name, pin_hash, role)
-          values (${venue.tenantId}, ${`The ${role}`}, ${hashPin("1234")}, ${role}) returning id`);
+          insert into persons (display_name, pin_hash, role)
+          values (${`The ${role}`}, ${hashPin("1234")}, ${role}) returning id`);
       const session = await startManagementSession(tx, {
-        tenantId: venue.tenantId,
         personId: p.rows[0]!.id,
       });
       return session.id;
@@ -97,7 +95,6 @@ async function setupVenue(): Promise<Venue> {
   });
 
   return {
-    tenantId: venue.tenantId,
     managerCookie: `${MANAGEMENT_COOKIE}=${managerSid}`,
     staffCookie: `${MANAGEMENT_COOKIE}=${staffSid}`,
     supervisorCookie: `${MANAGEMENT_COOKIE}=${supervisorSid}`,
@@ -126,13 +123,12 @@ function stubReader(): { reader: LogReader; lastRecentOpts: () => { limit?: numb
 
 /** One Hono app for a venue, wiring the diagnostics routes with a real verbosity controller (default
  * `info`) and the given stub reader. `now` is fixed so `revertsAt` is deterministic. */
-function mountApp(v: Pick<Venue, "tenantId">, reader: LogReader): { app: Hono } {
+function mountApp(reader: LogReader): { app: Hono } {
   const app = new Hono();
   mountDiagnosticsApi(
     app,
     {
       db: suite.admin,
-      cfg: { tenantId: v.tenantId },
       reader,
       verbosity: createVerbosityController({
         defaultLevel: "info",
@@ -161,8 +157,7 @@ async function post(app: Hono, path: string, cookie: string, body: unknown): Pro
 
 describe("mountDiagnosticsApi — diagnostics.view gate + verbosity over real Postgres", () => {
   it("rejects an unauthenticated caller with 401", async () => {
-    const v = await setupVenue();
-    const { app } = mountApp(v, stubReader().reader);
+    const { app } = mountApp(stubReader().reader);
     const res = await get(app, "/management-api/diagnostics/recent");
     expect(res.status).toBe(401);
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
@@ -172,7 +167,7 @@ describe("mountDiagnosticsApi — diagnostics.view gate + verbosity over real Po
 
   it("rejects a staff session with 403 (gate by deletion)", async () => {
     const v = await setupVenue();
-    const { app } = mountApp(v, stubReader().reader);
+    const { app } = mountApp(stubReader().reader);
     const res = await get(app, "/management-api/diagnostics/recent", v.staffCookie);
     expect(res.status).toBe(403);
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
@@ -182,7 +177,7 @@ describe("mountDiagnosticsApi — diagnostics.view gate + verbosity over real Po
 
   it("rejects a supervisor session with 403", async () => {
     const v = await setupVenue();
-    const { app } = mountApp(v, stubReader().reader);
+    const { app } = mountApp(stubReader().reader);
     const res = await get(app, "/management-api/diagnostics/recent", v.supervisorCookie);
     expect(res.status).toBe(403);
   });
@@ -190,7 +185,7 @@ describe("mountDiagnosticsApi — diagnostics.view gate + verbosity over real Po
   it("returns recent lines for a manager, clamping the limit", async () => {
     const v = await setupVenue();
     const stub = stubReader();
-    const { app } = mountApp(v, stub.reader);
+    const { app } = mountApp(stub.reader);
 
     const res = await get(app, "/management-api/diagnostics/recent?limit=2", v.managerCookie);
     expect(res.status).toBe(200);
@@ -220,7 +215,7 @@ describe("mountDiagnosticsApi — diagnostics.view gate + verbosity over real Po
 
   it("reports the default verbosity (no active override) as info with a null revert time", async () => {
     const v = await setupVenue();
-    const { app } = mountApp(v, stubReader().reader);
+    const { app } = mountApp(stubReader().reader);
     const res = await get(app, "/management-api/diagnostics/verbosity", v.managerCookie);
     expect(res.status).toBe(200);
     expect((await res.json()) as { level: string; revertsAt: string | null }).toEqual({
@@ -231,7 +226,7 @@ describe("mountDiagnosticsApi — diagnostics.view gate + verbosity over real Po
 
   it("raises verbosity and reports it back with a revert time", async () => {
     const v = await setupVenue();
-    const { app } = mountApp(v, stubReader().reader);
+    const { app } = mountApp(stubReader().reader);
 
     const raise = await post(app, "/management-api/diagnostics/verbosity", v.managerCookie, {
       level: "debug",
@@ -248,7 +243,7 @@ describe("mountDiagnosticsApi — diagnostics.view gate + verbosity over real Po
 
   it("rejects an invalid level with diagnostics.invalid_verbosity", async () => {
     const v = await setupVenue();
-    const { app } = mountApp(v, stubReader().reader);
+    const { app } = mountApp(stubReader().reader);
     const res = await post(app, "/management-api/diagnostics/verbosity", v.managerCookie, {
       level: "trace",
       ttlMinutes: 5,
@@ -263,7 +258,7 @@ describe("mountDiagnosticsApi — diagnostics.view gate + verbosity over real Po
 
   it("rejects an out-of-range ttl with diagnostics.invalid_verbosity", async () => {
     const v = await setupVenue();
-    const { app } = mountApp(v, stubReader().reader);
+    const { app } = mountApp(stubReader().reader);
     const res = await post(app, "/management-api/diagnostics/verbosity", v.managerCookie, {
       level: "debug",
       ttlMinutes: 0,
@@ -278,7 +273,7 @@ describe("mountDiagnosticsApi — diagnostics.view gate + verbosity over real Po
 
   it("rejects a ttl above the ceiling too", async () => {
     const v = await setupVenue();
-    const { app } = mountApp(v, stubReader().reader);
+    const { app } = mountApp(stubReader().reader);
     const res = await post(app, "/management-api/diagnostics/verbosity", v.managerCookie, {
       level: "debug",
       ttlMinutes: 121,
@@ -291,7 +286,7 @@ describe("mountDiagnosticsApi — diagnostics.view gate + verbosity over real Po
 
   it("coerces an empty POST body to a clean 400, not an opaque 500", async () => {
     const v = await setupVenue();
-    const { app } = mountApp(v, stubReader().reader);
+    const { app } = mountApp(stubReader().reader);
     // No body: `c.req.json()` would throw SyntaxError → the boundary answers `server.internal` 500;
     // `readJsonBody` coerces it to `{}` so the field guard refuses it as `diagnostics.invalid_verbosity`.
     const res = await app.request("/management-api/diagnostics/verbosity", {

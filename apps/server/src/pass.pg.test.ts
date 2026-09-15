@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
-import { credentialTenants, loadKeyRing, putCredential } from "@waitron/credentials";
+import { credentialProvisioned, loadKeyRing, putCredential } from "@waitron/credentials";
 import { DEFAULTS, runDue } from "@waitron/scheduler";
 import { StripeReconciler } from "@waitron/payments-stripe";
 import { drain } from "@waitron/fiscal-verifactu";
@@ -45,7 +45,7 @@ const emptyStripe = {
 
 describe("one pass as the non-superuser deployment role", () => {
   it("reads credentials, sweeps reconcile and writes the ledger", async () => {
-    const tenantId = await seedTenant(suite.admin);
+    await seedTenant(suite.admin);
     await withTransaction(suite.admin, (tx) =>
       putCredential(tx, ring, {
         purpose: "payments.stripe",
@@ -60,11 +60,10 @@ describe("one pass as the non-superuser deployment role", () => {
 
     const probe = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
-      // The enrolment list, read cross-tenant through `credential_tenants` as the deployment role.
-      // Under PGlite this would pass while proving nothing: a superuser sees the rows regardless of
-      // whether the SECURITY DEFINER seam or its grant exists.
-      const tenants = await credentialTenants(probe, "payments.stripe");
-      expect(tenants).toContain(tenantId);
+      // The enrolment answer, read through `credential_tenants` as the deployment role. Under
+      // PGlite this would pass while proving nothing: a superuser sees the rows regardless of
+      // whether the seam or its grant exists.
+      expect(await credentialProvisioned(probe, "payments.stripe")).toBe(true);
 
       const reconciler = new StripeReconciler({
         db: probe,
@@ -94,7 +93,7 @@ describe("one pass as the non-superuser deployment role", () => {
               },
               now,
             ),
-          reconcile: (now) => runDue({ db: probe, duties: [duty], ...DEFAULTS }, tenants, now),
+          reconcile: (now) => runDue({ db: probe, duties: [duty], ...DEFAULTS }, now),
           awaitingCert: { current: false },
           monotonicMs: () => performance.now(),
           log: createLogger(
@@ -138,7 +137,7 @@ describe("one pass as the non-superuser deployment role", () => {
   });
 
   it("does not enumerate a tenant provisioned for a different purpose", async () => {
-    const otherPurposeTenant = await seedTenant(suite.admin);
+    await seedTenant(suite.admin);
     // Provisioned for `fiscal.aeat`, NOT `payments.stripe` — a tenant with no credential at ALL
     // would pass this assertion even if `credential_tenants`'s `WHERE purpose = p_purpose` clause
     // were deleted outright. Giving it a DIFFERENT purpose's credential is what makes the filter,
@@ -151,9 +150,9 @@ describe("one pass as the non-superuser deployment role", () => {
     );
     const probe = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
-      // The vault IS the enrolment list: a tenant provisioned for a different purpose is not
-      // half-served under the wrong one.
-      expect(await credentialTenants(probe, "payments.stripe")).not.toContain(otherPurposeTenant);
+      // The vault IS the enrolment list: a credential provisioned for a different purpose does not
+      // make this one look provisioned.
+      expect(await credentialProvisioned(probe, "payments.stripe")).toBe(false);
     } finally {
       await probe.close();
     }

@@ -11,13 +11,7 @@ import type { VenueResult } from "@waitron/provisioning";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { registrosFacturacion } from "@waitron/fiscal-verifactu";
 import { computeDailyClose } from "@waitron/reporting";
-import {
-  addDecimal,
-  compareDecimal,
-  decimal,
-  nodeId as brandNodeId,
-  tenantId as brandTenantId,
-} from "@waitron/shared";
+import { addDecimal, compareDecimal, decimal, nodeId as brandNodeId } from "@waitron/shared";
 import { seedSales } from "./seed-sales.js";
 import type { SeedSalesProduct, SeedSalesVenue } from "./seed-sales.js";
 
@@ -110,7 +104,6 @@ async function provisionVenue(): Promise<VenueResult> {
 
 function venueFor(v: VenueResult): SeedSalesVenue {
   return {
-    tenantId: v.tenantId,
     tillId: v.tillId,
     nodeId: v.nodeId,
     // planVenue emits the standard series first, then the rectificative one.
@@ -152,13 +145,12 @@ describe("seedSales", () => {
           coalesce(sum(t.amount), 0)::text as tendered,
           coalesce(sum(t.tip_amount), 0)::text as tips
         from sales s
-        join tenders t on t.sale_id = s.id and t.tenant_id = s.tenant_id
+        join tenders t on t.sale_id = s.id
         where s.id = ${sampled.id}
         group by s.total`);
       // Business day = yesterday (UTC), which the generator always fills fully and in the past.
       const businessDay = new Date(start - DAY_MS).toISOString().slice(0, 10);
       const close = await computeDailyClose(tx, {
-        tenantId: brandTenantId(venue.tenantId),
         nodeId: brandNodeId(venue.nodeId),
         businessDay,
         timeZone: "Europe/Madrid",

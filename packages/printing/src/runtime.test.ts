@@ -20,10 +20,10 @@ import type { PrintConfig } from "./printers.js";
 const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS] });
 
 async function setup(): Promise<PrintConfig> {
-  const tenantId = await seedTenant(suite.db);
+  await seedTenant(suite.db);
   const { rows } = await suite.db.execute<{ id: string }>(sql`
     insert into locations (name, invoice_locales, operation_description) values ('Bar', array['es-ES'], 'Sale on premises') returning id`);
-  return { tenantId, locationId: rows[0]!.id };
+  return { locationId: rows[0]!.id };
 }
 
 async function seedAgent(cfg: PrintConfig, name = "Kitchen agent"): Promise<string> {
@@ -90,7 +90,6 @@ describe("runAgentOnce (pull → push → report)", () => {
       const sink = new FakeSink();
       const result = await runAgentOnce({
         tx,
-        cfg,
         agentId,
         locationId: cfg.locationId,
         visibleKeys: [],
@@ -125,7 +124,6 @@ describe("runAgentOnce (pull → push → report)", () => {
       const sink = new FlakySink(down.id);
       const result = await runAgentOnce({
         tx,
-        cfg,
         agentId,
         locationId: cfg.locationId,
         visibleKeys: [],
@@ -156,7 +154,6 @@ describe("runAgentOnce (pull → push → report)", () => {
       const rejecting: Transport = { send: () => Promise.reject("drawer jammed") };
       const result = await runAgentOnce({
         tx,
-        cfg,
         agentId,
         locationId: cfg.locationId,
         visibleKeys: [],
@@ -179,7 +176,6 @@ describe("runAgentOnce (pull → push → report)", () => {
       // Run 1: the printer is down → failed, attempts 1.
       await runAgentOnce({
         tx,
-        cfg,
         agentId,
         locationId: cfg.locationId,
         visibleKeys: [],
@@ -192,7 +188,6 @@ describe("runAgentOnce (pull → push → report)", () => {
       const sink = new FakeSink();
       const result = await runAgentOnce({
         tx,
-        cfg,
         agentId,
         locationId: cfg.locationId,
         visibleKeys: [],
@@ -219,7 +214,6 @@ describe("runAgentOnce (pull → push → report)", () => {
       const sink = new FakeSink();
       const result = await runAgentOnce({
         tx,
-        cfg,
         agentId,
         locationId: cfg.locationId,
         visibleKeys: [],
@@ -247,7 +241,6 @@ describe("runAgentOnce (pull → push → report)", () => {
       const sink = new FakeSink();
       const result = await runAgentOnce({
         tx,
-        cfg,
         agentId,
         locationId: otherLocationId,
         visibleKeys: [],
@@ -268,7 +261,6 @@ describe("runAgentOnce (pull → push → report)", () => {
       expect(
         await runAgentOnce({
           tx,
-          cfg,
           agentId,
           locationId: cfg.locationId,
           visibleKeys: [],

@@ -126,13 +126,7 @@ function groupValues(input: ModifierInput) {
     defaultChoiceId: input.type === "options" ? input.defaultChoiceId : null,
   };
 }
-async function writeChoices(
-  tx: Transaction,
-  tenantId: string,
-  modifierId: string,
-  input: ModifierInput,
-) {
-  void tenantId;
+async function writeChoices(tx: Transaction, modifierId: string, input: ModifierInput) {
   const choices = input.type === "extras" || input.type === "options" ? input.choices : [];
   const old = await tx
     .select()
@@ -176,7 +170,6 @@ async function writeChoices(
 }
 export async function createModifier(
   tx: Transaction,
-  tenantId: string,
   value: unknown,
   fallbackLanguage: string,
 ): Promise<Modifier> {
@@ -185,12 +178,11 @@ export async function createModifier(
   await lockModifierDefinitions(tx);
   const id = randomUUID();
   await tx.insert(optionGroups).values({ id, ...groupValues(input) });
-  await writeChoices(tx, tenantId, id, input);
+  await writeChoices(tx, id, input);
   return getModifier(tx, id);
 }
 export async function updateModifier(
   tx: Transaction,
-  tenantId: string,
   modifierId: string,
   value: unknown,
   fallbackLanguage: string,
@@ -201,7 +193,7 @@ export async function updateModifier(
   const old = await getModifier(tx, modifierId);
   if (old.type !== input.type) await assertUnused(tx, modifierId);
   await tx.update(optionGroups).set(groupValues(input)).where(eq(optionGroups.id, modifierId));
-  await writeChoices(tx, tenantId, modifierId, input);
+  await writeChoices(tx, modifierId, input);
   return getModifier(tx, modifierId);
 }
 export async function deleteModifier(tx: Transaction, modifierId: string): Promise<void> {

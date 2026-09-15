@@ -1,4 +1,4 @@
-import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
+import { locationId as brandLocationId } from "@waitron/shared";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
@@ -33,7 +33,6 @@ afterEach(async () => {
   });
 });
 
-const TENANT_A = "11111111-1111-4111-8111-111111111111";
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const TILL_A1 = "aaaaaaaa-1111-4000-8000-000000000001";
 const AT = "2026-07-20T19:20:30+00:00";
@@ -55,7 +54,7 @@ async function rows<T>(db: Database, query: ReturnType<typeof sql>): Promise<T[]
 async function seed(db: Database): Promise<void> {
   await db
     .insert(tenants)
-    .values([{ id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
+    .values([{ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
   await db.insert(locations).values([
     {
       id: LOCATION_A,
@@ -266,7 +265,7 @@ describe("working_orders", () => {
   it("carries a nullable node_id column referencing nodes", async () => {
     // Node rekey scaffolding (Task 3): node_id is added NULLABLE with a plain FK to `nodes`, and
     // working_orders stays nullable permanently in this slice — no writer yet (design §5).
-    const node = await seedNode(db, brandTenantId(TENANT_A), brandLocationId(LOCATION_A));
+    const node = await seedNode(db, brandLocationId(LOCATION_A));
     const meta = await rows<{ is_nullable: string }>(
       db,
       sql`select is_nullable from information_schema.columns

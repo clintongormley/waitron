@@ -21,7 +21,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tenantId as brandTenantId,
   tillId as brandTillId,
 } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
@@ -91,7 +90,6 @@ function nextNif(): string {
 
 function tillConfigFromVenue(venue: VenueResult): TillConfig {
   return {
-    tenantId: brandTenantId(venue.tenantId),
     tillId: brandTillId(venue.tillId),
     nodeId: brandNodeId(venue.nodeId),
     // planVenue emits the standard series first, then the rectificative one.
@@ -156,9 +154,9 @@ async function setupVenue(db: Database = suite.admin): Promise<SeededVenue> {
   const cfg = tillConfigFromVenue(venue);
   const available = await withTransaction(db, async (tx) => {
     await asAppUser(tx);
-    const cat = await createCatalogue(tx, cfg.tenantId, { name: "Delicatessen" });
-    const bebidas = await createCategory(tx, cfg.tenantId, { name: { [LOCALE]: "Bebidas" } });
-    await createProduct(tx, cfg.tenantId, {
+    const cat = await createCatalogue(tx, { name: "Delicatessen" });
+    const bebidas = await createCategory(tx, { name: { [LOCALE]: "Bebidas" } });
+    await createProduct(tx, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
       name: "Café",
@@ -166,7 +164,7 @@ async function setupVenue(db: Database = suite.admin): Promise<SeededVenue> {
       unitPrice: "1.50",
       vatClass: "general",
     });
-    await createProduct(tx, cfg.tenantId, {
+    await createProduct(tx, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
       name: "Agua",
@@ -201,9 +199,9 @@ async function seedTable(
  * lock, both create one → 2, and the table's single tab_id points at only one, orphaning the
  * other.
  */
-async function openOrderCount(cfg: TillConfig): Promise<number> {
+async function openOrderCount(): Promise<number> {
   const { rows } = await suite.admin.execute<{ n: string }>(
-    sql`select count(*)::text as n from working_orders where tenant_id = ${cfg.tenantId} and status = 'open'`,
+    sql`select count(*)::text as n from working_orders where status = 'open'`,
   );
   return Number(rows[0]!.n);
 }
@@ -311,7 +309,7 @@ describe("openTab concurrency (one open tab per table; the per-table lock IS the
       });
       // The corruption observable: exactly ONE open working order exists. Without the lock both would be
       // created (the loser reads a stale tab_id=null) → 2, one orphaned by the single tab_id column.
-      expect(await openOrderCount(cfg)).toBe(1);
+      expect(await openOrderCount()).toBe(1);
     } finally {
       await Promise.all([connA.close(), connB.close()]);
     }
@@ -390,7 +388,7 @@ describe("pay closes the tab (reuses payWorkingOrder → recordSale UNCHANGED)",
     // order is settled, so the "open tab" join finds nothing (occupancy — Task 9).
     const { rows } = await suite.admin.execute<{ n: string }>(sql`
       select count(*)::text as n
-      from dining_tables dt join working_orders wo on wo.id = dt.tab_id and wo.tenant_id = dt.tenant_id
+      from dining_tables dt join working_orders wo on wo.id = dt.tab_id
       where dt.id = ${tableId} and wo.status = 'open'`);
     expect(Number(rows[0]!.n)).toBe(0);
   });
@@ -451,9 +449,9 @@ function fixedClock(instant: Date): TrustedClock {
  * issuer identifier (`IDEmisorFactura`) `recordSale` files under, and the field the two filings
  * must SHARE for their huellas to match. Owner read.
  */
-async function nifOf(cfg: TillConfig, db: Database = suite.admin): Promise<string> {
+async function nifOf(db: Database = suite.admin): Promise<string> {
   const { rows } = await db.execute<{ tax_id: string }>(
-    sql`select tax_id from tenants where id = ${cfg.tenantId}`,
+    sql`select tax_id from tenants where id = 1`,
   );
   return rows[0]!.tax_id;
 }
@@ -490,7 +488,6 @@ async function secondVenueSharingNif(
   const venue = await setupVenue(db);
   await withTransaction(db, async (tx) => {
     await registerSif(tx, {
-      tenantId: venue.cfg.tenantId,
       nodeId: venue.cfg.nodeId,
       nif,
       idSistemaInformatico: "W1",
@@ -521,7 +518,7 @@ describe("H2: the huella is independent of whether the order was a tab", () => {
 
     // Tenant A — a WALK-UP, no table → A/1, primer_registro, filed under A's own NIF (database `suite`).
     const { cfg: cfgA, cafe: cafeA } = await setupVenue();
-    const nifA = await nifOf(cfgA);
+    const nifA = await nifOf();
     const walkUpId = randomUUID();
     await payWorkingOrder(depsA, cfgA, {
       id: walkUpId,
@@ -648,7 +645,7 @@ describe("H2 (column): the huella is independent of delivery_table_id", () => {
     // Tenant A — a counter sale DELIVERED to a table → A/1, primer_registro, filed under A's own NIF
     // (database `suite`).
     const { cfg: cfgA, cafe: cafeA } = await setupVenue();
-    const nifA = await nifOf(cfgA);
+    const nifA = await nifOf();
     const tableA = await seedTable(cfgA, "H2col-A");
     const deliveredId = randomUUID();
     await recordTillSale(depsA, cfgA, {

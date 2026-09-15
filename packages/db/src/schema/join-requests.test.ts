@@ -6,7 +6,6 @@ import { asAppUser } from "../testing/roles.js";
 import { withTransaction } from "../tenancy.js";
 import { tenants } from "./tenants.js";
 
-const TENANT_A = "11111111-1111-4111-8111-111111111111";
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 
 describe("join_requests", () => {
@@ -15,7 +14,7 @@ describe("join_requests", () => {
   beforeAll(async () => {
     await suite.admin
       .insert(tenants)
-      .values([{ id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
+      .values([{ id: 1, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
     // operation_description is Spanish test DATA, not a schema identifier, exactly as the sibling
     // devices/kitchen-stations tests use 'Hostelería'.
     await suite.admin.execute(sql`

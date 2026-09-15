@@ -3,7 +3,7 @@ import type { Modifier } from "@waitron/shared";
 import { lockModifierDefinitions } from "./modifier-lock.js";
 import { isModifierPrice } from "./modifier-limits.js";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
-import { AppError, resolveContentText, FALLBACK_LOCALE, type TenantId } from "@waitron/shared";
+import { AppError, resolveContentText, FALLBACK_LOCALE } from "@waitron/shared";
 import {
   catalogues,
   categories,
@@ -432,10 +432,8 @@ function legacyPricingUnit(unit: SellableUnit): PricingUnit {
 
 export async function createCatalogue(
   tx: Transaction,
-  tenantId: TenantId,
   input: { name: string },
 ): Promise<Catalogue> {
-  void tenantId;
   const [row] = await tx
     .insert(catalogues)
     .values({ name: input.name })
@@ -1085,12 +1083,7 @@ export async function applyDietDerivation(
   await republishProductDiet(tx, productId);
 }
 
-export async function createProduct(
-  tx: Transaction,
-  tenantId: TenantId,
-  input: CreateProductInput,
-): Promise<Product> {
-  void tenantId;
+export async function createProduct(tx: Transaction, input: CreateProductInput): Promise<Product> {
   if (input.unitId === undefined && input.pricingUnit === undefined) {
     throw new AppError("management.request_invalid", { field: "unitId" });
   }
@@ -1342,7 +1335,6 @@ export async function assignCatalogueToLocation(
  */
 export async function setLocationDefaultCatalogue(
   tx: Transaction,
-  tenantId: TenantId,
   locationId: string,
   catalogueId: string,
 ): Promise<void> {
@@ -1355,7 +1347,7 @@ export async function setLocationDefaultCatalogue(
     .where(eq(locations.id, locationId));
   const defaultId = row?.id ?? null;
   if (defaultId !== null && defaultId !== catalogueId) {
-    await addCatalogueToLocation(tx, tenantId, locationId, defaultId);
+    await addCatalogueToLocation(tx, locationId, defaultId);
   }
   await assignCatalogueToLocation(tx, locationId, catalogueId);
 }
@@ -1368,11 +1360,9 @@ export async function setLocationDefaultCatalogue(
  */
 export async function addCatalogueToLocation(
   tx: Transaction,
-  tenantId: TenantId,
   locationId: string,
   catalogueId: string,
 ): Promise<void> {
-  void tenantId;
   await tx.insert(locationCatalogues).values({ locationId, catalogueId }).onConflictDoNothing();
 }
 
@@ -1808,10 +1798,8 @@ function normalizeOverlay(input: {
 
 export async function createOptionGroup(
   tx: Transaction,
-  tenantId: TenantId,
   input: CreateOptionGroupInput,
 ): Promise<OptionGroup> {
-  void tenantId;
   await lockModifierDefinitions(tx);
   // Resolve the column defaults HERE so the invariant is validated against the values that will land
   // (the DB defaults are min 0, max 1, required false).
@@ -1879,11 +1867,9 @@ export async function updateOptionGroup(
 
 export async function createOptionGroupItem(
   tx: Transaction,
-  tenantId: TenantId,
   groupId: string,
   input: CreateOptionGroupItemInput,
 ): Promise<OptionGroupItem> {
-  void tenantId;
   await lockModifierDefinitions(tx);
   // Resolve the default HERE so the invariant is validated against the value that will land (the DB
   // default is 1), the same posture createOptionGroup takes for its bounds.
@@ -1952,11 +1938,9 @@ export async function updateOptionGroupItem(
  */
 export async function setProductOptionGroups(
   tx: Transaction,
-  tenantId: TenantId,
   productId: string,
   groupIds: string[],
 ): Promise<void> {
-  void tenantId;
   await lockModifierDefinitions(tx);
   const [product] = await tx
     .select({ id: products.id })

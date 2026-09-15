@@ -43,14 +43,14 @@ export interface StationPrinter {
  * target, so it is not an attach target either — no point wiring a fire to a printer the outbox
  * will refuse.
  *
- * Then INSERT the `(tenant_id, station_id, printer_id)` row with `ON CONFLICT DO NOTHING`, so
+ * Then INSERT the `(station_id, printer_id)` row with `ON CONFLICT DO NOTHING`, so
  * attaching an already-attached pair is a silent no-op rather than a 23505 — the idempotency the
  * config UI's multi-select relies on (re-saving a selection that already holds the pair must not
  * error). Both predicates bind as `$n` (never concatenated).
  */
 export async function attachPrinterToStation(
   tx: Transaction,
-  cfg: PrintConfig,
+
   { stationId, printerId }: StationPrinter,
 ): Promise<void> {
   const [live] = await tx
@@ -65,10 +65,7 @@ export async function attachPrinterToStation(
     .where(and(eq(printers.id, printerId), eq(printers.active, true)));
   if (printer === undefined) throw new AppError("printer.not_found", { id: printerId });
 
-  await tx
-    .insert(stationPrinters)
-    .values({ tenantId: cfg.tenantId, stationId, printerId })
-    .onConflictDoNothing();
+  await tx.insert(stationPrinters).values({ stationId, printerId }).onConflictDoNothing();
 }
 
 /**

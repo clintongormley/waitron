@@ -3,7 +3,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, createPgliteDb, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { AppError } from "@waitron/shared";
-import type { TenantId } from "@waitron/shared";
 // Side-effect only: this test constructs a real `AppError<"payment.reconcile_unsettled">`, and
 // that code exists only via @waitron/payments's own `declare module "@waitron/shared"`
 // augmentation (its src/errors.ts). This package's runtime code never imports @waitron/payments —
@@ -24,12 +23,10 @@ const HORIZON_START = new Date("2026-06-01T00:00:00Z");
 const SKIP_RETRY_MS = DEFAULTS.skipRetryMs;
 const AFTER_SKIP_RETRY = new Date(NOW.getTime() + SKIP_RETRY_MS);
 
-let tenantId: TenantId;
-
 const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS, SCHEDULER_MIGRATIONS] });
 
 beforeEach(async () => {
-  tenantId = await seedTenant(suite.db);
+  await seedTenant(suite.db);
 });
 
 afterEach(() => {
@@ -56,7 +53,7 @@ function deps(
 describe("runDue", () => {
   it("runs the most recent complete period for a duty that has never run", async () => {
     const duty = new FakeDuty();
-    const result = await runDue(deps([duty]), [tenantId], NOW);
+    const result = await runDue(deps([duty]), NOW);
 
     expect(duty.calls).toHaveLength(1);
     expect(duty.calls[0]!.period.from).toEqual(new Date("2026-07-24T00:00:00Z"));
@@ -68,7 +65,7 @@ describe("runDue", () => {
     const duty = new FakeDuty("test.duty", () =>
       Promise.resolve({ summary: { remediationFailures: [{ paymentRef: "pi_1", reason: "x" }] } }),
     );
-    await runDue(deps([duty]), [tenantId], NOW);
+    await runDue(deps([duty]), NOW);
 
     // Read the column directly: readSnapshot deliberately omits `summary`, since derivation never
     // needs it and a large one would be read on every tick for nothing.
@@ -85,8 +82,8 @@ describe("runDue", () => {
 
   it("is idempotent within a tick — a second call finds no gap", async () => {
     const duty = new FakeDuty();
-    await runDue(deps([duty]), [tenantId], NOW);
-    const second = await runDue(deps([duty]), [tenantId], NOW);
+    await runDue(deps([duty]), NOW);
+    const second = await runDue(deps([duty]), NOW);
 
     expect(duty.calls).toHaveLength(1);
     expect(second.ran).toEqual([]);
@@ -98,14 +95,14 @@ describe("runDue", () => {
       "test.duty",
       new AppError("payment.reconcile_unsettled", { payments: [], count: 0 }),
     );
-    const result = await runDue(deps([duty]), [tenantId], NOW);
+    const result = await runDue(deps([duty]), NOW);
 
     expect(result.ran[0]).toMatchObject({
       outcome: "failed",
       errorCode: "payment.reconcile_unsettled",
     });
     const snapshot = await withTransaction(suite.db, (tx) =>
-      readSnapshot(tx, { tenantId, duty: "test.duty", horizonStart: HORIZON_START }),
+      readSnapshot(tx, { duty: "test.duty", horizonStart: HORIZON_START }),
     );
     // 15 minutes: backoffBaseMs * 2^(attempts-1), attempts = 1. Store timestamps are normalised
     // ISO-8601 via `to_json(col) #>> '{}'`, which renders the offset form
@@ -123,7 +120,7 @@ describe("runDue", () => {
 
   it("records `unknown` for a non-AppError failure", async () => {
     const duty = throwingDuty("test.duty", new Error("boom"));
-    const result = await runDue(deps([duty]), [tenantId], NOW);
+    const result = await runDue(deps([duty]), NOW);
     expect(result.ran[0]).toMatchObject({ outcome: "failed", errorCode: "unknown" });
   });
 
@@ -131,13 +128,13 @@ describe("runDue", () => {
     const duty = throwingDuty("test.duty", new Error("boom"));
     let at = NOW;
     for (let i = 0; i < 3; i += 1) {
-      await runDue(deps([duty]), [tenantId], at);
+      await runDue(deps([duty]), at);
       at = new Date(at.getTime() + 2 * 60 * 60 * 1000);
     }
-    const after = await runDue(deps([duty]), [tenantId], at);
+    const after = await runDue(deps([duty]), at);
 
     const snapshot = await withTransaction(suite.db, (tx) =>
-      readSnapshot(tx, { tenantId, duty: "test.duty", horizonStart: HORIZON_START }),
+      readSnapshot(tx, { duty: "test.duty", horizonStart: HORIZON_START }),
     );
     // A parked row is non-terminal in neither sense: it stays visible in the snapshot, but it is
     // never claimed again, so the fourth tick finds nothing.
@@ -149,12 +146,12 @@ describe("runDue", () => {
     const duty = throwingDuty("test.duty", new Error("boom"));
     let at = NOW;
     for (let i = 0; i < 3; i += 1) {
-      await runDue(deps([duty]), [tenantId], at);
+      await runDue(deps([duty]), at);
       at = new Date(at.getTime() + 2 * 60 * 60 * 1000);
     }
     // Next day: 2026-07-25 is now a complete period with no row of its own.
     const nextDay = new Date("2026-07-26T04:00:00Z");
-    const result = await runDue(deps([duty]), [tenantId], nextDay);
+    const result = await runDue(deps([duty]), nextDay);
     expect(result.ran.map((r) => r.period.from.toISOString())).toEqual([
       "2026-07-25T00:00:00.000Z",
     ]);
@@ -164,8 +161,8 @@ describe("runDue", () => {
     const duty = new FakeDuty();
     // Sweeping at 2026-07-20 records 2026-07-19, which becomes the floor. At NOW the gaps are
     // 07-20 … 07-24 — five of them.
-    await runDue(deps([duty]), [tenantId], new Date("2026-07-20T04:00:00Z"));
-    const result = await runDue(deps([duty], { maxPeriodsPerTick: 2 }), [tenantId], NOW);
+    await runDue(deps([duty]), new Date("2026-07-20T04:00:00Z"));
+    const result = await runDue(deps([duty], { maxPeriodsPerTick: 2 }), NOW);
 
     expect(result.ran).toHaveLength(2);
     expect(result.ran.map((r) => r.period.from.toISOString())).toEqual([
@@ -183,15 +180,15 @@ describe("runDue", () => {
     const duty = new FakeDuty();
     // The snapshot read succeeds and derives a gap; only the claim that would record it throws.
     vi.spyOn(store, "claimGap").mockRejectedValue(new Error("claim failed"));
-    const result = await runDue(deps([duty]), [tenantId], NOW);
+    const result = await runDue(deps([duty]), NOW);
 
     expect(store.claimGap).toHaveBeenCalledTimes(1);
     expect(result.ran).toEqual([]);
-    expect(result.skipped).toEqual([{ tenantId, duty: "test.duty", errorCode: "unknown" }]);
+    expect(result.skipped).toEqual([{ duty: "test.duty", errorCode: "unknown" }]);
     expect(duty.calls).toEqual([]);
     // Skipped work is due on the skip-retry interval, NOT at the next day boundary the derivation
     // computed before the claim threw — a host sleeping on that would leave the failure untouched
-    // for 20 hours. It is also not `now`: a pair that fails for a reason only a human can fix
+    // for 20 hours. It is also not `now`: a duty that fails for a reason only a human can fix
     // answers the same way every pass, and reporting `now` pins the host's loop at its MIN_TICK
     // floor forever.
     expect(result.nextDueAt).toEqual(AFTER_SKIP_RETRY);
@@ -209,7 +206,7 @@ describe("runDue", () => {
     await dead.close();
 
     const duty = new FakeDuty();
-    const result = await runDue({ ...deps([duty]), db: dead }, [tenantId], NOW);
+    const result = await runDue({ ...deps([duty]), db: dead }, NOW);
 
     expect(result.ran).toEqual([]);
     expect(result.skipped).toHaveLength(1);
@@ -231,11 +228,7 @@ describe("runDue", () => {
     const failing = throwingDuty("duty.fail", new Error("boom"));
     const skipper = new FakeDuty("duty.skip");
     failSnapshotFor("duty.skip");
-    const result = await runDue(
-      deps([failing, skipper], { backoffBaseMs: 1_000 }),
-      [tenantId],
-      NOW,
-    );
+    const result = await runDue(deps([failing, skipper], { backoffBaseMs: 1_000 }), NOW);
 
     expect(result.skipped).toHaveLength(1);
     expect(result.ran.some((r) => r.outcome === "failed")).toBe(true);
@@ -249,7 +242,7 @@ describe("runDue", () => {
     const failing = throwingDuty("duty.fail", new Error("boom"));
     const skipper = new FakeDuty("duty.skip");
     failSnapshotFor("duty.skip");
-    const result = await runDue(deps([failing, skipper]), [tenantId], NOW);
+    const result = await runDue(deps([failing, skipper]), NOW);
 
     expect(result.skipped).toHaveLength(1);
     expect(result.nextDueAt).toEqual(AFTER_SKIP_RETRY);
@@ -264,30 +257,28 @@ describe("runDue", () => {
     // "runs the most recent complete period for a duty that has never run" — so `maxPeriodsPerTick:
     // 1` alone could not defer anything. Sweeping once at 2026-07-23 records 2026-07-22 as the
     // floor, so at NOW there are two gaps (07-23, 07-24) for the cap to actually bite on.
-    await runDue(deps([duty]), [tenantId], new Date("2026-07-23T04:00:00Z"));
+    await runDue(deps([duty]), new Date("2026-07-23T04:00:00Z"));
     failSnapshotFor("duty.skip");
-    const result = await runDue(deps([duty, skipper], { maxPeriodsPerTick: 1 }), [tenantId], NOW);
+    const result = await runDue(deps([duty, skipper], { maxPeriodsPerTick: 1 }), NOW);
 
     expect(result.deferred).toBeGreaterThan(0);
     expect(result.skipped).toHaveLength(1);
     expect(result.nextDueAt).toEqual(NOW);
   });
 
-  // The ONLY state in which `nextDueAt` may be null, and now the only test that reaches it: a
-  // tenant list with a duty list to cross against produces at least a next period boundary, and a
-  // pair that throws reports the skip-retry interval. "No pair at all" is what null means, and
-  // nothing else.
-  it("reports null only when there is no (tenant, duty) pair at all", async () => {
+  // The ONLY state in which `nextDueAt` may be null, and now the only test that reaches it: any
+  // duty at all produces at least a next period boundary, and a duty that throws reports the
+  // skip-retry interval. "No duty at all" is what null means, and nothing else.
+  it("reports null only when there is no duty at all", async () => {
     const duty = new FakeDuty();
-    expect((await runDue(deps([duty]), [], NOW)).nextDueAt).toBeNull();
-    expect((await runDue(deps([]), [tenantId], NOW)).nextDueAt).toBeNull();
-    expect(duty.calls).toEqual([]);
+    expect((await runDue(deps([]), NOW)).nextDueAt).toBeNull();
+    expect((await runDue(deps([duty]), NOW)).nextDueAt).not.toBeNull();
   });
 
   it("runs every duty for the tenant", async () => {
     const one = new FakeDuty("duty.one");
     const two = new FakeDuty("duty.two");
-    const result = await runDue(deps([one, two]), [tenantId], NOW);
+    const result = await runDue(deps([one, two]), NOW);
 
     expect(result.ran).toHaveLength(2);
     expect(one.calls).toHaveLength(1);
@@ -305,7 +296,7 @@ describe("runDue", () => {
   it("treats a completion lost to a mid-flight reclaim as 'this attempt owns nothing' — absent from ran", async () => {
     const duty = new FakeDuty("test.duty", async (call) => {
       const snapshot = await withTransaction(suite.db, (tx) =>
-        readSnapshot(tx, { tenantId, duty: "test.duty", horizonStart: HORIZON_START }),
+        readSnapshot(tx, { duty: "test.duty", horizonStart: HORIZON_START }),
       );
       const row = snapshot.rows.find(
         (r) => new Date(r.periodFrom).getTime() === call.period.from.getTime(),
@@ -320,7 +311,7 @@ describe("runDue", () => {
       return { summary: { ok: true } };
     });
 
-    const result = await runDue(deps([duty]), [tenantId], NOW);
+    const result = await runDue(deps([duty]), NOW);
 
     expect(duty.calls).toHaveLength(1);
     expect(result.ran).toEqual([]);
@@ -328,7 +319,7 @@ describe("runDue", () => {
     // The row itself must still read exactly as the reclaim left it — running, at the reclaim's
     // attempt count — never overwritten by the lost attempt's (rejected) completion.
     const snapshot = await withTransaction(suite.db, (tx) =>
-      readSnapshot(tx, { tenantId, duty: "test.duty", horizonStart: HORIZON_START }),
+      readSnapshot(tx, { duty: "test.duty", horizonStart: HORIZON_START }),
     );
     expect(snapshot.rows[0]).toMatchObject({ state: "running", attempts: 2 });
   });
@@ -343,14 +334,14 @@ describe("runDue", () => {
     const two = new FakeDuty("duty.two");
     // Each duty's OWN earliest-recorded period, far enough in the past that a later, narrower
     // horizon drops most of the days between it and the horizon permanently.
-    await runDue(deps([one]), [tenantId], new Date("2026-07-11T04:00:00Z")); // records 2026-07-10
-    await runDue(deps([two]), [tenantId], new Date("2026-07-15T04:00:00Z")); // records 2026-07-14
+    await runDue(deps([one]), new Date("2026-07-11T04:00:00Z")); // records 2026-07-10
+    await runDue(deps([two]), new Date("2026-07-15T04:00:00Z")); // records 2026-07-14
 
     // horizonDays: 5 → horizonStart = 2026-07-20. duty.one's floor (07-10) is 10 days short of it,
     // with only the one row recorded below the horizon: beyondHorizon = 10 - 1 = 9. duty.two's
     // floor (07-14) is 6 days short, same one recorded row: beyondHorizon = 6 - 1 = 5. The true
     // sum is 14; a `=` bug would leave 5 — duty.two's own value, since it is processed second.
-    const result = await runDue(deps([one, two], { horizonDays: 5 }), [tenantId], NOW);
+    const result = await runDue(deps([one, two], { horizonDays: 5 }), NOW);
 
     expect(result.beyondHorizon).toBe(14);
   });
@@ -372,7 +363,7 @@ describe("runDue", () => {
 
     const duty = new FakeDuty();
     const later = new Date(NOW.getTime() + DEFAULTS.staleAfterMs + 1);
-    const result = await runDue(deps([duty]), [tenantId], later);
+    const result = await runDue(deps([duty]), later);
 
     // The duty ran again for the SAME period. If `runOne` mistakenly claimed via `claimGap`
     // instead of `reclaimStale`, this insert would collide with the stranded row's own
@@ -383,7 +374,7 @@ describe("runDue", () => {
     expect(result.ran[0]).toMatchObject({ outcome: "succeeded", generation: 0 });
 
     const snapshot = await withTransaction(suite.db, (tx) =>
-      readSnapshot(tx, { tenantId, duty: "test.duty", horizonStart: HORIZON_START }),
+      readSnapshot(tx, { duty: "test.duty", horizonStart: HORIZON_START }),
     );
     // Exactly one row for the period — a RECLAIM of the stranded row, not a second row inserted
     // alongside it.

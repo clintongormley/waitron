@@ -55,7 +55,7 @@ export const FISCAL_SLOT: FiscalContribution = {
     validate: (raw) => {
       parseAeatCert(raw);
     },
-    seal: (deps, tenantId, raw) => sealAeatSecret(deps, tenantId, raw),
+    seal: (deps, raw) => sealAeatSecret(deps, raw),
   },
   // The operator-typed fields that reach AEAT verbatim. Refused here, at provision time, so the
   // operator fixes them in the wizard — the alternative is the chain-append guard refusing the

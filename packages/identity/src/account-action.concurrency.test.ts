@@ -10,11 +10,10 @@ import { requestAccountRecoveryAction } from "./account-action.js";
 // the person-row lock prevents two concurrent reset issuers from leaving two live successor tokens.
 const suite = useTemplateDb({ template: "core_identity" });
 
-let tenantId: string;
 let personId: string;
 
 beforeEach(async () => {
-  tenantId = await seedTenant(suite.admin);
+  await seedTenant(suite.admin);
   personId = await seedManager(suite.admin, { email: "reset-race@x.com" });
 });
 
@@ -40,7 +39,6 @@ describe("account-action issuance under real concurrency", () => {
       try {
         c1Done = withTransaction(c1, async (tx) => {
           const issued = await requestAccountRecoveryAction(tx, {
-            tenantId,
             email: "reset-race@x.com",
           });
           expect(issued?.personId).toBe(personId);
@@ -53,7 +51,7 @@ describe("account-action issuance under real concurrency", () => {
         const blocked = await captureError(() =>
           withTransaction(c2, async (tx) => {
             await tx.execute(sql`set local lock_timeout = '250ms'`);
-            return requestAccountRecoveryAction(tx, { tenantId, email: "reset-race@x.com" });
+            return requestAccountRecoveryAction(tx, { email: "reset-race@x.com" });
           }),
         );
         expect(pgErrorCode(blocked)).toBe("55P03");
@@ -61,7 +59,7 @@ describe("account-action issuance under real concurrency", () => {
         releaseFirst();
         await c1Done;
         await withTransaction(c2, (tx) =>
-          requestAccountRecoveryAction(tx, { tenantId, email: "reset-race@x.com" }),
+          requestAccountRecoveryAction(tx, { email: "reset-race@x.com" }),
         );
         const live = await suite.admin.execute<{ count: string }>(sql`
         select count(*) as count

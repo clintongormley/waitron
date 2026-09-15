@@ -20,7 +20,6 @@ import { workingOrders } from "./schema/orders.js";
  */
 export interface AppendAmendmentInput {
   /** Inert: nothing here reads it. apps/server still supplies it; the field goes when that does. */
-  tenantId?: string;
   workingOrderId: string;
   kind: "order_placed" | "order_cancelled";
   /** The accountable actor (the operator uuid from the open session). */

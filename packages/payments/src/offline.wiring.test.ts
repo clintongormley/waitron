@@ -6,7 +6,6 @@ import {
   decimal,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tenantId as brandTenantId,
   tillId as brandTillId,
   workingOrderId as brandWorkingOrderId,
 } from "@waitron/shared";
@@ -42,7 +41,6 @@ const steadyClock: TrustedClock = {
 
 function buildInput(s: SeededForSale, settledAt: Date): RecordSaleInput {
   return {
-    tenantId: brandTenantId(s.tenantId),
     tillId: brandTillId(s.tillId),
     nodeId: brandNodeId(s.nodeId),
     seriesId: brandSeriesId(s.seriesId),
@@ -77,7 +75,7 @@ describe("offline accept -> recordSale -> associate -> forward decline (sale sta
     await seedPaymentPolicy(pg.db, "accept_offline", "50.00");
 
     // 1. Offline accept BEFORE the sale transaction (there is an acceptance step, unlike manual mode).
-    const provider = new FakePaymentProvider(pg.db, s.tenantId);
+    const provider = new FakePaymentProvider(pg.db);
     provider.offlineNextCollect();
     const paid = await provider.collect({
       tillId: brandTillId(s.tillId),

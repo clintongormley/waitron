@@ -39,18 +39,17 @@ function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise
  *  verbs' own `location_id` predicate is the only guard against. Returns a full TillConfig scoped to
  *  each. */
 async function setupTwoVenues(): Promise<{ a: TillConfig; b: TillConfig }> {
-  const tenantId = await seedTenant(db);
+  await seedTenant(db);
   const make = async (name: string): Promise<TillConfig> => {
     const loc = await db.execute<{ id: string }>(sql`
-      insert into locations (tenant_id, name, invoice_locales, operation_description)
-      values (${tenantId}, ${name}, array[${LOCALE}], 'Venta en establecimiento') returning id`);
+      insert into locations (name, invoice_locales, operation_description)
+      values (${name}, array[${LOCALE}], 'Venta en establecimiento') returning id`);
     const locationId = loc.rows[0]!.id;
     const till = await db.execute<{ id: string }>(sql`
-      insert into tills (tenant_id, location_id, name)
-      values (${tenantId}, ${locationId}, ${`${name} Caja`}) returning id`);
-    const nodeId = await seedNode(db, tenantId, brandLocationId(locationId));
+      insert into tills (location_id, name)
+      values (${locationId}, ${`${name} Caja`}) returning id`);
+    const nodeId = await seedNode(db, brandLocationId(locationId));
     return {
-      tenantId,
       tillId: brandTillId(till.rows[0]!.id),
       nodeId: brandNodeId(nodeId),
       seriesId: brandSeriesId(randomUUID()),

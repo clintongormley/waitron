@@ -1,6 +1,5 @@
 // Exercise the staff seed on PostgreSQL through app_user, including the permitted persons writes.
 
-import { tenantId as brandTenantId } from "@waitron/shared";
 import { describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { asAppUser, withTransaction } from "@waitron/db";
@@ -25,8 +24,8 @@ function nextNif(): string {
 }
 
 /** Provision a fresh chained venue (as the owner) and return the tenant id the seed needs. */
-async function provisionVenue(): Promise<{ tenantId: string }> {
-  const venue = await applyVenue(
+async function provisionVenue(): Promise<void> {
+  await applyVenue(
     planVenue(
       {
         country: "ES",
@@ -59,16 +58,15 @@ async function provisionVenue(): Promise<{ tenantId: string }> {
     ),
     { db: suite.admin, modules: ALL_MODULES },
   );
-  return { tenantId: venue.tenantId };
 }
 
 describe("seedStaff", () => {
   it("seeds staff across all roles, all on the demo PIN", async () => {
-    const { tenantId } = await provisionVenue();
+    await provisionVenue();
 
     const persons = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
-      await seedStaff(tx, brandTenantId(tenantId));
+      await seedStaff(tx);
 
       const { rows } = await tx.execute<{
         display_name: string;
@@ -101,11 +99,11 @@ describe("seedStaff", () => {
   });
 
   it("gives every person an email while preserving which demo accounts have preset passwords", async () => {
-    const { tenantId } = await provisionVenue();
+    await provisionVenue();
 
     const rows = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
-      await seedStaff(tx, brandTenantId(tenantId));
+      await seedStaff(tx);
 
       const { rows } = await tx.execute<{
         display_name: string;

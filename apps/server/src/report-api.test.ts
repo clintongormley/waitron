@@ -24,7 +24,6 @@ import "./errors.js";
 // Sales and received invoices are seeded directly because the report reads their stored values.
 const noopLog: Logger = () => {};
 
-let tenantId: string;
 let tillId: string;
 let nodeId: string;
 let seriesId: string;
@@ -82,7 +81,6 @@ const expectedBox27Q1 = packAeatNumeric(
  * `sales.vat_breakdown` — the only column the reporting aggregate reads. */
 async function seedSale(db: Database, s: SeededSale | typeof Q1_SALE): Promise<void> {
   await db.insert(sales).values({
-    tenantId,
     tillId,
     nodeId,
     seriesId,
@@ -104,7 +102,6 @@ async function seedPurchase(db: Database): Promise<void> {
   const [row] = await db
     .insert(purchaseInvoices)
     .values({
-      tenantId,
       supplierTaxId: "B11111111",
       supplierName: "Café del Puerto SL",
       supplierInvoiceNumber: "2026/501",
@@ -115,7 +112,6 @@ async function seedPurchase(db: Database): Promise<void> {
     })
     .returning({ id: purchaseInvoices.id });
   await db.insert(purchaseInvoiceVat).values({
-    tenantId,
     purchaseInvoiceId: row!.id,
     rate: "21.00",
     base: "100.00",
@@ -130,23 +126,23 @@ const suite = usePgliteDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     // seedTenant supplies the tax_id + legal_name the route reads back as the obligado identity.
-    tenantId = await seedTenant(db);
+    await seedTenant(db);
     // The one venue's location/till/node/series, seeded directly as the superuser (the demo idiom).
     const loc = await db.execute<{ id: string }>(sql`
-      insert into locations (tenant_id, name, invoice_locales, operation_description)
-      values (${tenantId}, 'Sala principal', array['es-ES'], 'Venta en establecimiento') returning id`);
+      insert into locations (name, invoice_locales, operation_description)
+      values ('Sala principal', array['es-ES'], 'Venta en establecimiento') returning id`);
     const locationId = loc.rows[0]!.id;
     const till = await db.execute<{ id: string }>(sql`
-      insert into tills (tenant_id, location_id, name)
-      values (${tenantId}, ${locationId}, 'Caja 1') returning id`);
+      insert into tills (location_id, name)
+      values (${locationId}, 'Caja 1') returning id`);
     tillId = till.rows[0]!.id;
     const node = await db.execute<{ id: string }>(sql`
-      insert into nodes (tenant_id, location_id, name)
-      values (${tenantId}, ${locationId}, 'Nodo 1') returning id`);
+      insert into nodes (location_id, name)
+      values (${locationId}, 'Nodo 1') returning id`);
     nodeId = node.rows[0]!.id;
     const series = await db.execute<{ id: string }>(sql`
-      insert into invoice_series (tenant_id, node_id, code)
-      values (${tenantId}, ${nodeId}, 'A') returning id`);
+      insert into invoice_series (node_id, code)
+      values (${nodeId}, 'A') returning id`);
     seriesId = series.rows[0]!.id;
 
     // A known month (August) + quarter (Q1, via the February sale) of trade, plus one August purchase.
@@ -160,17 +156,15 @@ const suite = usePgliteDb({
     const { managerSid, staffSid } = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       const mgr = await tx.execute<{ id: string }>(sql`
-        insert into persons (tenant_id, display_name, pin_hash, role)
-        values (${tenantId}, 'The Manager', ${hashPin("1234")}, 'manager') returning id`);
+        insert into persons (display_name, pin_hash, role)
+        values ('The Manager', ${hashPin("1234")}, 'manager') returning id`);
       const stf = await tx.execute<{ id: string }>(sql`
-        insert into persons (tenant_id, display_name, pin_hash, role)
-        values (${tenantId}, 'The Clerk', ${hashPin("1234")}, 'staff') returning id`);
+        insert into persons (display_name, pin_hash, role)
+        values ('The Clerk', ${hashPin("1234")}, 'staff') returning id`);
       const managerSession = await startManagementSession(tx, {
-        tenantId,
         personId: mgr.rows[0]!.id,
       });
       const staffSession = await startManagementSession(tx, {
-        tenantId,
         personId: stf.rows[0]!.id,
       });
       return { managerSid: managerSession.id, staffSid: staffSession.id };
@@ -182,7 +176,7 @@ const suite = usePgliteDb({
 
 function mountApp(): Hono {
   const app = new Hono();
-  mountReportApi(app, { db: suite.db, cfg: { tenantId, nodeId } }, noopLog);
+  mountReportApi(app, { db: suite.db, cfg: { nodeId } }, noopLog);
   return app;
 }
 

@@ -51,20 +51,19 @@ import type { OnboardingIntent } from "./trading-config.js";
 import type { AccountEmailSender } from "./account-email.js";
 
 /**
- * The deployment holds one tenant per database. The deps the "me" API needs — the SAME minimal
- * shape `mountScheduleApi` takes: no fiscal backend, clock or card provider, because these routes
- * touch only the identity session (`management_sessions`) and the planning tables
- * (`shifts`/`shift_swaps`/`absences`). `cfg.tenantId` is this venue's tenant, scoping every
- * `withTransaction` below.
+ * The deps the "me" API needs: no fiscal backend, clock or card provider, because these routes touch
+ * only the identity session (`management_sessions`) and the planning tables
+ * (`shifts`/`shift_swaps`/`absences`). It carries the node id on top of the handle, so it is one
+ * field wider than `mountScheduleApi`'s.
  */
 export interface MeApiDeps {
   db: Database;
   /**
-   * `tenantId` scopes every `withTransaction` below. `nodeId` is this node's id, carried on the uniform
-   * write-path `cfg` shape every mounted API takes; it no longer stamps a capture origin (the
-   * application outbox and its capture triggers were removed).
+   * `nodeId` is this node's id, carried on the uniform write-path `cfg` shape every mounted API
+   * takes; it no longer stamps a capture origin (the application outbox and its capture triggers
+   * were removed).
    */
-  cfg: { tenantId: string; nodeId: string };
+  cfg: { nodeId: string };
   /**
    * The venue's DEFAULT UI locale, derived ONCE at boot (`readVenueLocale`, boot.ts). Surfaced by the
    * public `GET /management-api/locales` as `venueDefault` — the language the dashboard defaults to
@@ -195,11 +194,7 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
   app.get("/management-api/session/me/profile", (c) =>
     run(c, log, async () => {
       const managementSessionId = requireManagementSession(c);
-      return c.json(
-        await asStaff((tx) =>
-          readOwnProfile(tx, { tenantId: deps.cfg.tenantId, managementSessionId }),
-        ),
-      );
+      return c.json(await asStaff((tx) => readOwnProfile(tx, { managementSessionId })));
     }),
   );
   app.put("/management-api/session/me/profile", (c) =>
@@ -207,7 +202,6 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
       const managementSessionId = requireManagementSession(c);
       const body = await readJsonBody<Record<string, unknown>>(c);
       const input = {
-        tenantId: deps.cfg.tenantId,
         managementSessionId,
         displayName: textField(body, "displayName"),
         firstNames: textField(body, "firstNames"),
@@ -246,7 +240,6 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
       const body = await readJsonBody<Record<string, unknown>>(c);
       const email = await asStaff((tx) =>
         confirmOwnEmailChange(tx, {
-          tenantId: deps.cfg.tenantId,
           managementSessionId,
           code: textField(body, "code"),
           codeKey: accountActionCodeKey,
@@ -261,7 +254,6 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
       const managementSessionId = requireManagementSession(c);
       const body = await readJsonBody<Record<string, unknown>>(c);
       const input = {
-        tenantId: deps.cfg.tenantId,
         managementSessionId,
         password: textField(body, "password"),
         ...credentials(body),
@@ -275,7 +267,6 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
       const managementSessionId = requireManagementSession(c);
       const body = await readJsonBody<Record<string, unknown>>(c);
       const input = {
-        tenantId: deps.cfg.tenantId,
         managementSessionId,
         pin: textField(body, "pin"),
         ...credentials(body),
@@ -289,7 +280,6 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
       const managementSessionId = requireManagementSession(c);
       const body = await readJsonBody<Record<string, unknown>>(c);
       const input = {
-        tenantId: deps.cfg.tenantId,
         managementSessionId,
         id: requireUuidParam(c.req.param("id"), "passkey"),
         ...credentials(body),
@@ -305,7 +295,6 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
       return c.json(
         await updateProfile(managementSessionId, (tx) =>
           beginOwnTotpEnrollment(tx, {
-            tenantId: deps.cfg.tenantId,
             managementSessionId,
             ...credentials(body),
           }),
@@ -319,7 +308,6 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
       const body = await readJsonBody<Record<string, unknown>>(c);
       const result = await updateProfile(managementSessionId, (tx) =>
         finishOwnTotpEnrollment(tx, {
-          tenantId: deps.cfg.tenantId,
           managementSessionId,
           enrollmentId: requireBodyUuid(body.enrollmentId, "enrollmentId"),
           code: textField(body, "code"),
@@ -336,7 +324,6 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
       return c.json(
         await updateProfile(managementSessionId, (tx) =>
           regenerateOwnRecoveryCodes(tx, {
-            tenantId: deps.cfg.tenantId,
             managementSessionId,
             ...credentials(body),
           }),
@@ -350,7 +337,6 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
       const body = await readJsonBody<Record<string, unknown>>(c);
       await updateProfile(managementSessionId, (tx) =>
         disableOwnTotp(tx, {
-          tenantId: deps.cfg.tenantId,
           managementSessionId,
           ...credentials(body),
         }),
@@ -364,7 +350,6 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
       const body = await readJsonBody<Record<string, unknown>>(c);
       await updateProfile(managementSessionId, (tx) =>
         unlinkOwnGoogle(tx, {
-          tenantId: deps.cfg.tenantId,
           managementSessionId,
           ...credentials(body),
         }),
@@ -379,7 +364,7 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
     const [venue] = await tx
       .select({ venueName: tenants.legalName })
       .from(tenants)
-      .where(eq(tenants.id, deps.cfg.tenantId));
+      .where(eq(tenants.id, 1));
     if (venue === undefined) throw new Error("Configured tenant does not exist");
     return venue.venueName;
   };
@@ -465,7 +450,7 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
       const locale = typeof body.locale === "string" ? body.locale : "";
       await asStaff(async (tx) => {
         const { personId } = await resolveManagementSession(tx, sessionId);
-        await setPersonLocale(tx, { tenantId: deps.cfg.tenantId, personId, locale });
+        await setPersonLocale(tx, { personId, locale });
       });
       return c.body(null, 204);
     }),
@@ -483,7 +468,7 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
       const sessionId = requireManagementSession(c);
       await asStaff(async (tx) => {
         const { personId } = await resolveManagementSession(tx, sessionId);
-        await markPasskeyOffered(tx, { tenantId: deps.cfg.tenantId, personId });
+        await markPasskeyOffered(tx, { personId });
       });
       return c.body(null, 204);
     }),

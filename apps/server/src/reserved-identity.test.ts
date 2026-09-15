@@ -6,8 +6,8 @@ import { currentSif } from "@waitron/fiscal-verifactu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { tenantId as brandTenantId, nodeId as brandNodeId } from "@waitron/shared";
-import type { LocationId, TenantId } from "@waitron/shared";
+import { nodeId as brandNodeId } from "@waitron/shared";
+import type { LocationId } from "@waitron/shared";
 import type { Endorsement } from "@waitron/membership";
 import type { ReservedIdentity } from "./mirror-bundle.js";
 import { ALL_MODULES } from "./modules.js";
@@ -31,7 +31,6 @@ describe("establishReservedStandbyIdentity", () => {
     timeoutMs: 60_000,
   });
 
-  let tenantId: TenantId;
   let locationId: LocationId;
   let NIF: string;
 
@@ -39,13 +38,13 @@ describe("establishReservedStandbyIdentity", () => {
   // tenant with the establish case (which seals one). Tenants accumulate for the suite, each on its own
   // NIF via seedTenant's counter.
   beforeEach(async () => {
-    tenantId = await seedTenant(suite.db);
+    await seedTenant(suite.db);
     const loc = await suite.db.execute<{ id: string }>(sql`
-      insert into locations (tenant_id, name, invoice_locales, operation_description)
-      values (${tenantId}, 'Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
+      insert into locations (name, invoice_locales, operation_description)
+      values ('Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
     locationId = loc.rows[0]!.id as LocationId;
     const t = await suite.db.execute<{ tax_id: string }>(
-      sql`select tax_id from tenants where id = ${tenantId}`,
+      sql`select tax_id from tenants where id = 1`,
     );
     NIF = t.rows[0]!.tax_id;
   });
@@ -55,7 +54,6 @@ describe("establishReservedStandbyIdentity", () => {
     await establishReservedStandbyIdentity(
       { ownerDb: suite.db, ring: RING },
       {
-        tenantId,
         locationId,
         standby,
         nodeName: "cloud",
@@ -80,7 +78,7 @@ describe("establishReservedStandbyIdentity", () => {
     expect(cred?.privateKey).toBe(standby.privateKey);
     // reserved SIF is the cloud node's live identity with the supplied number
     const sif = await withTransaction(suite.db, (tx) =>
-      currentSif(tx, brandTenantId(tenantId), brandNodeId(standby.nodeId)),
+      currentSif(tx, brandNodeId(standby.nodeId)),
     );
     expect(sif.numeroInstalacion).toBe(7);
     // reserved series landed for the standby's node
@@ -95,7 +93,6 @@ describe("establishReservedStandbyIdentity", () => {
   it("is idempotent: a second call with a fresh identity is a no-op (keeps the first)", async () => {
     const first = generateStandbyIdentity();
     const base = {
-      tenantId,
       locationId,
       nodeName: "cloud",
       filingModule: null,
@@ -152,7 +149,6 @@ describe("establishReservedStandbyIdentity", () => {
       establishReservedStandbyIdentity(
         { ownerDb: suite.db, ring: RING },
         {
-          tenantId,
           locationId,
           standby,
           nodeName: "cloud",
@@ -176,7 +172,6 @@ describe("establishReservedStandbyIdentity", () => {
       establishReservedStandbyIdentity(
         { ownerDb: suite.db, ring: RING },
         {
-          tenantId,
           locationId,
           standby,
           nodeName: "cloud",

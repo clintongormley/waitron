@@ -18,7 +18,6 @@ import { sealAeatSecret, validateAeatCert, type AeatCert } from "./provisioning-
 // it sets no session variable (`packages/db/src/tenancy.test.ts` asserts that). `sealAeatSecret`
 // still TAKES a tenant id because the slot seat it fills does; it reads it nowhere, so the constant
 // below is a placeholder, not a row.
-const tenant = "00000000-0000-4000-8000-000000000001";
 
 const suite = usePgliteDb({
   migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS],
@@ -48,7 +47,7 @@ describe("sealAeatSecret", () => {
     const ring = testRing();
     const cert = aeatCert({ certKind: "representante" });
 
-    await sealAeatSecret({ db: suite.db, ring }, tenant, cert);
+    await sealAeatSecret({ db: suite.db, ring }, cert);
 
     const readBack = await withTransaction(suite.db, (tx) =>
       getCredential(tx, ring, { purpose: "fiscal.aeat" }),
@@ -66,9 +65,7 @@ describe("sealAeatSecret", () => {
     // only this module's certKind guard rejects it (the deletion-proof for that guard).
     const cert = aeatCert({ certKind: "bogus" as AeatCert["certKind"] });
 
-    const error = await sealAeatSecret({ db: suite.db, ring }, tenant, cert).catch(
-      (e: unknown) => e,
-    );
+    const error = await sealAeatSecret({ db: suite.db, ring }, cert).catch((e: unknown) => e);
     expect(isAppError(error)).toBe(true);
     expect(isAppError(error) && hasCode(error, "setup.request_invalid") && error.params.field).toBe(
       "certKind",
@@ -97,9 +94,7 @@ describe("sealAeatSecret", () => {
     const ring = testRing();
     const cert = aeatCert({ pfxBase64 });
 
-    const error = await sealAeatSecret({ db: suite.db, ring }, tenant, cert).catch(
-      (e: unknown) => e,
-    );
+    const error = await sealAeatSecret({ db: suite.db, ring }, cert).catch((e: unknown) => e);
     expect(isAppError(error)).toBe(true);
     expect(isAppError(error) && hasCode(error, "setup.request_invalid") && error.params.field).toBe(
       "pfxBase64",
@@ -118,7 +113,7 @@ describe("sealAeatSecret", () => {
     // seal must accept it, proving the length/padding-enforcing regex rejects no genuine encoding.
     const cert = aeatCert({ pfxBase64: "aGVsbG8=" });
 
-    await sealAeatSecret({ db: suite.db, ring }, tenant, cert);
+    await sealAeatSecret({ db: suite.db, ring }, cert);
 
     const readBack = await withTransaction(suite.db, (tx) =>
       getCredential(tx, ring, { purpose: "fiscal.aeat" }),
@@ -129,7 +124,7 @@ describe("sealAeatSecret", () => {
   it("refuses a non-object raw blob naming aeatCert and seals nothing", async () => {
     const ring = testRing();
 
-    const error = await sealAeatSecret({ db: suite.db, ring }, tenant, "not-an-object").catch(
+    const error = await sealAeatSecret({ db: suite.db, ring }, "not-an-object").catch(
       (e: unknown) => e,
     );
     expect(isAppError(error) && hasCode(error, "setup.request_invalid") && error.params.field).toBe(

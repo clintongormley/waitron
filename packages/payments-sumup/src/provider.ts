@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { AppError, tillId as brandTillId } from "@waitron/shared";
-import type { Decimal, TenantId } from "@waitron/shared";
+import type { Decimal } from "@waitron/shared";
 import { withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type {
@@ -45,7 +45,6 @@ export interface SumUpCloudProviderOptions {
   /** A plain `Database` handle; every phase is scoped with `withTransaction(db, …)`. */
   db: Database;
   /** Stamped on the incident `resolvePending` raises. */
-  tenantId: TenantId;
   nodeId: string;
   /** Where `resolvePending` raises `payment.pending_outcome_unactionable`. */
   incidents: IncidentSink;
@@ -306,7 +305,6 @@ export class SumUpCloudProvider implements PaymentProvider {
         const tillId = tills.get(workingOrderId);
         if (tillId === undefined) return false;
         return this.opts.incidents(tx, {
-          tenantId: this.opts.tenantId,
           tillId: brandTillId(tillId),
           error: new AppError("payment.pending_outcome_unactionable", {
             paymentRef: key.paymentRef,

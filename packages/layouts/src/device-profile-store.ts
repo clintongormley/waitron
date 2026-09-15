@@ -123,11 +123,7 @@ export function translateWriteError(err: unknown): never {
 }
 
 /** All device profiles, ordered by name. */
-export async function listDeviceProfiles(
-  tx: Transaction,
-  tenantId: string,
-): Promise<DeviceProfileRow[]> {
-  void tenantId;
+export async function listDeviceProfiles(tx: Transaction): Promise<DeviceProfileRow[]> {
   const rows = await tx
     .select(PROFILE_COLUMNS)
     .from(deviceProfiles)
@@ -139,10 +135,8 @@ export async function listDeviceProfiles(
 /** One device profile by id, or `undefined` when no profile carries that id. */
 export async function getDeviceProfile(
   tx: Transaction,
-  tenantId: string,
   id: string,
 ): Promise<DeviceProfileRow | undefined> {
-  void tenantId;
   const [row] = await tx
     .select(PROFILE_COLUMNS)
     .from(deviceProfiles)
@@ -159,7 +153,6 @@ export async function createDeviceProfile(
     managementSessionId: string;
     /** Inert: nothing here reads it. apps/server and provisioning still supply it; the field goes
      * when those callers do. */
-    tenantId?: string;
     name: string;
     formFactor: FormFactor;
     canvasId: string | null | undefined;
@@ -209,7 +202,6 @@ export async function updateDeviceProfile(
     managementSessionId: string;
     /** Inert: nothing here reads it. apps/server and provisioning still supply it; the field goes
      * when those callers do. */
-    tenantId?: string;
     id: string;
     name: string;
     formFactor: FormFactor;
@@ -264,7 +256,7 @@ export async function updateDeviceProfile(
  */
 export async function deleteDeviceProfile(
   tx: Transaction,
-  input: { managementSessionId: string; tenantId?: string; id: string },
+  input: { managementSessionId: string; id: string },
 ): Promise<void> {
   await authorizeManager(tx, {
     managementSessionId: input.managementSessionId,

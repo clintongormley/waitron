@@ -31,7 +31,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tenantId as brandTenantId,
   tillId as brandTillId,
 } from "@waitron/shared";
 import { deploymentEnvironment } from "../src/config.js";
@@ -137,7 +136,6 @@ async function main(): Promise<void> {
     // planVenue emits the standard series first, then the rectificative one, so seriesIds[0] is the
     // ordinary sale's series.
     const cfg: TillConfig = {
-      tenantId: brandTenantId(venue.tenantId),
       tillId: brandTillId(venue.tillId),
       nodeId: brandNodeId(venue.nodeId),
       seriesId: brandSeriesId(venue.seriesIds[0]!),
@@ -156,10 +154,10 @@ async function main(): Promise<void> {
     // out of the english-only guard's scope.
     await withTransaction(db, async (tx) => {
       await asAppUser(tx);
-      const cat = await createCatalogue(tx, cfg.tenantId, { name: "Delicatessen" });
-      const comida = await createCategory(tx, cfg.tenantId, { name: { es: "Comida" } });
-      const bebidas = await createCategory(tx, cfg.tenantId, { name: { es: "Bebidas" } });
-      await createProduct(tx, cfg.tenantId, {
+      const cat = await createCatalogue(tx, { name: "Delicatessen" });
+      const comida = await createCategory(tx, { name: { es: "Comida" } });
+      const bebidas = await createCategory(tx, { name: { es: "Bebidas" } });
+      await createProduct(tx, {
         catalogueId: cat.id,
         categoryId: comida.id,
         name: "Jamón cortado",
@@ -167,7 +165,7 @@ async function main(): Promise<void> {
         unitPrice: "24.90", // €/kg, gross (VAT-inclusive), reduced (10%)
         vatClass: "reduced",
       });
-      await createProduct(tx, cfg.tenantId, {
+      await createProduct(tx, {
         catalogueId: cat.id,
         categoryId: bebidas.id,
         name: "Agua mineral",
@@ -177,8 +175,8 @@ async function main(): Promise<void> {
       });
       await assignCatalogueToLocation(tx, venue.locationId, cat.id);
       await tx.execute(sql`
-        insert into persons (tenant_id, display_name, email, pin_hash, role)
-        values (${cfg.tenantId}, 'Cajera', 'cashier@till.demo', ${hashPin("5555")}, 'staff')`);
+        insert into persons (display_name, email, pin_hash, role)
+        values ('Cajera', 'cashier@till.demo', ${hashPin("5555")}, 'staff')`);
     });
 
     const clock = systemClock();

@@ -32,8 +32,8 @@ function nextNif(): string {
 }
 
 // Same manager-login scaffolding as box-status.route.test.ts.
-async function setupTenant(): Promise<{ tenantId: string; managerId: string }> {
-  const venue = await applyVenue(
+async function setupTenant(): Promise<{ managerId: string }> {
+  await applyVenue(
     planVenue(
       {
         country: "ES",
@@ -69,12 +69,12 @@ async function setupTenant(): Promise<{ tenantId: string; managerId: string }> {
   const managerId = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const m = await tx.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, email, pin_hash, password_hash, role)
-      values (${venue.tenantId}, 'The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')
+      insert into persons (display_name, email, pin_hash, password_hash, role)
+      values ('The Manager', ${MANAGER_EMAIL}, ${hashPin("1234")}, ${hashPassword(PASSWORD)}, 'manager')
       returning id`);
     return m.rows[0]!.id;
   });
-  return { tenantId: venue.tenantId, managerId };
+  return { managerId };
 }
 
 /** Seed every `RECOVERY_FILES` path, or all but `omit` — omitting one makes the route hit
@@ -89,7 +89,7 @@ async function seedStateDir(omit?: string): Promise<string> {
   return dir;
 }
 
-function buildApp(tenantId: string, stateDir: string): Hono {
+function buildApp(stateDir: string): Hono {
   const app = new Hono();
   mountManagementApi(
     app,
@@ -97,7 +97,7 @@ function buildApp(tenantId: string, stateDir: string): Hono {
       db: suite.admin,
       // The all-zero node id (the capture default): this suite uses the management API only for its
       // login route, not origin attribution, so the sentinel keeps behaviour exactly as before Task 6.
-      cfg: { tenantId, nodeId: "00000000-0000-0000-0000-000000000000" },
+      cfg: { nodeId: "00000000-0000-0000-0000-000000000000" },
       secureCookies: false,
       rpId: "localhost",
       origin: "http://localhost",
@@ -106,7 +106,7 @@ function buildApp(tenantId: string, stateDir: string): Hono {
   );
   mountRecoveryBundleApi(
     app,
-    { db: suite.admin, cfg: { tenantId }, stateDir, now: () => new Date("2026-08-29T10:00:00Z") },
+    { db: suite.admin, stateDir, now: () => new Date("2026-08-29T10:00:00Z") },
     () => {},
   );
   return app;
@@ -125,11 +125,10 @@ async function login(app: Hono, email: string): Promise<string> {
 describe("POST /api/box/recovery-bundle (real postgres)", () => {
   let app: Hono;
   let cookie: string;
-  let tenantId: string;
 
   beforeAll(async () => {
-    ({ tenantId } = await setupTenant());
-    app = buildApp(tenantId, await seedStateDir());
+    await setupTenant();
+    app = buildApp(await seedStateDir());
     cookie = await login(app, MANAGER_EMAIL);
   });
 
@@ -178,7 +177,7 @@ describe("POST /api/box/recovery-bundle (real postgres)", () => {
     // A provisioned box missing its own `trading.env` is a box-side fault, not operator error, so
     // the boundary classifies it a STRUCTURED 500 that names the absent file — not a 400 and not an
     // opaque 500. Same authorized manager, a state dir seeded all-but-one.
-    const incompleteApp = buildApp(tenantId, await seedStateDir("trading.env"));
+    const incompleteApp = buildApp(await seedStateDir("trading.env"));
     const incompleteCookie = await login(incompleteApp, MANAGER_EMAIL);
     const res = await incompleteApp.request("/api/box/recovery-bundle", {
       method: "POST",

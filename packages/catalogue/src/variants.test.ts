@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import type { TenantId } from "@waitron/shared";
 import {
   createCatalogue,
   createProduct,
@@ -26,7 +25,6 @@ import { useCatalogueDb } from "../test/fixtures.js";
 
 // PGlite exercises aggregate round-trips; role privileges and races use the PostgreSQL suite.
 const fx = useCatalogueDb();
-let tenantId: TenantId;
 let productId: string;
 let offerId: string;
 let menuId: string;
@@ -41,16 +39,16 @@ const variant = (name: string, unitPrice: string) => ({
 const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 
 beforeEach(async () => {
-  tenantId = await seedTenant(fx.db);
+  await seedTenant(fx.db);
   await run(async (tx) => {
-    const menu = await createCatalogue(tx, tenantId, { name: "Bar" });
+    const menu = await createCatalogue(tx, { name: "Bar" });
     menuId = menu.id;
     const unit = await createUnit(
       tx,
       { name: { en: "each" }, precision: 0, abbreviation: { en: "u" } },
       "en",
     );
-    const product = await createProduct(tx, tenantId, {
+    const product = await createProduct(tx, {
       catalogueId: menu.id,
       categoryId: null,
       name: "Coffee",

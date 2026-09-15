@@ -24,13 +24,13 @@ import {
 import type { Logger } from "./logger.js";
 
 /**
- * The deps the staff schedule API needs — the SAME minimal shape `mountWorkforceApi` takes, plus what
- * `requireSession` reads (only `cfg.tenantId`). No fiscal backend, clock or card provider: these routes
- * touch only the planning tables (`shifts`/`shift_swaps`/`absences`).
+ * The deps the staff schedule API needs: a database handle and nothing else. No fiscal backend,
+ * clock or card provider — these routes touch only the identity session and the planning tables
+ * (`shifts`/`shift_swaps`/`absences`). `mountWorkforceApi` takes a WIDER shape (it also carries the
+ * node id); this one is genuinely just the handle.
  */
 export interface ScheduleApiDeps {
   db: Database;
-  cfg: { tenantId: string };
 }
 
 /**
