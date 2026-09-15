@@ -1,14 +1,12 @@
 import { randomBytes } from "node:crypto";
 import { AppError } from "@waitron/shared";
+import { certificate, type CertExtension } from "@waitron/server-kit/certificate.js";
 import forge from "node-forge";
 import "./errors.js";
 
 /**
  * A private CA and the server certificate it signs, both PEM-encoded — everything the box needs to
- * serve setup-mode HTTPS from a self-signed identity it mints on first boot (onboarding slice 2a).
- * This is the productised, server-cert-only counterpart of `testing/tls.ts`'s `mintMtlsMaterial`,
- * which also mints a CLIENT certificate and a PKCS#12 bundle for the mTLS suite — a different shape
- * this module deliberately does not carry.
+ * serve setup-mode HTTPS from a self-signed identity it mints on first boot.
  */
 export interface SelfSignedMaterial {
   /** The CA certificate, PEM. A setup client trusts THIS to accept the server cert below. */
@@ -33,30 +31,6 @@ export interface MintOptions {
    * twice per mint. Defaults to `forge.pki.rsa.generateKeyPair(2048)`.
    */
   keypair?: () => forge.pki.rsa.KeyPair;
-}
-
-/**
- * The shape `forge.pki.Certificate#setExtensions` actually accepts. The installed `@types/node-forge`
- * types that parameter as `any[]` and exports no `CertificateExtension` — so this is this file's own,
- * narrower stand-in for the extension shapes the two certs below construct, the same idiom
- * `testing/tls.ts` uses. It carries only the fields used here (`cRLSign`, present for the CA, is the
- * one addition over that file's copy; `clientAuth` is dropped — no client cert is minted).
- */
-interface CertExtension {
-  name: string;
-  cA?: boolean;
-  pathLenConstraint?: number;
-  keyCertSign?: boolean;
-  cRLSign?: boolean;
-  digitalSignature?: boolean;
-  keyEncipherment?: boolean;
-  serverAuth?: boolean;
-  altNames?: Array<{ type: number; value?: string; ip?: string }>;
-  // A pre-built extension node-forge has no builder for: `id` (the literal OID), `critical`, and the
-  // raw DER `value` bytes it emits verbatim. See `nameConstraintsExtension`.
-  id?: string;
-  critical?: boolean;
-  value?: string;
 }
 
 /**
@@ -178,26 +152,6 @@ function randomSerial(): string {
   return bytes.toString("hex");
 }
 
-function certificate(
-  subjectCn: string,
-  subjectKeys: forge.pki.rsa.KeyPair,
-  issuer: { cn: string; key: forge.pki.rsa.PrivateKey },
-  serialNumber: string,
-  validity: { notBefore: Date; notAfter: Date },
-  extensions: CertExtension[],
-): forge.pki.Certificate {
-  const cert = forge.pki.createCertificate();
-  cert.publicKey = subjectKeys.publicKey;
-  cert.serialNumber = serialNumber;
-  cert.validity.notBefore = validity.notBefore;
-  cert.validity.notAfter = validity.notAfter;
-  cert.setSubject([{ name: "commonName", value: subjectCn }]);
-  cert.setIssuer([{ name: "commonName", value: issuer.cn }]);
-  cert.setExtensions(extensions);
-  cert.sign(issuer.key, forge.md.sha256.create());
-  return cert;
-}
-
 /**
  * Mint a private CA and a leaf server certificate signed by it, for the box to serve setup-mode
  * HTTPS. The leaf carries every `hostnames` entry as a `dNSName` SAN and every `ipAddresses` entry
@@ -239,8 +193,7 @@ export function mintSelfSignedServerCert(opts: MintOptions): SelfSignedMaterial 
   );
 
   const serverKeys = makeKeypair();
-  // type 2 is dNSName, type 7 is iPAddress — the same encoding `testing/tls.ts` uses, so a client
-  // can dial either a hostname or an IP the leaf carries.
+  // type 2 is dNSName, type 7 is iPAddress, so a client can dial either a hostname or an IP.
   const altNames = [
     ...hostnames.map((value) => ({ type: 2, value })),
     ...ipAddresses.map((ip) => ({ type: 7, ip })),

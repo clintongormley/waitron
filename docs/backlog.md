@@ -1303,8 +1303,6 @@ image constraints under *Detail → Box image*.
   `packages/credentials/src/store.ts`), so a
   row sealed under an older `PURPOSES` list returns a missing field as `undefined` — fail-loudly
   versus keep-serving, to settle before the first consumer relies on it.
-- **Two near-identical node-forge certificate builders** (`self-signed-cert.ts`, `testing/tls.ts`,
-  plus the fiscal module's byte-copy). Extract one; its own PR, it touches the mTLS fixture.
 - **The same hand-built SQL array appears in several packages** — `sql.join` of each value inside
   `array[...]::text[]`, in `packages/catalogue/src/provisioning.ts`,
   `packages/provisioning/src/venue-apply.ts` and `apps/server/src/configuration-transfer.ts` (find
@@ -1328,8 +1326,8 @@ image constraints under *Detail → Box image*.
   normalisation in bookings; a supplier country/identifier scheme before validating purchasing tax
   IDs; the pack's module preset; the refused foral, Canary, Ceuta and Melilla jurisdictions; a
   territory picker in the setup wizard (it offers `ES-common` only).
-- **`fiscal-none` left-behinds:** de-dup the `tls.ts` mTLS fixture; remove the inert
-  `resolveClient`/`skipRetryMs`; regime-agnostic provisioning tests.
+- **`fiscal-none` left-behinds:** remove the inert `resolveClient`/`skipRetryMs`; regime-agnostic
+  provisioning tests.
 - **Test-helper debt:** `provisionTestVenue(db, overrides)` for `apps/server`'s sixty-odd suites; the
   duplicated `boot.*.test.ts` helpers into `apps/server/src/testing/`; a shared
   `useFiscalMirrorPair()` for the two-clone fiscal suites.

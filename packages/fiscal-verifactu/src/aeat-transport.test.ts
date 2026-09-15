@@ -19,7 +19,7 @@ import {
   startMtlsServer,
   type MtlsMaterial,
   type MtlsServer,
-} from "./testing/tls.js";
+} from "@waitron/server-kit/testing/mtls.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 
 const KEY_ENV = {
@@ -247,8 +247,8 @@ describe("the resolved client over a real client-certificate handshake", () => {
     // from a wrong CA or a bad origin (checked: all three leave the count equally unchanged), so it
     // is not a substitute for the `SocketError` check above — but it directly disproves the one
     // thing this test's name asserts and an error TYPE never can: that the server actually accepted
-    // and answered the request. (Mutation-checked: flipping this fixture's own `rejectUnauthorized`
-    // to `false` makes the request succeed and turns this whole test red — see the task report.)
+    // and answered the request. (Flipping `rejectUnauthorized` to `false` in
+    // `packages/server-kit/src/testing/mtls.ts` makes the request succeed and turns this test red.)
     expect(server.requests()).toBe(requestsBefore);
   });
 });

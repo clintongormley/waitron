@@ -35,7 +35,7 @@ import { ALL_MODULES } from "./modules.js";
 import { establishReservedStandbyIdentity, generateStandbyIdentity } from "./reserved-identity.js";
 import { parseEnvFile } from "./env-file.js";
 import { roleUrl } from "./testing/postgres.js";
-import { mintMtlsMaterial } from "./testing/tls.js";
+import { mintMtlsMaterial } from "@waitron/server-kit/testing/mtls.js";
 
 // The headline e2e for the promote action (promote runbook design §8): a booted LOCAL SECONDARY
 // (mode='primary', singleton_role='secondary') files NOTHING; an in-process promote flips
