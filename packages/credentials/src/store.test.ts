@@ -82,13 +82,14 @@ describe("the seal binds each credential to its purpose", () => {
   it("refuses a sealed row moved to another purpose with credentials.decrypt_failed", async () => {
     // The moved-row attack: someone with write access relabels a sealed row so a reader of one
     // purpose is handed another purpose's material. Same key, intact ciphertext and tag — only the
-    // purpose differs, so only the authenticated data can refuse it.
-    const aeat = { pfxBase64: "AAAA", passphrase: "p", certKind: "sello" };
+    // purpose differs, so only the authenticated data can refuse it. Both purposes share the
+    // `payments.` prefix, so a binding to that prefix alone would also open the row.
+    const sumup = { apiKey: "sup_x", merchantCode: "M1", affiliateAppId: "-", affiliateKey: "-" };
     await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
-      await putCredential(tx, RING_V1, { purpose: "fiscal.aeat", value: aeat });
+      await putCredential(tx, RING_V1, { purpose: "payments.sumup", value: sumup });
       await tx.execute(sql`
-        update tenant_credentials set purpose = 'payments.stripe' where purpose = 'fiscal.aeat'`);
+        update tenant_credentials set purpose = 'payments.stripe' where purpose = 'payments.sumup'`);
     });
     const error = await captured(() =>
       withTransaction(suite.db, async (tx) => {
