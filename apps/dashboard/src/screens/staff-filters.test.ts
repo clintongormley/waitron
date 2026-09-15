@@ -3,8 +3,12 @@ import type { DashboardApi, PersonSummary } from "../api/client.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import type { StaffList } from "../widgets/staff-list.js";
 import { StaffScreen } from "./staff-screen.js";
+import { setLocale } from "../i18n/t.js";
 
-afterEach(cleanupWidgets);
+afterEach(() => {
+  cleanupWidgets();
+  setLocale("es-ES");
+});
 
 const people: PersonSummary[] = [
   {
@@ -77,4 +81,19 @@ it("combines role and status filters and can include inactive users", async () =
   role.dispatchEvent(new Event("change"));
   await el.updateComplete;
   expect(shown(el).map((person) => person.displayName)).toEqual(["Inactive Alex"]);
+});
+
+it("explains what current users are in a help tooltip beside the status filter", async () => {
+  setLocale("en-GB");
+  const el = await screen();
+  const status = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=status-filter]")!;
+  const help = el.shadowRoot!.querySelector<HTMLElement>("[data-test=status-filter-help]")!;
+  expect(help.tagName).toBe("WT-HELP-TOOLTIP");
+  expect(help.getAttribute("aria-label")).toBe("About current users");
+  expect(help.textContent?.trim()).toBe(
+    "Current users are everyone who has not been disabled: active users, and pending users (invited, but yet to finish setting up their account).",
+  );
+  // The tooltip sits outside the label, so the dropdown's label text is just "Status".
+  expect(help.closest("label")).toBeNull();
+  expect(status.labels?.[0]?.textContent?.trim()).toBe("Status");
 });
