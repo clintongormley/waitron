@@ -549,6 +549,10 @@ recipe, and a modifier choice can invalidate a claim — adding bacon stops the 
 the dish vegan. [Operator guide](products.md),
 [checkpoint and receipts](superpowers/plans/2026-09-13-product-editor-checkpoint.md),
 [design](superpowers/specs/2026-09-12-product-editor-design.md).
+_Superseded 2026-09-15 (#377):_ the modifier "invalidate a claim" model above is gone — a modifier
+choice no longer stops the till and kitchen calling a dish vegan. Each product and each choice now
+states its own positive `suitableFor` list, shown independently; the app no longer combines a dish
+with its extras. Product-level direct allergen/dietary declarations are unchanged.
 
 What it left open:
 
@@ -611,6 +615,36 @@ What it left open:
   defect. **Next action:** add a polite live region to the choices table naming the moved choice and
   its new position, and cover it with a test that reads the region's text after a key press.
 
+**Modifier nutrition redesign (pass 1) — LANDED #377 (2026-09-15).** Each modifier choice now carries
+its own simple nutrition information, and the app no longer combines a dish with its chosen extras. The
+redundant Yes/no modifier type is gone (the three types are Text, Extras and Options, enforced by a
+`option_groups_type_ck` check). A choice's allergens are one "contains" list — the separate "removes"
+list and the two unused origin lists were dropped from `option_group_items` (everywhere, including the
+`operations.ts` menu resolver). The negative "no longer suitable for" dietary control became a positive
+`suitableFor` list over vegan, vegetarian, halal and kosher, stored in a new `dietary_suitability`
+column. The waiter basket and the kitchen/expo screens now show each item's own allergens and diet as
+text instead of a combined "as-served" figure. The dashboard editor shows one Allergens list and a
+four-item Dietary preferences checklist under a renamed "Nutritional information" section, and a
+modifiers-list row now opens a "products that use this modifier" modal (like Categories). Fiscal records
+are unaffected — the allergen/diet values never enter the invoice hash. Migrations `0027_drop_yes_no_type`,
+`0028_drop_option_item_allergen_overrides`, `0029_dietary_suitability`.
+[Design](superpowers/specs/2026-09-15-modifier-nutrition-redesign-design.md),
+[plan](superpowers/plans/2026-09-15-modifier-nutrition-redesign.md),
+[developer guide](developers/modifiers.md).
+
+What it left open:
+
+- **Pass 2 — icons — is not started.** Pass 1 renders allergens and diets as text pills; the design's
+  pass 2 replaces them with Material Design icons across the dashboard, waiter basket and kitchen/expo
+  screens. It needs its own spec. **Next action:** write the pass-2 spec when the icon work is picked up.
+- **The basket's "not fully reviewed" allergen warning now depends on whether an extra was picked.**
+  In `apps/till/src/widgets/basket.ts` `#allergenRow`, after the dish+extras fold was removed, a dish
+  whose own allergens are unreviewed shows the "not fully reviewed" note only when it also has an
+  option — a leftover of the old fold, since options no longer contribute allergens. The branch's own
+  test asserts the current behaviour, so it was left as-is. **Next action (owner decision):** decide
+  whether an unreviewed dish should show that food-allergen warning always, or never on the basis of
+  options, then make `#allergenRow` depend on the review state alone and update the test.
+
 **Modifiers screen rebuilt — LANDED #370 (2026-09-15).** The `/manage/modifiers` page now uses the
 same shape as the rebuilt Categories screen: one full-width search box with a **Type** filter, a
 table that remembers your last sort and filter for the browser tab and first sorts by name A–Z, and
@@ -644,6 +678,8 @@ What it left open:
 - **The read-only details panel is built inline in the screen (~130 lines).** Every other modal in
   this area is its own widget, so this is the odd one out. **Next action:** extract it into a
   `dashboard-modifier-details` widget, the way choice editing became `dashboard-choice-form`.
+  _Superseded 2026-09-15 (#377):_ the read-only details panel was removed — a modifier row now opens a
+  "products that use this modifier" modal instead — so there is nothing left to extract.
 - **Removing "contains / may contain" and the "reviewed" toggle stopped at modifier choices.** This
   branch built the shared `allergen-dietary-picker` widget and adopted it for choices only. Products,
   ingredients and the till still carry the old contains/may-contain distinction and the reviewed
