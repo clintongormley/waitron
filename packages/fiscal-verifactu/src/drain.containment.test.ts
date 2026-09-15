@@ -119,8 +119,9 @@ describe("drain resolves a client only when it has work", () => {
   // earlier than every gate the pass could compute. `now + skipRetryMs` is not, so it is folded as
   // a MINIMUM — otherwise an abandoned batch would delay a gate the same pass had already computed.
   //
-  // The successful-submission version of this test lives in `drain.fold.test.ts`, which hand-seeds
-  // an `envio_flujo` gate 30s out — no network round trip needed to prove the fold.
+  // The minimum itself — a pass folding TWO instants and reporting the earlier — is pinned in
+  // `drain.test.ts`'s "nextDueAt is folded as a minimum, never assigned" describe, which needs a
+  // failed submit rather than a skip. What this case pins is the skip arm's own instant.
   it("honours an explicit skipRetryMs rather than a package constant", async () => {
     // Pins that the value is READ from deps, not baked in — the assertion that would fail if the
     // fold quietly used DEFAULT_SKIP_RETRY_MS instead of what the caller passed.
@@ -145,7 +146,7 @@ describe("drain resolves a client only when it has work", () => {
     // Narrower than the two tests above on purpose: those prove a REJECTED resolver is contained.
     // This one proves the try/catch in `drain()` wraps the WHOLE unit — resolveClient AND
     // drainDue — not merely the resolveClient call. A resolver that returns a client whose
-    // `submit` rejects would NOT prove this: `drainTenant` already contains that failure in its
+    // `submit` rejects would NOT prove this: `drainDue` already contains that failure in its
     // OWN inner try/catch (backs the batch off, never rethrows — see `drain.ts`'s own scope note
     // on that catch), so it can never reach this outer one either way, wrapped narrowly or not.
     //

@@ -39,7 +39,7 @@ const INERT_TENANT_ID = brandTenantId("00000000-0000-4000-8000-000000000001");
 
 const BOGUS_NODE = "99999999-9999-4999-8999-999999999999";
 
-/** A fresh node under TENANT_A's seeded tenant/location. */
+/** A fresh node under TENANT_A's seeded location. */
 async function seedNodeForA(): Promise<string> {
   return seedNode(pg.db, INERT_TENANT_ID, brandLocationId(TENANT_A.locationId));
 }

@@ -415,6 +415,59 @@ describe("drain — retry backoff on a transient submit failure", () => {
 });
 
 /**
+ * `nextDueAt` is a MINIMUM over every instant a pass computes, which `packages/fiscal`'s own
+ * `DrainResult` doc states as "FOLD, never assign … so an abandoned batch's retry can never delay
+ * an earlier gate the pass had already computed". Losing that quietly defers a submission past the
+ * hour art. 16.4 requires, so it is pinned here rather than left to the prose.
+ *
+ * ONE node, ONE pass, TWO instants — no second taxpayer needed: `backoffBatch` (./drain.ts) folds
+ * `now + backoffMs(intentos)` when the submit throws, and the tail fold after the loop folds `now + t * 1000`, where `t` is the
+ * flow-control row's own `tiempo_espera_seg`. The backoff is folded FIRST, so the two cases below
+ * catch the two ways a fold degrades: an implementation that keeps whichever instant arrived first
+ * fails "the gate is earlier", and one that assigns whatever arrives last fails "the gate is
+ * later". Each case is the other's control.
+ */
+describe("drain — nextDueAt is folded as a minimum, never assigned", () => {
+  const NOW = new Date("2026-07-21T00:01:00Z");
+  const failing: VerifactuClient = {
+    submit: () => Promise.reject(new Error("network down")),
+    consultar: () => Promise.reject(new Error("not this test's subject")),
+  };
+
+  /** One due row, an already-elapsed gate so the pass claims it, and `tiempo_espera_seg` set to
+   * `seconds` so the tail fold lands at `now + seconds`. Cleans up both tables: the row stays
+   * `pendiente` after the backoff, and `envio_flujo` holds ONE row for the whole database. */
+  async function passWithGate(seconds: number): Promise<Awaited<ReturnType<typeof drain>>> {
+    const seeded = await seedPendingEnvios(pg.db, { count: 1 });
+    await pg.db.execute(sql`
+      insert into envio_flujo (id, proximo_envio_en, tiempo_espera_seg)
+      values (1, ${new Date(NOW.getTime() - 1000).toISOString()}, ${seconds})
+    `);
+    try {
+      return await drain(drainDeps(staticResolver(failing)), NOW);
+    } finally {
+      await pg.db.execute(sql`delete from envios where ${ownChain(seeded)}`);
+      await pg.db.execute(sql`delete from envio_flujo`);
+    }
+  }
+
+  it("reports the flow-control gate when it is earlier than the failed batch's backoff", async () => {
+    // 10s gate against a 60s backoff (`backoffMs(1)`): the gate wins, so a fold that kept the
+    // first instant it was handed — the backoff — reports 60s here and fails.
+    const result = await passWithGate(10);
+    expect(result.nextDueAt).toEqual(new Date(NOW.getTime() + 10_000));
+  });
+
+  it("reports the failed batch's backoff when the flow-control gate is later", async () => {
+    // 600s gate against the same 60s backoff: the backoff wins, so a fold that assigned whatever
+    // arrived last — the gate — reports 600s here and fails. `backoffMs(1)`, not a bare 60_000, so
+    // the assertion follows the constant rather than restating it.
+    const result = await passWithGate(600);
+    expect(result.nextDueAt).toEqual(new Date(NOW.getTime() + backoffMs(1)));
+  });
+});
+
+/**
  * Task 9: replaces the "everything accepted" happy path with real per-record resolution via
  * `resolveEstadoEfectivo` — rejection halts the chain and raises a structured incident,
  * AceptadoConErrores is still an accept but raises a warning, and a record that lands on an
@@ -597,10 +650,10 @@ describe("drain — per-record resolution: rejection, halting, incidents", () =>
  * always `RegistroDuplicado`'s own inner detail (or, for Route B, a follow-up consulta).
  *
  * `tiempoEsperaInicial: 5`, and every two-drain test's second call at `00:01:30Z` rather than the
- * suite's usual 60s-later pattern: `drain()`'s own `tenantsWithWork` sweep is global across the
- * WHOLE shared `pg.db` (this file's own repeated note — e.g. the "per-record resolution" describe
- * above). Confirmed live while implementing this task: this file's "retry backoff on a transient
- * submit failure" describe deliberately leaves its OWN tenant `pendiente`, due again at exactly
+ * suite's usual 60s-later pattern: `drain()` claims every due row in the WHOLE shared `pg.db`
+ * (this file's own repeated note — e.g. the "per-record resolution" describe above). Confirmed
+ * live while implementing this task: this file's "retry backoff on a transient submit failure"
+ * describe deliberately leaves its OWN row `pendiente`, due again at exactly
  * `2026-07-21T00:02:00Z`, and gate-less (its `envio_flujo` row also lands at exactly that instant —
  * see that describe's own scenario). A second drain at the suite's usual `:03:00Z` is AT OR PAST
  * that shared instant, and the very first test below to reach it silently sweeps that OTHER test's
@@ -946,7 +999,7 @@ describe("drain — the deployment-environment guard", () => {
       // in place it would sit `pendiente` forever in this file's SHARED `pg.db`, violating the
       // "batching (the >cap split)" describe's own documented assumption that nothing else here
       // leaves work behind (its header comment, corrected in this same fix round). Deleting the
-      // `envios` row (not the tenant/registro — `envios_tenants_with_work` reads only this table)
+      // `envios` row (not the registro — `envios_work_due` reads only this table)
       // is `boot.test.ts`'s own established pattern for the identical need.
       await pg.db.execute(sql`delete from envios where ${ownChain(seeded)}`);
     }
@@ -1092,7 +1145,7 @@ describe("drain — the deployment-environment guard", () => {
    * window — the same shape the production cap of 1000 would need 1000 refused rows to reproduce); a
    * `seedIndependentChain` row on a second, UNRELATED chain is forced to sort strictly LAST
    * (`sifId: "ffffffff-..."`, a near-maximal literal `registerSif`'s own `defaultRandom()` id could
-   * never produce) — so only `drainTenant`'s retry loop, excluding the now-blocked chain from a
+   * never produce) — so only `drainDue`'s retry loop, excluding the now-blocked chain from a
    * SECOND `claimBatch` call, can ever reach it. Before the fix this healthy row was unreachable,
    * this pass and every later one, since nothing about a refused row changes its own due-ness.
    *
@@ -1105,7 +1158,7 @@ describe("drain — the deployment-environment guard", () => {
     // Seeding lives INSIDE the try (I3's own fix-round-2 correction — same reasoning as the
     // chain-halt test above): a throw between the two seed calls would otherwise leak
     // permanently-`pendiente` rows into this shared `pg.db` with no `finally` covering them. Only the
-    // tenant id crosses into `finally` — same "avoid narrowing through a closure" reasoning as the
+    // node id crosses into `finally` — same "avoid narrowing through a closure" reasoning as the
     // chain-halt test above.
     let cleanupNodeId: string | undefined;
     try {
