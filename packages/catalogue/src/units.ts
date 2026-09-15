@@ -29,6 +29,24 @@ export interface SellableUnit extends Unit {
   hardwareUnit: "kg" | "g" | "mg" | null;
 }
 
+/** The unit a product reads as when it has NO stored unit. It is NEVER written to the units table or a
+ * product_units row (a no-unit product simply has no row); `sellableUnit()` returns it for the null
+ * join so Product/AvailableProduct.unit stay non-null and the sale/receipt paths are unchanged.
+ *
+ * Its id is a SENTINEL UUID, not "": the live order path writes `offer.unit.id` into
+ * `working_line_contexts.unit_id` (`uuid NOT NULL`, no FK — venue-service schema/service.ts:278,
+ * operations.ts:870), so the id must be a valid UUID. This matches the till's own "each" fallback id
+ * (apps/till/src/widgets/product-name.ts:28) so server and till agree. Nothing looks it up as a real
+ * unit and it never reaches product_units. */
+export const EACH_UNIT_ID = "00000000-0000-0000-0000-000000000001";
+export const EACH_UNIT: SellableUnit = {
+  id: EACH_UNIT_ID,
+  name: { en: "Each", es: "Unidad", ca: "Unitat", gl: "Unidade", eu: "Unitatea" },
+  abbreviation: { en: "ea", es: "ud", ca: "u", gl: "u", eu: "u" },
+  precision: 0,
+  hardwareUnit: null,
+};
+
 export interface CreateUnitInput {
   name: Record<string, string>;
   precision: number;
@@ -186,37 +204,58 @@ export async function assignProductUnit(
  * its row locks in one scan instead of interleaving N separate statements' locks across a loop. The
  * scan order is PostgreSQL's choice, not the caller's list order, which is what `units.pg.test.ts`
  * runs two opposite-order reassignments against. An id that is not currently on `sourceUnitId` —
- * an unknown id or another tenant's included — matches no row and is skipped, never an error. */
+ * an unknown id or another tenant's included — matches no row and is skipped, never an error. A
+ * `null` target instead deletes those rows and, in the same transaction, sets their `pricing_unit`
+ * to `'each'`, so the listed products become Each (no unit) with the no-unit ⟺ each invariant held. */
 export async function reassignProductsToUnit(
   tx: Transaction,
   tenantId: string,
   sourceUnitId: string,
   productIds: readonly string[],
-  targetUnitId: string,
+  targetUnitId: string | null,
 ): Promise<void> {
+  const scope = and(
+    eq(productUnits.tenantId, tenantId),
+    eq(productUnits.unitId, sourceUnitId),
+    inArray(productUnits.productId, productIds),
+  );
+  if (targetUnitId === null) {
+    // Reassign to Each: the listed products still on the source unit lose their unit rows and, in the
+    // same transaction, return to each-priced so the no-unit ⟺ pricing_unit='each' invariant holds.
+    // The UPDATE runs BEFORE the DELETE so it can scope by the product_units rows still present, and
+    // the two are awaited in turn (pg queueing — CLAUDE.md §3).
+    await tx
+      .update(products)
+      .set({ pricingUnit: "each" })
+      .where(
+        and(
+          eq(products.tenantId, tenantId),
+          inArray(
+            products.id,
+            tx.select({ id: productUnits.productId }).from(productUnits).where(scope),
+          ),
+        ),
+      );
+    await tx.delete(productUnits).where(scope);
+    return;
+  }
   const [target] = await tx
     .select({ id: units.id })
     .from(units)
     .where(and(eq(units.tenantId, tenantId), eq(units.id, targetUnitId)))
     .for("key share");
   if (target === undefined) throw new AppError("unit.not_found", { unitId: targetUnitId });
-  await tx
-    .update(productUnits)
-    .set({ unitId: targetUnitId })
-    .where(
-      and(
-        eq(productUnits.tenantId, tenantId),
-        eq(productUnits.unitId, sourceUnitId),
-        inArray(productUnits.productId, productIds),
-      ),
-    );
+  await tx.update(productUnits).set({ unitId: targetUnitId }).where(scope);
 }
 
+/** The editor read of a product's stored unit: `null` when it has no `product_units` row (it reads as
+ * Each in the form). Deliberately different from the display reads, which return the synthetic Each
+ * unit for the same product — the editor needs the real "no unit" so the form can preselect Each. */
 export async function readProductUnitId(
   tx: Transaction,
   tenantId: string,
   productId: string,
-): Promise<string> {
+): Promise<string | null> {
   const [row] = await tx
     .select({ productId: products.id, unitId: productUnits.unitId })
     .from(products)
@@ -226,8 +265,18 @@ export async function readProductUnitId(
     )
     .where(and(eq(products.tenantId, tenantId), eq(products.id, productId)));
   if (row === undefined) throw new AppError("product.not_found", { productId });
-  if (row.unitId === null) throw new AppError("unit.not_found", { unitId: productId });
   return row.unitId;
+}
+
+/** Remove a product's unit assignment (it then reads as Each). A no-op when there is no row. */
+export async function clearProductUnit(
+  tx: Transaction,
+  tenantId: string,
+  productId: string,
+): Promise<void> {
+  await tx
+    .delete(productUnits)
+    .where(and(eq(productUnits.tenantId, tenantId), eq(productUnits.productId, productId)));
 }
 
 /** The products that assign this unit, each with its availability, ordered stably by product id.

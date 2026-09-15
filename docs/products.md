@@ -5,8 +5,10 @@ modifiers are available in a particular service. Keeping those jobs separate let
 coffee on several menus without copying its kitchen name, dietary declarations or choices.
 
 Open **Products** in the management dashboard and choose **Add product**. Give the product a name in
-your default content language, choose its selling unit, enter its price and choose its tax treatment.
-The tax label shows the same percentage that Waitron uses to calculate the sale.
+your default content language, enter its price and choose its tax treatment. A product is sold by the
+each unless you say otherwise, so choosing a selling unit is optional — pick one only when you sell
+the product by weight or volume, such as grams or litres. The tax label shows the same percentage
+that Waitron uses to calculate the sale.
 
 Choose **No tax (0%)** when you want the existing zero-rate tax class. This is a real selection, so
 leaving the field blank still prevents the product from being saved.

@@ -11,7 +11,7 @@ import {
 import type { Transaction } from "@waitron/db";
 import type { TenantId } from "@waitron/shared";
 import { priceBasket } from "./pricing.js";
-import type { PriceableProduct } from "./pricing.js";
+import type { PriceableProduct, PricingUnit } from "./pricing.js";
 import {
   addCatalogueToLocation,
   applyDietDerivation,
@@ -51,7 +51,7 @@ import {
 } from "./operations.js";
 import { AppError } from "@waitron/shared";
 import type { AvailableProduct } from "./operations.js";
-import { createUnit } from "./units.js";
+import { createUnit, EACH_UNIT, readProductUnitId } from "./units.js";
 import { seedCatalogueFixture, seedVenue, useCatalogueDb } from "../test/fixtures.js";
 
 // Query behaviour runs on PGlite; each case starts with empty authoring tables.
@@ -437,6 +437,156 @@ describe("catalogue operations", () => {
       expect(seenHam.vatClass).toBe("reduced");
       expect(seenHam.descriptions).toEqual({ en: "sliced ham" });
       expect(seenHam.active).toBe(true);
+    });
+  });
+
+  it("reads a product with no unit as the synthetic Each unit", async () => {
+    await asTenant(async (tx) => {
+      const cat = await createCatalogue(tx, tenantId, { name: "Deli" });
+      // Create a normal product, then remove its product_units row so the read exercises the
+      // null-join branch of a product that has no stored unit at all.
+      const product = await createProduct(tx, tenantId, {
+        catalogueId: cat.id,
+        categoryId: null,
+        descriptions: { en: "loose sweets" },
+        pricingUnit: "each",
+        unitPrice: "0.00",
+        vatClass: "general",
+      });
+      await tx.execute(
+        sql`delete from product_units where tenant_id = ${tenantId} and product_id = ${product.id}`,
+      );
+      const [seen] = await listProducts(tx, tenantId, cat.id);
+      // toEqual(EACH_UNIT) asserts the whole synthetic unit, hardwareUnit: null included.
+      expect(seen!.unit).toEqual(EACH_UNIT);
+      expect(seen!.unit.id).toBe("00000000-0000-0000-0000-000000000001");
+      expect(seen!.unitId).toBe("00000000-0000-0000-0000-000000000001");
+      expect(seen!.pricingUnit).toBe("each");
+    });
+  });
+
+  it("creates a product with no unit when unitId is null", async () => {
+    await asTenant(async (tx) => {
+      const cat = await createCatalogue(tx, tenantId, { name: "Deli" });
+      const created = await createProduct(tx, tenantId, {
+        catalogueId: cat.id,
+        categoryId: null,
+        descriptions: { en: "loose sweets" },
+        unitId: null,
+        unitPrice: "0.00",
+        vatClass: "general",
+      });
+      expect(created.pricingUnit).toBe("each");
+      expect(created.unit).toEqual(EACH_UNIT);
+      expect(await readProductUnitId(tx, tenantId, created.id)).toBeNull();
+    });
+  });
+
+  it("clears a product's unit when updated to null", async () => {
+    await asTenant(async (tx) => {
+      const cat = await createCatalogue(tx, tenantId, { name: "Deli" });
+      const created = await createProduct(tx, tenantId, {
+        catalogueId: cat.id,
+        categoryId: null,
+        descriptions: { en: "ham" },
+        unitId: kgUnitId,
+        unitPrice: "24.90",
+        vatClass: "reduced",
+      });
+      await updateProduct(tx, tenantId, created.id, { unitId: null });
+      expect(await readProductUnitId(tx, tenantId, created.id)).toBeNull();
+      const [after] = await tx
+        .select({ p: products.pricingUnit })
+        .from(products)
+        .where(eq(products.id, created.id));
+      expect(after!.p).toBe("each");
+    });
+  });
+
+  it("leaves a product's unit unchanged when neither unitId nor pricingUnit is patched", async () => {
+    await asTenant(async (tx) => {
+      const cat = await createCatalogue(tx, tenantId, { name: "Deli" });
+      const created = await createProduct(tx, tenantId, {
+        catalogueId: cat.id,
+        categoryId: null,
+        descriptions: { en: "ham" },
+        unitId: kgUnitId,
+        unitPrice: "24.90",
+        vatClass: "reduced",
+      });
+      await updateProduct(tx, tenantId, created.id, { unitPrice: "25.00" });
+      expect(await readProductUnitId(tx, tenantId, created.id)).toBe(kgUnitId);
+    });
+  });
+
+  it("legacy pricingUnit 'each' creates a product with no unit", async () => {
+    await asTenant(async (tx) => {
+      const cat = await createCatalogue(tx, tenantId, { name: "Deli" });
+      const created = await createProduct(tx, tenantId, {
+        catalogueId: cat.id,
+        categoryId: null,
+        descriptions: { en: "loose sweets" },
+        pricingUnit: "each",
+        unitPrice: "0.00",
+        vatClass: "general",
+      });
+      expect(await readProductUnitId(tx, tenantId, created.id)).toBeNull();
+      expect(created.pricingUnit).toBe("each");
+    });
+  });
+
+  it("still rejects a create with neither unitId nor pricingUnit", async () => {
+    await asTenant(async (tx) => {
+      const cat = await createCatalogue(tx, tenantId, { name: "Deli" });
+      await expect(
+        createProduct(tx, tenantId, {
+          catalogueId: cat.id,
+          categoryId: null,
+          descriptions: { en: "mystery" },
+          unitPrice: "0.00",
+          vatClass: "general",
+        }),
+      ).rejects.toMatchObject({ code: "management.request_invalid" });
+    });
+  });
+
+  it("rejects a create whose legacy pricingUnit is neither 'each' nor 'weight'", async () => {
+    await asTenant(async (tx) => {
+      const cat = await createCatalogue(tx, tenantId, { name: "Deli" });
+      await expect(
+        createProduct(tx, tenantId, {
+          catalogueId: cat.id,
+          categoryId: null,
+          descriptions: { en: "mystery" },
+          // A stray legacy value must be rejected at the boundary, not treated as weight.
+          pricingUnit: "portion" as PricingUnit,
+          unitPrice: "0.00",
+          vatClass: "general",
+        }),
+      ).rejects.toMatchObject({
+        code: "management.request_invalid",
+        params: { field: "pricingUnit" },
+      });
+    });
+  });
+
+  it("rejects an update whose legacy pricingUnit is neither 'each' nor 'weight'", async () => {
+    await asTenant(async (tx) => {
+      const cat = await createCatalogue(tx, tenantId, { name: "Deli" });
+      const product = await createProduct(tx, tenantId, {
+        catalogueId: cat.id,
+        categoryId: null,
+        descriptions: { en: "ham" },
+        unitId: kgUnitId,
+        unitPrice: "24.90",
+        vatClass: "reduced",
+      });
+      await expect(
+        updateProduct(tx, tenantId, product.id, { pricingUnit: "portion" as PricingUnit }),
+      ).rejects.toMatchObject({
+        code: "management.request_invalid",
+        params: { field: "pricingUnit" },
+      });
     });
   });
 

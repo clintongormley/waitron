@@ -326,7 +326,6 @@ export class CatalogueScreen extends LitElement {
         .childOpen=${this.#child.kind !== null}
         .locales=${locales}
         .value=${this.editorValue}
-        .defaultUnitId=${this.units[0]?.id ?? ""}
         .units=${this.units}
         .categories=${this.categories}
         .modifiers=${this.modifiers}

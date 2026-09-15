@@ -6,6 +6,12 @@ product editor and the final integration of Units, Categories and Modifiers.
 Naming decision, 2026-09-13: display `primaryCategoryId` as **Reporting Category**. Use this name
 in its label and validation messages, as confirmed in the shared design.
 
+Update, 2026-09-15: the Unit field below is no longer required. A product may have no unit, which
+shows as **Each** and is never stored; the seeded "each" unit was dropped. The "Required, defaults
+to the existing each unit" row in the field table records the original design, not current
+behaviour. See `2026-09-15-optional-product-unit-design.md`; the current product-editor design is
+`2026-09-15-product-editor-rework-design.md`.
+
 You build a product from a name, unit, price and tax choice, then add the detail it needs. You can
 choose existing categories/modifiers/units or create them without leaving the product draft. The
 list and editor are product-library screens; menus continue to decide which products are offered

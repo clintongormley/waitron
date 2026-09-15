@@ -433,12 +433,15 @@ What it left open:
   from a second pair of eyes. Worth knowing before anyone treats those paths as double-checked.
 
 **Product selling units — LANDED #342 (2026-09-13).** You now say what you actually sell a product
-by — each, grams, kilograms, millilitres, litres, or a unit you invent yourself — and how many decimal
+by — by the each (the default when you choose nothing), or by weight or volume: grams, milligrams,
+kilograms, millilitres, litres, or a unit you invent yourself — and how many decimal
 places its quantity may have (0 to 3, where 0 means whole numbers only). A price is always a price per
 that unit: choosing grams after pricing per kilo does not convert anything, it just means the number
 now reads as a price per gram. Units get their own dashboard page, and a new venue is seeded with the
-six above; editing or deleting a seeded unit survives provisioning running again, because a durable
-per-tenant marker records that seeding already happened. Deleting a unit is refused while any product
+five weight-and-volume units above (grams, milligrams, kilograms, millilitres, litres); Each is the
+implicit default for a product with no unit, not a seeded unit, so a product may have no unit at all —
+it simply shows as Each and is never stored. Editing or deleting a seeded unit survives provisioning
+running again, because a durable per-tenant marker records that seeding already happened. Deleting a unit is refused while any product
 uses it, including products that are switched off, and the refusal names the products. Renaming a unit
 or changing its precision is allowed while it is in use: new quantities follow the new rule and
 quantities already recorded keep the unit name and precision they were sold under, frozen onto the
@@ -457,7 +460,9 @@ shared table conventions — the Add button sits at the header, the table has it
 precision filter, row actions are left-aligned, and the last sort and filter are remembered per tab;
 its old "Decimal places" field is now labelled **Precision** and shows the value as the locale's
 decimal marker followed by that many zeroes (`,000` in Spanish, `.000` in English). The seeded
-minority-language unit names and the `each` abbreviation are drafts pending owner confirmation.
+minority-language unit names are drafts pending owner confirmation. (The seeded `each` unit has since
+been dropped: a product's unit is now optional and a product with no unit simply shows as Each,
+never stored.)
 [Design](superpowers/specs/2026-09-14-units-screen-and-abbreviation-design.md),
 [plan](superpowers/plans/2026-09-14-units-screen-and-abbreviation.md).
 

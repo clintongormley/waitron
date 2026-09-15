@@ -35,7 +35,7 @@ function emptyDraft(): ProductEditorDraft {
     description: null,
     kitchenName: null,
     image: null,
-    unitId: "",
+    unitId: null,
     unitPrice: "0.00",
     available: true,
     vatClass: "general",
@@ -130,7 +130,6 @@ export class ProductEditor extends LitElement {
   }[];
   @property({ attribute: false }) fieldErrors: Record<string, string> = {};
   @property({ attribute: false }) api?: DashboardApi;
-  @property() defaultUnitId = "";
   @state() private draft: ProductEditorDraft = emptyDraft();
   @state() private errors: Record<string, string> = {};
   @state() private imageOpen = false;
@@ -144,9 +143,7 @@ export class ProductEditor extends LitElement {
 
   override willUpdate(changed: PropertyValues): void {
     if (changed.has("value") || (changed.has("open") && this.open)) {
-      this.draft = this.value
-        ? structuredClone(this.value)
-        : { ...emptyDraft(), unitId: this.defaultUnitId };
+      this.draft = this.value ? structuredClone(this.value) : emptyDraft();
       this.generation++;
       this.allergenOpen = false;
       this.imageOpen = false;
@@ -245,8 +242,6 @@ export class ProductEditor extends LitElement {
     const defaultLanguage = this.locales[0] ?? "en";
     if (!this.draft.name[defaultLanguage]?.trim())
       errors[`name-${defaultLanguage}`] = t("editor.name_required");
-    if (!this.units.some((unit) => unit.id === this.draft.unitId))
-      errors.unit = t("editor.unit_required");
     const price = /^(0|[1-9]\d{0,9})(\.\d{1,2})?$/;
     if (!price.test(this.draft.unitPrice)) errors["unit-price"] = t("editor.price_invalid");
     if (!this.taxes.some((tax) => tax.id === this.draft.vatClass))
@@ -571,21 +566,20 @@ export class ProductEditor extends LitElement {
           ><h3 slot="header">${t("editor.selling")}</h3>
           <div class="fields">
             <label
-              >${t("product.unit")} *<select
+              >${t("product.unit")}<select
                 name="unit"
-                .value=${this.draft.unitId}
-                aria-required="true"
-                aria-invalid=${this.error("unit") ? "true" : "false"}
-                aria-describedby="unit-error"
+                .value=${this.draft.unitId ?? ""}
                 @change=${(event: Event) => {
                   event.stopPropagation();
-                  this.change("unitId", (event.target as HTMLSelectElement).value);
+                  this.change("unitId", (event.target as HTMLSelectElement).value || null);
                 }}
               >
-                <option value="">${t("editor.choose")}</option>
+                <option value="" .selected=${this.draft.unitId === null}>
+                  ${t("editor.unit_each")}
+                </option>
                 ${this.units.map((unit) => html`<option value=${unit.id} .selected=${unit.id === this.draft.unitId}>${this.unitLabel(unit)}</option>`)}
               </select></label
-            ><span class="error" id="unit-error">${this.error("unit")}</span>
+            >
             <wt-button
               variant="secondary"
               data-test="add-unit"

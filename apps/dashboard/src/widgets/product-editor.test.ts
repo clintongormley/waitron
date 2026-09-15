@@ -135,7 +135,7 @@ it("explains missing required fields together and retains entered values", async
   const summary = el.shadowRoot!.querySelector<HTMLElement & { errors: string[] }>(
     "wt-form-error-summary",
   )!;
-  expect(summary.errors.length).toBeGreaterThanOrEqual(3);
+  expect(summary.errors.length).toBeGreaterThanOrEqual(2);
   expect((el.shadowRoot!.querySelector("[name=unit-price]") as HTMLInputElement).value).toBe("-1");
 });
 
@@ -270,12 +270,10 @@ it("associates server and client errors with native selects", async () => {
   });
   save(el);
   await el.updateComplete;
-  for (const name of ["unit", "tax"]) {
-    const select = el.shadowRoot!.querySelector(`[name=${name}]`)!;
-    expect(select.getAttribute("aria-invalid")).toBe("true");
-    const error = el.shadowRoot!.getElementById(select.getAttribute("aria-describedby")!);
-    expect(error?.textContent?.trim()).toBeTruthy();
-  }
+  const select = el.shadowRoot!.querySelector(`[name=tax]`)!;
+  expect(select.getAttribute("aria-invalid")).toBe("true");
+  const error = el.shadowRoot!.getElementById(select.getAttribute("aria-describedby")!);
+  expect(error?.textContent?.trim()).toBeTruthy();
   expect(el.shadowRoot!.getElementById("tax-error")!.textContent).toBe(
     "Tax is no longer available",
   );
@@ -339,6 +337,50 @@ it("keeps station and course routing available for an existing product", async (
     productId: "product-1",
     courseId: null,
   });
+});
+
+it("defaults a new product to Each (no unit)", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    locales: ["en"],
+    units: [{ id: "kg", name: { en: "Kilogram" }, abbreviation: { en: "kg" } }],
+  });
+  const select = el.shadowRoot!.querySelector<HTMLSelectElement>('select[name="unit"]')!;
+  expect(select.value).toBe(""); // the Each option
+  expect(el.shadowRoot!.querySelector('[data-test="add-unit"]')).toBeTruthy();
+});
+
+it("submits unitId null when Each stays selected", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    locales: ["en"],
+    units: [{ id: "kg", name: { en: "Kilogram" }, abbreviation: { en: "kg" } }],
+    taxChoices: [{ id: "general", rate: "21.00", label: "General" }],
+  });
+  const submit = vi.fn();
+  el.addEventListener("wt-submit", submit);
+  await input(el, "name-en", "Water");
+  await input(el, "unit-price", "1.00");
+  save(el);
+  expect(submit).toHaveBeenCalledOnce();
+  expect(submit.mock.calls[0]![0].detail.value.unitId).toBeNull();
+});
+
+it("submits the chosen real unit and marks it selected after load", async () => {
+  const kg = { id: "kg", name: { en: "Kilogram" }, abbreviation: { en: "kg" } };
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: { ...product, unitId: kg.id },
+    locales: ["en"],
+    units: [kg],
+    taxChoices: [{ id: "reduced", rate: "10.00", label: "Reduced" }],
+  });
+  const select = el.shadowRoot!.querySelector<HTMLSelectElement>('select[name="unit"]')!;
+  expect(select.value).toBe(kg.id);
+  const submit = vi.fn();
+  el.addEventListener("wt-submit", submit);
+  save(el);
+  expect(submit.mock.calls[0]![0].detail.value.unitId).toBe(kg.id);
 });
 
 it("shows the resolver's rates, including a fractional rate supplied by a controlled fixture", async () => {

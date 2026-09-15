@@ -23,8 +23,8 @@ const emulateColorScheme: BrowserCommand<[colorScheme: ColorScheme]> = async (
 };
 
 export default defineConfig({
-  // Prebundle the table directive so discovering it cannot reload an in-flight browser test.
-  optimizeDeps: { include: ["lit/directives/repeat.js"] },
+  // Prebundle the table directives so discovering one cannot reload an in-flight browser test.
+  optimizeDeps: { include: ["lit/directives/repeat.js", "lit/directives/class-map.js"] },
   test: {
     globals: true,
     // A crashed Stryker run leaves .stryker-tmp holding mutated copies of the

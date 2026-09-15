@@ -2,6 +2,11 @@
 
 Read the [shared design](2026-09-12-products-overhaul-design.md) first.
 
+Update, 2026-09-15: a product's unit is now optional. "Each" is no longer a sellable/seeded unit —
+it is the absence of a unit (shown as Each, never stored), and the seeded `each` unit was dropped.
+The "such as each, grams or kilograms" wording below records the original required-unit model, not
+current behaviour. See `2026-09-15-optional-product-unit-design.md`.
+
 You choose the unit you actually sell, such as each, grams or kilograms, and set how many decimal
 places a quantity may contain. A price of 24.90 per kg with a quantity of 0.250 produces a gross
 line total of 6.23 using the existing money rounding. A price per gram is a separate price; choosing

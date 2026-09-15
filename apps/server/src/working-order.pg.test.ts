@@ -7,6 +7,7 @@ import {
   createCatalogue,
   createCategory,
   createProduct,
+  EACH_UNIT,
   listAvailableProducts,
 } from "@waitron/catalogue";
 import type { AvailableProduct } from "@waitron/catalogue";
@@ -1563,14 +1564,11 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
     const labels = await frozenUnitLabels(id);
     expect(labels.workingOrderLine).toEqual(abbreviation);
     expect(labels.saleLine).toEqual(abbreviation);
-    // Read the LIVE unit name back and confirm the frozen label is not it — the short form was
-    // frozen, not the name. Read from the DB rather than restated so this cannot go stale if the
-    // provisioning seed's names change.
-    const { rows: unitRows } = await suite.admin.execute<{ name: Record<string, string> }>(sql`
-      select name from units where tenant_id = ${cfg.tenantId} and seed_key = 'each'`);
-    const liveName = unitRows[0]!.name;
-    expect(liveName.en.toLowerCase()).toBe("each");
-    expect(labels.saleLine).not.toEqual(liveName);
+    // Confirm the frozen label is the abbreviation, not the full unit name — the short form was
+    // frozen, not the name. The live "Each" unit is now the synthetic `EACH_UNIT` defined in code
+    // (there is no seeded "each" row any more), so its name comes from there.
+    expect(EACH_UNIT.name.en.toLowerCase()).toBe("each");
+    expect(labels.saleLine).not.toEqual(EACH_UNIT.name);
   });
 
   // MODE I (invoice_first): at PLACE issue a DEFERRED (unpaid) chained invoice, open → placed, and it

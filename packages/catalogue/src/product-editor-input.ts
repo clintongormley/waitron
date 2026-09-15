@@ -10,7 +10,7 @@ export interface ProductEditorInput {
   description: Record<string, string> | null;
   kitchenName: string | null;
   image: string | null;
-  unitId: string;
+  unitId: string | null;
   unitPrice: string;
   available: boolean;
   vatClass: VatClass;
@@ -41,6 +41,10 @@ function id(value: unknown, field: string): string {
   if (typeof value !== "string" || !isUuid(value)) invalid(field);
   return value.toLowerCase();
 }
+/** `null` (the Each option) parses to null; any other value must be a uuid, or it throws. */
+function nullableId(value: unknown, field: string): string | null {
+  return value === null ? null : id(value, field);
+}
 function ids(value: unknown, field: string): string[] {
   if (!Array.isArray(value)) invalid(field);
   const values = value.map((value) => id(value, field));
@@ -67,7 +71,7 @@ export function parseProductEditorInput(value: unknown): ProductEditorInput {
   const name = translations(body.name, "name");
   const description =
     body.description === null ? null : translations(body.description, "description");
-  const unitId = id(body.unitId, "unitId");
+  const unitId = nullableId(body.unitId, "unitId");
   const categoryIds = ids(body.categoryIds, "categoryIds");
   const modifierIds = ids(body.modifierIds, "modifierIds");
   const primaryCategoryId =

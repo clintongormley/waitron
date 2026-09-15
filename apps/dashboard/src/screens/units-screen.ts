@@ -18,6 +18,10 @@ import "@waitron/ui/src/components/wt-row-actions.js";
 
 type UnitError = { code?: string; params?: { products?: ProductUsingUnit[] } };
 
+/** The reassign target that means "no unit" (Each). Distinct from a uuid and from the placeholder
+ * "", so the disabled guard treats it as a real choice; `#changeUnit` maps it to a null target. */
+const REASSIGN_EACH = "__each__";
+
 const decimalMarkers = new Map<string, string>();
 function decimalMarker(locale: string): string {
   let marker = decimalMarkers.get(locale);
@@ -222,6 +226,22 @@ export class UnitsScreen extends LitElement {
     void this.#deleteUnit(unit.id);
   }
 
+  /** Clicking a unit row opens the same products modal a refused delete does — here to view and
+   * reassign, not because a delete failed. Fetches the products, then reuses `#openInUse`. */
+  async #openUnitProducts(unit: Unit): Promise<void> {
+    if (this.busy) return;
+    this.busy = true;
+    this.error = null;
+    try {
+      const products = await this.api.listUnitProducts(unit.id);
+      this.#openInUse(unit.id, products);
+    } catch (error) {
+      this.error = error as UnitError;
+    } finally {
+      this.busy = false;
+    }
+  }
+
   #openInUse(unitId: string, products: ProductUsingUnit[]): void {
     this.inUseUnitId = unitId;
     this.inUseProducts = products;
@@ -255,11 +275,12 @@ export class UnitsScreen extends LitElement {
       return;
     this.busy = true;
     this.error = null;
+    const target = this.reassignTarget === REASSIGN_EACH ? null : this.reassignTarget;
     try {
       this.inUseProducts = await this.api.reassignProductsUnit(
         this.inUseUnitId,
         this.selectedProducts,
-        this.reassignTarget,
+        target,
       );
       this.selectedProducts = [];
       this.reassignTarget = "";
@@ -424,6 +445,8 @@ export class UnitsScreen extends LitElement {
         .rows=${this.units}
         .columns=${this.#columns()}
         .rowKey=${(unit: Unit) => unit.id}
+        .rowClick=${(unit: Unit) => void this.#openUnitProducts(unit)}
+        .rowClickLabel=${(unit: Unit) => `${t("units.view_products")}: ${localizedName(unit.name)}`}
         .loading=${this.loading}
         emptyMessage=${t("units.empty")}
       ></wt-data-table>
@@ -472,6 +495,7 @@ export class UnitsScreen extends LitElement {
                       }}
                     >
                       <option value="">${t("units.change_unit_placeholder")}</option>
+                      <option value=${REASSIGN_EACH}>${t("units.change_unit_each")}</option>
                       ${otherUnits.map(
                         (unit) =>
                           html`<option value=${unit.id}>${localizedName(unit.name)}</option>`,
