@@ -8,7 +8,7 @@ import type { ServerType } from "@hono/node-server";
 import { Hono } from "hono";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildServeOptions } from "./tls.js";
-import { mintMtlsMaterial } from "./testing/tls.js";
+import { mintMtlsMaterial } from "@waitron/server-kit/testing/mtls.js";
 
 /**
  * `buildServeOptions` is the whole of this task's TLS surface: with no `tls` it hands `serve` the

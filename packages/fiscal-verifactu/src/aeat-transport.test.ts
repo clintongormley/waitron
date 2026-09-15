@@ -19,7 +19,7 @@ import {
   startMtlsServer,
   type MtlsMaterial,
   type MtlsServer,
-} from "./testing/tls.js";
+} from "@waitron/server-kit/testing/mtls.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 
 const KEY_ENV = {

@@ -56,7 +56,7 @@ import { ALL_MODULES } from "./modules.js";
 import { DUTY_BUDGET_MS } from "./health.js";
 import { DRAIN_DUTY } from "./pass.js";
 import { roleUrl } from "./testing/postgres.js";
-import { mintMtlsMaterial } from "./testing/tls.js";
+import { mintMtlsMaterial } from "@waitron/server-kit/testing/mtls.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import { loadTillConfig } from "./till-config.js";
 import type { TillConfig } from "./till-config.js";
