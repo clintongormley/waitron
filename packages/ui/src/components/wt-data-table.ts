@@ -1,6 +1,7 @@
 import { LitElement, css, html, nothing } from "lit";
 import type { PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { classMap } from "lit/directives/class-map.js";
 import { baseStyles, selectStyles } from "../base-styles.js";
 
 export interface DataTableColumn<Row> {
@@ -76,6 +77,44 @@ export class WtDataTable<Row = unknown> extends LitElement {
 
       tbody tr:hover {
         background: var(--wt-color-surface-raised);
+      }
+
+      tr.clickable {
+        position: relative;
+      }
+
+      tr.clickable:hover td,
+      tr.clickable:focus-within td {
+        background: var(--wt-color-surface-raised);
+        cursor: pointer;
+      }
+
+      /* The stretched activator covers the whole row so a mouse user can click anywhere; it is a
+         real focusable button so keyboard/AT users tab to it and Enter/Space activate the row. It
+         sits at the base layer… */
+      .row-activate {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        cursor: pointer;
+        z-index: 0;
+      }
+
+      .row-activate:focus-visible {
+        outline: var(--wt-focus-ring);
+        outline-offset: var(--wt-focus-offset);
+      }
+
+      /* …and every other interactive control in a clickable row sits ABOVE it, so a click on the
+         Edit/Delete menu or the selection checkbox never activates the row. */
+      tr.clickable td :is(button, a, input, select, label, wt-row-actions):not(.row-activate) {
+        position: relative;
+        z-index: 1;
       }
 
       .sort {
@@ -193,6 +232,12 @@ export class WtDataTable<Row = unknown> extends LitElement {
   @property({ attribute: false }) rowKey: (row: Row, index: number) => string = (_row, index) =>
     String(index);
   @property({ attribute: false }) rowParent?: (row: Row) => string | null;
+  /** When set (plain, non-tree tables only), each row becomes activatable: a stretched, focusable
+   * button covers the row and calls this on click. Per-row controls (the selection checkbox, the
+   * Edit/Delete menu) sit above the activator, so they are never swallowed. A tree table ignores it. */
+  @property({ attribute: false }) rowClick?: (row: Row) => void;
+  /** The accessible name for each row's activator button; defaults to a generic label. */
+  @property({ attribute: false }) rowClickLabel: (row: Row) => string = () => "Open row";
   @property({ type: Boolean }) loading = false;
   @property() loadingMessage = "Loading";
   @property() emptyMessage = "No results";
@@ -690,12 +735,23 @@ export class WtDataTable<Row = unknown> extends LitElement {
               ${sorted.map((row, index) => {
                 const key = this.rowKey(row, index);
                 return html`
-                  <tr data-row-key=${key}>
+                  <tr
+                    data-row-key=${key}
+                    class=${classMap({ clickable: this.rowClick !== undefined })}
+                  >
                     ${this.#renderSelectCell(key, row, false)}
                     ${this.columns.map(
-                      (column) => html`
+                      (column, ci) => html`
                         <td data-align=${column.align ?? "start"}>
-                          ${column.cell(row, { ancestorOnly: false })}
+                          ${
+                            ci === 0 && this.rowClick !== undefined
+                              ? html`<button
+                                    class="row-activate"
+                                    aria-label=${this.rowClickLabel(row)}
+                                    @click=${() => this.rowClick!(row)}
+                                  ></button>${column.cell(row, { ancestorOnly: false })}`
+                              : column.cell(row, { ancestorOnly: false })
+                          }
                         </td>
                       `,
                     )}

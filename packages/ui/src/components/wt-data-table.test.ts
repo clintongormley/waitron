@@ -817,3 +817,43 @@ test("a throwing setItem does not break the table", async () => {
   expect(el.sortKey).toBe("name");
   expect(rowText(el)).toEqual(["Ada10Edit", "Bea2Edit"]);
 });
+
+test("no clickable rows and no stretched activator unless rowClick is set", async () => {
+  const el = await table();
+  expect(el.shadowRoot!.querySelector(".row-activate")).toBeNull();
+  expect(el.shadowRoot!.querySelector("tr.clickable")).toBeNull();
+});
+
+test("activates a row on click when rowClick is set", async () => {
+  const clicked: string[] = [];
+  const el = await table({
+    rowClick: (row: Row) => clicked.push(row.id),
+    rowClickLabel: (row: Row) => `Open ${row.name}`,
+  });
+  // The rows are unsorted, so the first rendered row is Bea (id "b").
+  const activate = el.shadowRoot!.querySelector<HTMLButtonElement>(".row-activate")!;
+  expect(activate.getAttribute("aria-label")).toBe("Open Bea");
+  expect(activate.closest("tr")!.classList.contains("clickable")).toBe(true);
+  activate.click();
+  expect(clicked).toEqual(["b"]);
+});
+
+test("does not activate the row when an in-cell control is clicked", async () => {
+  const clicked: string[] = [];
+  const el = await table({ rowClick: (row: Row) => clicked.push(row.id) });
+  el.shadowRoot!.querySelector<HTMLButtonElement>('button[aria-label="Edit Bea"]')!.click();
+  expect(clicked).toEqual([]); // the Edit click did not activate its row
+});
+
+test("paints the focused clickable row from a token", async () => {
+  const el = await table({ rowClick: (row: Row) => row.id });
+  host.style.setProperty("--wt-color-surface-raised", "rgb(30, 40, 50)");
+  const activate = el.shadowRoot!.querySelector<HTMLButtonElement>(".row-activate")!;
+  const cell = activate.closest("td")!;
+  // Before focus, the cell paints no raised background of its own.
+  expect(getComputedStyle(cell).backgroundColor).not.toBe("rgb(30, 40, 50)");
+  activate.focus();
+  // :focus-within (focus is on the row's activator button) paints the row cell from the token.
+  // Asserted via :focus-within, not :hover — getComputedStyle cannot force a hover state.
+  expect(getComputedStyle(cell).backgroundColor).toBe("rgb(30, 40, 50)");
+});
