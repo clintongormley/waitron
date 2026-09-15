@@ -204,7 +204,8 @@ export async function assignProductUnit(
  * its row locks in one scan instead of interleaving N separate statements' locks across a loop. The
  * scan order is PostgreSQL's choice, not the caller's list order, which is what `units.pg.test.ts`
  * runs two opposite-order reassignments against. An id that is not currently on `sourceUnitId` —
- * an unknown id or another tenant's included — matches no row and is skipped, never an error. */
+ * an unknown id or another tenant's included — matches no row and is skipped, never an error. A
+ * `null` target instead deletes those rows outright, so the listed products become Each (no unit). */
 export async function reassignProductsToUnit(
   tx: Transaction,
   tenantId: string,
