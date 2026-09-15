@@ -28,6 +28,7 @@
 import { chmod, mkdir, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import type { Database } from "@waitron/db";
+import { recordBackupOutcome, type BackupOutcomeHolder } from "./alert-sources.js";
 import type { WaitronModule } from "@waitron/module";
 import { encryptArtifact } from "./artifact-cipher.js";
 import { packArchive, type ArchiveEntry } from "./backup-archive.js";
@@ -110,6 +111,11 @@ export interface BackupSweepDeps {
    * fires ONLY on a real store, so an all-destinations-failed tick (every `put` threw, swallowed as
    * `backup.destination_failed`) never fires it. */
   onStored?: () => void;
+  /** In-memory per-destination outcome holder the backups alert source reads. Each destination's tick
+   * result is recorded here (success clears an earlier failure, a throw records one), so a failed last
+   * attempt surfaces as an ongoing dashboard alert without waiting for the freshness threshold. Optional
+   * so the loop-logic and fan-out tests that do not care about outcomes need not supply one. */
+  outcomes?: BackupOutcomeHolder;
   log: Logger;
   /** Injectable for tests; defaults to the real `pg_dump` shell-out. */
   runDump?: PgDumpRunner;
@@ -202,11 +208,20 @@ export async function runOnce(
     let anyStored = false;
     await Promise.allSettled(
       deps.backends.map(async (backend) => {
+        // Whether the STORE (`put`) itself succeeded, separate from the whole try: a prune fault below
+        // must not flip this destination's recorded outcome to failed when the archive is safely stored.
+        let stored = false;
         try {
           await backend.put(key, ciphertext);
           // The archive is now stored on this backend regardless of what prune does next; record the
           // success before prune so a later prune fault cannot mask a genuine store.
+          stored = true;
           anyStored = true;
+          // Record the store as this destination's latest outcome, clearing any earlier failure —
+          // done right after the store (before prune) so a later prune fault cannot mask a genuine
+          // store, matching the `anyStored` ordering above.
+          if (deps.outcomes)
+            recordBackupOutcome(deps.outcomes, backend.id, true, stamp.toISOString());
           await pruneBackend(backend, deps.retain, deps.retainDays, nowMs);
           deps.log("info", "backup.destination_completed", { destination: backend.id, key });
         } catch (err) {
@@ -219,6 +234,11 @@ export async function runOnce(
             errorCode: codeOf(err),
             errno: (err as NodeJS.ErrnoException).code,
           });
+          // Record a failed outcome only for a genuine STORE failure. A prune-only fault (put already
+          // stored the archive) leaves the success recorded above — the backup is safe, so the alert
+          // source must not report this destination as failed.
+          if (deps.outcomes && !stored)
+            recordBackupOutcome(deps.outcomes, backend.id, false, stamp.toISOString());
         }
       }),
     );

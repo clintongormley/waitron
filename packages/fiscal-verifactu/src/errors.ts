@@ -415,5 +415,32 @@ declare module "@waitron/shared" {
      * the record being built, not an AEAT wire state.
      */
     "fiscal.foreign_recipient_unsupported": { countryCode: string };
+
+    /**
+     * The dashboard's ongoing fiscal-submission check (`./submission-alerts.ts`) — an alert code the
+     * source hands the dashboard, never a thrown `AppError`. Records have waited past
+     * `SUBMISSION_DELAYED_WARN_MS`/`SUBMISSION_DELAYED_ERROR_MS` to reach AEAT; `count` is how many
+     * are still waiting and `hours` is the oldest one's age. Registered here because this package
+     * owns the source, beside the codes it constructs. `fiscal.*`, matching the file's other
+     * regime-neutral-shaped codes: a fact about the submission lifecycle any regime backend shares.
+     */
+    "fiscal.submission_delayed": { count: number; hours: number };
+
+    /**
+     * The same ongoing check: `count` records have stopped submitting (`envios.estado = detenido`)
+     * and need a human — a halted chain never drains itself. An alert code the source hands the
+     * dashboard, never thrown. See `fiscal.submission_delayed` above.
+     */
+    "fiscal.submission_stopped": { count: number };
+
+    /**
+     * The dashboard's awaiting-certificate ongoing check (`apps/server/src/alert-sources.ts`), not
+     * this package's own source: it reads the in-memory cell the fiscal pass flips
+     * (`AwaitingCertStatus`, `apps/server/src/pass.ts`) when a drain skips a tenant for a missing
+     * AEAT certificate. Registered here anyway, matching `fiscal.submission_delayed`'s reasoning
+     * above: the code names the fiscal domain concept, not the package that raises it. No params —
+     * the alert is a plain on/off fact, unlike the counted submission codes.
+     */
+    "fiscal.awaiting_certificate": Record<string, never>;
   }
 }

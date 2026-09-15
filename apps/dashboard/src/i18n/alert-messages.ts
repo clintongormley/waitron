@@ -22,6 +22,18 @@ export const ALERT_MESSAGES: Readonly<
     en: "One of Waitron's checks could not run. It will try again in a minute.",
     es: "Una de las comprobaciones de Waitron no se ha podido ejecutar. Lo volverá a intentar en un minuto.",
   },
+  "backup.destination_overdue": {
+    en: "Backups to “{destination}” are overdue — no recent good backup. Check the destination on the Backups page.",
+    es: "Las copias de seguridad en «{destination}» están atrasadas: no hay ninguna correcta reciente. Revisa el destino en la página de Copias.",
+  },
+  "backup.destination_failed": {
+    en: "The last backup to “{destination}” failed. Open the Backups page to retry.",
+    es: "La última copia de seguridad en «{destination}» falló. Abre la página de Copias para reintentar.",
+  },
+  "backup.disabled": {
+    en: "Backups are not set up. Configure a destination on the Backups page so your data is protected.",
+    es: "Las copias de seguridad no están configuradas. Configura un destino en la página de Copias para proteger tus datos.",
+  },
   "chain.verification_failed": {
     en: "The invoice record chain failed its integrity check on a sale. Contact support.",
     es: "La cadena de registros de facturación no ha superado su comprobación de integridad en una venta. Contacta con soporte.",
@@ -74,6 +86,18 @@ export const ALERT_MESSAGES: Readonly<
     en: "The tax agency (AEAT) lists invoice {numSerieFactura} as cancelled, but it was not voided here. Contact support.",
     es: "La AEAT indica que la factura {numSerieFactura} está anulada, pero aquí no se anuló. Contacta con soporte.",
   },
+  "fiscal.submission_delayed": {
+    en: "{count} fiscal record(s) have been waiting {hours}h to reach the tax agency. If this persists, check that the fiscal certificate is valid.",
+    es: "{count} registro(s) fiscal(es) llevan {hours} h esperando para llegar a la Agencia Tributaria. Si continúa, comprueba que el certificado fiscal sea válido.",
+  },
+  "fiscal.submission_stopped": {
+    en: "{count} fiscal record(s) have stopped submitting and need attention.",
+    es: "{count} registro(s) fiscal(es) han detenido su envío y requieren atención.",
+  },
+  "fiscal.awaiting_certificate": {
+    en: "Fiscal records are waiting because no valid tax certificate is installed. Upload the certificate to resume submitting.",
+    es: "Hay registros fiscales en espera porque no hay un certificado tributario válido instalado. Sube el certificado para reanudar los envíos.",
+  },
   "payment.offline_forward_declined": {
     en: "A card payment of {amount} taken while offline was declined when it was sent on (reference {paymentRef}). Collect the money another way.",
     es: "Un pago con tarjeta de {amount} cobrado sin conexión se rechazó al enviarlo (referencia {paymentRef}). Cobra el importe de otra forma.",
@@ -105,5 +129,17 @@ export const ALERT_MESSAGES: Readonly<
   "payment.reconcile_remediation_failed": {
     en: `Automatic refunds failed for {count} card payments. Waitron will not try them again; refund them in the card provider's own dashboard.${MORE_EN}`,
     es: `Las devoluciones automáticas han fallado en {count} pagos con tarjeta. Waitron no las volverá a intentar; devuélvelos desde el panel del proveedor.${MORE_ES}`,
+  },
+  "agent.silent": {
+    en: "Print agent “{agent}” has gone quiet — it has not checked in for several minutes. Printing may be affected.",
+    es: "El agente de impresión «{agent}» está en silencio: lleva varios minutos sin dar señales. La impresión puede verse afectada.",
+  },
+  "printer.jobs_waiting": {
+    en: "{count} print job(s) are stuck at “{printer}”. Check the printer on the Printers page.",
+    es: "{count} trabajo(s) de impresión atascado(s) en «{printer}». Revisa la impresora en la página de Impresoras.",
+  },
+  "reader.battery_low": {
+    en: "Card reader “{reader}” battery is low ({percent}%). Charge it to avoid interruptions at the till.",
+    es: "La batería del lector de tarjetas «{reader}» está baja ({percent} %). Cárgalo para evitar interrupciones en la caja.",
   },
 };

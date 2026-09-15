@@ -317,6 +317,13 @@ declare module "@waitron/shared" {
      */
     "reader.provider_disconnected": { providerId: string };
     /**
+     * An active card reader's provider reports its battery at or below the warning/error floor — an
+     * ongoing dashboard alert, not a thrown request error. `reader` is the reader's display name and
+     * `percent` its whole-percent battery reading; neither is a secret. Raised by the battery alert
+     * source (`alert-sources.ts`).
+     */
+    "reader.battery_low": { reader: string; percent: number };
+    /**
      * The deployment holds one tenant per database. A basket line named a product the till cannot
      * sell at its location — it is not in the location's assigned catalogue or is deactivated.
      * `productId` is a uuid the caller already holds, not a secret, so echoing it is what makes
@@ -1710,6 +1717,15 @@ declare module "@waitron/shared" {
     /** An alert source failed while being read. Its alerts are replaced by this one, under the
      * source's own area and permission. Built as data, never thrown. */
     "alert.source_unavailable": { area: string };
+    /** A backup destination's newest good backup is older than the stale threshold. `destination` is
+     * the backend id (never a secret). Built as data by the backups alert source, never thrown. */
+    "backup.destination_overdue": { destination: string };
+    /** A backup destination's most recent attempt failed. `destination` is the backend id (never a
+     * secret). Built as data by the backups alert source, never thrown. */
+    "backup.destination_failed": { destination: string };
+    /** No backup destination is configured, so no data is being protected. Built as data by the
+     * backups alert source, never thrown. */
+    "backup.disabled": Record<string, never>;
     /**
      * BR-3's restore compatibility gate (`restore-gate.ts`) refused: the backup manifest's
      * `environment` differs from the restoring binary's own target environment. Refusing this here,

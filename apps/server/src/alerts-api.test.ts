@@ -8,10 +8,28 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { listOpenIncidents, recordIncident } from "@waitron/core";
-import { hashPin, startManagementSession } from "@waitron/identity";
+import {
+  hashPin,
+  resolveManagementSession,
+  startManagementSession,
+  withPassiveManagementRead,
+} from "@waitron/identity";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
+import type { AlertSource } from "@waitron/module";
+import type {
+  CardProviderContribution,
+  CardProviderRuntimeDeps,
+  ReaderStatus,
+} from "@waitron/payments";
 import { AppError, tillId as brandTillId, type TenantId, type TillId } from "@waitron/shared";
 import { mountAlertsApi } from "./alerts-api.js";
+import {
+  awaitingCertAlertSource,
+  backupAlertSource,
+  batteryAlertSource,
+  printingAlertSource,
+} from "./alert-sources.js";
+import { createTtlCache } from "./ttl-cache.js";
 
 // No real role holds payments.manage without fiscal.view and diagnostics.view, so a test replaces
 // one role's held set while the real alert claims stay in force.
@@ -101,6 +119,14 @@ function appFor(
   registry = createAlertRegistry({ claims: ALL_ALERT_CLAIMS, sources: [] }),
 ): Hono {
   const app = new Hono();
+  // Mirror boot.ts: a GET carrying `x-waitron-live: 1` runs under a passive read, so an automatic
+  // dashboard poll verifies the session without sliding its idle window. Requests without the header
+  // are unaffected, so every other test in this file sees the ordinary active-read path.
+  app.use("*", async (c, next) => {
+    if (c.req.method === "GET" && c.req.header("x-waitron-live") === "1") {
+      await withPassiveManagementRead(next);
+    } else await next();
+  });
   mountAlertsApi(
     app,
     {
@@ -325,5 +351,208 @@ describe("alert routes", () => {
       return listOpenIncidents(tx, b.tenantId);
     });
     expect(stillOpen.map((i) => i.id)).toEqual([theirs]);
+  });
+});
+
+// A card-provider seat whose only live method reports a flat 5% battery, so a seeded reader always
+// fires `reader.battery_low`. Every other method throws — the battery source never reaches them.
+function stubCardProvider(): CardProviderContribution {
+  const unused = (): never => {
+    throw new Error("stubCardProvider: this method is not used by the battery source");
+  };
+  return {
+    providerId: "stub",
+    credentialPurpose: "payments.stripe",
+    credentialFields: [],
+    readerAdd: { kind: "reference", refLabelKey: "x" },
+    connect: unused,
+    build: unused,
+    readers: {
+      canUnpair: false,
+      list: unused,
+      add: unused,
+      remove: unused,
+      status: async (): Promise<ReaderStatus> => ({ online: true, batteryPercent: 5 }),
+    },
+  };
+}
+
+const cardRuntimeDeps = (tenantId: TenantId): CardProviderRuntimeDeps => ({
+  db,
+  ring: {} as never,
+  tenantId,
+});
+
+/**
+ * The four server-owned ongoing sources, wired as boot does, so a route test exercises the real
+ * registry composition. By default the two in-memory sources are quiet (backup configured with no
+ * destinations, certificate present) and only the two tenant-scoped DB sources — printing and
+ * card-reader battery — can fire; flip `backupDisabled`/`awaitingCert` to make those two fire too.
+ */
+function ongoingRegistry(opts: { backupDisabled?: boolean; awaitingCert?: boolean } = {}) {
+  return createAlertRegistry({
+    claims: ALL_ALERT_CLAIMS,
+    sources: [
+      backupAlertSource({
+        listStatus: async () =>
+          opts.backupDisabled ? { configured: false } : { configured: true, destinations: [] },
+        outcomes: { failed: new Map() },
+        now: () => NOW,
+      }),
+      awaitingCertAlertSource({ current: opts.awaitingCert ?? false }),
+      printingAlertSource(),
+      batteryAlertSource({
+        providers: [stubCardProvider()],
+        runtimeDeps: cardRuntimeDeps,
+        cache: createTtlCache<number | null>({ ttlMs: 5 * 60_000, now: () => NOW }),
+      }),
+    ],
+  });
+}
+
+async function seedLowReader(tenantId: TenantId, name = "Datafono"): Promise<void> {
+  await db.execute(sql`
+    insert into card_readers (tenant_id, provider, provider_ref, name, active)
+    values (${tenantId}, 'stub', ${`ref-${name}`}, ${name}, true)`);
+}
+
+/** A document print job old enough to count as stuck, on an active printer, so `printingAlertSource`
+ * fires `printer.jobs_waiting` for this tenant. */
+async function seedStuckPrintJob(tenantId: TenantId): Promise<void> {
+  const loc = await db.execute<{ id: string }>(sql`
+    insert into locations (tenant_id, name, invoice_locales, operation_description)
+    values (${tenantId}, 'Barra', array['es-ES'], 'Retail') returning id`);
+  const printer = await db.execute<{ id: string }>(sql`
+    insert into printers (tenant_id, location_id, name, transport, host, active)
+    values (${tenantId}, ${loc.rows[0]!.id}, 'Barra', 'network_tcp', '10.0.0.1', true) returning id`);
+  await db.execute(sql`
+    insert into print_jobs (tenant_id, location_id, printer_id, payload, kind, status, attempts, created_at)
+    values (${tenantId}, ${loc.rows[0]!.id}, ${printer.rows[0]!.id}, decode('01', 'hex'),
+            'document', 'queued', 0, ${new Date(NOW.getTime() - 5 * 60_000).toISOString()})`);
+}
+
+const liveGet = (app: Hono, cookie: string) =>
+  app.request("/management-api/alerts", {
+    method: "GET",
+    headers: { cookie, "x-waitron-live": "1" },
+  });
+
+describe("ongoing alert sources through the route", () => {
+  it("filters ongoing sources by permission: a payments.manage-only session sees only card_reader alerts", async () => {
+    // Give the supervisor exactly the battery source's permission and nothing else, the way branch-1's
+    // permission tests do, then fire all four areas.
+    roleOverride.set("supervisor", ["payments.manage"]);
+    const v = await seedVenue();
+    await seedLowReader(v.tenantId);
+    await seedStuckPrintJob(v.tenantId);
+    const app = appFor(v, ongoingRegistry({ backupDisabled: true, awaitingCert: true }));
+
+    // Control: a manager holds every source permission, so all four areas actually fire — the
+    // payments-only assertion below is filtering at work, not four empty sources.
+    const managerAreas = (
+      (await (await get(app, "/management-api/alerts", v.manager)).json()) as {
+        alerts: { area: string }[];
+      }
+    ).alerts.map((a) => a.area);
+    expect(new Set(managerAreas)).toEqual(new Set(["backup", "fiscal", "printing", "card_reader"]));
+
+    // The payments.manage session reads only the source whose permission it holds; the fiscal, backup
+    // and printing ongoing alerts — each on a permission it lacks — never reach it.
+    const body = (await (await get(app, "/management-api/alerts", v.supervisor)).json()) as {
+      alerts: { code: string; area: string }[];
+    };
+    expect(body.alerts.map((a) => a.area)).toEqual(["card_reader"]);
+    expect(body.alerts.map((a) => a.code)).toEqual(["reader.battery_low"]);
+  });
+
+  it("isolates a throwing ongoing source: its area yields exactly one alert.source_unavailable and the others survive", async () => {
+    const v = await seedVenue();
+    const working: AlertSource = {
+      area: "printing",
+      permission: "printer.manage",
+      read: async () => [
+        {
+          key: "agent.silent:a1",
+          code: "agent.silent",
+          params: {},
+          severity: "warning",
+          since: null,
+        },
+      ],
+    };
+    const failing: AlertSource = {
+      area: "card_reader",
+      permission: "payments.manage",
+      read: async () => {
+        throw new Error("stub battery probe failed");
+      },
+    };
+    const registry = createAlertRegistry({ claims: ALL_ALERT_CLAIMS, sources: [working, failing] });
+    const body = (await (
+      await get(appFor(v, registry), "/management-api/alerts", v.manager)
+    ).json()) as { alerts: { code: string; area: string; params: unknown }[] };
+
+    // The working source's alert is untouched by the other source's failure…
+    expect(body.alerts).toContainEqual(
+      expect.objectContaining({ code: "agent.silent", area: "printing" }),
+    );
+    // …and the failing source collapses to a single synthetic naming its own area — not an HTTP error,
+    // not silence, and not one-per-attempt.
+    expect(body.alerts.filter((a) => a.code === "alert.source_unavailable")).toEqual([
+      expect.objectContaining({
+        code: "alert.source_unavailable",
+        area: "card_reader",
+        params: { area: "card_reader" },
+      }),
+    ]);
+  });
+
+  it("polls passively: the x-waitron-live GET does not extend the session, an ordinary GET does", async () => {
+    const v = await seedVenue();
+    const app = appFor(v, ongoingRegistry());
+    const sid = v.manager.slice(MANAGEMENT_COOKIE.length + 1);
+    // Age the session so a touch would visibly move its expiry away from the aged baseline.
+    await db.execute(
+      sql`update management_sessions set last_seen_at = now() - interval '10 minutes' where id = ${sid}`,
+    );
+    const expiryOf = () =>
+      withTenant(db, v.tenantId, (tx) => resolveManagementSession(tx, sid, { touch: false }));
+    const before = (await expiryOf()).expiresAt;
+
+    // The live poll verifies the session but does not slide its idle window.
+    expect((await liveGet(app, v.manager)).status).toBe(200);
+    expect((await expiryOf()).expiresAt).toBe(before);
+
+    // Control: the same GET without the live header counts as human activity and slides it forward.
+    expect((await get(app, "/management-api/alerts", v.manager)).status).toBe(200);
+    expect(Date.parse((await expiryOf()).expiresAt)).toBeGreaterThan(Date.parse(before));
+  });
+
+  it("scopes ongoing sources to the route's tenant: tenant A's session sees none of tenant B's ongoing alerts", async () => {
+    // While `tenant_id` still exists, every source carries its own tenant predicate (CLAUDE.md §3: one
+    // database per tenant is NOT the query's isolation boundary). If tenant_id is dropped
+    // (docs/superpowers/specs/2026-09-14-drop-tenant-id-design.md), this case retires with it.
+    const a = await seedVenue();
+    const b = await seedVenue();
+    await seedLowReader(b.tenantId);
+    await seedStuckPrintJob(b.tenantId);
+
+    // Control: through tenant B's own route the seeded rows fire on both DB sources…
+    const bAreas = (
+      (await (
+        await get(appFor(b, ongoingRegistry()), "/management-api/alerts", b.manager)
+      ).json()) as {
+        alerts: { area: string }[];
+      }
+    ).alerts
+      .map((alert) => alert.area)
+      .sort();
+    expect(bAreas).toEqual(["card_reader", "printing"]);
+
+    // …but tenant A's route, with nothing of its own, sees none of tenant B's ongoing alerts.
+    const aBody = (await (
+      await get(appFor(a, ongoingRegistry()), "/management-api/alerts", a.manager)
+    ).json()) as { alerts: unknown[] };
+    expect(aBody.alerts).toEqual([]);
   });
 });

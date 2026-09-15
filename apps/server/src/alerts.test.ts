@@ -101,15 +101,10 @@ describe("claims", () => {
     ).toThrow(/payment\./);
   });
 
-  it("refuses two sources in the same area", () => {
-    const source = (): AlertSource => ({
-      area: "printing",
-      permission: "diagnostics.view",
-      read: async () => [],
-    });
-    expect(() => createAlertRegistry({ claims: [], sources: [source(), source()] })).toThrow(
-      /printing/,
-    );
+  it("accepts two sources that share an area", () => {
+    const a: AlertSource = { area: "fiscal", permission: "fiscal.view", read: async () => [] };
+    const b: AlertSource = { area: "fiscal", permission: "fiscal.view", read: async () => [] };
+    expect(() => createAlertRegistry({ claims: [], sources: [a, b] })).not.toThrow();
   });
 
   it("is visible to a session holding only a source's permission", () => {
@@ -375,6 +370,66 @@ describe("readOpenAlerts", () => {
       "alert.source_unavailable:backup",
       "printing.jobs_waiting:p1",
     ]);
+  });
+
+  it("merges the alerts of two sources sharing an area", async () => {
+    const v = await seedVenue();
+    const a: AlertSource = {
+      area: "fiscal",
+      permission: "fiscal.view",
+      read: async () => [
+        {
+          key: "x:1",
+          code: "fiscal.submission_stopped",
+          params: { count: 1 },
+          severity: "error",
+          since: null,
+        },
+      ],
+    };
+    const b: AlertSource = {
+      area: "fiscal",
+      permission: "fiscal.view",
+      read: async () => [
+        {
+          key: "fiscal.awaiting_certificate",
+          code: "fiscal.awaiting_certificate",
+          params: {},
+          severity: "error",
+          since: null,
+        },
+      ],
+    };
+    const r = createAlertRegistry({ claims: [], sources: [a, b] });
+    const alerts = await asApp(v.tenantId, (tx) =>
+      readOpenAlerts(
+        tx,
+        { registry: r, tenantId: v.tenantId, now: NOW, log: noopLog },
+        new Set(["fiscal.view"]),
+      ),
+    );
+    expect(alerts.map((x) => x.code).sort()).toEqual([
+      "fiscal.awaiting_certificate",
+      "fiscal.submission_stopped",
+    ]);
+  });
+
+  it("reports one source_unavailable per area when two sources in it throw", async () => {
+    const v = await seedVenue();
+    const boom = (): Promise<never> => {
+      throw new AppError("server.internal", {});
+    };
+    const a: AlertSource = { area: "fiscal", permission: "fiscal.view", read: boom };
+    const b: AlertSource = { area: "fiscal", permission: "fiscal.view", read: boom };
+    const r = createAlertRegistry({ claims: [], sources: [a, b] });
+    const alerts = await asApp(v.tenantId, (tx) =>
+      readOpenAlerts(
+        tx,
+        { registry: r, tenantId: v.tenantId, now: NOW, log: noopLog },
+        new Set(["fiscal.view"]),
+      ),
+    );
+    expect(alerts.filter((x) => x.code === "alert.source_unavailable")).toHaveLength(1);
   });
 });
 
