@@ -33,10 +33,11 @@ async function storedUnits(tenantId: string) {
     await suite.db.execute<{
       seed_key: string;
       name: Record<string, string>;
+      abbreviation: Record<string, string>;
       precision: number;
       hardware_unit: string | null;
     }>(sql`
-      select seed_key, name, precision, hardware_unit from units
+      select seed_key, name, abbreviation, precision, hardware_unit from units
       where tenant_id = ${tenantId} order by seed_key`)
   ).rows;
 }
@@ -94,37 +95,61 @@ describe("catalogue provisioning", () => {
     expect(await storedUnits(node.tenantId)).toEqual([
       {
         seed_key: "each",
-        name: { en: "each", es: "unidad", ca: "unitat", gl: "unidade", eu: "unitatea" },
+        name: { en: "Each", es: "Unidad", ca: "Unitat", gl: "Unidade", eu: "Unitatea" },
+        abbreviation: { en: "ea", es: "ud", ca: "u", gl: "u", eu: "u" },
         precision: 0,
         hardware_unit: null,
       },
       {
         seed_key: "g",
-        name: { en: "g", es: "g", ca: "g", gl: "g", eu: "g" },
+        name: { en: "Gram", es: "Gramo", ca: "Gram", gl: "Gramo", eu: "Gramo" },
+        abbreviation: { en: "g", es: "g", ca: "g", gl: "g", eu: "g" },
         precision: 0,
         hardware_unit: "g",
       },
       {
         seed_key: "kg",
-        name: { en: "kg", es: "kg", ca: "kg", gl: "kg", eu: "kg" },
+        name: {
+          en: "Kilogram",
+          es: "Kilogramo",
+          ca: "Quilogram",
+          gl: "Quilogramo",
+          eu: "Kilogramo",
+        },
+        abbreviation: { en: "kg", es: "kg", ca: "kg", gl: "kg", eu: "kg" },
         precision: 3,
         hardware_unit: "kg",
       },
       {
         seed_key: "l",
-        name: { en: "l", es: "l", ca: "l", gl: "l", eu: "l" },
+        name: { en: "Litre", es: "Litro", ca: "Litre", gl: "Litro", eu: "Litro" },
+        abbreviation: { en: "l", es: "l", ca: "l", gl: "l", eu: "l" },
         precision: 3,
         hardware_unit: null,
       },
       {
         seed_key: "mg",
-        name: { en: "mg", es: "mg", ca: "mg", gl: "mg", eu: "mg" },
+        name: {
+          en: "Milligram",
+          es: "Miligramo",
+          ca: "Mil·ligram",
+          gl: "Miligramo",
+          eu: "Miligramo",
+        },
+        abbreviation: { en: "mg", es: "mg", ca: "mg", gl: "mg", eu: "mg" },
         precision: 0,
         hardware_unit: "mg",
       },
       {
         seed_key: "ml",
-        name: { en: "ml", es: "ml", ca: "ml", gl: "ml", eu: "ml" },
+        name: {
+          en: "Millilitre",
+          es: "Mililitro",
+          ca: "Mil·lilitre",
+          gl: "Mililitro",
+          eu: "Mililitro",
+        },
+        abbreviation: { en: "ml", es: "ml", ca: "ml", gl: "ml", eu: "ml" },
         precision: 0,
         hardware_unit: null,
       },

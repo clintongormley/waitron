@@ -7,7 +7,7 @@ import type { DashboardApi, ProductUsingUnit, Unit, UnitInput } from "../api/cli
 import { DashboardQueries } from "../api/query-controller.js";
 import { codeMessage } from "../i18n/codes.js";
 import { localizedName } from "../i18n/localized.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, t } from "../i18n/t.js";
 import "../widgets/unit-form.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
@@ -18,6 +18,18 @@ import "@waitron/ui/src/components/wt-row-actions.js";
 
 type UnitError = { code?: string; params?: { products?: ProductUsingUnit[] } };
 
+const decimalMarkers = new Map<string, string>();
+function decimalMarker(locale: string): string {
+  let marker = decimalMarkers.get(locale);
+  if (marker === undefined) {
+    marker =
+      new Intl.NumberFormat(locale).formatToParts(1.1).find((p) => p.type === "decimal")?.value ??
+      ".";
+    decimalMarkers.set(locale, marker);
+  }
+  return marker;
+}
+
 @customElement("dashboard-units-screen")
 export class UnitsScreen extends LitElement {
   static override styles = [
@@ -27,22 +39,25 @@ export class UnitsScreen extends LitElement {
       :host {
         display: block;
       }
+      .heading {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--wt-space-3);
+      }
       h1 {
-        margin: 0 0 var(--wt-space-2);
-        font-size: var(--wt-font-size-lg);
+        margin: var(--wt-space-4) 0 var(--wt-space-2);
+      }
+      .header-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--wt-space-3);
+        align-items: center;
       }
       .description {
         margin: 0 0 var(--wt-space-4);
         color: var(--wt-color-text-muted);
-      }
-      .toolbar {
-        display: flex;
-        gap: var(--wt-space-3);
-        align-items: end;
-        margin-bottom: var(--wt-space-4);
-      }
-      .search {
-        flex: 1;
       }
       .error {
         color: var(--wt-color-danger);
@@ -81,7 +96,6 @@ export class UnitsScreen extends LitElement {
   @state() private units: Unit[] = [];
   @state() private languages: ContentLanguages | null = null;
   @state() private loading = true;
-  @state() private search = "";
   @state() private editorOpen = false;
   @state() private editing: Unit | null = null;
   @state() private busy = false;
@@ -299,19 +313,48 @@ export class UnitsScreen extends LitElement {
     ];
   }
 
+  /** The precision written with the reader's decimal marker: precision 3 → ",000" (es) / ".000"
+   * (en); precision 0 → "0". Shown in the column cell, the filter's options, so a manager reads a
+   * unit's precision the way a price of that precision would print, not as a bare digit. */
+  #precisionLabel(precision: number): string {
+    return precision === 0 ? "0" : decimalMarker(currentLocale()) + "0".repeat(precision);
+  }
+
+  /** One filter option per distinct precision the units in the list actually use, ascending, each
+   * labelled with the same marker text as its cell. A precision nothing uses would match no row. */
+  #precisionOptions(): { value: string; label: string }[] {
+    return [...new Set(this.units.map((unit) => unit.precision))]
+      .sort((a, b) => a - b)
+      .map((precision) => ({ value: String(precision), label: this.#precisionLabel(precision) }));
+  }
+
   #columns(): DataTableColumn<Unit>[] {
     return [
       {
         key: "name",
         label: t("units.name"),
         cell: (unit) => localizedName(unit.name),
+        searchValue: (unit) => localizedName(unit.name),
         sortValue: (unit) => localizedName(unit.name),
+      },
+      {
+        key: "abbreviation",
+        label: t("units.abbreviation"),
+        cell: (unit) => localizedName(unit.abbreviation),
+        searchValue: (unit) => localizedName(unit.abbreviation),
+        sortValue: (unit) => localizedName(unit.abbreviation),
       },
       {
         key: "precision",
         label: t("units.precision"),
-        cell: (unit) => unit.precision,
+        cell: (unit) => this.#precisionLabel(unit.precision),
         sortValue: (unit) => unit.precision,
+        filter: {
+          label: t("units.precision"),
+          allLabel: t("units.filter_precision_all"),
+          value: (unit) => String(unit.precision),
+          options: this.#precisionOptions(),
+        },
       },
       {
         key: "actions",
@@ -319,12 +362,14 @@ export class UnitsScreen extends LitElement {
         cell: (unit) => html`
           <wt-row-actions label=${`${t("units.actions")}: ${localizedName(unit.name)}`}>
             <wt-button
+              align="start"
               data-test=${`edit-${unit.id}`}
               variant="ghost"
               @click=${(event: Event) => this.#openEdit(unit, event)}
               >${t("action.edit")}</wt-button
             >
             <wt-button
+              align="start"
               data-test=${`delete-${unit.id}`}
               variant="ghost"
               @click=${(event: Event) => this.#requestDelete(unit, event)}
@@ -337,13 +382,6 @@ export class UnitsScreen extends LitElement {
   }
 
   override render() {
-    const needle = this.search.trim().toLocaleLowerCase();
-    const rows =
-      needle === ""
-        ? this.units
-        : this.units.filter((unit) =>
-            Object.values(unit.name).some((name) => name.toLocaleLowerCase().includes(needle)),
-          );
     const productNeedle = this.inUseSearch.trim().toLocaleLowerCase();
     const inUseRows =
       productNeedle === ""
@@ -355,23 +393,15 @@ export class UnitsScreen extends LitElement {
           );
     const otherUnits = this.units.filter((unit) => unit.id !== this.inUseUnitId);
     return html`
-      <h1>${t("units.title")}</h1>
-      <p class="description">${t("units.description")}</p>
-      <div class="toolbar">
-        <wt-input
-          class="search"
-          data-test="search"
-          name="unit-search"
-          label=${t("units.search")}
-          @wt-change=${(event: CustomEvent<{ value: string }>) => {
-            event.stopPropagation();
-            this.search = event.detail.value;
-          }}
-        ></wt-input>
-        <wt-button data-test="create" variant="primary" @click=${this.#openCreate}
-          >${t("units.create")}</wt-button
-        >
+      <div class="heading">
+        <h1>${t("units.title")}</h1>
+        <div class="header-actions">
+          <wt-button data-test="create" variant="primary" @click=${this.#openCreate}
+            >${t("units.create")}</wt-button
+          >
+        </div>
       </div>
+      <p class="description">${t("units.description")}</p>
       ${
         this.error
           ? html`<div class="error" role="alert">
@@ -385,7 +415,13 @@ export class UnitsScreen extends LitElement {
       }
       <wt-data-table
         aria-label=${t("units.title")}
-        .rows=${rows}
+        searchable
+        searchLabel=${t("units.search")}
+        noMatchesMessage=${t("units.no_matches")}
+        viewKey="waitron.units.table"
+        sortKey="name"
+        sortDirection="ascending"
+        .rows=${this.units}
         .columns=${this.#columns()}
         .rowKey=${(unit: Unit) => unit.id}
         .loading=${this.loading}

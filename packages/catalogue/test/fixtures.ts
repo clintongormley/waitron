@@ -30,9 +30,9 @@ export interface SeededVenue {
 /** Seed the two legacy product choices with real tenant-scoped unit identities. */
 export async function seedLegacySellingUnits(db: Database, tenantId: string): Promise<void> {
   await db.execute(sql`
-    insert into units (tenant_id, seed_key, name, precision, hardware_unit) values
-      (${tenantId}, 'each', '{"en":"each","fr":"unité"}'::jsonb, 0, null),
-      (${tenantId}, 'kg', '{"en":"kg","fr":"kg"}'::jsonb, 3, 'kg')`);
+    insert into units (tenant_id, seed_key, name, abbreviation, precision, hardware_unit) values
+      (${tenantId}, 'each', '{"en":"each","fr":"unité"}'::jsonb, '{"en":"ea","fr":"u"}'::jsonb, 0, null),
+      (${tenantId}, 'kg', '{"en":"kg","fr":"kg"}'::jsonb, '{"en":"kg","fr":"kg"}'::jsonb, 3, 'kg')`);
 }
 
 export async function seedVenue(db: Database): Promise<SeededVenue> {
@@ -68,10 +68,20 @@ export async function seedCatalogueFixture(
   const food = await createCategory(tx, venue.tenantId, { name: { en: "Food" } });
   const drinks = await createCategory(tx, venue.tenantId, { name: { en: "Drinks" } });
   const eachUnitId = (
-    await createUnit(tx, venue.tenantId, { name: { en: "each" }, precision: 0 }, "en")
+    await createUnit(
+      tx,
+      venue.tenantId,
+      { name: { en: "each" }, precision: 0, abbreviation: { en: "ea" } },
+      "en",
+    )
   ).id;
   const kgUnitId = (
-    await createUnit(tx, venue.tenantId, { name: { en: "kg" }, precision: 3 }, "en")
+    await createUnit(
+      tx,
+      venue.tenantId,
+      { name: { en: "kg" }, precision: 3, abbreviation: { en: "kg" } },
+      "en",
+    )
   ).id;
   const slicedHam = await createProduct(tx, venue.tenantId, {
     catalogueId: catalogue.id,

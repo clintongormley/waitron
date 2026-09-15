@@ -10,7 +10,13 @@ import type { TillProduct } from "../api/client.js";
 const cafe: TillProduct = {
   id: "cafe",
   descriptions: { es: "Café" },
-  unit: { id: "unit-each", name: { es: "unidad" }, precision: 0, hardwareUnit: null },
+  unit: {
+    id: "unit-each",
+    name: { es: "unidad" },
+    abbreviation: { es: "ud" },
+    precision: 0,
+    hardwareUnit: null,
+  },
   unitPrice: "1.50",
   vatClass: "general",
   category: null,
@@ -20,7 +26,13 @@ const cafe: TillProduct = {
 const jamon: TillProduct = {
   id: "jamon",
   descriptions: { es: "Jamón" },
-  unit: { id: "unit-kg", name: { es: "kg" }, precision: 3, hardwareUnit: "kg" },
+  unit: {
+    id: "unit-kg",
+    name: { es: "kg" },
+    abbreviation: { es: "kg" },
+    precision: 3,
+    hardwareUnit: "kg",
+  },
   unitPrice: "10.00",
   vatClass: "reduced",
   category: "charcutería",
@@ -102,7 +114,13 @@ describe("till-product-grid", () => {
     const portion: TillProduct = {
       ...cafe,
       id: "portion",
-      unit: { id: "custom-portion", name: { en: "portion" }, precision: 2, hardwareUnit: null },
+      unit: {
+        id: "custom-portion",
+        name: { en: "portion" },
+        abbreviation: { en: "pt" },
+        precision: 2,
+        hardwareUnit: null,
+      },
     };
     const store = new WorkingOrderStore();
     const selected: TillProduct[] = [];
@@ -120,7 +138,13 @@ describe("till-product-grid", () => {
     const namedKg: TillProduct = {
       ...cafe,
       id: "named-kg",
-      unit: { id: "custom-kg", name: { es: "kg" }, precision: 0, hardwareUnit: null },
+      unit: {
+        id: "custom-kg",
+        name: { es: "kg" },
+        abbreviation: { es: "kg" },
+        precision: 0,
+        hardwareUnit: null,
+      },
     };
     const store = new WorkingOrderStore();
     const selected: TillProduct[] = [];

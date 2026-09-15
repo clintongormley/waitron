@@ -276,16 +276,19 @@ export interface CategoryProduct extends ProductCategories {
 export interface Unit {
   id: string;
   name: Record<string, string>;
+  abbreviation: Record<string, string>;
   precision: number;
 }
 
 export interface UnitInput {
   name: Record<string, string>;
+  abbreviation: Record<string, string>;
   precision: number;
 }
 
 export interface UnitPatch {
   name?: Record<string, string>;
+  abbreviation?: Record<string, string>;
   precision?: number;
 }
 

@@ -15,8 +15,17 @@ const geographicLocales = [
   ]),
 ];
 
+// Full display name shown in the dashboard; the short abbreviation is frozen onto sold lines.
 const UNIT_NAMES = {
-  each: { en: "each", es: "unidad", ca: "unitat", gl: "unidade", eu: "unitatea" },
+  each: { en: "Each", es: "Unidad", ca: "Unitat", gl: "Unidade", eu: "Unitatea" },
+  g: { en: "Gram", es: "Gramo", ca: "Gram", gl: "Gramo", eu: "Gramo" },
+  kg: { en: "Kilogram", es: "Kilogramo", ca: "Quilogram", gl: "Quilogramo", eu: "Kilogramo" },
+  mg: { en: "Milligram", es: "Miligramo", ca: "Mil·ligram", gl: "Miligramo", eu: "Miligramo" },
+  ml: { en: "Millilitre", es: "Mililitro", ca: "Mil·lilitre", gl: "Mililitro", eu: "Mililitro" },
+  l: { en: "Litre", es: "Litro", ca: "Litre", gl: "Litro", eu: "Litro" },
+} as const;
+const UNIT_ABBR = {
+  each: { en: "ea", es: "ud", ca: "u", gl: "u", eu: "u" },
   g: { en: "g", es: "g", ca: "g", gl: "g", eu: "g" },
   kg: { en: "kg", es: "kg", ca: "kg", gl: "kg", eu: "kg" },
   mg: { en: "mg", es: "mg", ca: "mg", gl: "mg", eu: "mg" },
@@ -75,13 +84,13 @@ export const CATALOGUE_PROVISIONING: ModuleProvisioning = {
         on conflict (tenant_id) do nothing returning tenant_id`);
       if (claimed.rows.length > 0) {
         await tx.execute(sql`
-          insert into units (tenant_id, seed_key, name, precision, hardware_unit) values
-            (${node.tenantId}, 'each', ${JSON.stringify(UNIT_NAMES.each)}::jsonb, 0, null),
-            (${node.tenantId}, 'g', ${JSON.stringify(UNIT_NAMES.g)}::jsonb, 0, 'g'),
-            (${node.tenantId}, 'kg', ${JSON.stringify(UNIT_NAMES.kg)}::jsonb, 3, 'kg'),
-            (${node.tenantId}, 'mg', ${JSON.stringify(UNIT_NAMES.mg)}::jsonb, 0, 'mg'),
-            (${node.tenantId}, 'ml', ${JSON.stringify(UNIT_NAMES.ml)}::jsonb, 0, null),
-            (${node.tenantId}, 'l', ${JSON.stringify(UNIT_NAMES.l)}::jsonb, 3, null)`);
+          insert into units (tenant_id, seed_key, name, abbreviation, precision, hardware_unit) values
+            (${node.tenantId}, 'each', ${JSON.stringify(UNIT_NAMES.each)}::jsonb, ${JSON.stringify(UNIT_ABBR.each)}::jsonb, 0, null),
+            (${node.tenantId}, 'g', ${JSON.stringify(UNIT_NAMES.g)}::jsonb, ${JSON.stringify(UNIT_ABBR.g)}::jsonb, 0, 'g'),
+            (${node.tenantId}, 'kg', ${JSON.stringify(UNIT_NAMES.kg)}::jsonb, ${JSON.stringify(UNIT_ABBR.kg)}::jsonb, 3, 'kg'),
+            (${node.tenantId}, 'mg', ${JSON.stringify(UNIT_NAMES.mg)}::jsonb, ${JSON.stringify(UNIT_ABBR.mg)}::jsonb, 0, 'mg'),
+            (${node.tenantId}, 'ml', ${JSON.stringify(UNIT_NAMES.ml)}::jsonb, ${JSON.stringify(UNIT_ABBR.ml)}::jsonb, 0, null),
+            (${node.tenantId}, 'l', ${JSON.stringify(UNIT_NAMES.l)}::jsonb, ${JSON.stringify(UNIT_ABBR.l)}::jsonb, 3, null)`);
       }
       let catalogueId = location.rows[0]?.catalogue_id ?? null;
       if (catalogueId === null) {

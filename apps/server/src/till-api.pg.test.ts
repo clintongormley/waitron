@@ -1486,11 +1486,11 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
             descriptions: { "es-ES": "Agua mineral" },
             quantity: "2.000",
             unitName: {
-              ca: "unitat",
-              en: "each",
-              es: "unidad",
-              eu: "unitatea",
-              gl: "unidade",
+              ca: "u",
+              en: "ea",
+              es: "ud",
+              eu: "u",
+              gl: "u",
             },
             unitPrecision: 0,
             // KDS-2: this product carries no course, so the item serialises `course: null` and fires
@@ -2445,7 +2445,7 @@ it("files all four modifier modes through cash checkout and reprints their saved
       gross: "3.00",
       parentLineNo: null,
       modifierSnapshots: snapshots,
-      unitName: { ca: "unitat", en: "each", es: "unidad", eu: "unitatea", gl: "unidade" },
+      unitName: { ca: "u", en: "ea", es: "ud", eu: "u", gl: "u" },
       unitPrecision: 0,
     },
     {
@@ -2484,7 +2484,7 @@ it("files all four modifier modes through cash checkout and reprints their saved
       quantity: "2.000",
       vat_rate: "21.00",
       modifier_snapshots: snapshots,
-      unit_name: { ca: "unitat", en: "each", es: "unidad", eu: "unitatea", gl: "unidade" },
+      unit_name: { ca: "u", en: "ea", es: "ud", eu: "u", gl: "u" },
       unit_precision: 0,
     },
     {

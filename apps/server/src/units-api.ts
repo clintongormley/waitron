@@ -51,8 +51,11 @@ function unitId(c: Context): string {
   return id;
 }
 
-function screenName(value: unknown): asserts value is Record<string, string> {
-  if (!isPlainObject(value)) throw new AppError("management.request_invalid", { field: "name" });
+function screenTranslatable(
+  value: unknown,
+  field: string,
+): asserts value is Record<string, string> {
+  if (!isPlainObject(value)) throw new AppError("management.request_invalid", { field });
 }
 
 export function mountUnitsApi(app: Hono, deps: UnitsApiDeps, log: Logger): void {
@@ -113,8 +116,13 @@ export function mountUnitsApi(app: Hono, deps: UnitsApiDeps, log: Logger): void 
   app.post("/management-api/units", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const body = await readJsonBody<{ name?: unknown; precision?: unknown }>(c);
-      screenName(body.name);
+      const body = await readJsonBody<{
+        name?: unknown;
+        precision?: unknown;
+        abbreviation?: unknown;
+      }>(c);
+      screenTranslatable(body.name, "name");
+      screenTranslatable(body.abbreviation, "abbreviation");
       if (typeof body.precision !== "number") {
         throw new AppError("management.request_invalid", { field: "precision" });
       }
@@ -122,7 +130,11 @@ export function mountUnitsApi(app: Hono, deps: UnitsApiDeps, log: Logger): void 
         createUnit(
           tx,
           deps.cfg.tenantId,
-          { name: body.name as Record<string, string>, precision: body.precision as number },
+          {
+            name: body.name as Record<string, string>,
+            precision: body.precision as number,
+            abbreviation: body.abbreviation as Record<string, string>,
+          },
           deps.venueLocale,
         ),
       );
@@ -134,11 +146,19 @@ export function mountUnitsApi(app: Hono, deps: UnitsApiDeps, log: Logger): void 
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = unitId(c);
-      const body = await readJsonBody<{ name?: unknown; precision?: unknown }>(c);
+      const body = await readJsonBody<{
+        name?: unknown;
+        precision?: unknown;
+        abbreviation?: unknown;
+      }>(c);
       const patch: UpdateUnitInput = {};
       if (body.name !== undefined) {
-        screenName(body.name);
+        screenTranslatable(body.name, "name");
         patch.name = body.name as Record<string, string>;
+      }
+      if (body.abbreviation !== undefined) {
+        screenTranslatable(body.abbreviation, "abbreviation");
+        patch.abbreviation = body.abbreviation as Record<string, string>;
       }
       if (body.precision !== undefined) {
         if (typeof body.precision !== "number") {

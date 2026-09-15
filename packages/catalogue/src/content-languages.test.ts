@@ -25,7 +25,7 @@ describe("site content languages", () => {
       const unit = await createUnit(
         tx,
         tenantId,
-        { name: { en: "each", fr: "unité" }, precision: 0 },
+        { name: { en: "each", fr: "unité" }, precision: 0, abbreviation: { en: "u" } },
         "en",
       );
       const product = await createProduct(tx, tenantId, {
@@ -166,7 +166,8 @@ describe("site content languages", () => {
     await withTenant(suite.db, tenantId, async (tx) => {
       await writeContentLanguages(tx, tenantId, { defaultLanguage: "en", languages: ["en", "fr"] });
       await tx.execute(sql`
-        insert into units (tenant_id, name, precision) values (${tenantId}, '{"en":"cup"}'::jsonb, 0)`);
+        insert into units (tenant_id, name, abbreviation, precision)
+        values (${tenantId}, '{"en":"cup"}'::jsonb, '{"en":"c"}'::jsonb, 0)`);
     });
     await expect(
       withTenant(suite.db, tenantId, (tx) =>

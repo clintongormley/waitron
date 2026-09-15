@@ -398,6 +398,7 @@ export interface TillProduct {
   unit?: {
     id: string;
     name: Record<string, string>;
+    abbreviation: Record<string, string>;
     precision: number;
     hardwareUnit: "kg" | "g" | "mg" | null;
   };

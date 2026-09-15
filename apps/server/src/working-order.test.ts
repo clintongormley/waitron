@@ -124,9 +124,9 @@ interface SeededVenue {
 async function setupVenue(orderFlow: TillConfig["orderFlow"] = "prepay"): Promise<SeededVenue> {
   const tenantId = await seedTenant(db);
   const seededUnits = await db.execute<{ id: string; seed_key: "each" | "kg" }>(sql`
-    insert into units (tenant_id, seed_key, name, precision, hardware_unit) values
-      (${tenantId}, 'each', '{"en":"each"}'::jsonb, 0, null),
-      (${tenantId}, 'kg', '{"en":"kg"}'::jsonb, 3, 'kg')
+    insert into units (tenant_id, seed_key, name, abbreviation, precision, hardware_unit) values
+      (${tenantId}, 'each', '{"en":"each"}'::jsonb, '{"en":"ea"}'::jsonb, 0, null),
+      (${tenantId}, 'kg', '{"en":"kg"}'::jsonb, '{"en":"kg"}'::jsonb, 3, 'kg')
     returning id, seed_key`);
   const eachUnitId = seededUnits.rows.find((unit) => unit.seed_key === "each")!.id;
   const kgUnitId = seededUnits.rows.find((unit) => unit.seed_key === "kg")!.id;
@@ -806,8 +806,8 @@ describe("getHeldOrder", () => {
     const { productId, menuItemId, unitId } = await withTenant(db, cfg.tenantId, async (tx) => {
       await asAppUser(tx);
       const inserted = await tx.execute<{ id: string }>(sql`
-        insert into units (tenant_id, name, precision, hardware_unit)
-        values (${cfg.tenantId}, ${JSON.stringify({ [LOCALE]: "kg" })}::jsonb, 3, 'kg')
+        insert into units (tenant_id, name, abbreviation, precision, hardware_unit)
+        values (${cfg.tenantId}, ${JSON.stringify({ [LOCALE]: "kg" })}::jsonb, ${JSON.stringify({ [LOCALE]: "kg" })}::jsonb, 3, 'kg')
         returning id`);
       const unitId = inserted.rows[0]!.id;
       const product = await createProduct(tx, cfg.tenantId, {
@@ -2225,13 +2225,13 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
       // (numeric(12,3) read back as "2.000"/"3.000") — what the kitchen display turns into "2× Café".
       expect(group!.items[0]).toMatchObject({
         descriptions: { [LOCALE]: "Café" },
-        unitName: { en: "each" },
+        unitName: { en: "ea" },
         unitPrecision: 0,
         quantity: "2.000",
       });
       expect(group!.items[1]).toMatchObject({
         descriptions: { [LOCALE]: "Agua" },
-        unitName: { en: "each" },
+        unitName: { en: "ea" },
         unitPrecision: 0,
         quantity: "3.000",
       });

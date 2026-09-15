@@ -339,9 +339,22 @@ describe("catalogue operations", () => {
     locationId = venue.locationId;
     await withTenant(fx.db, tenantId, async (tx) => {
       await asAppUser(tx);
-      eachUnitId = (await createUnit(tx, tenantId, { name: { en: "each" }, precision: 0 }, "en"))
-        .id;
-      kgUnitId = (await createUnit(tx, tenantId, { name: { en: "kg" }, precision: 3 }, "en")).id;
+      eachUnitId = (
+        await createUnit(
+          tx,
+          tenantId,
+          { name: { en: "each" }, precision: 0, abbreviation: { en: "u" } },
+          "en",
+        )
+      ).id;
+      kgUnitId = (
+        await createUnit(
+          tx,
+          tenantId,
+          { name: { en: "kg" }, precision: 3, abbreviation: { en: "u" } },
+          "en",
+        )
+      ).id;
       await tx.execute(
         sql`update units
             set seed_key = case when id = ${eachUnitId} then 'each' else 'kg' end,
@@ -418,6 +431,7 @@ describe("catalogue operations", () => {
         name: { en: "kg" },
         precision: 3,
         hardwareUnit: "kg",
+        abbreviation: { en: "u" },
       });
       expect(seenHam.unitPrice).toBe("24.90");
       expect(seenHam.vatClass).toBe("reduced");
@@ -446,6 +460,7 @@ describe("catalogue operations", () => {
         name: { en: "kg" },
         precision: 3,
         hardwareUnit: "kg",
+        abbreviation: { en: "u" },
       });
     });
   });
@@ -1637,7 +1652,13 @@ describe("catalogue operations", () => {
     const sample: AvailableProduct = {
       id: "00000000-0000-0000-0000-000000000000",
       descriptions: { en: "water" },
-      unit: { id: eachUnitId, name: { en: "each" }, precision: 0, hardwareUnit: null },
+      unit: {
+        id: eachUnitId,
+        name: { en: "each" },
+        precision: 0,
+        hardwareUnit: null,
+        abbreviation: { en: "ea" },
+      },
       pricingUnit: "each",
       unitPrice: "1.50",
       vatClass: "general",

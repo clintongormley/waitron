@@ -67,9 +67,9 @@ async function seedUnitTenant(): Promise<{
 }> {
   const tenantId = brandTenantId(await seedTenant(db));
   const seeded = await db.execute<{ id: string; seed_key: "each" | "kg" }>(sql`
-    insert into units (tenant_id, seed_key, name, precision, hardware_unit) values
-      (${tenantId}, 'each', '{"en":"each"}'::jsonb, 0, null),
-      (${tenantId}, 'kg', '{"en":"kg"}'::jsonb, 3, 'kg')
+    insert into units (tenant_id, seed_key, name, abbreviation, precision, hardware_unit) values
+      (${tenantId}, 'each', '{"en":"each"}'::jsonb, '{"en":"ea"}'::jsonb, 0, null),
+      (${tenantId}, 'kg', '{"en":"kg"}'::jsonb, '{"en":"kg"}'::jsonb, 3, 'kg')
     returning id, seed_key`);
   return {
     tenantId,

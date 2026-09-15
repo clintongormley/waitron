@@ -187,6 +187,73 @@ describe("till_id is not part of the huella (SP-A.2 §16.4(a))", () => {
   });
 });
 
+describe("unit_name (the frozen unit label) is not part of the huella", () => {
+  // The fiscal receipt for the units-abbreviation feature. A sold line now freezes the unit's
+  // ABBREVIATION into `sale_lines.unit_name` (a jsonb column, packages/db/src/schema/sales.ts) instead
+  // of the unit's full name. The whole feature rests on the claim that `unit_name` is presentation-only
+  // — it prints on the receipt but never feeds the Veri*Factu hash — so freezing a different string is
+  // a display change, not a fiscal one.
+  //
+  // This block RUNS that claim rather than reading it (CLAUDE.md §1). It is the `till_id` receipt above
+  // applied to `unit_name`, and rests on the same structural fact: the canonical string the huella
+  // hashes is built from exactly the eight alta fields and five anulación fields (`CadenaAltaInput` /
+  // `CadenaAnulacionInput` in types.ts), and the unit label is none of them. The huella carries NO
+  // per-line data at all — only the aggregate CuotaTotal/ImporteTotal — so a per-line unit label is
+  // doubly removed from it. `RegistroAlta` and `RegistroAnulacion` have no unit-label field either
+  // (types.ts): the label lives on `sale_lines`/`working_order_lines`, not on the AEAT record.
+  //
+  // Failing case (what makes this meaningful): if the unit label DID feed `buildCadena`, two records
+  // carrying different labels would hash DIFFERENTLY and the equality assertions below would fail, and
+  // the structural assertion would find a unit-label token in the canonical string. If EITHER of those
+  // fails, the feature's fiscal-neutrality claim is wrong and freezing the abbreviation is a fiscal
+  // change — STOP and escalate. The control at the end confirms the probe discriminates: a real hashed
+  // field change (ImporteTotal) DOES change the huella, so equality here is neutrality, not a hash that
+  // ignores everything.
+
+  it("names no unit-label field in either canonical string", () => {
+    // Structural: the built canonical strings carry only their fixed AEAT field names. No unit-label
+    // token (English or Spanish) appears, so a unit label cannot reach computeHuella's SHA-256 input.
+    for (const cadena of [buildCadenaAlta(VECTOR_1_INPUT), buildCadenaAnulacion(VECTOR_3_INPUT)]) {
+      const lower = cadena.toLowerCase();
+      expect(lower).not.toContain("unitname");
+      expect(lower).not.toContain("unit_name");
+      expect(lower).not.toContain("unidad");
+    }
+  });
+
+  it("hashes two alta records that differ only in a carried unit label identically", () => {
+    // `RegistroAlta` has no unit-label field at all — the frozen label is sale-line metadata on
+    // `sale_lines.unit_name`, not on the AEAT record — so a label carried ALONGSIDE the record (the
+    // widest shape a regression could leak) is spread on and cast. computeHuella reads only the eight
+    // hashed fields, so both hash to the same published vector regardless of the label.
+    const record = altaRecord(VECTOR_1_INPUT, { PrimerRegistro: "S" });
+    expect(computeHuella({ ...record, unitName: { es: "ud" } } as RegistroAlta)).toBe(
+      VECTOR_1_HUELLA,
+    );
+    expect(computeHuella({ ...record, unitName: { es: "kg" } } as RegistroAlta)).toBe(
+      VECTOR_1_HUELLA,
+    );
+  });
+
+  it("hashes two anulación records that differ only in a carried unit label identically", () => {
+    const record = anulacionRecord(VECTOR_3_INPUT, previous(VECTOR_2_HUELLA));
+    expect(computeHuella({ ...record, unitName: { es: "ud" } } as RegistroAnulacion)).toBe(
+      VECTOR_3_HUELLA,
+    );
+    expect(computeHuella({ ...record, unitName: { es: "kg" } } as RegistroAnulacion)).toBe(
+      VECTOR_3_HUELLA,
+    );
+  });
+
+  it("control: a real hashed field change DOES change the huella, so the equality above is neutrality", () => {
+    // The probe in the other direction. If this were also equal, the equality assertions above would
+    // prove nothing (a hash that ignored everything). Changing a genuine hashed field (ImporteTotal)
+    // must move the huella.
+    const record = altaRecord(VECTOR_1_INPUT, { PrimerRegistro: "S" });
+    expect(computeHuella({ ...record, ImporteTotal: "123.46" })).not.toBe(VECTOR_1_HUELLA);
+  });
+});
+
 describe("verifyHuella", () => {
   it("accepts a record whose stored huella matches its content", () => {
     const record = altaRecord(VECTOR_1_INPUT, { PrimerRegistro: "S" });

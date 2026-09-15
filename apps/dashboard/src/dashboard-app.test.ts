@@ -1482,7 +1482,11 @@ describe("dashboard-app", () => {
   it("opens a product's editor on the catalogue screen from the units in-use modal", async () => {
     const api = stubApi({
       listStaff: vi.fn().mockResolvedValue([]),
-      listUnits: vi.fn().mockResolvedValue([{ id: "u1", name: { es: "kg" }, precision: 0 }]),
+      listUnits: vi
+        .fn()
+        .mockResolvedValue([
+          { id: "u1", name: { es: "kg" }, abbreviation: { es: "kg" }, precision: 0 },
+        ]),
     });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
     await flush(el);
@@ -1510,7 +1514,11 @@ describe("dashboard-app", () => {
     history.replaceState(null, "", "/manage/units/view/detail");
     const api = stubApi({
       listStaff: vi.fn().mockResolvedValue([]),
-      listUnits: vi.fn().mockResolvedValue([{ id: "u1", name: { es: "kg" }, precision: 0 }]),
+      listUnits: vi
+        .fn()
+        .mockResolvedValue([
+          { id: "u1", name: { es: "kg" }, abbreviation: { es: "kg" }, precision: 0 },
+        ]),
     });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
     await flush(el);

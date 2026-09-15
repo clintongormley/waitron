@@ -43,7 +43,11 @@ export interface SeedProduct {
   description?: Record<SeedLocale, string>;
   kitchenName?: string;
   dietaryDeclarations?: DietaryLabel[];
-  unit?: { name: Record<SeedLocale, string>; precision: number };
+  unit?: {
+    name: Record<SeedLocale, string>;
+    precision: number;
+    abbreviation: Record<SeedLocale, string>;
+  };
   variants?: {
     name: Record<SeedLocale, string>;
     productPrice: string;
@@ -586,7 +590,11 @@ export const MENU_DEL_DIA: SeedCatalogue = {
           },
           kitchenName: "MIXED SALAD",
           dietaryDeclarations: ["vegan"],
-          unit: { name: { en: "serving", es: "ración" }, precision: 2 },
+          unit: {
+            name: { en: "serving", es: "ración" },
+            precision: 2,
+            abbreviation: { en: "srv", es: "rac" },
+          },
           pricingUnit: "each",
           unitPrice: "6.00",
           vatClass: "reduced",

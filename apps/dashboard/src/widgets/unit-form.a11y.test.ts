@@ -9,7 +9,12 @@ describe.each(["light", "dark"] as const)("unit-form a11y (%s theme)", (theme) =
   it("renders create and edit states accessibly", async () => {
     for (const value of [
       null,
-      { id: "u1", name: { es: "kilogramo", en: "kilogram" }, precision: 3 },
+      {
+        id: "u1",
+        name: { es: "kilogramo", en: "kilogram" },
+        abbreviation: { es: "kg", en: "kg" },
+        precision: 3,
+      },
     ]) {
       const { el, host } = await mountWidget<UnitForm>(
         "dashboard-unit-form",

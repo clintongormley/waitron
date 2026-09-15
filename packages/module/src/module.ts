@@ -117,6 +117,9 @@ export interface ZoneMenuOffer {
   readonly unit: {
     readonly id: string;
     readonly name: Readonly<Record<string, string>>;
+    // The printed short form, frozen onto a sold line as its unit label; the offer carries it so the
+    // add-time pricing freeze does not re-read the unit.
+    readonly abbreviation: Readonly<Record<string, string>>;
     readonly precision: number;
     readonly hardwareUnit: "kg" | "g" | "mg" | null;
   };

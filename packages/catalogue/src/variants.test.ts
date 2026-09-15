@@ -41,7 +41,12 @@ beforeEach(async () => {
   await run(async (tx) => {
     const menu = await createCatalogue(tx, tenantId, { name: "Bar" });
     menuId = menu.id;
-    const unit = await createUnit(tx, tenantId, { name: { en: "each" }, precision: 0 }, "en");
+    const unit = await createUnit(
+      tx,
+      tenantId,
+      { name: { en: "each" }, precision: 0, abbreviation: { en: "u" } },
+      "en",
+    );
     const product = await createProduct(tx, tenantId, {
       catalogueId: menu.id,
       categoryId: null,
@@ -248,7 +253,7 @@ it("prices the required published variant instead of the base or product variant
     {
       product: {
         descriptions: { en: "Coffee · Small" },
-        unit: { name: { en: "each" }, precision: 0 },
+        unit: { name: { en: "each" }, precision: 0, abbreviation: { en: "ea" } },
         unitPrice: selected.unitPrice,
         vatClass: "reduced",
         category: null,

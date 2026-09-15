@@ -18,7 +18,12 @@ beforeEach(async () => {
   tenantId = await seedTenant(fx.db);
   const setup = await withTenant(fx.db, tenantId, async (tx) => ({
     catalogue: await createCatalogue(tx, tenantId, { name: "Menu" }),
-    unit: await createUnit(tx, tenantId, { name: { en: "each" }, precision: 0 }, "en"),
+    unit: await createUnit(
+      tx,
+      tenantId,
+      { name: { en: "each" }, precision: 0, abbreviation: { en: "u" } },
+      "en",
+    ),
   }));
   catalogueId = setup.catalogue.id;
   input = {
@@ -85,7 +90,7 @@ it("changes the product's unit on update", async () => {
     saveProductEditor(tx, tenantId, null, catalogueId, input, "en"),
   );
   const other = await withTenant(fx.db, tenantId, (tx) =>
-    createUnit(tx, tenantId, { name: { en: "kg" }, precision: 3 }, "en"),
+    createUnit(tx, tenantId, { name: { en: "kg" }, precision: 3, abbreviation: { en: "u" } }, "en"),
   );
   const updated = await withTenant(fx.db, tenantId, (tx) =>
     saveProductEditor(tx, tenantId, saved.id, catalogueId, { ...saved, unitId: other.id }, "en"),

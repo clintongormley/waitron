@@ -9,7 +9,7 @@ import "@waitron/ui/src/components/wt-modal.js";
 import type { Unit, UnitInput } from "../api/client.js";
 import { t } from "../i18n/t.js";
 
-type UnitField = "name" | "precision";
+type UnitField = "name" | "precision" | "abbreviation";
 
 /** Reusable editor for a unit definition. It owns a copy of its draft, never its host's object. */
 @customElement("dashboard-unit-form")
@@ -31,6 +31,7 @@ export class UnitForm extends LitElement {
   @property({ attribute: false }) fieldErrors: Partial<Record<UnitField, string>> = {};
 
   @state() private names: Record<string, string> = {};
+  @state() private abbreviations: Record<string, string> = {};
   @state() private precision = "0";
   @state() private localErrors: Partial<Record<UnitField, string>> = {};
 
@@ -46,6 +47,12 @@ export class UnitForm extends LitElement {
           this.locales.map((locale) => [locale, this.value?.name[locale] ?? ""]),
         ),
       };
+      this.abbreviations = {
+        ...(this.value?.abbreviation ?? {}),
+        ...Object.fromEntries(
+          this.locales.map((locale) => [locale, this.value?.abbreviation[locale] ?? ""]),
+        ),
+      };
       this.precision = String(this.value?.precision ?? 0);
       this.localErrors = {};
     }
@@ -55,6 +62,12 @@ export class UnitForm extends LitElement {
     event.stopPropagation();
     this.names = { ...this.names, [locale]: event.detail.value };
     this.localErrors = { ...this.localErrors, name: undefined };
+  }
+
+  #changeAbbreviation(locale: string, event: CustomEvent<{ value: string }>): void {
+    event.stopPropagation();
+    this.abbreviations = { ...this.abbreviations, [locale]: event.detail.value };
+    this.localErrors = { ...this.localErrors, abbreviation: undefined };
   }
 
   #changePrecision(event: CustomEvent<{ value: string }>): void {
@@ -71,6 +84,9 @@ export class UnitForm extends LitElement {
     const errors: Partial<Record<UnitField, string>> = {};
     if (!defaultLocale || this.names[defaultLocale]?.trim() === "") {
       errors.name = t("units.name_required");
+    }
+    if (!defaultLocale || this.abbreviations[defaultLocale]?.trim() === "") {
+      errors.abbreviation = t("units.abbreviation_required");
     }
     if (
       this.precision.trim() === "" ||
@@ -89,7 +105,13 @@ export class UnitForm extends LitElement {
       if (translation === "") delete name[locale];
       else name[locale] = translation;
     }
-    const value: UnitInput = { name, precision };
+    const abbreviation = { ...this.abbreviations };
+    for (const locale of this.locales) {
+      const translation = this.abbreviations[locale]?.trim() ?? "";
+      if (translation === "") delete abbreviation[locale];
+      else abbreviation[locale] = translation;
+    }
+    const value: UnitInput = { name, abbreviation, precision };
     this.dispatchEvent(
       new CustomEvent("wt-submit", { detail: { value }, bubbles: true, composed: true }),
     );
@@ -126,6 +148,17 @@ export class UnitForm extends LitElement {
               error=${index === 0 ? (errors.name ?? "") : ""}
               .value=${this.names[locale] ?? ""}
               @wt-change=${(event: CustomEvent<{ value: string }>) => this.#changeName(locale, event)}
+            ></wt-input>
+            <wt-input
+              class="field"
+              data-test=${`abbreviation-${locale}`}
+              name=${`abbreviation-${locale}`}
+              label=${`${t("units.abbreviation")} (${locale.toUpperCase()})`}
+              ?required=${index === 0}
+              error=${index === 0 ? (errors.abbreviation ?? "") : ""}
+              .value=${this.abbreviations[locale] ?? ""}
+              @wt-change=${(event: CustomEvent<{ value: string }>) =>
+                this.#changeAbbreviation(locale, event)}
             ></wt-input>
           `,
         )}

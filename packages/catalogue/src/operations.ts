@@ -340,6 +340,7 @@ const PRODUCT_COLUMNS = {
   ...PRODUCT_BASE_COLUMNS,
   unitId: units.id,
   unitName: units.name,
+  unitAbbreviation: units.abbreviation,
   unitPrecision: units.precision,
   hardwareUnit: units.hardwareUnit,
 };
@@ -352,6 +353,7 @@ interface RawProduct {
   descriptions: Record<string, string>;
   unitId: string | null;
   unitName: Record<string, string> | null;
+  unitAbbreviation: Record<string, string> | null;
   unitPrecision: number | null;
   hardwareUnit: string | null;
   description: Record<string, string> | null;
@@ -386,8 +388,15 @@ function toProduct(
   categoryIds: string[],
   variants: ProductVariant[] = [],
 ): Product {
-  const { unitName, unitPrecision, hardwareUnit, ...product } = row;
-  const unit = sellableUnit(row.unitId, unitName, unitPrecision, row.pricingUnit, hardwareUnit);
+  const { unitName, unitAbbreviation, unitPrecision, hardwareUnit, ...product } = row;
+  const unit = sellableUnit(
+    row.unitId,
+    unitName,
+    unitPrecision,
+    row.pricingUnit,
+    hardwareUnit,
+    unitAbbreviation,
+  );
   return {
     ...product,
     categoryIds,
@@ -408,13 +417,15 @@ function sellableUnit(
   name: Record<string, string> | null,
   precision: number | null,
   legacy: string,
-  hardwareUnit?: string | null,
+  hardwareUnit: string | null | undefined,
+  abbreviation: Record<string, string> | null,
 ): SellableUnit {
   if (id !== null && name !== null && precision !== null) {
     return {
       id,
       name,
       precision,
+      abbreviation: abbreviation ?? {},
       hardwareUnit: hardwareUnit as SellableUnit["hardwareUnit"],
     };
   }
@@ -817,6 +828,7 @@ export async function listMenuOffers(
       kitchenName: products.kitchenName,
       unitId: units.id,
       unitName: units.name,
+      unitAbbreviation: units.abbreviation,
       unitPrecision: units.precision,
       hardwareUnit: units.hardwareUnit,
       pricingUnit: products.pricingUnit,
@@ -1010,6 +1022,7 @@ export async function listMenuOffers(
       row.unitPrecision,
       row.pricingUnit,
       row.hardwareUnit,
+      row.unitAbbreviation,
     ),
     pricingUnit: row.pricingUnit as PricingUnit,
     vatClass: row.vatClass as VatClass,
@@ -1618,6 +1631,7 @@ export async function listAvailableProducts(
       descriptions: products.descriptions,
       unitId: units.id,
       unitName: units.name,
+      unitAbbreviation: units.abbreviation,
       unitPrecision: units.precision,
       hardwareUnit: units.hardwareUnit,
       pricingUnit: products.pricingUnit,
@@ -1757,6 +1771,7 @@ export async function listAvailableProducts(
       row.unitPrecision,
       row.pricingUnit,
       row.hardwareUnit,
+      row.unitAbbreviation,
     ),
     pricingUnit: row.pricingUnit as PricingUnit,
     unitPrice: row.unitPrice,

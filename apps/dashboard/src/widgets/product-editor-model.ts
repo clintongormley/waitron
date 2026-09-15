@@ -30,6 +30,9 @@ export interface EditorChoice {
   id: string;
   name: LocalizedText;
 }
+export interface UnitChoice extends EditorChoice {
+  abbreviation: LocalizedText;
+}
 export interface ProductRoutingChoice {
   id: string;
   name: string;

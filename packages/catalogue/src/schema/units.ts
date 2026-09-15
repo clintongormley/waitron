@@ -20,6 +20,7 @@ export const units = pgTable(
     tenantId: uuid("tenant_id").notNull(),
     seedKey: text("seed_key"),
     name: jsonb("name").$type<Record<string, string>>().notNull(),
+    abbreviation: jsonb("abbreviation").$type<Record<string, string>>().notNull(),
     precision: integer("precision").notNull(),
     hardwareUnit: text("hardware_unit"),
   },

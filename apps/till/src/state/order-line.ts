@@ -81,7 +81,7 @@ export function optionGross(line: OrderLine, option: SelectedLineOption): Decima
   return grossOf(option.priceDelta, combinedOptionQuantity(line, option));
 }
 
-/** How much of a line, followed by the selected unit's localized snapshot name. */
+/** How much of a line, followed by the selected unit's localized short label (its abbreviation). */
 export function quantityLabel(line: OrderLine): string {
   return `${line.quantity} ${unitName(line.product)}`;
 }

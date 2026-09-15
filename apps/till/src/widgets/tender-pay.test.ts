@@ -9,7 +9,13 @@ import type { TillProduct } from "../api/client.js";
 const cafe: TillProduct = {
   id: "cafe",
   descriptions: { es: "Café" },
-  unit: { id: "unit-each", name: { en: "unit", es: "unidad" }, precision: 0, hardwareUnit: null },
+  unit: {
+    id: "unit-each",
+    name: { en: "unit", es: "unidad" },
+    abbreviation: { en: "ea", es: "ud" },
+    precision: 0,
+    hardwareUnit: null,
+  },
   unitPrice: "1.50",
   vatClass: "general",
   category: null,
@@ -19,7 +25,13 @@ const cafe: TillProduct = {
 const jamon: TillProduct = {
   id: "jamon",
   descriptions: { es: "Jamón" },
-  unit: { id: "unit-kg", name: { en: "kg", es: "kg" }, precision: 3, hardwareUnit: "kg" },
+  unit: {
+    id: "unit-kg",
+    name: { en: "kg", es: "kg" },
+    abbreviation: { en: "kg", es: "kg" },
+    precision: 3,
+    hardwareUnit: "kg",
+  },
   unitPrice: "10.00",
   vatClass: "reduced",
   category: "charcutería",
@@ -29,7 +41,13 @@ const jamon: TillProduct = {
 const portion: TillProduct = {
   ...cafe,
   id: "portion",
-  unit: { id: "unit-portion", name: { en: "portion" }, precision: 2, hardwareUnit: null },
+  unit: {
+    id: "unit-portion",
+    name: { en: "portion" },
+    abbreviation: { en: "pt" },
+    precision: 2,
+    hardwareUnit: null,
+  },
 };
 
 /** Taps one keypad key inside the widget and lets the parent re-render with the new value. */
