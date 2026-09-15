@@ -38,7 +38,7 @@ A product with no stored unit must read (for display/pricing) as a synthetic "Ea
 - Test (cross-package sale-path proof): `packages/venue-service/src/operations.test.ts`
 
 **Interfaces:**
-- Produces: `EACH_UNIT_ID` (`""`), `EACH_UNIT: SellableUnit` — exported from `@waitron/catalogue` via `units.ts`. Consumed by Task 3 and the display reads.
+- Produces: `EACH_UNIT_ID` (the sentinel UUID `00000000-0000-0000-0000-000000000001`), `EACH_UNIT: SellableUnit` — exported from `@waitron/catalogue` via `units.ts`. Consumed by Task 3 and the display reads.
 
 - [ ] **Step 1: Write the failing test** — a product row with NO `product_units` row reads back with the Each unit.
 
