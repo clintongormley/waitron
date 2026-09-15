@@ -40,7 +40,7 @@ export const SHUTDOWN_DEADLINE_MS = 8000;
  *
  * `exit` runs from the write's completion callback, never straight after it: on a pipe (Docker,
  * systemd) `process.stdout.write` is asynchronous and exiting immediately truncates the one line
- * explaining the failure. The log carries `codeOf`'s classification rather than the caught value —
+ * explaining the failure. The deadline still exits if that write never completes. The log carries `codeOf`'s classification rather than the caught value —
  * a `pg` pool `end()` rejection can embed the connection string it was built from.
  *
  * A THIRD signal, of either name, is not caught by anything here: both `once` listeners have
@@ -51,44 +51,40 @@ export function installShutdownHandlers(
   server: { close(): Promise<void> },
   deps: ShutdownDeps = DEFAULT_DEPS,
 ): void {
-  const logShutdownFailure = createLogger((line) => deps.write(line, () => deps.exit(1)), deps.now);
-  // The deadline's log is fire-and-forget (no exit in its write callback): the whole point of the
-  // deadline is a guaranteed exit, so a stalled stdout pipe must not be able to withhold it. The
-  // exit is called directly below instead.
+  // Every path ends in exactly one exit, whichever of {clean close, failure-log write, deadline}
+  // reaches it first; a timer's `cancel()` can arrive a tick too late, so the losers must be no-ops.
+  let exited = false;
+  const exitOnce = (code: number): void => {
+    if (exited) return;
+    exited = true;
+    deps.exit(code);
+  };
+  let closeFailed = false;
+  const logShutdownFailure = createLogger((line) => deps.write(line, () => exitOnce(1)), deps.now);
+  // Fire-and-forget: a stalled stdout pipe must not be able to withhold the deadline's exit.
   const logShutdownTimeout = createLogger((line) => deps.write(line, () => {}), deps.now);
   let shuttingDown = false;
-  // `deadline.cancel()` can arrive a tick too late for an already-fired timer, so the deadline and a
-  // resolving/rejecting close() can both run. This latch makes the FIRST of {clean, reject, deadline}
-  // own the exit and the losers no-ops. (`shuttingDown` above already prevents a second close().)
-  let finished = false;
-  const finish = (act: () => void): void => {
-    if (finished) return;
-    finished = true;
-    act();
-  };
   const setTimer = deps.setTimer ?? unrefTimer;
   for (const signal of ["SIGTERM", "SIGINT"] as const) {
     deps.on(signal, () => {
       if (shuttingDown) return;
       shuttingDown = true;
-      const deadline = setTimer(SHUTDOWN_DEADLINE_MS, () =>
-        finish(() => {
-          logShutdownTimeout("warn", "server.shutdown_timeout", {
-            deadlineMs: SHUTDOWN_DEADLINE_MS,
-          });
-          deps.exit(0);
-        }),
-      );
+      // Left running after a rejection: it is the exit if the failure line's write never completes.
+      const deadline = setTimer(SHUTDOWN_DEADLINE_MS, () => {
+        if (exited) return;
+        if (closeFailed) return exitOnce(1);
+        logShutdownTimeout("warn", "server.shutdown_timeout", { deadlineMs: SHUTDOWN_DEADLINE_MS });
+        exitOnce(0);
+      });
       void server.close().then(
         () => {
           deadline.cancel();
-          finish(() => deps.exit(0));
+          exitOnce(0);
         },
         (error: unknown) => {
-          deadline.cancel();
-          finish(() =>
-            logShutdownFailure("error", "server.shutdown_failed", { errorCode: codeOf(error) }),
-          );
+          if (exited) return;
+          closeFailed = true;
+          logShutdownFailure("error", "server.shutdown_failed", { errorCode: codeOf(error) });
         },
       );
     });
