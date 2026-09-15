@@ -185,9 +185,9 @@ describe("seedDemoRestaurant", () => {
       };
     });
 
-    // The coffee keeps the retained Size + Milk groups and demonstrates all four current modifier
-    // modes; the steak carries Extras + Cooking. The back-dated sales generator rings at least one
-    // selection so the demo also contains persisted modifier sub-lines.
+    // The coffee keeps the retained Size + Milk groups and demonstrates the three current modifier
+    // modes (text, extras, options); the steak carries Extras + Cooking. The back-dated sales generator
+    // rings at least one selection so the demo also contains persisted modifier sub-lines.
     const coffee = read.products.find((p) => p.descriptions[LOCALE] === "Coffee");
     const steak = read.products.find((p) => p.descriptions[LOCALE] === "Sirloin in whisky sauce");
     expect(coffee).toBeDefined();
@@ -195,7 +195,6 @@ describe("seedDemoRestaurant", () => {
     expect(coffee!.optionGroups.map((g) => g.name[LOCALE]).sort()).toEqual([
       "Demo add-ons",
       "Demo cup",
-      "Demo decaf",
       "Demo preparation note",
       "Milk",
       "Size",

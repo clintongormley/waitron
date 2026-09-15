@@ -69,7 +69,7 @@ async function provisionVenue(): Promise<{ tenantId: string; locationId: string 
 }
 
 describe("seedOptions", () => {
-  it("seeds legacy groups and all four canonical modifier types with product and menu behavior", async () => {
+  it("seeds legacy groups and the three canonical modifier types with product and menu behavior", async () => {
     const { tenantId, locationId } = await provisionVenue();
 
     const { products, modifiers } = await withTenant(suite.admin, tenantId, async (tx) => {
