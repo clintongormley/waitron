@@ -1755,14 +1755,17 @@ describe("startServer, against a real container as the deployment role", () => {
           // env). `check` is the clone's superuser connection, used for both observations.
           expect(await readDeploymentEnvironment(check)).toBe("production");
 
-          // Exactly one `fiscal.aeat` credential was sealed, for the tenant just provisioned — the real
-          // provisioning-secret seal seat (fed boot.ts's `db: ownerDb` + `ring`) ran end-to-end.
-          const sealed = await check.execute<{ n: number; tenant: string }>(
-            sql`select count(*)::int as n, max(tenant_id::text) as tenant
-                from tenant_credentials where purpose = 'fiscal.aeat'`,
+          // Exactly one `fiscal.aeat` credential was sealed, in the database holding the tenant just
+          // provisioned — the real provisioning-secret seal seat (fed boot.ts's `db: ownerDb` + `ring`)
+          // ran end-to-end.
+          const sealed = await check.execute<{ n: number }>(
+            sql`select count(*)::int as n from tenant_credentials where purpose = 'fiscal.aeat'`,
           );
           expect(sealed.rows[0]!.n).toBe(1);
-          expect(sealed.rows[0]!.tenant).toBe(json.tenantId);
+          const provisioned = await check.execute<{ id: string }>(
+            sql`select id::text as id from tenants`,
+          );
+          expect(provisioned.rows).toEqual([{ id: json.tenantId }]);
 
           // The restart fires once after the seal + persist, as for the plain demo above.
           await poll(() => (kills.length > 0 ? kills.length : undefined));
@@ -2430,7 +2433,6 @@ describe("startServer, against a real container as the deployment role", () => {
     // ONE tenant carrying both due work and a usable credential, not two separate tenants.
     await withTransaction(suite.admin, (tx) =>
       putCredential(tx, loadKeyRing(KEY_ENV), {
-        tenantId: seeded.tenantId,
         purpose: "fiscal.aeat",
         value: {
           pfxBase64: material.clientPfx.toString("base64"),

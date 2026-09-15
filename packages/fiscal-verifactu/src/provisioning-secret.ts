@@ -1,6 +1,6 @@
 import { putCredential, type KeyRing } from "@waitron/credentials";
 import { withTransaction, type Database } from "@waitron/db";
-import { AppError, tenantId as brandTenantId } from "@waitron/shared";
+import { AppError } from "@waitron/shared";
 import { isCertKind, type CertKind } from "./aeat-transport.js";
 import "./errors.js";
 
@@ -84,7 +84,7 @@ export function parseAeatCert(raw: unknown): AeatCert {
 }
 
 /**
- * Seal a LIVE ES-common venue's AEAT certificate into the `fiscal.aeat` vault purpose for `tenantId`.
+ * Seal a LIVE ES-common venue's AEAT certificate into the `fiscal.aeat` vault purpose.
  *
  * The opaque blob's SHAPE is validated HERE, before the write, via `parseAeatCert` — the SAME check
  * the host runs upfront through the `validate` seat, so a malformed `certKind`, `pfxBase64` or
@@ -95,8 +95,7 @@ export function parseAeatCert(raw: unknown): AeatCert {
  * non-empty `certKind` (a `"bogus"` value only fails far downstream when the drain picks a SOAP host)
  * and any non-empty `pfxBase64` (a non-base64 blob only fails at decode time).
  *
- * The seal runs under `withTransaction` (the write's own transaction), and the tenant must already exist
- * (the seal runs AFTER `applyVenue` mints it — the FK is `restrict`).
+ * The seal runs under `withTransaction` (the write's own transaction).
  */
 export async function sealAeatSecret(
   deps: { db: Database; ring: KeyRing },
@@ -105,10 +104,9 @@ export async function sealAeatSecret(
 ): Promise<void> {
   const cert = parseAeatCert(raw);
 
-  const tenant = brandTenantId(tenantId);
+  void tenantId;
   await withTransaction(deps.db, (tx) =>
     putCredential(tx, deps.ring, {
-      tenantId: tenant,
       purpose: "fiscal.aeat",
       value: {
         pfxBase64: cert.pfxBase64,

@@ -48,7 +48,7 @@ describe("sealAeatSecret", () => {
     await sealAeatSecret({ db: suite.db, ring }, tenant, cert);
 
     const readBack = await withTransaction(suite.db, (tx) =>
-      getCredential(tx, ring, { tenantId: tenant, purpose: "fiscal.aeat" }),
+      getCredential(tx, ring, { purpose: "fiscal.aeat" }),
     );
     expect(readBack).toEqual({
       pfxBase64: cert.pfxBase64,
@@ -74,7 +74,7 @@ describe("sealAeatSecret", () => {
 
     // Nothing was written — a read finds no row.
     const missing = await withTransaction(suite.db, (tx) =>
-      getCredential(tx, ring, { tenantId: tenant, purpose: "fiscal.aeat" }),
+      getCredential(tx, ring, { purpose: "fiscal.aeat" }),
     ).catch((e: unknown) => e);
     expect(isAppError(missing) && missing.code).toBe("credentials.missing");
   });
@@ -105,7 +105,7 @@ describe("sealAeatSecret", () => {
     );
 
     const missing = await withTransaction(suite.db, (tx) =>
-      getCredential(tx, ring, { tenantId: tenant, purpose: "fiscal.aeat" }),
+      getCredential(tx, ring, { purpose: "fiscal.aeat" }),
     ).catch((e: unknown) => e);
     expect(isAppError(missing) && missing.code).toBe("credentials.missing");
   });
@@ -121,7 +121,7 @@ describe("sealAeatSecret", () => {
     await sealAeatSecret({ db: suite.db, ring }, tenant, cert);
 
     const readBack = await withTransaction(suite.db, (tx) =>
-      getCredential(tx, ring, { tenantId: tenant, purpose: "fiscal.aeat" }),
+      getCredential(tx, ring, { purpose: "fiscal.aeat" }),
     );
     expect(readBack.pfxBase64).toBe("aGVsbG8=");
   });
@@ -138,7 +138,7 @@ describe("sealAeatSecret", () => {
     );
 
     const missing = await withTransaction(suite.db, (tx) =>
-      getCredential(tx, ring, { tenantId: tenant, purpose: "fiscal.aeat" }),
+      getCredential(tx, ring, { purpose: "fiscal.aeat" }),
     ).catch((e: unknown) => e);
     expect(isAppError(missing) && missing.code).toBe("credentials.missing");
   });

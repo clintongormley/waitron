@@ -55,8 +55,7 @@ let caPem: string;
 let appDb: Database; // app_login → app_user: reads the venue rows in this database
 // One tenant per database: the venue is provisioned ONCE in beforeAll and every test reuses it. The
 // suite does not reset between tests (resetPerTest:false), so a per-test `setupVenue()` would
-// accumulate tenants — and with the tenant filters removed a credential read would return the wrong
-// tenant's sealed row, failing its AAD check on decrypt.
+// accumulate tenants in a database whose vault holds one credential per purpose.
 let designated: AdoptResult;
 
 /** Provision a fresh venue (as the owner), stamp its database `preproduction`, and return the five

@@ -23,7 +23,6 @@ describe("stripeAccountResolver", () => {
     const tenantId = await seedTenant(suite.db);
     await withTransaction(suite.db, (tx) =>
       putCredential(tx, ring, {
-        tenantId,
         purpose: "payments.stripe",
         value: {
           secretKey: "sk_test_tenant_one",

@@ -724,7 +724,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         }
 
         // Establish this node's membership identity (design §4): after the tenant/node are minted (the
-        // vault row is FK-restricted to the tenant) and before the trading config is persisted. A fresh
+        // public key is stamped on the node row) and before the trading config is persisted. A fresh
         // primary becomes its own sole trust anchor; boot reads it into membershipTrustSet.
         if (!setupPhaseReached(operation, "identity_established")) {
           await establishIdentity(result.tenantId, result.nodeId);
@@ -739,9 +739,9 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
           await operation?.advance("membership_seeded");
         }
 
-        // Seal the regime's provisioning secret AFTER provision mints the tenant (the vault row is
-        // FK-restricted to it) and BEFORE the trading config is persisted. Reaches the regime only
-        // through the `seal` seat, so this host imports no regime package.
+        // Seal the regime's provisioning secret AFTER provision mints the tenant and BEFORE the trading
+        // config is persisted. Reaches the regime only through the `seal` seat, so this host imports
+        // no regime package.
         if (!setupPhaseReached(operation, "secret_sealed")) {
           if (expected) await secret!.seal({ db, ring }, result.tenantId, rawSecret);
           await operation?.advance("secret_sealed");

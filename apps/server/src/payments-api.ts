@@ -315,7 +315,6 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         // a provider that returns a wrong-shaped payload fails loudly rather than sealing junk.
         validatePayload(seat.credentialPurpose, sealedPayload);
         await putCredential(tx, deps.ring, {
-          tenantId: deps.cfg.tenantId,
           purpose: seat.credentialPurpose,
           value: sealedPayload,
         });
@@ -342,10 +341,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         if (active.length > 0) {
           throw new AppError("payment.provider_in_use", { activeReaders: active.length });
         }
-        await deleteCredential(tx, {
-          tenantId: deps.cfg.tenantId,
-          purpose: seat.credentialPurpose,
-        });
+        await deleteCredential(tx, { purpose: seat.credentialPurpose });
       });
       deps.pool.evict(id);
       return c.body(null, 204);

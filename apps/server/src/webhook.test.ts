@@ -89,7 +89,6 @@ async function seedInitiated(
   );
   await withTransaction(db, (tx) =>
     putCredential(tx, ring, {
-      tenantId,
       purpose: "payments.stripe",
       value: {
         secretKey: opts.secretKey ?? "sk_test_seed",

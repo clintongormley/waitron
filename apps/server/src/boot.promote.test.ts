@@ -229,7 +229,6 @@ async function seedFiscalWork(): Promise<{ registroIds: string[]; tenantId: stri
   const material = mintMtlsMaterial();
   await withTransaction(suite.admin, (tx) =>
     putCredential(tx, loadKeyRing(KEY_ENV), {
-      tenantId: seeded.tenantId,
       purpose: "fiscal.aeat",
       value: {
         pfxBase64: material.clientPfx.toString("base64"),

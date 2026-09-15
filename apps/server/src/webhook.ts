@@ -100,8 +100,8 @@ export async function settleWebhook(
 ): Promise<WebhookOutcome> {
   const tenant = brandTenantId(pathTenantId);
   const ref = { tenantId: pathTenantId, purpose: PURPOSE };
-  // Secret selection. `readCredential` reads the database's one credential for this purpose and opens
-  // it with the path tenant as AAD, so a secret sealed for any other tenant fails to decrypt.
+  // Secret selection: the database's one credential for this purpose. The path tenant plays no part
+  // in opening it; the signature check and the resolved-tenant cross-check below are the gates.
   const payload = await readCredential(deps.db, deps.ring, tenant, PURPOSE);
   const secretKey = stripeSecretKeyFrom(payload, ref, deps.environment);
   const webhookSecret = hostedWebhookSecretFrom(payload, ref);

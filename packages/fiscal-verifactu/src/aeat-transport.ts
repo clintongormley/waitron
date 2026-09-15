@@ -81,7 +81,7 @@ export async function readCertMaterial(
   tenantId: TenantId,
 ): Promise<CertMaterial> {
   const payload = await withTransaction(db, (tx) =>
-    getCredential(tx, ring, { tenantId, purpose: "fiscal.aeat" }),
+    getCredential(tx, ring, { purpose: "fiscal.aeat" }),
   );
   return certMaterialFrom(payload, { tenantId, purpose: "fiscal.aeat" });
 }

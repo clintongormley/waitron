@@ -233,11 +233,10 @@ async function addReader(
   });
 }
 
-async function sealedStripe(venue: Venue): Promise<Record<string, string> | null> {
+async function sealedStripe(): Promise<Record<string, string> | null> {
   return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     return tryGetCredential(tx, RING, {
-      tenantId: brandTenantId(venue.tenantId),
       purpose: "payments.stripe",
     });
   });
@@ -258,7 +257,6 @@ describe("connect", () => {
     const stored = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return getCredential(tx, RING, {
-        tenantId: brandTenantId(venue.tenantId),
         purpose: "payments.stripe",
       });
     });
@@ -276,7 +274,7 @@ describe("connect", () => {
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
       error: { code: "payment.provider_credential_rejected" },
     });
-    expect(await sealedStripe(venue)).toBeNull();
+    expect(await sealedStripe()).toBeNull();
   });
 
   it("refuses a wrong-environment key with payment.credential_environment_mismatch (environment is passed)", async () => {
@@ -292,7 +290,7 @@ describe("connect", () => {
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
       error: { code: "payment.credential_environment_mismatch" },
     });
-    expect(await sealedStripe(venue)).toBeNull();
+    expect(await sealedStripe()).toBeNull();
   });
 
   it("refuses a staff session with authorization.not_permitted", async () => {
@@ -306,7 +304,7 @@ describe("connect", () => {
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
       error: { code: "authorization.not_permitted" },
     });
-    expect(await sealedStripe(venue)).toBeNull();
+    expect(await sealedStripe()).toBeNull();
   });
 });
 
@@ -522,7 +520,7 @@ describe("disconnect", () => {
       cookie: venue.managerCookie,
     });
     expect(gone.status).toBe(204);
-    expect(await sealedStripe(venue)).toBeNull();
+    expect(await sealedStripe()).toBeNull();
   });
 });
 

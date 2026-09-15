@@ -56,7 +56,6 @@ async function provision(certKind: string): Promise<TenantId> {
   const tenantId = await seedTenant(suite.db);
   await withTransaction(suite.db, (tx) =>
     putCredential(tx, ring, {
-      tenantId,
       purpose: "fiscal.aeat",
       value: {
         pfxBase64: material.clientPfx.toString("base64"),
@@ -257,8 +256,7 @@ describe("aeatClientResolver lifetime", () => {
   // One tenant per database: `resolve` appends a transport to the close list on EVERY call and
   // dedups on nothing, so the count of transports to release tracks resolve CALLS, not tenants.
   // Two transports are built by resolving this node's single tenant twice with its real vaulted
-  // credential — a second tenant's sealed row in the same database would be returned by the
-  // now-unscoped credential read and fail its per-tenant AAD check on decrypt.
+  // credential; the vault holds one `fiscal.aeat` credential per database.
   it("closes one transport per client it resolved", async () => {
     const tenant = await provision("sello");
     const closed: string[] = [];

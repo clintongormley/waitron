@@ -102,7 +102,7 @@ describe("FISCAL_SLOT.provisioningSecret", () => {
     const tenant = await seedTenant(pg.db);
     await secret.seal({ db: pg.db, ring }, tenant, goodCert);
     const readBack = await withTransaction(pg.db, (tx) =>
-      getCredential(tx, ring, { tenantId: tenant, purpose: "fiscal.aeat" }),
+      getCredential(tx, ring, { purpose: "fiscal.aeat" }),
     );
     expect(readBack.certKind).toBe("sello");
   });

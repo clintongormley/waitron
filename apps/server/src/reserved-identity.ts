@@ -26,7 +26,7 @@ export interface StandbyIdentity {
 /** Mint a standby's own identity in memory (design §6 R2): a fresh nodeId + Ed25519 keypair. Generated
  * BEFORE the adopt fetch so the public half + nodeId can be sent to the primary for endorsement +
  * number allocation; the private half is sealed by `establishReservedStandbyIdentity` after the tenant
- * exists (the vault FK is restrict). */
+ * exists. */
 export function generateStandbyIdentity(): StandbyIdentity {
   const { publicKey, privateKey } = generateNodeKeyPair();
   return { nodeId: randomUUID(), publicKey, privateKey };
@@ -66,14 +66,10 @@ export async function establishReservedStandbyIdentity(
 ): Promise<void> {
   const tenant = brandTenantId(args.tenantId);
   await withTransaction(deps.ownerDb, async (tx) => {
-    const existing = await tryGetCredential(tx, deps.ring, {
-      tenantId: tenant,
-      purpose: NODE_KEY_PURPOSE,
-    });
+    const existing = await tryGetCredential(tx, deps.ring, { purpose: NODE_KEY_PURPOSE });
     if (existing !== null) return; // already established — idempotent no-op
 
     await putCredential(tx, deps.ring, {
-      tenantId: tenant,
       purpose: NODE_KEY_PURPOSE,
       value: { privateKey: args.standby.privateKey },
     });

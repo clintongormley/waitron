@@ -363,12 +363,11 @@ async function setDefaultReader(
     values (${cfg.tenantId}, ${deviceId}, ${readerId})`);
 }
 
-/** Seal this tenant's `payments.stripe` credential so the provider counts as CONNECTED (the pay
+/** Seal the `payments.stripe` credential so the provider counts as CONNECTED (the pay
  * path's pre-check reads only its presence). */
-async function connectStripe(cfg: TillConfig): Promise<void> {
+async function connectStripe(): Promise<void> {
   await withTransaction(suite.admin, (tx) =>
     putCredential(tx, RING, {
-      tenantId: cfg.tenantId,
       purpose: "payments.stripe",
       value: {
         secretKey: "sk_test_x",
@@ -911,7 +910,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, providerDb, new FakeStripe())), noopLog);
       const cookie = await loginSession(app, cfg, operatorId);
       const deviceCookie = await enrolTillCookie(cfg, await createTillProfile(cfg));
-      await connectStripe(cfg);
+      await connectStripe();
       const reader = await seedReader(cfg);
       await setDefaultReader(cfg, deviceIdOf(deviceCookie), reader.id);
 
@@ -945,7 +944,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, providerDb, new FakeStripe())), noopLog);
       const cookie = await loginSession(app, cfg, operatorId);
       const deviceCookie = await enrolTillCookie(cfg, await createTillProfile(cfg));
-      await connectStripe(cfg);
+      await connectStripe();
       const dflt = await seedReader(cfg, { name: "Default" });
       const other = await seedReader(cfg, { name: "Other" });
       await setDefaultReader(cfg, deviceIdOf(deviceCookie), dflt.id);
@@ -987,7 +986,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, providerDb, client)), noopLog);
       const cookie = await loginSession(app, cfg, operatorId);
       const deviceCookie = await enrolTillCookie(cfg, await createTillProfile(cfg));
-      await connectStripe(cfg);
+      await connectStripe();
       const readerA = await seedReader(cfg, { name: "Reader A" });
       const readerB = await seedReader(cfg, { name: "Reader B" });
 
@@ -1031,7 +1030,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       mountTillApi(app, apiDepsWithPool(cfg, pool), noopLog);
       const cookie = await loginSession(app, cfg, operatorId);
       const deviceCookie = await enrolTillCookie(cfg, await createTillProfile(cfg));
-      await connectStripe(cfg);
+      await connectStripe();
       const reader = await seedReader(cfg);
       await setDefaultReader(cfg, deviceIdOf(deviceCookie), reader.id);
 
@@ -1129,7 +1128,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, providerDb, client)), noopLog);
       const cookie = await loginSession(app, cfg, operatorId);
       const deviceCookie = await enrolTillCookie(cfg, await createTillProfile(cfg));
-      await connectStripe(cfg);
+      await connectStripe();
       const reader = await seedReader(cfg);
       await setDefaultReader(cfg, deviceIdOf(deviceCookie), reader.id);
 
@@ -1214,7 +1213,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, providerDb, new FakeStripe())), noopLog);
       const cookie = await loginSession(app, cfg, operatorId);
       const deviceCookie = await enrolTillCookie(cfg, await createTillProfile(cfg));
-      await connectStripe(cfg);
+      await connectStripe();
       const reader = await seedReader(cfg);
       await setDefaultReader(cfg, deviceIdOf(deviceCookie), reader.id);
       const payRes = await app.request("/api/pay", {

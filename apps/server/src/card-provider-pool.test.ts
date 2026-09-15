@@ -88,7 +88,6 @@ async function seedTenantWithSumUpKey(): Promise<TenantId> {
   const tenantId = await seedTenant(suite.db);
   await withTransaction(suite.db, (tx) =>
     putCredential(tx, ring, {
-      tenantId,
       purpose: "payments.sumup",
       value: {
         apiKey: "sup_sk_x",

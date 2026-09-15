@@ -18,8 +18,9 @@ export async function resolveEmailDelivery(
   tenantId: TenantId,
   practiceMode: boolean,
 ): Promise<EmailDelivery> {
+  void tenantId;
   const configured = await withTransaction(db, (tx) =>
-    tryGetCredential(tx, ring, { tenantId, purpose: "email.smtp" }),
+    tryGetCredential(tx, ring, { purpose: "email.smtp" }),
   );
   if (configured !== null) {
     return { mode: "smtp", smtp: { url: configured.url!, from: configured.from! } };

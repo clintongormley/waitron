@@ -28,7 +28,6 @@ describe("resolveEmailDelivery", () => {
     const tenantId = await seedTenant(suite.db);
     await withTransaction(suite.db, (tx) =>
       putCredential(tx, ring, {
-        tenantId,
         purpose: "email.smtp",
         value: { url: "smtps://smtp.example.test:465", from: "Venue <venue@example.test>" },
       }),

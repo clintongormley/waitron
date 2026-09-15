@@ -5,7 +5,7 @@ import type { KeyRing, Purpose } from "@waitron/credentials";
 import type { TenantId } from "@waitron/shared";
 
 /**
- * Read the credential for this tenant on each pass. Provisioning and rotation
+ * Read the credential for a purpose on each pass. Provisioning and rotation
  * therefore take effect without a restart, and decrypted secrets are not cached
  * for the lifetime of the process.
  */
@@ -15,5 +15,6 @@ export function readCredential(
   tenantId: TenantId,
   purpose: Purpose,
 ): Promise<Record<string, string>> {
-  return withTransaction(db, (tx) => getCredential(tx, ring, { tenantId, purpose }));
+  void tenantId;
+  return withTransaction(db, (tx) => getCredential(tx, ring, { purpose }));
 }

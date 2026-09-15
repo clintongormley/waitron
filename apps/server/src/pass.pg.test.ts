@@ -48,7 +48,6 @@ describe("one pass as the non-superuser deployment role", () => {
     const tenantId = await seedTenant(suite.admin);
     await withTransaction(suite.admin, (tx) =>
       putCredential(tx, ring, {
-        tenantId,
         purpose: "payments.stripe",
         value: {
           secretKey: "sk_test_probe",
@@ -146,7 +145,6 @@ describe("one pass as the non-superuser deployment role", () => {
     // not merely the row's absence, the thing this test depends on.
     await withTransaction(suite.admin, (tx) =>
       putCredential(tx, ring, {
-        tenantId: otherPurposeTenant,
         purpose: "fiscal.aeat",
         value: { pfxBase64: "AAAA", passphrase: "p", certKind: "sello" },
       }),

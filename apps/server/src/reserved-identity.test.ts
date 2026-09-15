@@ -74,7 +74,6 @@ describe("establishReservedStandbyIdentity", () => {
     // sealed private key present
     const cred = await withTransaction(suite.db, (tx) =>
       tryGetCredential(tx, RING, {
-        tenantId: brandTenantId(tenantId),
         purpose: "membership.node_key",
       }),
     );
@@ -135,7 +134,6 @@ describe("establishReservedStandbyIdentity", () => {
     // the vault still holds the FIRST key; the SECOND node has no reserved SIF
     const cred = await withTransaction(suite.db, (tx) =>
       tryGetCredential(tx, RING, {
-        tenantId: brandTenantId(tenantId),
         purpose: "membership.node_key",
       }),
     );

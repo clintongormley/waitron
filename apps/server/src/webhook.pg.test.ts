@@ -73,7 +73,6 @@ async function seedInitiated(admin: Database, webhookSecret: string): Promise<Se
   );
   await withTransaction(admin, (tx) =>
     putCredential(tx, ring, {
-      tenantId,
       purpose: "payments.stripe",
       value: {
         secretKey: "sk_test_probe",
