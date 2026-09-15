@@ -522,6 +522,26 @@ modifierDependants query."
 
 ---
 
+## Task 7: Developer-doc sweep for the whole redesign
+
+Added after the Task 1 review flagged `docs/developers/modifiers.md` as stale (§1 defect class: a behaviour change leaving false prose no `apps/`/`packages/` sweep sees). Do this LAST, once the code is settled, so the doc is rewritten once against the final shape rather than restaged by every task.
+
+**Files:**
+- Modify: `docs/developers/modifiers.md` — remove the `"type": "yes-no"` authoring body and the `{ "type": "yes-no", "value": false }` `modifierSelections` example (a case the server now rejects with `modifier.invalid`); update the allergen prose from the add/remove model to the single "contains" list; update the dietary prose from "no longer suitable for" / `dietaryEffect.invalidates` to the positive `suitableFor` (vegan/vegetarian/halal/kosher); rename the sections to match the editor ("Nutritional information", "Dietary preferences"); note that the till/kitchen no longer compute a combined as-served figure.
+- Sweep: `git grep -ln "yes-no\|invalidates\|removeAllergens\|no longer suitable\|as-served\|dietaryEffect" -- docs` (EXCLUDING `docs/superpowers/**`, which are dated historical records — leave them). Update every live runbook/reference prose hit; a dated pointer, not a rewrite, for anything historical.
+
+**Interfaces:** none (docs only).
+
+- [ ] **Step 1: Grep the docs tree** for the terms above (excluding `docs/superpowers/`), list the live-prose hits.
+- [ ] **Step 2: Rewrite `docs/developers/modifiers.md`** to the final model (no yes-no; single allergen list; positive dietary; renamed sections; no combining). Show a correct `modifierSelections` example (extras/options/text only).
+- [ ] **Step 3: Fix any other live-prose hits** from Step 1.
+- [ ] **Step 4: Verify** `scripts/claude-md-pointers.test.ts` still passes if any pointer changed (`pnpm test -- claude-md-pointers` or the root guard run), and re-grep to confirm no live doc still teaches the old model.
+- [ ] **Step 5: Commit** (`git commit -s`) — plain English, e.g. "Docs: update the modifiers developer guide for the nutrition redesign".
+
+**Deferred minor to fold into Task 5:** `apps/dashboard/src/widgets/modifier-form.ts` — the `@state() private available` and the `&& this.available` term in `#save`'s choices-required guard are vestigial after Task 1 (no type can be turned off as a whole). Remove both while reworking the form.
+
+---
+
 ## Self-review notes
 
 - **Spec coverage:** yes-no removal (T1); stop combining (T2); single allergen list (T3); positive dietary + per-item display (T4); section renames + editor (T5); row modal + delete restyle (T6). Product derivation untouched (T2 keeps `deriveDietProfile`/`overlayDietProfile`/`republish`). Calorie dropped (absent). "Tree nuts" already "Nuts" (no task). Icons deferred (not in this plan).
