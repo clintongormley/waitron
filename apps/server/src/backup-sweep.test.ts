@@ -17,6 +17,7 @@ import {
   runBackupSweep,
   runOnce,
 } from "./backup-sweep.js";
+import type { BackupOutcomeHolder } from "./alert-sources.js";
 import { backupArchiveKey } from "./pg-dump.js";
 import { ALL_MODULES } from "./modules.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
@@ -267,6 +268,21 @@ describe("runOnce (fan-out)", () => {
       "backup.destination_failed",
       expect.objectContaining({ destination: "full-disk", errorCode: "unknown", errno: "ENOSPC" }),
     );
+  });
+
+  it("records each destination's last outcome: a failure lands in outcomes.failed, a success clears it", async () => {
+    const good = new FakeBackend("good");
+    const bad = new FakeBackend("bad", true);
+    const outcomes: BackupOutcomeHolder = { failed: new Map() };
+    // A failing put records the failure under that destination; the healthy one records no failure.
+    await runOnce({ ...deps([good, bad]), outcomes });
+    expect(outcomes.failed.has("bad")).toBe(true);
+    expect(outcomes.failed.get("bad")).toEqual({ at: "2026-09-05T00:00:00.000Z" });
+    expect(outcomes.failed.has("good")).toBe(false);
+    // A later tick where the once-bad destination succeeds clears its recorded failure.
+    const recovered = new FakeBackend("bad");
+    await runOnce({ ...deps([recovered]), outcomes });
+    expect(outcomes.failed.has("bad")).toBe(false);
   });
 
   it("prunes each backend to retain", async () => {

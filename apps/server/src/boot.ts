@@ -80,6 +80,7 @@ import { corsForVenue } from "./cors.js";
 import { mountDiagnosticsApi } from "./diagnostics-api.js";
 import { mountAlertsApi } from "./alerts-api.js";
 import { createAlertRegistry } from "./alerts.js";
+import type { BackupOutcomeHolder } from "./alert-sources.js";
 import {
   createHealthState,
   healthApp,
@@ -2159,6 +2160,11 @@ export async function startServer(
   // primary whose probe passes. A probe failure or a non-primary role leaves backup off and is logged,
   // never stopping sales (§5). Provenance and the disk re-read both read the RAW `base` env, not the
   // merged `env`, so a file-sourced value is distinguishable from an env-sourced one (spec §3.2).
+  // The in-process record of each backup destination's last sweep outcome, read by the backups alert
+  // source (Task 7 assembles that source, after this supervisor exists). Declared here so the sweep the
+  // supervisor starts fills it and the later source reads the same holder; it is process-lived and
+  // empty until the first sweep tick after boot.
+  const backupOutcomes: BackupOutcomeHolder = { failed: new Map() };
   const backupSupervisor = new BackupSupervisor({
     buildConfig: async () => loadBackupConfig(await loadBoxEnv(base, config.stateDir)),
     isManagedByEnvironment: () => BACKUP_ENV_KEYS.some((k) => !isUnset(base[k])),
@@ -2176,6 +2182,7 @@ export async function startServer(
         await asAppUser(tx);
         return resolveVenueClock(tx, till.tenantId, till.nodeId);
       }),
+    outcomes: backupOutcomes,
     log,
   });
   await backupSupervisor.reload();

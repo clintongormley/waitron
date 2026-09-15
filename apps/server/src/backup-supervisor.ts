@@ -27,6 +27,7 @@ import type { BackupConfig, BackupSchedule } from "./backup-config.js";
 import type { ScheduleClock } from "./backup-schedule.js";
 import { readBackupStatus, type BackupStatus } from "./backup-status.js";
 import { runBackupSweep } from "./backup-sweep.js";
+import type { BackupOutcomeHolder } from "./alert-sources.js";
 import type { DeploymentEnvironment } from "./config.js";
 import { buildBackend } from "./local-fs-backend.js";
 import { realSleep } from "./loop.js";
@@ -67,6 +68,9 @@ export interface BackupSupervisorDeps {
   jitterSeed: string;
   /** The venue's tenant-scoped wall clock (tz + business-day cutover). */
   readClock: () => Promise<ScheduleClock>;
+  /** In-memory per-destination outcome holder the backups alert source reads. Passed straight to the
+   * sweep so each destination's tick result is recorded; optional so tests that ignore alerts omit it. */
+  outcomes?: BackupOutcomeHolder;
   log: Logger;
   /** DI for tests; defaults to `createPostgresDb`. */
   openDb?: (url: string) => Promise<Database>;
@@ -171,6 +175,7 @@ export class BackupSupervisor {
         retainDays: cfg.retainDays,
         jitterSeed: this.#deps.jitterSeed,
         readClock: this.#deps.readClock,
+        outcomes: this.#deps.outcomes,
         signal: controller.signal,
         // Fired when a tick stored to ≥1 destination — the in-process proof an artifact exists under
         // the current key. A stale callback from a torn-down sweep cannot lie: reload() reset the flag

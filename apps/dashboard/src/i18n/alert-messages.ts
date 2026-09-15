@@ -22,6 +22,18 @@ export const ALERT_MESSAGES: Readonly<
     en: "One of Waitron's checks could not run. It will try again in a minute.",
     es: "Una de las comprobaciones de Waitron no se ha podido ejecutar. Lo volverá a intentar en un minuto.",
   },
+  "backup.destination_overdue": {
+    en: "Backups to “{destination}” are overdue — the last good backup is older than expected. Check the destination on the Backups page.",
+    es: "Las copias de seguridad en «{destination}» están atrasadas: la última correcta es más antigua de lo esperado. Revisa el destino en la página de Copias.",
+  },
+  "backup.destination_failed": {
+    en: "The last backup to “{destination}” failed. Open the Backups page to retry.",
+    es: "La última copia de seguridad en «{destination}» falló. Abre la página de Copias para reintentar.",
+  },
+  "backup.disabled": {
+    en: "Backups are not set up. Configure a destination on the Backups page so your data is protected.",
+    es: "Las copias de seguridad no están configuradas. Configura un destino en la página de Copias para proteger tus datos.",
+  },
   "chain.verification_failed": {
     en: "The invoice record chain failed its integrity check on a sale. Contact support.",
     es: "La cadena de registros de facturación no ha superado su comprobación de integridad en una venta. Contacta con soporte.",
