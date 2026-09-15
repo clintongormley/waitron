@@ -47,7 +47,7 @@ it("preserves exclusions, phrases and OR while stemming multilingual searches as
   });
 });
 
-it("ranks, filters and paginates multilingual results within the requested tenant as app_user", async () => {
+it("ranks, filters and paginates multilingual results as app_user", async () => {
   const tenantId = await seedTenant(suite.admin);
   await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
@@ -56,12 +56,11 @@ it("ranks, filters and paginates multilingual results within the requested tenan
       names: Record<string, string>,
       altText: string,
       labels: string[],
-      owner = tenantId,
     ) =>
       (
         await uploadImage(
           tx,
-          owner,
+          tenantId,
           {
             bytes: new Uint8Array([0xff, 0xd8, 0xff, marker]),
             names,

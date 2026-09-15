@@ -142,11 +142,11 @@ it.each(["staff"] as const)(
       });
     }
     const images = await suite.admin.execute(
-      sql`select id, filename, names, alt_text as "altText", labels from media_images where tenant_id = ${tenantId}`,
+      sql`select id, filename, names, alt_text as "altText", labels from media_images`,
     );
     expect(images.rows).toEqual([{ id: image.id, filename: image.filename, ...original }]);
     const data = await suite.admin.execute<{ count: number }>(
-      sql`select count(*)::int as count from media_image_data where tenant_id = ${tenantId} and image_id = ${image.id}`,
+      sql`select count(*)::int as count from media_image_data where image_id = ${image.id}`,
     );
     expect(data.rows).toEqual([{ count: 1 }]);
   },

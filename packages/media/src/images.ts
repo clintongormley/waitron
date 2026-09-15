@@ -229,7 +229,7 @@ export async function uploadImage(
   const extension = validateImageBytes(input.bytes);
   const filename = `${createHash("sha256").update(input.bytes).digest("hex")}.${extension}`;
   const values = await metadata(tx, tenantId, input, options.fallbackLanguage ?? FALLBACK_LOCALE);
-  // The content-language lock also serializes duplicate uploads within this tenant.
+  // The content-language lock also serializes duplicate uploads.
   const [existing] = await tx
     .select({ id: mediaImages.id })
     .from(mediaImages)
@@ -237,9 +237,9 @@ export async function uploadImage(
   if (existing) return { created: false, image: await readImage(tx, tenantId, existing.id) };
   const [row] = await tx
     .insert(mediaImages)
-    .values({ tenantId, filename, ...values })
+    .values({ filename, ...values })
     .returning({ id: mediaImages.id });
-  await tx.insert(mediaImageData).values({ tenantId, imageId: row!.id, bytes: input.bytes });
+  await tx.insert(mediaImageData).values({ imageId: row!.id, bytes: input.bytes });
   return { created: true, image: await readImage(tx, tenantId, row!.id) };
 }
 

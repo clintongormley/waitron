@@ -116,7 +116,7 @@ describe("seedMedia", () => {
     }
 
     const written = await suite.admin.execute<{ count: number }>(
-      sql`select count(*)::int as count from media_images where tenant_id = ${tenantId}`,
+      sql`select count(*)::int as count from media_images`,
     );
     const distinctHashes = new Set(
       await Promise.all(
@@ -140,11 +140,11 @@ describe("seedMedia", () => {
       });
       await seedMedia(tx, { tenantId, productsByImage });
       const before = await tx.execute(
-        sql`select id, filename, names, alt_text from media_images where tenant_id = ${tenantId} order by id`,
+        sql`select id, filename, names, alt_text from media_images order by id`,
       );
       await seedMedia(tx, { tenantId, productsByImage });
       const after = await tx.execute(
-        sql`select id, filename, names, alt_text from media_images where tenant_id = ${tenantId} order by id`,
+        sql`select id, filename, names, alt_text from media_images order by id`,
       );
       expect(after.rows).toEqual(before.rows);
       expect(after.rows.length).toBeGreaterThan(0);

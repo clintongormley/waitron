@@ -1,6 +1,14 @@
 import { sql } from "drizzle-orm";
 import { expect, it } from "vitest";
-import { asAppUser, withTransaction, type Database, type Transaction } from "@waitron/db";
+import {
+  asAppUser,
+  captureError,
+  pgErrorCode,
+  pgErrorMessage,
+  withTransaction,
+  type Database,
+  type Transaction,
+} from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { deleteImage, readImageBytes, uploadImage } from "./images.js";
@@ -72,30 +80,110 @@ it("grants metadata CRUD and immutable byte insertion, and refuses truncation", 
       { table: "media_images", privileges: "DELETE,INSERT,SELECT,UPDATE" },
     ]);
   });
-  await expect(
-    app(suite.admin, tenantId, (tx) => tx.execute(sql`truncate media_images cascade`)),
-  ).rejects.toThrow();
-  await expect(
-    app(suite.admin, tenantId, (tx) =>
-      tx.execute(sql`delete from media_image_data where tenant_id = ${tenantId}`),
-    ),
-  ).rejects.toThrow();
-  await expect(
-    app(suite.admin, tenantId, (tx) =>
-      tx.execute(sql`update media_image_data set bytes = bytes where tenant_id = ${tenantId}`),
-    ),
-  ).rejects.toThrow();
+  for (const statement of [
+    sql`truncate media_images cascade`,
+    sql`delete from media_image_data where image_id = ${image.id}`,
+    sql`update media_image_data set bytes = bytes where image_id = ${image.id}`,
+  ]) {
+    const error = await captureError(() =>
+      app(suite.admin, tenantId, (tx) => tx.execute(statement)),
+    );
+    expect(pgErrorCode(error)).toBe("42501");
+  }
+});
+
+it("carries no tenant column and keys the image tables on their own columns", async () => {
+  const columns = await suite.admin.execute<{ table_name: string }>(sql`
+    select table_name from information_schema.columns
+    where table_schema = 'public' and table_name in ('media_images', 'media_image_data')
+      and column_name = 'tenant_id'`);
+  expect(columns.rows).toEqual([]);
+  const constraints = await suite.admin.execute<{ name: string; def: string }>(sql`
+    select conname as name, pg_get_constraintdef(oid) as def from pg_constraint
+    where contype in ('p', 'u', 'f') and (
+      conrelid in ('public.media_images'::regclass, 'public.media_image_data'::regclass)
+      or confrelid = 'public.media_images'::regclass)
+    order by conname`);
+  expect(constraints.rows).toEqual([
+    {
+      name: "category_details_media_image_fk",
+      def: "FOREIGN KEY (image) REFERENCES media_images(filename) ON DELETE RESTRICT",
+    },
+    {
+      name: "media_image_data_image_fk",
+      def: "FOREIGN KEY (image_id) REFERENCES media_images(id) ON DELETE CASCADE",
+    },
+    { name: "media_image_data_image_id_pk", def: "PRIMARY KEY (image_id)" },
+    { name: "media_images_filename_key", def: "UNIQUE (filename)" },
+    { name: "media_images_pkey", def: "PRIMARY KEY (id)" },
+    {
+      name: "products_media_image_fk",
+      def: "FOREIGN KEY (image) REFERENCES media_images(filename) ON DELETE RESTRICT",
+    },
+  ]);
+  const indexes = await suite.admin.execute<{ name: string; def: string }>(sql`
+    select indexname as name, indexdef as def from pg_indexes
+    where schemaname = 'public' and tablename = 'media_images'
+      and indexname not in ('media_images_pkey', 'media_images_filename_key')
+    order by indexname`);
+  expect(indexes.rows).toEqual([
+    {
+      name: "media_images_date_idx",
+      def: "CREATE INDEX media_images_date_idx ON public.media_images USING btree (created_at, id)",
+    },
+    {
+      name: "media_images_search_idx",
+      def: "CREATE INDEX media_images_search_idx ON public.media_images USING gin (media_search_vector(names, alt_text, labels))",
+    },
+  ]);
 });
 
 it("refuses a product reference to an absent image filename", async () => {
   const { tenantId, productId } = await fixture();
-  await expect(
+  const error = await captureError(() =>
     app(suite.admin, tenantId, (tx) =>
       tx.execute(
-        sql`update products set image = ${"a".repeat(64) + ".jpg"} where tenant_id = ${tenantId} and id = ${productId}`,
+        sql`update products set image = ${"a".repeat(64) + ".jpg"} where id = ${productId}`,
       ),
     ),
-  ).rejects.toThrow();
+  );
+  expect(pgErrorCode(error)).toBe("23503");
+  expect(pgErrorMessage(error)).toMatch(/products_media_image_fk/);
+});
+
+it("refuses a category reference to an absent image filename", async () => {
+  const { createCategory } = await import("@waitron/catalogue");
+  const { tenantId } = await fixture();
+  const category = await app(suite.admin, tenantId, (tx) =>
+    createCategory(tx, tenantId, { name: { en: "Bakery" } }),
+  );
+  const error = await captureError(() =>
+    app(suite.admin, tenantId, (tx) =>
+      tx.execute(
+        sql`update category_details set image = ${"b".repeat(64) + ".jpg"} where category_id = ${category.id}`,
+      ),
+    ),
+  );
+  expect(pgErrorCode(error)).toBe("23503");
+  expect(pgErrorMessage(error)).toMatch(/category_details_media_image_fk/);
+});
+
+it("refuses image bytes for an absent image and removes the bytes with their image", async () => {
+  const { tenantId, image } = await fixture();
+  const error = await captureError(() =>
+    app(suite.admin, tenantId, (tx) =>
+      tx.execute(
+        sql`insert into media_image_data (image_id, bytes) values (gen_random_uuid(), ${Buffer.from([0])})`,
+      ),
+    ),
+  );
+  expect(pgErrorCode(error)).toBe("23503");
+  expect(pgErrorMessage(error)).toMatch(/media_image_data_image_fk/);
+  await suite.admin.execute(sql`delete from media_images where id = ${image.id}`);
+  const data = await suite.admin.execute<{ count: number }>(
+    sql`select count(*)::int as count from media_image_data where image_id = ${image.id}`,
+  );
+  expect(data.rows).toEqual([{ count: 0 }]);
 });
 
 it("waits for an attaching product then reports its committed use instead of deleting", async () => {
@@ -113,9 +201,7 @@ it("waits for an attaching product then reports its committed use instead of del
     const pid = (await remove.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`))
       .rows[0]!.pid;
     const adding = app(attach, tenantId, async (tx) => {
-      await tx.execute(
-        sql`update products set image = ${image.filename} where tenant_id = ${tenantId} and id = ${productId}`,
-      );
+      await tx.execute(sql`update products set image = ${image.filename} where id = ${productId}`);
       ready();
       await wait;
     });
@@ -156,9 +242,7 @@ it("makes an attachment wait for deletion then rejects the missing reference", a
     });
     await deleted;
     const adding = app(attach, tenantId, (tx) =>
-      tx.execute(
-        sql`update products set image = ${image.filename} where tenant_id = ${tenantId} and id = ${productId}`,
-      ),
+      tx.execute(sql`update products set image = ${image.filename} where id = ${productId}`),
     );
     const settled = Promise.allSettled([adding, deleting]);
     try {

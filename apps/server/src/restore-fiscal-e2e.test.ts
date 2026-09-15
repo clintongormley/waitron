@@ -387,7 +387,7 @@ describe("fiscal restore (real Postgres, end to end)", () => {
           filename: string;
           names: Record<string, string>;
           labels: string[];
-        }>(sql`select filename, names, labels from media_images where tenant_id = ${F.tenantId}`);
+        }>(sql`select filename, names, labels from media_images`);
         expect(images.rows).toHaveLength(1);
         expect(images.rows[0]).toMatchObject({ names: { es: "Pan" }, labels: ["Food"] });
         const restored = await readImageBytes(tx, F.tenantId, images.rows[0]!.filename);

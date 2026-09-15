@@ -1,6 +1,5 @@
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { bodyLimit } from "hono/body-limit";
-import { sql } from "drizzle-orm";
 import { asAppUser, withTransaction, type Transaction } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
 import type { ModuleRoutes } from "@waitron/module";
@@ -66,13 +65,10 @@ export const MEDIA_ROUTES: ModuleRoutes = {
     const gated = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>) =>
       withTransaction(ctx.db, async (tx) => {
         await asAppUser(tx);
-        const auth = await authorizeManager(tx, {
+        await authorizeManager(tx, {
           managementSessionId: sessionId,
           permission: "image.manage",
         });
-        const member = await tx.execute(sql`select 1 from persons where id=${auth.authorizedBy}`);
-        if (member.rows.length === 0)
-          throw new AppError("authorization.not_permitted", { permission: "image.manage" });
         return fn(tx);
       });
     app.get("/management-api/images", (c) =>

@@ -29,6 +29,27 @@
       "when": 1789247495019,
       "tag": "0003_category_images",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1789489162395,
+      "tag": "0004_drop_tenant_id_inbound_fks",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1789489170310,
+      "tag": "0005_drop_tenant_id",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1789489179679,
+      "tag": "0006_drop_tenant_id_sql",
+      "breakpoints": true
     }
   ]
 }

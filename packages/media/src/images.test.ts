@@ -311,7 +311,7 @@ describe("search and sorting", () => {
         );
       for (let n = 0; n < 3; n++)
         await tx.execute(
-          sql`update media_images set created_at = ${new Date(2026, 0, n + 1)} where tenant_id = ${tenantId} and id = ${added[n]!.id}`,
+          sql`update media_images set created_at = ${new Date(2026, 0, n + 1)} where id = ${added[n]!.id}`,
         );
       const ids = (result: Awaited<ReturnType<typeof listImages>>) =>
         result.images.map((image) => image.id);
