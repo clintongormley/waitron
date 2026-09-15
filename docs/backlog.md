@@ -910,8 +910,13 @@ the alerts framework and recorded incidents — **LANDED #368**
 pop-up for new alerts, and wording for every recorded incident code; (2) the ongoing checks — **LANDED
 #371** (2026-09-15): backups, fiscal submission and the awaiting-certificate pause, print agents and
 printers, and reader battery. The printing codes shipped as `agent.silent` and `printer.jobs_waiting`,
-not the spec's provisional `printing.*` names, to match the printing package's existing code families;
-codes are never renamed once shipped.
+not the spec's provisional `printing.*` names, to match the printing package's existing code families.
+They can still be renamed cleanly (one commit, no deprecated alias). The never-rename rule protects a
+code already saved where it can't be edited, and these two are worked out live on each dashboard read:
+only the check (`apps/server/src/alert-sources.ts`), its wording and the printing code list name them,
+and nothing writes them to `incidents` or browser storage (by reading, 2026-09-15). That stops holding
+once a venue is live or anything starts saving them. Precedent: `series.not_found`, renamed twice
+(`packages/db/src/errors.ts`).
 The questions below are answered there; the notes stay as the origin of the item.
 
 What branch 1 surfaced, each checked by a whole-repo grep on 2026-09-14:
