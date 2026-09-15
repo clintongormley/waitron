@@ -85,9 +85,10 @@ brainstorm → spec → plan → PR; fiscal-adjacent ones take owner sign-off at
    split it depended on has LANDED (#363). Branch 1, the alerts framework and recorded incidents, has
    LANDED (#368): it shows recorded incidents such as a rejected filing or a payment drift in the
    dashboard's bell and Alerts screen. Branch 2, the ongoing
-   checks, is next; until it lands, a stalled print agent and a failed or stale backup stay
-   invisible. Items that wait on this surface point back to A5 (A6's low reader battery, B2's "backups
-   off or stale" reminder).
+   checks, is BUILT on branch `feat/dashboard-alerts-ongoing`, awaiting merge: a stalled print agent, a
+   fiscal outbox that has stopped, a missing tax certificate, waiting print jobs, a low reader battery
+   and a failed or stale backup now surface too. Items that wait on this surface point back to A5
+   (A6's low reader battery, B2's "backups off or stale" reminder).
 
 3. **Backups that leave the box** (B2) — S3 first, then Drive. With the mirror deferred, a bucket is a
    standalone primary's only off-box copy. Only `LocalFsBackend` exists.
@@ -906,15 +907,16 @@ they guard — **LANDED #363** (2026-09-14), adds `layout.configure` / `venue.co
 `system.manage` with no access change, and the alerts work uses `system.manage` for backup alerts; (1)
 the alerts framework and recorded incidents — **LANDED #368**
 (2026-09-15): the bell, its panel, the Alerts screen with Open and Handled tabs, the
-pop-up for new alerts, and wording for every recorded incident code; (2) the ongoing checks — NEXT.
+pop-up for new alerts, and wording for every recorded incident code; (2) the ongoing checks — BUILT on
+branch `feat/dashboard-alerts-ongoing`, awaiting merge.
 The questions below are answered there; the notes stay as the origin of the item.
 
 What branch 1 surfaced, each checked by a whole-repo grep on 2026-09-14:
 
-- **Branch 2 must add alert wording for every code its ongoing sources raise** (for example
-  `backup.disabled`). Branch 1 worded only the recorded incident codes, and
-  `apps/dashboard/src/i18n/alert-messages.ts` has no entry for any ongoing code. Without one, the
-  dashboard shows a generic sentence with the raw code beneath it.
+- **Every ongoing alert code is now worded in both languages** (branch 2) in
+  `apps/dashboard/src/i18n/alert-messages.ts`. The guard `scripts/ongoing-alert-codes.test.ts` fails if
+  a code an ongoing source raises has no English and Spanish sentence, so a real ongoing alert can no
+  longer fall back to the generic sentence with the raw code beneath it.
 - **The fiscal reconcile sweep has no production caller.** Only `acks.test.ts` and
   `reconcile.test.ts` import `packages/fiscal-verifactu/src/reconcile.ts`, and the package's
   `index.ts` does not export it. Its `fiscal.reconcile_*` incidents are worded, but nothing in

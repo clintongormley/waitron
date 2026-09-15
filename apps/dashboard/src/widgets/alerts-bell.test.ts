@@ -33,6 +33,20 @@ const ongoing: AlertView = {
   area: "backup",
   screen: "backup",
 };
+// A real ongoing check produced by a server source (feat/dashboard-alerts-ongoing): worded from its
+// params and naming the screen that fixes it. The stub `ongoing` above is a bare placeholder; this
+// is the first end-to-end proof that a real code's wording resolves and its "Go to" targets its own
+// screen.
+const jobsWaiting: AlertView = {
+  key: "printer.jobs_waiting:barra",
+  kind: "ongoing",
+  code: "printer.jobs_waiting",
+  params: { printer: "Barra", count: 2 },
+  severity: "warning",
+  since: "2026-09-14T12:00:00.000Z",
+  area: "printing",
+  screen: "printers",
+};
 
 const menu = (el: AlertsBell) => el.shadowRoot!.querySelector("wt-row-actions")!;
 const popup = (el: AlertsBell) => menu(el).shadowRoot!.querySelector<HTMLElement>("[popover]")!;
@@ -101,6 +115,32 @@ describe("dashboard-alerts-bell", () => {
     await userEvent.click(q(el, "[data-test=alert-go-to]")!);
     expect(goTo.mock.calls[0]![0].detail).toEqual({ screen: "backup" });
     expect(popup(el).matches(":popover-open")).toBe(false);
+  });
+
+  it("renders a real ongoing check's wording and a Go to for its own screen, gated on permission", async () => {
+    setLocale("en-GB");
+    const { el } = await mountWidget<AlertsBell>("dashboard-alerts-bell", {
+      alerts: [jobsWaiting],
+      canOpen: () => false,
+    });
+    const item = qa(el, "li")[0]!.textContent!;
+    // Real wording from its params, not the generic fallback or the raw code.
+    expect(item).toContain("print job(s) are stuck at");
+    expect(item).toContain("Barra");
+    expect(item).not.toContain("Something needs attention");
+    expect(item).not.toContain("printer.jobs_waiting");
+    // Without the screen's permission there is no way to reach it.
+    expect(q(el, "[data-test=alert-go-to]")).toBeNull();
+
+    el.canOpen = (screen) => screen === "printers";
+    await el.updateComplete;
+    const goTo = q(el, "[data-test=alert-go-to]")!;
+    expect(goTo.textContent).toContain("Printers");
+    const emitted = vi.fn();
+    el.addEventListener("wt-alert-go-to", emitted);
+    el.open();
+    await userEvent.click(goTo);
+    expect(emitted.mock.calls[0]![0].detail).toEqual({ screen: "printers" });
   });
 
   it("See all asks for the screen and closes the panel", async () => {
