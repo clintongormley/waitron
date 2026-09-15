@@ -574,7 +574,9 @@ export class ProductEditor extends LitElement {
                   this.change("unitId", (event.target as HTMLSelectElement).value || null);
                 }}
               >
-                <option value="" .selected=${this.draft.unitId === null}>${t("editor.unit_each")}</option>
+                <option value="" .selected=${this.draft.unitId === null}>
+                  ${t("editor.unit_each")}
+                </option>
                 ${this.units.map((unit) => html`<option value=${unit.id} .selected=${unit.id === this.draft.unitId}>${this.unitLabel(unit)}</option>`)}
               </select></label
             >

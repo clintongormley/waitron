@@ -749,7 +749,8 @@ export class WtDataTable<Row = unknown> extends LitElement {
                                     class="row-activate"
                                     aria-label=${this.rowClickLabel(row)}
                                     @click=${() => this.rowClick!(row)}
-                                  ></button>${column.cell(row, { ancestorOnly: false })}`
+                                  ></button
+                                  >${column.cell(row, { ancestorOnly: false })}`
                               : column.cell(row, { ancestorOnly: false })
                           }
                         </td>
