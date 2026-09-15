@@ -119,7 +119,7 @@ describe("concurrent reconcile sweeps", () => {
         params: { payments: { remediation: string }[] };
       }>(sql`
         select count(*) over () as n, params from incidents
-        where tenant_id = ${seeded.tenantId} and code = 'payment.reconcile_orphan'
+        where code = 'payment.reconcile_orphan'
           and acknowledged_at is null`);
       // `count(*) over ()` returns ZERO rows (not one row with n = 0) when no incident matches, so
       // this guards the failure mode explicitly: without it, a regression that raised no orphan

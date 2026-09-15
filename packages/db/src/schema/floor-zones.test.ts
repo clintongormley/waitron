@@ -22,9 +22,7 @@ describe("floor_zones schema (columns and the dining_tables.zone_id composite FK
       .insert(tenants)
       .values([{ id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
     await suite.admin.execute(sql`
-      insert into locations (id, tenant_id, name, invoice_locales, operation_description)
-      values
-        (${LOCATION_A}, ${TENANT_A}, 'Loc A', array['es'], 'Hostelería')
+      insert into locations (id, name, invoice_locales, operation_description) values (${LOCATION_A}, 'Loc A', array['es'], 'Hostelería')
       on conflict (id) do nothing`);
   });
 
@@ -39,7 +37,7 @@ describe("floor_zones schema (columns and the dining_tables.zone_id composite FK
   async function seedZone(tenant: string, location: string, name: string): Promise<string> {
     return asApp(tenant, async (tx) => {
       const r = await tx.execute<{ id: string }>(
-        sql`insert into floor_zones (tenant_id, location_id, name) values (${tenant}, ${location}, ${name}) returning id`,
+        sql`insert into floor_zones (location_id, name) values (${location}, ${name}) returning id`,
       );
       return r.rows[0]!.id;
     });
@@ -67,7 +65,7 @@ describe("floor_zones schema (columns and the dining_tables.zone_id composite FK
     const tableId = await asApp(TENANT_A, async (tx) =>
       tx
         .execute<{ id: string }>(
-          sql`insert into dining_tables (tenant_id, location_id, label) values (${TENANT_A}, ${LOCATION_A}, 'T-zone') returning id`,
+          sql`insert into dining_tables (location_id, label) values (${LOCATION_A}, 'T-zone') returning id`,
         )
         .then((r) => r.rows[0]!.id),
     );
@@ -96,9 +94,7 @@ describe("floor_zones schema (columns and the dining_tables.zone_id composite FK
   });
 
   it("working_order_lines.served_at is visible and writable by the non-owner app_user", async () => {
-    await asApp(TENANT_A, (tx) =>
-      tx.execute(sql`select served_at from working_order_lines where tenant_id = ${TENANT_A}`),
-    );
+    await asApp(TENANT_A, (tx) => tx.execute(sql`select served_at from working_order_lines`));
     const updated = await asApp(TENANT_A, (tx) =>
       tx
         .execute<{ served_at: string | null }>(

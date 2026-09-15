@@ -153,7 +153,7 @@ describe("a record whose totals disagree with themselves is written, filed and f
     });
 
     const rows = await pg.db.execute<{ code: string; severity: string; sale_id: string }>(
-      sql`select code, severity, sale_id from incidents where tenant_id = ${tenantId}`,
+      sql`select code, severity, sale_id from incidents`,
     );
     expect(rows.rows).toEqual([
       expect.objectContaining({
@@ -168,7 +168,7 @@ describe("a record whose totals disagree with themselves is written, filed and f
     await useSeriesCode("FS");
     await sell();
 
-    const rows = await pg.db.execute(sql`select 1 from incidents where tenant_id = ${tenantId}`);
+    const rows = await pg.db.execute(sql`select 1 from incidents`);
     expect(rows.rows).toEqual([]);
   });
 });
@@ -197,7 +197,6 @@ describe("a recipient's name is checked as closely as the issuer's", () => {
       await asAppUser(tx);
       await tx.insert(sales).values({
         id: saleId,
-        tenantId,
         tillId,
         nodeId,
         seriesId,

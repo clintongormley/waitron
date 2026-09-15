@@ -31,33 +31,35 @@ export async function seedTenant(db: Database): Promise<TenantId> {
   return brandTenantId(result.rows[0]!.id);
 }
 
-/** Seeds one node for `tenant` at `location` and returns its id. Run as the connection owner
+/** Seeds one node at `location` and returns its id. Run as the connection owner
  * for fixture setup, exactly like {@link seedTenant}. The name
  * is a fixed fixture value, mirroring seedTenant's hardcoded legal_name: callers that care about a
- * node's name insert it themselves. */
+ * node's name insert it themselves. The `tenant` argument is inert — apps/server still passes it. */
 export async function seedNode(
   db: Database,
   tenant: TenantId,
   location: LocationId,
 ): Promise<NodeId> {
+  void tenant;
   const result = await db.execute<{ id: string }>(sql`
-    insert into nodes (tenant_id, location_id, name)
-    values (${tenant}, ${location}, 'Test node') returning id`);
+    insert into nodes (location_id, name)
+    values (${location}, 'Test node') returning id`);
   return brandNodeId(result.rows[0]!.id);
 }
 
-/** Seeds one kitchen station for `tenantId`/`locationId` and returns its id. Run as the connection owner
+/** Seeds one kitchen station for `locationId` and returns its id. Run as the connection owner
  * for fixture setup, exactly like {@link seedTenant}/{@link seedNode}.
  * Defaults to the DEFAULT station named 'Cocina' — the fixture shape the till suites need so a fire's
  * default-station fallback ({@link fireLines}) resolves; callers wanting a non-default or differently
  * named station override `isDefault`/`name`. */
 export async function seedKitchenStation(
   db: Database,
-  opts: { tenantId: TenantId; locationId: LocationId; name?: string; isDefault?: boolean },
+  // `tenantId` is inert: apps/server still supplies it, and the field goes when that caller does.
+  opts: { tenantId?: TenantId; locationId: LocationId; name?: string; isDefault?: boolean },
 ): Promise<string> {
-  const { tenantId, locationId, name = "Cocina", isDefault = true } = opts;
+  const { locationId, name = "Cocina", isDefault = true } = opts;
   const result = await db.execute<{ id: string }>(sql`
-    insert into kitchen_stations (tenant_id, location_id, name, is_default)
-    values (${tenantId}, ${locationId}, ${name}, ${isDefault}) returning id`);
+    insert into kitchen_stations (location_id, name, is_default)
+    values (${locationId}, ${name}, ${isDefault}) returning id`);
   return result.rows[0]!.id;
 }

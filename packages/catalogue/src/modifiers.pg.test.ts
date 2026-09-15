@@ -98,7 +98,6 @@ it("reads a stored-inactive non-yes/no modifier as available", async () => {
   const tenant = await seedTenant(suite.admin);
   const groupId = randomUUID();
   await suite.admin.insert(optionGroups).values({
-    tenantId: tenant,
     id: groupId,
     name,
     type: "options",
@@ -106,7 +105,7 @@ it("reads a stored-inactive non-yes/no modifier as available", async () => {
   });
   await suite.admin
     .insert(optionGroupItems)
-    .values({ tenantId: tenant, id: randomUUID(), groupId, name: { en: "Oat" }, active: true });
+    .values({ id: randomUUID(), groupId, name: { en: "Oat" }, active: true });
   const [modifier] = await app(tenant, (tx) => listModifiers(tx));
   expect(modifier).toMatchObject({ id: groupId, type: "options", available: true });
 });
@@ -383,10 +382,9 @@ it("refuses to delete a modifier an open working order uses", async () => {
     );
     const [order] = await tx
       .insert(workingOrders)
-      .values({ tenantId, tillId, nodeId, orderNumber: 1 })
+      .values({ tillId, nodeId, orderNumber: 1 })
       .returning();
     await tx.insert(workingOrderLines).values({
-      tenantId,
       workingOrderId: order!.id,
       productId: product.id,
       lineNo: 1,

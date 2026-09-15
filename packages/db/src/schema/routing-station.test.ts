@@ -31,26 +31,24 @@ describe("categories.station_id / products.station_id routing FKs (tenant-consis
     await admin.insert(locations).values([
       {
         id: LOCATION_A,
-        tenantId: TENANT_A,
         name: "Loc A",
         invoiceLocales: ["es"],
         operationDescription: "Hostelería",
       },
     ]);
-    stationA = await seedStation(TENANT_A, LOCATION_A);
+    stationA = await seedStation(LOCATION_A);
     const [catA] = await admin
       .insert(categories)
-      .values({ tenantId: TENANT_A, name: { es: "Comida" } })
+      .values({ name: { es: "Comida" } })
       .returning({ id: categories.id });
     categoryA = catA!.id;
     const [cat] = await admin
       .insert(catalogues)
-      .values({ tenantId: TENANT_A, name: "Deli A" })
+      .values({ name: "Deli A" })
       .returning({ id: catalogues.id });
     const [prodA] = await admin
       .insert(products)
       .values({
-        tenantId: TENANT_A,
         catalogueId: cat!.id,
         name: "Café solo",
         pricingUnit: "each",
@@ -61,10 +59,9 @@ describe("categories.station_id / products.station_id routing FKs (tenant-consis
     productA = prodA!.id;
   });
 
-  async function seedStation(tenant: string, location: string): Promise<string> {
+  async function seedStation(location: string): Promise<string> {
     const r = await suite.admin.execute<{ id: string }>(
-      sql`insert into kitchen_stations (tenant_id, location_id, name, is_default)
-          values (${tenant}, ${location}, 'Cocina', true) returning id`,
+      sql`insert into kitchen_stations (location_id, name, is_default) values (${location}, 'Cocina', true) returning id`,
     );
     return r.rows[0]!.id;
   }

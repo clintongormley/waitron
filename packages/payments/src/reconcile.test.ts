@@ -93,14 +93,12 @@ async function seedSecondTill(seeded: Seeded): Promise<Seeded> {
     )
   ).rows;
   const till2 = await pg.db.execute<{ id: string }>(sql`
-    insert into tills (tenant_id, location_id, name)
-    values (${seeded.tenantId}, ${till.location_id}, 'Till 2') returning id`);
+    insert into tills (location_id, name) values (${till.location_id}, 'Till 2') returning id`);
   const tillId = till2.rows[0].id;
   const node2 = await pg.db.execute<{ id: string }>(sql`
-    insert into nodes (tenant_id, location_id, name)
-    values (${seeded.tenantId}, ${till.location_id}, 'Node 2') returning id`);
+    insert into nodes (location_id, name) values (${till.location_id}, 'Node 2') returning id`);
   const wo2 = await pg.db.execute<{ id: string }>(sql`
-    insert into working_orders (tenant_id, till_id, order_number) values (${seeded.tenantId}, ${tillId}, 1) returning id`);
+    insert into working_orders (till_id, order_number) values (${tillId}, 1) returning id`);
   return {
     tenantId: seeded.tenantId,
     tillId,
@@ -109,9 +107,9 @@ async function seedSecondTill(seeded: Seeded): Promise<Seeded> {
   };
 }
 
-async function openIncidentCodes(tenantId: string): Promise<string[]> {
+async function openIncidentCodes(): Promise<string[]> {
   const { rows } = await pg.db.execute<{ code: string }>(
-    sql`select code from incidents where tenant_id = ${tenantId} order by code`,
+    sql`select code from incidents order by code`,
   );
   return rows.map((r) => r.code);
 }
@@ -153,7 +151,7 @@ describe("reconcilePayments", () => {
     );
     expect(result.checked).toBe(1);
     expect(result.incidentsRaised).toBe(0);
-    expect(await openIncidentCodes(seeded.tenantId)).toEqual([]);
+    expect(await openIncidentCodes()).toEqual([]);
   });
 
   it("raises one aggregated unsettled incident covering every stale payment on the till", async () => {
@@ -234,7 +232,7 @@ describe("reconcilePayments", () => {
     );
     expect(result.drift).toHaveLength(1);
     expect(result.drift[0]).toMatchObject({ localAmount: "10.00", settledAmount: "9.00" });
-    expect(await openIncidentCodes(seeded.tenantId)).toEqual(["payment.reconcile_drift"]);
+    expect(await openIncidentCodes()).toEqual(["payment.reconcile_drift"]);
     // The declared params shape, asserted whole: a human resolving this incident needs BOTH
     // figures, and the pair is the entire content of the finding.
     const { rows } = await pg.db.execute<{
@@ -268,7 +266,7 @@ describe("reconcilePayments", () => {
       NOW,
     );
     expect(result.lostSettlement).toHaveLength(1);
-    expect(await openIncidentCodes(seeded.tenantId)).toEqual(["payment.reconcile_lost_settlement"]);
+    expect(await openIncidentCodes()).toEqual(["payment.reconcile_lost_settlement"]);
     // The declared params shape, asserted whole: this incident names a settlement the processor
     // confirmed for a payment we never locally marked captured — the working order is the only
     // thing pointing a human back at what was actually paid for.
@@ -295,7 +293,7 @@ describe("reconcilePayments", () => {
     expect(result.missingLocal).toHaveLength(1);
     expect(result.missingLocal[0]).toMatchObject({ paymentRef: null, references: ["ext-ghost"] });
     expect(result.incidentsRaised).toBe(0);
-    expect(await openIncidentCodes(seeded.tenantId)).toEqual([]);
+    expect(await openIncidentCodes()).toEqual([]);
   });
 
   it("raises an incident for a missingLocal the processor attributed via a hint", async () => {
@@ -315,7 +313,7 @@ describe("reconcilePayments", () => {
     );
     expect(result.missingLocal).toHaveLength(1);
     expect(result.incidentsRaised).toBe(1);
-    expect(await openIncidentCodes(seeded.tenantId)).toEqual(["payment.reconcile_missing_local"]);
+    expect(await openIncidentCodes()).toEqual(["payment.reconcile_missing_local"]);
     // The declared params shape, asserted whole: this incident names money we hold NO row for, so
     // every processor reference, the amount, the settlement time and the hinted payment_ref are all
     // a human has to go on.
@@ -526,7 +524,7 @@ describe("orphan remediation", () => {
     expect(result.orphan).toHaveLength(1);
     expect(result.remediated).toBe(0);
     expect(reverse.calls).toEqual([]);
-    expect(await openIncidentCodes(seeded.tenantId)).toEqual(["payment.reconcile_orphan"]);
+    expect(await openIncidentCodes()).toEqual(["payment.reconcile_orphan"]);
     const { rows } = await pg.db.execute<{ reconcile_remediated_at: string | null }>(
       sql`select reconcile_remediated_at from payments where payment_ref = 'p1'`,
     );
@@ -566,7 +564,7 @@ describe("orphan remediation", () => {
     expect(result.remediated).toBe(0);
     expect(result.remediationFailures).toEqual([]);
     expect(reverse.calls).toEqual([]);
-    expect(await openIncidentCodes(seeded.tenantId)).toEqual(["payment.reconcile_orphan"]);
+    expect(await openIncidentCodes()).toEqual(["payment.reconcile_orphan"]);
     const incident = await pg.db.execute<{
       params: { payments: { remediation: string }[] };
     }>(sql`select params from incidents where code = 'payment.reconcile_orphan'`);
@@ -610,7 +608,7 @@ describe("orphan remediation", () => {
     ]);
     // One orphan aggregate + one remediation-failed aggregate.
     expect(result.incidentsRaised).toBe(2);
-    expect(await openIncidentCodes(seeded.tenantId)).toEqual([
+    expect(await openIncidentCodes()).toEqual([
       "payment.reconcile_orphan",
       "payment.reconcile_remediation_failed",
     ]);
@@ -761,7 +759,7 @@ describe("orphan remediation", () => {
     // NULL`, so while the first stays open the second sweep's insert is deduplicated away.
     await pg.db.execute(sql`
       update incidents set acknowledged_at = now()
-      where tenant_id = ${seeded.tenantId} and code = 'payment.reconcile_orphan'`);
+      where code = 'payment.reconcile_orphan'`);
 
     const second = recordingReverse();
     const result = await reconcilePayments(
@@ -805,7 +803,7 @@ describe("orphan remediation", () => {
     // (`claimed`) instead of the second sweep's.
     await pg.db.execute(sql`
       update incidents set acknowledged_at = now()
-      where tenant_id = ${seeded.tenantId} and code = 'payment.reconcile_orphan'`);
+      where code = 'payment.reconcile_orphan'`);
 
     // The second sweep's report now drifts the amount for the already-claimed row.
     const second = recordingReverse();
@@ -858,7 +856,7 @@ describe("orphan remediation", () => {
       sql`select reconcile_remediated_at from payments where payment_ref = 'p1'`,
     );
     expect(rows[0].reconcile_remediated_at).toBeNull();
-    expect(await openIncidentCodes(seeded.tenantId)).toEqual([
+    expect(await openIncidentCodes()).toEqual([
       "payment.reconcile_drift",
       "payment.reconcile_orphan",
     ]);

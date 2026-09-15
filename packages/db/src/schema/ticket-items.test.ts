@@ -43,24 +43,20 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
     await admin.insert(locations).values([
       {
         id: LOCATION_A,
-        tenantId: TENANT_A,
         name: "Fixture Location A",
         invoiceLocales: ["es"],
         operationDescription: "Hostelería",
       },
     ]);
-    await admin
-      .insert(tills)
-      .values([{ id: TILL_A1, tenantId: TENANT_A, locationId: LOCATION_A, name: "A1" }]);
+    await admin.insert(tills).values([{ id: TILL_A1, locationId: LOCATION_A, name: "A1" }]);
     nodeA = await seedNode(admin, brandTenantId(TENANT_A), brandLocationId(LOCATION_A));
     const [catA] = await admin
       .insert(catalogues)
-      .values({ tenantId: TENANT_A, name: "Deli A" })
+      .values({ name: "Deli A" })
       .returning({ id: catalogues.id });
     const [prodA] = await admin
       .insert(products)
       .values({
-        tenantId: TENANT_A,
         catalogueId: catA!.id,
         name: "Café solo",
         pricingUnit: "each",
@@ -70,34 +66,28 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
       .returning({ id: products.id });
     productA = prodA!.id;
     // The venue's default station — the FK target for ticket_items.station_id. Seeded as admin.
-    stationA = await seedStation(TENANT_A, LOCATION_A);
+    stationA = await seedStation(LOCATION_A);
   });
 
-  async function seedStation(tenant: string, location: string): Promise<string> {
+  async function seedStation(location: string): Promise<string> {
     const r = await suite.admin.execute<{ id: string }>(
-      sql`insert into kitchen_stations (tenant_id, location_id, name, is_default)
-          values (${tenant}, ${location}, 'Cocina', true) returning id`,
+      sql`insert into kitchen_stations (location_id, name, is_default) values (${location}, 'Cocina', true) returning id`,
     );
     return r.rows[0]!.id;
   }
 
   async function seedOrderLine(
-    tenant: string,
     till: string,
     node: string,
     product: string,
   ): Promise<{ orderId: string; lineId: string }> {
     orderNumberSeq += 1;
     const order = await suite.admin.execute<{ id: string }>(
-      sql`insert into working_orders (tenant_id, till_id, node_id, order_number, status, opened_at)
-          values (${tenant}, ${till}, ${node}, ${orderNumberSeq}, 'open', ${AT}) returning id`,
+      sql`insert into working_orders (till_id, node_id, order_number, status, opened_at) values (${till}, ${node}, ${orderNumberSeq}, 'open', ${AT}) returning id`,
     );
     const orderId = order.rows[0]!.id;
     const line = await suite.admin.execute<{ id: string }>(
-      sql`insert into working_order_lines
-            (tenant_id, working_order_id, line_no, product_id, name, descriptions,
-             quantity, unit_price, unit_price_gross, vat_rate, line_total)
-          values (${tenant}, ${orderId}, 1, ${product}, 'Café solo', ${DESCRIPTIONS_A}::jsonb,
+      sql`insert into working_order_lines (working_order_id, line_no, product_id, name, descriptions, quantity, unit_price, unit_price_gross, vat_rate, line_total) values (${orderId}, 1, ${product}, 'Café solo', ${DESCRIPTIONS_A}::jsonb,
              '1.000', '1.00', '1.10', '10.00', '1.10') returning id`,
     );
     return { orderId, lineId: line.rows[0]!.id };
@@ -121,16 +111,14 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
   ): Promise<string> {
     return asApp(tenant, async (tx) => {
       const r = await tx.execute<{ id: string }>(
-        sql`insert into ticket_items
-              (tenant_id, node_id, working_order_id, working_order_line_id, station_id, state)
-            values (${tenant}, ${node}, ${orderId}, ${lineId}, ${station}, ${state}) returning id`,
+        sql`insert into ticket_items (node_id, working_order_id, working_order_line_id, station_id, state) values (${node}, ${orderId}, ${lineId}, ${station}, ${state}) returning id`,
       );
       return r.rows[0]!.id;
     });
   }
 
   it("exposes every column through the Drizzle export across the queued → preparing → ready lifecycle", async () => {
-    const { orderId, lineId } = await seedOrderLine(TENANT_A, TILL_A1, nodeA, productA);
+    const { orderId, lineId } = await seedOrderLine(TILL_A1, nodeA, productA);
     const id = await seedTicket(TENANT_A, nodeA, orderId, lineId, stationA);
     // Advance queued → preparing → ready as app_user — the per-line kitchen lifecycle (§2d).
     await asApp(TENANT_A, (tx) =>
@@ -168,7 +156,7 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
     // app_user (0055) covers it with no grant change — a write that raised 42501 would mean the column
     // was somehow outside the table grant, and a read that raised 42703 would mean the migration's ADD
     // COLUMN never applied. This is the Task-1 receipt that the added column is visible AND writable.
-    const { orderId, lineId } = await seedOrderLine(TENANT_A, TILL_A1, nodeA, productA);
+    const { orderId, lineId } = await seedOrderLine(TILL_A1, nodeA, productA);
     const id = await seedTicket(TENANT_A, nodeA, orderId, lineId, stationA);
     await asApp(TENANT_A, (tx) =>
       tx.execute(sql`update ticket_items set away_at = now() where id = ${id}`),
@@ -209,7 +197,7 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
       { column_name: "note", is_nullable: "YES", data_type: "text", udt_name: "text" },
     ]);
     // app_user stamps both (additive columns, existing grant) and reads them back.
-    const { orderId, lineId } = await seedOrderLine(TENANT_A, TILL_A1, nodeA, productA);
+    const { orderId, lineId } = await seedOrderLine(TILL_A1, nodeA, productA);
     const id = await seedTicket(TENANT_A, nodeA, orderId, lineId, stationA);
     await asApp(TENANT_A, (tx) =>
       tx.execute(
@@ -231,7 +219,7 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
     // One ticket item per working_order_line: a second insert for the same line is a unique_violation
     // (23505). This is the guard §7 names for a concurrent double-fire — two rounds firing at once
     // collide here rather than duplicating the item.
-    const { orderId, lineId } = await seedOrderLine(TENANT_A, TILL_A1, nodeA, productA);
+    const { orderId, lineId } = await seedOrderLine(TILL_A1, nodeA, productA);
     await seedTicket(TENANT_A, nodeA, orderId, lineId, stationA);
     const e = await captureError(() => seedTicket(TENANT_A, nodeA, orderId, lineId, stationA));
     expect(pgErrorCode(e)).toBe("23505");
@@ -242,7 +230,7 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
     // the analogue of order_prep's order FK. Deleting the line (as admin; the parent order is open, so
     // working_order_lines_require_open_parent permits it) removes the ticket item with it, which is how
     // a cancelled/abandoned line's item is cleaned up without any DELETE grant on ticket_items.
-    const { orderId, lineId } = await seedOrderLine(TENANT_A, TILL_A1, nodeA, productA);
+    const { orderId, lineId } = await seedOrderLine(TILL_A1, nodeA, productA);
     const id = await seedTicket(TENANT_A, nodeA, orderId, lineId, stationA);
     const before = await countTicket(id);
     expect(before).toBe(1);

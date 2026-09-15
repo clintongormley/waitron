@@ -75,9 +75,8 @@ describe("FISCAL_PROVISIONING.standby", () => {
     // The primary must hold a live SIF and its series before it can reserve for a standby.
     await withTransaction(db, (tx) => seed.run(tx, NODE));
     await db.execute(sql`
-      insert into invoice_series (tenant_id, node_id, code, purpose) values
-        (${TENANT_A.id}, ${TENANT_A.nodeId}, 'FA', 'standard'),
-        (${TENANT_A.id}, ${TENANT_A.nodeId}, 'RF', 'rectificative')`);
+      insert into invoice_series (node_id, code, purpose) values (${TENANT_A.nodeId}, 'FA', 'standard'),
+        ( ${TENANT_A.nodeId}, 'RF', 'rectificative')`);
   });
 
   it("reserve derives from the primary's LIVE series bases: a restored primary's `FA-<n>` gives the standby `FA-<m>`, not `FA-<n>-<m>`", async () => {
@@ -92,10 +91,9 @@ describe("FISCAL_PROVISIONING.standby", () => {
     );
     // What a restored primary holds: `FA` retired, `FA-<its installation number>` and `RE-<n>` live.
     await db.execute(sql`
-      insert into invoice_series (tenant_id, node_id, code, purpose, retired_at) values
-        (${TENANT_A.id}, ${TENANT_A.nodeId}, 'FA', 'standard', now()),
-        (${TENANT_A.id}, ${TENANT_A.nodeId}, ${`FA-${primarySif.numeroInstalacion}`}, 'standard', null),
-        (${TENANT_A.id}, ${TENANT_A.nodeId}, ${`RE-${primarySif.numeroInstalacion}`}, 'rectificative', null)
+      insert into invoice_series (node_id, code, purpose, retired_at) values (${TENANT_A.nodeId}, 'FA', 'standard', now()),
+        ( ${TENANT_A.nodeId}, ${`FA-${primarySif.numeroInstalacion}`}, 'standard', null),
+        ( ${TENANT_A.nodeId}, ${`RE-${primarySif.numeroInstalacion}`}, 'rectificative', null)
     `);
     const reservation = await withTransaction(db, (tx) => standby.reserve(tx, NODE));
     const m = (reservation.state as { numeroInstalacion: number }).numeroInstalacion;

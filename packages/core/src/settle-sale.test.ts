@@ -37,7 +37,6 @@ async function seedSale(
   const [row] = await db
     .insert(sales)
     .values({
-      tenantId: seed.tenantId,
       tillId: seed.tillId,
       nodeId: seed.nodeId,
       seriesId: seed.seriesId,
@@ -269,7 +268,6 @@ describe("settleSale — guards", () => {
     const seed = await seedTenant(postgres.admin);
     const saleId = await seedSale(postgres.admin, seed, { total: "65.00" });
     await postgres.admin.insert(saleVoids).values({
-      tenantId: seed.tenantId,
       saleId,
       reason: "Wrong table",
       voidedAt: new Date("2026-08-01T11:30:00Z").toISOString(),
@@ -532,25 +530,17 @@ describe("settleSale — error propagation", () => {
 // Insert tenders then a settlement row directly, as the app role — bypassing settleSale so the
 // coverage TRIGGER is what is under test. Tenders first: tenders_reject_post_settlement (WT002)
 // rejects a tender once a settlement row exists.
-async function settleDirect(
-  db: Database,
-  tenantId: TenantId,
-  saleId: SaleId,
-  amount: string,
-): Promise<void> {
+async function settleDirect(db: Database, saleId: SaleId, amount: string): Promise<void> {
   await withTransaction(db, async (tx) => {
     await asAppUser(tx);
     await tx.insert(tenders).values({
-      tenantId,
       saleId,
       method: "cash",
       amount,
       tipAmount: "0.00",
       settledAt: SETTLED_AT.toISOString(),
     });
-    await tx
-      .insert(saleSettlements)
-      .values({ tenantId, saleId, settledAt: SETTLED_AT.toISOString() });
+    await tx.insert(saleSettlements).values({ saleId, settledAt: SETTLED_AT.toISOString() });
   });
 }
 
@@ -564,7 +554,7 @@ describe("coverage trigger nets corrections", () => {
       correctsSaleId: originalId,
     });
 
-    await settleDirect(postgres.admin, seed.tenantId, originalId, "65.00");
+    await settleDirect(postgres.admin, originalId, "65.00");
 
     const settled = await postgres.admin
       .select()
@@ -582,9 +572,7 @@ describe("coverage trigger nets corrections", () => {
       correctsSaleId: originalId,
     });
 
-    const error = await captureError(() =>
-      settleDirect(postgres.admin, seed.tenantId, originalId, "70.00"),
-    );
+    const error = await captureError(() => settleDirect(postgres.admin, originalId, "70.00"));
     expect(error).toBeDefined();
 
     const settled = await postgres.admin
@@ -598,9 +586,7 @@ describe("coverage trigger nets corrections", () => {
     const seed = await seedTenant(postgres.admin);
     const originalId = await seedSale(postgres.admin, seed, { total: "70.00", invoiceNumber: 1 });
 
-    const error = await captureError(() =>
-      settleDirect(postgres.admin, seed.tenantId, originalId, "65.00"),
-    );
+    const error = await captureError(() => settleDirect(postgres.admin, originalId, "65.00"));
     expect(error).toBeDefined();
 
     const settled = await postgres.admin

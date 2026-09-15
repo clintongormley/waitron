@@ -55,11 +55,11 @@ async function codeOf(fn: () => Promise<unknown>): Promise<string> {
   return isAppError(error) ? error.code : `did not throw an AppError: ${String(error)}`;
 }
 
-/** Rows for `tenantId` counted as the owner, independently of anything the app role's own reads
- * return — so a refused or rolled-back write is visible here as an absence. */
-async function rowCount(tenantId: string): Promise<number> {
+/** Rows counted as the owner, independently of anything the app role's own reads return — so a
+ * refused or rolled-back write is visible here as an absence. */
+async function rowCount(): Promise<number> {
   const rows = await suite.admin.execute<{ n: number }>(
-    sql`select count(*)::int as n from canvases where tenant_id = ${tenantId}`,
+    sql`select count(*)::int as n from canvases`,
   );
   return rows.rows[0]!.n;
 }
@@ -84,7 +84,6 @@ describe("layout canvas store on real Postgres, as the app role", () => {
     const { id } = await asApp(managerTenant, (tx) =>
       createCanvas(tx, {
         managementSessionId: managerSession,
-        tenantId: managerTenant,
         name: "Front counter",
         definition,
       }),
@@ -99,7 +98,6 @@ describe("layout canvas store on real Postgres, as the app role", () => {
     const first = await asApp(tenantId, (tx) =>
       createCanvas(tx, {
         managementSessionId: session,
-        tenantId,
         name: "P1",
         definition: phoneCanvas("One"),
       }),
@@ -107,7 +105,6 @@ describe("layout canvas store on real Postgres, as the app role", () => {
     const second = await asApp(tenantId, (tx) =>
       createCanvas(tx, {
         managementSessionId: session,
-        tenantId,
         name: "P2",
         definition: phoneCanvas("Two"),
       }),
@@ -130,7 +127,6 @@ describe("layout canvas store on real Postgres, as the app role", () => {
     const { id } = await asApp(tenantId, (tx) =>
       createCanvas(tx, {
         managementSessionId: session,
-        tenantId,
         name: "Original",
         definition: phoneCanvas("Before"),
       }),
@@ -139,7 +135,6 @@ describe("layout canvas store on real Postgres, as the app role", () => {
     await asApp(tenantId, (tx) =>
       updateCanvas(tx, {
         managementSessionId: session,
-        tenantId,
         id,
         name: "Renamed",
         definition: nextDef,
@@ -147,7 +142,7 @@ describe("layout canvas store on real Postgres, as the app role", () => {
     );
     const row = await asApp(tenantId, (tx) => getCanvas(tx, tenantId, id));
     expect(row).toEqual({ id, name: "Renamed", definition: nextDef });
-    expect(await rowCount(tenantId)).toBe(1); // update, never insert a duplicate
+    expect(await rowCount()).toBe(1); // update, never insert a duplicate
   });
 
   it("deletes a canvas", async () => {
@@ -156,14 +151,13 @@ describe("layout canvas store on real Postgres, as the app role", () => {
     const { id } = await asApp(tenantId, (tx) =>
       createCanvas(tx, {
         managementSessionId: session,
-        tenantId,
         name: "Doomed",
         definition: phoneCanvas("Gone"),
       }),
     );
-    await asApp(tenantId, (tx) => deleteCanvas(tx, { managementSessionId: session, tenantId, id }));
+    await asApp(tenantId, (tx) => deleteCanvas(tx, { managementSessionId: session, id }));
     expect(await asApp(tenantId, (tx) => getCanvas(tx, tenantId, id))).toBeUndefined();
-    expect(await rowCount(tenantId)).toBe(0);
+    expect(await rowCount()).toBe(0);
   });
 
   it("translates a delete of a profile-referenced canvas to canvas.in_use (23001 → 409), canvas survives", async () => {
@@ -179,20 +173,18 @@ describe("layout canvas store on real Postgres, as the app role", () => {
     const { id } = await asApp(tenantId, (tx) =>
       createCanvas(tx, {
         managementSessionId: session,
-        tenantId,
         name: "Referenced canvas",
         definition: phoneCanvas("Bound"),
       }),
     );
     // Seed a device profile that binds the canvas, as the owner — setup, not the thing under test.
     await suite.admin.execute(sql`
-      insert into device_profiles (tenant_id, name, form_factor, canvas_id)
-      values (${tenantId}, 'Binding profile', 'till', ${id})`);
+      insert into device_profiles (name, form_factor, canvas_id) values ('Binding profile', 'till', ${id})`);
     const code = await codeOf(() =>
-      asApp(tenantId, (tx) => deleteCanvas(tx, { managementSessionId: session, tenantId, id })),
+      asApp(tenantId, (tx) => deleteCanvas(tx, { managementSessionId: session, id })),
     );
     expect(code).toBe("canvas.in_use");
-    expect(await rowCount(tenantId)).toBe(1); // the canvas survived the refused delete (RESTRICT)
+    expect(await rowCount()).toBe(1); // the canvas survived the refused delete (RESTRICT)
   });
 
   it("throws canvas.not_found when updating an absent id", async () => {
@@ -205,7 +197,6 @@ describe("layout canvas store on real Postgres, as the app role", () => {
       asApp(tenantId, (tx) =>
         updateCanvas(tx, {
           managementSessionId: session,
-          tenantId,
           id: "00000000-0000-4000-8000-000000000000",
           name: "Ghost",
           definition: phoneCanvas("None"),
@@ -222,7 +213,6 @@ describe("layout canvas store on real Postgres, as the app role", () => {
       asApp(tenantId, (tx) =>
         deleteCanvas(tx, {
           managementSessionId: session,
-          tenantId,
           id: "00000000-0000-4000-8000-000000000000",
         }),
       ),
@@ -243,7 +233,6 @@ describe("layout canvas store on real Postgres, as the app role", () => {
     await asApp(tenantId, (tx) =>
       createCanvas(tx, {
         managementSessionId: session,
-        tenantId,
         name: "My phone",
         definition: stored,
       }),
@@ -266,14 +255,13 @@ describe("layout canvas store on real Postgres, as the app role", () => {
       asApp(staffTenant, (tx) =>
         createCanvas(tx, {
           managementSessionId: staffSession,
-          tenantId: staffTenant,
           name: "Nope",
           definition: phoneCanvas("Denied"),
         }),
       ),
     );
     expect(code).toBe("authorization.not_permitted");
-    expect(await rowCount(staffTenant)).toBe(0); // the gate ran before the write
+    expect(await rowCount()).toBe(0); // the gate ran before the write
   });
 
   it("rejects an invalid definition with canvas.invalid before any INSERT", async () => {
@@ -285,14 +273,13 @@ describe("layout canvas store on real Postgres, as the app role", () => {
       asApp(tenantId, (tx) =>
         createCanvas(tx, {
           managementSessionId: session,
-          tenantId,
           name: "Bad",
           definition: {} as unknown,
         }),
       ),
     );
     expect(code).toBe("canvas.invalid");
-    expect(await rowCount(tenantId)).toBe(0); // validate threw before the INSERT
+    expect(await rowCount()).toBe(0); // validate threw before the INSERT
   });
 
   it("translates a duplicate name to canvas.name_taken (23505 → clean 409), no second row", async () => {
@@ -305,7 +292,6 @@ describe("layout canvas store on real Postgres, as the app role", () => {
     await asApp(tenantId, (tx) =>
       createCanvas(tx, {
         managementSessionId: session,
-        tenantId,
         name: "Twin",
         definition: phoneCanvas("First"),
       }),
@@ -314,14 +300,13 @@ describe("layout canvas store on real Postgres, as the app role", () => {
       asApp(tenantId, (tx) =>
         createCanvas(tx, {
           managementSessionId: session,
-          tenantId,
           name: "Twin",
           definition: phoneCanvas("Second"),
         }),
       ),
     );
     expect(code).toBe("canvas.name_taken");
-    expect(await rowCount(tenantId)).toBe(1); // the duplicate never landed
+    expect(await rowCount()).toBe(1); // the duplicate never landed
   });
 
   it("translates a duplicate name on UPDATE to canvas.name_taken", async () => {
@@ -331,7 +316,6 @@ describe("layout canvas store on real Postgres, as the app role", () => {
     await asApp(tenantId, (tx) =>
       createCanvas(tx, {
         managementSessionId: session,
-        tenantId,
         name: "Keep",
         definition: phoneCanvas("A"),
       }),
@@ -339,7 +323,6 @@ describe("layout canvas store on real Postgres, as the app role", () => {
     const { id: second } = await asApp(tenantId, (tx) =>
       createCanvas(tx, {
         managementSessionId: session,
-        tenantId,
         name: "Move",
         definition: phoneCanvas("B"),
       }),
@@ -348,7 +331,6 @@ describe("layout canvas store on real Postgres, as the app role", () => {
       asApp(tenantId, (tx) =>
         updateCanvas(tx, {
           managementSessionId: session,
-          tenantId,
           id: second,
           name: "Keep", // collides with the first canvas's name
           definition: phoneCanvas("B2"),

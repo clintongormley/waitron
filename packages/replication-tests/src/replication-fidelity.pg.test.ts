@@ -404,8 +404,8 @@ describe("native-replication fiscal fidelity — Case 4 WAL overflow + re-adopt 
     let walStatus: string | null = null;
     for (let round = 0; round < 8 && walStatus !== "lost"; round++) {
       await nodeA.ownerDb.execute(sql`
-        insert into locations (tenant_id, name, invoice_locales, operation_description)
-        select ${seed.tenantId}, repeat('x', 1024), array['es'], 'x' from generate_series(1, 20000)
+        insert into locations (name, invoice_locales, operation_description)
+        select repeat('x', 1024), array['es'], 'x' from generate_series(1, 20000)
       `);
       await nodeA.superuserDb.execute(sql.raw("CHECKPOINT"));
       walStatus = (await readSlotDrain(nodeA.ownerDb, SUB)).walStatus;

@@ -31,9 +31,7 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
     // The location — the direct location_id → locations.id FK target. operation_description
     // is Spanish test DATA, not a schema identifier, exactly as the sibling tests use 'Hostelería'.
     await suite.admin.execute(sql`
-      insert into locations (id, tenant_id, name, invoice_locales, operation_description)
-      values
-        (${LOCATION_A}, ${TENANT_A}, 'Loc A', array['es'], 'Hostelería')
+      insert into locations (id, name, invoice_locales, operation_description) values (${LOCATION_A}, 'Loc A', array['es'], 'Hostelería')
       on conflict (id) do nothing`);
   });
 
@@ -48,8 +46,7 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
   async function seedAgent(tenant: string, name: string): Promise<string> {
     return asApp(tenant, async (tx) => {
       const r = await tx.execute<{ id: string }>(
-        sql`insert into print_agents (tenant_id, location_id, name, token_hash)
-            values (${tenant}, ${LOCATION_A}, ${name}, ${TOKEN_HASH}) returning id`,
+        sql`insert into print_agents (location_id, name, token_hash) values (${LOCATION_A}, ${name}, ${TOKEN_HASH}) returning id`,
       );
       return r.rows[0]!.id;
     });
@@ -60,8 +57,7 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
   async function seedPrinter(tenant: string, name: string): Promise<string> {
     return asApp(tenant, async (tx) => {
       const r = await tx.execute<{ id: string }>(
-        sql`insert into printers (tenant_id, location_id, name, transport, host)
-            values (${tenant}, ${LOCATION_A}, ${name}, 'network_tcp', '10.0.0.5')
+        sql`insert into printers (location_id, name, transport, host) values (${LOCATION_A}, ${name}, 'network_tcp', '10.0.0.5')
             returning id`,
       );
       return r.rows[0]!.id;
@@ -71,8 +67,7 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
   async function seedJob(tenant: string, printer: string): Promise<string> {
     return asApp(tenant, async (tx) => {
       const r = await tx.execute<{ id: string }>(
-        sql`insert into print_jobs (tenant_id, location_id, printer_id, payload)
-            values (${tenant}, ${LOCATION_A}, ${printer}, decode('48656c6c6f', 'hex'))
+        sql`insert into print_jobs (location_id, printer_id, payload) values (${LOCATION_A}, ${printer}, decode('48656c6c6f', 'hex'))
             returning id`,
       );
       return r.rows[0]!.id;
@@ -101,8 +96,7 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
     return asApp(tenant, (tx) =>
       tx
         .execute<{ id: string }>(
-          sql`insert into printers (tenant_id, location_id, name, transport, local_key, host, poll_id)
-              values (${tenant}, ${LOCATION_A}, ${name}, ${opts.transport}, ${localKey}, ${host}, ${pollId})
+          sql`insert into printers (location_id, name, transport, local_key, host, poll_id) values (${LOCATION_A}, ${name}, ${opts.transport}, ${localKey}, ${host}, ${pollId})
               returning id`,
         )
         .then((r) => r.rows),
@@ -134,8 +128,7 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
     const e = await captureError(() =>
       asApp(TENANT_A, (tx) =>
         tx.execute(
-          sql`insert into print_agents (tenant_id, location_id, name, token_hash)
-              values (${TENANT_A}, ${GHOST_LOCATION}, 'Ghost location', ${TOKEN_HASH})`,
+          sql`insert into print_agents (location_id, name, token_hash) values (${GHOST_LOCATION}, 'Ghost location', ${TOKEN_HASH})`,
         ),
       ),
     );
@@ -160,15 +153,13 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
     const node = "cccccccc-0000-4000-8000-000000000001";
     await asApp(TENANT_A, (tx) =>
       tx.execute(
-        sql`insert into print_agents (tenant_id, location_id, name, token_hash, node_id)
-            values (${TENANT_A}, ${LOCATION_A}, 'box', ${TOKEN_HASH}, ${node})`,
+        sql`insert into print_agents (location_id, name, token_hash, node_id) values (${LOCATION_A}, 'box', ${TOKEN_HASH}, ${node})`,
       ),
     );
     const err = await captureError(() =>
       asApp(TENANT_A, (tx) =>
         tx.execute(
-          sql`insert into print_agents (tenant_id, location_id, name, token_hash, node_id)
-              values (${TENANT_A}, ${LOCATION_A}, 'box dup', ${TOKEN_HASH}, ${node})`,
+          sql`insert into print_agents (location_id, name, token_hash, node_id) values (${LOCATION_A}, 'box dup', ${TOKEN_HASH}, ${node})`,
         ),
       ),
     );
@@ -205,8 +196,7 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
     const cloudId = await asApp(TENANT_A, (tx) =>
       tx
         .execute<{ id: string }>(
-          sql`insert into printers (tenant_id, location_id, name, transport, poll_id)
-              values (${TENANT_A}, ${LOCATION_A}, 'Cloud printer', 'cloud_poll', 'poll-abc')
+          sql`insert into printers (location_id, name, transport, poll_id) values (${LOCATION_A}, 'Cloud printer', 'cloud_poll', 'poll-abc')
               returning id`,
         )
         .then((r) => r.rows[0]!.id),
@@ -247,7 +237,6 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
       tx
         .insert(printJobs)
         .values({
-          tenantId: TENANT_A,
           locationId: LOCATION_A,
           printerId: printer,
           payload: Buffer.from([27, 112, 0, 25, 250]),
@@ -266,8 +255,7 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
     const error = await captureError(() =>
       asApp(TENANT_A, (tx) =>
         tx.execute(
-          sql`insert into print_jobs (tenant_id, location_id, printer_id, payload, kind)
-          values (${TENANT_A}, ${LOCATION_A}, ${printer}, decode('1b700019fa', 'hex'), ${kind})`,
+          sql`insert into print_jobs (location_id, printer_id, payload, kind) values (${LOCATION_A}, ${printer}, decode('1b700019fa', 'hex'), ${kind})`,
         ),
       ),
     );
@@ -315,7 +303,7 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
     expect(b[0]!.id).toBeDefined();
   });
 
-  it("printers: the old (tenant_id, agent_id) FK and the agent_id/usb_path columns are gone", async () => {
+  it("printers: the old (agent_id) FK and the agent_id/usb_path columns are gone", async () => {
     // Decision #2: prove the drop by reading pg_constraint back, do not assume DROP COLUMN cascaded.
     const fk = await suite.admin.execute(
       sql`select 1 from pg_constraint
@@ -342,8 +330,7 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
     const claimed = await asApp(TENANT_A, (tx) =>
       tx
         .execute<{ id: string }>(
-          sql`insert into print_jobs (tenant_id, location_id, printer_id, payload, claimed_by)
-              values (${TENANT_A}, ${LOCATION_A}, ${printerA}, decode('00', 'hex'), ${agentA})
+          sql`insert into print_jobs (location_id, printer_id, payload, claimed_by) values (${LOCATION_A}, ${printerA}, decode('00', 'hex'), ${agentA})
               returning id`,
         )
         .then((r) => r.rows),

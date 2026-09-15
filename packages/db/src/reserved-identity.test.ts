@@ -37,13 +37,9 @@ const CLOUD_NODE = ENDORSEMENT.nodeId;
 
 // There is deliberately no seedLocation helper (only seedTenant/seedNode exist — see seed.test.ts), so
 // build the location the node FKs first, exactly as node-identity.test.ts does.
-async function seedLocation(
-  db: Database,
-  tenant: string,
-): Promise<ReturnType<typeof brandLocationId>> {
+async function seedLocation(db: Database): Promise<ReturnType<typeof brandLocationId>> {
   const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenant}, 'Test location', ARRAY['es']::text[], 'Restaurant') returning id`);
+    insert into locations (name, invoice_locales, operation_description) values ('Test location', ARRAY['es']::text[], 'Restaurant') returning id`);
   return brandLocationId(loc.rows[0]!.id);
 }
 
@@ -59,14 +55,13 @@ describe("reserved-identity accessors", () => {
 
   beforeAll(async () => {
     tenantId = await seedTenant(suite.db);
-    locationId = await seedLocation(suite.db, tenantId);
+    locationId = await seedLocation(suite.db);
   });
 
   it("insertReservedNodeTx persists a dormant node with its public key + endorsement", async () => {
     await withTransaction(suite.db, (tx) =>
       insertReservedNodeTx(tx, {
         id: CLOUD_NODE,
-        tenantId,
         locationId,
         name: "cloud",
         filingModule: null,
@@ -89,8 +84,8 @@ describe("reserved-identity accessors", () => {
   it("insertReservedSeriesTx inserts the reserved series at next_number 1", async () => {
     await withTransaction(suite.db, (tx) =>
       insertReservedSeriesTx(tx, [
-        { tenantId, nodeId: CLOUD_NODE, code: "FA-3", purpose: "standard" },
-        { tenantId, nodeId: CLOUD_NODE, code: "RF-3", purpose: "rectificative" },
+        { nodeId: CLOUD_NODE, code: "FA-3", purpose: "standard" },
+        { nodeId: CLOUD_NODE, code: "RF-3", purpose: "rectificative" },
       ]),
     );
     const rows = await withTransaction(suite.db, (tx) =>
@@ -110,8 +105,8 @@ describe("reserved-identity accessors", () => {
     const node = await seedNode(suite.db, tenantId, locationId);
     await withTransaction(suite.db, (tx) =>
       insertReservedSeriesTx(tx, [
-        { tenantId, nodeId: node, code: "F-42", purpose: "standard" },
-        { tenantId, nodeId: node, code: "R-42", purpose: "rectificative" },
+        { nodeId: node, code: "F-42", purpose: "standard" },
+        { nodeId: node, code: "R-42", purpose: "rectificative" },
       ]),
     );
     const id = await readStandardSeriesId(suite.db, tenantId, node);
@@ -135,8 +130,8 @@ describe("reserved-identity accessors", () => {
     const node = await seedNode(suite.db, tenantId, locationId);
     await withTransaction(suite.db, (tx) =>
       insertReservedSeriesTx(tx, [
-        { tenantId, nodeId: node, code: "FA", purpose: "standard" },
-        { tenantId, nodeId: node, code: "FA-210441234", purpose: "standard" },
+        { nodeId: node, code: "FA", purpose: "standard" },
+        { nodeId: node, code: "FA-210441234", purpose: "standard" },
       ]),
     );
     await suite.db
@@ -155,8 +150,8 @@ describe("reserved-identity accessors", () => {
     const node = await seedNode(suite.db, tenantId, locationId);
     await withTransaction(suite.db, (tx) =>
       insertReservedSeriesTx(tx, [
-        { tenantId, nodeId: node, code: "X1", purpose: "standard" },
-        { tenantId, nodeId: node, code: "X2", purpose: "standard" },
+        { nodeId: node, code: "X1", purpose: "standard" },
+        { nodeId: node, code: "X2", purpose: "standard" },
       ]),
     );
     await expect(readStandardSeriesId(suite.db, tenantId, node)).rejects.toThrow(
@@ -169,9 +164,9 @@ describe("reserved-identity accessors", () => {
     const other = await seedNode(suite.db, tenantId, locationId);
     await withTransaction(suite.db, (tx) =>
       insertReservedSeriesTx(tx, [
-        { tenantId, nodeId: node, code: "FA", purpose: "standard" },
-        { tenantId, nodeId: node, code: "RE", purpose: "rectificative" },
-        { tenantId, nodeId: other, code: "FA", purpose: "standard" },
+        { nodeId: node, code: "FA", purpose: "standard" },
+        { nodeId: node, code: "RE", purpose: "rectificative" },
+        { nodeId: other, code: "FA", purpose: "standard" },
       ]),
     );
     const retired = await withTransaction(suite.db, (tx) => retireNodeSeriesTx(tx, tenantId, node));
@@ -201,7 +196,7 @@ describe("reserved-identity accessors", () => {
   it("insertNodeSeriesTx inserts at next_number 1 and refuses a code the node holds, live OR retired", async () => {
     const node = await seedNode(suite.db, tenantId, locationId);
     await withTransaction(suite.db, (tx) =>
-      insertReservedSeriesTx(tx, [{ tenantId, nodeId: node, code: "FA", purpose: "standard" }]),
+      insertReservedSeriesTx(tx, [{ nodeId: node, code: "FA", purpose: "standard" }]),
     );
     await withTransaction(suite.db, (tx) => retireNodeSeriesTx(tx, tenantId, node));
     await withTransaction(suite.db, (tx) =>

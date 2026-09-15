@@ -8,7 +8,7 @@ import { usePgliteDb } from "../testing/lifecycle.js";
 const TENANT_A = "11111111-1111-4111-8111-111111111111";
 const CANVAS_A = "11111111-0000-4000-8000-0000000000a2";
 
-describe("device_profiles composite canvas FK (tenant_id, canvas_id) → canvases", () => {
+describe("device_profiles canvas FK (canvas_id) → canvases", () => {
   const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
   let admin: Database;
 
@@ -19,8 +19,7 @@ describe("device_profiles composite canvas FK (tenant_id, canvas_id) → canvase
         (${TENANT_A}, 'ES', 'B00000000', 'Fixture Tenant A')
       on conflict (id) do nothing`);
     await admin.execute(sql`
-      insert into canvases (id, tenant_id, name, definition) values
-        (${CANVAS_A}, ${TENANT_A}, 'Canvas A', '{}'::jsonb)
+      insert into canvases (id, name, definition) values (${CANVAS_A}, 'Canvas A', '{}'::jsonb)
       on conflict (id) do nothing`);
   });
 
@@ -31,8 +30,7 @@ describe("device_profiles composite canvas FK (tenant_id, canvas_id) → canvase
 
   it("accepts a same-tenant canvas_id; a NULL canvas_id is unconstrained (MATCH SIMPLE)", async () => {
     const bound = await admin.execute<{ id: string }>(
-      sql`insert into device_profiles (tenant_id, name, form_factor, canvas_id)
-          values (${TENANT_A}, 'Bound profile', 'till', ${CANVAS_A}) returning id`,
+      sql`insert into device_profiles (name, form_factor, canvas_id) values ('Bound profile', 'till', ${CANVAS_A}) returning id`,
     );
     expect(bound.rows).toHaveLength(1);
 
@@ -40,8 +38,7 @@ describe("device_profiles composite canvas FK (tenant_id, canvas_id) → canvase
     // default applies ('[]').
     const [row] = (
       await admin.execute<{ canvas_id: string | null; capabilities: unknown }>(
-        sql`insert into device_profiles (tenant_id, name, form_factor)
-            values (${TENANT_A}, 'Unbound profile', 'till')
+        sql`insert into device_profiles (name, form_factor) values ('Unbound profile', 'till')
             returning canvas_id, capabilities`,
       )
     ).rows;
@@ -53,11 +50,9 @@ describe("device_profiles composite canvas FK (tenant_id, canvas_id) → canvase
     // Bind a profile to a fresh canvas, then try to hard-delete that canvas: RESTRICT blocks it.
     const canvasC = "11111111-0000-4000-8000-0000000000c2";
     await admin.execute(sql`
-      insert into canvases (id, tenant_id, name, definition)
-      values (${canvasC}, ${TENANT_A}, 'Canvas C', '{}'::jsonb)`);
+      insert into canvases (id, name, definition) values (${canvasC}, 'Canvas C', '{}'::jsonb)`);
     await admin.execute(sql`
-      insert into device_profiles (tenant_id, name, form_factor, canvas_id)
-      values (${TENANT_A}, 'Restrict profile', 'till', ${canvasC})`);
+      insert into device_profiles (name, form_factor, canvas_id) values ('Restrict profile', 'till', ${canvasC})`);
     const e = await captureError(() =>
       admin.execute(sql`delete from canvases where id = ${canvasC}`),
     );

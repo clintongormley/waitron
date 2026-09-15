@@ -4,7 +4,7 @@
 // (index.ts). Mirrors ./record-sale.ts's identical convention.
 import "./errors.js";
 import { eq } from "drizzle-orm";
-import { isUniqueViolation, saleVoids, sales } from "@waitron/db";
+import { isUniqueViolation, saleVoids, sales, tenants } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import type { NodeId, SaleId, TenantId, TillId } from "@waitron/shared";
@@ -39,7 +39,7 @@ export async function recordVoid(
   authz: AuthzInput,
 ): Promise<{ fiscal: FiscalRecordRef }> {
   const [sale] = await tx
-    .select({ tenantId: sales.tenantId, tillId: sales.tillId, nodeId: sales.nodeId })
+    .select({ tillId: sales.tillId, nodeId: sales.nodeId })
     .from(sales)
     .where(eq(sales.id, saleId));
 
@@ -68,13 +68,19 @@ export async function recordVoid(
   // No clock-degradation incident here: unlike `recordSale`, `recordVoid` takes no `TrustedClock`
   // at all (its own `new Date()` a few lines down is not a `TrustedReading`), so there is no
   // `.warning` to forward.
-  const verification = await backend.checkIntegrity(
-    tx,
-    sale.tenantId as TenantId,
-    sale.nodeId as NodeId,
-  );
+  // The taxpayer, read from the one `tenants` row. `sales` used to carry it and no longer does,
+  // while the fiscal module's own chain tables still key on it, so this is where the value comes
+  // from until those tables are converted too. Every sibling in this package takes it as an input;
+  // only this path had nowhere else to read it.
+  const [taxpayer] = await tx.select({ id: tenants.id }).from(tenants).limit(1);
+  if (taxpayer === undefined) {
+    throw new AppError("sale.not_found", { saleId });
+  }
+  const tenantId = taxpayer.id as TenantId;
+
+  const verification = await backend.checkIntegrity(tx, tenantId, sale.nodeId as NodeId);
   // ONE incident aggregating all of this call's issues, never one per issue — the table-wide
-  // `incidents_open_dedup` index holds at most one open incident per (tenant, till, code, sale), so
+  // `incidents_open_dedup` index holds at most one open incident per (till, code, sale), so
   // one row per issue (all sharing this sale + `chain.verification_failed`) would collapse to a
   // single row and drop every issue after the first. `params.issues` carries them all. Mirrors
   // `./record-sale.ts`'s identical aggregation.
@@ -106,7 +112,7 @@ export async function recordVoid(
 
   for (const incident of pending) {
     await recordIncident(tx, {
-      tenantId: sale.tenantId as TenantId,
+      tenantId,
       tillId: sale.tillId as TillId,
       saleId,
       detectedAt: now,
@@ -121,7 +127,6 @@ export async function recordVoid(
   // at all — lock order stays chain-then-everything-else, matching `./record-sale.ts`.
   try {
     await tx.insert(saleVoids).values({
-      tenantId: sale.tenantId,
       saleId,
       reason,
       voidedAt: now.toISOString(),

@@ -24,8 +24,7 @@ describe("device_profiles form-factor drift guard (locked while an active device
     admin = suite.admin;
     tenantId = await seedTenant(admin);
     const location = await admin.execute<{ id: string }>(sql`
-      insert into locations (tenant_id, name, invoice_locales, operation_description)
-      values (${tenantId}, 'Loc', array['es'], 'Hostelería') returning id`);
+      insert into locations (name, invoice_locales, operation_description) values ('Loc', array['es'], 'Hostelería') returning id`);
     locationId = location.rows[0]!.id as LocationId;
     stationId = await seedKitchenStation(admin, { tenantId, locationId });
   });
@@ -34,16 +33,14 @@ describe("device_profiles form-factor drift guard (locked while an active device
   async function freshKdsProfile(): Promise<string> {
     profileSeq += 1;
     const p = await admin.execute<{ id: string }>(sql`
-      insert into device_profiles (tenant_id, name, form_factor)
-      values (${tenantId}, ${`KDS profile ${profileSeq}`}, 'kds') returning id`);
+      insert into device_profiles (name, form_factor) values (${`KDS profile ${profileSeq}`}, 'kds') returning id`);
     return p.rows[0]!.id;
   }
 
   // A kds device bound to the station (the binding rule needs a station and no till for a kds profile).
   async function insertKdsDevice(profileId: string, active: boolean, label: string): Promise<void> {
     await admin.execute(sql`
-      insert into devices (tenant_id, location_id, device_profile_id, station_id, till_id, label, token_hash, active)
-      values (${tenantId}, ${locationId}, ${profileId}, ${stationId}, ${null}, ${label}, ${TOKEN_HASH}, ${active})`);
+      insert into devices (location_id, device_profile_id, station_id, till_id, label, token_hash, active) values (${locationId}, ${profileId}, ${stationId}, ${null}, ${label}, ${TOKEN_HASH}, ${active})`);
   }
 
   // Poll (bounded) until a backend in THIS clone is waiting on a lock while running `querySubstr`. The
@@ -131,8 +128,7 @@ describe("device_profiles form-factor drift guard (locked while an active device
       // then HOLD until released, then commit.
       const p1 = admin.transaction(async (tx) => {
         await tx.execute(sql`
-          insert into devices (tenant_id, location_id, device_profile_id, station_id, till_id, label, token_hash, active)
-          values (${tenantId}, ${locationId}, ${profileId}, ${stationId}, ${null}, 'Race kds', ${TOKEN_HASH}, true)`);
+          insert into devices (location_id, device_profile_id, station_id, till_id, label, token_hash, active) values (${locationId}, ${profileId}, ${stationId}, ${null}, 'Race kds', ${TOKEN_HASH}, true)`);
         signalInserted();
         await gate;
       });

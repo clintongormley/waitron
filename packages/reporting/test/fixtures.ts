@@ -41,16 +41,15 @@ export interface SeededVenue {
 export async function seedVenue(db: Database): Promise<SeededVenue> {
   const tenantId = await seedTenant(db);
   const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Main', array['es-ES'], 'Test op') returning id`);
+    insert into locations (name, invoice_locales, operation_description) values ('Main', array['es-ES'], 'Test op') returning id`);
   const locationId = loc.rows[0]!.id;
   const till = await db.execute<{ id: string }>(
-    sql`insert into tills (tenant_id, location_id, name) values (${tenantId}, ${locationId}, 'Till 1') returning id`,
+    sql`insert into tills (location_id, name) values (${locationId}, 'Till 1') returning id`,
   );
   const tillId = brandTillId(till.rows[0]!.id);
   const nodeId = await seedNode(db, tenantId, brandLocationId(locationId));
   const series = await db.execute<{ id: string }>(
-    sql`insert into invoice_series (tenant_id, node_id, code) values (${tenantId}, ${nodeId}, 'A') returning id`,
+    sql`insert into invoice_series (node_id, code) values (${nodeId}, 'A') returning id`,
   );
   const seriesId = brandSeriesId(series.rows[0]!.id);
   return { tenantId, locationId, tillId, nodeId, seriesId };
@@ -68,12 +67,12 @@ export async function seedNodeAndSeries(
 ): Promise<{ nodeId: NodeId; seriesId: SeriesId }> {
   const nodeId = await seedNode(db, venue.tenantId, brandLocationId(venue.locationId));
   const series = await db.execute<{ id: string }>(
-    sql`insert into invoice_series (tenant_id, node_id, code) values (${venue.tenantId}, ${nodeId}, ${seriesCode}) returning id`,
+    sql`insert into invoice_series (node_id, code) values (${nodeId}, ${seriesCode}) returning id`,
   );
   return { nodeId, seriesId: brandSeriesId(series.rows[0]!.id) };
 }
 
-// A venue-scoped unique index on tills(tenant_id, location_id, name) means two seeded tills in one
+// A venue-scoped unique index on tills(location_id, name) means two seeded tills in one
 // venue cannot share a name; the counter gives each a distinct one (seedVenue owns "Till 1").
 let tillSeq = 1;
 
@@ -83,8 +82,10 @@ export async function seedTill(
   locationId: string,
   name = `Till ${++tillSeq}`,
 ): Promise<TillId> {
+  // apps/server and the sibling suites still pass the tenant; the parameter goes when they do.
+  void tenantId;
   const till = await db.execute<{ id: string }>(
-    sql`insert into tills (tenant_id, location_id, name) values (${tenantId}, ${locationId}, ${name}) returning id`,
+    sql`insert into tills (location_id, name) values (${locationId}, ${name}) returning id`,
   );
   return brandTillId(till.rows[0]!.id);
 }
@@ -151,7 +152,6 @@ export async function seedSale(
   const [row] = await db
     .insert(sales)
     .values({
-      tenantId: seed.tenantId,
       tillId: seed.tillId,
       nodeId: seed.nodeId,
       seriesId: seed.seriesId,
@@ -170,7 +170,6 @@ export async function seedSale(
   const saleId = brandSaleId(row!.id);
   await db.insert(saleLines).values(
     opts.lines.map((line, i) => ({
-      tenantId: seed.tenantId,
       saleId,
       lineNo: i + 1,
       name: line.name ?? "Item",
@@ -192,7 +191,6 @@ export async function seedTender(
   opts: { method: TenderMethod; amount: string; tipAmount?: string; settledAt: string },
 ): Promise<void> {
   await db.insert(tenders).values({
-    tenantId: ref.tenantId,
     saleId: ref.saleId,
     method: opts.method,
     amount: opts.amount,
@@ -207,7 +205,6 @@ export async function seedVoid(
   voidedAt: string,
 ): Promise<void> {
   await db.insert(saleVoids).values({
-    tenantId: ref.tenantId,
     saleId: ref.saleId,
     reason: "test void",
     voidedAt,
@@ -219,10 +216,11 @@ export async function seedVoid(
  * connection owner for fixture setup. Inserts the raw tables rather than going
  * through `@waitron/purchasing`, so `@waitron/reporting`'s tests take no dependency on that package
  * (it reads the tables directly, exactly as it reads `sales`). `supplierInvoiceNumber` must be unique
- * per (tenant, supplierTaxId).
+ * per supplierTaxId.
  */
 export async function seedPurchaseInvoice(
   db: Database,
+  // Inert: callers still pass the seeded venue; the parameter goes when they stop.
   seed: { tenantId: TenantId },
   opts: {
     supplierTaxId?: string;
@@ -235,10 +233,10 @@ export async function seedPurchaseInvoice(
     lines: Array<{ rate: string; base: string; tax: string; kind?: "ordinary" | "capital" }>;
   },
 ): Promise<string> {
+  void seed;
   const [row] = await db
     .insert(purchaseInvoices)
     .values({
-      tenantId: seed.tenantId,
       supplierTaxId: opts.supplierTaxId ?? "B00000000",
       supplierName: "Proveedor",
       supplierInvoiceNumber: opts.supplierInvoiceNumber,
@@ -252,7 +250,6 @@ export async function seedPurchaseInvoice(
   const id = row!.id;
   await db.insert(purchaseInvoiceVat).values(
     opts.lines.map((l) => ({
-      tenantId: seed.tenantId,
       purchaseInvoiceId: id,
       rate: l.rate,
       base: l.base,
@@ -268,7 +265,6 @@ export async function seedSubstitution(
   ref: { tenantId: TenantId; substitutionSaleId: SaleId; substitutedSaleId: SaleId },
 ): Promise<void> {
   await db.insert(saleSubstitutions).values({
-    tenantId: ref.tenantId,
     substitutionSaleId: ref.substitutionSaleId,
     substitutedSaleId: ref.substitutedSaleId,
   });
@@ -304,12 +300,11 @@ export async function seedFiredLine(
 ): Promise<void> {
   const [catalogue] = await db
     .insert(catalogues)
-    .values({ tenantId: seed.tenantId, name: "Test catalogue" })
+    .values({ name: "Test catalogue" })
     .returning({ id: catalogues.id });
   const [product] = await db
     .insert(products)
     .values({
-      tenantId: seed.tenantId,
       catalogueId: catalogue!.id,
       name: "Item",
       pricingUnit: "each",
@@ -320,7 +315,6 @@ export async function seedFiredLine(
   const [line] = await db
     .insert(workingOrderLines)
     .values({
-      tenantId: seed.tenantId,
       workingOrderId: opts.orderId,
       lineNo: opts.lineNo,
       productId: product!.id,
@@ -335,7 +329,6 @@ export async function seedFiredLine(
     })
     .returning({ id: workingOrderLines.id });
   await db.insert(ticketItems).values({
-    tenantId: seed.tenantId,
     nodeId: seed.nodeId,
     workingOrderId: opts.orderId,
     workingOrderLineId: line!.id,
@@ -372,7 +365,6 @@ export async function seedOpenOrder(
   const [order] = await db
     .insert(workingOrders)
     .values({
-      tenantId: seed.tenantId,
       tillId: seed.tillId,
       nodeId: seed.nodeId,
       orderNumber,
@@ -422,7 +414,6 @@ export async function seedFiredOrder(
   }
   if (opts.tableLabel !== undefined) {
     await db.insert(diningTables).values({
-      tenantId: seed.tenantId,
       locationId: seed.locationId,
       label: opts.tableLabel,
       tabId: orderId,

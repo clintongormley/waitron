@@ -290,7 +290,7 @@ describe("recordDailyClose — snapshot, reconciliation, chain", () => {
     expect(first.sequenceNo).toBe(1);
     await suite.db.execute(sql`
       update daily_close_chain set sequence_no = 0
-       where tenant_id = ${venue.tenantId} and node_id = ${venue.nodeId}`);
+       where node_id = ${venue.nodeId}`);
 
     const error = await captureError(() => record("2026-08-05", []));
     expect(isAppError(error)).toBe(false); // NOT translated to close.already_closed

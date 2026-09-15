@@ -19,8 +19,7 @@ describe("join_requests", () => {
     // operation_description is Spanish test DATA, not a schema identifier, exactly as the sibling
     // devices/kitchen-stations tests use 'Hostelería'.
     await suite.admin.execute(sql`
-      insert into locations (id, tenant_id, name, invoice_locales, operation_description)
-      values (${LOCATION_A}, ${TENANT_A}, 'Loc A', array['es'], 'Hostelería')
+      insert into locations (id, name, invoice_locales, operation_description) values (${LOCATION_A}, 'Loc A', array['es'], 'Hostelería')
       on conflict (id) do nothing`);
   });
 
@@ -28,11 +27,8 @@ describe("join_requests", () => {
     await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       await tx.execute(sql`
-        insert into join_requests
-          (tenant_id, location_id, kind, label, token_hash, verification_number, decoy_numbers)
-        values
-          (${TENANT_A}, ${LOCATION_A}, 'device', 'Bar till', 'h1', '47', array['12', '83']),
-          (${TENANT_A}, ${LOCATION_A}, 'print_agent', 'Kitchen box', 'h2', '13', array['04', '91'])`);
+        insert into join_requests (location_id, kind, label, token_hash, verification_number, decoy_numbers) values (${LOCATION_A}, 'device', 'Bar till', 'h1', '47', array['12', '83']),
+          ( ${LOCATION_A}, 'print_agent', 'Kitchen box', 'h2', '13', array['04', '91'])`);
       const rows = await tx.execute<{ kind: string; verification_number: string }>(
         sql`select kind, verification_number from join_requests order by kind`,
       );
@@ -45,9 +41,7 @@ describe("join_requests", () => {
       await asAppUser(tx);
       const e = await captureError(() =>
         tx.execute(sql`
-          insert into join_requests
-            (tenant_id, location_id, kind, label, token_hash, verification_number, decoy_numbers)
-          values (${TENANT_A}, ${LOCATION_A}, 'kitchen_sink', 'x', 'h', '00', array['01', '02'])`),
+          insert into join_requests (location_id, kind, label, token_hash, verification_number, decoy_numbers) values (${LOCATION_A}, 'kitchen_sink', 'x', 'h', '00', array['01', '02'])`),
       );
       expect(pgErrorCode(e)).toBe("22P02"); // invalid_text_representation — not a valid enum label
     });

@@ -17,8 +17,7 @@ const suite = useTemplateDb({ template: "core" });
 async function setup(): Promise<PrintConfig> {
   const tenantId = await seedTenant(suite.admin);
   const { rows } = await suite.admin.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Bar', array['es-ES'], 'Sale on premises') returning id`);
+    insert into locations (name, invoice_locales, operation_description) values ('Bar', array['es-ES'], 'Sale on premises') returning id`);
   return { tenantId, locationId: rows[0]!.id };
 }
 
@@ -35,8 +34,7 @@ function asApp<T>(db: Database, cfg: PrintConfig, fn: (tx: Transaction) => Promi
 
 async function seedAgent(cfg: PrintConfig): Promise<string> {
   const { rows } = await suite.admin.execute<{ id: string }>(sql`
-    insert into print_agents (tenant_id, location_id, name, token_hash)
-    values (${cfg.tenantId}, ${cfg.locationId}, 'Kitchen', 'scrypt$fixture') returning id`);
+    insert into print_agents (location_id, name, token_hash) values (${cfg.locationId}, 'Kitchen', 'scrypt$fixture') returning id`);
   return rows[0]!.id;
 }
 

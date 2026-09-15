@@ -22,9 +22,7 @@ describe("location_catalogues schema (multi-menu accessibility map — PK + comp
       .insert(tenants)
       .values([{ id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
     await suite.admin.execute(sql`
-      insert into locations (id, tenant_id, name, invoice_locales, operation_description)
-      values
-        (${LOCATION_A}, ${TENANT_A}, 'Loc A', array['es'], 'Hostelería')
+      insert into locations (id, name, invoice_locales, operation_description) values (${LOCATION_A}, 'Loc A', array['es'], 'Hostelería')
       on conflict (id) do nothing`);
   });
 
@@ -41,7 +39,7 @@ describe("location_catalogues schema (multi-menu accessibility map — PK + comp
   async function seedCatalogue(tenant: string, name: string): Promise<string> {
     return asApp(tenant, async (tx) => {
       const r = await tx.execute<{ id: string }>(
-        sql`insert into catalogues (tenant_id, name) values (${tenant}, ${name}) returning id`,
+        sql`insert into catalogues (name) values (${name}) returning id`,
       );
       return r.rows[0]!.id;
     });
@@ -54,8 +52,7 @@ describe("location_catalogues schema (multi-menu accessibility map — PK + comp
   ): Promise<void> {
     await asApp(tenant, (tx) =>
       tx.execute(
-        sql`insert into location_catalogues (tenant_id, location_id, catalogue_id)
-            values (${tenant}, ${location}, ${catalogue})`,
+        sql`insert into location_catalogues (location_id, catalogue_id) values (${location}, ${catalogue})`,
       ),
     );
   }
@@ -71,7 +68,6 @@ describe("location_catalogues schema (multi-menu accessibility map — PK + comp
         .from(locationCatalogues)
         .where(sql`catalogue_id = ${catalogue}`),
     );
-    expect(row!.tenantId).toBe(TENANT_A);
     expect(row!.locationId).toBe(LOCATION_A);
     expect(row!.catalogueId).toBe(catalogue);
     // A membership row is REMOVED via DELETE (app_user holds DELETE — detach).
@@ -88,7 +84,7 @@ describe("location_catalogues schema (multi-menu accessibility map — PK + comp
     expect(deleted[0]!.catalogue_id).toBe(catalogue);
   });
 
-  it("the primary key rejects a duplicate (tenant_id, location_id, catalogue_id) membership (23505)", async () => {
+  it("the primary key rejects a duplicate (location_id, catalogue_id) membership (23505)", async () => {
     const catalogue = await seedCatalogue(TENANT_A, "Carta de vinos");
     await seedMembership(TENANT_A, LOCATION_A, catalogue);
     const e = await captureError(() => seedMembership(TENANT_A, LOCATION_A, catalogue));

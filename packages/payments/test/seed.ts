@@ -35,18 +35,17 @@ export async function seedWorkingOrder(db: Database, nif = "B00000000"): Promise
     insert into tenants (country, tax_id, legal_name) values ('ES', ${nif}, 'Test SL') returning id`);
   const tenantId = t.rows[0].id;
   const l = await db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Counter', array['es'], 'Retail') returning id`);
+    insert into locations (name, invoice_locales, operation_description) values ('Counter', array['es'], 'Retail') returning id`);
   const locationId = l.rows[0].id;
   const till = await db.execute<{ id: string }>(sql`
-    insert into tills (tenant_id, location_id, name) values (${tenantId}, ${locationId}, 'Till 1') returning id`);
+    insert into tills (location_id, name) values (${locationId}, 'Till 1') returning id`);
   const tillId = till.rows[0].id;
   const node = await db.execute<{ id: string }>(sql`
-    insert into nodes (tenant_id, location_id, name) values (${tenantId}, ${locationId}, 'Node 1') returning id`);
+    insert into nodes (location_id, name) values (${locationId}, 'Node 1') returning id`);
   const nodeId = node.rows[0].id;
   // order_number is NOT NULL since park & retrieve (@waitron/db Task 1); this seed just needs a value.
   const wo = await db.execute<{ id: string }>(sql`
-    insert into working_orders (tenant_id, till_id, order_number) values (${tenantId}, ${tillId}, 1) returning id`);
+    insert into working_orders (till_id, order_number) values (${tillId}, 1) returning id`);
   return { tenantId, tillId, nodeId, workingOrderId: wo.rows[0].id };
 }
 
@@ -71,22 +70,16 @@ export async function seedWorkingOrder(db: Database, nif = "B00000000"): Promise
  */
 export async function seedSale(db: Database, seeded: Seeded): Promise<string> {
   const series = await db.execute<{ id: string }>(sql`
-    insert into invoice_series (tenant_id, node_id, code)
-    values (${seeded.tenantId}, ${seeded.nodeId}, 'A') returning id`);
+    insert into invoice_series (node_id, code) values (${seeded.nodeId}, 'A') returning id`);
   const seriesId = series.rows[0].id;
   return db.transaction(async (tx) => {
     const sale = await tx.execute<{ id: string }>(sql`
-      insert into sales (
-        tenant_id, till_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes,
-        total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state
-      ) values (
-        ${seeded.tenantId}, ${seeded.tillId}, ${seeded.nodeId}, ${seriesId}, 1, now(), 60,
+      insert into sales (till_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes, total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state) values (${seeded.tillId}, ${seeded.nodeId}, ${seriesId}, 1, now(), 60,
         '10.00', '[]'::jsonb, 'es', array['es'], 'fake', 'not_applicable'
       ) returning id`);
     const saleId = sale.rows[0].id;
     await tx.execute(sql`
-      insert into tenders (tenant_id, sale_id, method, amount, settled_at)
-      values (${seeded.tenantId}, ${saleId}, 'card', '10.00', now())`);
+      insert into tenders (sale_id, method, amount, settled_at) values (${saleId}, 'card', '10.00', now())`);
     return saleId;
   });
 }
@@ -113,8 +106,7 @@ export async function seedForSale(
 ): Promise<SeededForSale> {
   const seeded = await seedWorkingOrder(db, nif);
   const series = await db.execute<{ id: string }>(sql`
-    insert into invoice_series (tenant_id, node_id, code)
-    values (${seeded.tenantId}, ${seeded.nodeId}, 'A') returning id`);
+    insert into invoice_series (node_id, code) values (${seeded.nodeId}, 'A') returning id`);
   const seriesId = series.rows[0].id;
   await db.transaction(async (tx) => {
     await backend.registerNode(tx, brandNodeId(seeded.nodeId), { tenantId: seeded.tenantId });

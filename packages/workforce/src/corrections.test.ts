@@ -90,8 +90,7 @@ async function insertApprovedCorrection(row: {
       person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
       recorded_by_person_id, recorded_at, corrects_entry_id, correction_reason, correction_status,
       correction_actor_id, entry_hash, prev_entry_hash, sequence_no, is_first_entry)
-    values (
-      ${row.personId}, ${locationId}, ${row.node}, 'correction', ${row.eventAt}, 0,
+    values (${row.personId}, ${locationId}, ${row.node}, 'correction', ${row.eventAt}, 0,
       ${row.actorId}, ${row.recordedAt}, ${row.correctsEntryId}, 'cross-node merge', 'approved',
       ${row.actorId}, ${"A".repeat(64)}, ${"B".repeat(64)}, ${row.sequenceNo}, false)`);
 }

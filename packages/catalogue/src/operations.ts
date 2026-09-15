@@ -57,8 +57,8 @@ import { validateDietaryDeclarations, type DietaryLabel } from "./dietary-declar
  * Catalogue operations — CRUD over `catalogues`/`categories`/`products`, catalogue↔location
  * assignment, and the read the till sells from (`listAvailableProducts`).
  *
- * Every operation shares the caller's transaction. Inserts into the core tables still take the
- * tenant id, which those tables carry.
+ * Every operation shares the caller's transaction. The functions that write a core table still
+ * take a tenant argument, which nothing reads; it goes with its last caller (apps/server).
  *
  * Deactivation is `active = false`, never DELETE: a product may sit behind historical sale-line
  * snapshots, and the app role holds no DELETE grant (`products: "SIU"` in
@@ -435,9 +435,10 @@ export async function createCatalogue(
   tenantId: TenantId,
   input: { name: string },
 ): Promise<Catalogue> {
+  void tenantId;
   const [row] = await tx
     .insert(catalogues)
-    .values({ tenantId, name: input.name })
+    .values({ name: input.name })
     .returning(CATALOGUE_COLUMNS);
   return row!;
 }
@@ -940,9 +941,9 @@ export async function listMenuOffers(tx: Transaction, menuIds: string[]): Promis
 
 /**
  * Check an untrusted catalogue id before a location-menu write, so an absent catalogue produces
- * `catalogue.not_found` (404) instead of an opaque FK failure (23503). Composite FKs on
+ * `catalogue.not_found` (404) instead of an opaque FK failure (23503). The foreign keys on
  * `locations.catalogue_id` and `location_catalogues.catalogue_id` remain the data-layer backstop
- * for missing or tenant-inconsistent references; this read checks existence only.
+ * for a missing reference; this read checks existence only.
  */
 export async function catalogueExists(tx: Transaction, catalogueId: string): Promise<boolean> {
   const [row] = await tx
@@ -1089,6 +1090,7 @@ export async function createProduct(
   tenantId: TenantId,
   input: CreateProductInput,
 ): Promise<Product> {
+  void tenantId;
   if (input.unitId === undefined && input.pricingUnit === undefined) {
     throw new AppError("management.request_invalid", { field: "unitId" });
   }
@@ -1127,7 +1129,6 @@ export async function createProduct(
   const [row] = await tx
     .insert(products)
     .values({
-      tenantId,
       catalogueId: input.catalogueId,
       categoryId: null,
       name: input.name,
@@ -1361,8 +1362,8 @@ export async function setLocationDefaultCatalogue(
 
 /**
  * Attach a NON-default catalogue to a location's accessible set (a `location_catalogues` row): the
- * location may then sell from it alongside its default `catalogue_id`. Idempotent — the composite PK
- * (tenant_id, location_id, catalogue_id) makes a re-attach a no-op via `onConflictDoNothing`. The
+ * location may then sell from it alongside its default `catalogue_id`. Idempotent — the primary key
+ * (location_id, catalogue_id) makes a re-attach a no-op via `onConflictDoNothing`. The
  * default assignment stays with {@link assignCatalogueToLocation}; this only adds OTHER menus.
  */
 export async function addCatalogueToLocation(
@@ -1371,10 +1372,8 @@ export async function addCatalogueToLocation(
   locationId: string,
   catalogueId: string,
 ): Promise<void> {
-  await tx
-    .insert(locationCatalogues)
-    .values({ tenantId, locationId, catalogueId })
-    .onConflictDoNothing();
+  void tenantId;
+  await tx.insert(locationCatalogues).values({ locationId, catalogueId }).onConflictDoNothing();
 }
 
 /**
@@ -1812,6 +1811,7 @@ export async function createOptionGroup(
   tenantId: TenantId,
   input: CreateOptionGroupInput,
 ): Promise<OptionGroup> {
+  void tenantId;
   await lockModifierDefinitions(tx);
   // Resolve the column defaults HERE so the invariant is validated against the values that will land
   // (the DB defaults are min 0, max 1, required false).
@@ -1822,7 +1822,6 @@ export async function createOptionGroup(
   const [row] = await tx
     .insert(optionGroups)
     .values({
-      tenantId,
       name: input.name,
       minSelect,
       maxSelect,
@@ -1884,6 +1883,7 @@ export async function createOptionGroupItem(
   groupId: string,
   input: CreateOptionGroupItemInput,
 ): Promise<OptionGroupItem> {
+  void tenantId;
   await lockModifierDefinitions(tx);
   // Resolve the default HERE so the invariant is validated against the value that will land (the DB
   // default is 1), the same posture createOptionGroup takes for its bounds.
@@ -1892,7 +1892,6 @@ export async function createOptionGroupItem(
   const [row] = await tx
     .insert(optionGroupItems)
     .values({
-      tenantId,
       groupId,
       name: input.name,
       maxQuantity,
@@ -1948,8 +1947,8 @@ export async function updateOptionGroupItem(
 /**
  * Fully replace the product's option groups with `groupIds`. Delete the existing attachments,
  * then insert each id with `sort` equal to its list index; an empty list detaches everything.
- * The caller's transaction keeps replacement atomic, and composite FKs reject tenant-inconsistent
- * product or group references.
+ * The caller's transaction keeps replacement atomic, and the foreign keys reject a product or
+ * group reference that names no row.
  */
 export async function setProductOptionGroups(
   tx: Transaction,
@@ -1957,6 +1956,7 @@ export async function setProductOptionGroups(
   productId: string,
   groupIds: string[],
 ): Promise<void> {
+  void tenantId;
   await lockModifierDefinitions(tx);
   const [product] = await tx
     .select({ id: products.id })
@@ -1985,7 +1985,6 @@ export async function setProductOptionGroups(
   if (groupIds.length === 0) return;
   await tx.insert(productOptionGroups).values(
     groupIds.map((groupId, index) => ({
-      tenantId,
       productId,
       groupId,
       sort: index,

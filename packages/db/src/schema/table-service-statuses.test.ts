@@ -32,7 +32,7 @@ describe("table_service_statuses schema (the dining_tables.status_id composite F
   async function seedStatus(tenant: string, label: string): Promise<string> {
     return asApp(tenant, async (tx) => {
       const r = await tx.execute<{ id: string }>(
-        sql`insert into table_service_statuses (tenant_id, label, color) values (${tenant}, ${label}, '#ef4444') returning id`,
+        sql`insert into table_service_statuses (label, color) values (${label}, '#ef4444') returning id`,
       );
       return r.rows[0]!.id;
     });
@@ -42,13 +42,12 @@ describe("table_service_statuses schema (the dining_tables.status_id composite F
     // Seed a location + a dining table (TS-1) as the owner, then set + read status_id as app_user.
     const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
     await suite.admin.execute(sql`
-      insert into locations (id, tenant_id, name, invoice_locales, operation_description)
-      values (${LOCATION_A}, ${TENANT_A}, 'Loc A', array['es'], 'Hostelería')
+      insert into locations (id, name, invoice_locales, operation_description) values (${LOCATION_A}, 'Loc A', array['es'], 'Hostelería')
       on conflict (id) do nothing`);
     const tableId = await asApp(TENANT_A, async (tx) =>
       tx
         .execute<{ id: string }>(
-          sql`insert into dining_tables (tenant_id, location_id, label) values (${TENANT_A}, ${LOCATION_A}, 'T-status') returning id`,
+          sql`insert into dining_tables (location_id, label) values (${LOCATION_A}, 'T-status') returning id`,
         )
         .then((r) => r.rows[0]!.id),
     );
@@ -65,9 +64,7 @@ describe("table_service_statuses schema (the dining_tables.status_id composite F
     );
     expect(row!.status_id).toBe(statusId);
 
-    // The FK rejects a status_id that names no row at all (a random uuid) — 23503. This case proves FK
-    // EXISTENCE; a plain single-column FK would reject it identically, so it does not on its own
-    // distinguish the composite (tenant_id, status_id) FK from a single-column one.
+    // The FK rejects a status_id that names no row at all (a random uuid) — 23503.
     const eRandom = await captureError(() =>
       asApp(TENANT_A, (tx) =>
         tx.execute(
@@ -77,14 +74,14 @@ describe("table_service_statuses schema (the dining_tables.status_id composite F
     );
     expect(pgErrorCode(eRandom)).toBe("23503"); // foreign_key_violation
 
-    const foreignStatusId = await seedStatus(TENANT_B, "B's status");
-    const eForeign = await captureError(() =>
+    // A deleted status is refused the same way: the reference must name a row that exists.
+    const goneStatusId = await seedStatus(TENANT_A, "Deleted status");
+    await suite.admin.execute(sql`delete from table_service_statuses where id = ${goneStatusId}`);
+    const eGone = await captureError(() =>
       asApp(TENANT_A, (tx) =>
-        tx.execute(
-          sql`update dining_tables set status_id = ${foreignStatusId} where id = ${tableId}`,
-        ),
+        tx.execute(sql`update dining_tables set status_id = ${goneStatusId} where id = ${tableId}`),
       ),
     );
-    expect(pgErrorCode(eForeign)).toBe("23503"); // foreign_key_violation — (TENANT_A, B's id) has no match
+    expect(pgErrorCode(eGone)).toBe("23503"); // foreign_key_violation
   });
 });

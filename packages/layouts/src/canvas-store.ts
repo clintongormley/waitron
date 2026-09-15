@@ -15,7 +15,7 @@ import { validateCanvas } from "./validate-canvas.js";
 
 /**
  * The list/get/create/update/delete service over `canvases` (design §4, SP-A.2 §16.3). MANY
- * rows per tenant, keyed by `id`, names unique per tenant.
+ * rows, keyed by `id`, with distinct names.
  *
  * Every function takes the caller's transaction, opened with
  * `withTransaction(deps.db, …)` + `asAppUser(tx)`. Exercised in
@@ -39,13 +39,12 @@ import { validateCanvas } from "./validate-canvas.js";
  *   - a `canvases_tenant_name_key` collision (a duplicate name per tenant, SQLSTATE 23505) →
  *     `canvas.name_taken`. This closes the Phase-3 reviewer's flagged gap: a duplicate name must
  *     return a clean 409, not the raw 23505 an unwrapped INSERT/UPDATE would surface as a 500. It
- *     matches on the CONSTRAINT NAME, not merely on 23505: `canvases` also carries a `(tenant_id, id)`
- *     unique (the composite-FK target devices point at), and any 23505 on THAT — or any constraint
- *     added later — is re-thrown untouched rather than mislabelled `canvas.name_taken`. When the
- *     driver reports no constraint name (PGlite omits it) it falls back to translating: the name key is
- *     the only NON-composite unique these writes can trip on an author-supplied value (a
- *     `(tenant_id, id)` clash is a cryptographically-unreachable `defaultRandom()` collision, and an
- *     UPDATE never changes `id`). The same constraint-targeted shape as identity's `asEmailTaken`;
+ *     matches on the CONSTRAINT NAME, not merely on 23505: any 23505 on a constraint added later is
+ *     re-thrown untouched rather than mislabelled `canvas.name_taken`. When the driver reports no
+ *     constraint name (PGlite omits it) it falls back to translating: the name key is the only unique
+ *     these writes can trip on an author-supplied value (the primary key is a
+ *     cryptographically-unreachable `defaultRandom()` collision, and an UPDATE never changes `id`).
+ *     The same constraint-targeted shape as identity's `asEmailTaken`;
  *   - a `device_profiles_canvas_fk` violation (a delete of a canvas a device profile still references,
  *     ON DELETE RESTRICT, SQLSTATE 23001) → `canvas.in_use` — a clean 409 rather than a raw 500.
  *     Matched on the constraint NAME so an unrelated RESTRICT is re-thrown untouched.
@@ -106,10 +105,10 @@ export async function getCanvas(
   return { id: row.id, name: row.name, definition: row.definition as CanvasDef };
 }
 
-/** Create a canvas for the tenant, returning its generated id. Manager/admin only (`layout.configure`). */
+/** Create a canvas, returning its generated id. Manager/admin only (`layout.configure`). */
 export async function createCanvas(
   tx: Transaction,
-  input: { managementSessionId: string; tenantId: string; name: string; definition: unknown },
+  input: { managementSessionId: string; tenantId?: string; name: string; definition: unknown },
 ): Promise<{ id: string }> {
   await authorizeManager(tx, {
     managementSessionId: input.managementSessionId,
@@ -119,7 +118,7 @@ export async function createCanvas(
   try {
     const [row] = await tx
       .insert(canvases)
-      .values({ tenantId: input.tenantId, name: input.name, definition })
+      .values({ name: input.name, definition })
       .returning({ id: canvases.id });
     return { id: row!.id };
   } catch (error) {
@@ -139,7 +138,9 @@ export async function updateCanvas(
   tx: Transaction,
   input: {
     managementSessionId: string;
-    tenantId: string;
+    /** Inert: nothing here reads it. apps/server and provisioning still supply it; the field goes
+     * when those callers do. */
+    tenantId?: string;
     id: string;
     name: string;
     definition: unknown;
@@ -170,13 +171,13 @@ export async function updateCanvas(
  * throws `canvas.not_found`, read back via `.returning({ id })` —
  * the same by-id config-CRUD idiom `deactivateZone`/`deactivateTable`/`deactivateStatus` (`tables.ts`)
  * use, so a DELETE that matched zero rows is a 404 rather than a silent success. A device profile still
- * referencing the canvas (the composite FK `device_profiles_canvas_fk`, ON DELETE RESTRICT) trips a
+ * referencing the canvas (`device_profiles_canvas_fk`, ON DELETE RESTRICT) trips a
  * 23001 restrict_violation, which `translateWriteError` turns into `canvas.in_use` (a clean 409) rather
  * than letting the raw DB error propagate to a 500.
  */
 export async function deleteCanvas(
   tx: Transaction,
-  input: { managementSessionId: string; tenantId: string; id: string },
+  input: { managementSessionId: string; tenantId?: string; id: string },
 ): Promise<void> {
   await authorizeManager(tx, {
     managementSessionId: input.managementSessionId,

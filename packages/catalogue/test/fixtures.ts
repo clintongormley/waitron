@@ -38,16 +38,15 @@ export async function seedLegacySellingUnits(db: Database): Promise<void> {
 export async function seedVenue(db: Database): Promise<SeededVenue> {
   const tenantId = await seedTenant(db);
   const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Main', array['en-GB'], 'Test op') returning id`);
+    insert into locations (name, invoice_locales, operation_description) values ('Main', array['en-GB'], 'Test op') returning id`);
   const locationId = loc.rows[0]!.id;
   const till = await db.execute<{ id: string }>(
-    sql`insert into tills (tenant_id, location_id, name) values (${tenantId}, ${locationId}, 'Till 1') returning id`,
+    sql`insert into tills (location_id, name) values (${locationId}, 'Till 1') returning id`,
   );
   const tillId = brandTillId(till.rows[0]!.id);
   const nodeId = await seedNode(db, tenantId, brandLocationId(locationId));
   const series = await db.execute<{ id: string }>(
-    sql`insert into invoice_series (tenant_id, node_id, code) values (${tenantId}, ${nodeId}, 'A') returning id`,
+    sql`insert into invoice_series (node_id, code) values (${nodeId}, 'A') returning id`,
   );
   const seriesId = brandSeriesId(series.rows[0]!.id);
   return { tenantId, locationId, tillId, nodeId, seriesId };

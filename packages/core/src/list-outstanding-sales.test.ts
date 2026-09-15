@@ -38,7 +38,6 @@ async function settleDirectly(saleId: SaleId): Promise<void> {
   await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     await tx.insert(tenders).values({
-      tenantId,
       saleId,
       method: "cash",
       amount: "70.00",
@@ -46,7 +45,6 @@ async function settleDirectly(saleId: SaleId): Promise<void> {
       settledAt: new Date("2026-08-01T12:00:00Z").toISOString(),
     });
     await tx.insert(saleSettlements).values({
-      tenantId,
       saleId,
       settledAt: new Date("2026-08-01T12:00:00Z").toISOString(),
     });
@@ -112,7 +110,6 @@ describe("listOutstandingSales", () => {
       { total: "70.00", invoiceNumber: 1 },
     );
     await suite.db.insert(saleVoids).values({
-      tenantId,
       saleId,
       reason: "test void",
       voidedAt: new Date("2026-08-01T12:00:00Z").toISOString(),
@@ -135,7 +132,7 @@ describe("listOutstandingSales", () => {
     );
     await suite.db
       .insert(saleSubstitutions)
-      .values({ tenantId, substitutionSaleId: f3Id, substitutedSaleId: ticketId });
+      .values({ substitutionSaleId: f3Id, substitutedSaleId: ticketId });
 
     const out = await list();
     expect(out.map((o) => o.saleId)).not.toContain(f3Id);

@@ -33,26 +33,22 @@ async function seed(db: Database): Promise<void> {
   await db.insert(locations).values([
     {
       id: LOCATION_A,
-      tenantId: TENANT_A,
       name: "Fixture Location A",
       invoiceLocales: ["es", "ca"],
       operationDescription: "Hostelería",
     },
   ]);
-  await db
-    .insert(tills)
-    .values([{ id: TILL_A1, tenantId: TENANT_A, locationId: LOCATION_A, name: "A1" }]);
+  await db.insert(tills).values([{ id: TILL_A1, locationId: LOCATION_A, name: "A1" }]);
   nodeA = await seedNode(db, brandTenantId(TENANT_A), brandLocationId(LOCATION_A));
   const [a] = await db
     .insert(invoiceSeries)
-    .values({ tenantId: TENANT_A, nodeId: nodeA, code: "FA", purpose: "standard" })
+    .values({ nodeId: nodeA, code: "FA", purpose: "standard" })
     .returning({ id: invoiceSeries.id });
   seriesA = a.id;
 }
 
 function saleValues(overrides: Record<string, unknown> = {}) {
   return {
-    tenantId: TENANT_A,
     tillId: TILL_A1,
     nodeId: nodeA,
     seriesId: seriesA,
@@ -95,7 +91,6 @@ async function recordCompleteSale(
   return db.transaction(async (tx) => {
     const [sale] = await tx.insert(sales).values(saleValues(overrides)).returning({ id: sales.id });
     await tx.insert(saleLines).values({
-      tenantId: (overrides.tenantId as string) ?? TENANT_A,
       saleId: sale.id,
       lineNo: 1,
       name: "Café solo",
@@ -107,7 +102,6 @@ async function recordCompleteSale(
     });
     await tx.insert(tenders).values(
       tenderRows.map((t) => ({
-        tenantId: (overrides.tenantId as string) ?? TENANT_A,
         saleId: sale.id,
         method: t.method,
         amount: t.amount,
@@ -168,7 +162,7 @@ describeEachTarget("sales — the commercial record", (target) => {
   it("permits the same invoice number in two different series", async () => {
     const [other] = await db
       .insert(invoiceSeries)
-      .values({ tenantId: TENANT_A, nodeId: nodeA, code: "RA", purpose: "rectificative" })
+      .values({ nodeId: nodeA, code: "RA", purpose: "rectificative" })
       .returning({ id: invoiceSeries.id });
     await recordCompleteSale(db);
     const second = await recordCompleteSale(db, { seriesId: other.id });
@@ -230,7 +224,6 @@ describeEachTarget("sales — the commercial record", (target) => {
         .returning({ id: sales.id });
       await tx.insert(saleLines).values(
         ["0.10", "0.20", "0.70"].map((amount, i) => ({
-          tenantId: TENANT_A,
           saleId: sale.id,
           lineNo: i + 1,
           name: "Café solo",
@@ -246,7 +239,6 @@ describeEachTarget("sales — the commercial record", (target) => {
         })),
       );
       await tx.insert(tenders).values({
-        tenantId: TENANT_A,
         saleId: sale.id,
         method: "cash",
         amount: "1.00",
@@ -307,11 +299,7 @@ describeEachTarget("sales — the commercial record", (target) => {
     // insert type requires node_id, so the omission can only be expressed at the SQL layer.
     const error = await captureError(() =>
       db.execute(
-        sql`insert into sales (
-               tenant_id, till_id, series_id, invoice_number, issued_at, issued_offset_minutes,
-               total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state
-             ) values (
-               ${TENANT_A}, ${TILL_A1}, ${seriesA}, 2, ${AT}, 120,
+        sql`insert into sales (till_id, series_id, invoice_number, issued_at, issued_offset_minutes, total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state) values (${TILL_A1}, ${seriesA}, 2, ${AT}, 120,
                '1.00', '[]'::jsonb, 'es', array['es', 'ca']::text[], 'verifactu', 'recorded'
              )`,
       ),
@@ -423,9 +411,7 @@ describeEachTarget("sales — tender coverage", (target) => {
     // tenders_amount_ck is the only constraint that can fire here — deleting it
     // is what lets a zero tender through (proved by deletion locally).
     const error = await captureError(() =>
-      db
-        .insert(tenders)
-        .values({ tenantId: TENANT_A, saleId: id, method: "cash", amount: "0.00", settledAt: AT }),
+      db.insert(tenders).values({ saleId: id, method: "cash", amount: "0.00", settledAt: AT }),
     );
     expect(pgErrorCode(error)).toBe("23514");
     expect(pgErrorMessage(error)).toMatch(/tenders_amount_ck/);
@@ -441,7 +427,6 @@ describeEachTarget("sales — tender coverage", (target) => {
     // above is the one that isolates tenders_amount_ck under deletion.
     const error = await captureError(() =>
       db.insert(tenders).values({
-        tenantId: TENANT_A,
         saleId: id,
         method: "cash",
         amount: "-10.00",
@@ -455,7 +440,7 @@ describeEachTarget("sales — tender coverage", (target) => {
     const id = await recordCompleteSale(db);
     const [inserted] = await db
       .insert(tenders)
-      .values({ tenantId: TENANT_A, saleId: id, method: "cash", amount: "10.00", settledAt: AT })
+      .values({ saleId: id, method: "cash", amount: "10.00", settledAt: AT })
       .returning();
     expect(inserted.amount).toBe("10.00");
   });
@@ -469,7 +454,6 @@ describeEachTarget("sales — tender coverage", (target) => {
     // only constraint that can fire — the name is safe to pin here.
     const error = await captureError(() =>
       db.insert(tenders).values({
-        tenantId: TENANT_A,
         saleId: id,
         method: "card",
         amount: "10.00",
@@ -486,7 +470,6 @@ describeEachTarget("sales — tender coverage", (target) => {
     const [inserted] = await db
       .insert(tenders)
       .values({
-        tenantId: TENANT_A,
         saleId: id,
         method: "card",
         amount: "10.00",
@@ -501,7 +484,6 @@ describeEachTarget("sales — tender coverage", (target) => {
     const id = await recordCompleteSale(db);
     const error = await captureError(() =>
       db.insert(tenders).values({
-        tenantId: TENANT_A,
         saleId: id,
         method: "card",
         amount: "10.00",
@@ -692,10 +674,8 @@ describeEachTarget("sales — corrective link and negative total", (target) => {
     seriesId?: string;
     invoiceLocales?: string[];
   }): Promise<{ id: string }[]> {
-    const tenantId = opts.tenantId ?? TENANT_A;
     const tillId = opts.tillId ?? TILL_A1;
-    // node_id is NOT NULL since the rekey; these correctives are all tenant A, so nodeA is the
-    // tenant-consistent node for the composite FK.
+    // node_id is NOT NULL since the rekey.
     const nodeId = opts.nodeId ?? nodeA;
     const seriesId = opts.seriesId ?? seriesA;
     const locales = opts.invoiceLocales ?? ["es", "ca"];
@@ -705,12 +685,7 @@ describeEachTarget("sales — corrective link and negative total", (target) => {
     )}]::text[]`;
     return rows<{ id: string }>(
       db,
-      sql`insert into sales (
-             tenant_id, till_id, node_id, series_id, invoice_number, issued_at,
-             issued_offset_minutes, total, vat_breakdown, locale, invoice_locales, fiscal_backend,
-             fiscal_state, corrects_sale_id
-           ) values (
-             ${tenantId}, ${tillId}, ${nodeId}, ${seriesId}, ${opts.invoiceNumber}, ${AT}, 120,
+      sql`insert into sales (till_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes, total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state, corrects_sale_id) values (${tillId}, ${nodeId}, ${seriesId}, ${opts.invoiceNumber}, ${AT}, 120,
              ${opts.total}, '[]'::jsonb, 'es', ${localesArray}, 'verifactu', 'recorded',
              ${opts.correctsSaleId}
            ) returning id`,
@@ -826,18 +801,12 @@ describeEachTarget("sale_lines — parent line self-link", (target) => {
     saleId: string;
     lineNo: number;
     parentLineId: string | null;
-    tenantId?: string;
     descriptions?: string;
   }): Promise<{ id: string }[]> {
-    const tenantId = opts.tenantId ?? TENANT_A;
     const descriptions = opts.descriptions ?? '{"es":"Café solo","ca":"Cafè sol"}';
     return rows<{ id: string }>(
       db,
-      sql`insert into sale_lines (
-             tenant_id, sale_id, line_no, name, descriptions, quantity, unit_price, vat_rate,
-             line_total, parent_line_id
-           ) values (
-             ${tenantId}, ${opts.saleId}, ${opts.lineNo}, 'Café solo', ${descriptions}::jsonb, '1.000', '1.00',
+      sql`insert into sale_lines (sale_id, line_no, name, descriptions, quantity, unit_price, vat_rate, line_total, parent_line_id) values (${opts.saleId}, ${opts.lineNo}, 'Café solo', ${descriptions}::jsonb, '1.000', '1.00',
              '10.00', '1.00', ${opts.parentLineId}
            ) returning id`,
     );

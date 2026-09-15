@@ -5,7 +5,6 @@ import { captureError, pgErrorCode, pgErrorMessage } from "../testing/errors.js"
 import { usePgliteDb } from "../testing/lifecycle.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { catalogues, optionGroups } from "./catalogue.js";
-import { tenants } from "./tenants.js";
 
 const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS] });
 
@@ -31,33 +30,29 @@ describe("catalogue — menu, taxonomy and priced items", () => {
   });
 
   it("rejects a bad pricing_unit and a bad vat_class, each on its own CHECK", async () => {
-    // Seed real FK parents FIRST so the two INSERTs below reach the CHECK constraints instead of
-    // tripping products' tenant_id / catalogue_id foreign keys. The previous version of this test
-    // inserted gen_random_uuid() for both keys, so it threw 23503 (FK violation) whether or not the
-    // CHECKs existed — and it never exercised an invalid vat_class at all. (F1, whole-branch review.)
-    const [tenant] = await db
-      .insert(tenants)
-      .values({ country: "ES", taxId: "B00000000", legalName: "Fixture Tenant" })
-      .returning({ id: tenants.id });
+    // Seed the real FK parent FIRST so the two INSERTs below reach the CHECK constraints instead of
+    // tripping products' catalogue_id foreign key. The previous version of this test inserted
+    // gen_random_uuid() for the key, so it threw 23503 (FK violation) whether or not the CHECKs
+    // existed — and it never exercised an invalid vat_class at all. (F1, whole-branch review.)
     const [catalogue] = await db
       .insert(catalogues)
-      .values({ tenantId: tenant.id, name: "Deli" })
+      .values({ name: "Deli" })
       .returning({ id: catalogues.id });
 
     // Bad pricing_unit, VALID vat_class → only products_pricing_unit_ck can fire.
     const pricingError = await captureError(() =>
-      db.execute(sql`insert into products
-        (tenant_id, catalogue_id, name, pricing_unit, unit_price, vat_class)
-        values (${tenant.id}, ${catalogue.id}, 'Fixture', 'bogus', '1.00', 'general')`),
+      db.execute(
+        sql`insert into products (catalogue_id, name, pricing_unit, unit_price, vat_class) values (${catalogue.id}, 'Fixture', 'bogus', '1.00', 'general')`,
+      ),
     );
     expect(pgErrorCode(pricingError)).toBe("23514");
     expect(pgErrorMessage(pricingError)).toMatch(/products_pricing_unit_ck/);
 
     // Bad vat_class, VALID pricing_unit → only products_vat_class_ck can fire.
     const vatError = await captureError(() =>
-      db.execute(sql`insert into products
-        (tenant_id, catalogue_id, name, pricing_unit, unit_price, vat_class)
-        values (${tenant.id}, ${catalogue.id}, 'Fixture', 'each', '1.00', 'bogus')`),
+      db.execute(
+        sql`insert into products (catalogue_id, name, pricing_unit, unit_price, vat_class) values (${catalogue.id}, 'Fixture', 'each', '1.00', 'bogus')`,
+      ),
     );
     expect(pgErrorCode(vatError)).toBe("23514");
     expect(pgErrorMessage(vatError)).toMatch(/products_vat_class_ck/);
@@ -130,18 +125,13 @@ describe("catalogue — menu, taxonomy and priced items", () => {
     // The AUTHORED per-option cap. Raw SQL that lists no max_quantity column, so a missing column
     // fails on `column "max_quantity" ... does not exist` — the real cause — rather than on a
     // drizzle-schema mismatch.
-    const [tenant] = await db
-      .insert(tenants)
-      .values({ country: "ES", taxId: "B00000001", legalName: "Fixture Tenant QTY" })
-      .returning({ id: tenants.id });
     const [group] = await db
       .insert(optionGroups)
-      .values({ tenantId: tenant.id, name: { en: "Extras" } })
+      .values({ name: { en: "Extras" } })
       .returning({ id: optionGroups.id });
     const [row] = await rows<{ max_quantity: number }>(
       db,
-      sql`insert into option_group_items (tenant_id, group_id, name, price_delta)
-          values (${tenant.id}, ${group.id}, '{"en":"Cheese"}'::jsonb, '0.50')
+      sql`insert into option_group_items (group_id, name, price_delta) values (${group.id}, '{"en":"Cheese"}'::jsonb, '0.50')
           returning max_quantity`,
     );
     expect(row?.max_quantity).toBe(1);
@@ -151,17 +141,14 @@ describe("catalogue — menu, taxonomy and priced items", () => {
     // The real SQLSTATE and constraint name live on the driver error's `.cause`, not on
     // DrizzleQueryError's own `Failed query: <sql>` message — so read them with pgErrorCode/
     // pgErrorMessage rather than matching the wrapper text (which would pass on any thrown error).
-    const [tenant] = await db
-      .insert(tenants)
-      .values({ country: "ES", taxId: "B00000002", legalName: "Fixture Tenant QTY2" })
-      .returning({ id: tenants.id });
     const [group] = await db
       .insert(optionGroups)
-      .values({ tenantId: tenant.id, name: { en: "Extras" } })
+      .values({ name: { en: "Extras" } })
       .returning({ id: optionGroups.id });
     const error = await captureError(() =>
-      db.execute(sql`insert into option_group_items (tenant_id, group_id, name, price_delta, max_quantity)
-        values (${tenant.id}, ${group.id}, '{"en":"Bacon"}'::jsonb, '1.00', 0)`),
+      db.execute(
+        sql`insert into option_group_items (group_id, name, price_delta, max_quantity) values (${group.id}, '{"en":"Bacon"}'::jsonb, '1.00', 0)`,
+      ),
     );
     expect(pgErrorCode(error)).toBe("23514"); // check_violation
     expect(pgErrorMessage(error)).toMatch(/option_group_items_qty_ck/);

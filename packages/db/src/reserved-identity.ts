@@ -9,7 +9,6 @@ import { withTransaction } from "./tenancy.js";
 
 export interface ReservedNodeInput {
   id: string; // the standby's own nodeId
-  tenantId: string;
   locationId: string;
   name: string;
   filingModule: string | null;
@@ -33,7 +32,6 @@ export async function insertReservedNodeTx(
 }
 
 export interface ReservedSeriesInput {
-  tenantId: string;
   nodeId: string;
   code: string;
   purpose: string; // "standard" | "rectificative"
@@ -77,7 +75,7 @@ export function readNodeEndorsement(
  * The id of a node's LIVE standard-purpose invoice series, inside the caller's tenant transaction.
  * Reads only `retired_at IS NULL` rows — a retired series is history, never the one to number from.
  * Caps the read at TWO rows and fails LOUD on a second live standard series rather than picking one
- * silently: nothing enforces one standard series per node (the natural key is `(tenant_id, node_id,
+ * silently: nothing enforces one standard series per node (the natural key is `(node_id,
  * code)`, not purpose), and two would make the invoice number non-deterministic. Reachable only by a
  * corrupt write; a plain `Error`, not a code, because it is a programming-level invariant.
  */
@@ -148,6 +146,8 @@ export async function insertNodeSeriesTx(
   nodeId: string,
   series: readonly { code: string; purpose: string }[],
 ): Promise<void> {
+  // apps/server and packages/provisioning still pass the tenant; the parameter goes when they do.
+  void tenantId;
   if (series.length === 0) return;
   const codes = new Set<string>();
   for (const { code } of series) {
@@ -172,6 +172,6 @@ export async function insertNodeSeriesTx(
   }
   await insertReservedSeriesTx(
     tx,
-    series.map((s) => ({ tenantId, nodeId, code: s.code, purpose: s.purpose })),
+    series.map((s) => ({ nodeId, code: s.code, purpose: s.purpose })),
   );
 }

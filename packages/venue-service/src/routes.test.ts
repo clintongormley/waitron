@@ -50,15 +50,12 @@ async function fixture(existingTenantId?: string): Promise<Fixture> {
   const rawTenantId = existingTenantId ?? (await seedTenant(db));
   const scopedTenantId = tenantId(rawTenantId);
   const location = await db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${scopedTenantId}, 'Venue', array['en-GB'], 'Hospitality') returning id`);
+    insert into locations (name, invoice_locales, operation_description) values ('Venue', array['en-GB'], 'Hospitality') returning id`);
   const scopedLocationId = locationId(location.rows[0]!.id);
   const zone = await db.execute<{ id: string }>(sql`
-    insert into floor_zones (tenant_id, location_id, name)
-    values (${scopedTenantId}, ${scopedLocationId}, 'Terrace') returning id`);
+    insert into floor_zones (location_id, name) values (${scopedLocationId}, 'Terrace') returning id`);
   const station = await db.execute<{ id: string }>(sql`
-    insert into kitchen_stations (tenant_id, location_id, name)
-    values (${scopedTenantId}, ${scopedLocationId}, 'Terrace bar') returning id`);
+    insert into kitchen_stations (location_id, name) values (${scopedLocationId}, 'Terrace bar') returning id`);
 
   const { menuId, categoryId, managerSessionId, staffSessionId } = await db.transaction(
     async (tx) => {

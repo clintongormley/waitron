@@ -86,11 +86,11 @@ export async function setProductRecipe(
   productId: string,
   ingredientIds: string[],
 ): Promise<void> {
+  void tenantId;
   await tx.delete(recipeLines).where(eq(recipeLines.productId, productId));
   if (ingredientIds.length > 0) {
     await tx.insert(recipeLines).values(
       ingredientIds.map((ingredientId) => ({
-        tenantId,
         productId,
         ingredientId,
       })),

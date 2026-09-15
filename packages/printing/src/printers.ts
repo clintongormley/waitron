@@ -120,7 +120,6 @@ export async function createPrinter(
     const [row] = await tx
       .insert(printers)
       .values({
-        tenantId: cfg.tenantId,
         locationId: cfg.locationId,
         name: input.name,
         transport: input.transport,

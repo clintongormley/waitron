@@ -56,8 +56,7 @@ interface Venue {
 async function setupVenue(): Promise<Venue> {
   const tenantId = await seedTenant(db);
   const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
+    insert into locations (name, invoice_locales, operation_description) values ('Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
   const locationId = loc.rows[0]!.id;
   return {
     cfg: { tenantId: brandTenantId(tenantId), locationId: brandLocationId(locationId) },
@@ -68,25 +67,22 @@ async function setupVenue(): Promise<Venue> {
 /** Insert an ACTIVE dining table for the venue and return its id (for the optional table-link path). */
 async function makeTable(cfg: VenueCfg, active = true): Promise<string> {
   const row = await db.execute<{ id: string }>(sql`
-    insert into dining_tables (tenant_id, location_id, label, active)
-    values (${cfg.tenantId}, ${cfg.locationId}, '12', ${active}) returning id`);
+    insert into dining_tables (location_id, label, active) values (${cfg.locationId}, '12', ${active}) returning id`);
   return row.rows[0]!.id;
 }
 
 /**
- * The deployment holds one tenant per database. Insert an ACTIVE dining table in a SECOND
- * location of the SAME tenant, and return its id. This cross-LOCATION table exists in the same
+ * Insert an ACTIVE dining table in a SECOND location, and return its id. This
+ * cross-LOCATION table exists in the same
  * database — the exact shape the location-scope guard must refuse (a booking in location A must
  * not be assigned a table in location B).
  */
-async function makeTableInOtherLocation(cfg: VenueCfg): Promise<string> {
+async function makeTableInOtherLocation(): Promise<string> {
   const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${cfg.tenantId}, 'Terraza', array['es-ES'], 'Venta en establecimiento') returning id`);
+    insert into locations (name, invoice_locales, operation_description) values ('Terraza', array['es-ES'], 'Venta en establecimiento') returning id`);
   const otherLocationId = loc.rows[0]!.id;
   const row = await db.execute<{ id: string }>(sql`
-    insert into dining_tables (tenant_id, location_id, label, active)
-    values (${cfg.tenantId}, ${otherLocationId}, 'B-1', true) returning id`);
+    insert into dining_tables (location_id, label, active) values (${otherLocationId}, 'B-1', true) returning id`);
   return row.rows[0]!.id;
 }
 
@@ -270,7 +266,7 @@ describe("createBooking — optional table link", () => {
 
   it("rejects an ACTIVE table in ANOTHER location of the same tenant with table.not_found", async () => {
     const { cfg, createdBy } = await setupVenue();
-    const tableId = await makeTableInOtherLocation(cfg);
+    const tableId = await makeTableInOtherLocation();
     await expect(
       scoped(cfg, (tx) =>
         createBooking(tx, cfg, {
@@ -370,7 +366,7 @@ describe("updateBooking", () => {
 
   it("rejects an edit that assigns a table in ANOTHER location with table.not_found", async () => {
     const { cfg, createdBy } = await setupVenue();
-    const tableId = await makeTableInOtherLocation(cfg);
+    const tableId = await makeTableInOtherLocation();
     const { id } = await scoped(cfg, (tx) =>
       createBooking(tx, cfg, {
         bookingDate: "2026-08-20",
@@ -454,8 +450,7 @@ describe("getBooking", () => {
  * verb lives in apps/server, which a module cannot import). */
 async function seedTable(cfg: VenueCfg, label: string): Promise<string> {
   const row = await db.execute<{ id: string }>(sql`
-    insert into dining_tables (tenant_id, location_id, label, active)
-    values (${cfg.tenantId}, ${cfg.locationId}, ${label}, true) returning id`);
+    insert into dining_tables (location_id, label, active) values (${cfg.locationId}, ${label}, true) returning id`);
   return row.rows[0]!.id;
 }
 
@@ -472,12 +467,10 @@ describe("seatBooking", () => {
   }> {
     const tenantId = await seedTenant(db);
     const loc = await db.execute<{ id: string }>(sql`
-      insert into locations (tenant_id, name, invoice_locales, operation_description)
-      values (${tenantId}, 'Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
+      insert into locations (name, invoice_locales, operation_description) values ('Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
     const locationId = loc.rows[0]!.id;
     const till = await db.execute<{ id: string }>(sql`
-      insert into tills (tenant_id, location_id, name)
-      values (${tenantId}, ${locationId}, 'Caja 1') returning id`);
+      insert into tills (location_id, name) values (${locationId}, 'Caja 1') returning id`);
     const nodeId = await seedNode(db, tenantId, brandLocationId(locationId));
     return {
       cfg: { tenantId: brandTenantId(tenantId), locationId: brandLocationId(locationId) },
@@ -524,7 +517,7 @@ describe("seatBooking", () => {
 
   it("rejects a req.tableId in ANOTHER location of the same tenant with table.not_found", async () => {
     const { cfg, core, createdBy } = await setupTillVenue();
-    const otherTableId = await makeTableInOtherLocation(cfg);
+    const otherTableId = await makeTableInOtherLocation();
     const { id } = await scoped(cfg, (tx) =>
       createBooking(tx, cfg, {
         bookingDate: "2026-08-20",
@@ -601,7 +594,7 @@ describe("seatBooking", () => {
     const b = await scoped(cfg, (tx) => getBooking(tx, cfg, id));
     expect(b).toMatchObject({ status: "cancelled", tabId: null });
     const tabs = await db.execute<{ n: number }>(
-      sql`select count(*)::int as n from working_orders where tenant_id = ${cfg.tenantId}`,
+      sql`select count(*)::int as n from working_orders`,
     );
     expect(tabs.rows[0]!.n).toBe(0);
   });

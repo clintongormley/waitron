@@ -41,7 +41,7 @@ export const CATALOGUE_PROVISIONING: ModuleProvisioning = {
         country: string;
       }>(sql`
         select l.catalogue_id, l.province, t.country from locations l
-        join tenants t on t.id = l.tenant_id
+        cross join tenants t
         where l.id = ${node.locationId}`);
       const country = location.rows[0]?.country;
       // Hard-coded for Spain, and wrong for a Spanish venue outside Catalonia: the deli writes its
@@ -92,17 +92,15 @@ export const CATALOGUE_PROVISIONING: ModuleProvisioning = {
       let catalogueId = location.rows[0]?.catalogue_id ?? null;
       if (catalogueId === null) {
         const created = await tx.execute<{ id: string }>(sql`
-          insert into catalogues (tenant_id, name)
-          values (${node.tenantId}, 'Menu') returning id`);
+          insert into catalogues (name) values ('Menu') returning id`);
         catalogueId = created.rows[0]!.id;
         await tx.execute(sql`
           update locations set catalogue_id = ${catalogueId}
           where id = ${node.locationId}`);
       }
       await tx.execute(sql`
-        insert into location_catalogues (tenant_id, location_id, catalogue_id)
-        values (${node.tenantId}, ${node.locationId}, ${catalogueId})
-        on conflict (tenant_id, location_id, catalogue_id) do nothing`);
+        insert into location_catalogues (location_id, catalogue_id) values (${node.locationId}, ${catalogueId})
+        on conflict (location_id, catalogue_id) do nothing`);
       return "initial menu ready";
     },
   },

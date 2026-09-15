@@ -66,7 +66,7 @@ function clockEvent(): TimeEntryAppend {
 /** Seeds a till at a location so a captured event can attribute to it. Returns its id. */
 async function seedTill(location: string): Promise<string> {
   const { rows } = await pg.db.execute<{ id: string }>(sql`
-    insert into tills (tenant_id, location_id, name) values (${tenantId}, ${location}, 'Till 1')
+    insert into tills (location_id, name) values (${location}, 'Till 1')
     returning id`);
   return rows[0]!.id;
 }
@@ -201,8 +201,7 @@ describe("appendToChain", () => {
         insert into time_entries (
           person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
           recorded_by_person_id, recorded_at, entry_hash, sequence_no, is_first_entry
-        ) values (
-          ${personId}, ${locationId}, ${nodeId}, 'in', '2026-01-05T09:00:00.123Z', 0,
+        ) values (${personId}, ${locationId}, ${nodeId}, 'in', '2026-01-05T09:00:00.123Z', 0,
           ${personId}, '2026-01-05T09:00:00Z', ${"0".repeat(64)}, 1, true)`),
     );
     expect(pgErrorCode(error)).toBe("23514");
@@ -216,8 +215,7 @@ describe("appendToChain", () => {
         insert into time_entries (
           person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
           recorded_by_person_id, recorded_at, entry_hash, sequence_no, is_first_entry
-        ) values (
-          ${personId}, ${locationId}, ${nodeId}, 'in', '2026-01-05T09:00:00Z', 0,
+        ) values (${personId}, ${locationId}, ${nodeId}, 'in', '2026-01-05T09:00:00Z', 0,
           ${personId}, '2026-01-05T09:00:00.123Z', ${"0".repeat(64)}, 1, true)`),
     );
     expect(pgErrorCode(error)).toBe("23514");
@@ -233,8 +231,7 @@ describe("appendToChain", () => {
         insert into time_entries (
           person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
           recorded_by_person_id, recorded_at, entry_hash, sequence_no, is_first_entry
-        ) values (
-          ${personId}, ${locationId}, ${nodeId}, 'out', '2026-01-05T18:00:00Z', 0,
+        ) values (${personId}, ${locationId}, ${nodeId}, 'out', '2026-01-05T18:00:00Z', 0,
           ${personId}, '2026-01-05T18:00:00Z', ${"0".repeat(64)}, 1, true)`),
     );
     expect(pgErrorCode(error)).toBe("23505");
@@ -249,8 +246,7 @@ describe("appendToChain", () => {
       insert into time_entries (
         person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
         recorded_by_person_id, recorded_at, entry_hash, sequence_no, is_first_entry
-      ) values (
-        ${personId}, ${locationId}, ${nodeId}, 'in', '2026-01-05T08:00:00Z', 0,
+      ) values (${personId}, ${locationId}, ${nodeId}, 'in', '2026-01-05T08:00:00Z', 0,
         ${personId}, '2026-01-05T08:00:00Z', ${"1".repeat(64)}, 1, true)`);
 
     const error = await pg.db

@@ -45,15 +45,14 @@ async function seed(db: Database): Promise<void> {
   await db.insert(locations).values([
     {
       id: LOCATION_A,
-      tenantId: TENANT_A,
       name: "Fixture Location A",
       invoiceLocales: ["es", "ca"],
       operationDescription: "Hostelería",
     },
   ]);
   await db.insert(tills).values([
-    { id: TILL_A1, tenantId: TENANT_A, locationId: LOCATION_A, name: "A1" },
-    { id: TILL_A2, tenantId: TENANT_A, locationId: LOCATION_A, name: "A2" },
+    { id: TILL_A1, locationId: LOCATION_A, name: "A1" },
+    { id: TILL_A2, locationId: LOCATION_A, name: "A2" },
   ]);
   nodeA1 = await seedNode(db, brandTenantId(TENANT_A), brandLocationId(LOCATION_A));
   nodeA2 = await seedNode(db, brandTenantId(TENANT_A), brandLocationId(LOCATION_A));
@@ -69,8 +68,8 @@ describe("invoice_series schema", () => {
 
   it("holds several series on one node", async () => {
     await db.insert(invoiceSeries).values([
-      { tenantId: TENANT_A, nodeId: nodeA1, code: "FA", purpose: "standard", nextNumber: 1 },
-      { tenantId: TENANT_A, nodeId: nodeA1, code: "RA", purpose: "rectificative", nextNumber: 1 },
+      { nodeId: nodeA1, code: "FA", purpose: "standard", nextNumber: 1 },
+      { nodeId: nodeA1, code: "RA", purpose: "rectificative", nextNumber: 1 },
     ]);
     const found = await db
       .select({ code: invoiceSeries.code })
@@ -86,13 +85,9 @@ describe("invoice_series schema", () => {
     // (see tenancy.test.ts's `rejectsWithCauseMatching` for the same finding).
     // `toThrow` only reads `.message`, so it would pass against any rejection
     // at all, not specifically this one.
-    await db
-      .insert(invoiceSeries)
-      .values({ tenantId: TENANT_A, nodeId: nodeA1, code: "FA", purpose: "standard" });
+    await db.insert(invoiceSeries).values({ nodeId: nodeA1, code: "FA", purpose: "standard" });
     const error = await captureError(() =>
-      db
-        .insert(invoiceSeries)
-        .values({ tenantId: TENANT_A, nodeId: nodeA1, code: "FA", purpose: "standard" }),
+      db.insert(invoiceSeries).values({ nodeId: nodeA1, code: "FA", purpose: "standard" }),
     );
     expect(pgErrorMessage(error)).toMatch(/duplicate key value/);
   });
@@ -101,8 +96,8 @@ describe("invoice_series schema", () => {
     // Series codes are a per-node numbering concern (node-id rekey, 2026-08-03). Two nodes in one
     // venue both running series "FA" is normal, and their numbers are independent.
     await db.insert(invoiceSeries).values([
-      { tenantId: TENANT_A, nodeId: nodeA1, code: "FA", purpose: "standard" },
-      { tenantId: TENANT_A, nodeId: nodeA2, code: "FA", purpose: "standard" },
+      { nodeId: nodeA1, code: "FA", purpose: "standard" },
+      { nodeId: nodeA2, code: "FA", purpose: "standard" },
     ]);
     const found = await db.select({ id: invoiceSeries.id }).from(invoiceSeries);
     expect(found).toHaveLength(2);
@@ -112,9 +107,7 @@ describe("invoice_series schema", () => {
     // Same wrapper issue as the duplicate-code test above: match the
     // unwrapped Postgres message, not the DrizzleQueryError's own.
     const error = await captureError(() =>
-      db
-        .insert(invoiceSeries)
-        .values({ tenantId: TENANT_A, nodeId: nodeA1, code: "XX", purpose: "invented" }),
+      db.insert(invoiceSeries).values({ nodeId: nodeA1, code: "XX", purpose: "invented" }),
     );
     expect(pgErrorMessage(error)).toMatch(/invoice_series_purpose_ck/);
   });
@@ -138,7 +131,6 @@ describe("invoice_series schema", () => {
       "node_id",
       "purpose",
       "retired_at",
-      "tenant_id",
     ]);
   });
 
@@ -157,13 +149,12 @@ describe("invoice_series schema", () => {
     // Accepts a valid node id.
     const withNode = await rows<{ node_id: string | null }>(
       db,
-      sql`insert into invoice_series (tenant_id, node_id, code)
-           values (${TENANT_A}, ${node}, 'FN') returning node_id`,
+      sql`insert into invoice_series (node_id, code) values (${node}, 'FN') returning node_id`,
     );
     expect(withNode).toEqual([{ node_id: node }]);
     // And a row WITHOUT it is now refused (NOT NULL), the flip Task 4 introduces.
     const error = await captureError(() =>
-      db.execute(sql`insert into invoice_series (tenant_id, code) values (${TENANT_A}, 'FM')`),
+      db.execute(sql`insert into invoice_series (code) values ('FM')`),
     );
     expect(pgErrorMessage(error)).toMatch(/null value in column "node_id"|not-null/i);
   });
@@ -173,15 +164,14 @@ describe("invoice_series schema", () => {
     // no `nodes` row is refused.
     const error = await captureError(() =>
       db.execute(
-        sql`insert into invoice_series (tenant_id, node_id, code)
-             values (${TENANT_A}, '99999999-9999-4999-8999-999999999999', 'FX')`,
+        sql`insert into invoice_series (node_id, code) values ('99999999-9999-4999-8999-999999999999', 'FX')`,
       ),
     );
     expect(pgErrorMessage(error)).toMatch(/violates foreign key constraint/);
   });
 
-  it("has no unique constraint on (tenant_id, node_id) alone", async () => {
-    // The subtle coupling: a unique index on the pair would silently reimpose
+  it("has no unique constraint on node_id alone", async () => {
+    // The subtle coupling: a unique index on node_id would silently reimpose
     // one series per node, which is the thing N-series-from-day-one exists to
     // avoid (node-id rekey, 2026-08-03: the pair moved from till to node). It
     // reads as a harmless index, so only a test catches it.
@@ -190,7 +180,7 @@ describe("invoice_series schema", () => {
       sql`select indexdef from pg_indexes where tablename = 'invoice_series'`,
     );
     const pairOnly = found.filter(
-      (i) => /UNIQUE/i.test(i.indexdef) && /\(tenant_id, node_id\)/.test(i.indexdef),
+      (i) => /UNIQUE/i.test(i.indexdef) && /\(node_id\)/.test(i.indexdef),
     );
     expect(pairOnly).toEqual([]);
   });

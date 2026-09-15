@@ -28,7 +28,6 @@ async function seed(db: Database): Promise<void> {
   await db.insert(locations).values([
     {
       id: LOCATION_A,
-      tenantId: TENANT_A,
       name: "Fixture Location A",
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
@@ -107,7 +106,6 @@ describe("allocateOrderNumber under concurrency", () => {
     const [location] = await admin
       .insert(locations)
       .values({
-        tenantId,
         name: "Fixture Location",
         invoiceLocales: ["es"],
         operationDescription: "Hostelería",

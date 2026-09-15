@@ -309,7 +309,6 @@ export async function recordSale(
   const [inserted] = await tx
     .insert(sales)
     .values({
-      tenantId: input.tenantId,
       tillId: input.tillId,
       nodeId: input.nodeId,
       seriesId: input.seriesId,
@@ -353,7 +352,7 @@ export async function recordSale(
     });
   }
 
-  await tx.insert(saleLines).values(saleLineRows(input.tenantId, saleId, input.lines));
+  await tx.insert(saleLines).values(saleLineRows(saleId, input.lines));
 
   if (input.settlement.kind === "immediate") {
     // The one settlement implementation both modes take (design D6): pay-first hands its tenders

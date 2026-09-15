@@ -30,22 +30,19 @@ describe("kitchen_courses schema (columns, defaults, course FKs)", () => {
       .insert(tenants)
       .values([{ id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
     await suite.admin.execute(sql`
-      insert into locations (id, tenant_id, name, invoice_locales, operation_description)
-      values
-        (${LOCATION_A}, ${TENANT_A}, 'Loc A', array['es'], 'Hostelería'),
-        (${LOCATION_A2}, ${TENANT_A}, 'Loc A2', array['es'], 'Hostelería')
+      insert into locations (id, name, invoice_locales, operation_description) values (${LOCATION_A}, 'Loc A', array['es'], 'Hostelería'),
+        (${LOCATION_A2}, 'Loc A2', array['es'], 'Hostelería')
       on conflict (id) do nothing`);
     courseA = await seedCourse(TENANT_A, LOCATION_A, "Entrantes");
     // A catalogue + product of tenant A, so the products.course_id FK proof has an own-tenant product
     // to route. Seeded as admin (a catalogue fixture, not the thing under test) — same as routing-station.
     const [cat] = await suite.admin
       .insert(catalogues)
-      .values({ tenantId: TENANT_A, name: "Deli A" })
+      .values({ name: "Deli A" })
       .returning({ id: catalogues.id });
     const [prod] = await suite.admin
       .insert(products)
       .values({
-        tenantId: TENANT_A,
         catalogueId: cat!.id,
         name: "Café solo",
         pricingUnit: "each",
@@ -72,8 +69,7 @@ describe("kitchen_courses schema (columns, defaults, course FKs)", () => {
   ): Promise<string> {
     return asApp(tenant, async (tx) => {
       const r = await tx.execute<{ id: string }>(
-        sql`insert into kitchen_courses (tenant_id, location_id, name, display_order)
-            values (${tenant}, ${location}, ${name}, ${displayOrder}) returning id`,
+        sql`insert into kitchen_courses (location_id, name, display_order) values (${location}, ${name}, ${displayOrder}) returning id`,
       );
       return r.rows[0]!.id;
     });
@@ -163,7 +159,7 @@ describe("kitchen_courses schema (columns, defaults, course FKs)", () => {
     // ticket_items.course_id use the IDENTICAL hand-written DDL. Asserting each of the three FK
     // definitions structurally (pg_get_constraintdef reads the LIVE catalog, not source) catches a
     // copy-paste error in the target or the column list — e.g. a course FK that points at
-    // kitchen_stations, or omits tenant_id — that the single behavioural test would not reach.
+    // kitchen_stations — that the single behavioural test would not reach.
     const defs = await suite.admin.execute<{ conname: string; def: string }>(
       sql`select conname, pg_get_constraintdef(oid) as def from pg_constraint
           where conname in ('products_course_fk', 'working_order_lines_course_fk', 'ticket_items_course_fk')
@@ -178,8 +174,8 @@ describe("kitchen_courses schema (columns, defaults, course FKs)", () => {
     ]) {
       const def = byName.get(name);
       expect(def, `${name} must exist`).toBeDefined();
-      expect(def).toContain("FOREIGN KEY (tenant_id, course_id)");
-      expect(def).toContain("kitchen_courses(tenant_id, id)");
+      expect(def).toContain("FOREIGN KEY (course_id)");
+      expect(def).toContain("kitchen_courses(id)");
     }
   });
 });

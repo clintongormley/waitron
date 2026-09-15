@@ -19,12 +19,12 @@ import { assertQuantityPrecision } from "./units.js";
 const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
 
 async function product(tx: Transaction, tenantId: string, name: string) {
+  void tenantId;
   const menu = await tx.execute<{ id: string }>(sql`
-    insert into catalogues (tenant_id, name) values (${tenantId}, 'Menu') returning id`);
+    insert into catalogues (name) values ('Menu') returning id`);
   return (
     await tx.execute<{ id: string }>(sql`
-      insert into products (tenant_id, catalogue_id, name, pricing_unit, unit_price, vat_class)
-      values (${tenantId}, ${menu.rows[0]!.id}, ${name}, 'each', '1', 'general')
+      insert into products (catalogue_id, name, pricing_unit, unit_price, vat_class) values (${menu.rows[0]!.id}, ${name}, 'each', '1', 'general')
       returning id`)
   ).rows[0]!.id;
 }
@@ -85,7 +85,7 @@ describe("unit operations", () => {
       const productId = await product(tx, tenantId, "Soup");
       await assignProductUnit(tx, productId, unit.id);
       await tx.execute(sql`
-        update products set active = false where tenant_id = ${tenantId} and id = ${productId}`);
+        update products set active = false where id = ${productId}`);
       await expect(deleteUnit(tx, unit.id)).rejects.toMatchObject({
         code: "unit.in_use",
         params: { products: [{ id: productId, name: "Soup", available: false }] },
@@ -108,7 +108,7 @@ describe("unit operations", () => {
       await assignProductUnit(tx, soup, unit.id);
       await assignProductUnit(tx, tea, unit.id);
       await tx.execute(sql`
-        update products set active = false where tenant_id = ${tenantId} and id = ${tea}`);
+        update products set active = false where id = ${tea}`);
 
       const using = await productsUsingUnit(tx, unit.id);
       expect(using).toHaveLength(2);

@@ -26,8 +26,7 @@ afterEach(() => {
 async function setup(): Promise<PrintConfig> {
   const tenantId = await seedTenant(suite.db);
   const { rows } = await suite.db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Bar', array['es-ES'], 'Sale on premises') returning id`);
+    insert into locations (name, invoice_locales, operation_description) values ('Bar', array['es-ES'], 'Sale on premises') returning id`);
   return { tenantId, locationId: rows[0]!.id };
 }
 
@@ -180,7 +179,7 @@ describe("resendPrintJob", () => {
           .where(eq(printJobs.id, original.jobId));
         const [before] = await tx.select().from(printJobs).where(eq(printJobs.id, original.jobId));
         const otherLocation = await tx.execute<{ id: string }>(
-          sql`insert into locations (tenant_id, name, invoice_locales, operation_description) values (${cfg.tenantId}, 'Other', array['es-ES'], 'Sale') returning id`,
+          sql`insert into locations (name, invoice_locales, operation_description) values ('Other', array['es-ES'], 'Sale') returning id`,
         );
         const result = await resendPrintJob(
           tx,
@@ -191,7 +190,6 @@ describe("resendPrintJob", () => {
         const [copy] = await tx.select().from(printJobs).where(eq(printJobs.id, result.jobId));
         expect(copy).toMatchObject({
           kind: "document",
-          tenantId: cfg.tenantId,
           locationId: cfg.locationId,
           printerId: printer.id,
           status: "queued",

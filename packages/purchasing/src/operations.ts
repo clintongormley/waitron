@@ -134,11 +134,11 @@ async function insertLines(
   invoiceId: string,
   lines: readonly PurchaseInvoiceLineInput[],
 ): Promise<LineRowWithId[]> {
+  void tenantId;
   return tx
     .insert(purchaseInvoiceVat)
     .values(
       lines.map((line) => ({
-        tenantId,
         purchaseInvoiceId: invoiceId,
         rate: line.rate,
         base: line.base,
@@ -199,7 +199,6 @@ export async function createPurchaseInvoice(
     const [row] = await tx
       .insert(purchaseInvoices)
       .values({
-        tenantId,
         supplierTaxId: input.header.supplierTaxId,
         supplierName: input.header.supplierName,
         supplierInvoiceNumber: input.header.supplierInvoiceNumber,

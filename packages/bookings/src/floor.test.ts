@@ -33,8 +33,7 @@ async function setupVenue(opts: { timeZone?: string } = {}): Promise<Venue> {
   // default (Europe/Madrid) unless a test pins one.
   const timeZone = opts.timeZone ?? DEFAULT_TIME_ZONE;
   const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description, time_zone)
-    values (${tenantId}, 'Barra', array['es-ES'], 'Venta en establecimiento', ${timeZone}) returning id`);
+    insert into locations (name, invoice_locales, operation_description, time_zone) values ('Barra', array['es-ES'], 'Venta en establecimiento', ${timeZone}) returning id`);
   return {
     tenantId: brandTenantId(tenantId),
     locationId: brandLocationId(loc.rows[0]!.id),
@@ -44,8 +43,7 @@ async function setupVenue(opts: { timeZone?: string } = {}): Promise<Venue> {
 /** Insert an ACTIVE dining table for the venue and return its id. */
 async function makeTable(v: Venue, label: string): Promise<string> {
   const row = await db.execute<{ id: string }>(sql`
-    insert into dining_tables (tenant_id, location_id, label, active)
-    values (${v.tenantId}, ${v.locationId}, ${label}, true) returning id`);
+    insert into dining_tables (location_id, label, active) values (${v.locationId}, ${label}, true) returning id`);
   return row.rows[0]!.id;
 }
 

@@ -241,7 +241,6 @@ export async function recordCorrection(
   const [inserted] = await tx
     .insert(sales)
     .values({
-      tenantId: input.tenantId,
       tillId: input.tillId,
       nodeId: input.nodeId,
       seriesId: input.seriesId,
@@ -285,7 +284,7 @@ export async function recordCorrection(
     });
   }
 
-  await tx.insert(saleLines).values(saleLineRows(input.tenantId, saleId, input.lines));
+  await tx.insert(saleLines).values(saleLineRows(saleId, input.lines));
 
   const [location] = await tx
     .select({ operationDescription: locations.operationDescription })

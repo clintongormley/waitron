@@ -27,9 +27,8 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
         limit 1`);
       if (existing.rows.length === 0) {
         const zone = await tx.execute<{ id: string }>(sql`
-          insert into floor_zones (tenant_id, location_id, name, display_order, active)
-          values (${node.tenantId}, ${node.locationId}, 'Counter', 0, true)
-          on conflict (tenant_id, location_id, name)
+          insert into floor_zones (location_id, name, display_order, active) values (${node.locationId}, 'Counter', 0, true)
+          on conflict (location_id, name)
           do update set name = excluded.name
           returning id`);
         const zoneId = zone.rows[0]!.id;

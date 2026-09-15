@@ -15,8 +15,7 @@ async function venue(country: string, province: string, receipt: string) {
   const tenantId = await seedTenant(suite.db);
   await suite.db.execute(sql`update tenants set country = ${country} where id = ${tenantId}`);
   const location = await suite.db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, province, invoice_locales, operation_description)
-    values (${tenantId}, 'Venue', ${province}, array[${receipt}], 'Hospitality') returning id`);
+    insert into locations (name, province, invoice_locales, operation_description) values ('Venue', ${province}, array[${receipt}], 'Hospitality') returning id`);
   const locationId = brandLocationId(location.rows[0]!.id);
   const nodeId = await seedNode(suite.db, tenantId, locationId);
   return { tenantId, locationId, nodeId };
@@ -64,7 +63,7 @@ describe("catalogue provisioning", () => {
       await suite.db.transaction((tx) => CATALOGUE_PROVISIONING.seed!.run(tx, node));
       expect(await storedLanguages()).toEqual([{ default_language: language, languages }]);
       const location = await suite.db.execute<{ invoice_locales: string[] }>(sql`
-      select invoice_locales from locations where tenant_id = ${node.tenantId} and id = ${node.locationId}`);
+      select invoice_locales from locations where id = ${node.locationId}`);
       expect(location.rows).toEqual([{ invoice_locales: [receipt] }]);
     },
   );
@@ -79,7 +78,7 @@ describe("catalogue provisioning", () => {
     await run();
     expect(await storedLanguages()).toEqual([{ default_language: "fr", languages: ["fr", "de"] }]);
     const menus = await suite.db.execute<{ count: number }>(sql`
-      select count(*)::int as count from location_catalogues where tenant_id = ${node.tenantId}`);
+      select count(*)::int as count from location_catalogues`);
     expect(menus.rows).toEqual([{ count: 1 }]);
   });
 

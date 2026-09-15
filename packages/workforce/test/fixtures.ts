@@ -43,9 +43,9 @@ export function makeRuleset(overrides: Partial<WorkTimeRuleset> = {}): WorkTimeR
 
 /** A location (centro de trabajo) for the tenant. Returns its id. */
 export async function seedLocation(db: Database, tenantId: string): Promise<string> {
+  void tenantId;
   const result = await db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Main', array['en'], 'Sale on premises')
+    insert into locations (name, invoice_locales, operation_description) values ('Main', array['en'], 'Sale on premises')
     returning id`);
   return result.rows[0]!.id;
 }
@@ -67,8 +67,7 @@ export async function seedEmployment(
   const result = await db.execute<{ id: string }>(sql`
     insert into employments (
       person_id, contracted_minutes_per_week, contract_type, start_date, pay_rate
-    ) values (
-      ${params.personId},
+    ) values (${params.personId},
       ${params.contractedMinutesPerWeek ?? 2400}, 'full_time', '2026-01-01', '15.00'
     )
     returning id`);
@@ -87,8 +86,7 @@ export async function insertRosterVersion(
 ): Promise<string> {
   const result = await db.execute<{ id: string }>(sql`
     insert into roster_versions (location_id, period_start, period_end)
-    values (
-      ${params.locationId},
+    values (${params.locationId},
       ${params.periodStart ?? "2026-01-05"}, ${params.periodEnd ?? "2026-01-11"}
     )
     returning id`);
@@ -114,8 +112,7 @@ export async function insertDraftShift(
     insert into shifts (
       person_id, location_id, starts_at, starts_offset_minutes,
       ends_at, ends_offset_minutes, role, roster_version_id
-    ) values (
-      ${params.personId}, ${params.locationId},
+    ) values (${params.personId}, ${params.locationId},
       ${params.startsAt ?? "2026-01-05T09:00:00Z"}, ${params.startsOffsetMinutes ?? 0},
       ${params.endsAt ?? "2026-01-05T17:00:00Z"}, ${params.endsOffsetMinutes ?? 0},
       ${params.role ?? null}, ${params.rosterVersionId ?? null}
@@ -142,8 +139,7 @@ export async function insertAbsence(
 ): Promise<string> {
   const result = await db.execute<{ id: string }>(sql`
     insert into absences (person_id, absence_kind, starts_on, ends_on, status, note, created_at)
-    values (
-      ${params.personId}, ${params.kind ?? "holiday"},
+    values (${params.personId}, ${params.kind ?? "holiday"},
       ${params.startsOn ?? "2026-01-05"}, ${params.endsOn ?? "2026-01-08"},
       ${params.status ?? "requested"}, ${params.note ?? null},
       ${params.createdAt === undefined ? sql`default` : params.createdAt}
@@ -169,8 +165,7 @@ export async function insertAvailability(
     insert into availability (
       person_id, weekday, available_from_minute, available_to_minute,
       effective_from, effective_to
-    ) values (
-      ${params.personId}, ${params.weekday ?? 0},
+    ) values (${params.personId}, ${params.weekday ?? 0},
       ${params.availableFromMinute ?? 540}, ${params.availableToMinute ?? 1020},
       ${params.effectiveFrom ?? "2026-01-01"}, ${params.effectiveTo ?? null}
     )
@@ -194,8 +189,7 @@ export async function insertShiftTemplate(
   const result = await db.execute<{ id: string }>(sql`
     insert into shift_templates (
       location_id, label, weekday, starts_minute, ends_minute, role
-    ) values (
-      ${params.locationId}, ${params.label ?? "Evening bar"},
+    ) values (${params.locationId}, ${params.label ?? "Evening bar"},
       ${params.weekday ?? 0}, ${params.startsMinute ?? 1080}, ${params.endsMinute ?? 1440},
       ${params.role ?? null}
     )
@@ -221,8 +215,7 @@ export async function insertShiftSwap(
   const result = await db.execute<{ id: string }>(sql`
     insert into shift_swaps (
       requested_by_person_id, from_shift_id, to_person_id, to_shift_id, status, created_at
-    ) values (
-      ${params.requestedByPersonId}, ${params.fromShiftId},
+    ) values (${params.requestedByPersonId}, ${params.fromShiftId},
       ${params.toPersonId}, ${params.toShiftId ?? null}, ${params.status ?? "requested"},
       ${params.createdAt === undefined ? sql`default` : params.createdAt}
     )

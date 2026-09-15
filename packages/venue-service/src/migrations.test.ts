@@ -148,12 +148,10 @@ describe("the venue-service foreign keys refuse a missing target", () => {
   async function venue() {
     const tenantId = await seedTenant(db);
     const location = await db.execute<{ id: string }>(sql`
-      insert into locations (tenant_id, name, invoice_locales, operation_description)
-      values (${tenantId}, 'Venue', array['en'], 'Hospitality') returning id`);
+      insert into locations (name, invoice_locales, operation_description) values ('Venue', array['en'], 'Hospitality') returning id`);
     const locationId = location.rows[0]!.id;
     const zone = await db.execute<{ id: string }>(sql`
-      insert into floor_zones (tenant_id, location_id, name)
-      values (${tenantId}, ${locationId}, 'Terrace') returning id`);
+      insert into floor_zones (location_id, name) values (${locationId}, 'Terrace') returning id`);
     const department = await db.execute<{ id: string }>(sql`
       insert into departments (location_id, name, trading_name, default_service_mode)
       values (${locationId}, 'Bar', 'Bar', 'prepay') returning id`);

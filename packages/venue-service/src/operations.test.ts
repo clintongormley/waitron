@@ -83,12 +83,10 @@ describe("venue service routing", () => {
   it("reports incomplete active zones and refuses to deactivate their department", async () => {
     const { tenantId } = await seedUnitTenant();
     const location = await db.execute<{ id: string }>(sql`
-      insert into locations (tenant_id, name, invoice_locales, operation_description)
-      values (${tenantId}, 'Venue', array['en-GB'], 'Hospitality') returning id`);
+      insert into locations (name, invoice_locales, operation_description) values ('Venue', array['en-GB'], 'Hospitality') returning id`);
     const locationId = brandLocationId(location.rows[0]!.id);
     const zone = await db.execute<{ id: string }>(sql`
-      insert into floor_zones (tenant_id, location_id, name)
-      values (${tenantId}, ${locationId}, 'Terrace') returning id`);
+      insert into floor_zones (location_id, name) values (${locationId}, 'Terrace') returning id`);
 
     await scoped(tenantId, async (tx) => {
       const department = await createDepartment(
@@ -216,21 +214,16 @@ describe("venue service routing", () => {
   it("routes one cocktail to the bar serving its service zone", async () => {
     const { tenantId } = await seedUnitTenant();
     const location = await db.execute<{ id: string }>(sql`
-      insert into locations (tenant_id, name, invoice_locales, operation_description)
-      values (${tenantId}, 'Venue', array['en-GB'], 'Hospitality') returning id`);
+      insert into locations (name, invoice_locales, operation_description) values ('Venue', array['en-GB'], 'Hospitality') returning id`);
     const locationId = brandLocationId(location.rows[0]!.id);
     const upstairsZone = await db.execute<{ id: string }>(sql`
-      insert into floor_zones (tenant_id, location_id, name)
-      values (${tenantId}, ${locationId}, 'Upstairs') returning id`);
+      insert into floor_zones (location_id, name) values (${locationId}, 'Upstairs') returning id`);
     const downstairsZone = await db.execute<{ id: string }>(sql`
-      insert into floor_zones (tenant_id, location_id, name)
-      values (${tenantId}, ${locationId}, 'Downstairs') returning id`);
+      insert into floor_zones (location_id, name) values (${locationId}, 'Downstairs') returning id`);
     const upstairsBar = await db.execute<{ id: string }>(sql`
-      insert into kitchen_stations (tenant_id, location_id, name)
-      values (${tenantId}, ${locationId}, 'Upstairs bar') returning id`);
+      insert into kitchen_stations (location_id, name) values (${locationId}, 'Upstairs bar') returning id`);
     const downstairsBar = await db.execute<{ id: string }>(sql`
-      insert into kitchen_stations (tenant_id, location_id, name)
-      values (${tenantId}, ${locationId}, 'Downstairs bar') returning id`);
+      insert into kitchen_stations (location_id, name) values (${locationId}, 'Downstairs bar') returning id`);
 
     await scoped(tenantId, async (tx) => {
       const department = await createDepartment(
@@ -321,15 +314,12 @@ describe("venue service routing", () => {
   it("inherits service mode, lists zone offers, and freezes the order context", async () => {
     const { tenantId, kgUnitId } = await seedUnitTenant();
     const location = await db.execute<{ id: string }>(sql`
-      insert into locations (tenant_id, name, invoice_locales, operation_description)
-      values (${tenantId}, 'Venue', array['en-GB'], 'Hospitality') returning id`);
+      insert into locations (name, invoice_locales, operation_description) values ('Venue', array['en-GB'], 'Hospitality') returning id`);
     const locationId = brandLocationId(location.rows[0]!.id);
     const zone = await db.execute<{ id: string }>(sql`
-      insert into floor_zones (tenant_id, location_id, name)
-      values (${tenantId}, ${locationId}, 'Deli counter') returning id`);
+      insert into floor_zones (location_id, name) values (${locationId}, 'Deli counter') returning id`);
     const till = await db.execute<{ id: string }>(sql`
-      insert into tills (tenant_id, location_id, name)
-      values (${tenantId}, ${locationId}, 'Deli till') returning id`);
+      insert into tills (location_id, name) values (${locationId}, 'Deli till') returning id`);
     const nodeId = await seedNode(db, tenantId, locationId);
 
     await scoped(tenantId, async (tx) => {
@@ -388,8 +378,7 @@ describe("venue service routing", () => {
         where zone_id = ${zone.rows[0]!.id}`);
 
       await tx.execute(sql`
-        insert into working_orders (id, tenant_id, till_id, node_id, order_number)
-        values ('00000000-0000-4000-8000-000000000001', ${tenantId}, ${brandTillId(till.rows[0]!.id)}, ${nodeId}, 1)`);
+        insert into working_orders (id, till_id, node_id, order_number) values ('00000000-0000-4000-8000-000000000001', ${brandTillId(till.rows[0]!.id)}, ${nodeId}, 1)`);
       await recordOrderServiceContext(
         tx,
         { locationId },
@@ -399,7 +388,6 @@ describe("venue service routing", () => {
       const workingLineId = "00000000-0000-4000-8000-000000000002";
       await tx.insert(workingOrderLines).values({
         id: workingLineId,
-        tenantId,
         workingOrderId: "00000000-0000-4000-8000-000000000001",
         lineNo: 1,
         productId: ham.id,
@@ -459,7 +447,7 @@ describe("venue service routing", () => {
       ).rejects.toMatchObject({ code: "service_zone.offer_not_allowed" });
       await tx.execute(sql`
         update catalogues set name = 'Renamed menu'
-        where tenant_id = ${tenantId} and id = ${menu.id}`);
+        where id = ${menu.id}`);
       await tx.execute(sql`
         update departments set name = 'Renamed department'
         where id = ${department.id}`);
@@ -497,11 +485,9 @@ describe("venue service routing", () => {
       const copiedOrderId = "00000000-0000-4000-8000-000000000003";
       const copiedLineId = "00000000-0000-4000-8000-000000000004";
       await tx.execute(sql`
-        insert into working_orders (id, tenant_id, till_id, node_id, order_number)
-        values (${copiedOrderId}, ${tenantId}, ${brandTillId(till.rows[0]!.id)}, ${nodeId}, 2)`);
+        insert into working_orders (id, till_id, node_id, order_number) values (${copiedOrderId}, ${brandTillId(till.rows[0]!.id)}, ${nodeId}, 2)`);
       await tx.insert(workingOrderLines).values({
         id: copiedLineId,
-        tenantId,
         workingOrderId: copiedOrderId,
         lineNo: 1,
         productId: ham.id,
@@ -634,12 +620,10 @@ describe("venue service routing", () => {
   it("refuses missing configuration and supports explicit no-preparation", async () => {
     const { tenantId } = await seedUnitTenant();
     const location = await db.execute<{ id: string }>(sql`
-      insert into locations (tenant_id, name, invoice_locales, operation_description)
-      values (${tenantId}, 'Venue', array['en-GB'], 'Hospitality') returning id`);
+      insert into locations (name, invoice_locales, operation_description) values ('Venue', array['en-GB'], 'Hospitality') returning id`);
     const locationId = brandLocationId(location.rows[0]!.id);
     const zone = await db.execute<{ id: string }>(sql`
-      insert into floor_zones (tenant_id, location_id, name)
-      values (${tenantId}, ${locationId}, 'Terrace') returning id`);
+      insert into floor_zones (location_id, name) values (${locationId}, 'Terrace') returning id`);
 
     await scoped(tenantId, async (tx) => {
       const department = await createDepartment(
@@ -744,15 +728,12 @@ describe("venue service routing", () => {
   it("refuses a missing route and a route to an inactive station", async () => {
     const { tenantId } = await seedUnitTenant();
     const location = await db.execute<{ id: string }>(sql`
-      insert into locations (tenant_id, name, invoice_locales, operation_description)
-      values (${tenantId}, 'Venue', array['en-GB'], 'Hospitality') returning id`);
+      insert into locations (name, invoice_locales, operation_description) values ('Venue', array['en-GB'], 'Hospitality') returning id`);
     const locationId = brandLocationId(location.rows[0]!.id);
     const zone = await db.execute<{ id: string }>(sql`
-      insert into floor_zones (tenant_id, location_id, name)
-      values (${tenantId}, ${locationId}, 'Interior') returning id`);
+      insert into floor_zones (location_id, name) values (${locationId}, 'Interior') returning id`);
     const station = await db.execute<{ id: string }>(sql`
-      insert into kitchen_stations (tenant_id, location_id, name, active)
-      values (${tenantId}, ${locationId}, 'Closed bar', false) returning id`);
+      insert into kitchen_stations (location_id, name, active) values (${locationId}, 'Closed bar', false) returning id`);
 
     await scoped(tenantId, async (tx) => {
       const department = await createDepartment(
@@ -804,18 +785,14 @@ describe("venue service routing", () => {
 async function seedRoutingVenue() {
   const { tenantId } = await seedUnitTenant();
   const location = await db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Venue', array['en-GB'], 'Hospitality') returning id`);
+    insert into locations (name, invoice_locales, operation_description) values ('Venue', array['en-GB'], 'Hospitality') returning id`);
   const otherLocation = await db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Second venue', array['en-GB'], 'Hospitality') returning id`);
+    insert into locations (name, invoice_locales, operation_description) values ('Second venue', array['en-GB'], 'Hospitality') returning id`);
   const locationId = brandLocationId(location.rows[0]!.id);
   const zone = await db.execute<{ id: string }>(sql`
-    insert into floor_zones (tenant_id, location_id, name)
-    values (${tenantId}, ${locationId}, 'Dining room') returning id`);
+    insert into floor_zones (location_id, name) values (${locationId}, 'Dining room') returning id`);
   const otherZone = await db.execute<{ id: string }>(sql`
-    insert into floor_zones (tenant_id, location_id, name)
-    values (${tenantId}, ${locationId}, 'Terrace') returning id`);
+    insert into floor_zones (location_id, name) values (${locationId}, 'Terrace') returning id`);
   const cfg = { tenantId, locationId };
   await scoped(tenantId, async (tx) => {
     const department = await createDepartment(tx, cfg, {
@@ -840,9 +817,9 @@ async function insertStation(
   locationId: string,
   name: string,
 ): Promise<string> {
+  void tenantId;
   const row = await tx.execute<{ id: string }>(sql`
-    insert into kitchen_stations (tenant_id, location_id, name)
-    values (${tenantId}, ${locationId}, ${name}) returning id`);
+    insert into kitchen_stations (location_id, name) values (${locationId}, ${name}) returning id`);
   return row.rows[0]!.id;
 }
 

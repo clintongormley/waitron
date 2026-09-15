@@ -8,7 +8,6 @@ import {
   unique,
   uuid,
 } from "drizzle-orm/pg-core";
-import { tenants } from "./tenants.js";
 
 /**
  * The device form factor a profile targets — the sizing guardrail a canvas is authored against. The
@@ -26,10 +25,10 @@ export const deviceFormFactorEnum = pgEnum("device_form_factor", [
 /**
  * A reusable DEVICE PROFILE (design 2026-09-05 §5.1): the binding bundle a device uses — a name, a
  * reference to a reusable canvas, and the capabilities set (relocated off the canvas record). MANY per
- * tenant, keyed by name; a device (Task 5) points at one via a composite (tenant_id, id) FK, so two
- * UNIQUEs back that. Tenant-wide, NOT location-scoped (like canvases).
+ * database, keyed by name; a device (Task 5) points at one by its `id`. NOT location-scoped (like
+ * canvases).
  *
- * `canvas_id` is a BARE uuid (nullable): the tenant-consistent (tenant_id, canvas_id) → canvases FK is
+ * `canvas_id` is a BARE uuid (nullable): the `canvas_id` → canvases FK is
  * hand-written --custom (0107), the devices.station_id idiom. NULL ⇒ the resolver falls back to the
  * form-factor default canvas (design §5.3). MATCH SIMPLE skips the FK check on NULL.
  *
@@ -41,10 +40,6 @@ export const deviceProfiles = pgTable(
   "device_profiles",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    tenantId: uuid("tenant_id")
-      .notNull()
-      /* v8 ignore next */
-      .references(() => tenants.id, { onDelete: "restrict" }),
     name: text("name").notNull(),
     formFactor: deviceFormFactorEnum("form_factor").notNull(),
     canvasId: uuid("canvas_id"),
@@ -61,8 +56,5 @@ export const deviceProfiles = pgTable(
       .notNull()
       .defaultNow(),
   },
-  (t) => [
-    unique("device_profiles_tenant_id_key").on(t.tenantId, t.id),
-    unique("device_profiles_tenant_name_key").on(t.tenantId, t.name),
-  ],
+  (t) => [unique("device_profiles_tenant_name_key").on(t.name)],
 );

@@ -58,12 +58,10 @@ async function setupVenue(): Promise<{
 }> {
   const tenantId = await seedTenant(db);
   const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
+    insert into locations (name, invoice_locales, operation_description) values ('Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
   const locationId = loc.rows[0]!.id;
   const till = await db.execute<{ id: string }>(sql`
-    insert into tills (tenant_id, location_id, name)
-    values (${tenantId}, ${locationId}, 'Caja 1') returning id`);
+    insert into tills (location_id, name) values (${locationId}, 'Caja 1') returning id`);
   const nodeId = await seedNode(db, tenantId, brandLocationId(locationId));
   return {
     cfg: { tenantId: brandTenantId(tenantId), locationId: brandLocationId(locationId) },
@@ -76,8 +74,7 @@ async function setupVenue(): Promise<{
  * verb lives in apps/server, which a module cannot import). */
 async function seedTable(cfg: VenueCfg, label: string): Promise<string> {
   const row = await db.execute<{ id: string }>(sql`
-    insert into dining_tables (tenant_id, location_id, label, active)
-    values (${cfg.tenantId}, ${cfg.locationId}, ${label}, true) returning id`);
+    insert into dining_tables (location_id, label, active) values (${cfg.locationId}, ${label}, true) returning id`);
   return row.rows[0]!.id;
 }
 
@@ -104,10 +101,10 @@ async function waitUntilLockBlocked(pid: number): Promise<void> {
   throw new Error(`backend ${pid} never became lock-blocked (the race never staged)`);
 }
 
-/** Count of `working_orders` for this tenant, read as the owner. */
-async function workingOrderCount(cfg: VenueCfg): Promise<number> {
+/** Count of `working_orders`, read as the owner. */
+async function workingOrderCount(): Promise<number> {
   const { rows } = await db.execute<{ n: number }>(
-    sql`select count(*)::int as n from working_orders where tenant_id = ${cfg.tenantId}`,
+    sql`select count(*)::int as n from working_orders`,
   );
   return rows[0]!.n;
 }
@@ -182,7 +179,7 @@ describe("seatBooking compare-and-swap guard (real Postgres, two backends)", () 
       // working order behind — the CAS's throw rolls the whole caller tx back, so no orphan tab survives.
       const after = await asApp(db, cfg, (tx) => getBooking(tx, cfg, bookingId));
       expect(after).toMatchObject({ status: "cancelled", tabId: null });
-      expect(await workingOrderCount(cfg)).toBe(0);
+      expect(await workingOrderCount()).toBe(0);
     } finally {
       await Promise.all([connA.close(), connB.close()]);
     }

@@ -37,12 +37,13 @@ async function fixture() {
   const tenantId = await seedTenant(suite.admin);
   const { image } = await app(suite.admin, tenantId, (tx) => uploadImage(tx, metadata, options));
   const menu = await suite.admin.execute<{ id: string }>(
-    sql`insert into catalogues (tenant_id, name) values (${tenantId}, 'Lunch') returning id`,
+    sql`insert into catalogues (name) values ('Lunch') returning id`,
   );
   const product = await suite.admin.execute<{
     id: string;
-  }>(sql`insert into products (tenant_id, catalogue_id, name, pricing_unit, unit_price, vat_class)
-    values (${tenantId}, ${menu.rows[0]!.id}, 'Bread', 'each', '2.00', 'general') returning id`);
+  }>(
+    sql`insert into products (catalogue_id, name, pricing_unit, unit_price, vat_class) values (${menu.rows[0]!.id}, 'Bread', 'each', '2.00', 'general') returning id`,
+  );
   return { tenantId, image, productId: product.rows[0]!.id };
 }
 async function blocked(pid: number) {

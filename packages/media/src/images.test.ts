@@ -121,7 +121,7 @@ describe("metadata, labels and references", () => {
   });
 
   it("shows active and inactive product uses and blocks deletion until every use is cleared", async () => {
-    const tenantId = await seedTenant(suite.db);
+    await seedTenant(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const { image } = await uploadImage(
         tx,
@@ -129,12 +129,13 @@ describe("metadata, labels and references", () => {
         { fallbackLanguage: "en", maxUploadBytes: 100 },
       );
       const menu = await tx.execute<{ id: string }>(
-        sql`insert into catalogues (tenant_id, name) values (${tenantId}, 'Lunch') returning id`,
+        sql`insert into catalogues (name) values ('Lunch') returning id`,
       );
       const inserted = await tx.execute<{
         id: string;
-      }>(sql`insert into products (tenant_id, catalogue_id, name, pricing_unit, unit_price, vat_class, image, active)
-        values (${tenantId}, ${menu.rows[0]!.id}, 'Bread', 'each', '2.00', 'general', ${image.filename}, false) returning id`);
+      }>(
+        sql`insert into products (catalogue_id, name, pricing_unit, unit_price, vat_class, image, active) values (${menu.rows[0]!.id}, 'Bread', 'each', '2.00', 'general', ${image.filename}, false) returning id`,
+      );
       const uses = [
         {
           kind: "product",
@@ -147,7 +148,7 @@ describe("metadata, labels and references", () => {
       expect(await listImageUsages(tx, image.id)).toEqual(uses);
       expect(await deleteImage(tx, image.id)).toEqual({ deleted: false, uses });
       expect((await readImage(tx, image.id)).usageCount).toBe(1);
-      await tx.execute(sql`update products set image = null where tenant_id = ${tenantId}`);
+      await tx.execute(sql`update products set image = null`);
       expect(await deleteImage(tx, image.id)).toEqual({ deleted: true, uses: [] });
     });
   });
@@ -502,11 +503,10 @@ it("protects an image used only by a category and releases it after clearing the
       image: image.filename,
     });
     const menu = await tx.execute<{ id: string }>(sql`
-      insert into catalogues (tenant_id, name) values (${tenantId}, 'Lunch') returning id
+      insert into catalogues (name) values ('Lunch') returning id
     `);
     const product = await tx.execute<{ id: string }>(sql`
-      insert into products (tenant_id, catalogue_id, name, pricing_unit, unit_price, vat_class, image)
-      values (${tenantId}, ${menu.rows[0]!.id}, 'Bread', 'each', 2, 'general', ${image.filename})
+      insert into products (catalogue_id, name, pricing_unit, unit_price, vat_class, image) values (${menu.rows[0]!.id}, 'Bread', 'each', 2, 'general', ${image.filename})
       returning id
     `);
     const uses = [
@@ -524,9 +524,7 @@ it("protects an image used only by a category and releases it after clearing the
     expect((await listImages(tx, {})).images[0]!.usageCount).toBe(2);
     expect(await deleteImage(tx, image.id)).toEqual({ deleted: false, uses });
     await updateCategory(tx, category.id, { image: null });
-    await tx.execute(
-      sql`update products set image = null where tenant_id = ${tenantId} and id = ${product.rows[0]!.id}`,
-    );
+    await tx.execute(sql`update products set image = null where id = ${product.rows[0]!.id}`);
     expect(await deleteImage(tx, image.id)).toEqual({ deleted: true, uses: [] });
   });
 });

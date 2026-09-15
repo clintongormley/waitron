@@ -45,19 +45,13 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, c
       .insert(tenants)
       .values([{ id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
     await suite.admin.execute(sql`
-      insert into locations (id, tenant_id, name, invoice_locales, operation_description)
-      values
-        (${LOCATION_A}, ${TENANT_A}, 'Loc A', array['es'], 'Hostelería')
+      insert into locations (id, name, invoice_locales, operation_description) values (${LOCATION_A}, 'Loc A', array['es'], 'Hostelería')
       on conflict (id) do nothing`);
     await suite.admin.execute(sql`
-      insert into tills (id, tenant_id, location_id, name)
-      values
-        (${TILL_A}, ${TENANT_A}, ${LOCATION_A}, 'Till A')
+      insert into tills (id, location_id, name) values (${TILL_A}, ${LOCATION_A}, 'Till A')
       on conflict (id) do nothing`);
     await suite.admin.execute(sql`
-      insert into printers (id, tenant_id, location_id, name, transport, poll_id)
-      values
-        (${PRINTER_A}, ${TENANT_A}, ${LOCATION_A}, 'Impresora A', 'cloud_poll', 'poll-a')
+      insert into printers (id, location_id, name, transport, poll_id) values (${PRINTER_A}, ${LOCATION_A}, 'Impresora A', 'cloud_poll', 'poll-a')
       on conflict (id) do nothing`);
   });
 
@@ -76,8 +70,7 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, c
   ): Promise<void> {
     await asApp(tenant, (tx) =>
       tx.execute(
-        sql`insert into drawer_opens (tenant_id, till_id, person_id, reason, sale_id)
-            values (${tenant}, ${TILL_A}, ${PERSON}, ${reason}, ${saleId})`,
+        sql`insert into drawer_opens (till_id, person_id, reason, sale_id) values (${TILL_A}, ${PERSON}, ${reason}, ${saleId})`,
       ),
     );
   }
@@ -95,7 +88,6 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, c
         .from(drawerOpens)
         .where(sql`person_id = ${PERSON} and reason = 'manual'`),
     );
-    expect(row!.tenantId).toBe(TENANT_A);
     expect(row!.tillId).toBe(TILL_A);
     expect(row!.personId).toBe(PERSON);
     expect(row!.reason).toBe("manual");
@@ -115,8 +107,7 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, c
     // both are populated. Read back through the Drizzle `drawerOpens` export.
     await asApp(TENANT_A, (tx) =>
       tx.execute(
-        sql`insert into drawer_opens (tenant_id, till_id, person_id, reason, authorized_by, via_override)
-            values (${TENANT_A}, ${TILL_A}, ${PERSON}, 'manual', ${AUTHORIZER}, true)`,
+        sql`insert into drawer_opens (till_id, person_id, reason, authorized_by, via_override) values (${TILL_A}, ${PERSON}, 'manual', ${AUTHORIZER}, true)`,
       ),
     );
     const [row] = await asApp(TENANT_A, (tx) =>
@@ -136,8 +127,7 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, c
     const e = await captureError(() =>
       asApp(TENANT_A, (tx) =>
         tx.execute(
-          sql`insert into drawer_opens (tenant_id, till_id, person_id, reason)
-              values (${TENANT_A}, ${TILL_A}, ${PERSON}, 'refund')`,
+          sql`insert into drawer_opens (till_id, person_id, reason) values (${TILL_A}, ${PERSON}, 'refund')`,
         ),
       ),
     );
@@ -154,12 +144,11 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, c
     const e = await captureError(() =>
       asApp(TENANT_A, (tx) =>
         tx.execute(
-          sql`insert into drawer_opens (tenant_id, till_id, person_id, reason, sale_id)
-              values (${TENANT_A}, ${TILL_A}, ${PERSON}, 'cash_sale', ${missingSale})`,
+          sql`insert into drawer_opens (till_id, person_id, reason, sale_id) values (${TILL_A}, ${PERSON}, 'cash_sale', ${missingSale})`,
         ),
       ),
     );
-    expect(pgErrorCode(e)).toBe("23503"); // foreign_key_violation on (tenant_id, sale_id)
+    expect(pgErrorCode(e)).toBe("23503"); // foreign_key_violation on (sale_id)
   });
 
   it("the app role can set and read tills.receipt_printer_id (new column, composite FK to printers)", async () => {

@@ -39,8 +39,7 @@ describe("cuota_total / importe_total round-trip the huella's literal hash input
         tipo_factura, descripcion_operacion, desglose, cuota_total, importe_total,
         primer_registro, sistema_informatico,
         fecha_hora_huso_gen_registro, offset_minutos, tipo_huella, huella
-      ) values (
-        ${TENANT_A.id}, ${TENANT_A.tillId}, ${TENANT_A.nodeId}, ${TENANT_A.sifId}, ${TENANT_A.saleId},
+      ) values (${TENANT_A.id}, ${TENANT_A.tillId}, ${TENANT_A.nodeId}, ${TENANT_A.sifId}, ${TENANT_A.saleId},
         1, 'alta',
         '89890001K', 'A/1', '2026-07-20', 'Waitron SL',
         'F2', 'Venta en establecimiento', '[]'::jsonb, ${cuotaTotal}, ${importeTotal},

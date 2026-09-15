@@ -92,13 +92,11 @@ const DEVICE_PROFILE_FK = "devices_device_profile_fk";
  * re-throw anything else untouched:
  *   - a `device_profiles_tenant_name_key` collision (a duplicate name per tenant, SQLSTATE 23505) →
  *     `device_profile.name_taken` — the `translateWriteError` twin from `canvas-store.ts`, matched on
- *     the CONSTRAINT NAME so the composite `device_profiles_tenant_id_key` (the FK target devices point
- *     at, a cryptographically-unreachable `defaultRandom()` clash on writes) is re-thrown untouched,
- *     with the same "no constraint name reported ⇒ translate" fallback for PGlite;
- *   - a `device_profiles_canvas_fk` violation (a `canvas_id` that is absent or belongs to another
- *     tenant, SQLSTATE 23503) → `device_profile.invalid` {reason: "bad_canvas_ref"}. Matched on the
- *     constraint name so the `tenant_id → tenants` FK (server-controlled, never client input) can
- *     never be mislabelled. The name is the only 23503 a client value can trip here;
+ *     the CONSTRAINT NAME so a 23505 on any other constraint is re-thrown untouched, with the same
+ *     "no constraint name reported ⇒ translate" fallback for PGlite;
+ *   - a `device_profiles_canvas_fk` violation (a `canvas_id` that names no canvas, SQLSTATE 23503) →
+ *     `device_profile.invalid` {reason: "bad_canvas_ref"}. Matched on the constraint name, and it is
+ *     the only 23503 a client value can trip here;
  *   - a `devices_device_profile_fk` violation (a delete of a profile a live device still references, ON
  *     DELETE RESTRICT, SQLSTATE 23001) → `device_profile.in_use` — a clean 409 rather than a raw 500.
  *     Matched on the constraint NAME so an unrelated RESTRICT is re-thrown untouched.
@@ -159,7 +157,9 @@ export async function createDeviceProfile(
   tx: Transaction,
   input: {
     managementSessionId: string;
-    tenantId: string;
+    /** Inert: nothing here reads it. apps/server and provisioning still supply it; the field goes
+     * when those callers do. */
+    tenantId?: string;
     name: string;
     formFactor: FormFactor;
     canvasId: string | null | undefined;
@@ -182,7 +182,6 @@ export async function createDeviceProfile(
     const [row] = await tx
       .insert(deviceProfiles)
       .values({
-        tenantId: input.tenantId,
         name: input.name,
         formFactor: input.formFactor,
         canvasId: input.canvasId ?? null,
@@ -208,7 +207,9 @@ export async function updateDeviceProfile(
   tx: Transaction,
   input: {
     managementSessionId: string;
-    tenantId: string;
+    /** Inert: nothing here reads it. apps/server and provisioning still supply it; the field goes
+     * when those callers do. */
+    tenantId?: string;
     id: string;
     name: string;
     formFactor: FormFactor;
@@ -263,7 +264,7 @@ export async function updateDeviceProfile(
  */
 export async function deleteDeviceProfile(
   tx: Transaction,
-  input: { managementSessionId: string; tenantId: string; id: string },
+  input: { managementSessionId: string; tenantId?: string; id: string },
 ): Promise<void> {
   await authorizeManager(tx, {
     managementSessionId: input.managementSessionId,

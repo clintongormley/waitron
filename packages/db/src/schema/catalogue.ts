@@ -12,10 +12,8 @@ import {
   primaryKey,
   text,
   timestamp,
-  unique,
   uuid,
 } from "drizzle-orm/pg-core";
-import { tenants } from "./tenants.js";
 
 /**
  * The db-layer copy of the allergen-declaration shape: a per-code presence map with an optional
@@ -27,49 +25,24 @@ export type AllergenMap = Record<string, { presence: "contains" | "may_contain";
 
 /** A named, shareable menu. Many locations may point at one catalogue (N identical delis share it);
  * a heterogeneous venue set uses one catalogue each. `version` is the sync seam (bumped later). */
-export const catalogues = pgTable(
-  "catalogues",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    tenantId: uuid("tenant_id")
-      .notNull()
-      .references(() => tenants.id),
-    name: text("name").notNull(),
-    active: boolean("active").notNull().default(true),
-    version: bigint("version", { mode: "number" }).notNull().default(1),
-    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
-  },
-  (t) => [
-    index("catalogues_tenant_id_idx").on(t.tenantId),
-    // Composite target so a tenant-scoped join can carry a tenant-consistent (tenant_id, catalogue_id)
-    // FK — the same role `products_tenant_id_key` plays. Used by location_catalogues_catalogue_fk
-    // (schema/location-catalogues.ts): a membership row cannot reference another tenant's catalogue.
-    // `id` alone is already unique (it is the PK); this adds the composite so the FK can be
-    // tenant-consistent rather than merely referential.
-    unique("catalogues_tenant_id_key").on(t.tenantId, t.id),
-  ],
-);
+export const catalogues = pgTable("catalogues", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  active: boolean("active").notNull().default(true),
+  version: bigint("version", { mode: "number" }).notNull().default(1),
+  createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+});
 
-/** Tenant-wide analytics taxonomy ("Food", "Drinks"). Orthogonal to catalogue; snapshotted onto
+/** The analytics taxonomy ("Food", "Drinks"). Orthogonal to catalogue; snapshotted onto
  * the sale line as a label so a roll-up sums one canonical bucket across catalogues. */
-export const categories = pgTable(
-  "categories",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    tenantId: uuid("tenant_id")
-      .notNull()
-      .references(() => tenants.id),
-    name: jsonb("name").$type<Record<string, string>>().notNull(),
-    stationId: uuid("station_id"),
-    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
-  },
-  (t) => [
-    index("categories_tenant_id_idx").on(t.tenantId),
-    unique("categories_tenant_id_key").on(t.tenantId, t.id),
-  ],
-);
+export const categories = pgTable("categories", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: jsonb("name").$type<Record<string, string>>().notNull(),
+  stationId: uuid("station_id"),
+  createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+});
 
 /** A priced item. Catalogue-owned `product_units` assigns its unit without a reverse migration edge.
  * Deactivate via `active`, never delete (may sit behind historical sale-line snapshots). */
@@ -77,9 +50,6 @@ export const products = pgTable(
   "products",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    tenantId: uuid("tenant_id")
-      .notNull()
-      .references(() => tenants.id),
     catalogueId: uuid("catalogue_id")
       .notNull()
       .references(() => catalogues.id),
@@ -150,12 +120,8 @@ export const products = pgTable(
   },
   (t) => [
     index("products_catalogue_id_idx").on(t.catalogueId),
-    // Composite target so a tenant-scoped table can carry a tenant-consistent (tenant_id,
-    // product_id) FK — the same role nodes_tenant_id_key plays for `working_orders`/`sales`. Used
+    // Target for the foreign keys that name a product. Used
     // by working_order_lines_product_fk (schema/orders.ts): a draft line cannot price against a
-    // product belonging to another tenant. `id` alone is already unique (it is the PK); this adds
-    // the composite so the FK can be tenant-consistent rather than merely referential.
-    unique("products_tenant_id_key").on(t.tenantId, t.id),
     check("products_pricing_unit_ck", sql`${t.pricingUnit} in ('each','weight')`),
     check(
       "products_vat_class_ck",
@@ -172,9 +138,6 @@ export const optionGroups = pgTable(
   "option_groups",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    tenantId: uuid("tenant_id")
-      .notNull()
-      .references(() => tenants.id),
     name: jsonb("name").$type<Record<string, string>>().notNull(),
     type: text("type").$type<"text" | "extras" | "options">().notNull().default("extras"),
     maxTotalQuantity: integer("max_total_quantity"),
@@ -191,12 +154,9 @@ export const optionGroups = pgTable(
       "option_groups_total_ck",
       sql`${t.maxTotalQuantity} is null or ${t.maxTotalQuantity} >= 1`,
     ),
-    index("option_groups_tenant_id_idx").on(t.tenantId),
-    // Composite target so the tenant-scoped children (option_group_items, product_option_groups) can
-    // carry a tenant-consistent (tenant_id, group_id) FK — the same role products_tenant_id_key plays.
+    // Target for the foreign keys the children (option_group_items, product_option_groups) carry.
     // `id` alone is already unique (it is the PK); this adds the composite so the FK is
-    // tenant-consistent rather than merely referential.
-    unique("option_groups_tenant_id_key").on(t.tenantId, t.id),
+    // rather than merely referential.
     // min_select >= 0 and max_select >= min_select. Design §3 invariant, enforced in the DB.
     check("option_groups_select_ck", sql`${t.maxSelect} >= ${t.minSelect} and ${t.minSelect} >= 0`),
     // required implies at least one selection. Design §3 invariant.
@@ -207,14 +167,11 @@ export const optionGroups = pgTable(
 /** The individual choices within an `option_groups` row. `price_delta` is GROSS (VAT-inclusive) and
  * added to the parent dish's price when the item is chosen. `vat_class` NULL means "inherit the
  * parent dish's rate at add time"; a non-null value matches `products.vat_class`. Deactivate via
- * `active`. The (tenant_id, group_id) FK is tenant-consistent and cascades on group delete. */
+ * `active`. The `group_id` FK cascades on group delete. */
 export const optionGroupItems = pgTable(
   "option_group_items",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    tenantId: uuid("tenant_id")
-      .notNull()
-      .references(() => tenants.id),
     groupId: uuid("group_id").notNull(),
     name: jsonb("name").$type<Record<string, string>>().notNull(),
     priceDelta: numeric("price_delta", { precision: 12, scale: 2 }).notNull().default("0"),
@@ -234,47 +191,41 @@ export const optionGroupItems = pgTable(
   },
   (t) => [
     index("option_group_items_group_idx").on(t.groupId),
-    unique("option_group_items_tenant_id_key").on(t.tenantId, t.id),
     // A per-option cap is meaningless below 1: an option a diner can take zero times is just an
     // inactive option. Enforced in the DB so no authoring path can persist a nonsensical cap.
     check("option_group_items_qty_ck", sql`${t.maxQuantity} >= 1`),
-    // Tenant-consistent FK: an item cannot reference a group belonging to another tenant. Cascades so
+    // Cascades so
     // deleting a group removes its items. NULL vat_class = inherit; a non-null must match products'.
     foreignKey({
-      columns: [t.tenantId, t.groupId],
-      foreignColumns: [optionGroups.tenantId, optionGroups.id],
+      columns: [t.groupId],
+      foreignColumns: [optionGroups.id],
       name: "option_group_items_group_fk",
     }).onDelete("cascade"),
   ],
 );
 
 /** The many-to-many attaching reusable `option_groups` to `products` — one group serves many dishes.
- * `sort` orders the groups within a product's modifier UI. Both FKs are tenant-consistent and cascade,
+ * `sort` orders the groups within a product's modifier UI. Both FKs cascade,
  * so detaching happens by deleting the link row (never by deleting the shared group). */
 export const productOptionGroups = pgTable(
   "product_option_groups",
   {
-    tenantId: uuid("tenant_id")
-      .notNull()
-      .references(() => tenants.id),
     productId: uuid("product_id").notNull(),
     groupId: uuid("group_id").notNull(),
     sort: integer("sort").notNull().default(0),
   },
   (t) => [
-    // Tenant-first named PK, matching the other tenant-scoped join tables (station_printers,
-    // location_catalogues): a consistent tenant-scoped identity key. `(product_id, group_id)` is
-    // already unique (both are tenant-owned uuids and the composite FKs below keep them
-    // tenant-consistent), so `tenant_id` adds no new uniqueness — it makes the key shape uniform.
-    primaryKey({ columns: [t.tenantId, t.productId, t.groupId], name: "product_option_groups_pk" }),
+    // `(product_id, group_id)` IS the identity, as in the other join tables (station_printers,
+    // location_catalogues): a product names a group at most once.
+    primaryKey({ columns: [t.productId, t.groupId], name: "product_option_groups_pk" }),
     foreignKey({
-      columns: [t.tenantId, t.productId],
-      foreignColumns: [products.tenantId, products.id],
+      columns: [t.productId],
+      foreignColumns: [products.id],
       name: "product_option_groups_product_fk",
     }).onDelete("cascade"),
     foreignKey({
-      columns: [t.tenantId, t.groupId],
-      foreignColumns: [optionGroups.tenantId, optionGroups.id],
+      columns: [t.groupId],
+      foreignColumns: [optionGroups.id],
       name: "product_option_groups_group_fk",
     }).onDelete("cascade"),
   ],

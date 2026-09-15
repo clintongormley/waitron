@@ -23,24 +23,21 @@ interface Seeded {
  * one card reader — the rows device_card_readers' device and reader FKs point at.
  */
 async function seedDeviceAndReader(db: Database): Promise<Seeded> {
-  const t = await db.execute<{ id: string }>(sql`
+  // One `tenants` row so the database looks like a provisioned one; nothing below references it.
+  await db.execute(sql`
     insert into tenants (country, tax_id, legal_name)
-    values ('ES', ${freshNif()}, 'Test SL') returning id`);
-  const tenantId = t.rows[0]!.id;
+    values ('ES', ${freshNif()}, 'Test SL')`);
   const l = await db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Counter', array['es'], 'Hostelería') returning id`);
+    insert into locations (name, invoice_locales, operation_description) values ('Counter', array['es'], 'Hostelería') returning id`);
   const locationId = l.rows[0]!.id;
   const till = await db.execute<{ id: string }>(sql`
-    insert into tills (tenant_id, location_id, name) values (${tenantId}, ${locationId}, 'Till 1') returning id`);
+    insert into tills (location_id, name) values (${locationId}, 'Till 1') returning id`);
   const tillId = till.rows[0]!.id;
   const profile = await db.execute<{ id: string }>(sql`
-    insert into device_profiles (tenant_id, name, form_factor)
-    values (${tenantId}, 'Profile', 'till') returning id`);
+    insert into device_profiles (name, form_factor) values ('Profile', 'till') returning id`);
   const profileId = profile.rows[0]!.id;
   const device = await db.execute<{ id: string }>(sql`
-    insert into devices (tenant_id, location_id, device_profile_id, till_id, label, token_hash)
-    values (${tenantId}, ${locationId}, ${profileId}, ${tillId}, 'Counter till', 'scrypt$00$00') returning id`);
+    insert into devices (location_id, device_profile_id, till_id, label, token_hash) values (${locationId}, ${profileId}, ${tillId}, 'Counter till', 'scrypt$00$00') returning id`);
   const deviceId = device.rows[0]!.id;
   const reader = await db
     .insert(cardReaders)

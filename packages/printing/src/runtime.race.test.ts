@@ -25,8 +25,7 @@ async function setup(): Promise<PrintConfig> {
   const admin = suite.admin;
   const tenantId = await seedTenant(admin);
   const { rows } = await admin.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Bar', array['es-ES'], 'Sale on premises') returning id`);
+    insert into locations (name, invoice_locales, operation_description) values ('Bar', array['es-ES'], 'Sale on premises') returning id`);
   return { tenantId, locationId: rows[0]!.id };
 }
 
@@ -84,8 +83,7 @@ describe("double-pull race (real Postgres)", () => {
     // to pull it — the reimaged-agent / two-boxes topology.
     const agentId = (
       await suite.admin.execute<{ id: string }>(sql`
-        insert into print_agents (tenant_id, location_id, name, token_hash)
-        values (${cfg.tenantId}, ${cfg.locationId}, 'Kitchen', 'scrypt$fixture') returning id`)
+        insert into print_agents (location_id, name, token_hash) values (${cfg.locationId}, 'Kitchen', 'scrypt$fixture') returning id`)
     ).rows[0]!.id;
     const printerId = await asApp(suite.admin, cfg, (tx) =>
       createPrinter(tx, cfg, {
@@ -173,8 +171,7 @@ describe("double-pull race (real Postgres)", () => {
     const [agentA, agentB] = await Promise.all(
       ["A", "B"].map(async (name) => {
         const { rows } = await suite.admin.execute<{ id: string }>(sql`
-          insert into print_agents (tenant_id, location_id, name, token_hash)
-          values (${cfg.tenantId}, ${cfg.locationId}, ${"Kitchen " + name}, 'scrypt$fixture')
+          insert into print_agents (location_id, name, token_hash) values (${cfg.locationId}, ${"Kitchen " + name}, 'scrypt$fixture')
           returning id`);
         return rows[0]!.id;
       }),

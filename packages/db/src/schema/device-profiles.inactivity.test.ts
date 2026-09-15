@@ -34,14 +34,12 @@ describe("device_profiles.inactivity_timeout_seconds", () => {
 
   it("defaults to NULL when omitted on insert, and round-trips a value", async () => {
     const omitted = await admin.execute<{ inactivity_timeout_seconds: number | null }>(sql`
-      insert into device_profiles (tenant_id, name, form_factor)
-      values (${TENANT}, 'No timeout', 'till')
+      insert into device_profiles (name, form_factor) values ('No timeout', 'till')
       returning inactivity_timeout_seconds`);
     expect(omitted.rows[0]!.inactivity_timeout_seconds).toBeNull();
 
     const withValue = await admin.execute<{ inactivity_timeout_seconds: number | null }>(sql`
-      insert into device_profiles (tenant_id, name, form_factor, inactivity_timeout_seconds)
-      values (${TENANT}, 'Five minutes', 'phone-portrait', 300)
+      insert into device_profiles (name, form_factor, inactivity_timeout_seconds) values ('Five minutes', 'phone-portrait', 300)
       returning inactivity_timeout_seconds`);
     expect(withValue.rows[0]!.inactivity_timeout_seconds).toBe(300);
   });

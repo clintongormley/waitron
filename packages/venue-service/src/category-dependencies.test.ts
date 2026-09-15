@@ -24,8 +24,7 @@ const suite = usePgliteDb({
 async function venue() {
   const tenantId = await seedTenant(suite.db);
   const location = await suite.db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Main', array['en'], 'Restaurant') returning id
+    insert into locations (name, invoice_locales, operation_description) values ('Main', array['en'], 'Restaurant') returning id
   `);
   return { tenantId, locationId: location.rows[0]!.id as LocationId };
 }
@@ -56,8 +55,7 @@ it("an open order keeps its copied category label after the category is deleted"
   await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     const till = await tx.execute<{ id: string }>(sql`
-      insert into tills (tenant_id, location_id, name)
-      values (${tenantId}, ${locationId}, 'Till') returning id
+      insert into tills (location_id, name) values (${locationId}, 'Till') returning id
     `);
     const catalogue = await createCatalogue(tx, tenantId, { name: "Menu" });
     const category = await createCategory(tx, tenantId, { name: { en: "Bakery" } });
@@ -75,22 +73,16 @@ it("an open order keeps its copied category label after the category is deleted"
       vatClass: "general",
     });
     const order = await tx.execute<{ id: string }>(sql`
-      insert into working_orders (tenant_id, till_id, order_number, label)
-      values (${tenantId}, ${till.rows[0]!.id}, 1, 'Historical') returning id
+      insert into working_orders (till_id, order_number, label) values (${till.rows[0]!.id}, 1, 'Historical') returning id
     `);
     await tx.execute(sql`
-      insert into working_order_lines
-        (tenant_id, working_order_id, line_no, product_id, name, descriptions, quantity,
-         unit_price, unit_price_gross, vat_rate, line_total, category)
-      values
-        (${tenantId}, ${order.rows[0]!.id}, 1, ${product.id}, 'Bread', '{"en":"Bread"}'::jsonb, 1,
+      insert into working_order_lines (working_order_id, line_no, product_id, name, descriptions, quantity, unit_price, unit_price_gross, vat_rate, line_total, category) values (${order.rows[0]!.id}, 1, ${product.id}, 'Bread', '{"en":"Bread"}'::jsonb, 1,
          2, 2, 10, 2, 'Bakery')
     `);
 
     await deleteCategory(tx, category.id);
     const snapshot = await tx.execute<{ category: string | null }>(sql`
-      select category from working_order_lines where tenant_id = ${tenantId}
-        and working_order_id = ${order.rows[0]!.id}
+      select category from working_order_lines where working_order_id = ${order.rows[0]!.id}
     `);
     expect(snapshot.rows).toEqual([{ category: "Bakery" }]);
   });
@@ -102,11 +94,9 @@ it("dependants lists a category's preparation routes with station and zone names
     await asAppUser(tx);
     const category = await createCategory(tx, tenantId, { name: { en: "Grill" } });
     const zone = await tx.execute<{ id: string }>(sql`
-      insert into floor_zones (tenant_id, location_id, name)
-      values (${tenantId}, ${locationId}, 'Terrace') returning id`);
+      insert into floor_zones (location_id, name) values (${locationId}, 'Terrace') returning id`);
     const station = await tx.execute<{ id: string }>(sql`
-      insert into kitchen_stations (tenant_id, location_id, name)
-      values (${tenantId}, ${locationId}, 'Plancha') returning id`);
+      insert into kitchen_stations (location_id, name) values (${locationId}, 'Plancha') returning id`);
     // A route may carry a zone, and a zoned route requires the zone to be a configured service zone.
     const department = await createDepartment(
       tx,

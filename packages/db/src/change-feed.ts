@@ -39,7 +39,7 @@ export async function installChangeFeed(
           end if;
         end loop;
         perform pg_notify('waitron_changes', jsonb_build_object(
-          'tenantId', changed_row ->> 'tenant_id', 'resources', resources
+          'resources', resources
         )::text);
       end loop;
       return null;

@@ -27,7 +27,7 @@ async function configuredTenant() {
     writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "fr"] }),
   );
   const menu = await suite.admin.execute<{ id: string }>(
-    sql`insert into catalogues (tenant_id, name) values (${tenantId}, 'Lunch') returning id`,
+    sql`insert into catalogues (name) values ('Lunch') returning id`,
   );
   return { tenantId, menuId: menu.rows[0]!.id };
 }
@@ -92,8 +92,9 @@ it("a default switch waits for an authoring transaction and rejects its newly co
       await validateContentTranslations(tx, { en: "Bread" }, "es");
       ready();
       await wait;
-      await tx.execute(sql`insert into products (tenant_id, catalogue_id, name, customer_name, pricing_unit, unit_price, vat_class)
-        values (${tenantId}, ${menuId}, 'Bread', '{"en":"Bread"}'::jsonb, 'each', '2', 'general')`);
+      await tx.execute(
+        sql`insert into products (catalogue_id, name, customer_name, pricing_unit, unit_price, vat_class) values (${menuId}, 'Bread', '{"en":"Bread"}'::jsonb, 'each', '2', 'general')`,
+      );
     });
     await validated;
     const changing = app(configuration, tenantId, (tx) =>

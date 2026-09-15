@@ -160,7 +160,7 @@ it("writes direct declarations without reviving or rewriting stale recipe deriva
     await tx.execute(sql`update products set
       recipe_derivation = ${JSON.stringify(staleRecipe)}::jsonb,
       diet_derivation = ${JSON.stringify(staleDiet)}::jsonb
-      where tenant_id = ${tenantId} and id = ${saved.id}`);
+      where id = ${saved.id}`);
     await saveProductEditor(
       tx,
       tenantId,
@@ -175,7 +175,7 @@ it("writes direct declarations without reviving or rewriting stale recipe deriva
     diet_derivation: unknown;
     dietary_declarations: string[];
   }>(sql`select recipe_derivation, diet_derivation, dietary_declarations from products
-    where tenant_id = ${tenantId} and id = ${saved.id}`);
+    where id = ${saved.id}`);
   expect(rows.rows[0]).toEqual({
     recipe_derivation: staleRecipe,
     diet_derivation: staleDiet,

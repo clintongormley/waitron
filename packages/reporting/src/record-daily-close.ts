@@ -42,7 +42,7 @@ export async function recordDailyClose(
   // 1. Validate the supplied cash counts up front — fail before taking the chain lock or reading.
   const counts = validateCashCounts(input.cashCounts);
 
-  // 2. Serialise this (tenant, node)'s closes on the chain head. FOR UPDATE, not FOR SHARE: two
+  // 2. Serialise this node's closes on the chain head. FOR UPDATE, not FOR SHARE: two
   //    closers must not both read the same head and then both assign the same next sequence number.
   const head = await lockChainHead(tx, input.tenantId, input.nodeId);
 
@@ -82,7 +82,6 @@ export async function recordDailyClose(
   //    daily_closes_business_day_key (23505) → close.already_closed; the savepoint confines that abort
   //    to the failed insert so the caller's enclosing transaction is not poisoned by it.
   const id = await insertClose(tx, {
-    tenantId: input.tenantId,
     nodeId: input.nodeId,
     businessDay: input.businessDay,
     sequenceNo,
@@ -252,7 +251,7 @@ async function selectHeadForUpdate(
  * do nothing` then a locking re-select, not an upsert-returning: when a concurrent transaction has
  * inserted the head but not committed, this transaction's speculative insert waits on it and then does
  * nothing on the conflict, so the re-select observes the COMMITTED row rather than one that might roll
- * back. Same shape as workforce's `lockChainHead`, keyed by (tenant, node).
+ * back. Same shape as workforce's `lockChainHead`, keyed by node.
  */
 async function lockChainHead(
   tx: Transaction,
@@ -264,8 +263,8 @@ async function lockChainHead(
 
   await tx
     .insert(dailyCloseChain)
-    .values({ tenantId, nodeId })
-    .onConflictDoNothing({ target: [dailyCloseChain.tenantId, dailyCloseChain.nodeId] });
+    .values({ nodeId })
+    .onConflictDoNothing({ target: [dailyCloseChain.nodeId] });
 
   const created = await selectHeadForUpdate(tx, tenantId, nodeId);
   /* v8 ignore start */
@@ -279,7 +278,6 @@ async function lockChainHead(
 }
 
 interface CloseRow {
-  tenantId: TenantId;
   nodeId: NodeId;
   businessDay: string;
   sequenceNo: number;
@@ -320,7 +318,7 @@ async function insertClose(tx: Transaction, row: CloseRow): Promise<string> {
 
 /**
  * Is this (or anything it wraps) a unique violation on `daily_closes_business_day_key` — a second
- * close of the same (tenant, node, business day)? Walks the cause chain because Drizzle wraps every
+ * close of the same (node, business day)? Walks the cause chain because Drizzle wraps every
  * failed query in a `DrizzleQueryError` whose own `.code` is undefined; the real SQLSTATE and the
  * `.constraint` name live on `.cause` (node-postgres), one level deeper still under PGlite. Stops at a
  * fixed depth so a self-referential `cause` cannot spin forever. Reads the CONSTRAINT NAME, not just

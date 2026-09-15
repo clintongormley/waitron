@@ -8,7 +8,8 @@ import type { SaleId, TenantId } from "@waitron/shared";
 import type { RecordSaleTender } from "./record-sale.js";
 
 export interface SettleSaleInput {
-  tenantId: TenantId;
+  /** Inert: nothing here reads it. apps/server still supplies it; the field goes when that does. */
+  tenantId?: TenantId;
   saleId: SaleId;
   tenders: RecordSaleTender[];
 }
@@ -109,7 +110,6 @@ export async function settleSale(tx: Transaction, input: SettleSaleInput): Promi
     try {
       await tx.insert(tenders).values(
         input.tenders.map((tender) => ({
-          tenantId: input.tenantId,
           saleId: input.saleId,
           method: tender.method as (typeof tenders.$inferInsert)["method"],
           amount: tender.amount,
@@ -135,7 +135,6 @@ export async function settleSale(tx: Transaction, input: SettleSaleInput): Promi
 
   try {
     await tx.insert(saleSettlements).values({
-      tenantId: input.tenantId,
       saleId: input.saleId,
       settledAt: settledAt.toISOString(),
     });

@@ -26,7 +26,6 @@ describe("dining_tables placement columns", () => {
     await admin.insert(locations).values([
       {
         id: LOCATION_A,
-        tenantId: TENANT_A,
         name: "Loc A",
         invoiceLocales: ["es"],
         operationDescription: "Hostelería",
@@ -45,7 +44,7 @@ describe("dining_tables placement columns", () => {
   async function seedTable(tenant: string, location: string, label: string): Promise<string> {
     return asApp(tenant, async (tx) => {
       const r = await tx.execute<{ id: string }>(
-        sql`insert into dining_tables (tenant_id, location_id, label) values (${tenant}, ${location}, ${label}) returning id`,
+        sql`insert into dining_tables (location_id, label) values (${location}, ${label}) returning id`,
       );
       return r.rows[0]!.id;
     });

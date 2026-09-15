@@ -197,7 +197,7 @@ async function substitute(
  * a fresh tenant per test, so an unscoped count would fold in every earlier test. */
 async function countRows(table: string): Promise<number> {
   const result = await suite.db.execute<{ n: number }>(
-    sql`select count(*)::int as n from ${sql.raw(table)} where tenant_id = ${tenantId}`,
+    sql`select count(*)::int as n from ${sql.raw(table)}`,
   );
   return result.rows[0]!.n;
 }
@@ -270,26 +270,31 @@ describe("recordSubstitution — the substituted tickets (input guards)", () => 
 describe("recordSubstitution — error propagation", () => {
   it("propagates a sale_substitutions error that is not a unique violation, untranslated", async () => {
     // The insert's OTHER failure path: any reason `sale_substitutions` could reject BESIDES the
-    // `(tenant_id, substituted_sale_id)` unique (a future constraint, an FK violation) must reach
-    // the caller as-is rather than being misreported as `sale.already_substituted` — mirrors
-    // record-void.ts's identical "not a unique violation" test.
+    // `substituted_sale_id` unique (a constraint added later, an FK violation) must reach the caller
+    // as-is rather than being misreported as `sale.already_substituted` — mirrors record-void.ts's
+    // identical "not a unique violation" test.
     //
-    // Provoked with a ticket belonging to a second seeded tenant: the existence check reads `sales`
-    // by id alone (no tenant predicate — record-substitution.ts step 1b) on a PGlite superuser
-    // connection, so the ticket IS found; the composite FK `(tenant_id, substituted_sale_id) →
-    // sales` then rejects the insert with a foreign-key violation (23503), not a unique one — which
-    // is what exercises the untranslated rethrow.
+    // Provoked by adding a CHECK that no row can satisfy, which is the "a constraint added later"
+    // case stated literally: the insert then fails with 23514, not 23505. The constraint is dropped
+    // in the `finally` so nothing after this case sees it.
     const backend = new FakeFiscalBackend(suite.db);
-    const other = await seedTenant(suite.db);
-    const foreignTicket = await seedBareSale(suite.db, other);
-
-    const error = await captureError(() =>
-      withTransaction(suite.db, (tx) =>
-        recordSubstitution(tx, backend, substitutionInput([foreignTicket])),
-      ),
+    const { saleId } = await sellTicket(backend);
+    await suite.db.execute(
+      sql`alter table sale_substitutions add constraint tmp_refuse_everything check (false) not valid`,
     );
-    expect(error).not.toBeInstanceOf(AppError);
-    expect(pgErrorCode(error)).toBe("23503"); // foreign_key_violation, not 23505 (unique)
+    try {
+      const error = await captureError(() =>
+        withTransaction(suite.db, (tx) =>
+          recordSubstitution(tx, backend, substitutionInput([saleId])),
+        ),
+      );
+      expect(error).not.toBeInstanceOf(AppError);
+      expect(pgErrorCode(error)).toBe("23514"); // check_violation, not 23505 (unique)
+    } finally {
+      await suite.db.execute(
+        sql`alter table sale_substitutions drop constraint tmp_refuse_everything`,
+      );
+    }
   });
 });
 
@@ -326,7 +331,7 @@ describe("recordSubstitution — the series (node-ownership guards)", () => {
     // is chained.
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId } = await sellTicket(backend);
-    const rectSeries = await seedRectificativeSeries(suite.db, tenantId, nodeId);
+    const rectSeries = await seedRectificativeSeries(suite.db, nodeId);
     await expect(substitute(backend, [saleId], { seriesId: rectSeries })).rejects.toMatchObject({
       code: "sale.series_wrong_purpose",
       params: { seriesId: rectSeries, expected: "standard", actual: "rectificative" },

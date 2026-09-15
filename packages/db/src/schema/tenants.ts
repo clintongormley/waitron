@@ -1,13 +1,11 @@
 import { sql } from "drizzle-orm";
 import {
   check,
-  index,
   pgEnum,
   pgTable,
   text,
   time,
   timestamp,
-  unique,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
@@ -115,9 +113,6 @@ export const locations = pgTable(
   "locations",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    tenantId: uuid("tenant_id")
-      .notNull()
-      .references(() => tenants.id),
     name: text("name").notNull(),
     invoiceLocales: text("invoice_locales").array().notNull(),
     operationDescription: text("operation_description").notNull(),
@@ -163,16 +158,10 @@ export const locations = pgTable(
     // This location's DEFAULT catalogue (menu) — nullable (a venue may exist before a menu is
     // assigned). Not the only menu a location sells from: `location_catalogues` may add further
     // catalogues to the accessible set, resolved by `resolveAccessibleCatalogueIds`
-    // (`packages/catalogue/src/operations.ts`). The FK is a TENANT-CONSISTENT composite
-    // `(tenant_id, catalogue_id) → catalogues(tenant_id, id)`, hand-written in a custom migration
-    // (0078; 0077 first drops the original single-column FK) exactly like `location_catalogues`'s FKs —
-    // deliberately NOT a single-column `.references()`
-    // here — so a location cannot take another tenant's catalogue as its default (0028's single-column
-    // FK to catalogues(id) let it; proven in locations-default-catalogue.test.ts). `catalogue_id` is
-    // nullable, so a MATCH SIMPLE composite FK skips the check when it is NULL (no default). Declaring
-    // the FK in the migration rather than the schema drops the tenants→catalogue import edge the
-    // single-column thunk needed; `catalogue.ts` still imports `tenants` for its own tenant FK, so the
-    // dependency is now one-directional.
+    // (`packages/catalogue/src/operations.ts`). The FK `(catalogue_id) → catalogues(id)` is
+    // hand-written in a custom migration rather than declared here as `.references()`, which keeps
+    // this file from importing `catalogue.ts` and closing an import cycle. `catalogue_id` is
+    // nullable, and a MATCH SIMPLE FK skips the check when it is NULL (no default).
     catalogueId: uuid("catalogue_id"),
   },
   (t) => [
@@ -181,11 +170,6 @@ export const locations = pgTable(
     // therefore be accepted — verified on PostgreSQL 18.4. cardinality('{}')
     // is 0 and the constraint bites.
     check("locations_invoice_locales_len", sql`cardinality(${t.invoiceLocales}) between 1 and 2`),
-    // Composite (tenant_id, id) UNIQUE — the target for dining_tables_location_fk's tenant-consistent
-    // (tenant_id, location_id) FK (dining-tables.ts), the same role tills_tenant_id_key plays for
-    // order_amendments_till_fk. A single-column-PK table takes the extra unique the way tills/nodes do.
-    unique("locations_tenant_id_key").on(t.tenantId, t.id),
-    index("locations_tenant_id_idx").on(t.tenantId),
   ],
 );
 
@@ -203,30 +187,18 @@ export const locations = pgTable(
  * live SIF identity per regime, so that join is 1:1; a till reaches its SIF
  * through the node that serves it.
  */
-export const tills = pgTable(
-  "tills",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    tenantId: uuid("tenant_id")
-      .notNull()
-      .references(() => tenants.id),
-    locationId: uuid("location_id")
-      .notNull()
-      .references(() => locations.id),
-    name: text("name").notNull(),
-    // The till's per-till receipt printer (counter-receipt/drawer slice §2), which is also the
-    // cash-drawer kick (deli-hardware §6 — the drawer is a printer capability, no separate device).
-    // BARE uuid, NULLABLE (a till with no printer just doesn't print): the tenant-consistent
-    // (tenant_id, receipt_printer_id) → printers(tenant_id, id) composite FK is hand-written in the
-    // paired --custom migration, exactly as `printers.agent_id` → print_agents is. MATCH SIMPLE skips
-    // the FK check on a NULL.
-    receiptPrinterId: uuid("receipt_printer_id"),
-    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
-  },
-  (t) => [
-    // Composite (tenant_id, id) UNIQUE — the target for order_amendments_till_fk's tenant-consistent
-    // FK (order-amendments.ts), the same role nodes_tenant_id_key plays for working_orders_node_fk.
-    unique("tills_tenant_id_key").on(t.tenantId, t.id),
-    index("tills_tenant_id_idx").on(t.tenantId),
-  ],
-);
+export const tills = pgTable("tills", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  locationId: uuid("location_id")
+    .notNull()
+    .references(() => locations.id),
+  name: text("name").notNull(),
+  // The till's per-till receipt printer (counter-receipt/drawer slice §2), which is also the
+  // cash-drawer kick (deli-hardware §6 — the drawer is a printer capability, no separate device).
+  // BARE uuid, NULLABLE (a till with no printer just doesn't print): the
+  // (receipt_printer_id) → printers(id) composite FK is hand-written in the
+  // paired --custom migration, exactly as `printers.agent_id` → print_agents is. MATCH SIMPLE skips
+  // the FK check on a NULL.
+  receiptPrinterId: uuid("receipt_printer_id"),
+  createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+});

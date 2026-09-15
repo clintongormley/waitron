@@ -46,6 +46,7 @@ export async function createIngredient(
   tenantId: TenantId,
   input: CreateIngredientInput,
 ): Promise<Ingredient> {
+  void tenantId;
   // Validate before the write: an unreviewed ingredient stores null, a supplied map is checked
   // against the EU-14 taxonomy and rejected (throws `allergen.invalid_code`/`allergen.invalid_presence`)
   // before any row is inserted.
@@ -55,7 +56,7 @@ export async function createIngredient(
   const dietaryOrigin = input.dietaryOrigin == null ? null : validateOrigin(input.dietaryOrigin);
   const [row] = await tx
     .insert(ingredients)
-    .values({ tenantId, name: input.name, allergens, dietaryOrigin })
+    .values({ name: input.name, allergens, dietaryOrigin })
     .returning(INGREDIENT_COLUMNS);
   return row!;
 }

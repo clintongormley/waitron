@@ -40,25 +40,19 @@ describe("devices schema (columns, FKs, unique)", () => {
     // itself needs an owning location. operation_description is Spanish test DATA, not a schema
     // identifier, exactly as the sibling kitchen-stations test uses 'Hostelería'.
     await suite.admin.execute(sql`
-      insert into locations (id, tenant_id, name, invoice_locales, operation_description)
-      values
-        (${LOCATION_A}, ${TENANT_A}, 'Loc A', array['es'], 'Hostelería'),
-        (${LOCATION_B}, ${TENANT_B}, 'Loc B', array['es'], 'Hostelería')
+      insert into locations (id, name, invoice_locales, operation_description) values (${LOCATION_A}, 'Loc A', array['es'], 'Hostelería'),
+        (${LOCATION_B}, 'Loc B', array['es'], 'Hostelería')
       on conflict (id) do nothing`);
     await suite.admin.execute(sql`
-      insert into kitchen_stations (id, tenant_id, location_id, name)
-      values
-        (${STATION_A}, ${TENANT_A}, ${LOCATION_A}, 'Kitchen A'),
-        (${STATION_B}, ${TENANT_B}, ${LOCATION_B}, 'Kitchen B')
+      insert into kitchen_stations (id, location_id, name) values (${STATION_A}, ${LOCATION_A}, 'Kitchen A'),
+        (${STATION_B}, ${LOCATION_B}, 'Kitchen B')
       on conflict (id) do nothing`);
     // One kds device profile per tenant — the (tenant_id, device_profile_id) composite-FK target a
     // station-bound device points at, and the `kds` form factor the binding rule reads to require a
     // station.
     await suite.admin.execute(sql`
-      insert into device_profiles (id, tenant_id, name, form_factor)
-      values
-        (${KDS_PROFILE_A}, ${TENANT_A}, 'KDS A', 'kds'),
-        (${KDS_PROFILE_B}, ${TENANT_B}, 'KDS B', 'kds')
+      insert into device_profiles (id, name, form_factor) values (${KDS_PROFILE_A}, 'KDS A', 'kds'),
+        (${KDS_PROFILE_B}, 'KDS B', 'kds')
       on conflict (id) do nothing`);
   });
 
@@ -92,8 +86,7 @@ describe("devices schema (columns, FKs, unique)", () => {
   ): Promise<string> {
     return asApp(tenant, async (tx) => {
       const r = await tx.execute<{ id: string }>(
-        sql`insert into devices (tenant_id, location_id, device_profile_id, station_id, label, token_hash)
-            values (${tenant}, ${location}, ${profile}, ${station}, ${label}, ${TOKEN_HASH}) returning id`,
+        sql`insert into devices (location_id, device_profile_id, station_id, label, token_hash) values (${location}, ${profile}, ${station}, ${label}, ${TOKEN_HASH}) returning id`,
       );
       return r.rows[0]!.id;
     });

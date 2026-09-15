@@ -1,6 +1,5 @@
 import { sql } from "drizzle-orm";
 import { boolean, check, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
-import { tenants } from "./tenants.js";
 
 export type DrawerOpenReason = "cash_sale" | "manual";
 
@@ -11,8 +10,8 @@ export type DrawerOpenReason = "cash_sale" | "manual";
  * sale settled at the till). The drawer is the till's receipt printer's kick (deli-hardware §6 — no
  * separate device), so this table records the ACT of opening, not a device.
  *
- * `till_id` and `sale_id` are BARE uuids: their tenant-consistent composite FKs —
- * (tenant_id, till_id) → tills(tenant_id, id) and (tenant_id, sale_id) → sales(tenant_id, id) — are
+ * `till_id` and `sale_id` are BARE uuids: their FKs —
+ * (till_id) → tills(id) and (sale_id) → sales(id) — are
  * hand-written in the --custom migration (a bare column carries no FK), exactly as `sale_voids`'s
  * composite `sale_id` FK is. `sale_id` is NULLABLE (a manual open has no sale; a cash-sale open
  * references it) — MATCH SIMPLE skips the FK check on a NULL. `person_id` is a plain uuid with NO
@@ -30,13 +29,7 @@ export const drawerOpens = pgTable(
   "drawer_opens",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    tenantId: uuid("tenant_id")
-      .notNull()
-      // Two-arg `.references()` so v8 tracks this thunk as its own never-invoked function (drizzle-kit
-      // resolves it in a separate CLI process), the reason the sibling schema files use this form.
-      /* v8 ignore next */
-      .references(() => tenants.id, { onDelete: "restrict" }),
-    // Bare column: the tenant-consistent (tenant_id, till_id) → tills(tenant_id, id) composite FK is
+    // Bare column: the (till_id) → tills(id) composite FK is
     // hand-written in the --custom migration.
     tillId: uuid("till_id").notNull(),
     // The acting operator (identity person id). Plain uuid, no FK: the person schema is a separate
@@ -52,7 +45,7 @@ export const drawerOpens = pgTable(
     // on locations is a pgEnum instead, matching order_flow — a per-venue CONFIG mode, a different family.)
     reason: text("reason").$type<DrawerOpenReason>().notNull(),
     // NULLABLE bare column: a manual open has no sale; a cash-sale open references it. The
-    // tenant-consistent (tenant_id, sale_id) → sales(tenant_id, id) composite FK is hand-written in the
+    // (sale_id) → sales(id) composite FK is hand-written in the
     // --custom migration; MATCH SIMPLE skips it on a NULL sale_id.
     saleId: uuid("sale_id"),
     // Who authorized this open under a 'gated' drawer_open_policy (cash-drawer-authorization slice §2).

@@ -22,9 +22,7 @@ describe("station_printers schema (KDS-4 mapping — PK + composite FKs)", () =>
       .insert(tenants)
       .values([{ id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant A" }]);
     await suite.admin.execute(sql`
-      insert into locations (id, tenant_id, name, invoice_locales, operation_description)
-      values
-        (${LOCATION_A}, ${TENANT_A}, 'Loc A', array['es'], 'Hostelería')
+      insert into locations (id, name, invoice_locales, operation_description) values (${LOCATION_A}, 'Loc A', array['es'], 'Hostelería')
       on conflict (id) do nothing`);
   });
 
@@ -39,8 +37,7 @@ describe("station_printers schema (KDS-4 mapping — PK + composite FKs)", () =>
   async function seedStation(tenant: string, name: string): Promise<string> {
     return asApp(tenant, async (tx) => {
       const r = await tx.execute<{ id: string }>(
-        sql`insert into kitchen_stations (tenant_id, location_id, name)
-            values (${tenant}, ${LOCATION_A}, ${name}) returning id`,
+        sql`insert into kitchen_stations (location_id, name) values (${LOCATION_A}, ${name}) returning id`,
       );
       return r.rows[0]!.id;
     });
@@ -51,8 +48,7 @@ describe("station_printers schema (KDS-4 mapping — PK + composite FKs)", () =>
   async function seedPrinter(tenant: string, name: string, pollId: string): Promise<string> {
     return asApp(tenant, async (tx) => {
       const r = await tx.execute<{ id: string }>(
-        sql`insert into printers (tenant_id, location_id, name, transport, poll_id)
-            values (${tenant}, ${LOCATION_A}, ${name}, 'cloud_poll', ${pollId}) returning id`,
+        sql`insert into printers (location_id, name, transport, poll_id) values (${LOCATION_A}, ${name}, 'cloud_poll', ${pollId}) returning id`,
       );
       return r.rows[0]!.id;
     });
@@ -61,8 +57,7 @@ describe("station_printers schema (KDS-4 mapping — PK + composite FKs)", () =>
   async function seedMapping(tenant: string, station: string, printer: string): Promise<void> {
     await asApp(tenant, (tx) =>
       tx.execute(
-        sql`insert into station_printers (tenant_id, station_id, printer_id)
-            values (${tenant}, ${station}, ${printer})`,
+        sql`insert into station_printers (station_id, printer_id) values (${station}, ${printer})`,
       ),
     );
   }
@@ -79,7 +74,6 @@ describe("station_printers schema (KDS-4 mapping — PK + composite FKs)", () =>
         .from(stationPrinters)
         .where(sql`station_id = ${station}`),
     );
-    expect(row!.tenantId).toBe(TENANT_A);
     expect(row!.stationId).toBe(station);
     expect(row!.printerId).toBe(printer);
     // A mapping row is REMOVED via DELETE (app_user holds DELETE — detach in §3a).
@@ -95,7 +89,7 @@ describe("station_printers schema (KDS-4 mapping — PK + composite FKs)", () =>
     expect(deleted[0]!.printer_id).toBe(printer);
   });
 
-  it("the primary key rejects a duplicate (tenant_id, station_id, printer_id) mapping (23505)", async () => {
+  it("the primary key rejects a duplicate (station_id, printer_id) mapping (23505)", async () => {
     const station = await seedStation(TENANT_A, "Barra");
     const printer = await seedPrinter(TENANT_A, "Impresora Barra", "poll-dup");
     await seedMapping(TENANT_A, station, printer);

@@ -34,8 +34,7 @@ beforeEach(async () => {
   // `chain.concurrency.test.ts` documents.
   till = await seedTill(suite.admin, "A");
   const series = await suite.admin.execute<{ id: string }>(sql`
-    insert into invoice_series (tenant_id, node_id, code, purpose, next_number)
-    values (${till.tenantId}, ${till.nodeId}, 'R', 'rectificative', 1)
+    insert into invoice_series (node_id, code, purpose, next_number) values (${till.nodeId}, 'R', 'rectificative', 1)
     returning id
   `);
   rectificativeSeriesId = series.rows[0]!.id;
@@ -109,10 +108,7 @@ async function seedCorrectiveRow(
   total: string,
 ): Promise<string> {
   const { rows } = await suite.admin.execute<{ id: string }>(sql`
-    insert into sales (tenant_id, till_id, node_id, series_id, invoice_number, issued_at,
-                       issued_offset_minutes, total, vat_breakdown, corrects_sale_id,
-                       locale, invoice_locales, fiscal_backend, fiscal_state)
-    values (${till.tenantId}, ${till.tillId}, ${till.nodeId}, ${rectificativeSeriesId}, ${invoiceNumber},
+    insert into sales (till_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes, total, vat_breakdown, corrects_sale_id, locale, invoice_locales, fiscal_backend, fiscal_state) values (${till.tillId}, ${till.nodeId}, ${rectificativeSeriesId}, ${invoiceNumber},
             '2026-03-02T12:05:00+01:00', 60, ${total}, '[]'::jsonb, ${correctsSaleId},
             'es', array['es'], 'verifactu', 'recorded')
     returning id

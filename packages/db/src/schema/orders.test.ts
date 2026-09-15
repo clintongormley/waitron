@@ -59,7 +59,6 @@ async function seed(db: Database): Promise<void> {
   await db.insert(locations).values([
     {
       id: LOCATION_A,
-      tenantId: TENANT_A,
       // Bilingual on purpose: a single-locale venue cannot detect a trigger
       // that checks "at least one locale" instead of "exactly these".
       name: "Fixture Location A",
@@ -67,18 +66,15 @@ async function seed(db: Database): Promise<void> {
       operationDescription: "Hostelería",
     },
   ]);
-  await db
-    .insert(tills)
-    .values([{ id: TILL_A1, tenantId: TENANT_A, locationId: LOCATION_A, name: "A1" }]);
+  await db.insert(tills).values([{ id: TILL_A1, locationId: LOCATION_A, name: "A1" }]);
   // One priced product — the FK target every draft line now needs.
   const [catA] = await db
     .insert(catalogues)
-    .values({ tenantId: TENANT_A, name: "Deli A" })
+    .values({ name: "Deli A" })
     .returning({ id: catalogues.id });
   const [prodA] = await db
     .insert(products)
     .values({
-      tenantId: TENANT_A,
       catalogueId: catA.id,
       name: "Café solo",
       pricingUnit: "each",
@@ -89,10 +85,10 @@ async function seed(db: Database): Promise<void> {
   productA = prodA.id;
 }
 
-async function openOrder(db: Database, tenantId = TENANT_A, tillId = TILL_A1): Promise<string> {
+async function openOrder(db: Database, tillId = TILL_A1): Promise<string> {
   const [row] = await db
     .insert(workingOrders)
-    .values({ tenantId, tillId, orderNumber: ++orderNumberSeq, status: "open", openedAt: AT })
+    .values({ tillId, orderNumber: ++orderNumberSeq, status: "open", openedAt: AT })
     .returning({ id: workingOrders.id });
   return row.id;
 }
@@ -128,8 +124,7 @@ describe("working_orders", () => {
   it("rejects a status outside the enum", async () => {
     const error = await captureError(() =>
       db.execute(
-        sql`insert into working_orders (tenant_id, till_id, status, opened_at)
-            values (${TENANT_A}::uuid, ${TILL_A1}::uuid, 'paid', ${AT}::timestamptz)`,
+        sql`insert into working_orders (till_id, status, opened_at) values (${TILL_A1}::uuid, 'paid', ${AT}::timestamptz)`,
       ),
     );
     expect(pgErrorMessage(error)).toMatch(/invalid input value for enum working_order_status/);
@@ -139,12 +134,10 @@ describe("working_orders", () => {
     // open → open is the ordinary case and must stay cheap: a table adds a
     // round of drinks four times before it asks for the bill.
     const id = await openOrder(db);
+    await db.insert(workingOrderLines).values({ ...LINE, productId: productA, workingOrderId: id });
     await db
       .insert(workingOrderLines)
-      .values({ ...LINE, productId: productA, tenantId: TENANT_A, workingOrderId: id });
-    await db
-      .insert(workingOrderLines)
-      .values({ ...LINE, productId: productA, lineNo: 2, tenantId: TENANT_A, workingOrderId: id });
+      .values({ ...LINE, productId: productA, lineNo: 2, workingOrderId: id });
     await db
       .update(workingOrderLines)
       .set({ quantity: "2.000", lineTotal: "2.60" })
@@ -288,7 +281,6 @@ describe("working_orders", () => {
     const [withNode] = await db
       .insert(workingOrders)
       .values({
-        tenantId: TENANT_A,
         tillId: TILL_A1,
         orderNumber: ++orderNumberSeq,
         status: "open",
@@ -302,7 +294,6 @@ describe("working_orders", () => {
   it("rejects a node_id that does not exist with a foreign-key violation", async () => {
     const error = await captureError(() =>
       db.insert(workingOrders).values({
-        tenantId: TENANT_A,
         tillId: TILL_A1,
         orderNumber: ++orderNumberSeq,
         status: "open",
@@ -324,9 +315,7 @@ describe("working_order_lines", () => {
 
   it("adds a line to an open order", async () => {
     const id = await openOrder(db);
-    await db
-      .insert(workingOrderLines)
-      .values({ ...LINE, productId: productA, tenantId: TENANT_A, workingOrderId: id });
+    await db.insert(workingOrderLines).values({ ...LINE, productId: productA, workingOrderId: id });
     const found = await db.select().from(workingOrderLines);
     expect(found).toHaveLength(1);
     expect(found[0].descriptions).toEqual({ es: "Café solo", ca: "Cafè sol" });
@@ -334,13 +323,9 @@ describe("working_order_lines", () => {
 
   it("rejects a duplicate line_no within an order", async () => {
     const id = await openOrder(db);
-    await db
-      .insert(workingOrderLines)
-      .values({ ...LINE, productId: productA, tenantId: TENANT_A, workingOrderId: id });
+    await db.insert(workingOrderLines).values({ ...LINE, productId: productA, workingOrderId: id });
     const error = await captureError(() =>
-      db
-        .insert(workingOrderLines)
-        .values({ ...LINE, productId: productA, tenantId: TENANT_A, workingOrderId: id }),
+      db.insert(workingOrderLines).values({ ...LINE, productId: productA, workingOrderId: id }),
     );
     expect(pgErrorMessage(error)).toMatch(/duplicate key value/);
   });
@@ -352,9 +337,7 @@ describe("working_order_lines", () => {
       .set({ status: "settled", settledAt: AT })
       .where(eq(workingOrders.id, id));
     const error = await captureError(() =>
-      db
-        .insert(workingOrderLines)
-        .values({ ...LINE, productId: productA, tenantId: TENANT_A, workingOrderId: id }),
+      db.insert(workingOrderLines).values({ ...LINE, productId: productA, workingOrderId: id }),
     );
     expect(pgErrorMessage(error)).toMatch(/lines may only be written while the order is open/);
   });
@@ -363,9 +346,7 @@ describe("working_order_lines", () => {
     const id = await openOrder(db);
     await db.update(workingOrders).set({ status: "abandoned" }).where(eq(workingOrders.id, id));
     const error = await captureError(() =>
-      db
-        .insert(workingOrderLines)
-        .values({ ...LINE, productId: productA, tenantId: TENANT_A, workingOrderId: id }),
+      db.insert(workingOrderLines).values({ ...LINE, productId: productA, workingOrderId: id }),
     );
     expect(pgErrorMessage(error)).toMatch(/lines may only be written while the order is open/);
   });
@@ -374,9 +355,7 @@ describe("working_order_lines", () => {
     // Deletion is the transition that would otherwise slip through: the
     // trigger has to cover DELETE, and OLD rather than NEW carries the id.
     const id = await openOrder(db);
-    await db
-      .insert(workingOrderLines)
-      .values({ ...LINE, productId: productA, tenantId: TENANT_A, workingOrderId: id });
+    await db.insert(workingOrderLines).values({ ...LINE, productId: productA, workingOrderId: id });
     await db
       .update(workingOrders)
       .set({ status: "settled", settledAt: AT })
@@ -393,7 +372,6 @@ describe("working_order_lines", () => {
       db.insert(workingOrderLines).values({
         ...LINE,
         productId: productA,
-        tenantId: TENANT_A,
         workingOrderId: id,
         descriptions: { es: "Café solo" },
       }),
@@ -407,7 +385,6 @@ describe("working_order_lines", () => {
       db.insert(workingOrderLines).values({
         ...LINE,
         productId: productA,
-        tenantId: TENANT_A,
         workingOrderId: id,
         descriptions: { es: "Café solo", ca: "Cafè sol", en: "Black coffee" },
       }),
@@ -420,9 +397,7 @@ describe("working_order_lines", () => {
     // configuration would mean a receipt reprinted next year reads differently
     // from the one the customer took.
     const id = await openOrder(db);
-    await db
-      .insert(workingOrderLines)
-      .values({ ...LINE, productId: productA, tenantId: TENANT_A, workingOrderId: id });
+    await db.insert(workingOrderLines).values({ ...LINE, productId: productA, workingOrderId: id });
     await db
       .update(locations)
       .set({ invoiceLocales: ["es", "en"] })
@@ -525,34 +500,28 @@ describe("working_order_lines — modifier links", () => {
     productId: string | null;
     parentLineId?: string | null;
     optionGroupItemId?: string | null;
-    tenantId?: string;
     descriptions?: string;
   }): Promise<{ id: string }[]> {
-    const tenantId = opts.tenantId ?? TENANT_A;
     const descriptions = opts.descriptions ?? '{"es":"Café solo","ca":"Cafè sol"}';
     return rows<{ id: string }>(
       db,
-      sql`insert into working_order_lines (
-             tenant_id, working_order_id, line_no, product_id, name, descriptions, quantity,
-             unit_price, unit_price_gross, vat_rate, line_total, parent_line_id, option_group_item_id
-           ) values (
-             ${tenantId}, ${opts.workingOrderId}, ${opts.lineNo}, ${opts.productId}, 'Café solo',
+      sql`insert into working_order_lines (working_order_id, line_no, product_id, name, descriptions, quantity, unit_price, unit_price_gross, vat_rate, line_total, parent_line_id, option_group_item_id) values (${opts.workingOrderId}, ${opts.lineNo}, ${opts.productId}, 'Café solo',
              ${descriptions}::jsonb, '1.000', '1.30', '1.43', '10.00', '1.30',
              ${opts.parentLineId ?? null}, ${opts.optionGroupItemId ?? null}
            ) returning id`,
     );
   }
 
-  // A group + one item in `tenantId`. Names are the known-safe café strings — option names are jsonb
+  // A group + one item. Names are the known-safe café strings — option names are jsonb
   // VALUES, but this package's english-only guard scans string literals in test files too.
-  async function seedOptionItem(tenantId: string): Promise<string> {
+  async function seedOptionItem(): Promise<string> {
     const [group] = await db
       .insert(optionGroups)
-      .values({ tenantId, name: { es: "Café solo" } })
+      .values({ name: { es: "Café solo" } })
       .returning({ id: optionGroups.id });
     const [item] = await db
       .insert(optionGroupItems)
-      .values({ tenantId, groupId: group.id, name: { es: "Café solo" }, priceDelta: "0.50" })
+      .values({ groupId: group.id, name: { es: "Café solo" }, priceDelta: "0.50" })
       .returning({ id: optionGroupItems.id });
     return item.id;
   }
@@ -577,7 +546,7 @@ describe("working_order_lines — modifier links", () => {
 
   it("links a line to an option_group_item for authoring traceability", async () => {
     const orderId = await openOrder(db);
-    const itemId = await seedOptionItem(TENANT_A);
+    const itemId = await seedOptionItem();
     const [line] = await insertLine({
       workingOrderId: orderId,
       lineNo: 1,
@@ -597,7 +566,7 @@ describe("working_order_lines — modifier links", () => {
     // intact; onDelete SET NULL clears just this back-reference. The order stays open so the
     // require_open_parent trigger admits the cascade UPDATE.
     const orderId = await openOrder(db);
-    const itemId = await seedOptionItem(TENANT_A);
+    const itemId = await seedOptionItem();
     const [line] = await insertLine({
       workingOrderId: orderId,
       lineNo: 1,

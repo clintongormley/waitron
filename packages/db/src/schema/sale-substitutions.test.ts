@@ -48,19 +48,16 @@ async function seed(db: Database): Promise<void> {
   await db.insert(locations).values([
     {
       id: LOCATION_A,
-      tenantId: TENANT_A,
       name: "Fixture Location A",
       invoiceLocales: ["es", "ca"],
       operationDescription: "Hostelería",
     },
   ]);
-  await db
-    .insert(tills)
-    .values([{ id: TILL_A1, tenantId: TENANT_A, locationId: LOCATION_A, name: "A1" }]);
+  await db.insert(tills).values([{ id: TILL_A1, locationId: LOCATION_A, name: "A1" }]);
   nodeA = await seedNode(db, brandTenantId(TENANT_A), brandLocationId(LOCATION_A));
   const [a] = await db
     .insert(invoiceSeries)
-    .values({ tenantId: TENANT_A, nodeId: nodeA, code: "FA", purpose: "standard" })
+    .values({ nodeId: nodeA, code: "FA", purpose: "standard" })
     .returning({ id: invoiceSeries.id });
   seriesA = a.id;
 }
@@ -80,9 +77,8 @@ async function insertSale(
     counterparty?: { taxId: string; legalName: string; countryCode: string } | null;
   } = {},
 ): Promise<string> {
-  const tenantId = opts.tenantId ?? TENANT_A;
   const tillId = opts.tillId ?? TILL_A1;
-  // node_id is NOT NULL and tenant-consistent with the sale.
+  // node_id is NOT NULL.
   const nodeId = opts.nodeId ?? nodeA;
   const seriesId = opts.seriesId ?? seriesA;
   const locales = opts.invoiceLocales ?? ["es", "ca"];
@@ -94,12 +90,7 @@ async function insertSale(
   )}]::text[]`;
   const [row] = await rows<{ id: string }>(
     db,
-    sql`insert into sales (
-           tenant_id, till_id, node_id, series_id, invoice_number, issued_at,
-           issued_offset_minutes, total, vat_breakdown, locale, invoice_locales, fiscal_backend,
-           fiscal_state, counterparty_tax_id, counterparty_legal_name, counterparty_country_code
-         ) values (
-           ${tenantId}, ${tillId}, ${nodeId}, ${seriesId}, ${invoiceCounter}, ${AT}, 120,
+    sql`insert into sales (till_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes, total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state, counterparty_tax_id, counterparty_legal_name, counterparty_country_code) values (${tillId}, ${nodeId}, ${seriesId}, ${invoiceCounter}, ${AT}, 120,
            '1.00', '[]'::jsonb, ${locales[0]}, ${localesArray}, 'verifactu', 'recorded',
            ${cp?.taxId ?? null}, ${cp?.legalName ?? null}, ${cp?.countryCode ?? null}
          ) returning id`,
@@ -113,8 +104,7 @@ async function insertSubstitution(
 ): Promise<{ id: string }[]> {
   return rows<{ id: string }>(
     db,
-    sql`insert into sale_substitutions (tenant_id, substitution_sale_id, substituted_sale_id)
-         values (${opts.tenantId ?? TENANT_A}, ${opts.substitutionSaleId}, ${opts.substitutedSaleId})
+    sql`insert into sale_substitutions (substitution_sale_id, substituted_sale_id) values (${opts.substitutionSaleId}, ${opts.substitutedSaleId})
          returning id`,
   );
 }

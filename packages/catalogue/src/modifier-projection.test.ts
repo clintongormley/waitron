@@ -51,7 +51,6 @@ it("publishes an attached text modifier without requiring choice rows", async ()
     );
     await tx.insert(productOptionGroups).values(
       [text].map((modifier, sort) => ({
-        tenantId,
         productId: product.id,
         groupId: modifier.id,
         sort,
@@ -129,7 +128,6 @@ it("projects only published available choices, clears excluded defaults, and kee
     );
     await tx.insert(productOptionGroups).values(
       [options, extras].map((modifier, sort) => ({
-        tenantId,
         productId: product.id,
         groupId: modifier.id,
         sort,

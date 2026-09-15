@@ -752,7 +752,6 @@ describe("tenant incident reads", () => {
     for (const [index, id] of ids.entries()) {
       await suite.db.insert(incidents).values({
         id,
-        tenantId,
         tillId,
         code: `test.tied_${index}`,
         params: {},

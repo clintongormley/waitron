@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { check, index, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { sales } from "./sales.js";
-import { tenants, tills } from "./tenants.js";
+import { tills } from "./tenants.js";
 
 export type IncidentSeverity = "warning" | "error";
 
@@ -23,9 +23,6 @@ export const incidents = pgTable(
   "incidents",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    tenantId: uuid("tenant_id")
-      .notNull()
-      .references(() => tenants.id),
     tillId: uuid("till_id")
       .notNull()
       .references(() => tills.id),

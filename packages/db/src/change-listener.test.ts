@@ -57,7 +57,6 @@ it("ignores malformed notifications and accepts collection identities without ex
     payload: JSON.stringify({
       // The SQL trigger still puts a `tenantId` in the payload (its column is dropped in Phase B);
       // the parser now ignores it and never copies it onto the change.
-      tenantId: "any-tenant",
       resources: [{ type: "printers", secret: "hidden" }],
     }),
   });

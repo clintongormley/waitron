@@ -13,8 +13,8 @@ import {
 import { nodes } from "./nodes.js";
 
 /**
- * The frozen daily close (cierre Z) document, one immutable row per (tenant, node, business day).
- * Append-only and hash-chained per (tenant, node): each close carries `prev_entry_hash` (its
+ * The frozen daily close (cierre Z) document, one immutable row per (node, business day).
+ * Append-only and hash-chained per node: each close carries `prev_entry_hash` (its
  * predecessor's `entry_hash`, "" for the genesis close) and its own `entry_hash`, computed over the
  * identity fields plus the `snapshot` in a later task. A deleted or tampered close breaks the chain,
  * which is exactly what the verification (Task 4) detects.
@@ -55,10 +55,9 @@ export const dailyCloses = pgTable(
   "daily_closes",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    tenantId: uuid("tenant_id").notNull(),
     nodeId: uuid("node_id").notNull(),
     businessDay: date("business_day").notNull(),
-    // 1-based per (tenant, node), monotonic — the chain position.
+    // 1-based per node, monotonic — the chain position.
     sequenceNo: integer("sequence_no").notNull(),
     // The predecessor's entry_hash ("" for the genesis close).
     prevEntryHash: text("prev_entry_hash").notNull(),
@@ -71,33 +70,31 @@ export const dailyCloses = pgTable(
     snapshot: jsonb("snapshot").$type<DailyCloseSnapshot>().notNull(),
   },
   (t) => [
-    // Composite target so the close is tenant-consistent — a close cannot name a node of another
-    // tenant — mirroring working_order_counters_node_fk. Targets nodes_tenant_id_key.
+    // A close names a node that exists, mirroring working_order_counters_node_fk.
     foreignKey({
-      columns: [t.tenantId, t.nodeId],
-      foreignColumns: [nodes.tenantId, nodes.id],
+      columns: [t.nodeId],
+      foreignColumns: [nodes.id],
       name: "daily_closes_node_fk",
     }),
     // One close per business day per node.
-    unique("daily_closes_business_day_key").on(t.tenantId, t.nodeId, t.businessDay),
+    unique("daily_closes_business_day_key").on(t.nodeId, t.businessDay),
     // Chain-position backstop: no two closes on a node share a sequence number.
-    unique("daily_closes_sequence_key").on(t.tenantId, t.nodeId, t.sequenceNo),
+    unique("daily_closes_sequence_key").on(t.nodeId, t.sequenceNo),
   ],
 );
 
 export const dailyCloseChain = pgTable(
   "daily_close_chain",
   {
-    tenantId: uuid("tenant_id").notNull(),
     nodeId: uuid("node_id").notNull(),
     sequenceNo: integer("sequence_no").notNull().default(0),
     lastEntryHash: text("last_entry_hash").notNull().default(""),
   },
   (t) => [
-    primaryKey({ columns: [t.tenantId, t.nodeId], name: "daily_close_chain_pk" }),
+    primaryKey({ columns: [t.nodeId], name: "daily_close_chain_pk" }),
     foreignKey({
-      columns: [t.tenantId, t.nodeId],
-      foreignColumns: [nodes.tenantId, nodes.id],
+      columns: [t.nodeId],
+      foreignColumns: [nodes.id],
       name: "daily_close_chain_node_fk",
     }),
   ],

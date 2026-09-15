@@ -82,10 +82,9 @@ it("reports products, menus and the open-order count a delete would touch", asyn
     ]);
     const [order] = await tx
       .insert(workingOrders)
-      .values({ tenantId, tillId, nodeId, orderNumber: 1 })
+      .values({ tillId, nodeId, orderNumber: 1 })
       .returning();
     await tx.insert(workingOrderLines).values({
-      tenantId,
       workingOrderId: order!.id,
       productId: productQ.id,
       lineNo: 1,

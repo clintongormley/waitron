@@ -23,8 +23,7 @@ export interface SeededVenue {
 export async function seedVenue(db: Database): Promise<SeededVenue> {
   const tenantId = await seedTenant(db);
   const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Main', array['en-GB'], 'Test op') returning id`);
+    insert into locations (name, invoice_locales, operation_description) values ('Main', array['en-GB'], 'Test op') returning id`);
   const locationId = loc.rows[0]!.id;
   await seedNode(db, tenantId, brandLocationId(locationId));
   return { tenantId, locationId };

@@ -294,7 +294,6 @@ describe("recordCorrection — refusals", () => {
       await asAppUser(tx);
       await tx.insert(sales).values({
         id: original,
-        tenantId,
         tillId,
         nodeId,
         seriesId,
@@ -397,7 +396,6 @@ describe("recordSubstitution — refusals", () => {
       await asAppUser(tx);
       await tx.insert(sales).values({
         id: original,
-        tenantId,
         tillId,
         nodeId,
         seriesId,
@@ -493,7 +491,6 @@ describe("recordSale — invoice type selection", () => {
       // since only one is hashed), so this sale's own total is irrelevant to the assertion below.
       await tx.insert(sales).values({
         id: freshSaleId,
-        tenantId,
         tillId,
         nodeId,
         seriesId,
@@ -543,7 +540,6 @@ describe("recordSale — invoice type selection", () => {
       await asAppUser(tx);
       await tx.insert(sales).values({
         id: saleId,
-        tenantId,
         tillId,
         nodeId,
         seriesId,
@@ -702,7 +698,6 @@ describe("filedReceiptFor", () => {
       await asAppUser(tx);
       await tx.insert(sales).values({
         id: freshSaleId,
-        tenantId,
         tillId,
         nodeId,
         seriesId,

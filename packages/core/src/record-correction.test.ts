@@ -56,7 +56,7 @@ const suite = usePgliteDb({
 
 beforeEach(async () => {
   ({ tenantId, tillId, nodeId, seriesId } = await seedTenant(suite.db));
-  rectSeriesId = await seedRectificativeSeries(suite.db, tenantId, nodeId);
+  rectSeriesId = await seedRectificativeSeries(suite.db, nodeId);
   // A supervisor and a manager (both hold `sale.rectify`), and a staff member (holds nothing).
   // Seeded on the fixture connection, like the record-void suite.
   supervisorId = await seedPerson("supervisor");
@@ -222,7 +222,7 @@ async function correct(
  * mirrors record-sale.test.ts's own scoped `countRows`. */
 async function countRows(table: string): Promise<number> {
   const result = await suite.db.execute<{ n: number }>(
-    sql`select count(*)::int as n from ${sql.raw(table)} where tenant_id = ${tenantId}`,
+    sql`select count(*)::int as n from ${sql.raw(table)}`,
   );
   return result.rows[0]!.n;
 }
@@ -292,7 +292,7 @@ describe("recordCorrection — series purpose guard (§5)", () => {
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId } = await sell(backend);
     const other = await seedTenant(suite.db, { tenantId });
-    const otherRect = await seedRectificativeSeries(suite.db, tenantId, other.nodeId, "R2");
+    const otherRect = await seedRectificativeSeries(suite.db, other.nodeId, "R2");
     await expect(correct(backend, saleId, { seriesId: otherRect })).rejects.toMatchObject({
       code: "sale.series_wrong_node",
       params: { seriesId: otherRect, expected: other.nodeId, actual: nodeId },

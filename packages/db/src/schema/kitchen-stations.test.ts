@@ -41,11 +41,9 @@ describe("kitchen_stations schema (columns, threshold CHECK, partial unique)", (
       { id: TENANT_B, country: "ES", taxId: "B11111111", legalName: "Fixture Tenant B" },
     ]);
     await suite.admin.execute(sql`
-      insert into locations (id, tenant_id, name, invoice_locales, operation_description)
-      values
-        (${LOCATION_A}, ${TENANT_A}, 'Loc A', array['es'], 'Hostelería'),
-        (${LOCATION_A2}, ${TENANT_A}, 'Loc A2', array['es'], 'Hostelería'),
-        (${LOCATION_B}, ${TENANT_B}, 'Loc B', array['es'], 'Hostelería')
+      insert into locations (id, name, invoice_locales, operation_description) values (${LOCATION_A}, 'Loc A', array['es'], 'Hostelería'),
+        (${LOCATION_A2}, 'Loc A2', array['es'], 'Hostelería'),
+        (${LOCATION_B}, 'Loc B', array['es'], 'Hostelería')
       on conflict (id) do nothing`);
   });
 
@@ -65,8 +63,7 @@ describe("kitchen_stations schema (columns, threshold CHECK, partial unique)", (
   ): Promise<string> {
     return asApp(tenant, async (tx) => {
       const r = await tx.execute<{ id: string }>(
-        sql`insert into kitchen_stations (tenant_id, location_id, name, is_default)
-            values (${tenant}, ${location}, ${name}, ${isDefault}) returning id`,
+        sql`insert into kitchen_stations (location_id, name, is_default) values (${location}, ${name}, ${isDefault}) returning id`,
       );
       return r.rows[0]!.id;
     });
@@ -138,8 +135,7 @@ describe("kitchen_stations schema (columns, threshold CHECK, partial unique)", (
     // to whatever the test above committed.
     const probeLocation = "aaaaaaaa-0000-4000-8000-000000000003";
     await suite.admin.execute(sql`
-      insert into locations (id, tenant_id, name, invoice_locales, operation_description)
-      values (${probeLocation}, ${TENANT_A}, 'Loc A3', array['es'], 'Hostelería')
+      insert into locations (id, name, invoice_locales, operation_description) values (${probeLocation}, 'Loc A3', array['es'], 'Hostelería')
       on conflict (id) do nothing`);
     await seedStation(TENANT_A, probeLocation, "Probe default", true);
     await rollBackAfter(suite.admin, TENANT_A, async (tx) => {
@@ -147,8 +143,7 @@ describe("kitchen_stations schema (columns, threshold CHECK, partial unique)", (
       await tx.execute(sql`set local role app_user`);
       // With the index gone, a second default at the same location goes through — no 23505.
       await tx.execute(
-        sql`insert into kitchen_stations (tenant_id, location_id, name, is_default)
-            values (${TENANT_A}, ${probeLocation}, 'Probe default two', true)`,
+        sql`insert into kitchen_stations (location_id, name, is_default) values (${probeLocation}, 'Probe default two', true)`,
       );
       const n = await tx
         .execute<{ n: number }>(

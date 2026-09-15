@@ -42,17 +42,11 @@ async function seedRegistro(db: Database, id: Identity, genTime: Date): Promise<
   seq += 1;
   const s = seq;
   const series = await db.execute<{ id: string }>(sql`
-    insert into invoice_series (tenant_id, node_id, code)
-    values (${id.tenantId}, ${id.nodeId}, ${"W" + String(s)})
+    insert into invoice_series (node_id, code) values (${id.nodeId}, ${"W" + String(s)})
     returning id
   `);
   const sale = await db.execute<{ id: string }>(sql`
-    insert into sales (
-      tenant_id, till_id, node_id, series_id, invoice_number,
-      issued_at, issued_offset_minutes, total, vat_breakdown,
-      locale, invoice_locales, fiscal_backend, fiscal_state
-    ) values (
-      ${id.tenantId}, ${id.tillId}, ${id.nodeId}, ${series.rows[0]!.id}, ${s},
+    insert into sales (till_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes, total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state) values (${id.tillId}, ${id.nodeId}, ${series.rows[0]!.id}, ${s},
       '2026-07-20T19:20:30+01:00', 60, '0.00', '[]'::jsonb,
       'es', array['es'], 'verifactu', 'recorded'
     ) returning id
@@ -64,8 +58,7 @@ async function seedRegistro(db: Database, id: Identity, genTime: Date): Promise<
       id_emisor_factura, num_serie_factura, fecha_expedicion_factura, nombre_razon_emisor,
       primer_registro, sistema_informatico,
       fecha_hora_huso_gen_registro, offset_minutos, tipo_huella, huella
-    ) values (
-      ${id.tenantId}, ${id.tillId}, ${id.nodeId}, ${id.sifId}, ${sale.rows[0]!.id}, ${s}, 'alta',
+    ) values (${id.tenantId}, ${id.tillId}, ${id.nodeId}, ${id.sifId}, ${sale.rows[0]!.id}, ${s}, 'alta',
       ${id.nif}, ${"W" + String(s) + "/1"}, '2026-07-20', 'Waitron SL',
       true, '{}'::jsonb,
       ${genTime.toISOString()}, 60, '01', ${huella}

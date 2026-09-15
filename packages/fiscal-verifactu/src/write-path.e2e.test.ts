@@ -524,8 +524,7 @@ describe("till_id is inert to the huella and the chain (SP-A.2 §16.4(b))", () =
       sql`select location_id from tills where id = ${tillId}`,
     );
     const { rows: tillYRows } = await pg.db.execute<{ id: string }>(
-      sql`insert into tills (tenant_id, location_id, name)
-          values (${tenantId}, ${locRows[0]!.location_id}, 'Caja 2') returning id`,
+      sql`insert into tills (location_id, name) values (${locRows[0]!.location_id}, 'Caja 2') returning id`,
     );
     const tillX = tillId;
     const tillY = brandTillId(tillYRows[0]!.id);

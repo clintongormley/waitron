@@ -168,7 +168,7 @@ describe("initiate -> webhook -> settle -> recordSale -> associate (Mode 3, end 
 
     // Exactly one sale exists for this tenant's till/series (invoice_number 1, never a second).
     const sales = await pg.db.execute<{ count: string }>(
-      sql`select count(*)::text as count from sales where tenant_id = ${s.tenantId}`,
+      sql`select count(*)::text as count from sales`,
     );
     expect(sales.rows[0].count).toBe("1");
   });
@@ -198,7 +198,7 @@ describe("initiate -> webhook -> settle -> recordSale -> associate (Mode 3, end 
     expect(row?.state).toBe("failed");
     expect(row?.saleId).toBeNull();
     const sales = await pg.db.execute<{ count: string }>(
-      sql`select count(*)::text as count from sales where tenant_id = ${s.tenantId}`,
+      sql`select count(*)::text as count from sales`,
     );
     expect(sales.rows[0].count).toBe("0");
   });

@@ -145,12 +145,10 @@ describe("currentSif resolves per node", () => {
   async function addSiblingNode(seed: SeededTill): Promise<NodeId> {
     return suite.admin.transaction(async (tx) => {
       const loc = await tx.execute<{ id: string }>(sql`
-        insert into locations (tenant_id, name, invoice_locales, operation_description)
-        values (${seed.tenantId}, 'Sala sib', array['es'], 'Venta en establecimiento') returning id
+        insert into locations (name, invoice_locales, operation_description) values ('Sala sib', array['es'], 'Venta en establecimiento') returning id
       `);
       const nodeRow = await tx.execute<{ id: string }>(sql`
-        insert into nodes (tenant_id, location_id, name)
-        values (${seed.tenantId}, ${loc.rows[0]!.id}, 'Node sib') returning id
+        insert into nodes (location_id, name) values (${loc.rows[0]!.id}, 'Node sib') returning id
       `);
       const sibling = brandNodeId(nodeRow.rows[0]!.id);
       // Register a SIF for the sibling under the same NIF as the fixture (one obligado, two nodes)

@@ -639,7 +639,7 @@ describe("catalogue operations", () => {
       await updateProduct(tx, ham.id, { unitId: eachUnitId });
       const stored = await tx.execute<{ pricing_unit: string }>(sql`
         select pricing_unit from products
-        where tenant_id = ${tenantId} and id = ${ham.id}`);
+        where id = ${ham.id}`);
       expect(stored.rows).toEqual([{ pricing_unit: "each" }]);
       const [updated] = await listProducts(tx, catalogue.id);
       expect(updated).toMatchObject({
@@ -918,7 +918,6 @@ describe("catalogue operations", () => {
       const [extras] = await tx
         .insert(optionGroups)
         .values({
-          tenantId,
           name: { en: "Extras" },
           minSelect: 0,
           maxSelect: 2,
@@ -929,7 +928,6 @@ describe("catalogue operations", () => {
         .returning({ id: optionGroups.id });
       await tx.insert(optionGroupItems).values([
         {
-          tenantId,
           groupId: extras!.id,
           name: { en: "Bacon" },
           priceDelta: "0.50",
@@ -938,7 +936,6 @@ describe("catalogue operations", () => {
           active: true,
         },
         {
-          tenantId,
           groupId: extras!.id,
           name: { en: "Lettuce" },
           priceDelta: "0",
@@ -947,7 +944,6 @@ describe("catalogue operations", () => {
           active: true,
         },
         {
-          tenantId,
           groupId: extras!.id,
           name: { en: "Gold leaf" },
           priceDelta: "5.00",
@@ -961,14 +957,12 @@ describe("catalogue operations", () => {
       const [retired] = await tx
         .insert(optionGroups)
         .values({
-          tenantId,
           name: { en: "Retired" },
           sort: 1,
           active: false,
         })
         .returning({ id: optionGroups.id });
       await tx.insert(optionGroupItems).values({
-        tenantId,
         groupId: retired!.id,
         name: { en: "Old" },
         priceDelta: "1.00",
@@ -984,14 +978,12 @@ describe("catalogue operations", () => {
       const [sauces] = await tx
         .insert(optionGroups)
         .values({
-          tenantId,
           name: { en: "Sauces" },
           sort: 0,
           active: true,
         })
         .returning({ id: optionGroups.id });
       await tx.insert(optionGroupItems).values({
-        tenantId,
         groupId: sauces!.id,
         name: { en: "Discontinued ketchup" },
         priceDelta: "0",
@@ -1005,9 +997,9 @@ describe("catalogue operations", () => {
       // expected order below can only be produced by `product_option_groups.sort`. Retired (2) is
       // inactive and excluded regardless.
       await tx.insert(productOptionGroups).values([
-        { tenantId, productId: burger.id, groupId: extras!.id, sort: 0 },
-        { tenantId, productId: burger.id, groupId: retired!.id, sort: 2 },
-        { tenantId, productId: burger.id, groupId: sauces!.id, sort: 1 },
+        { productId: burger.id, groupId: extras!.id, sort: 0 },
+        { productId: burger.id, groupId: retired!.id, sort: 2 },
+        { productId: burger.id, groupId: sauces!.id, sort: 1 },
       ]);
 
       await assignCatalogueToLocation(tx, locationId, cat.id);

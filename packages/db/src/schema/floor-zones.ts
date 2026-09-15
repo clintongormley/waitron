@@ -8,7 +8,7 @@ import {
   unique,
   uuid,
 } from "drizzle-orm/pg-core";
-import { locations, tenants } from "./tenants.js";
+import { locations } from "./tenants.js";
 
 /**
  * A venue-configured floor-plan ZONE (FP-1) — "Comedor", "Terraza", "Barra". A grouping the live
@@ -17,22 +17,16 @@ import { locations, tenants } from "./tenants.js";
  * re-typed onto every table. `dining_tables.zone_id` points at one of these (a single nullable
  * composite FK, added in the paired --custom migration).
  *
- * Location-scoped, unlike TS-2's tenant-wide `table_service_statuses`: a floor plan belongs to one
- * venue, so the composite (tenant_id, location_id) → locations(tenant_id, id) FK ties a zone to its
- * venue, and `floor_zones_name_key` makes a name unique within that venue rather than tenant-wide.
+ * Location-scoped, unlike the venue-wide `table_service_statuses`: a floor plan belongs to one
+ * venue, so the composite (location_id) → locations(id) FK ties a zone to its
+ * venue, and `floor_zones_name_key` makes a name unique within that venue.
  */
 export const floorZones = pgTable(
   "floor_zones",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    tenantId: uuid("tenant_id")
-      .notNull()
-      // Two-arg `.references()` so v8 tracks this thunk as its own never-invoked function (drizzle-kit
-      // resolves it in a separate CLI process), the reason orders.ts / layouts.ts use this form.
-      /* v8 ignore next */
-      .references(() => tenants.id, { onDelete: "restrict" }),
-    // Bare column: the FK is the tenant-consistent COMPOSITE (tenant_id, location_id) →
-    // locations(tenant_id, id) declared below (mirroring dining_tables_location_fk).
+    // Bare column: the FK is the (location_id) →
+    // locations(id) declared below (mirroring dining_tables_location_fk).
     locationId: uuid("location_id").notNull(),
     // The human label the floor plan groups tables under ("Comedor", "Terraza"). Unique within a venue.
     name: text("name").notNull(),
@@ -44,15 +38,11 @@ export const floorZones = pgTable(
       .defaultNow(),
   },
   (t) => [
-    // Composite (tenant_id, id) UNIQUE — the target for dining_tables' tenant-consistent
-    // (tenant_id, zone_id) FK (hand-written custom migration), the same role
-    // table_service_statuses_tenant_id_key plays for dining_tables_status_fk.
-    unique("floor_zones_tenant_id_key").on(t.tenantId, t.id),
     // No two zones share a name within a venue.
-    unique("floor_zones_name_key").on(t.tenantId, t.locationId, t.name),
+    unique("floor_zones_name_key").on(t.locationId, t.name),
     foreignKey({
-      columns: [t.tenantId, t.locationId],
-      foreignColumns: [locations.tenantId, locations.id],
+      columns: [t.locationId],
+      foreignColumns: [locations.id],
       name: "floor_zones_location_fk",
     }),
   ],

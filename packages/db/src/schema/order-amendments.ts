@@ -44,7 +44,6 @@ export const orderAmendments = pgTable(
   "order_amendments",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    tenantId: uuid("tenant_id").notNull(),
     workingOrderId: uuid("working_order_id").notNull(),
     // 1-based position within THIS order's amendment chain; ours and contiguous, hashed.
     sequenceNo: integer("sequence_no").notNull(),
@@ -72,24 +71,24 @@ export const orderAmendments = pgTable(
   },
   (t) => [
     foreignKey({
-      columns: [t.tenantId, t.workingOrderId],
-      foreignColumns: [workingOrders.tenantId, workingOrders.id],
+      columns: [t.workingOrderId],
+      foreignColumns: [workingOrders.id],
       name: "order_amendments_order_fk",
     }).onDelete("restrict"),
     foreignKey({
-      columns: [t.tenantId, t.capturedByTillId],
-      foreignColumns: [tills.tenantId, tills.id],
+      columns: [t.capturedByTillId],
+      foreignColumns: [tills.id],
       name: "order_amendments_till_fk",
     }).onDelete("restrict"),
     foreignKey({
-      columns: [t.tenantId, t.capturedByNodeId],
-      foreignColumns: [nodes.tenantId, nodes.id],
+      columns: [t.capturedByNodeId],
+      foreignColumns: [nodes.id],
       name: "order_amendments_node_fk",
     }).onDelete("restrict"),
     // THE backstop against two writers claiming one chain position (mirrors
     // `time_entries_chain_position_uq` / `registros_tenant_node_secuencia_uq`).
-    unique("order_amendments_chain_position_key").on(t.tenantId, t.workingOrderId, t.sequenceNo),
-    index("order_amendments_order_idx").on(t.tenantId, t.workingOrderId),
+    unique("order_amendments_chain_position_key").on(t.workingOrderId, t.sequenceNo),
+    index("order_amendments_order_idx").on(t.workingOrderId),
     check("order_amendments_sequence_no_ck", sql`${t.sequenceNo} > 0`),
     check("order_amendments_entry_hash_ck", sql`${t.entryHash} ~ '^[0-9A-F]{64}$'`),
     check("order_amendments_event_offset_ck", sql`${t.eventOffsetMinutes} between -840 and 840`),

@@ -82,8 +82,7 @@ function rawForkInsertAt(position: number): Promise<unknown> {
     insert into time_entries (
       person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
       recorded_by_person_id, recorded_at, entry_hash, prev_entry_hash, sequence_no, is_first_entry
-    ) values (
-      ${personId}, ${locationId}, ${nodeId}, 'in', '2026-01-05T20:00:00Z', 0,
+    ) values (${personId}, ${locationId}, ${nodeId}, 'in', '2026-01-05T20:00:00Z', 0,
       ${personId}, '2026-01-05T20:00:00Z', ${"B".repeat(64)}, ${"A".repeat(64)}, ${position}, false)`);
 }
 

@@ -20,8 +20,7 @@ const suite = useTemplateDb({ template: "core" });
 async function setup(): Promise<PrintConfig> {
   const tenantId = await seedTenant(suite.admin);
   const { rows } = await suite.admin.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Bar', array['es-ES'], 'Sale on premises') returning id`);
+    insert into locations (name, invoice_locales, operation_description) values ('Bar', array['es-ES'], 'Sale on premises') returning id`);
   return { tenantId, locationId: rows[0]!.id };
 }
 
@@ -37,8 +36,7 @@ function asApp<T>(db: Database, cfg: PrintConfig, fn: (tx: Transaction) => Promi
 
 async function seedAgent(cfg: PrintConfig, name: string): Promise<string> {
   const { rows } = await suite.admin.execute<{ id: string }>(sql`
-    insert into print_agents (tenant_id, location_id, name, token_hash)
-    values (${cfg.tenantId}, ${cfg.locationId}, ${name}, 'scrypt$fixture') returning id`);
+    insert into print_agents (location_id, name, token_hash) values (${cfg.locationId}, ${name}, 'scrypt$fixture') returning id`);
   return rows[0]!.id;
 }
 
@@ -74,8 +72,7 @@ describe("claim eligibility (real Postgres) — derived from venue + visible key
     // A second venue in the same tenant; the printer lives in `cfg.locationId`, the agent reports the
     // other one — the venue conjunct (`p.location_id = ctx.locationId`) must exclude it.
     const { rows } = await suite.admin.execute<{ id: string }>(sql`
-      insert into locations (tenant_id, name, invoice_locales, operation_description)
-      values (${cfg.tenantId}, 'Terrace', array['es-ES'], 'Sale on premises') returning id`);
+      insert into locations (name, invoice_locales, operation_description) values ('Terrace', array['es-ES'], 'Sale on premises') returning id`);
     const otherLocationId = rows[0]!.id;
     await asApp(suite.admin, cfg, async (tx) => {
       const p = await createPrinter(tx, cfg, {

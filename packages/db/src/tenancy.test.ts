@@ -43,7 +43,6 @@ describe("invoice_locales", () => {
 
   const insertLocales = async (invoiceLocales: string[]): Promise<unknown> => {
     return db.insert(locations).values({
-      tenantId,
       name: `locales-${invoiceLocales.join("-") || "empty"}`,
       invoiceLocales,
       operationDescription: "Servicios de restauración",

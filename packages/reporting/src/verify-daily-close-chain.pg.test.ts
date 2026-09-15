@@ -115,9 +115,7 @@ describe("verifyDailyCloseChain against a tampered committed chain (real Postgre
     expect(await verify()).toEqual({ ok: true }); // control: head present, chain intact
 
     await bypassingImmutability((tx) =>
-      tx.execute(
-        sql`delete from daily_close_chain where tenant_id = ${venue.tenantId} and node_id = ${venue.nodeId}`,
-      ),
+      tx.execute(sql`delete from daily_close_chain where node_id = ${venue.nodeId}`),
     );
 
     // `brokenAt` is the surviving tip's sequence_no.

@@ -252,7 +252,6 @@ export async function recordSubstitution(
   const [inserted] = await tx
     .insert(sales)
     .values({
-      tenantId: input.tenantId,
       tillId: input.tillId,
       nodeId: input.nodeId,
       seriesId: input.seriesId,
@@ -293,7 +292,7 @@ export async function recordSubstitution(
     });
   }
 
-  await tx.insert(saleLines).values(saleLineRows(input.tenantId, saleId, input.lines));
+  await tx.insert(saleLines).values(saleLineRows(saleId, input.lines));
 
   // One `sale_substitutions` row per ticket — the N:1 fan-out. Inserted one at a time so a
   // `unique(tenant_id, substituted_sale_id)` violation NAMES the exact ticket that collides. That
@@ -304,7 +303,6 @@ export async function recordSubstitution(
   for (const substitutedSaleId of input.substitutedSaleIds) {
     try {
       await tx.insert(saleSubstitutions).values({
-        tenantId: input.tenantId,
         substitutionSaleId: saleId,
         substitutedSaleId,
       });

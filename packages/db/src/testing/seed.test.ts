@@ -69,8 +69,7 @@ describe("seedNode", () => {
     // seedTenant and seedNode exist).
     const tenant = await seedTenant(db);
     const locResult = await db.execute<{ id: string }>(sql`
-      insert into locations (tenant_id, name, invoice_locales, operation_description)
-      values (${tenant}, 'Test location', ARRAY['es']::text[], 'Restaurant') returning id`);
+      insert into locations (name, invoice_locales, operation_description) values ('Test location', ARRAY['es']::text[], 'Restaurant') returning id`);
     const location = brandLocationId(locResult.rows[0]!.id);
     const node = await seedNode(db, tenant, location);
     const result = await db.execute<{ n: number }>(
@@ -91,14 +90,13 @@ describe("seedKitchenStation", () => {
   async function seedVenue() {
     const tenant = await seedTenant(db);
     const locResult = await db.execute<{ id: string }>(sql`
-      insert into locations (tenant_id, name, invoice_locales, operation_description)
-      values (${tenant}, 'Test location', ARRAY['es']::text[], 'Restaurant') returning id`);
+      insert into locations (name, invoice_locales, operation_description) values ('Test location', ARRAY['es']::text[], 'Restaurant') returning id`);
     return { tenant, location: brandLocationId(locResult.rows[0]!.id) };
   }
 
   it("defaults to a DEFAULT station named 'Cocina' and returns its id", async () => {
-    const { tenant, location } = await seedVenue();
-    const id = await seedKitchenStation(db, { tenantId: tenant, locationId: location });
+    const { location } = await seedVenue();
+    const id = await seedKitchenStation(db, { locationId: location });
     const result = await db.execute<{ name: string; is_default: boolean }>(
       sql`select name, is_default from kitchen_stations where id = ${id} and location_id = ${location}`,
     );
@@ -106,9 +104,8 @@ describe("seedKitchenStation", () => {
   });
 
   it("honours an overridden name and is_default", async () => {
-    const { tenant, location } = await seedVenue();
+    const { location } = await seedVenue();
     const id = await seedKitchenStation(db, {
-      tenantId: tenant,
       locationId: location,
       name: "Barra",
       isDefault: false,

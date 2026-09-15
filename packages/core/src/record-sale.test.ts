@@ -170,19 +170,13 @@ async function run(backend: FiscalBackend, overrides: Partial<RecordSaleInput> =
 }
 
 /**
- * **Deviation from the brief.** The brief's `countRows` counted every row in the whole table,
- * unscoped. That silently assumes either a fresh database per test or a truncation between
- * them — neither holds here: this file's `beforeAll` boots ONE PGlite instance for the whole
- * suite (booting a fresh WASM PostgreSQL per test would be the far slower alternative), and
- * `beforeEach` seeds a FRESH tenant per test rather than truncating. Left unscoped, a later
- * test's count includes every row every earlier test in the file committed — observed live in
- * this task's own red phase as counts like 11, 12, 15 where 1 or 2 were expected. Scoped to the
- * CURRENT test's own tenant instead, which is what "this test wrote exactly N rows" actually
- * means once the database is shared across the file.
+ * Counts every row in `table`. The suite helper truncates between tests (`resetPerTest`, the default
+ * in `@waitron/db/testing/lifecycle.js`), so a count here is what THIS test wrote — it was once
+ * scoped by tenant instead, back when the file shared one database across every test.
  */
 async function countRows(table: string): Promise<number> {
   const result = await suite.db.execute<{ n: number }>(
-    sql`select count(*)::int as n from ${sql.raw(table)} where tenant_id = ${tenantId}`,
+    sql`select count(*)::int as n from ${sql.raw(table)}`,
   );
   return result.rows[0]!.n;
 }
@@ -812,7 +806,6 @@ describe("recordSale — numbering", () => {
       withTransaction(suite.db, async (tx) => {
         await asAppUser(tx);
         await tx.insert(sales).values({
-          tenantId,
           tillId,
           nodeId,
           seriesId,
@@ -876,7 +869,7 @@ describe("recordSale — series validation", () => {
     // The other direction of the §5 purpose guard. A corrective series (`purpose='rectificative'`)
     // is reserved for corrective invoices (RD 1619/2012 art. 6.1.a); an ordinary sale drawing from it
     // would consume a corrective number and break the mandated separation.
-    const rectSeriesId = await seedRectificativeSeries(suite.db, tenantId, nodeId);
+    const rectSeriesId = await seedRectificativeSeries(suite.db, nodeId);
     await expect(
       run(new FakeFiscalBackend(suite.db), { seriesId: rectSeriesId }),
     ).rejects.toMatchObject({
@@ -915,8 +908,7 @@ describe("recordSale — working order linkage", () => {
   // seed fixtures no longer mint one.
   async function seedOpenWorkingOrder(): Promise<WorkingOrderId> {
     const { rows } = await suite.db.execute<{ id: string }>(
-      sql`insert into working_orders (tenant_id, till_id, order_number)
-          values (${tenantId}, ${tillId}, 1) returning id`,
+      sql`insert into working_orders (till_id, order_number) values (${tillId}, 1) returning id`,
     );
     return brandWorkingOrderId(rows[0]!.id);
   }

@@ -51,17 +51,15 @@ describe("liveSeriesBases", () => {
       const registered = await registerSif(tx, identity);
       expect(registered.numeroInstalacion).toBe(2);
       await tx.execute(sql`
-        insert into invoice_series (tenant_id, node_id, code, purpose) values
-          (${node.tenantId}, ${node.nodeId}, 'FA', 'standard'),
-          (${node.tenantId}, ${node.nodeId}, 'FA-2', 'standard')
+        insert into invoice_series (node_id, code, purpose) values (${node.nodeId}, 'FA', 'standard'),
+          ( ${node.nodeId}, 'FA-2', 'standard')
       `);
       expect(await liveSeriesBases(tx, node)).toEqual([{ code: "FA", purpose: "standard" }]);
 
       await tx.execute(sql`
-        insert into invoice_series (tenant_id, node_id, code, purpose) values
-          (${node.tenantId}, ${node.nodeId}, 'RE', 'rectificative'),
-          (${node.tenantId}, ${node.nodeId}, 'FA-2-2', 'rectificative'),
-          (${node.tenantId}, ${node.nodeId}, 'FA-2-2-2', 'rectificative')
+        insert into invoice_series (node_id, code, purpose) values (${node.nodeId}, 'RE', 'rectificative'),
+          ( ${node.nodeId}, 'FA-2-2', 'rectificative'),
+          ( ${node.nodeId}, 'FA-2-2-2', 'rectificative')
       `);
       expect(await liveSeriesBases(tx, node)).toEqual([
         { code: "FA", purpose: "standard" },
@@ -82,9 +80,8 @@ describe("liveSeriesBases across purposes", () => {
       const sif = await registerSif(tx, { ...node, nif: "89890001K", idSistemaInformatico: "WT" });
       expect(sif.numeroInstalacion).toBe(1);
       await tx.execute(sql`
-          insert into invoice_series (tenant_id, node_id, code, purpose) values
-            (${node.tenantId}, ${node.nodeId}, 'FA', 'standard'),
-            (${node.tenantId}, ${node.nodeId}, 'FA-1', 'rectificative')
+          insert into invoice_series (node_id, code, purpose) values (${node.nodeId}, 'FA', 'standard'),
+            ( ${node.nodeId}, 'FA-1', 'rectificative')
         `);
       expect(await liveSeriesBases(tx, node)).toEqual([
         { code: "FA", purpose: "standard" },

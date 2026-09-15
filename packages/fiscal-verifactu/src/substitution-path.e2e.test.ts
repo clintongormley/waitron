@@ -43,8 +43,7 @@ beforeEach(async () => {
   // `correction-path.e2e.test.ts` documents.
   till = await seedTill(suite.admin, "A");
   const series = await suite.admin.execute<{ id: string }>(sql`
-    insert into invoice_series (tenant_id, node_id, code, purpose, next_number)
-    values (${till.tenantId}, ${till.nodeId}, 'F3', 'standard', 1)
+    insert into invoice_series (node_id, code, purpose, next_number) values (${till.nodeId}, 'F3', 'standard', 1)
     returning id
   `);
   substitutionSeriesId = series.rows[0]!.id;
@@ -119,11 +118,7 @@ async function recordTicket(invoiceNumber: number): Promise<string> {
 /** Insert an F3 sale with counterparty columns as the fixture owner and return its id. */
 async function seedSubstitutionRow(invoiceNumber: number): Promise<string> {
   const { rows } = await suite.admin.execute<{ id: string }>(sql`
-    insert into sales (tenant_id, till_id, node_id, series_id, invoice_number, issued_at,
-                       issued_offset_minutes, total, vat_breakdown,
-                       counterparty_tax_id, counterparty_legal_name, counterparty_country_code,
-                       locale, invoice_locales, fiscal_backend, fiscal_state)
-    values (${till.tenantId}, ${till.tillId}, ${till.nodeId}, ${substitutionSeriesId}, ${invoiceNumber},
+    insert into sales (till_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes, total, vat_breakdown, counterparty_tax_id, counterparty_legal_name, counterparty_country_code, locale, invoice_locales, fiscal_backend, fiscal_state) values (${till.tillId}, ${till.nodeId}, ${substitutionSeriesId}, ${invoiceNumber},
             '2026-03-02T12:05:00+01:00', 60, '123.45', '[]'::jsonb,
             ${RECIPIENT.taxId}, ${RECIPIENT.legalName}, ${RECIPIENT.countryCode},
             'es', array['es'], 'verifactu', 'recorded')

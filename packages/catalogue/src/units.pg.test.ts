@@ -31,12 +31,13 @@ function app<T>(
 
 /** `id` is supplied only where a test needs the rows' physical and key order to be predictable. */
 async function product(tenantId: string, id: string | null = null): Promise<string> {
+  void tenantId;
   const menu = await suite.admin.execute<{ id: string }>(sql`
-    insert into catalogues (tenant_id, name) values (${tenantId}, 'Menu') returning id`);
+    insert into catalogues (name) values ('Menu') returning id`);
   return (
     await suite.admin.execute<{ id: string }>(sql`
-      insert into products (id, tenant_id, catalogue_id, name, pricing_unit, unit_price, vat_class)
-      values (coalesce(${id}::uuid, gen_random_uuid()), ${tenantId}, ${menu.rows[0]!.id}, 'Soup', 'each', 1, 'general')
+      insert into products (id, catalogue_id, name, pricing_unit, unit_price, vat_class)
+      values (coalesce(${id}::uuid, gen_random_uuid()), ${menu.rows[0]!.id}, 'Soup', 'each', 1, 'general')
       returning id`)
   ).rows[0]!.id;
 }

@@ -32,11 +32,11 @@ describe("translateWriteError", () => {
     expect(isAppError(thrown) && thrown.code).toBe("canvas.name_taken");
   });
 
-  // A 23505 on a DIFFERENT canvases constraint (the composite (tenant_id, id) key, or any
-  // added later) must NOT be mislabelled canvas.name_taken — it is re-thrown untouched. Proof-by-
-  // deletion: drop the constraint gate and this fails (the error becomes name_taken).
+  // A 23505 on a DIFFERENT canvases constraint (the primary key, or any added later) must NOT be
+  // mislabelled canvas.name_taken — it is re-thrown untouched. Proof-by-deletion: drop the
+  // constraint gate and this fails (the error becomes name_taken).
   it("re-throws a 23505 whose constraint is not the name key", () => {
-    const original = { cause: { code: "23505", constraint: "canvases_tenant_id_key" } };
+    const original = { cause: { code: "23505", constraint: "canvases_pkey" } };
     let thrown: unknown;
     try {
       translateWriteError(original);

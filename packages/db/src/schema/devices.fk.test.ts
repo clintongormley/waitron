@@ -29,24 +29,20 @@ describe("devices composite FKs (till / receipt_printer / device_profile)", () =
         (${TENANT_A}, 'ES', 'B00000000', 'Fixture Tenant A')
       on conflict (id) do nothing`);
     await admin.execute(sql`
-      insert into locations (id, tenant_id, name, invoice_locales, operation_description) values
-        (${LOCATION_A}, ${TENANT_A}, 'Loc A', array['es'], 'Hostelería')
+      insert into locations (id, name, invoice_locales, operation_description) values (${LOCATION_A}, 'Loc A', array['es'], 'Hostelería')
       on conflict (id) do nothing`);
     await admin.execute(sql`
-      insert into tills (id, tenant_id, location_id, name) values
-        (${TILL_A}, ${TENANT_A}, ${LOCATION_A}, 'Till A')
+      insert into tills (id, location_id, name) values (${TILL_A}, ${LOCATION_A}, 'Till A')
       on conflict (id) do nothing`);
     // cloud_poll printers: the transport CHECK (printers_transport_fields_ck) needs poll_id for that
     // transport and nothing else, so this is the seed that avoids an agent FK.
     await admin.execute(sql`
-      insert into printers (id, tenant_id, location_id, name, transport, poll_id) values
-        (${PRINTER_A}, ${TENANT_A}, ${LOCATION_A}, 'Printer A', 'cloud_poll', 'poll-a')
+      insert into printers (id, location_id, name, transport, poll_id) values (${PRINTER_A}, ${LOCATION_A}, 'Printer A', 'cloud_poll', 'poll-a')
       on conflict (id) do nothing`);
     // One `till`-form-factor device_profiles row — the (tenant_id, device_profile_id) composite-FK
     // target, and the form factor whose binding rule requires a register (a till).
     await admin.execute(sql`
-      insert into device_profiles (id, tenant_id, name, form_factor) values
-        (${PROFILE_A}, ${TENANT_A}, 'Profile A', 'till')
+      insert into device_profiles (id, name, form_factor) values (${PROFILE_A}, 'Profile A', 'till')
       on conflict (id) do nothing`);
   });
 
@@ -57,9 +53,7 @@ describe("devices composite FKs (till / receipt_printer / device_profile)", () =
 
   it("accepts same-tenant bindings; a NULL printer is unconstrained (MATCH SIMPLE) and the defaults apply", async () => {
     const bound = await admin.execute<{ id: string }>(
-      sql`insert into devices (tenant_id, location_id, device_profile_id, station_id, label, token_hash,
-                               till_id, receipt_printer_id, has_cash_drawer)
-          values (${TENANT_A}, ${LOCATION_A}, ${PROFILE_A}, ${null}, 'Bound till', ${TOKEN_HASH},
+      sql`insert into devices (location_id, device_profile_id, station_id, label, token_hash, till_id, receipt_printer_id, has_cash_drawer) values (${LOCATION_A}, ${PROFILE_A}, ${null}, 'Bound till', ${TOKEN_HASH},
                   ${TILL_A}, ${PRINTER_A}, true) returning id`,
     );
     expect(bound.rows).toHaveLength(1);
@@ -69,8 +63,7 @@ describe("devices composite FKs (till / receipt_printer / device_profile)", () =
     // false).
     const [row] = (
       await admin.execute<{ has_cash_drawer: boolean }>(
-        sql`insert into devices (tenant_id, location_id, device_profile_id, station_id, label, token_hash, till_id)
-            values (${TENANT_A}, ${LOCATION_A}, ${PROFILE_A}, ${null}, 'Unbound printer', ${TOKEN_HASH}, ${TILL_A})
+        sql`insert into devices (location_id, device_profile_id, station_id, label, token_hash, till_id) values (${LOCATION_A}, ${PROFILE_A}, ${null}, 'Unbound printer', ${TOKEN_HASH}, ${TILL_A})
             returning has_cash_drawer`,
       )
     ).rows;
@@ -88,8 +81,7 @@ describe("devices composite FKs (till / receipt_printer / device_profile)", () =
 
   it("accepts a same-tenant device_profile_id", async () => {
     const bound = await admin.execute<{ id: string }>(
-      sql`insert into devices (tenant_id, location_id, device_profile_id, station_id, label, token_hash, till_id)
-          values (${TENANT_A}, ${LOCATION_A}, ${PROFILE_A}, ${null}, 'Profile-bound', ${TOKEN_HASH}, ${TILL_A}) returning id`,
+      sql`insert into devices (location_id, device_profile_id, station_id, label, token_hash, till_id) values (${LOCATION_A}, ${PROFILE_A}, ${null}, 'Profile-bound', ${TOKEN_HASH}, ${TILL_A}) returning id`,
     );
     expect(bound.rows).toHaveLength(1);
   });
@@ -98,10 +90,9 @@ describe("devices composite FKs (till / receipt_printer / device_profile)", () =
     // Bind a device to a fresh profile, then try to hard-delete that profile: RESTRICT blocks it.
     const profileC = "11111111-0000-4000-8000-0000000000c4";
     await admin.execute(sql`
-      insert into device_profiles (id, tenant_id, name, form_factor) values (${profileC}, ${TENANT_A}, 'Profile C', 'till')`);
+      insert into device_profiles (id, name, form_factor) values (${profileC}, 'Profile C', 'till')`);
     await admin.execute(sql`
-      insert into devices (tenant_id, location_id, device_profile_id, station_id, label, token_hash, till_id)
-      values (${TENANT_A}, ${LOCATION_A}, ${profileC}, ${null}, 'Restrict device', ${TOKEN_HASH}, ${TILL_A})`);
+      insert into devices (location_id, device_profile_id, station_id, label, token_hash, till_id) values (${LOCATION_A}, ${profileC}, ${null}, 'Restrict device', ${TOKEN_HASH}, ${TILL_A})`);
     const e = await captureError(() =>
       admin.execute(sql`delete from device_profiles where id = ${profileC}`),
     );

@@ -17,12 +17,11 @@ import type { PersonRoleValue } from "../src/permissions.js";
 
 /** Seed a location → till for `tenantId`. Returns the till id a session references. */
 export async function seedTill(db: Database, tenantId: string): Promise<string> {
+  void tenantId;
   const location = await db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Main', array['en'], 'Sale on premises') returning id`);
+    insert into locations (name, invoice_locales, operation_description) values ('Main', array['en'], 'Sale on premises') returning id`);
   const till = await db.execute<{ id: string }>(sql`
-    insert into tills (tenant_id, location_id, name)
-    values (${tenantId}, ${location.rows[0]!.id}, 'Till 1') returning id`);
+    insert into tills (location_id, name) values (${location.rows[0]!.id}, 'Till 1') returning id`);
   return till.rows[0]!.id;
 }
 

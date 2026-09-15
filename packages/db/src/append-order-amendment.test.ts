@@ -76,22 +76,20 @@ describe("order_amendments append helper", () => {
     await admin.insert(locations).values([
       {
         id: LOCATION_A,
-        tenantId: TENANT_A,
         name: "Fixture Location A",
         invoiceLocales: ["es"],
         operationDescription: "Hostelería",
       },
       {
         id: LOCATION_B,
-        tenantId: TENANT_B,
         name: "Fixture Location B",
         invoiceLocales: ["es"],
         operationDescription: "Hostelería",
       },
     ]);
     await admin.insert(tills).values([
-      { id: TILL_A1, tenantId: TENANT_A, locationId: LOCATION_A, name: "A1" },
-      { id: TILL_B1, tenantId: TENANT_B, locationId: LOCATION_B, name: "B1" },
+      { id: TILL_A1, locationId: LOCATION_A, name: "A1" },
+      { id: TILL_B1, locationId: LOCATION_B, name: "B1" },
     ]);
     nodeA = await seedNode(admin, brandTenantId(TENANT_A), brandLocationId(LOCATION_A));
     nodeB = await seedNode(admin, brandTenantId(TENANT_B), brandLocationId(LOCATION_B));
@@ -99,11 +97,10 @@ describe("order_amendments append helper", () => {
 
   /** Seeds one fresh open working order as the owner and returns its id. A fresh chain per test so
    * sequence numbers are predictable and one test's rows never interleave with another's. */
-  async function openOrder(tenant: string, till: string, node: string): Promise<string> {
+  async function openOrder(till: string, node: string): Promise<string> {
     orderNumberSeq += 1;
     const result = await suite.admin.execute<{ id: string }>(
-      sql`insert into working_orders (tenant_id, till_id, node_id, order_number, status, opened_at)
-          values (${tenant}, ${till}, ${node}, ${orderNumberSeq}, 'open', ${AT}) returning id`,
+      sql`insert into working_orders (till_id, node_id, order_number, status, opened_at) values (${till}, ${node}, ${orderNumberSeq}, 'open', ${AT}) returning id`,
     );
     return result.rows[0]!.id;
   }
@@ -118,7 +115,6 @@ describe("order_amendments append helper", () => {
   /** Tenant A's genesis `order_placed` input for an order. Reason null (a placement has no contest). */
   function genesisA(order: string): AppendAmendmentInput {
     return {
-      tenantId: TENANT_A,
       workingOrderId: order,
       kind: "order_placed",
       actorId: OPERATOR_A,
@@ -175,12 +171,11 @@ describe("order_amendments append helper", () => {
   }
 
   it("appends a hashed per-order sequence, genesis first then linked", async () => {
-    const order = await openOrder(TENANT_A, TILL_A1, nodeA);
+    const order = await openOrder(TILL_A1, nodeA);
     const first = await asApp((tx) => appendOrderAmendment(tx, genesisA(order)));
     expect(first.sequenceNo).toBe(1);
     const second = await asApp((tx) =>
       appendOrderAmendment(tx, {
-        tenantId: TENANT_A,
         workingOrderId: order,
         kind: "order_cancelled",
         actorId: OPERATOR_A,
@@ -216,7 +211,7 @@ describe("order_amendments append helper", () => {
     // has seen fire is a comment, not a backstop. Grant the privilege inside a transaction that rolls
     // back and watch reject_mutation catch it anyway. The trigger fires for every actor, the owner
     // included, so the granted app_user is stopped by the second layer alone.
-    const order = await openOrder(TENANT_A, TILL_A1, nodeA);
+    const order = await openOrder(TILL_A1, nodeA);
     await asApp((tx) => appendOrderAmendment(tx, genesisA(order)));
     // UPDATE and DELETE each in their OWN rolled-back transaction: the first WT001 aborts its
     // transaction (a later statement in it would return 25P02, in_failed_sql_transaction, not the
@@ -243,11 +238,10 @@ describe("order_amendments append helper", () => {
   });
 
   it("the stored hash commits the reason, actor and capturing node — a tamper of any breaks verification", async () => {
-    const order = await openOrder(TENANT_A, TILL_A1, nodeA);
+    const order = await openOrder(TILL_A1, nodeA);
     await asApp((tx) => appendOrderAmendment(tx, genesisA(order)));
     await asApp((tx) =>
       appendOrderAmendment(tx, {
-        tenantId: TENANT_A,
         workingOrderId: order,
         kind: "order_cancelled",
         actorId: OPERATOR_A,
@@ -296,7 +290,7 @@ describe("order_amendments append helper", () => {
     // (The FK from order_amendments to working_orders takes only a SHARED key-share lock on the
     // parent, which does NOT serialise the writers — the exclusive FOR UPDATE is what does.)
     const WRITERS = 10;
-    const order = await openOrder(TENANT_A, TILL_A1, nodeA);
+    const order = await openOrder(TILL_A1, nodeA);
     const conns = await Promise.all(Array.from({ length: WRITERS }, () => suite.pg.connect()));
     try {
       // A distinct instant per writer, so a lost race would also show as a wrong hash, not only a
@@ -305,7 +299,6 @@ describe("order_amendments append helper", () => {
         conns.map((db, i) =>
           db.transaction((tx) =>
             appendOrderAmendment(tx, {
-              tenantId: TENANT_A,
               workingOrderId: order,
               kind: i === 0 ? "order_placed" : "order_cancelled",
               actorId: OPERATOR_A,

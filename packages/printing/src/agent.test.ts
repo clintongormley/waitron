@@ -25,8 +25,7 @@ async function setup(): Promise<PrintAgentConfig> {
   const admin = suite.admin;
   const tenantId = await seedTenant(admin);
   const loc = await admin.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Bar', array[${LOCALE}], 'Sale on premises') returning id`);
+    insert into locations (name, invoice_locales, operation_description) values ('Bar', array[${LOCALE}], 'Sale on premises') returning id`);
   return { tenantId, locationId: loc.rows[0]!.id };
 }
 
@@ -62,8 +61,7 @@ describe("authenticateAgent", () => {
     const secret = randomBytes(32).toString("base64url");
     const [{ id }] = (
       await suite.admin.execute<{ id: string }>(sql`
-        insert into print_agents (tenant_id, location_id, name, token_hash, active)
-        values (${cfg.tenantId}, ${cfg.locationId}, 'Auth agent', ${hashSecret(secret)}, true)
+        insert into print_agents (location_id, name, token_hash, active) values (${cfg.locationId}, 'Auth agent', ${hashSecret(secret)}, true)
         returning id`)
     ).rows;
     return { cfg, agentId: id, token: `${id}.${secret}` };

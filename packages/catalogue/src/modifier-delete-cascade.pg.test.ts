@@ -99,7 +99,7 @@ it("cascades an option_groups delete through the published menu link rows", asyn
   // threw SQLSTATE 23001 (foreign-key RESTRICT violation), watched red on 2026-09-14. That red run
   // is the control — it proves the delete reaches the constraint rather than a no-op.
   await app(suite.admin, tenantId, (tx) =>
-    tx.execute(sql`delete from option_groups where tenant_id = ${tenantId} and id = ${groupId}`),
+    tx.execute(sql`delete from option_groups where id = ${groupId}`),
   );
 
   const groupsAfter = await suite.admin

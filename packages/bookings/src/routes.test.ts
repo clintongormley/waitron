@@ -49,12 +49,10 @@ async function setupVenue(): Promise<Venue> {
   const db: Database = suite.admin;
   const tenantId = await seedTenant(db);
   const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Sala principal', array['es-ES'], 'Venta en establecimiento') returning id`);
+    insert into locations (name, invoice_locales, operation_description) values ('Sala principal', array['es-ES'], 'Venta en establecimiento') returning id`);
   const locationId = loc.rows[0]!.id;
   const till = await db.execute<{ id: string }>(sql`
-    insert into tills (tenant_id, location_id, name)
-    values (${tenantId}, ${locationId}, 'Caja 1') returning id`);
+    insert into tills (location_id, name) values (${locationId}, 'Caja 1') returning id`);
   const nodeId = await seedNode(db, tenantId, brandLocationId(locationId));
 
   const { managerSid, staffSid } = await withTransaction(db, async (tx) => {
@@ -98,8 +96,7 @@ async function seedTable(cfg: ModuleRouteContext["cfg"], label = "12"): Promise<
   return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const row = await tx.execute<{ id: string }>(sql`
-      insert into dining_tables (tenant_id, location_id, label, active)
-      values (${cfg.tenantId}, ${cfg.locationId}, ${label}, true) returning id`);
+      insert into dining_tables (location_id, label, active) values (${cfg.locationId}, ${label}, true) returning id`);
     return row.rows[0]!.id;
   });
 }

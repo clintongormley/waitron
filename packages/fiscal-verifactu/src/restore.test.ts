@@ -29,9 +29,8 @@ async function seedLiveNode(): Promise<SifRegistration> {
     registerSif(tx, { ...SIF, tenantId: TENANT_A.id, nodeId: TENANT_A.nodeId }),
   );
   await db.execute(sql`
-    insert into invoice_series (tenant_id, node_id, code, purpose, next_number) values
-      (${TENANT_A.id}, ${TENANT_A.nodeId}, 'FA', 'standard', 5),
-      (${TENANT_A.id}, ${TENANT_A.nodeId}, 'RE', 'rectificative', 1)
+    insert into invoice_series (node_id, code, purpose, next_number) values (${TENANT_A.nodeId}, 'FA', 'standard', 5),
+      ( ${TENANT_A.nodeId}, 'RE', 'rectificative', 1)
   `);
   return sif;
 }
@@ -166,7 +165,7 @@ describe("restoreFiscal", () => {
 
   it("does nothing for a node with no live SIF: no mint, no series", async () => {
     await db.execute(sql`
-      insert into invoice_series (tenant_id, node_id, code) values (${TENANT_A.id}, ${TENANT_A.nodeId}, 'FA')
+      insert into invoice_series (node_id, code) values (${TENANT_A.nodeId}, 'FA')
     `);
     const outcome = await withTransaction(db, (tx) => restoreFiscal(tx, NODE, NOW));
     expect(outcome.series).toBeUndefined();

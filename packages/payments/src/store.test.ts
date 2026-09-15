@@ -87,11 +87,9 @@ async function seedSecondSale(seeded: Seeded): Promise<string> {
     )
   ).rows;
   const till2 = await pg.db.execute<{ id: string }>(sql`
-    insert into tills (tenant_id, location_id, name)
-    values (${seeded.tenantId}, ${till.location_id}, 'Till 2') returning id`);
+    insert into tills (location_id, name) values (${till.location_id}, 'Till 2') returning id`);
   const node2 = await pg.db.execute<{ id: string }>(sql`
-    insert into nodes (tenant_id, location_id, name)
-    values (${seeded.tenantId}, ${till.location_id}, 'Node 2') returning id`);
+    insert into nodes (location_id, name) values (${till.location_id}, 'Node 2') returning id`);
   return seedSale(pg.db, { ...seeded, tillId: till2.rows[0].id, nodeId: node2.rows[0].id });
 }
 
@@ -1075,14 +1073,12 @@ async function seedSecondTill(seeded: Seeded): Promise<Seeded> {
     )
   ).rows;
   const till2 = await pg.db.execute<{ id: string }>(sql`
-    insert into tills (tenant_id, location_id, name)
-    values (${seeded.tenantId}, ${till.location_id}, 'Till 2') returning id`);
+    insert into tills (location_id, name) values (${till.location_id}, 'Till 2') returning id`);
   const tillId = till2.rows[0].id;
   const node2 = await pg.db.execute<{ id: string }>(sql`
-    insert into nodes (tenant_id, location_id, name)
-    values (${seeded.tenantId}, ${till.location_id}, 'Node 2') returning id`);
+    insert into nodes (location_id, name) values (${till.location_id}, 'Node 2') returning id`);
   const wo2 = await pg.db.execute<{ id: string }>(sql`
-    insert into working_orders (tenant_id, till_id, order_number) values (${seeded.tenantId}, ${tillId}, 1) returning id`);
+    insert into working_orders (till_id, order_number) values (${tillId}, 1) returning id`);
   return {
     tenantId: seeded.tenantId,
     tillId,

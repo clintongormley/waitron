@@ -239,10 +239,9 @@ it("refuses deletion solely because an actual order retains a saved modifier sna
     await setMenuItemOptionGroups(tx, item.id, [{ groupId: modifier.id, options: [] }]);
     const [order] = await tx
       .insert(workingOrders)
-      .values({ tenantId, tillId, nodeId, orderNumber: 1 })
+      .values({ tillId, nodeId, orderNumber: 1 })
       .returning();
     await tx.insert(workingOrderLines).values({
-      tenantId,
       workingOrderId: order!.id,
       productId: product.id,
       lineNo: 1,

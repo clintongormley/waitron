@@ -50,14 +50,11 @@ describe("table↔tab link columns (mutual composite FKs)", () => {
       .values({ id: TENANT_A, country: "ES", taxId: "B00000000", legalName: "T A" });
     await admin.insert(locations).values({
       id: LOCATION_A,
-      tenantId: TENANT_A,
       name: "Loc A",
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
-    await admin
-      .insert(tills)
-      .values({ id: TILL_A, tenantId: TENANT_A, locationId: LOCATION_A, name: "A1" });
+    await admin.insert(tills).values({ id: TILL_A, locationId: LOCATION_A, name: "A1" });
     nodeA = await seedNode(admin, brandTenantId(TENANT_A), brandLocationId(LOCATION_A));
   });
 
@@ -66,7 +63,7 @@ describe("table↔tab link columns (mutual composite FKs)", () => {
     return asApp(async (tx) =>
       tx
         .execute<{ id: string }>(
-          sql`insert into dining_tables (tenant_id, location_id, label) values (${TENANT_A}, ${LOCATION_A}, ${label}) returning id`,
+          sql`insert into dining_tables (location_id, label) values (${LOCATION_A}, ${label}) returning id`,
         )
         .then((r) => r.rows[0]!.id),
     );
@@ -79,8 +76,7 @@ describe("table↔tab link columns (mutual composite FKs)", () => {
       tx
         .execute<{ id: string }>(
           sql`
-          insert into working_orders (tenant_id, till_id, node_id, order_number, status)
-          values (${TENANT_A}, ${TILL_A}, ${nodeA}, ${orderSeq}, 'open') returning id`,
+          insert into working_orders (till_id, node_id, order_number, status) values (${TILL_A}, ${nodeA}, ${orderSeq}, 'open') returning id`,
         )
         .then((r) => r.rows[0]!.id),
     );

@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 
 /**
  * The cloud mirror's connection config (sync cloud-mirror C2b). A whole-database operational
- * singleton with no tenant_id, like `deployment`. Non-secret parts only (the per-peer sync token
+ * singleton, like `deployment`. Non-secret parts only (the per-peer sync token
  * lives in the credentials vault, never here).
  *
  * Deliberately NOT re-exported from `./schema/index.ts` (the barrel `drizzle.config.ts` reads and

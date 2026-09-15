@@ -60,12 +60,12 @@ async function storeAllAtAeat(resolveClient: DrainDeps["resolveClient"]): Promis
   await drain(drainDeps(resolveClient), DRAIN_AT);
 }
 
-async function incidentsFor(
-  tenantId: string,
-): Promise<{ code: string; severity: string; params: Record<string, unknown> }[]> {
+async function incidentsFor(): Promise<
+  { code: string; severity: string; params: Record<string, unknown> }[]
+> {
   const { rows } = await withTransaction(pg.db, (tx) =>
     tx.execute<{ code: string; severity: string; params: Record<string, unknown> }>(
-      sql`select code, severity, params from incidents where tenant_id = ${tenantId}`,
+      sql`select code, severity, params from incidents`,
     ),
   );
   return rows;
@@ -170,7 +170,7 @@ describe("reconcile — the three audit cases", () => {
     expect(result.noTrace).toEqual([]);
     expect(result.drift).toEqual([]);
     expect(result.incidentsRaised).toBe(0);
-    expect(await incidentsFor(seeded.tenantId)).toHaveLength(0);
+    expect(await incidentsFor()).toHaveLength(0);
   });
 
   it("lostAck: we believe pendiente, AEAT holds it (Correcta) → lostAck", async () => {
@@ -201,7 +201,7 @@ describe("reconcile — the three audit cases", () => {
     expect(result.drift).toEqual([]);
     // A lost ack is never an incident (classification unchanged from Task 4).
     expect(result.incidentsRaised).toBe(0);
-    expect(await incidentsFor(seeded.tenantId)).toHaveLength(0);
+    expect(await incidentsFor()).toHaveLength(0);
 
     // Task 5: reconcile ALSO corrects the local estado toward the authority (Correcta → aceptado).
     // The audit above still reports the mismatch; this proves the correction is applied too.
@@ -238,7 +238,7 @@ describe("reconcile — the three audit cases", () => {
     expect(result.drift).toEqual([]);
     // No incident on first detection.
     expect(result.incidentsRaised).toBe(0);
-    expect(await incidentsFor(seeded.tenantId)).toHaveLength(0);
+    expect(await incidentsFor()).toHaveLength(0);
 
     // Remediated: reset to pendiente so the drainer re-submits it, and the marker is stamped.
     const estados = await estadosFor(seeded.tenantId);
@@ -276,7 +276,7 @@ describe("reconcile — the three audit cases", () => {
     expect(first.noTrace).toHaveLength(1);
     expect(first.incidentsRaised).toBe(1);
 
-    const inc = await incidentsFor(seeded.tenantId);
+    const inc = await incidentsFor();
     expect(inc).toHaveLength(1);
     expect(inc[0]?.code).toBe("fiscal.reconcile_no_trace");
     expect(inc[0]?.severity).toBe("error");
@@ -302,7 +302,7 @@ describe("reconcile — the three audit cases", () => {
     expect(second.noTrace).toHaveLength(1);
     expect(second.incidentsRaised).toBe(0); // deduped — no NEW incident counted this sweep
 
-    const incidents = await incidentsFor(seeded.tenantId);
+    const incidents = await incidentsFor();
     expect(incidents).toHaveLength(1);
   });
 
@@ -350,7 +350,7 @@ describe("reconcile — the three audit cases", () => {
     expect(result.noTrace).toEqual([]);
     expect(result.drift).toEqual([]);
     expect(result.incidentsRaised).toBe(0);
-    expect(await incidentsFor(seeded.tenantId)).toHaveLength(0);
+    expect(await incidentsFor()).toHaveLength(0);
 
     const marker = await reconciledResubmitAtFor(seeded.tenantId, seeded.registroIds[0]!);
     expect(marker).toBeNull();
@@ -380,7 +380,7 @@ describe("reconcile — the three audit cases", () => {
     expect(result.lostAck).toEqual([]);
     expect(result.incidentsRaised).toBe(1);
 
-    const inc = await incidentsFor(seeded.tenantId);
+    const inc = await incidentsFor();
     expect(inc).toHaveLength(1);
     expect(inc[0]?.code).toBe("fiscal.reconcile_drift_errores");
     expect(inc[0]?.severity).toBe("warning");
@@ -420,7 +420,7 @@ describe("reconcile — the three audit cases", () => {
     expect(result.lostAck).toEqual([]);
     expect(result.incidentsRaised).toBe(1);
 
-    const inc = await incidentsFor(seeded.tenantId);
+    const inc = await incidentsFor();
     expect(inc).toHaveLength(1);
     expect(inc[0]?.code).toBe("fiscal.reconcile_drift_anulada");
     expect(inc[0]?.severity).toBe("error");
@@ -504,7 +504,7 @@ describe("reconcile — the three audit cases", () => {
     expect(result.noTrace).toEqual([]);
     expect(result.lostAck).toEqual([]); // the anulación's own pendiente row is in-flight, not lost
     expect(result.incidentsRaised).toBe(0);
-    expect(await incidentsFor(tenantId)).toHaveLength(0);
+    expect(await incidentsFor()).toHaveLength(0);
 
     // No correction either — the alta's envío stays exactly as the drainer left it.
     const estados = await estadosFor(tenantId);
@@ -528,7 +528,7 @@ describe("reconcile — the three audit cases", () => {
     );
     expect(first.drift).toHaveLength(1);
     expect(first.incidentsRaised).toBe(1);
-    expect(await incidentsFor(seeded.tenantId)).toHaveLength(1);
+    expect(await incidentsFor()).toHaveLength(1);
 
     // Sweep 2 re-detects the SAME persistent Anulada — still classified as drift (there is no
     // converged state to agree with), but must NOT insert a second incident row.
@@ -540,7 +540,7 @@ describe("reconcile — the three audit cases", () => {
     expect(second.drift).toHaveLength(1);
     expect(second.incidentsRaised).toBe(0); // deduped — no NEW incident counted this sweep
 
-    const incidents = await incidentsFor(seeded.tenantId);
+    const incidents = await incidentsFor();
     expect(incidents).toHaveLength(1);
     expect(incidents[0]?.code).toBe("fiscal.reconcile_drift_anulada");
   });
@@ -572,7 +572,7 @@ describe("reconcile — the three audit cases", () => {
       reportedState: "AceptadaConErrores",
     });
     expect(first.incidentsRaised).toBe(1);
-    expect(await incidentsFor(seeded.tenantId)).toHaveLength(1);
+    expect(await incidentsFor()).toHaveLength(1);
     await expect(estadosFor(seeded.tenantId)).resolves.toEqual(
       new Map([[seeded.registroIds[0]!, "aceptado_con_errores"]]),
     );
@@ -589,7 +589,7 @@ describe("reconcile — the three audit cases", () => {
     expect(second.incidentsRaised).toBe(0);
 
     // (a) exactly ONE incident for the tenant total — not a fresh one every sweep.
-    const incidents = await incidentsFor(seeded.tenantId);
+    const incidents = await incidentsFor();
     expect(incidents).toHaveLength(1);
     expect(incidents[0]?.code).toBe("fiscal.reconcile_drift_errores");
 
@@ -628,7 +628,7 @@ describe("reconcile — the three audit cases", () => {
     expect(result.noTrace).toEqual([]);
     expect(result.lostAck).toEqual([]);
     expect(result.incidentsRaised).toBe(0);
-    expect(await incidentsFor(seeded.tenantId)).toHaveLength(0);
+    expect(await incidentsFor()).toHaveLength(0);
 
     // No correction needed — it was already a clean match.
     const estados = await estadosFor(seeded.tenantId);
@@ -691,7 +691,7 @@ describe("reconcile — in-flight tolerance and non-cases", () => {
     expect(result.lostAck).toEqual([]);
     expect(result.drift).toEqual([]);
     expect(result.incidentsRaised).toBe(0);
-    expect(await incidentsFor(seeded.tenantId)).toHaveLength(0);
+    expect(await incidentsFor()).toHaveLength(0);
   });
 
   it("skips a rechazado record — neither pending nor accepted, so never a mismatch", async () => {
@@ -717,7 +717,7 @@ describe("reconcile — in-flight tolerance and non-cases", () => {
     expect(result.lostAck).toEqual([]);
     expect(result.drift).toEqual([]);
     expect(result.incidentsRaised).toBe(0);
-    expect(await incidentsFor(seeded.tenantId)).toHaveLength(0);
+    expect(await incidentsFor()).toHaveLength(0);
   });
 
   it("ignores an AEAT record with no RefExterna (one we cannot attribute)", async () => {

@@ -436,7 +436,7 @@ describe("drain — per-record resolution: rejection, halting, incidents", () =>
 
     const inc = await withTransaction(pg.db, (tx) =>
       tx.execute<{ code: string; severity: string; params: Record<string, unknown> }>(sql`
-        select code, severity, params from incidents where tenant_id = ${seeded.tenantId}
+        select code, severity, params from incidents
       `),
     );
     expect(
@@ -464,9 +464,7 @@ describe("drain — per-record resolution: rejection, halting, incidents", () =>
     expect(result.recordsHalted).toBe(0);
 
     const inc = await withTransaction(pg.db, (tx) =>
-      tx.execute<{ severity: string; code: string }>(
-        sql`select severity, code from incidents where tenant_id = ${seeded.tenantId}`,
-      ),
+      tx.execute<{ severity: string; code: string }>(sql`select severity, code from incidents`),
     );
     expect(inc.rows).toHaveLength(1);
     expect(inc.rows[0]?.severity).toBe("warning");
@@ -642,9 +640,7 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
     // No fresh incident from a genuine re-acceptance — mirrors the plain "accepted" branch, which
     // raises none either.
     const inc = await withTransaction(pg.db, (tx) =>
-      tx.execute<{ code: string }>(
-        sql`select code from incidents where tenant_id = ${seeded.tenantId}`,
-      ),
+      tx.execute<{ code: string }>(sql`select code from incidents`),
     );
     expect(inc.rows).toHaveLength(0);
   });
@@ -686,9 +682,7 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
     expect(result.recordsAccepted).toBe(0); // secuencia 2's own "Correcta" line never wins the halt
 
     const inc = await withTransaction(pg.db, (tx) =>
-      tx.execute<{ code: string; severity: string }>(
-        sql`select code, severity from incidents where tenant_id = ${seeded.tenantId}`,
-      ),
+      tx.execute<{ code: string; severity: string }>(sql`select code, severity from incidents`),
     );
     // Exactly ONE incident: haltSuccessors flags the successor but never raises a second incident
     // for it — this package's established "flag, don't duplicate" precedent (haltOpenChainClaims's
@@ -727,9 +721,7 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
 
     // No fresh incident on a match — mirrors the plain "accepted" branch, which raises none either.
     const inc = await withTransaction(pg.db, (tx) =>
-      tx.execute<{ code: string }>(
-        sql`select code from incidents where tenant_id = ${seeded.tenantId}`,
-      ),
+      tx.execute<{ code: string }>(sql`select code from incidents`),
     );
     expect(inc.rows).toHaveLength(0);
   });
@@ -808,9 +800,7 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
     expect(result.recordsAccepted).toBe(0); // secuencia 2's own "Correcto" line never wins the halt
 
     const inc = await withTransaction(pg.db, (tx) =>
-      tx.execute<{ code: string; severity: string }>(
-        sql`select code, severity from incidents where tenant_id = ${seeded.tenantId}`,
-      ),
+      tx.execute<{ code: string; severity: string }>(sql`select code, severity from incidents`),
     );
     // Exactly ONE incident — same "flag, don't duplicate" reasoning as the Route A test above.
     expect(inc.rows).toHaveLength(1);
@@ -931,7 +921,7 @@ describe("drain — the deployment-environment guard", () => {
 
       const inc = await withTransaction(pg.db, (tx) =>
         tx.execute<{ code: string; severity: string; params: Record<string, unknown> }>(
-          sql`select code, severity, params from incidents where tenant_id = ${seeded.tenantId}`,
+          sql`select code, severity, params from incidents`,
         ),
       );
       expect(inc.rows).toHaveLength(1);
@@ -976,7 +966,7 @@ describe("drain — the deployment-environment guard", () => {
 
       const inc = await withTransaction(pg.db, (tx) =>
         tx.execute<{ code: string; params: Record<string, unknown> }>(
-          sql`select code, params from incidents where tenant_id = ${seeded.tenantId}`,
+          sql`select code, params from incidents`,
         ),
       );
       expect(inc.rows).toHaveLength(1);
@@ -1071,7 +1061,7 @@ describe("drain — the deployment-environment guard", () => {
 
       const inc = await withTransaction(pg.db, (tx) =>
         tx.execute<{ code: string; params: Record<string, unknown> }>(
-          sql`select code, params from incidents where tenant_id = ${seeded.tenantId}`,
+          sql`select code, params from incidents`,
         ),
       );
       expect(inc.rows).toHaveLength(1);
@@ -1162,9 +1152,7 @@ describe("drain — the deployment-environment guard", () => {
       expect(Number(refused.rows[0]!.count)).toBe(3);
 
       const inc = await withTransaction(pg.db, (tx) =>
-        tx.execute<{ code: string }>(
-          sql`select code from incidents where tenant_id = ${seeded.tenantId}`,
-        ),
+        tx.execute<{ code: string }>(sql`select code from incidents`),
       );
       expect(inc.rows).toHaveLength(1);
       expect(inc.rows[0]?.code).toBe("fiscal.environment_unknown");

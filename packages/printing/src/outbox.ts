@@ -52,7 +52,6 @@ export async function enqueuePrintJob(
   const [job] = await tx
     .insert(printJobs)
     .values({
-      tenantId: cfg.tenantId,
       locationId: cfg.locationId,
       printerId,
       payload: Buffer.from(payload),

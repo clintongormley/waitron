@@ -31,19 +31,14 @@ function insertSaleSql(opts: {
 }): ReturnType<typeof sql> {
   // Raw insert (not the drizzle `sales` object) so the RED phase fails on "column working_order_id
   // does not exist" — the real cause — rather than on a TypeScript shape mismatch.
-  return sql`insert into sales (
-      tenant_id, till_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes,
-      total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state, working_order_id
-    ) values (
-      ${TENANT_A}, ${TILL_A1}, ${nodeA}, ${seriesA}, ${opts.invoiceNumber}, ${AT}, 120,
+  return sql`insert into sales (till_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes, total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state, working_order_id) values (${TILL_A1}, ${nodeA}, ${seriesA}, ${opts.invoiceNumber}, ${AT}, 120,
       '1.00', '[]'::jsonb, 'es', array['es','ca']::text[], 'verifactu', 'recorded', ${opts.workingOrderId}
     )`;
 }
 
 async function openOrder(admin: Database, orderNumber: number): Promise<string> {
   const result = await admin.execute<{ id: string }>(
-    sql`insert into working_orders (tenant_id, till_id, order_number, status, opened_at)
-        values (${TENANT_A}, ${TILL_A1}, ${orderNumber}, 'open', ${AT}) returning id`,
+    sql`insert into working_orders (till_id, order_number, status, opened_at) values (${TILL_A1}, ${orderNumber}, 'open', ${AT}) returning id`,
   );
   return result.rows[0]!.id;
 }
@@ -59,29 +54,25 @@ describe("park & retrieve schema", () => {
     await admin.insert(locations).values([
       {
         id: LOCATION_A,
-        tenantId: TENANT_A,
         name: "Fixture Location A",
         invoiceLocales: ["es", "ca"],
         operationDescription: "Hostelería",
       },
     ]);
-    await admin
-      .insert(tills)
-      .values([{ id: TILL_A1, tenantId: TENANT_A, locationId: LOCATION_A, name: "A1" }]);
+    await admin.insert(tills).values([{ id: TILL_A1, locationId: LOCATION_A, name: "A1" }]);
     nodeA = await seedNode(admin, brandTenantId(TENANT_A), brandLocationId(LOCATION_A));
     const [series] = await admin
       .insert(invoiceSeries)
-      .values({ tenantId: TENANT_A, nodeId: nodeA, code: "FA", purpose: "standard" })
+      .values({ nodeId: nodeA, code: "FA", purpose: "standard" })
       .returning({ id: invoiceSeries.id });
     seriesA = series.id;
     const [catalogue] = await admin
       .insert(catalogues)
-      .values({ tenantId: TENANT_A, name: "Deli" })
+      .values({ name: "Deli" })
       .returning({ id: catalogues.id });
     const [product] = await admin
       .insert(products)
       .values({
-        tenantId: TENANT_A,
         catalogueId: catalogue.id,
         name: "Café solo",
         pricingUnit: "each",
@@ -116,10 +107,7 @@ describe("park & retrieve schema", () => {
     // Positive control: a valid, tenant-consistent product_id is accepted — so the rejection below
     // is the FK biting, not the line being malformed for some other reason.
     await suite.db.execute(
-      sql`insert into working_order_lines
-        (tenant_id, working_order_id, line_no, product_id, name, descriptions,
-         quantity, unit_price, unit_price_gross, vat_rate, line_total)
-        values (${TENANT_A}, ${wo}, 1, ${productA}, 'Café solo', ${DESCRIPTIONS_A}::jsonb,
+      sql`insert into working_order_lines (working_order_id, line_no, product_id, name, descriptions, quantity, unit_price, unit_price_gross, vat_rate, line_total) values (${wo}, 1, ${productA}, 'Café solo', ${DESCRIPTIONS_A}::jsonb,
          '1.000', '1.00', '1.10', '10.00', '1.00')`,
     );
     // Negative: a product_id with no products row is refused 23503. The BEFORE triggers
@@ -127,26 +115,24 @@ describe("park & retrieve schema", () => {
     // reaches the composite (tenant_id, product_id) → products FK, which is what rejects it.
     const error = await captureError(() =>
       suite.db.execute(
-        sql`insert into working_order_lines
-          (tenant_id, working_order_id, line_no, product_id, name, descriptions,
-           quantity, unit_price, unit_price_gross, vat_rate, line_total)
-          values (${TENANT_A}, ${wo}, 2, ${BOGUS_PRODUCT}, 'Café solo', ${DESCRIPTIONS_A}::jsonb,
+        sql`insert into working_order_lines (working_order_id, line_no, product_id, name, descriptions, quantity, unit_price, unit_price_gross, vat_rate, line_total) values (${wo}, 2, ${BOGUS_PRODUCT}, 'Café solo', ${DESCRIPTIONS_A}::jsonb,
            '1.000', '1.00', '1.10', '10.00', '1.00')`,
       ),
     );
     expect(pgErrorCode(error)).toBe("23503");
   });
 
-  it("gives products a UNIQUE(tenant_id, id) — the composite FK target for draft lines", async () => {
-    // The unique products.product_id draft lines reference is a composite (tenant_id, id) UNIQUE,
-    // not the bare id PK: it is what makes working_order_lines_product_fk tenant-consistent. Read
-    // the constraint definition directly rather than trusting that the FK's mere existence implies
-    // its shape.
+  it("points a draft line's product_id at the products primary key", async () => {
+    // Read the constraint definition directly rather than trusting that the foreign key's mere
+    // existence implies its shape.
     const result = await suite.db.execute<{ def: string }>(
       sql`select pg_get_constraintdef(oid) as def from pg_constraint
-          where conrelid = 'products'::regclass and conname = 'products_tenant_id_key'`,
+          where conrelid = 'working_order_lines'::regclass
+            and conname = 'working_order_lines_product_fk'`,
     );
     expect(result.rows).toHaveLength(1);
-    expect(result.rows[0]?.def).toBe("UNIQUE (tenant_id, id)");
+    expect(result.rows[0]?.def).toBe(
+      "FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE RESTRICT",
+    );
   });
 });

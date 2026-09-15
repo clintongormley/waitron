@@ -48,8 +48,7 @@ describe("working_orders state machine (enforce_transition)", () => {
   async function open(): Promise<string> {
     const orderNumber = nextOrderNumber++;
     const result = await suite.admin.execute<{ id: string }>(
-      sql`insert into working_orders (tenant_id, till_id, node_id, order_number, status, opened_at)
-          values (${TENANT_A}, ${TILL_A1}, ${nodeA}, ${orderNumber}, 'open', ${AT}) returning id`,
+      sql`insert into working_orders (till_id, node_id, order_number, status, opened_at) values (${TILL_A1}, ${nodeA}, ${orderNumber}, 'open', ${AT}) returning id`,
     );
     return result.rows[0]!.id;
   }
@@ -59,10 +58,7 @@ describe("working_orders state machine (enforce_transition)", () => {
   function insertLine(orderId: string, lineNo: number): Promise<unknown> {
     return asApp((tx) =>
       tx.execute(
-        sql`insert into working_order_lines
-              (tenant_id, working_order_id, line_no, product_id, name, descriptions,
-               quantity, unit_price, unit_price_gross, vat_rate, line_total)
-            values (${TENANT_A}, ${orderId}, ${lineNo}, ${productA}, 'Café solo', ${DESCRIPTIONS_A}::jsonb,
+        sql`insert into working_order_lines (working_order_id, line_no, product_id, name, descriptions, quantity, unit_price, unit_price_gross, vat_rate, line_total) values (${orderId}, ${lineNo}, ${productA}, 'Café solo', ${DESCRIPTIONS_A}::jsonb,
                '1.000', '1.00', '1.10', '10.00', '1.00')`,
       ),
     );
@@ -76,24 +72,20 @@ describe("working_orders state machine (enforce_transition)", () => {
     await admin.insert(locations).values([
       {
         id: LOCATION_A,
-        tenantId: TENANT_A,
         name: "Fixture Location A",
         invoiceLocales: ["es", "ca"],
         operationDescription: "Hostelería",
       },
     ]);
-    await admin
-      .insert(tills)
-      .values([{ id: TILL_A1, tenantId: TENANT_A, locationId: LOCATION_A, name: "A1" }]);
+    await admin.insert(tills).values([{ id: TILL_A1, locationId: LOCATION_A, name: "A1" }]);
     nodeA = await seedNode(admin, brandTenantId(TENANT_A), brandLocationId(LOCATION_A));
     const [catalogue] = await admin
       .insert(catalogues)
-      .values({ tenantId: TENANT_A, name: "Deli" })
+      .values({ name: "Deli" })
       .returning({ id: catalogues.id });
     const [product] = await admin
       .insert(products)
       .values({
-        tenantId: TENANT_A,
         catalogueId: catalogue.id,
         name: "Café solo",
         pricingUnit: "each",

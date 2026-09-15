@@ -182,7 +182,7 @@ describe("two simultaneous deliveries of the same settlement race on settleIniti
       expect(waiterSaleId).toBeNull();
 
       const sales = await postgres.admin.execute<{ count: string }>(
-        sql`select count(*)::text as count from sales where tenant_id = ${s.tenantId}`,
+        sql`select count(*)::text as count from sales`,
       );
       expect(sales.rows[0].count).toBe("1"); // never two invoice numbers for one settlement
 

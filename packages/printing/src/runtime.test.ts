@@ -22,15 +22,13 @@ const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS] });
 async function setup(): Promise<PrintConfig> {
   const tenantId = await seedTenant(suite.db);
   const { rows } = await suite.db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Bar', array['es-ES'], 'Sale on premises') returning id`);
+    insert into locations (name, invoice_locales, operation_description) values ('Bar', array['es-ES'], 'Sale on premises') returning id`);
   return { tenantId, locationId: rows[0]!.id };
 }
 
 async function seedAgent(cfg: PrintConfig, name = "Kitchen agent"): Promise<string> {
   const { rows } = await suite.db.execute<{ id: string }>(sql`
-    insert into print_agents (tenant_id, location_id, name, token_hash)
-    values (${cfg.tenantId}, ${cfg.locationId}, ${name}, 'scrypt$fixture') returning id`);
+    insert into print_agents (location_id, name, token_hash) values (${cfg.locationId}, ${name}, 'scrypt$fixture') returning id`);
   return rows[0]!.id;
 }
 
@@ -239,8 +237,7 @@ describe("runAgentOnce (pull → push → report)", () => {
     // A second venue in the same tenant. Printers carry no agent binding now, so venue membership is
     // what scopes a network printer's job — an agent reporting the OTHER venue must claim nothing.
     const { rows } = await suite.db.execute<{ id: string }>(sql`
-      insert into locations (tenant_id, name, invoice_locales, operation_description)
-      values (${cfg.tenantId}, 'Terrace', array['es-ES'], 'Sale on premises') returning id`);
+      insert into locations (name, invoice_locales, operation_description) values ('Terrace', array['es-ES'], 'Sale on premises') returning id`);
     const otherLocationId = rows[0]!.id;
     await withTransaction(suite.db, async (tx) => {
       const printerId = await seedPrinter(tx, cfg);

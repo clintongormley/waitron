@@ -56,7 +56,7 @@ function record(
 async function closeCount(): Promise<number> {
   const { rows } = await suite.admin.execute<{ n: number }>(sql`
     select count(*)::int as n from daily_closes
-     where tenant_id = ${venue.tenantId} and node_id = ${venue.nodeId}`);
+     where node_id = ${venue.nodeId}`);
   return rows[0]!.n;
 }
 
@@ -69,7 +69,7 @@ async function readChain(): Promise<
     entry_hash: string;
   }>(sql`
     select sequence_no, prev_entry_hash, entry_hash from daily_closes
-     where tenant_id = ${venue.tenantId} and node_id = ${venue.nodeId}
+     where node_id = ${venue.nodeId}
      order by sequence_no`);
   return rows.map((r) => ({
     sequenceNo: r.sequence_no,
@@ -141,7 +141,7 @@ describe("recordDailyClose under real contention", () => {
       const acquired = new Promise<void>((resolve) => (acquire = resolve));
       holding = holder.transaction(async (tx) => {
         await tx.execute(
-          sql`select 1 from daily_close_chain where tenant_id = ${venue.tenantId} and node_id = ${venue.nodeId} for update`,
+          sql`select 1 from daily_close_chain where node_id = ${venue.nodeId} for update`,
         );
         acquire();
         await held;

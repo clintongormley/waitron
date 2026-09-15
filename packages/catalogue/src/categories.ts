@@ -97,13 +97,14 @@ export async function createCategory(
   input: CategoryInput,
   fallbackLanguage: string = FALLBACK_LOCALE,
 ): Promise<Category> {
+  void tenantId;
   await validateContentTranslations(tx, input.name, fallbackLanguage);
   validateColor(input.color);
   await lockCategories(tx);
   const id = crypto.randomUUID();
   await validateParent(tx, id, input.parentId ?? null);
   await validateImage(tx, input.image ?? null);
-  await tx.insert(categories).values({ id, tenantId, name: input.name });
+  await tx.insert(categories).values({ id, name: input.name });
   await tx.insert(categoryDetails).values({
     categoryId: id,
     parentId: input.parentId ?? null,

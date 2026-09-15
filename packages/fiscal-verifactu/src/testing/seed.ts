@@ -68,9 +68,9 @@ async function insertTenant(tx: Transaction, nif: string): Promise<TenantId> {
 /** Inserts one location under an EXISTING tenant and returns its id — the FK a node and a till both
  * need. */
 async function insertLocation(tx: Transaction, tenant: TenantId, label: string): Promise<string> {
+  void tenant;
   const location = await tx.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenant}, ${"Sala " + label}, array['es'], ${"Venta en establecimiento"})
+    insert into locations (name, invoice_locales, operation_description) values (${"Sala " + label}, array['es'], ${"Venta en establecimiento"})
     returning id
   `);
   const locationRow = location.rows[0];
@@ -86,9 +86,9 @@ async function insertNode(
   location: string,
   label: string,
 ): Promise<NodeId> {
+  void tenant;
   const node = await tx.execute<{ id: string }>(sql`
-    insert into nodes (tenant_id, location_id, name)
-    values (${tenant}, ${location}, ${"Node " + label})
+    insert into nodes (location_id, name) values (${location}, ${"Node " + label})
     returning id
   `);
   const nodeRow = node.rows[0];
@@ -103,9 +103,9 @@ async function insertTill(
   location: string,
   label: string,
 ): Promise<TillId> {
+  void tenant;
   const till = await tx.execute<{ id: string }>(sql`
-    insert into tills (tenant_id, location_id, name)
-    values (${tenant}, ${location}, ${"Till " + label})
+    insert into tills (location_id, name) values (${location}, ${"Till " + label})
     returning id
   `);
   const tillRow = till.rows[0];
@@ -127,8 +127,7 @@ async function addTill(
   const tillId = await insertTill(tx, tenant, location, label);
 
   const series = await tx.execute<{ id: string }>(sql`
-    insert into invoice_series (tenant_id, node_id, code, purpose, next_number)
-    values (${tenant}, ${node}, ${"G" + label}, ${"standard"}, 1)
+    insert into invoice_series (node_id, code, purpose, next_number) values (${node}, ${"G" + label}, ${"standard"}, 1)
     returning id
   `);
   const seriesRow = series.rows[0];
@@ -180,8 +179,7 @@ export async function addTillToNode(
     if (locationRow === undefined) throw new Error("addTillToNode: node not found");
     const tillId = await insertTill(tx, seed.tenantId, locationRow.location_id, label);
     const series = await tx.execute<{ id: string }>(sql`
-      insert into invoice_series (tenant_id, node_id, code, purpose, next_number)
-      values (${seed.tenantId}, ${seed.nodeId}, ${"G" + label}, ${"standard"}, 1)
+      insert into invoice_series (node_id, code, purpose, next_number) values (${seed.nodeId}, ${"G" + label}, ${"standard"}, 1)
       returning id
     `);
     const seriesRow = series.rows[0];
@@ -266,10 +264,7 @@ export async function seedSale(
   invoiceNumber: number,
 ): Promise<SaleId> {
   const { rows } = await db.execute<{ id: string }>(sql`
-    insert into sales (tenant_id, till_id, node_id, series_id, invoice_number, issued_at,
-                       issued_offset_minutes, total, vat_breakdown, locale, invoice_locales,
-                       fiscal_backend, fiscal_state)
-    values (${till.tenantId}, ${till.tillId}, ${till.nodeId}, ${till.seriesId}, ${invoiceNumber},
+    insert into sales (till_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes, total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state) values (${till.tillId}, ${till.nodeId}, ${till.seriesId}, ${invoiceNumber},
             '2026-07-20T19:20:30+02:00', 120,
             '0.00', '[]'::jsonb,
             'es', array['es'], 'verifactu', 'recorded')

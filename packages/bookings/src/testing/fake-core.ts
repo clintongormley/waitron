@@ -56,7 +56,6 @@ export function fakeCore(cfg: FakeCoreConfig): CoreServices {
       nextOrderNumber += 1;
       await tx.insert(workingOrders).values({
         id: tabId,
-        tenantId: cfg.tenantId,
         tillId: cfg.tillId,
         nodeId: cfg.nodeId,
         orderNumber: nextOrderNumber,

@@ -35,22 +35,20 @@ async function seed(db: Database): Promise<void> {
   await db.insert(locations).values([
     {
       id: LOCATION_A,
-      tenantId: TENANT_A,
       name: "Fixture Location A",
       invoiceLocales: ["es", "ca"],
       operationDescription: "Hostelería",
     },
     {
       id: LOCATION_B,
-      tenantId: TENANT_B,
       name: "Fixture Location B",
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     },
   ]);
   await db.insert(tills).values([
-    { id: TILL_A1, tenantId: TENANT_A, locationId: LOCATION_A, name: "A1" },
-    { id: TILL_B1, tenantId: TENANT_B, locationId: LOCATION_B, name: "B1" },
+    { id: TILL_A1, locationId: LOCATION_A, name: "A1" },
+    { id: TILL_B1, locationId: LOCATION_B, name: "B1" },
   ]);
   nodeA1 = await seedNode(db, brandTenantId(TENANT_A), brandLocationId(LOCATION_A));
   await seedNode(db, brandTenantId(TENANT_B), brandLocationId(LOCATION_B));
@@ -58,7 +56,7 @@ async function seed(db: Database): Promise<void> {
 
 async function makeSeries(
   db: Database,
-  values: { tenantId: string; nodeId: string; code: string; nextNumber?: number },
+  values: { nodeId: string; code: string; nextNumber?: number },
 ): Promise<string> {
   const [row] = await db
     .insert(invoiceSeries)
@@ -95,7 +93,7 @@ describeEachTarget("allocateInvoiceNumber", (target) => {
   });
 
   it("returns the starting number on the first allocation", async () => {
-    const seriesId = await makeSeries(db, { tenantId: TENANT_A, nodeId: nodeA1, code: "FA" });
+    const seriesId = await makeSeries(db, { nodeId: nodeA1, code: "FA" });
     const n = await withTransaction(db, (tx) => allocateInvoiceNumber(tx, seriesId));
     expect(n).toBe(1);
   });
@@ -105,7 +103,6 @@ describeEachTarget("allocateInvoiceNumber", (target) => {
     // Hardcoding a start of 1 would silently restart the numbering and produce
     // duplicate numbers against records the tax authority already holds.
     const seriesId = await makeSeries(db, {
-      tenantId: TENANT_A,
       nodeId: nodeA1,
       code: "FA",
       nextNumber: 5000,
@@ -116,7 +113,7 @@ describeEachTarget("allocateInvoiceNumber", (target) => {
   });
 
   it("increases strictly across successive allocations", async () => {
-    const seriesId = await makeSeries(db, { tenantId: TENANT_A, nodeId: nodeA1, code: "FA" });
+    const seriesId = await makeSeries(db, { nodeId: nodeA1, code: "FA" });
     const allocated: number[] = [];
     for (let i = 0; i < 5; i += 1) {
       allocated.push(await withTransaction(db, (tx) => allocateInvoiceNumber(tx, seriesId)));
@@ -130,7 +127,7 @@ describeEachTarget("allocateInvoiceNumber", (target) => {
     // produces numeric, would render as a string instead. An unconverted "1"
     // compares equal to 1 under == but not under toBe, and would reach the
     // invoice number column as text.
-    const seriesId = await makeSeries(db, { tenantId: TENANT_A, nodeId: nodeA1, code: "FA" });
+    const seriesId = await makeSeries(db, { nodeId: nodeA1, code: "FA" });
     const n = await withTransaction(db, (tx) => allocateInvoiceNumber(tx, seriesId));
     expect(typeof n).toBe("number");
   });
@@ -142,7 +139,7 @@ describeEachTarget("allocateInvoiceNumber", (target) => {
     // returned number satisfies it. Asserting `2` here would be asserting that
     // the counter escaped its transaction, which is the behaviour this task
     // deliberately does not implement.
-    const seriesId = await makeSeries(db, { tenantId: TENANT_A, nodeId: nodeA1, code: "FA" });
+    const seriesId = await makeSeries(db, { nodeId: nodeA1, code: "FA" });
     let allocated = 0;
     await expect(
       withTransaction(db, async (tx) => {
@@ -166,7 +163,7 @@ describeEachTarget("allocateInvoiceNumber", (target) => {
     // number, and that is enforced by UNIQUE (tenant_id, series_id,
     // invoice_number) on `sales`, which Task 8 creates and Task 16 exercises
     // against the live write path.
-    const seriesId = await makeSeries(db, { tenantId: TENANT_A, nodeId: nodeA1, code: "FA" });
+    const seriesId = await makeSeries(db, { nodeId: nodeA1, code: "FA" });
     const committed: number[] = [];
     for (let i = 0; i < 6; i += 1) {
       const abort = i % 2 === 0;
@@ -185,8 +182,8 @@ describeEachTarget("allocateInvoiceNumber", (target) => {
   it("allocates independently for two series on the same node", async () => {
     // One node, N series, one chain. The two counters must not interfere, and
     // neither may be derived from the other.
-    const fa = await makeSeries(db, { tenantId: TENANT_A, nodeId: nodeA1, code: "FA" });
-    const ra = await makeSeries(db, { tenantId: TENANT_A, nodeId: nodeA1, code: "RA" });
+    const fa = await makeSeries(db, { nodeId: nodeA1, code: "FA" });
+    const ra = await makeSeries(db, { nodeId: nodeA1, code: "RA" });
     const a1 = await withTransaction(db, (tx) => allocateInvoiceNumber(tx, fa));
     const b1 = await withTransaction(db, (tx) => allocateInvoiceNumber(tx, ra));
     const a2 = await withTransaction(db, (tx) => allocateInvoiceNumber(tx, fa));
@@ -198,7 +195,7 @@ describeEachTarget("allocateInvoiceNumber", (target) => {
     // GRANT UPDATE (next_number) is missing, allocation works in every test
     // that skips asAppUser and fails only in production — the exact shape of a
     // suite that asserts nothing.
-    const seriesId = await makeSeries(db, { tenantId: TENANT_A, nodeId: nodeA1, code: "FA" });
+    const seriesId = await makeSeries(db, { nodeId: nodeA1, code: "FA" });
     const n = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       return allocateInvoiceNumber(tx, seriesId);
@@ -222,7 +219,7 @@ describeEachTarget("allocateInvoiceNumber", (target) => {
       // so a read-then-write implementation passes there by accident. Running
       // it on PGlite would be worse than skipping it — a green result that
       // means nothing. Real Postgres only, per the Global Constraint.
-      const seriesId = await makeSeries(db, { tenantId: TENANT_A, nodeId: nodeA1, code: "FA" });
+      const seriesId = await makeSeries(db, { nodeId: nodeA1, code: "FA" });
       const results = await Promise.all(
         Array.from({ length: 20 }, () =>
           withTransaction(db, (tx) => allocateInvoiceNumber(tx, seriesId)),

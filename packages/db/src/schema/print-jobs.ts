@@ -10,7 +10,7 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
-import { locations, tenants } from "./tenants.js";
+import { locations } from "./tenants.js";
 
 /**
  * The lifecycle of one outbox job (§2c). `queued` (default) → the agent atomically claims it as
@@ -35,27 +35,23 @@ const bytea = customType<{ data: Buffer; driverData: Buffer }>({
  * pulls it delivers it.
  *
  * `payload` is OPAQUE bytes (`bytea`): Slice B fills it with ESC/POS, and this subsystem never
- * inspects them — it only moves bytes. `printer_id` is a BARE uuid whose tenant-consistent
- * (tenant_id, printer_id) → printers (tenant_id, id) composite FK is hand-written in the paired
+ * inspects them — it only moves bytes. `printer_id` is a BARE uuid whose
+ * (printer_id) → printers (id) composite FK is hand-written in the paired
  * --custom migration (a bare column carries no FK), exactly as `devices.station_id`.
  */
 export const printJobs = pgTable(
   "print_jobs",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    tenantId: uuid("tenant_id")
-      .notNull()
-      /* v8 ignore next */
-      .references(() => tenants.id, { onDelete: "restrict" }),
     locationId: uuid("location_id")
       .notNull()
       /* v8 ignore next */
       .references(() => locations.id, { onDelete: "restrict" }),
-    // The target printer. Bare column: the tenant-consistent (tenant_id, printer_id) → printers
+    // The target printer. Bare column: the (printer_id) → printers
     // composite FK is hand-written in the --custom migration.
     printerId: uuid("printer_id").notNull(),
     // The agent currently holding this job (set on claim, overwritten by a lease reclaim). Bare
-    // column: the tenant-consistent (tenant_id, claimed_by) → print_agents composite FK is hand-written
+    // column: the (claimed_by) → print_agents composite FK is hand-written
     // in the --custom migration (MATCH SIMPLE skips it on NULL). Authorises the report — only the
     // claimer reports its own job (runtime.ts). NULL while queued and after the job leaves `printing`.
     claimedBy: uuid("claimed_by"),
@@ -85,7 +81,7 @@ export const printJobs = pgTable(
     deliveredAt: timestamp("delivered_at", { withTimezone: true, mode: "string" }),
   },
   (t) => [
-    index("print_jobs_pull_idx").on(t.tenantId, t.printerId, t.status),
+    index("print_jobs_pull_idx").on(t.printerId, t.status),
     check("print_jobs_kind_ck", sql`${t.kind} in ('document', 'drawer')`),
   ],
 );

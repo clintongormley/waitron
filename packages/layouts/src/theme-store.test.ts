@@ -42,9 +42,9 @@ async function codeOf(fn: () => Promise<unknown>): Promise<string> {
   return isAppError(error) ? error.code : `did not throw an AppError: ${String(error)}`;
 }
 
-async function rowCount(tenantId: string): Promise<number> {
+async function rowCount(): Promise<number> {
   const rows = await suite.admin.execute<{ n: number }>(
-    sql`select count(*)::int as n from tenant_themes where tenant_id = ${tenantId}`,
+    sql`select count(*)::int as n from tenant_themes`,
   );
   return rows.rows[0]!.n;
 }
@@ -60,7 +60,7 @@ describe("tenant theme store on real Postgres, as the app role", () => {
     const managerSession = await seedSession(managerTenant, "manager");
     const theme: ThemeOverride = { tokens: { "--wt-color-primary": "#ff0000" } };
     await asApp(managerTenant, (tx) =>
-      putTenantTheme(tx, { managementSessionId: managerSession, tenantId: managerTenant, theme }),
+      putTenantTheme(tx, { managementSessionId: managerSession, theme }),
     );
     expect(await asApp(managerTenant, (tx) => getTenantTheme(tx, managerTenant))).toEqual(theme);
   });
@@ -71,16 +71,15 @@ describe("tenant theme store on real Postgres, as the app role", () => {
     await asApp(tenantId, (tx) =>
       putTenantTheme(tx, {
         managementSessionId: session,
-        tenantId,
         theme: { tokens: { "--wt-color-primary": "#111111" } },
       }),
     );
     const next: ThemeOverride = { tokens: { "--wt-color-surface": "#222222" } };
     await asApp(tenantId, (tx) =>
-      putTenantTheme(tx, { managementSessionId: session, tenantId, theme: next }),
+      putTenantTheme(tx, { managementSessionId: session, theme: next }),
     );
     // ON CONFLICT (tenant_id) DO UPDATE — the second write replaces the row, never adds one.
-    expect(await rowCount(tenantId)).toBe(1);
+    expect(await rowCount()).toBe(1);
     expect(await asApp(tenantId, (tx) => getTenantTheme(tx, tenantId))).toEqual(next);
   });
 
@@ -95,13 +94,12 @@ describe("tenant theme store on real Postgres, as the app role", () => {
       asApp(staffTenant, (tx) =>
         putTenantTheme(tx, {
           managementSessionId: staffSession,
-          tenantId: staffTenant,
           theme: { tokens: { "--wt-color-primary": "#000000" } },
         }),
       ),
     );
     expect(code).toBe("authorization.not_permitted");
-    expect(await rowCount(staffTenant)).toBe(0); // the gate ran before the write
+    expect(await rowCount()).toBe(0); // the gate ran before the write
   });
 
   it("rejects an invalid theme with theme.invalid before any INSERT", async () => {
@@ -113,12 +111,11 @@ describe("tenant theme store on real Postgres, as the app role", () => {
       asApp(tenantId, (tx) =>
         putTenantTheme(tx, {
           managementSessionId: session,
-          tenantId,
           theme: { tokens: { "--evil": "red" } },
         }),
       ),
     );
     expect(code).toBe("theme.invalid");
-    expect(await rowCount(tenantId)).toBe(0); // validate threw before the INSERT
+    expect(await rowCount()).toBe(0); // validate threw before the INSERT
   });
 });

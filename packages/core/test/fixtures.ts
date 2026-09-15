@@ -53,26 +53,25 @@ export async function seedTenant(
   }
 
   const location = await db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenantId}, 'Sala principal', array['es-ES', 'ca-ES'], 'Venta en establecimiento')
+    insert into locations (name, invoice_locales, operation_description) values ('Sala principal', array['es-ES', 'ca-ES'], 'Venta en establecimiento')
     returning id
   `);
   const locationId = location.rows[0]!.id;
 
   const till = await db.execute<{ id: string }>(sql`
-    insert into tills (tenant_id, location_id, name) values (${tenantId}, ${locationId}, 'Caja 1')
+    insert into tills (location_id, name) values (${locationId}, 'Caja 1')
     returning id
   `);
   const tillId = brandTillId(till.rows[0]!.id);
 
   const node = await db.execute<{ id: string }>(sql`
-    insert into nodes (tenant_id, location_id, name) values (${tenantId}, ${locationId}, 'Nodo 1')
+    insert into nodes (location_id, name) values (${locationId}, 'Nodo 1')
     returning id
   `);
   const nodeId = brandNodeId(node.rows[0]!.id);
 
   const series = await db.execute<{ id: string }>(sql`
-    insert into invoice_series (tenant_id, node_id, code) values (${tenantId}, ${nodeId}, 'A')
+    insert into invoice_series (node_id, code) values (${nodeId}, 'A')
     returning id
   `);
   const seriesId = brandSeriesId(series.rows[0]!.id);
@@ -95,13 +94,11 @@ export async function seedTenant(
  */
 export async function seedRectificativeSeries(
   db: Database,
-  tenantId: TenantId,
   nodeId: NodeId,
   code = "R",
 ): Promise<SeriesId> {
   const { rows } = await db.execute<{ id: string }>(sql`
-    insert into invoice_series (tenant_id, node_id, code, purpose)
-    values (${tenantId}, ${nodeId}, ${code}, 'rectificative')
+    insert into invoice_series (node_id, code, purpose) values (${nodeId}, ${code}, 'rectificative')
     returning id
   `);
   return brandSeriesId(rows[0]!.id);
@@ -128,7 +125,6 @@ export async function seedBareSale(
   const [row] = await db
     .insert(sales)
     .values({
-      tenantId: seed.tenantId,
       tillId: seed.tillId,
       nodeId: seed.nodeId,
       seriesId: seed.seriesId,

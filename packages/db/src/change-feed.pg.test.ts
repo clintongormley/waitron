@@ -47,7 +47,6 @@ describe("database change feed", () => {
       await vi.waitFor(() =>
         expect(received).toEqual([
           {
-            tenantId: "tenant-a",
             resources: [
               { type: "print-job", id: "j1" },
               { type: "printer", id: "p1" },
@@ -81,9 +80,7 @@ describe("database change feed", () => {
         sql`insert into live_probe values ('committed', 'tenant-a', null, null)`,
       );
       await vi.waitFor(() => expect(received).toHaveLength(1));
-      expect(received).toEqual([
-        { tenantId: "tenant-a", resources: [{ type: "print-job", id: "committed" }] },
-      ]);
+      expect(received).toEqual([{ resources: [{ type: "print-job", id: "committed" }] }]);
     } finally {
       await listener.end();
     }
@@ -108,14 +105,12 @@ describe("database change feed", () => {
       await vi.waitFor(() => expect(received).toHaveLength(2));
       expect(received).toEqual([
         {
-          tenantId: "tenant-a",
           resources: [
             { type: "print-job", id: "moving" },
             { type: "printer", id: "p-before" },
           ],
         },
         {
-          tenantId: "tenant-a",
           resources: [
             { type: "print-job", id: "moving" },
             { type: "printer", id: "p-after" },

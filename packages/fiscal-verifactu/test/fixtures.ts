@@ -67,29 +67,19 @@ export async function seedTenantTillSif(db: Database): Promise<void> {
     values (${TENANT_A.id}, 'ES', '89890001K', 'Waitron SL')
   `);
   await db.execute(sql`
-    insert into locations (id, tenant_id, name, invoice_locales, operation_description)
-    values (${TENANT_A.locationId}, ${TENANT_A.id}, 'Local principal', array['es'], 'Venta en establecimiento')
+    insert into locations (id, name, invoice_locales, operation_description) values (${TENANT_A.locationId}, 'Local principal', array['es'], 'Venta en establecimiento')
   `);
   await db.execute(sql`
-    insert into tills (id, tenant_id, location_id, name)
-    values (${TENANT_A.tillId}, ${TENANT_A.id}, ${TENANT_A.locationId}, 'Caja 1')
+    insert into tills (id, location_id, name) values (${TENANT_A.tillId}, ${TENANT_A.locationId}, 'Caja 1')
   `);
   await db.execute(sql`
-    insert into nodes (id, tenant_id, location_id, name)
-    values (${TENANT_A.nodeId}, ${TENANT_A.id}, ${TENANT_A.locationId}, 'Node 1')
+    insert into nodes (id, location_id, name) values (${TENANT_A.nodeId}, ${TENANT_A.locationId}, 'Node 1')
   `);
   await db.execute(sql`
-    insert into invoice_series (id, tenant_id, node_id, code)
-    values (${TENANT_A.seriesId}, ${TENANT_A.id}, ${TENANT_A.nodeId}, 'A')
+    insert into invoice_series (id, node_id, code) values (${TENANT_A.seriesId}, ${TENANT_A.nodeId}, 'A')
   `);
   await db.execute(sql`
-    insert into sales (
-      id, tenant_id, till_id, node_id, series_id, invoice_number,
-      issued_at, issued_offset_minutes,
-      total, vat_breakdown,
-      locale, invoice_locales, fiscal_backend, fiscal_state
-    ) values (
-      ${TENANT_A.saleId}, ${TENANT_A.id}, ${TENANT_A.tillId}, ${TENANT_A.nodeId}, ${TENANT_A.seriesId}, 1,
+    insert into sales (id, till_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes, total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state) values (${TENANT_A.saleId}, ${TENANT_A.tillId}, ${TENANT_A.nodeId}, ${TENANT_A.seriesId}, 1,
       '2026-07-20T19:20:30+01:00', 60,
       '0.00', '[]'::jsonb,
       'es', array['es'], 'verifactu', 'recorded'
@@ -120,21 +110,18 @@ export async function seedTenants(db: Database): Promise<void> {
       (${TENANT_B.id}, 'ES', '12345678Z', 'Otro Obligado SL')
   `);
   await db.execute(sql`
-    insert into locations (id, tenant_id, name, invoice_locales, operation_description) values
-      (${TENANT_A.locationId}, ${TENANT_A.id}, 'Local principal', array['es'], 'Venta en establecimiento'),
-      (${TENANT_B.locationId}, ${TENANT_B.id}, 'Local principal', array['es'], 'Venta en establecimiento')
+    insert into locations (id, name, invoice_locales, operation_description) values (${TENANT_A.locationId}, 'Local principal', array['es'], 'Venta en establecimiento'),
+      ( ${TENANT_B.locationId}, 'Local principal', array['es'], 'Venta en establecimiento')
   `);
   await db.execute(sql`
-    insert into tills (id, tenant_id, location_id, name) values
-      (${TENANT_A.tillId}, ${TENANT_A.id}, ${TENANT_A.locationId}, 'Caja 1'),
-      (${TENANT_A.tillId2}, ${TENANT_A.id}, ${TENANT_A.locationId}, 'Caja 2'),
-      (${TENANT_B.tillId}, ${TENANT_B.id}, ${TENANT_B.locationId}, 'Caja 1')
+    insert into tills (id, location_id, name) values (${TENANT_A.tillId}, ${TENANT_A.locationId}, 'Caja 1'),
+      ( ${TENANT_A.tillId2}, ${TENANT_A.locationId}, 'Caja 2'),
+      ( ${TENANT_B.tillId}, ${TENANT_B.locationId}, 'Caja 1')
   `);
   await db.execute(sql`
-    insert into nodes (id, tenant_id, location_id, name) values
-      (${TENANT_A.nodeId}, ${TENANT_A.id}, ${TENANT_A.locationId}, 'Node 1'),
-      (${TENANT_A.nodeId2}, ${TENANT_A.id}, ${TENANT_A.locationId}, 'Node 2'),
-      (${TENANT_B.nodeId}, ${TENANT_B.id}, ${TENANT_B.locationId}, 'Node 1')
+    insert into nodes (id, location_id, name) values (${TENANT_A.nodeId}, ${TENANT_A.locationId}, 'Node 1'),
+      ( ${TENANT_A.nodeId2}, ${TENANT_A.locationId}, 'Node 2'),
+      ( ${TENANT_B.nodeId}, ${TENANT_B.locationId}, 'Node 1')
   `);
 }
 
@@ -174,19 +161,12 @@ export async function seedSoldRegistro(
 ): Promise<void> {
   const entorno = params.entorno === undefined ? "production" : params.entorno;
   const series = await db.execute<{ id: string }>(sql`
-    insert into invoice_series (tenant_id, node_id, code)
-    values (${params.tenantId}, ${params.nodeId}, ${"S" + String(params.secuencia)})
+    insert into invoice_series (node_id, code) values (${params.nodeId}, ${"S" + String(params.secuencia)})
     returning id
   `);
   const seriesId = series.rows[0]?.id;
   const sale = await db.execute<{ id: string }>(sql`
-    insert into sales (
-      tenant_id, till_id, node_id, series_id, invoice_number,
-      issued_at, issued_offset_minutes,
-      total, vat_breakdown,
-      locale, invoice_locales, fiscal_backend, fiscal_state
-    ) values (
-      ${params.tenantId}, ${params.tillId}, ${params.nodeId}, ${seriesId}, ${params.secuencia},
+    insert into sales (till_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes, total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state) values (${params.tillId}, ${params.nodeId}, ${seriesId}, ${params.secuencia},
       '2026-07-20T19:20:30+01:00', 60,
       '0.00', '[]'::jsonb,
       'es', array['es'], 'verifactu', 'recorded'
@@ -200,8 +180,7 @@ export async function seedSoldRegistro(
       id_emisor_factura, num_serie_factura, fecha_expedicion_factura, nombre_razon_emisor,
       primer_registro, sistema_informatico,
       fecha_hora_huso_gen_registro, offset_minutos, tipo_huella, huella, entorno
-    ) values (
-      ${params.tenantId}, ${params.tillId}, ${params.nodeId}, ${params.sifId}, ${saleId}, ${params.secuencia}, 'alta',
+    ) values (${params.tenantId}, ${params.tillId}, ${params.nodeId}, ${params.sifId}, ${saleId}, ${params.secuencia}, 'alta',
       ${params.nif}, ${"S" + String(params.secuencia) + "/1"}, '2026-07-20', 'Waitron SL',
       true, '{}'::jsonb,
       '2026-07-20T19:20:30+01:00', 60, '01', ${params.huella}, ${entorno}
@@ -238,23 +217,23 @@ async function insertLocationTillSeries(
   tx: Transaction,
   tenant: TenantId,
 ): Promise<{ tillId: TillId; nodeId: NodeId; seriesId: SeriesId }> {
+  void tenant;
   const location = await tx.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenant}, 'Sala principal', array['es-ES'], 'Venta en establecimiento')
+    insert into locations (name, invoice_locales, operation_description) values ('Sala principal', array['es-ES'], 'Venta en establecimiento')
     returning id
   `);
   const till = await tx.execute<{ id: string }>(sql`
-    insert into tills (tenant_id, location_id, name) values (${tenant}, ${location.rows[0]!.id}, 'Caja 1')
+    insert into tills (location_id, name) values (${location.rows[0]!.id}, 'Caja 1')
     returning id
   `);
   const tillId = brandTillId(till.rows[0]!.id);
   const node = await tx.execute<{ id: string }>(sql`
-    insert into nodes (tenant_id, location_id, name) values (${tenant}, ${location.rows[0]!.id}, 'Node 1')
+    insert into nodes (location_id, name) values (${location.rows[0]!.id}, 'Node 1')
     returning id
   `);
   const nodeId = brandNodeId(node.rows[0]!.id);
   const series = await tx.execute<{ id: string }>(sql`
-    insert into invoice_series (tenant_id, node_id, code) values (${tenant}, ${nodeId}, 'A')
+    insert into invoice_series (node_id, code) values (${nodeId}, 'A')
     returning id
   `);
   return { tillId, nodeId, seriesId: brandSeriesId(series.rows[0]!.id) };

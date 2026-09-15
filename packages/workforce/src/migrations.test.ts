@@ -124,8 +124,7 @@ describe("the D1a time & attendance tables", () => {
         insert into time_entries (
           person_id, location_id, entry_kind, event_at, event_offset_minutes,
           recorded_by_person_id
-        ) values (
-          ${personId}, ${locationId}, 'lunch', '2026-01-05T09:00:00Z', 0, ${personId})`),
+        ) values (${personId}, ${locationId}, 'lunch', '2026-01-05T09:00:00Z', 0, ${personId})`),
     );
     expect(pgErrorCode(error)).toBe("22P02"); // invalid_text_representation
   });
@@ -140,8 +139,7 @@ describe("the D1a time & attendance tables", () => {
         insert into time_entries (
           person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
           recorded_by_person_id, recorded_at, entry_hash, sequence_no, is_first_entry
-        ) values (
-          ${personId}, ${locationId}, ${nodeId}, 'in', '2026-01-05T09:00:00Z', 900,
+        ) values (${personId}, ${locationId}, ${nodeId}, 'in', '2026-01-05T09:00:00Z', 900,
           ${personId}, '2026-01-05T09:00:00Z', ${"A".repeat(64)}, 1, true)`),
     );
     expect(pgErrorCode(error)).toBe("23514"); // check_violation
@@ -192,8 +190,7 @@ describe("the D1b correction columns", () => {
       insert into time_entries (
         person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
         recorded_by_person_id, recorded_at, entry_hash, sequence_no, is_first_entry
-      ) values (
-        ${personId}, ${locationId}, ${nodeId}, 'in', '2026-01-05T09:00:00Z', 0,
+      ) values (${personId}, ${locationId}, ${nodeId}, 'in', '2026-01-05T09:00:00Z', 0,
         ${personId}, '2026-01-05T09:00:00Z', ${"A".repeat(64)}, 1, true
       ) returning id`);
     return { personId, locationId, nodeId, entryId: rows.rows[0]!.id };
@@ -208,8 +205,7 @@ describe("the D1b correction columns", () => {
         person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
         recorded_by_person_id, recorded_at, corrects_entry_id, correction_reason, correction_status,
         correction_actor_id, entry_hash, prev_entry_hash, sequence_no, is_first_entry
-      ) values (
-        ${personId}, ${locationId}, ${nodeId}, 'correction', '2026-01-05T18:00:00Z', 0,
+      ) values (${personId}, ${locationId}, ${nodeId}, 'correction', '2026-01-05T18:00:00Z', 0,
         ${personId}, '2026-01-05T18:00:00Z', ${entryId}, 'forgot to clock out', 'approved', ${personId},
         ${"B".repeat(64)}, ${"A".repeat(64)}, 2, false)`);
     const rows = await suite.db.execute<{ n: number }>(sql`
@@ -230,8 +226,7 @@ describe("the D1b correction columns", () => {
           person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
           recorded_by_person_id, recorded_at, corrects_entry_id, entry_hash, prev_entry_hash,
           sequence_no, is_first_entry
-        ) values (
-          ${personId}, ${locationId}, ${nodeId}, 'correction', '2026-01-05T18:00:00Z', 0,
+        ) values (${personId}, ${locationId}, ${nodeId}, 'correction', '2026-01-05T18:00:00Z', 0,
           ${personId}, '2026-01-05T18:00:00Z', ${entryId}, ${"B".repeat(64)}, ${"A".repeat(64)}, 2, false)`),
     );
     expect(pgErrorCode(error)).toBe("23514"); // check_violation
@@ -250,8 +245,7 @@ describe("the D1b correction columns", () => {
           person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
           recorded_by_person_id, recorded_at, correction_status, entry_hash, prev_entry_hash,
           sequence_no, is_first_entry
-        ) values (
-          ${personId}, ${locationId}, ${nodeId}, 'in', '2026-01-05T09:00:00Z', 0,
+        ) values (${personId}, ${locationId}, ${nodeId}, 'in', '2026-01-05T09:00:00Z', 0,
           ${personId}, '2026-01-05T09:00:00Z', 'requested', ${"B".repeat(64)}, ${"A".repeat(64)}, 2, false)`),
     );
     expect(pgErrorCode(error)).toBe("23514");
@@ -268,8 +262,7 @@ describe("the D1b correction columns", () => {
           person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
           recorded_by_person_id, recorded_at, corrects_entry_id, correction_reason, correction_status,
           correction_actor_id, entry_hash, prev_entry_hash, sequence_no, is_first_entry
-        ) values (
-          ${personId}, ${locationId}, ${nodeId}, 'correction', '2026-01-05T18:00:00Z', 0,
+        ) values (${personId}, ${locationId}, ${nodeId}, 'correction', '2026-01-05T18:00:00Z', 0,
           ${personId}, '2026-01-05T18:00:00Z', ${crypto.randomUUID()}, 'dangling', 'approved', ${personId},
           ${"B".repeat(64)}, ${"A".repeat(64)}, 2, false)`),
     );

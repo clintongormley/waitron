@@ -63,19 +63,19 @@ async function codeOf(fn: () => Promise<unknown>): Promise<string> {
   return typeof error === "string" ? error : error.code;
 }
 
-/** Rows for `tenantId` counted as the owner, independently of anything the app role's own reads
- * return — so a refused or rolled-back write is visible here as an absence. */
-async function rowCount(tenantId: string): Promise<number> {
+/** Rows counted as the owner, independently of anything the app role's own reads return — so a
+ * refused or rolled-back write is visible here as an absence. */
+async function rowCount(): Promise<number> {
   const rows = await suite.admin.execute<{ n: number }>(
-    sql`select count(*)::int as n from device_profiles where tenant_id = ${tenantId}`,
+    sql`select count(*)::int as n from device_profiles`,
   );
   return rows.rows[0]!.n;
 }
 
-/** Delete every device profile of `tenantId` as the owner — a `finally` teardown so a
- * suite reusing the shared managerTenant is order-independent (CLAUDE.md §4). */
-async function purgeProfiles(tenantId: string): Promise<void> {
-  await suite.admin.execute(sql`delete from device_profiles where tenant_id = ${tenantId}`);
+/** Delete every device profile as the owner — a `finally` teardown so the suite is
+ * order-independent (CLAUDE.md §4). */
+async function purgeProfiles(): Promise<void> {
+  await suite.admin.execute(sql`delete from device_profiles`);
 }
 
 /** Create a real canvas for `tenantId` (as a manager) and return its id — the target the FK check
@@ -84,7 +84,6 @@ async function seedCanvas(tenantId: string, session: string, name: string): Prom
   const { id } = await asApp(tenantId, (tx) =>
     createCanvas(tx, {
       managementSessionId: session,
-      tenantId,
       name,
       definition: DEFAULT_CANVASES["till"],
     }),
@@ -106,7 +105,6 @@ describe("device-profile store on real Postgres, as the app role", () => {
       const created = await asApp(managerTenant, (tx) =>
         createDeviceProfile(tx, {
           managementSessionId: managerSession,
-          tenantId: managerTenant,
           name: "Front counter",
           formFactor: "till",
           canvasId: null,
@@ -127,7 +125,7 @@ describe("device-profile store on real Postgres, as the app role", () => {
       );
       expect(fetched).toEqual(created);
     } finally {
-      await purgeProfiles(managerTenant);
+      await purgeProfiles();
     }
   });
 
@@ -137,7 +135,6 @@ describe("device-profile store on real Postgres, as the app role", () => {
     const created = await asApp(tenantId, (tx) =>
       createDeviceProfile(tx, {
         managementSessionId: session,
-        tenantId,
         name: "Kitchen display",
         canvasId: null,
         capabilities: ["act-as-kds"],
@@ -168,7 +165,6 @@ describe("device-profile store on real Postgres, as the app role", () => {
     const handheld = await asApp(tenantId, (tx) =>
       createDeviceProfile(tx, {
         managementSessionId: session,
-        tenantId,
         name: "Handheld",
         formFactor: "phone-portrait",
         canvasId: null,
@@ -184,7 +180,6 @@ describe("device-profile store on real Postgres, as the app role", () => {
     const kds = await asApp(tenantId, (tx) =>
       createDeviceProfile(tx, {
         managementSessionId: session,
-        tenantId,
         name: "Kitchen",
         formFactor: "kds",
         canvasId: null,
@@ -202,7 +197,6 @@ describe("device-profile store on real Postgres, as the app role", () => {
     const created = await asApp(tenantId, (tx) =>
       createDeviceProfile(tx, {
         managementSessionId: session,
-        tenantId,
         name: "Bound",
         formFactor: "till",
         canvasId,
@@ -225,7 +219,6 @@ describe("device-profile store on real Postgres, as the app role", () => {
     const first = await asApp(tenantId, (tx) =>
       createDeviceProfile(tx, {
         managementSessionId: session,
-        tenantId,
         name: "P1",
         formFactor: "till",
         canvasId: null,
@@ -235,7 +228,6 @@ describe("device-profile store on real Postgres, as the app role", () => {
     const second = await asApp(tenantId, (tx) =>
       createDeviceProfile(tx, {
         managementSessionId: session,
-        tenantId,
         name: "P2",
         formFactor: "till",
         canvasId: null,
@@ -261,7 +253,6 @@ describe("device-profile store on real Postgres, as the app role", () => {
     const created = await asApp(tenantId, (tx) =>
       createDeviceProfile(tx, {
         managementSessionId: session,
-        tenantId,
         name: "Original",
         formFactor: "till",
         canvasId: null,
@@ -271,7 +262,6 @@ describe("device-profile store on real Postgres, as the app role", () => {
     const updated = await asApp(tenantId, (tx) =>
       updateDeviceProfile(tx, {
         managementSessionId: session,
-        tenantId,
         id: created.id,
         name: "Renamed",
         formFactor: "till",
@@ -290,7 +280,7 @@ describe("device-profile store on real Postgres, as the app role", () => {
     expect(await asApp(tenantId, (tx) => getDeviceProfile(tx, tenantId, created.id))).toEqual(
       updated,
     );
-    expect(await rowCount(tenantId)).toBe(1); // update, never insert a duplicate
+    expect(await rowCount()).toBe(1); // update, never insert a duplicate
   });
 
   it("deletes an unreferenced profile", async () => {
@@ -299,7 +289,6 @@ describe("device-profile store on real Postgres, as the app role", () => {
     const created = await asApp(tenantId, (tx) =>
       createDeviceProfile(tx, {
         managementSessionId: session,
-        tenantId,
         name: "Doomed",
         formFactor: "till",
         canvasId: null,
@@ -307,12 +296,12 @@ describe("device-profile store on real Postgres, as the app role", () => {
       }),
     );
     await asApp(tenantId, (tx) =>
-      deleteDeviceProfile(tx, { managementSessionId: session, tenantId, id: created.id }),
+      deleteDeviceProfile(tx, { managementSessionId: session, id: created.id }),
     );
     expect(
       await asApp(tenantId, (tx) => getDeviceProfile(tx, tenantId, created.id)),
     ).toBeUndefined();
-    expect(await rowCount(tenantId)).toBe(0);
+    expect(await rowCount()).toBe(0);
   });
 
   it("translates a delete of a device-referenced profile to device_profile.in_use (23001 → 409), profile survives", async () => {
@@ -327,7 +316,6 @@ describe("device-profile store on real Postgres, as the app role", () => {
     const created = await asApp(tenantId, (tx) =>
       createDeviceProfile(tx, {
         managementSessionId: session,
-        tenantId,
         name: "Referenced",
         formFactor: "till",
         canvasId: null,
@@ -338,23 +326,20 @@ describe("device-profile store on real Postgres, as the app role", () => {
     // thing under test. A device is defined by its profile's form factor (no device_kind column); the
     // `till` profile means the binding rule (0004_device_binding_rule) requires a register, not a station.
     const location = await suite.admin.execute<{ id: string }>(sql`
-      insert into locations (tenant_id, name, invoice_locales, operation_description)
-      values (${tenantId}, 'Loc', array['es'], 'Hostelería') returning id`);
+      insert into locations (name, invoice_locales, operation_description) values ('Loc', array['es'], 'Hostelería') returning id`);
     const till = await suite.admin.execute<{ id: string }>(sql`
-      insert into tills (tenant_id, location_id, name)
-      values (${tenantId}, ${location.rows[0]!.id}, 'Register 1') returning id`);
+      insert into tills (location_id, name) values (${location.rows[0]!.id}, 'Register 1') returning id`);
     await suite.admin.execute(sql`
-      insert into devices (tenant_id, location_id, till_id, label, token_hash, device_profile_id)
-      values (${tenantId}, ${location.rows[0]!.id}, ${till.rows[0]!.id}, 'Bound device', 'scrypt$00$00', ${created.id})`);
+      insert into devices (location_id, till_id, label, token_hash, device_profile_id) values (${location.rows[0]!.id}, ${till.rows[0]!.id}, 'Bound device', 'scrypt$00$00', ${created.id})`);
     const error = await errorOf(() =>
       asApp(tenantId, (tx) =>
-        deleteDeviceProfile(tx, { managementSessionId: session, tenantId, id: created.id }),
+        deleteDeviceProfile(tx, { managementSessionId: session, id: created.id }),
       ),
     );
     expect(typeof error).not.toBe("string"); // it threw an AppError, not a raw 23001
     expect((error as AppError).code).toBe("device_profile.in_use");
     expect((error as AppError).params).toEqual({}); // the fact of the reference is the whole message
-    expect(await rowCount(tenantId)).toBe(1); // the profile survived the refused delete (RESTRICT)
+    expect(await rowCount()).toBe(1); // the profile survived the refused delete (RESTRICT)
   });
 
   it("throws device_profile.not_found when updating an absent id", async () => {
@@ -367,7 +352,6 @@ describe("device-profile store on real Postgres, as the app role", () => {
       asApp(tenantId, (tx) =>
         updateDeviceProfile(tx, {
           managementSessionId: session,
-          tenantId,
           id: "00000000-0000-4000-8000-000000000000",
           name: "Ghost",
           formFactor: "till",
@@ -386,7 +370,6 @@ describe("device-profile store on real Postgres, as the app role", () => {
       asApp(tenantId, (tx) =>
         deleteDeviceProfile(tx, {
           managementSessionId: session,
-          tenantId,
           id: "00000000-0000-4000-8000-000000000000",
         }),
       ),
@@ -404,7 +387,6 @@ describe("device-profile store on real Postgres, as the app role", () => {
       asApp(staffTenant, (tx) =>
         createDeviceProfile(tx, {
           managementSessionId: staffSession,
-          tenantId: staffTenant,
           name: "Nope",
           formFactor: "till",
           canvasId: null,
@@ -413,7 +395,7 @@ describe("device-profile store on real Postgres, as the app role", () => {
       ),
     );
     expect(code).toBe("authorization.not_permitted");
-    expect(await rowCount(staffTenant)).toBe(0); // the gate ran before the write
+    expect(await rowCount()).toBe(0); // the gate ran before the write
   });
 
   it("rejects an unknown capability with device_profile.invalid {bad_capabilities} before any INSERT", async () => {
@@ -425,7 +407,6 @@ describe("device-profile store on real Postgres, as the app role", () => {
       asApp(tenantId, (tx) =>
         createDeviceProfile(tx, {
           managementSessionId: session,
-          tenantId,
           name: "Bad caps",
           formFactor: "till",
           canvasId: null,
@@ -436,7 +417,7 @@ describe("device-profile store on real Postgres, as the app role", () => {
     expect(typeof error).not.toBe("string");
     expect((error as AppError).code).toBe("device_profile.invalid");
     expect((error as AppError).params).toEqual({ reason: "bad_capabilities" });
-    expect(await rowCount(tenantId)).toBe(0); // validate threw before the INSERT
+    expect(await rowCount()).toBe(0); // validate threw before the INSERT
   });
 
   it("translates a duplicate name to device_profile.name_taken (23505 → clean 409), no second row", async () => {
@@ -445,7 +426,6 @@ describe("device-profile store on real Postgres, as the app role", () => {
     await asApp(tenantId, (tx) =>
       createDeviceProfile(tx, {
         managementSessionId: session,
-        tenantId,
         name: "Twin",
         formFactor: "till",
         canvasId: null,
@@ -456,7 +436,6 @@ describe("device-profile store on real Postgres, as the app role", () => {
       asApp(tenantId, (tx) =>
         createDeviceProfile(tx, {
           managementSessionId: session,
-          tenantId,
           name: "Twin",
           formFactor: "till",
           canvasId: null,
@@ -465,7 +444,7 @@ describe("device-profile store on real Postgres, as the app role", () => {
       ),
     );
     expect(code).toBe("device_profile.name_taken");
-    expect(await rowCount(tenantId)).toBe(1); // the duplicate never landed
+    expect(await rowCount()).toBe(1); // the duplicate never landed
   });
 
   it("translates a duplicate name on UPDATE to device_profile.name_taken", async () => {
@@ -474,7 +453,6 @@ describe("device-profile store on real Postgres, as the app role", () => {
     await asApp(tenantId, (tx) =>
       createDeviceProfile(tx, {
         managementSessionId: session,
-        tenantId,
         name: "Keep",
         formFactor: "till",
         canvasId: null,
@@ -484,7 +462,6 @@ describe("device-profile store on real Postgres, as the app role", () => {
     const second = await asApp(tenantId, (tx) =>
       createDeviceProfile(tx, {
         managementSessionId: session,
-        tenantId,
         name: "Move",
         formFactor: "till",
         canvasId: null,
@@ -495,7 +472,6 @@ describe("device-profile store on real Postgres, as the app role", () => {
       asApp(tenantId, (tx) =>
         updateDeviceProfile(tx, {
           managementSessionId: session,
-          tenantId,
           id: second.id,
           name: "Keep", // collides with the first profile's name
           formFactor: "till",

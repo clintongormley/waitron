@@ -16,13 +16,9 @@ import { usePgliteDb } from "./testing/lifecycle.js";
 
 // There is deliberately no seedLocation helper (only seedTenant/seedNode exist — see seed.test.ts), so
 // build the location the node FKs first, exactly as seedNode's own suite does.
-async function seedLocation(
-  db: Database,
-  tenant: TenantId,
-): Promise<ReturnType<typeof brandLocationId>> {
+async function seedLocation(db: Database): Promise<ReturnType<typeof brandLocationId>> {
   const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${tenant}, 'Test location', ARRAY['es']::text[], 'Restaurant') returning id`);
+    insert into locations (name, invoice_locales, operation_description) values ('Test location', ARRAY['es']::text[], 'Restaurant') returning id`);
   return brandLocationId(loc.rows[0]!.id);
 }
 
@@ -35,7 +31,7 @@ describe("membership trust-set accessors", () => {
   beforeEach(async () => {
     await pg.db.execute(sql`delete from nodes`);
     tenantId = await seedTenant(pg.db);
-    nodeId = await seedNode(pg.db, tenantId, await seedLocation(pg.db, tenantId));
+    nodeId = await seedNode(pg.db, tenantId, await seedLocation(pg.db));
   });
 
   it("readMembershipTrustSet omits a node whose public_key is null", async () => {
@@ -49,7 +45,7 @@ describe("membership trust-set accessors", () => {
 
   it("readMembershipTrustSet returns every keyed node (two-node topology)", async () => {
     // A second node in the SAME database, so both are in the trust set the read returns.
-    const nodeId2 = await seedNode(pg.db, tenantId, await seedLocation(pg.db, tenantId));
+    const nodeId2 = await seedNode(pg.db, tenantId, await seedLocation(pg.db));
     await setNodePublicKey(pg.db, tenantId, nodeId, "KEY_A");
     await setNodePublicKey(pg.db, tenantId, nodeId2, "KEY_B");
     expect(await readMembershipTrustSet(pg.db, tenantId)).toEqual({

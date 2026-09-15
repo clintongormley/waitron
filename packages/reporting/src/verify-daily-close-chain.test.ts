@@ -69,11 +69,7 @@ function craftClose(opts: {
   entryHash: string;
 }): Promise<unknown> {
   return suite.db.execute(sql`
-    insert into daily_closes (
-      tenant_id, node_id, business_day, sequence_no,
-      prev_entry_hash, entry_hash, closed_by, snapshot
-    ) values (
-      ${venue.tenantId}, ${venue.nodeId}, ${opts.businessDay}, ${opts.sequenceNo},
+    insert into daily_closes (node_id, business_day, sequence_no, prev_entry_hash, entry_hash, closed_by, snapshot) values (${venue.nodeId}, ${opts.businessDay}, ${opts.sequenceNo},
       ${opts.prevEntryHash}, ${opts.entryHash}, ${CLOSED_BY}, ${SNAPSHOT}::jsonb
     )`);
 }
@@ -150,7 +146,7 @@ describe("verifyDailyCloseChain — the chain re-walk", () => {
     await record("2026-08-05", []);
     await suite.db.execute(sql`
       update daily_close_chain set sequence_no = 3, last_entry_hash = ${"F".repeat(64)}
-       where tenant_id = ${venue.tenantId} and node_id = ${venue.nodeId}`);
+       where node_id = ${venue.nodeId}`);
     expect(await verify()).toEqual({ ok: false, brokenAt: 3, reason: "tail_truncation" });
   });
 
@@ -162,7 +158,7 @@ describe("verifyDailyCloseChain — the chain re-walk", () => {
     await record("2026-08-05", []);
     await suite.db.execute(sql`
       update daily_close_chain set last_entry_hash = ${"E".repeat(64)}
-       where tenant_id = ${venue.tenantId} and node_id = ${venue.nodeId}`);
+       where node_id = ${venue.nodeId}`);
     expect(await verify()).toEqual({ ok: false, brokenAt: 2, reason: "tail_truncation" });
   });
 });

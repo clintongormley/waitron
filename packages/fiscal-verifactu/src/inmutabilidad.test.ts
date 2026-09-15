@@ -30,8 +30,7 @@ async function insertRegistro(tx: Transaction, secuencia: number) {
       tipo_factura, descripcion_operacion, desglose, cuota_total, importe_total,
       primer_registro, sistema_informatico,
       fecha_hora_huso_gen_registro, offset_minutos, tipo_huella, huella
-    ) values (
-      ${TENANT_A.id}, ${TENANT_A.tillId}, ${TENANT_A.nodeId}, ${TENANT_A.sifId}, ${TENANT_A.saleId},
+    ) values (${TENANT_A.id}, ${TENANT_A.tillId}, ${TENANT_A.nodeId}, ${TENANT_A.sifId}, ${TENANT_A.saleId},
       ${secuencia}, 'alta',
       '89890001K', ${"A/" + String(secuencia)}, '2026-07-20', 'Waitron SL',
       'F2', 'Venta en establecimiento', '[]'::jsonb, '12.35', '123.45',

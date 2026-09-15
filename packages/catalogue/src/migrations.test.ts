@@ -172,29 +172,27 @@ describe("the catalogue foreign keys refuse a missing or mismatched target", () 
 
   /** Rows seeded per test: the per-test reset empties every table after each case. */
   async function catalogue() {
-    const tenantId = await seedTenant(db);
+    await seedTenant(db);
     const one = async (statement: ReturnType<typeof sql>) =>
       (await db.execute<{ id: string }>(statement)).rows[0]!.id;
-    const menuId = await one(
-      sql`insert into catalogues (tenant_id, name) values (${tenantId}, 'Lunch') returning id`,
-    );
+    const menuId = await one(sql`insert into catalogues (name) values ('Lunch') returning id`);
     const otherMenuId = await one(
-      sql`insert into catalogues (tenant_id, name) values (${tenantId}, 'Dinner') returning id`,
+      sql`insert into catalogues (name) values ('Dinner') returning id`,
     );
     const product = (description: string) =>
-      one(sql`insert into products (tenant_id, catalogue_id, descriptions, pricing_unit, unit_price, vat_class)
-        values (${tenantId}, ${menuId}, ${JSON.stringify({ en: description })}::jsonb, 'each', 1, 'general')
+      one(sql`insert into products (catalogue_id, descriptions, pricing_unit, unit_price, vat_class) values (${menuId}, ${JSON.stringify({ en: description })}::jsonb, 'each', 1, 'general')
         returning id`);
     const productId = await product("Soup");
     const otherProductId = await product("Bread");
     const categoryId = await one(
-      sql`insert into categories (tenant_id, name) values (${tenantId}, '{"en":"Food"}') returning id`,
+      sql`insert into categories (name) values ('{"en":"Food"}') returning id`,
     );
     const groupId = await one(
-      sql`insert into option_groups (tenant_id, name) values (${tenantId}, '{"en":"Size"}') returning id`,
+      sql`insert into option_groups (name) values ('{"en":"Size"}') returning id`,
     );
-    const optionId = await one(sql`insert into option_group_items (tenant_id, group_id, name)
-      values (${tenantId}, ${groupId}, '{"en":"Large"}') returning id`);
+    const optionId = await one(
+      sql`insert into option_group_items (group_id, name) values (${groupId}, '{"en":"Large"}') returning id`,
+    );
     const unitId = await one(sql`insert into units (seed_key, name, abbreviation, precision)
       values ('each', '{"en":"each"}', '{"en":"ea"}', 0) returning id`);
     const sectionId = await one(sql`insert into menu_sections (menu_id, name)

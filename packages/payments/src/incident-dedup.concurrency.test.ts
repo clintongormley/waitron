@@ -69,7 +69,7 @@ describe("recordIncidentOnce is race-safe: concurrent same-key raises collapse t
 
       const { rows } = await postgres.admin.execute<{ n: string }>(sql`
         select count(*)::text as n from incidents
-        where tenant_id = ${s.tenantId} and code = 'payment.offline_forward_declined'
+        where code = 'payment.offline_forward_declined'
           and sale_id is null and acknowledged_at is null`);
       expect(rows[0].n).toBe("1");
     } finally {

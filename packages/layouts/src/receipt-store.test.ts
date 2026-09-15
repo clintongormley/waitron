@@ -43,9 +43,9 @@ async function codeOf(fn: () => Promise<unknown>): Promise<string> {
   return isAppError(error) ? error.code : `did not throw an AppError: ${String(error)}`;
 }
 
-async function rowCount(tenantId: string): Promise<number> {
+async function rowCount(): Promise<number> {
   const rows = await suite.admin.execute<{ n: number }>(
-    sql`select count(*)::int as n from tenant_receipts where tenant_id = ${tenantId}`,
+    sql`select count(*)::int as n from tenant_receipts`,
   );
   return rows.rows[0]!.n;
 }
@@ -63,7 +63,7 @@ describe("tenant receipt store on real Postgres, as the app role", () => {
     const managerSession = await seedSession(managerTenant, "manager");
     const receipt: ReceiptConfig = { headerSubtitle: "Hola" };
     await asApp(managerTenant, (tx) =>
-      putReceipt(tx, { managementSessionId: managerSession, tenantId: managerTenant, receipt }),
+      putReceipt(tx, { managementSessionId: managerSession, receipt }),
     );
     expect(await asApp(managerTenant, (tx) => getReceipt(tx, managerTenant))).toEqual(receipt);
   });
@@ -74,16 +74,13 @@ describe("tenant receipt store on real Postgres, as the app role", () => {
     await asApp(tenantId, (tx) =>
       putReceipt(tx, {
         managementSessionId: session,
-        tenantId,
         receipt: { headerSubtitle: "Calle Mayor 1" },
       }),
     );
     const next: ReceiptConfig = { footerMessage: "Gracias por su visita" };
-    await asApp(tenantId, (tx) =>
-      putReceipt(tx, { managementSessionId: session, tenantId, receipt: next }),
-    );
+    await asApp(tenantId, (tx) => putReceipt(tx, { managementSessionId: session, receipt: next }));
     // ON CONFLICT (tenant_id) DO UPDATE — the second write replaces the row, never adds one.
-    expect(await rowCount(tenantId)).toBe(1);
+    expect(await rowCount()).toBe(1);
     expect(await asApp(tenantId, (tx) => getReceipt(tx, tenantId))).toEqual(next);
   });
 
@@ -97,13 +94,12 @@ describe("tenant receipt store on real Postgres, as the app role", () => {
       asApp(staffTenant, (tx) =>
         putReceipt(tx, {
           managementSessionId: staffSession,
-          tenantId: staffTenant,
           receipt: { footerMessage: "Gracias" },
         }),
       ),
     );
     expect(code).toBe("authorization.not_permitted");
-    expect(await rowCount(staffTenant)).toBe(0); // the gate ran before the write
+    expect(await rowCount()).toBe(0); // the gate ran before the write
   });
 
   it("rejects an invalid receipt with receipt.invalid before any INSERT", async () => {
@@ -115,12 +111,11 @@ describe("tenant receipt store on real Postgres, as the app role", () => {
       asApp(tenantId, (tx) =>
         putReceipt(tx, {
           managementSessionId: session,
-          tenantId,
           receipt: { unknownField: "x" },
         }),
       ),
     );
     expect(code).toBe("receipt.invalid");
-    expect(await rowCount(tenantId)).toBe(0); // validate threw before the INSERT
+    expect(await rowCount()).toBe(0); // validate threw before the INSERT
   });
 });

@@ -59,11 +59,9 @@ describe("bookings schema (staff reservations — columns, CHECK, FKs)", () => {
       .insert(tenants)
       .values({ id: TENANT, country: "ES", taxId: "B00000000", legalName: "Fixture Tenant" });
     await suite.admin.execute(sql`
-      insert into locations (id, tenant_id, name, invoice_locales, operation_description)
-      values (${LOCATION}, ${TENANT}, 'Loc A', array['es'], 'Hostelería')`);
+      insert into locations (id, name, invoice_locales, operation_description) values (${LOCATION}, 'Loc A', array['es'], 'Hostelería')`);
     await suite.admin.execute(sql`
-      insert into dining_tables (id, tenant_id, location_id, label)
-      values (${TABLE}, ${TENANT}, ${LOCATION}, 'A1')`);
+      insert into dining_tables (id, location_id, label) values (${TABLE}, ${LOCATION}, 'A1')`);
   });
 
   function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {

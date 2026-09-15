@@ -52,18 +52,13 @@ function snapshotLiteral(nodeVariance: string): string {
 // `relation "daily_closes" does not exist` — the real cause — rather than at compile time on a
 // missing import, and the assertion exercises the actual column list a migration produces.
 function insertCloseSql(opts: {
-  tenantId: string;
   nodeId: string;
   businessDay: string;
   sequenceNo: number;
   snapshot?: string;
 }): ReturnType<typeof sql> {
   return sql`
-    insert into daily_closes (
-      tenant_id, node_id, business_day, sequence_no,
-      prev_entry_hash, entry_hash, closed_by, snapshot
-    ) values (
-      ${opts.tenantId}, ${opts.nodeId}, ${opts.businessDay}, ${opts.sequenceNo},
+    insert into daily_closes (node_id, business_day, sequence_no, prev_entry_hash, entry_hash, closed_by, snapshot) values (${opts.nodeId}, ${opts.businessDay}, ${opts.sequenceNo},
       '', ${"A".repeat(64)}, ${CLOSED_BY}, ${opts.snapshot ?? snapshotLiteral("0.00")}::jsonb
     ) returning id`;
 }
@@ -81,7 +76,6 @@ describe("frozen daily close schema (append-only triggers, columns, composite FK
     await admin.insert(locations).values([
       {
         id: LOCATION_A,
-        tenantId: TENANT_A,
         name: "Fixture Location A",
         invoiceLocales: ["es"],
         operationDescription: "Hosteleria",
@@ -98,7 +92,6 @@ describe("frozen daily close schema (append-only triggers, columns, composite FK
       await asAppUser(tx);
       await tx.execute(
         insertCloseSql({
-          tenantId: TENANT_A,
           nodeId: nodeA,
           businessDay: "2026-08-01",
           sequenceNo: 1,
@@ -116,7 +109,7 @@ describe("frozen daily close schema (append-only triggers, columns, composite FK
         select business_day, sequence_no, prev_entry_hash, entry_hash, closed_by,
                snapshot->'cashReconciliation'->>'nodeVariance' as node_variance
           from daily_closes
-         where tenant_id = ${TENANT_A} and node_id = ${nodeA} and business_day = '2026-08-01'`);
+         where node_id = ${nodeA} and business_day = '2026-08-01'`);
       return result.rows[0];
     });
     expect(row?.sequence_no).toBe(1);
@@ -138,7 +131,6 @@ describe("frozen daily close schema (append-only triggers, columns, composite FK
       await tx.execute(sql`set local role app_user`);
       await tx.execute(
         insertCloseSql({
-          tenantId: TENANT_A,
           nodeId: nodeA,
           businessDay: "2026-08-04",
           sequenceNo: 4,

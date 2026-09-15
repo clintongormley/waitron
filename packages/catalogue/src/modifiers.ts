@@ -132,6 +132,7 @@ async function writeChoices(
   modifierId: string,
   input: ModifierInput,
 ) {
+  void tenantId;
   const choices = input.type === "extras" || input.type === "options" ? input.choices : [];
   const old = await tx
     .select()
@@ -166,7 +167,7 @@ async function writeChoices(
     } else {
       const inserted = await tx
         .insert(optionGroupItems)
-        .values({ tenantId, groupId: modifierId, id: choice.id, ...values })
+        .values({ groupId: modifierId, id: choice.id, ...values })
         .onConflictDoNothing()
         .returning({ id: optionGroupItems.id });
       if (!inserted.length) throw new AppError("modifier.invalid", { field: `choices.${sort}.id` });
@@ -183,7 +184,7 @@ export async function createModifier(
   await validateLabels(tx, input, fallbackLanguage);
   await lockModifierDefinitions(tx);
   const id = randomUUID();
-  await tx.insert(optionGroups).values({ tenantId, id, ...groupValues(input) });
+  await tx.insert(optionGroups).values({ id, ...groupValues(input) });
   await writeChoices(tx, tenantId, id, input);
   return getModifier(tx, id);
 }

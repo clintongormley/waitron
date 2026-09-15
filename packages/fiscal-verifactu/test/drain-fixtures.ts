@@ -106,19 +106,12 @@ export async function insertPendingAlta(
 ): Promise<{ registroId: string; numSerieFactura: string }> {
   const numSerieFactura = `S${String(params.secuencia)}/1`;
   const series = await db.execute<{ id: string }>(sql`
-    insert into invoice_series (tenant_id, node_id, code)
-    values (${params.tenantId}, ${params.nodeId}, ${"S" + String(params.secuencia)})
+    insert into invoice_series (node_id, code) values (${params.nodeId}, ${"S" + String(params.secuencia)})
     returning id
   `);
   const seriesId = series.rows[0]?.id;
   const sale = await db.execute<{ id: string }>(sql`
-    insert into sales (
-      tenant_id, till_id, node_id, series_id, invoice_number,
-      issued_at, issued_offset_minutes,
-      total, vat_breakdown,
-      locale, invoice_locales, fiscal_backend, fiscal_state
-    ) values (
-      ${params.tenantId}, ${params.tillId}, ${params.nodeId}, ${seriesId}, ${params.secuencia},
+    insert into sales (till_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes, total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state) values (${params.tillId}, ${params.nodeId}, ${seriesId}, ${params.secuencia},
       '2026-07-20T19:20:30+01:00', 60,
       '0.00', '[]'::jsonb,
       'es', array['es'], 'verifactu', 'recorded'
@@ -149,8 +142,7 @@ export async function insertPendingAlta(
       tipo_factura, descripcion_operacion, desglose, cuota_total, importe_total,
       primer_registro, sistema_informatico,
       fecha_hora_huso_gen_registro, offset_minutos, tipo_huella, huella, entorno
-    ) values (
-      ${params.tenantId}, ${params.tillId}, ${params.nodeId}, ${params.sifId}, ${saleId}, ${params.secuencia}, 'alta',
+    ) values (${params.tenantId}, ${params.tillId}, ${params.nodeId}, ${params.sifId}, ${saleId}, ${params.secuencia}, 'alta',
       ${params.nif}, ${numSerieFactura}, ${params.fecha}, 'Waitron SL',
       'F2', 'Venta en establecimiento', ${desglose}::jsonb, '2.10', '12.10',
       true, '{}'::jsonb,
@@ -317,22 +309,21 @@ export async function seedSecondChain(
   // calls; only `currentSif`/`registerSif`, which are typed against `Transaction`, get their own
   // `db.transaction(...)` wrapper below).
   const location = await db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${seeded.tenantId}, 'Sala B', array['es'], 'Venta en establecimiento')
+    insert into locations (name, invoice_locales, operation_description) values ('Sala B', array['es'], 'Venta en establecimiento')
     returning id
   `);
   const till = await db.execute<{ id: string }>(sql`
-    insert into tills (tenant_id, location_id, name) values (${seeded.tenantId}, ${location.rows[0]!.id}, 'Till B')
+    insert into tills (location_id, name) values (${location.rows[0]!.id}, 'Till B')
     returning id
   `);
   const tillId = brandTillId(till.rows[0]!.id);
   const node = await db.execute<{ id: string }>(sql`
-    insert into nodes (tenant_id, location_id, name) values (${seeded.tenantId}, ${location.rows[0]!.id}, 'Node B')
+    insert into nodes (location_id, name) values (${location.rows[0]!.id}, 'Node B')
     returning id
   `);
   const nodeId = brandNodeId(node.rows[0]!.id);
   await db.execute(sql`
-    insert into invoice_series (tenant_id, node_id, code) values (${seeded.tenantId}, ${nodeId}, 'B')
+    insert into invoice_series (node_id, code) values (${nodeId}, 'B')
   `);
   // Same `nif`, same `idSistemaInformatico` ("WT" — `seedTenantWithSif`'s own literal) as
   // `seeded`'s own chain: `registerSif` mints installation numbers per (nif,
@@ -399,22 +390,21 @@ export async function seedIndependentChain(
   params: { sifId: string; secuencia: number; entorno?: Entorno | null },
 ): Promise<{ registroId: string; facturaKey: string }> {
   const location = await db.execute<{ id: string }>(sql`
-    insert into locations (tenant_id, name, invoice_locales, operation_description)
-    values (${seeded.tenantId}, 'Sala Z', array['es'], 'Venta en establecimiento')
+    insert into locations (name, invoice_locales, operation_description) values ('Sala Z', array['es'], 'Venta en establecimiento')
     returning id
   `);
   const till = await db.execute<{ id: string }>(sql`
-    insert into tills (tenant_id, location_id, name) values (${seeded.tenantId}, ${location.rows[0]!.id}, 'Till Z')
+    insert into tills (location_id, name) values (${location.rows[0]!.id}, 'Till Z')
     returning id
   `);
   const tillId = brandTillId(till.rows[0]!.id);
   const node = await db.execute<{ id: string }>(sql`
-    insert into nodes (tenant_id, location_id, name) values (${seeded.tenantId}, ${location.rows[0]!.id}, 'Node Z')
+    insert into nodes (location_id, name) values (${location.rows[0]!.id}, 'Node Z')
     returning id
   `);
   const nodeId = brandNodeId(node.rows[0]!.id);
   await db.execute(sql`
-    insert into invoice_series (tenant_id, node_id, code) values (${seeded.tenantId}, ${nodeId}, 'Z')
+    insert into invoice_series (node_id, code) values (${nodeId}, 'Z')
   `);
   // A fresh nif (not `seeded.nif`), so this row's own installation number can just be a fixed
   // literal with no risk of colliding with `seeded`'s real, `registerSif`-minted chain — this

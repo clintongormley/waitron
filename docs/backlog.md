@@ -1767,8 +1767,8 @@ turns out to need a design moves to its track.
   ever finalised long after the invoice printed?
 - A human account always keeps an email (no remove-email action; `setEmail` rejects clearing) — the
   rule now, rather than a missing UI path.
-- The duplicate purchase-invoice key `(tenant_id, supplier_tax_id, supplier_invoice_number)` is
-  unique forever — per-year versus forever is the asesor's.
+- The duplicate purchase-invoice key `(supplier_tax_id, supplier_invoice_number)` is unique
+  forever — per-year versus forever is the asesor's.
 
 ---
 

@@ -36,7 +36,7 @@ import "@waitron/shared";
 declare module "@waitron/shared" {
   interface ErrorParams {
     /**
-     * No such dining table for this tenant. `dining_tables` is a core table, so this code lives here
+     * No such dining table. `dining_tables` is a core table, so this code lives here
      * rather than in a verb package: it has throwers in more than one package (apps/server's table
      * verbs and @waitron/bookings' `requireActiveTable`), and only their common dependency — this
      * package — can hold the one declaration they all import. `tableId` is a caller-supplied uuid, not
@@ -56,7 +56,7 @@ declare module "@waitron/shared" {
     "series.no_standard_for_node": { tenantId: string; nodeId: string };
     /**
      * A series code being opened for a node is one the node already holds — live or retired: the
-     * natural key `(tenant_id, node_id, code)` covers both, so a retired code can never be reopened.
+     * natural key `(node_id, code)` covers both, so a retired code can never be reopened.
      * Reached only by a restore deriving a code that a human had chosen earlier; the restore is
      * redone. `series.*` names the domain concept; never renamed once shipped.
      */

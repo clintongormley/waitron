@@ -174,7 +174,7 @@ async function voidSale(
 
 async function countRows(table: string): Promise<number> {
   const result = await suite.db.execute<{ n: number }>(
-    sql`select count(*)::int as n from ${sql.raw(table)} where tenant_id = ${tenantId}`,
+    sql`select count(*)::int as n from ${sql.raw(table)}`,
   );
   return result.rows[0]!.n;
 }
@@ -294,7 +294,6 @@ describe("recordVoid — numbering", () => {
       withTransaction(suite.db, async (tx) => {
         await asAppUser(tx);
         await tx.insert(sales).values({
-          tenantId,
           tillId,
           nodeId,
           seriesId,
@@ -420,11 +419,14 @@ describe("recordVoid — error propagation", () => {
     // exposes both. One row carrying every field either path reads (plus a `manager` role that holds
     // `sale.void`) lets authorize pass on the operator path so control reaches the failing insert
     // this test is actually about.
-    const row = [{ tenantId, tillId, nodeId, personId: "operator", role: "manager" }];
+    // The stub's `from()` also answers `limit()`, which is how recordVoid reads the one `tenants`
+    // row for the taxpayer it hands to checkIntegrity and the incident.
+    const row = [{ id: tenantId, tenantId, tillId, nodeId, personId: "operator", role: "manager" }];
     const fakeTx = {
       select: () => ({
         from: () => ({
           where: () => Promise.resolve(row),
+          limit: () => Promise.resolve(row),
           innerJoin: () => ({ where: () => Promise.resolve(row) }),
         }),
       }),
