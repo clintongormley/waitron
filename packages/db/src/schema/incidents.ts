@@ -6,7 +6,8 @@ import { tenants, tills } from "./tenants.js";
 export type IncidentSeverity = "warning" | "error";
 
 /**
- * Fiscal incidents, surfaced to staff and to support.
+ * Incidents: problems recorded as they happen, shown as alerts on the management dashboard to anyone
+ * holding the permission for their area, who can mark them handled there.
  *
  * The only table in this plan that the application role may UPDATE, and only two of its
  * columns — see the migration below, which uses a column-level GRANT. An incident is a record
@@ -14,7 +15,8 @@ export type IncidentSeverity = "warning" | "error";
  * mutation.
  *
  * `code` and `params` come from a structured code+params pair rather than from a message
- * string, so the till can render this bilingually. A prose column here would reach a screen
+ * string, so the dashboard can word each alert in English or Spanish
+ * (`apps/dashboard/src/i18n/alert-messages.ts`). A prose column here would reach a screen
  * untranslatable, which is the constraint spec §9 places on this layer specifically.
  */
 export const incidents = pgTable(
@@ -35,15 +37,18 @@ export const incidents = pgTable(
     // mode: "string", matching sales.issuedAt/tenders.settledAt/sale_voids.voidedAt: a JS Date
     // normalises through the host timezone the moment anything formats it, and nothing formatted
     // is ever stored. Both columns here are populated by the application (recordIncident's own
-    // detectedAt, and a till acknowledging), never by defaultNow(), so the same discipline
-    // applies.
+    // detectedAt, and markIncidentHandled's acknowledgedAt when a manager marks the alert handled on
+    // the dashboard), never by defaultNow(), so the same discipline applies.
     detectedAt: timestamp("detected_at", { withTimezone: true, mode: "string" }).notNull(),
     acknowledgedAt: timestamp("acknowledged_at", { withTimezone: true, mode: "string" }),
     acknowledgedBy: uuid("acknowledged_by"),
   },
   (t) => [
-    // The till UI's query is "what is open on this till, newest first".
+    // `openIncidents` (packages/core): what is open on one till, newest first. Only tests call it;
+    // the till shows no incidents.
     index("incidents_till_open_idx").on(t.tillId, t.detectedAt),
+    // The dashboard's Handled tab: incidents handled since a date, most recent first.
+    index("incidents_handled_idx").on(t.acknowledgedAt),
     // A CHECK rather than a pgEnum, matching invoice_series.purpose's own precedent: `severity`
     // is a small, closed vocabulary and a CHECK is a one-line migration to widen, where an enum
     // needs ALTER TYPE.

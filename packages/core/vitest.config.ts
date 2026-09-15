@@ -25,9 +25,9 @@ export default defineConfig({
     // from, not how coverage merges across forks, so it neither introduces nor worsens the artifact.
     // (An isolated `test:coverage` here also reports 100/99.38/100/100, but per CLAUDE.md §2 that alone
     // proves nothing about the concurrent case.) It needs no
-    // `maxForks` connection cap (db/fiscal-verifactu's lever): only THREE real-PG files run here, the
-    // busiest of which (settle-sale) opens just two extra `pg.connect()` backends, so even fully
-    // parallel they hold a handful of connections, far under the shared cluster's ~100 budget.
+    // `maxForks` connection cap (db/fiscal-verifactu's lever): each real-PG race here opens just two
+    // extra `pg.connect()` backends, so even fully parallel they hold a handful of connections, far
+    // under the shared cluster's ~100 budget.
     coverage: {
       provider: "v8",
       reporter: ["text", "html", "json-summary"],

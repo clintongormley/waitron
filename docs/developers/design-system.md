@@ -81,12 +81,15 @@ This works whether or not `#app` also carries `data-theme` — see "Themes" abov
 
 `--wt-color-bg`, `--wt-color-surface`, `--wt-color-surface-raised`, `--wt-color-text`,
 `--wt-color-text-muted`, `--wt-color-primary`, `--wt-color-on-primary`, `--wt-color-danger`,
-`--wt-color-on-danger`, `--wt-color-success`, `--wt-color-border`, `--wt-color-focus`,
-`--wt-color-scrim`
+`--wt-color-on-danger`, `--wt-color-success`, `--wt-color-warning`, `--wt-color-on-warning`,
+`--wt-color-border`, `--wt-color-focus`, `--wt-color-scrim`
 
 Colours are semantic, not literal. There is no `--wt-color-blue`. `--wt-color-scrim` was added
 after the rest of the palette to back `wt-dialog`'s `::backdrop` — if you need a similar
 overlay/veil colour elsewhere, reuse it rather than inventing a new one.
+
+`--wt-color-warning` is the amber for a warning that is not yet an error, such as the alerts count
+badge when no open alert is an error. Text on it uses `--wt-color-on-warning`.
 
 A user-chosen data colour (a category's colour, so far) is the one deliberate exception to "no
 hex, no hardcoded chrome": `wt-lozenge` fills its background with that colour directly and computes
@@ -154,6 +157,8 @@ this floor — removing the `min-width` regresses that guard.
 | `wt-spinner` | `size` (`sm`\|`md`\|`lg`), `label` (the status region's accessible name), `decorative` | — |
 | `wt-card` | `raised`; default slot (body), `header` slot | — |
 | `wt-lozenge` | `color` (a hex string; empty or invalid renders the neutral chip); default slot (label) | — |
+| `wt-count-badge` | `count` (renders nothing at zero; shows `99+` above 99), `tone` (`neutral`\|`warning`\|`error`, reflected). It has no accessible name: the control it decorates must say the count | — |
+| `wt-toast` | `open`, `tone` (`info`\|`error`, reflected; info is announced politely through `role="status"`, error assertively through `role="alert"`), `message`, `close-label` (required: the close button's accessible name, and an empty one leaves that button nameless), `duration` (milliseconds, default `8000`; `0` keeps it open); `show()` opens it and restarts the full countdown (unless the pointer or keyboard focus is on it, when the countdown waits), which is how to re-announce an identical message. While the pointer or keyboard focus is on it the countdown never runs, even when the message changes; once both have left, the full duration restarts. Positioning belongs to the consumer, which must also register the `close` icon | `wt-activate` — `detail: {}` (the message was pressed; the toast then closes); `wt-close` — `detail: {}` (closed by the timer, the close button, or after activation) |
 | `wt-input` | `value`, `label`, `name`, `type`, `autocomplete`, `placeholder`, `required`, `disabled`, `invalid`, `error`; `help` and `end` slots | `wt-change` — `detail: { value: string }` |
 | `wt-switch` | `checked`, `disabled`, `label`, `name` | `wt-change` — `detail: { checked: boolean }` |
 | `wt-dialog` | `open`, `heading`, `aria-label` (fallback name when there is no `heading`), `dismissible` (default true; set the property `.dismissible=${false}` so Escape cannot close it); default slot (body), `footer` slot | `wt-close` |
@@ -162,7 +167,7 @@ this floor — removing the `min-width` regresses that guard.
 | `wt-form-actions` | `cancel`, `secondary`, and default slots | — |
 | `wt-help-tooltip` | `aria-label`; default slot | — |
 | `wt-tabs` | `items` (`{ key, label }[]`), `value`, `label`; named slots matching item keys | `wt-change` — `detail: { value: string }` |
-| `wt-row-actions` | `label`, `align` (`start`\|`end`, default `start` — which trigger edge the popup lines up with); default slot of action buttons | native events from actions |
+| `wt-row-actions` | `label`, `icon` (default `kebab`), `iconSize` (property; `wt-icon`'s `sm`\|`md`\|`lg`, default `md`), `align` (`start`\|`end`, default `start` — which trigger edge the popup lines up with; the popup's text starts at the start edge either way); default slot of action buttons; `badge` slot (drawn inside the trigger, in its top trailing corner); `part="popup"` (so a consumer can size the menu); methods `show()` and `hide()` open and close it from code | native events from actions |
 | `wt-data-table` | `rows`, `columns` (each has `cell` — `(row, { ancestorOnly }) => content` — and may carry `sortValue`, `searchValue` and a `filter` — `{ label, allLabel, value, options }`, which draws a dropdown whether or not the table is `searchable`), `rowKey`, `rowParent` (opts into tree mode), `collapseLabel`, `expandLabel`, `loading`, `loadingMessage`, `emptyMessage`, `errorMessage`, `aria-label`, `selectable`, `selected`, `selectionLabel` (`(row) => string`), `selectAllLabel`, `sortKey`, `sortDirection`, `searchable`, `searchLabel`, `searchPlaceholder` (defaults to `searchLabel`), `noMatchesMessage`, `viewKey` | `wt-selection-change` — `detail: { selected: string[] }`; `wt-sort-change` — `detail: { sortKey, sortDirection }`; native events from consumer-provided cells |
 | `wt-combobox` | `options` (`{value,label}[]`), `multiple`, `value`, `values`, `allowAdd`, `label`, `name`, `placeholder`, `required`, `disabled`, `invalid`, `error`, `countLabel`, `noResultsLabel`, `searchPlaceholder`, `addLabel` | `wt-change` — `detail: { value: string }` or `detail: { values: string[] }`; `wt-combobox-add` — `detail: { text: string }` |
 
@@ -309,8 +314,8 @@ An unregistered `name` renders nothing — there is no broken-icon fallback mark
 `packages/ui` primitive itself uses `<wt-icon name="...">` internally (`wt-row-actions`' kebab
 trigger, for one), that name becomes part of the primitive's contract: every consuming app must
 register it itself, or that primitive's icon silently disappears there. The dashboard's own set —
-`hamburger`, `kebab`, `chevron-down`, `gear`, `person`, `plus`, `grip`, each a plain geometric
-shape at the same 16x16 viewBox — lives in `apps/dashboard/src/icons.ts` (see that file's own header
+`hamburger`, `kebab`, `chevron-down`, `gear`, `person`, `plus`, `grip`, `bell`, `close`, each a
+plain geometric shape at the same 16x16 viewBox — lives in `apps/dashboard/src/icons.ts` (see that file's own header
 for which of these were plotted fresh and which one was scaled from a published glyph's path data)
 and is registered once in `main.ts`. `hamburger` and `kebab` look similar in the abstract ("reveal more") but mean
 different things at different scales: hamburger opens the whole app's navigation (used once);
@@ -474,7 +479,18 @@ banner shows the canonical Waitron lockup and the deployment tenant's legal name
 name: one deployment database represents one tenant, while that tenant can contain several
 locations. Once a session is active, put the account menu — a person-icon `wt-row-actions` popover
 holding Account settings and Log out — at the banner's trailing (right-hand in the shipped locales)
-edge. Do not show it before authentication.
+edge. Do not show it before authentication. Below the drawer breakpoint (`48rem`) the banner takes
+two rows: the menu toggle, the lockup and the menus share the first, with the lockup shrinking when
+space runs short, and the legal name and mode pill take the second in full.
+
+When the session may see alerts, the alerts bell (`dashboard-alerts-bell`, a `wt-row-actions` with
+the `bell` icon and a `wt-count-badge` in its `badge` slot) sits immediately before the account menu.
+The badge is red when any open alert is an error and amber otherwise. While there are open alerts,
+the trigger's accessible name includes the count, because the badge has no name of its own. The
+panel lists at most five alerts and, below the drawer breakpoint (`48rem`), spans the screen's width
+less a small gutter. When new alerts arrive while the page is open, a `wt-toast` appears just below the
+banner's bottom edge at the trailing edge, and below that same breakpoint spans the banner's width
+less a small gutter on each side.
 
 ### Dashboard sidebar navigation
 
@@ -869,7 +885,11 @@ disabled and loading states; `wt-spinner` as a status region and decorative — 
 2026-09-11; `wt-combobox` closed, closed and named only by a forwarded `aria-label`, open with
 results, open with the add row, open with no matches, multi-select with a selection, invalid with an
 error message, disabled and required — verified 2026-09-13 by running
-`packages/ui/src/components/wt-combobox.a11y.test.ts`, which covers those states in both themes). No
+`packages/ui/src/components/wt-combobox.a11y.test.ts`, which covers those states in both themes;
+`wt-count-badge` in its neutral, warning and error tones — verified 2026-09-14 by running
+`packages/ui/src/components/wt-count-badge.a11y.test.ts`; `wt-toast` open in its info and error
+tones, and closed — verified 2026-09-14 by running
+`packages/ui/src/components/wt-toast.a11y.test.ts`). No
 token values needed changing. (axe does flag unrelated `incomplete` — not
 violation — results: a `color-contrast` "background partially obscured" reading on `wt-dialog`'s
 `.body` slot, an [axe/shadow-DOM slot-content limitation](https://github.com/dequelabs/axe-core), and

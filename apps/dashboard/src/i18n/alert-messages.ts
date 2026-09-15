@@ -1,0 +1,109 @@
+// English and Spanish sentences for every alert code. `{name}` slots are filled from the alert's
+// params. Kept free of imports so the root guard (`scripts/alert-codes.test.ts`) can load it.
+//
+// No sentence promises a later check by the server: the daily payments check looks at each day once,
+// and the fiscal reconciliation sweep has no production caller. The one retry promised, in
+// `alert.source_unavailable`, is an open dashboard asking for its alerts again every minute.
+
+// An open payment incident swallows later detections for the same till and code, so its figures
+// are from when it was raised.
+const MORE_EN = " Later checks do not add to this alert while it is open, so there may be more.";
+const MORE_ES =
+  " Mientras esta alerta esté abierta, las comprobaciones posteriores no la amplían, así que puede haber más.";
+const NOT_RECHECKED_EN =
+  " Marking it handled does not fix it, and Waitron may not check these payments again.";
+const NOT_RECHECKED_ES =
+  " Marcarla como resuelta no lo soluciona, y es posible que Waitron no vuelva a comprobar estos pagos.";
+
+export const ALERT_MESSAGES: Readonly<
+  Record<string, { readonly en: string; readonly es: string }>
+> = {
+  "alert.source_unavailable": {
+    en: "One of Waitron's checks could not run. It will try again in a minute.",
+    es: "Una de las comprobaciones de Waitron no se ha podido ejecutar. Lo volverá a intentar en un minuto.",
+  },
+  "chain.verification_failed": {
+    en: "The invoice record chain failed its integrity check on a sale. Contact support.",
+    es: "La cadena de registros de facturación no ha superado su comprobación de integridad en una venta. Contacta con soporte.",
+  },
+  "clock.degraded": {
+    en: "This device's clock has not been checked against a trusted time source for {anchorAgeSeconds} seconds. Sales continue.",
+    es: "La hora de este equipo no se ha comprobado con una fuente de hora fiable desde hace {anchorAgeSeconds} segundos. Las ventas continúan.",
+  },
+  "clock.jump_detected": {
+    en: "This device's clock went backwards: it changed by {wallClockDeltaSeconds} seconds. Check its date and time.",
+    es: "La hora de este equipo ha retrocedido: ha cambiado {wallClockDeltaSeconds} segundos. Revisa su fecha y hora.",
+  },
+  "fiscal.registro_rechazado": {
+    en: "The tax agency (AEAT) rejected an invoice record: {mensaje} (code {codigo}). Later records on the same chain are on hold. Contact support.",
+    es: "La AEAT ha rechazado un registro de facturación: {mensaje} (código {codigo}). Los registros posteriores de la misma cadena están en espera. Contacta con soporte.",
+  },
+  "fiscal.aceptado_con_errores": {
+    en: "The tax agency (AEAT) accepted an invoice record but reported a problem: {mensaje} (code {codigo}).",
+    es: "La AEAT ha aceptado un registro de facturación, pero ha indicado un problema: {mensaje} (código {codigo}).",
+  },
+  "fiscal.duplicado_anulado": {
+    en: "The tax agency (AEAT) already holds this invoice record as cancelled. Sending on this chain is on hold. Contact support.",
+    es: "La AEAT ya tiene este registro de facturación como anulado. El envío de esta cadena está en espera. Contacta con soporte.",
+  },
+  "fiscal.huella_divergente": {
+    en: "An invoice record's fingerprint does not match the copy the tax agency (AEAT) holds. Sending on this chain is on hold. Contact support.",
+    es: "La huella de un registro de facturación no coincide con la copia de la AEAT. El envío de esta cadena está en espera. Contacta con soporte.",
+  },
+  "fiscal.environment_mismatch": {
+    en: "An invoice record was made for the tax agency's {recordEnvironment} service, but this box sends to {hostEnvironment}. It has not been sent. Contact support.",
+    es: "Un registro de facturación se creó para el servicio de {recordEnvironment} de la AEAT, pero este equipo envía a {hostEnvironment}. No se ha enviado. Contacta con soporte.",
+  },
+  "fiscal.environment_unknown": {
+    en: "An invoice record does not say which tax agency service it was made for, so it has not been sent. Contact support.",
+    es: "Un registro de facturación no indica para qué servicio de la AEAT se creó, así que no se ha enviado. Contacta con soporte.",
+  },
+  "fiscal.record_totals_disagree": {
+    en: "An invoice's totals do not match its tax lines. The tax agency accepts it, but check that sale's prices.",
+    es: "Los totales de una factura no coinciden con sus líneas de impuestos. La AEAT la acepta, pero revisa los precios de esa venta.",
+  },
+  "fiscal.reconcile_no_trace": {
+    en: "Invoice {numSerieFactura} was sent, but the tax agency (AEAT) has no record of it. Contact support.",
+    es: "La factura {numSerieFactura} se envió, pero la AEAT no tiene constancia de ella. Contacta con soporte.",
+  },
+  "fiscal.reconcile_drift_errores": {
+    en: "The tax agency (AEAT) now lists invoice {numSerieFactura} as accepted with errors, though it was recorded here as accepted. Waitron has updated its own record to match.",
+    es: "La AEAT indica ahora que la factura {numSerieFactura} se aceptó con errores, aunque aquí constaba como aceptada. Waitron ha actualizado su registro para que coincida.",
+  },
+  "fiscal.reconcile_drift_anulada": {
+    en: "The tax agency (AEAT) lists invoice {numSerieFactura} as cancelled, but it was not voided here. Contact support.",
+    es: "La AEAT indica que la factura {numSerieFactura} está anulada, pero aquí no se anuló. Contacta con soporte.",
+  },
+  "payment.offline_forward_declined": {
+    en: "A card payment of {amount} taken while offline was declined when it was sent on (reference {paymentRef}). Collect the money another way.",
+    es: "Un pago con tarjeta de {amount} cobrado sin conexión se rechazó al enviarlo (referencia {paymentRef}). Cobra el importe de otra forma.",
+  },
+  "payment.pending_outcome_unactionable": {
+    en: "Waitron could not tell what happened to card payment {paymentRef}: the card provider reported {status}, and money may have moved without reaching a sale. Waitron has marked the payment as failed. Check it in the provider's own dashboard.",
+    es: "Waitron no ha podido saber qué pasó con el pago con tarjeta {paymentRef}: el proveedor de pagos indicó {status}, y puede que se haya movido dinero sin llegar a una venta. Waitron ha marcado el pago como fallido. Compruébalo en el panel del proveedor.",
+  },
+  "payment.reconcile_unsettled": {
+    en: `A check found {count} card payments that the card provider had not paid out.${MORE_EN}${NOT_RECHECKED_EN}`,
+    es: `Una comprobación encontró {count} pagos con tarjeta que el proveedor de pagos no había liquidado.${MORE_ES}${NOT_RECHECKED_ES}`,
+  },
+  "payment.reconcile_lost_settlement": {
+    en: `A check found {count} payments the card provider says were paid, but that never finished here. Check those orders.${MORE_EN}${NOT_RECHECKED_EN}`,
+    es: `Una comprobación encontró {count} pagos que el proveedor de pagos indica como cobrados, pero que aquí no se completaron. Revisa esos pedidos.${MORE_ES}${NOT_RECHECKED_ES}`,
+  },
+  "payment.reconcile_orphan": {
+    en: `A check found {count} card payments taken for orders that were already closed or abandoned. Waitron tries to refund some of these itself; check the rest.${MORE_EN}${NOT_RECHECKED_EN}`,
+    es: `Una comprobación encontró {count} pagos con tarjeta de pedidos ya cerrados o abandonados. Waitron intenta devolver algunos por sí mismo; revisa el resto.${MORE_ES}${NOT_RECHECKED_ES}`,
+  },
+  "payment.reconcile_missing_local": {
+    en: `A check found {count} payments reported by the card provider that are not recorded here.${MORE_EN}${NOT_RECHECKED_EN}`,
+    es: `Una comprobación encontró {count} pagos indicados por el proveedor de pagos que no están registrados aquí.${MORE_ES}${NOT_RECHECKED_ES}`,
+  },
+  "payment.reconcile_drift": {
+    en: `A check found {count} card payments paid out for a different amount than was charged.${MORE_EN}${NOT_RECHECKED_EN}`,
+    es: `Una comprobación encontró {count} pagos con tarjeta liquidados por un importe distinto del cobrado.${MORE_ES}${NOT_RECHECKED_ES}`,
+  },
+  "payment.reconcile_remediation_failed": {
+    en: `Automatic refunds failed for {count} card payments. Waitron will not try them again; refund them in the card provider's own dashboard.${MORE_EN}`,
+    es: `Las devoluciones automáticas han fallado en {count} pagos con tarjeta. Waitron no las volverá a intentar; devuélvelos desde el panel del proveedor.${MORE_ES}`,
+  },
+};

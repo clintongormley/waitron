@@ -853,6 +853,23 @@ describe("DashboardApi", () => {
     // Exercises the constructor's default parameter initializers with no network call.
     expect(() => new DashboardApi()).not.toThrow();
   });
+
+  it("reads open and handled alerts and marks an incident handled", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ visible: true, alerts: [] }))
+      .mockResolvedValueOnce(jsonResponse({ visible: true, alerts: [] }))
+      .mockResolvedValueOnce(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.listAlerts()).toEqual({ visible: true, alerts: [] });
+    await api.listHandledAlerts();
+    await api.markIncidentHandled("a b");
+    expect(fetchImpl.mock.calls.map(([url, init]) => [url, init.method])).toEqual([
+      ["/management-api/alerts", "GET"],
+      ["/management-api/alerts/handled", "GET"],
+      ["/management-api/alerts/incidents/a%20b/handled", "POST"],
+    ]);
+  });
 });
 
 describe("DashboardApi — roster", () => {

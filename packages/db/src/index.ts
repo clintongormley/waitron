@@ -74,6 +74,7 @@ export {
   tenders,
 } from "./schema/sales.js";
 export { saleVoids } from "./schema/sale-voids.js";
+export { CORE_ALERTS } from "./alerts.js";
 export { CORE_CLASSIFICATION } from "./classification.js";
 export { CORE_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
 export { drawerOpens } from "./schema/drawer-opens.js";

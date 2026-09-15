@@ -15,8 +15,17 @@ import {
   sales,
   withTenant,
 } from "@waitron/db";
+import type { Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
-import { openIncidents, recordIncident, recordIncidentOnce } from "./incidents.js";
+import {
+  findIncident,
+  listHandledIncidents,
+  listOpenIncidents,
+  markIncidentHandled,
+  openIncidents,
+  recordIncident,
+  recordIncidentOnce,
+} from "./incidents.js";
 import type { RecordIncidentInput } from "./incidents.js";
 import { recordSale } from "./record-sale.js";
 import type { RecordSaleInput } from "./record-sale.js";
@@ -635,5 +644,209 @@ describe("incidents open-dedup invariant (partial unique index)", () => {
       sql`update incidents set acknowledged_at = now() where till_id = ${tillId}`,
     );
     expect(await raise()).toBe(true);
+  });
+});
+
+describe("tenant incident reads", () => {
+  function chainFailed(forTill: TillId): RecordIncidentInput["error"] {
+    return new AppError("chain.verification_failed", {
+      tillId: forTill,
+      issues: [{ issueCode: "predecessor-hash-mismatch", recordId: null, issueParams: {} }],
+    });
+  }
+
+  async function raise(forTenant: TenantId, forTill: TillId, detectedAt: Date): Promise<void> {
+    await withTenant(suite.db, forTenant, async (tx) => {
+      await asAppUser(tx);
+      await recordIncident(tx, {
+        tenantId: forTenant,
+        tillId: forTill,
+        error: chainFailed(forTill),
+        severity: "error",
+        detectedAt,
+      });
+    });
+  }
+
+  function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
+    return withTenant(suite.db, tenantId, async (tx) => {
+      await asAppUser(tx);
+      return fn(tx);
+    });
+  }
+
+  it("lists this tenant's open incidents across tills, newest first", async () => {
+    const secondTill = await seedTenant(suite.db, { tenantId });
+    await raise(tenantId, tillId, BASE);
+    await raise(tenantId, secondTill.tillId, new Date(BASE.getTime() + 60_000));
+    const rows = await asApp((tx) => listOpenIncidents(tx, tenantId));
+    expect(rows.map((r) => r.tillId)).toEqual([secondTill.tillId, tillId]);
+    expect(rows[0]).toMatchObject({ acknowledgedAt: null, acknowledgedBy: null });
+  });
+
+  it("never lists another tenant's incidents", async () => {
+    const other = await seedTenant(suite.db);
+    await raise(other.tenantId, other.tillId, BASE);
+    expect(await asApp((tx) => listOpenIncidents(tx, tenantId))).toEqual([]);
+  });
+
+  it("finds an incident by id only within its tenant", async () => {
+    const other = await seedTenant(suite.db);
+    await raise(tenantId, tillId, BASE);
+    await raise(other.tenantId, other.tillId, BASE);
+    const [mine] = await asApp((tx) => listOpenIncidents(tx, tenantId));
+    const theirs = await withTenant(suite.db, other.tenantId, async (tx) => {
+      await asAppUser(tx);
+      return (await listOpenIncidents(tx, other.tenantId))[0]!;
+    });
+    expect((await asApp((tx) => findIncident(tx, tenantId, mine!.id)))?.id).toBe(mine!.id);
+    expect(await asApp((tx) => findIncident(tx, tenantId, theirs.id))).toBeNull();
+  });
+
+  it("marks an incident handled once; a second mark keeps the first time and person", async () => {
+    await raise(tenantId, tillId, BASE);
+    const [open] = await asApp((tx) => listOpenIncidents(tx, tenantId));
+    const first = new Date(BASE.getTime() + 1_000);
+    const firstPerson = "00000000-0000-4000-8000-000000000001";
+    await asApp((tx) =>
+      markIncidentHandled(tx, { tenantId, id: open!.id, personId: firstPerson, handledAt: first }),
+    );
+    await asApp((tx) =>
+      markIncidentHandled(tx, {
+        tenantId,
+        id: open!.id,
+        personId: "00000000-0000-4000-8000-000000000002",
+        handledAt: new Date(BASE.getTime() + 9_000),
+      }),
+    );
+    expect(await asApp((tx) => listOpenIncidents(tx, tenantId))).toEqual([]);
+    const handled = await asApp((tx) => findIncident(tx, tenantId, open!.id));
+    expect(handled?.acknowledgedAt?.toISOString()).toBe(first.toISOString());
+    expect(handled?.acknowledgedBy).toBe(firstPerson);
+  });
+
+  it("does not mark another tenant's incident handled", async () => {
+    const other = await seedTenant(suite.db);
+    await raise(other.tenantId, other.tillId, BASE);
+    const theirs = await withTenant(suite.db, other.tenantId, async (tx) => {
+      await asAppUser(tx);
+      return (await listOpenIncidents(tx, other.tenantId))[0]!;
+    });
+    await asApp((tx) =>
+      markIncidentHandled(tx, {
+        tenantId,
+        id: theirs.id,
+        personId: "00000000-0000-4000-8000-000000000001",
+        handledAt: BASE,
+      }),
+    );
+    const still = await withTenant(suite.db, other.tenantId, async (tx) => {
+      await asAppUser(tx);
+      return listOpenIncidents(tx, other.tenantId);
+    });
+    expect(still.map((r) => r.id)).toEqual([theirs.id]);
+  });
+
+  it("lists handled incidents inside the window, newest handled first", async () => {
+    const secondTill = await seedTenant(suite.db, { tenantId });
+    const thirdTill = await seedTenant(suite.db, { tenantId });
+    await raise(tenantId, tillId, BASE);
+    await raise(tenantId, secondTill.tillId, BASE);
+    await raise(tenantId, thirdTill.tillId, BASE);
+    const open = await asApp((tx) => listOpenIncidents(tx, tenantId));
+    const byTill = new Map(open.map((r) => [r.tillId, r.id]));
+    const person = "00000000-0000-4000-8000-000000000001";
+    const mark = (till: TillId, at: Date) =>
+      asApp((tx) =>
+        markIncidentHandled(tx, {
+          tenantId,
+          id: byTill.get(till)!,
+          personId: person,
+          handledAt: at,
+        }),
+      );
+    await mark(tillId, new Date("2026-03-10T10:00:00Z"));
+    await mark(secondTill.tillId, new Date("2026-03-12T10:00:00Z"));
+    await mark(thirdTill.tillId, new Date("2026-02-01T10:00:00Z"));
+    const other = await seedTenant(suite.db);
+    await raise(other.tenantId, other.tillId, BASE);
+    await withTenant(suite.db, other.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const [theirs] = await listOpenIncidents(tx, other.tenantId);
+      await markIncidentHandled(tx, {
+        tenantId: other.tenantId,
+        id: theirs!.id,
+        personId: person,
+        handledAt: new Date("2026-03-11T10:00:00Z"),
+      });
+    });
+    const rows = await asApp((tx) =>
+      listHandledIncidents(tx, tenantId, new Date("2026-03-01T00:00:00Z")),
+    );
+    expect(rows.map((r) => r.tillId)).toEqual([secondTill.tillId, tillId]);
+  });
+
+  // The suite's database outlives each test, so every call mints fresh ids. They are inserted in
+  // ascending order: a read with no second sort key tends to hand tied rows back in that order,
+  // which fails the descending expectation.
+  async function insertTied(acknowledgedAt: string | null): Promise<string[]> {
+    const prefix = crypto.randomUUID().slice(0, -2);
+    const ids = ["0a", "0b", "0c"].map((suffix) => `${prefix}${suffix}`);
+    for (const [index, id] of ids.entries()) {
+      await suite.db.insert(incidents).values({
+        id,
+        tenantId,
+        tillId,
+        code: `test.tied_${index}`,
+        params: {},
+        severity: "error",
+        detectedAt: BASE.toISOString(),
+        acknowledgedAt,
+        acknowledgedBy: acknowledgedAt === null ? null : "00000000-0000-4000-8000-000000000001",
+      });
+    }
+    return ids;
+  }
+
+  it("orders open incidents detected at the same instant by id, highest first", async () => {
+    const ids = await insertTied(null);
+    const rows = await asApp((tx) => listOpenIncidents(tx, tenantId));
+    expect(rows.map((r) => r.id)).toEqual(ids.reverse());
+  });
+
+  it("orders incidents handled at the same instant by id, highest first", async () => {
+    const ids = await insertTied("2026-03-10T10:00:00.000Z");
+    const rows = await asApp((tx) =>
+      listHandledIncidents(tx, tenantId, new Date("2026-03-01T00:00:00Z")),
+    );
+    expect(rows.map((r) => r.id)).toEqual(ids.reverse());
+  });
+
+  it("includes an incident handled exactly at the cut-off and excludes one a millisecond before", async () => {
+    const cutOff = new Date("2026-03-10T10:00:00.000Z");
+    await raise(tenantId, tillId, BASE);
+    const secondTill = await seedTenant(suite.db, { tenantId });
+    await raise(tenantId, secondTill.tillId, BASE);
+    const open = await asApp((tx) => listOpenIncidents(tx, tenantId));
+    const byTill = new Map(open.map((r) => [r.tillId, r.id]));
+    const person = "00000000-0000-4000-8000-000000000001";
+    await asApp((tx) =>
+      markIncidentHandled(tx, {
+        tenantId,
+        id: byTill.get(tillId)!,
+        personId: person,
+        handledAt: cutOff,
+      }),
+    );
+    await asApp((tx) =>
+      markIncidentHandled(tx, {
+        tenantId,
+        id: byTill.get(secondTill.tillId)!,
+        personId: person,
+        handledAt: new Date(cutOff.getTime() - 1),
+      }),
+    );
+    const rows = await asApp((tx) => listHandledIncidents(tx, tenantId, cutOff));
+    expect(rows.map((r) => r.tillId)).toEqual([tillId]);
   });
 });

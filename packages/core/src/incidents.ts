@@ -4,7 +4,7 @@
 // this module documents chain.verification_failed's shape (RecordIncidentInput's own doc
 // comment) without constructing one — that happens in record-sale.ts/record-void.ts.
 import "./errors.js";
-import { and, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, sql } from "drizzle-orm";
 import { incidents } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type { AppError } from "@waitron/shared";
@@ -90,11 +90,8 @@ export async function recordIncidentOnce(
 }
 
 /**
- * The query the till UI will read for its persistent incident banner.
- *
- * Unacknowledged only, newest first, scoped to one till. Defined here rather than in the UI so
- * that the module boundary holds: the till never reads module-owned tables, and an incident
- * raised by plan 3's drainer surfaces through this same query with no UI change.
+ * Unacknowledged incidents for one till, newest first. Only tests call it: the till shows no
+ * incidents, and the dashboard alerts read a whole tenant's through `listOpenIncidents`.
  */
 export async function openIncidents(tx: Transaction, tillId: TillId): Promise<Incident[]> {
   const rows = await tx
@@ -124,4 +121,114 @@ export async function openIncidents(tx: Transaction, tillId: TillId): Promise<In
     severity: row.severity as IncidentSeverity,
     detectedAt: new Date(row.detectedAt),
   }));
+}
+
+/** An incident as the dashboard alerts read it: who handled it and when, if anyone has. */
+export interface TenantIncident extends Incident {
+  acknowledgedAt: Date | null;
+  acknowledgedBy: string | null;
+}
+
+const tenantIncidentColumns = {
+  id: incidents.id,
+  tillId: incidents.tillId,
+  saleId: incidents.saleId,
+  code: incidents.code,
+  params: incidents.params,
+  severity: incidents.severity,
+  detectedAt: incidents.detectedAt,
+  acknowledgedAt: incidents.acknowledgedAt,
+  acknowledgedBy: incidents.acknowledgedBy,
+};
+
+type TenantIncidentRow = {
+  id: string;
+  tillId: string;
+  saleId: string | null;
+  code: string;
+  params: Record<string, unknown>;
+  severity: string;
+  detectedAt: string;
+  acknowledgedAt: string | null;
+  acknowledgedBy: string | null;
+};
+
+function toTenantIncident(row: TenantIncidentRow): TenantIncident {
+  return {
+    id: row.id,
+    tillId: row.tillId as TillId,
+    saleId: row.saleId as SaleId | null,
+    code: row.code,
+    params: row.params,
+    severity: row.severity as IncidentSeverity,
+    detectedAt: new Date(row.detectedAt),
+    acknowledgedAt: row.acknowledgedAt === null ? null : new Date(row.acknowledgedAt),
+    acknowledgedBy: row.acknowledgedBy,
+  };
+}
+
+/** Every open incident in the tenant, newest first; ties break on id so the order is stable. */
+export async function listOpenIncidents(
+  tx: Transaction,
+  tenantId: TenantId,
+): Promise<TenantIncident[]> {
+  const rows = await tx
+    .select(tenantIncidentColumns)
+    .from(incidents)
+    .where(and(eq(incidents.tenantId, tenantId), isNull(incidents.acknowledgedAt)))
+    .orderBy(desc(incidents.detectedAt), desc(incidents.id));
+  return rows.map(toTenantIncident);
+}
+
+/** Incidents handled at or after `handledSince`, most recently handled first, ties by id. */
+export async function listHandledIncidents(
+  tx: Transaction,
+  tenantId: TenantId,
+  handledSince: Date,
+): Promise<TenantIncident[]> {
+  const rows = await tx
+    .select(tenantIncidentColumns)
+    .from(incidents)
+    .where(
+      and(
+        eq(incidents.tenantId, tenantId),
+        gte(incidents.acknowledgedAt, handledSince.toISOString()),
+      ),
+    )
+    .orderBy(desc(incidents.acknowledgedAt), desc(incidents.id));
+  return rows.map(toTenantIncident);
+}
+
+/** One incident by id, scoped to the tenant: another tenant's id reads as absent. */
+export async function findIncident(
+  tx: Transaction,
+  tenantId: TenantId,
+  id: string,
+): Promise<TenantIncident | null> {
+  const [row] = await tx
+    .select(tenantIncidentColumns)
+    .from(incidents)
+    .where(and(eq(incidents.tenantId, tenantId), eq(incidents.id, id)));
+  return row === undefined ? null : toTenantIncident(row);
+}
+
+/**
+ * Marks an open incident handled. Marking an already-handled incident changes nothing, so it keeps
+ * its first handler and time. Handling frees the `incidents_open_dedup` key: a producer that detects
+ * the same condition again records a new incident.
+ */
+export async function markIncidentHandled(
+  tx: Transaction,
+  input: { tenantId: TenantId; id: string; personId: string; handledAt: Date },
+): Promise<void> {
+  await tx
+    .update(incidents)
+    .set({ acknowledgedAt: input.handledAt.toISOString(), acknowledgedBy: input.personId })
+    .where(
+      and(
+        eq(incidents.tenantId, input.tenantId),
+        eq(incidents.id, input.id),
+        isNull(incidents.acknowledgedAt),
+      ),
+    );
 }

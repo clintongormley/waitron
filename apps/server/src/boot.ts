@@ -40,8 +40,10 @@ import { enabledModules, fiscalSlot, orderedMigrationSets, reconcile } from "@wa
 import type { ModuleRouteContext } from "@waitron/module";
 import { AppError, type TenantId } from "@waitron/shared";
 import {
+  ALL_ALERT_CLAIMS,
   ALL_MODULES,
   ALL_MODULE_PERMISSIONS,
+  enabledAlertSources,
   enabledFloorAnnotators,
   LEDGER_PUBLICATION_TABLES,
   STATE_PUBLICATION_TABLES,
@@ -76,6 +78,8 @@ import { requestIdMiddleware } from "./request-id.js";
 import { createOriginAllowlist } from "./allowed-origins.js";
 import { corsForVenue } from "./cors.js";
 import { mountDiagnosticsApi } from "./diagnostics-api.js";
+import { mountAlertsApi } from "./alerts-api.js";
+import { createAlertRegistry } from "./alerts.js";
 import {
   createHealthState,
   healthApp,
@@ -2034,6 +2038,21 @@ export async function startServer(
   // All three routes are gated behind `diagnostics.view`. Routes only — no database work at boot;
   // the gate runs per request.
   mountDiagnosticsApi(app, { db, cfg: { tenantId: till.tenantId }, reader, verbosity }, log);
+  // Dashboard alerts. Claims come from every module; ongoing checks only from the enabled set,
+  // whose tables are migrated.
+  mountAlertsApi(
+    app,
+    {
+      db,
+      cfg: { tenantId: till.tenantId },
+      registry: createAlertRegistry({
+        claims: ALL_ALERT_CLAIMS,
+        sources: enabledAlertSources(setsToMigrate),
+      }),
+      now,
+    },
+    log,
+  );
   // Catalogue writes and language settings share the management permission gate.
   mountCatalogueApi(
     app,

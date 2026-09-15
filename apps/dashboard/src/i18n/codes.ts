@@ -675,6 +675,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Those credentials are for a different environment (test vs live) than this venue",
     es: "Esas credenciales son de un entorno distinto (prueba o real) al de este local",
   },
+  "alert.not_found": {
+    en: "This alert no longer exists. Refresh the list.",
+    es: "Este aviso ya no existe. Actualiza la lista.",
+  },
   "server.internal": {
     en: "Something went wrong, try again",
     es: "Algo salió mal, inténtalo de nuevo",

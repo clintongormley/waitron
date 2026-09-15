@@ -1,5 +1,5 @@
 import { html, nothing } from "lit";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, test, vi } from "vitest";
 import { userEvent } from "@vitest/browser/context";
 import type { WtButton } from "./wt-button.js";
 import "./wt-button.js";
@@ -111,6 +111,15 @@ describe("row actions", () => {
     const { bounds, anchor } = await openInTable("end");
     expect(bounds.top).toBeCloseTo(anchor.bottom, 0);
     expect(bounds.right).toBeCloseTo(anchor.right, 0);
+  });
+
+  it("starts plain popup text at the start edge even when align is end", async () => {
+    const el = await mount(
+      '<wt-row-actions label="Alerts" align="end"><p>Payment check failed</p></wt-row-actions>',
+    );
+    (el as WtRowActions).show();
+    const text = el.querySelector("p")!;
+    expect(getComputedStyle(text).textAlign).toBe("start");
   });
 
   it("allows an action to keep the popup open while it asks for confirmation", async () => {
@@ -286,4 +295,74 @@ it("does not close for disabled actions or already handled Escape", async () => 
   await userEvent.click(trigger);
   trigger.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
   expect(popup.matches(":popover-open")).toBe(false);
+});
+
+test("puts a badge-slotted element inside the trigger button", async () => {
+  const el = (await mount(
+    '<wt-row-actions label="Alerts"><span slot="badge">3</span><wt-button>See all</wt-button></wt-row-actions>',
+  )) as WtRowActions;
+  const slot = el.shadowRoot!.querySelector<HTMLSlotElement>("button slot[name=badge]")!;
+  expect(slot.assignedElements().map((e) => e.textContent)).toEqual(["3"]);
+});
+
+test("show() opens the popup under its trigger and hide() closes it", async () => {
+  const el = (await mount(
+    '<wt-row-actions label="Alerts" align="end"><wt-button>See all</wt-button></wt-row-actions>',
+  )) as WtRowActions;
+  // Room on both sides, so the trailing-edge alignment is observed rather than clamped.
+  el.style.marginInlineStart = "300px";
+  const popup = el.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+  el.show();
+  expect(popup.matches(":popover-open")).toBe(true);
+  // Only a popup measured while open has a width to subtract from the trigger's right edge.
+  const anchor = el.shadowRoot!.querySelector("button")!.getBoundingClientRect();
+  const bounds = popup.getBoundingClientRect();
+  expect(bounds.top).toBeCloseTo(anchor.bottom, 0);
+  expect(bounds.right).toBeCloseTo(anchor.right, 0);
+  el.hide();
+  expect(popup.matches(":popover-open")).toBe(false);
+});
+
+test("show() and hide() do nothing before the first render", () => {
+  const el = document.createElement("wt-row-actions");
+  expect(() => el.show()).not.toThrow();
+  expect(() => el.hide()).not.toThrow();
+});
+
+test("show() does nothing once the menu has been removed from the page", async () => {
+  const el = (await mount(
+    '<wt-row-actions label="Alerts"><wt-button>See all</wt-button></wt-row-actions>',
+  )) as WtRowActions;
+  const popup = el.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+  el.remove();
+  expect(() => el.show()).not.toThrow();
+  expect(popup.matches(":popover-open")).toBe(false);
+  expect(() => el.hide()).not.toThrow();
+});
+
+test("a consumer can size the popup through its part", async () => {
+  const style = document.createElement("style");
+  style.textContent = "wt-row-actions.wide::part(popup) { width: 300px; }";
+  document.head.append(style);
+  try {
+    const el = (await mount(
+      '<wt-row-actions class="wide" label="Alerts"><wt-button>See all</wt-button></wt-row-actions>',
+    )) as WtRowActions;
+    el.show();
+    expect(
+      el.shadowRoot!.querySelector<HTMLElement>("[popover]")!.getBoundingClientRect().width,
+    ).toBe(300);
+  } finally {
+    style.remove();
+  }
+});
+
+test("pins the badge to the trigger's top trailing corner", async () => {
+  const el = (await mount(
+    '<wt-row-actions label="Alerts"><span slot="badge">3</span></wt-row-actions>',
+  )) as WtRowActions;
+  const trigger = el.shadowRoot!.querySelector("button")!.getBoundingClientRect();
+  const badge = el.querySelector("span")!.getBoundingClientRect();
+  expect(badge.top).toBeCloseTo(trigger.top, 0);
+  expect(badge.right).toBeCloseTo(trigger.right, 0);
 });

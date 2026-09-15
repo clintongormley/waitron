@@ -82,10 +82,12 @@ brainstorm → spec → plan → PR; fiscal-adjacent ones take owner sign-off at
    run; the box and sale path worked.
 
 2. **Somewhere for things that went wrong to show up** (A5) — designed 2026-09-14; the `till.configure`
-   split it depended on has LANDED (#363), so the next step is the alerts framework itself. The `incidents` table has several
-   producers and no reader, and the dashboard has no notification surface. A rejected filing, a payment drift, a
-   stalled print agent and a failed or stale backup are all invisible; several other items end "…waits
-   for the notification surface".
+   split it depended on has LANDED (#363). Branch 1, the alerts framework and recorded incidents, is
+   BUILT on `feat/dashboard-alerts-events` and awaiting merge: it shows recorded incidents such as a
+   rejected filing or a payment drift in the dashboard's bell and Alerts screen. Branch 2, the ongoing
+   checks, is next; until it lands, a stalled print agent and a failed or stale backup stay
+   invisible. Items that wait on this surface point back to A5 (A6's low reader battery, B2's "backups
+   off or stale" reminder).
 
 3. **Backups that leave the box** (B2) — S3 first, then Drive. With the mirror deferred, a bucket is a
    standalone primary's only off-box copy. Only `LocalFsBackend` exists.
@@ -902,12 +904,35 @@ one bell, panel and Alerts screen for recorded incidents and live checks (backup
 printing, reader battery). Build order: (0) split `till.configure` into permissions named for what
 they guard — **LANDED #363** (2026-09-14), adds `layout.configure` / `venue.configure` /
 `system.manage` with no access change, and the alerts work uses `system.manage` for backup alerts; (1)
-the alerts framework and recorded incidents — NEXT; (2) the live checks. The questions below are
-answered there; the notes stay as the origin of the item.
+the alerts framework and recorded incidents — **BUILT** on `feat/dashboard-alerts-events`
+(2026-09-14), awaiting merge: the bell, its panel, the Alerts screen with Open and Handled tabs, the
+pop-up for new alerts, and wording for every recorded incident code; (2) the ongoing checks — NEXT.
+The questions below are answered there; the notes stay as the origin of the item.
+
+What branch 1 surfaced, each checked by a whole-repo grep on 2026-09-14:
+
+- **Branch 2 must add alert wording for every code its ongoing sources raise** (for example
+  `backup.disabled`). Branch 1 worded only the recorded incident codes, and
+  `apps/dashboard/src/i18n/alert-messages.ts` has no entry for any ongoing code. Without one, the
+  dashboard shows a generic sentence with the raw code beneath it.
+- **The fiscal reconcile sweep has no production caller.** Only `acks.test.ts` and
+  `reconcile.test.ts` import `packages/fiscal-verifactu/src/reconcile.ts`, and the package's
+  `index.ts` does not export it. Its `fiscal.reconcile_*` incidents are worded, but nothing in
+  production raises them.
+- **A payment incident marked handled without being fixed does not come back.** The daily payments
+  check (`apps/server/src/reconcile-duty.ts`) covers each day once, and asks for a day to be checked
+  again (`resweepAfter`) only when it found a payment that was both an orphan and a drift. The alert
+  wording says so rather than promising a later check.
+- **Nothing in production raises `clock.degraded` or `clock.jump_detected`.** `createTrustedClock`
+  (`packages/fiscal/src/clock.ts`) has only test callers. `record-sale.ts` records a warning when a clock
+  reading carries one, but no clock that production passes to it is built by `createTrustedClock`.
 
 Two halves, one branch each (owner decision 2026-09-12).
 
-- **A reader for `incidents`.** `openIncidents` is the only read and nothing calls it, while the
+- **A reader for `incidents`.** (Branch 1, built and awaiting merge, adds one: `listOpenIncidents`
+  and `listHandledIncidents`, read by `apps/server/src/alerts.ts`. What follows describes `main`
+  without it.)
+  `openIncidents` is the only read and nothing calls it, while the
   fiscal drain (AEAT rejections), the payments reconciler (drift), the Stripe device provider and the
   card provider pool all write. Design questions: its own screen or part of diagnostics; who may see
   it (fiscal versus money); acknowledge or only observe. Detail under *Detail → Incidents*.
@@ -915,7 +940,10 @@ Two halves, one branch each (owner decision 2026-09-12).
   tried to join in the last 10 minutes" when pairing mode is shut. Then: a stalled fiscal outbox, a
   print agent that stopped pulling, a stuck job past its lease, a failed or stale backup, a low reader
   battery, later a standby that has fallen behind. Decide scope first: toast versus a persisted
-  per-person inbox, `state` versus `local`, push versus poll.
+  per-person inbox, `state` versus `local`, push versus poll. (Branch 1 settles these: a pop-up
+  toast; handled state shared by the whole venue in the `incidents` table; incident changes pushed to
+  the dashboard through the `incidents` change source, plus a one-minute refresh for the ongoing
+  checks. The pairing and ongoing-check consumers are not built.)
 
 ### A6. Payments
 
@@ -1431,12 +1459,27 @@ turns out to need a design moves to its track.
 
 **Dashboard, till and setup:**
 
+- **The Waitron wordmark is nearly invisible on the dashboard banner in the dark theme** (seen
+  2026-09-14 on the dashboard alerts branch). The banner shows `packages/ui/brand/waitron-lockup.svg`
+  as an image, which last changed in #284; I believe this predates that branch, but it was not
+  checked on `main`.
 - **An imported configuration no longer carries "already offered a passkey"** (fixed 2026-09-14).
   A configuration transfer no longer lets `passkey_offered_at` travel: it is stripped on export and
   the import refuses a bundle that still carries it, alongside the other person columns the transfer
   already leaves behind. Before the fix a person offered a passkey on the source box arrived on the new one holding no
   passkey but already stamped, so `shouldOfferPasskey` never offered again after they were reactivated
   and first signed in.
+- **The login screen's automatic passkey attempt can show "Something went wrong, try again" on load**
+  (seen 2026-09-14 while taking screenshots for the dashboard alerts branch; the same happens on
+  `main`, so it is not that branch's bug). Playwright's headless Chromium 149 refuses the attempt
+  with a `NotSupportedError`; installed Chrome 153 left it pending with no error. Whether a real
+  person's browser ever hits it is untested. Mechanism: the attempt's `catch`
+  (`apps/dashboard/src/screens/login-screen.ts:709-716`, from #305) stays quiet only for
+  `NotAllowedError` and `AbortError`, and `codeOf` (`packages/dashboard-kit/src/codes.ts:38-40`)
+  returns any `code` it finds, so a browser error's old numeric `code` (9 for `NotSupportedError`)
+  wins over the fallback and, matching no registered message, shows the generic sentence. The
+  passkey button's `catch` (`:672-674`) has the same flaw. **Fix direction:** the automatic attempt stays silent on every browser-side failure, and
+  `codeOf` accepts only a string code (check its other callers first).
 - **Timestamps across the printers and devices screens show UTC** — `formatIsoMinute`
   (`apps/dashboard/src/date-utils.ts:27`) slices the ISO string. One shared formatter, not a per-call-site patch.
 - The till renders `person.suspended` as "Account suspended" — align with the dashboard's Disabled
@@ -1797,6 +1840,9 @@ and a classification entry — never an enum, CLAUDE.md §2); names (built-ins a
 `roleName`, `apps/dashboard/src/i18n/domain.ts:180`, custom ones will not be).
 
 ### Incidents are written by several things and displayed by nothing (A5)
+
+_2026-09-14: branch 1 of the dashboard alerts, built on `feat/dashboard-alerts-events` and awaiting
+merge, adds the reader this paragraph asks for; the paragraph describes `main` without it._
 
 `openIncidents` (`packages/core/src/incidents.ts`) is the only function that reads the `incidents`
 table, and nothing calls it — a whole-repo search outside tests finds only its definition and the

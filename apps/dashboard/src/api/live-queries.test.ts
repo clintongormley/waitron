@@ -22,6 +22,9 @@ it.each([
   ["getDailyClose", ["2026-09-11"], "sale_lines"],
   ["getSalesPeriod", ["2026-09-01", "2026-09-11"], "sale_substitutions"],
   ["getPlannedVsActual", ["location", "2026-09-01", "2026-09-11"], "roster_versions"],
+  ["listAlerts", [], "incidents"],
+  ["listHandledAlerts", [], "incidents"],
+  ["listHandledAlerts", [], "persons"],
 ] as const)(
   "refreshes %s when its contributing %s query changes through %s",
   async (name, args, type) => {
@@ -37,3 +40,16 @@ it.each([
     }
   },
 );
+
+it("refreshes the open alerts passively and when incidents change", async () => {
+  const fetchImpl = vi.fn<(path: string, init: RequestInit) => Promise<Response>>(
+    async () => new Response(JSON.stringify({ visible: true, alerts: [] })),
+  );
+  const api = new DashboardApi("", fetchImpl);
+  const query = dashboardQuery(api, "listAlerts", []);
+  expect(query.dependencies).toEqual([{ type: "incidents" }]);
+  expect(query.refreshMs).toBe(60_000);
+  await query.read();
+  await query.read();
+  expect(new Headers(fetchImpl.mock.calls[1]![1].headers).get("x-waitron-live")).toBe("1");
+});

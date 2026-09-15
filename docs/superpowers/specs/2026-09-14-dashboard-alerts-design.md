@@ -184,8 +184,12 @@ written.
 - Handling an already-handled incident is a no-op success, so two managers clicking at once both
   succeed.
 - Once handled, the dedup key is free (`incidents_open_dedup`), so a condition still present is
-  recorded again on the producer's next detection. The payments and fiscal reconcilers do exactly
-  this; the wording for their codes says the alert returns if the problem is still there.
+  recorded again only if its producer looks again. The reconcilers mostly do not. The daily payments
+  check (`apps/server/src/reconcile-duty.ts`) checks each day once, and checks a day again only when
+  it found a payment there that was both an orphan and a drift. The fiscal reconciliation sweep
+  (`packages/fiscal-verifactu/src/reconcile.ts`) has no production caller. So no alert's wording
+  promises that it comes back; the payment reconcile codes say instead that marking one handled does
+  not fix it.
 - The Handled tab lists events handled in the last 30 days, newest first, with who and when.
 - No note field in this work.
 

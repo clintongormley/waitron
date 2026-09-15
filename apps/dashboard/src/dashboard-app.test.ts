@@ -52,8 +52,10 @@ function stubDrawerMatchMedia(): { set: (narrow: boolean) => void; restore: () =
 }
 import { currentLocale, setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
-import type { DashboardRequest } from "@waitron/dashboard-kit";
-import type { DashboardApi, PersonSummary } from "./api/client.js";
+import { LiveData, type DashboardRequest } from "@waitron/dashboard-kit";
+import type { WtToast } from "@waitron/ui";
+import type { AlertsBell } from "./widgets/alerts-bell.js";
+import type { AlertView, DashboardApi, PersonSummary } from "./api/client.js";
 
 /** A stub of the module request primitive: every module screen reads through it on connect. Resolves an
  * empty array for the reads the bundled bookings screen makes (listTables + the day's bookings), so
@@ -209,6 +211,10 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
       vat: { byRate: [], baseTotal: "0.00", taxTotal: "0.00", grossTotal: "0.00" },
       topSellers: [],
     }),
+    // The shell watches alerts for every non-staff session; default to none visible.
+    listAlerts: vi.fn().mockResolvedValue({ visible: false, alerts: [] }),
+    listHandledAlerts: vi.fn().mockResolvedValue({ visible: false, alerts: [] }),
+    markIncidentHandled: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   } as unknown as DashboardApi;
 }
@@ -840,7 +846,8 @@ describe("dashboard-app", () => {
     const hostBox = el.getBoundingClientRect();
     const bannerBox = banner.getBoundingClientRect();
 
-    expect(shell.firstElementChild).toBe(banner);
+    // The banner shares its first row only with the pop-up that hangs below it.
+    expect(shell.firstElementChild!.firstElementChild).toBe(banner);
     expect(bannerBox.left).toBeCloseTo(hostBox.left, 0);
     expect(bannerBox.right).toBeCloseTo(hostBox.right, 0);
     expect(sidebar.getBoundingClientRect().top).toBeGreaterThanOrEqual(bannerBox.bottom);
@@ -3243,4 +3250,579 @@ it("opens the reusable modifiers library from its own management destination", a
   await flush(el);
   expect(location.pathname).toBe("/manage/modifiers");
   expect(el.shadowRoot!.querySelector("dashboard-modifiers-screen")).not.toBeNull();
+});
+
+describe("alerts in the shell", () => {
+  const alert = (id: string, severity: AlertView["severity"] = "warning"): AlertView => ({
+    key: `incident:${id}`,
+    kind: "event",
+    code: "payment.offline_forward_declined",
+    params: { amount: "12.50", paymentRef: `pi_${id}` },
+    severity,
+    since: "2026-09-14T12:00:00.000Z",
+    area: "payments",
+  });
+  const bell = (el: DashboardApp) =>
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=alerts-bell]");
+  const toast = (el: DashboardApp) =>
+    el.shadowRoot!.querySelector<WtToast>("[data-test=alert-toast]")!;
+  const toastButton = (el: DashboardApp, name: "message" | "close") =>
+    toast(el).shadowRoot!.querySelector<HTMLButtonElement>(`.${name}`)!;
+  const panel = (el: DashboardApp) =>
+    bell(el)!
+      .shadowRoot!.querySelector("wt-row-actions")!
+      .shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+
+  // The shell applies the session's language on login, so the session itself must be English.
+  const alertsApi = (overrides: Record<string, unknown> = {}) =>
+    stubApi({
+      getMe: vi.fn().mockResolvedValue({ ...meResponse, sessionDefault: "en-GB" }),
+      liveData: new LiveData(),
+      ...overrides,
+    });
+  const countOf = (el: DashboardApp) =>
+    (bell(el)!.shadowRoot!.querySelector("wt-count-badge") as HTMLElement & { count: number })
+      .count;
+
+  /** Mounts a manager whose first alerts read holds one alert, then raises one more so the pop-up
+   * opens. Returns the element and its live data so a test can raise more. */
+  async function mountWithPopup() {
+    const liveData = new LiveData();
+    const listAlerts = vi
+      .fn()
+      .mockResolvedValueOnce({ visible: true, alerts: [alert("1")] })
+      .mockResolvedValue({ visible: true, alerts: [alert("1"), alert("2", "error")] });
+    const api = alertsApi({ listAlerts, liveData });
+    const { el, host } = await mountWidget<DashboardApp>("dashboard-app", {
+      api,
+      request: stubRequest,
+    });
+    await flush(el);
+    liveData.invalidate([{ type: "incidents", id: "new" }]);
+    await vi.waitFor(() => expect(toast(el).open).toBe(true));
+    await el.updateComplete;
+    await toast(el).updateComplete;
+    return { el, host, liveData };
+  }
+
+  /** Runs `body` at a real viewport size inside the real page's outer margin (`index.html` pads the
+   * body by 24px), then restores the size. */
+  async function atViewport(host: HTMLElement, width: number, body: () => Promise<void>) {
+    const before = { width: window.innerWidth, height: window.innerHeight };
+    host.style.padding = "24px";
+    try {
+      await page.viewport(width, 800);
+      await vi.waitFor(() => expect(window.innerWidth).toBe(width));
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      await body();
+    } finally {
+      await page.viewport(before.width, before.height);
+    }
+  }
+
+  it("shows the bell with its count when alerts are visible, and no pop-up on the first read", async () => {
+    const api = alertsApi({
+      listAlerts: vi
+        .fn()
+        .mockResolvedValue({ visible: true, alerts: [alert("1", "error"), alert("2")] }),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request: stubRequest });
+    await flush(el);
+    const count = bell(el)!.shadowRoot!.querySelector("wt-count-badge") as HTMLElement & {
+      count: number;
+    };
+    expect(count.count).toBe(2);
+    expect(count.getAttribute("tone")).toBe("error");
+    expect(toast(el).open).toBe(false);
+  });
+
+  it("puts the bell before the account menu in the banner", async () => {
+    const api = alertsApi({
+      listAlerts: vi.fn().mockResolvedValue({ visible: true, alerts: [alert("1")] }),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request: stubRequest });
+    await flush(el);
+    const actions = el.shadowRoot!.querySelector(".banner-actions")!;
+    expect([...actions.children].map((child) => child.getAttribute("data-test"))).toEqual([
+      "alerts-bell",
+      "account-menu",
+    ]);
+  });
+
+  it.each([360, 400, 480])(
+    "fits every banner item without overlap at %ipx, with the bell and the account menu",
+    async (width) => {
+      const api = alertsApi({
+        listAlerts: vi.fn().mockResolvedValue({ visible: true, alerts: [alert("1", "error")] }),
+      });
+      const { el, host } = await mountWidget<DashboardApp>("dashboard-app", {
+        api,
+        request: stubRequest,
+      });
+      await flush(el);
+      await atViewport(host, width, async () => {
+        const banner = brandBanner(el)!;
+        const items = [
+          "[data-test=nav-toggle]",
+          ".brand-logo",
+          "[data-test=venue-name]",
+          "[data-test=mode-indicator]",
+          "[data-test=alerts-bell]",
+          "[data-test=account-menu]",
+        ].map((selector) => {
+          const box = el.shadowRoot!.querySelector(selector)!.getBoundingClientRect();
+          return { selector, box };
+        });
+        const outer = banner.getBoundingClientRect();
+        for (const { selector, box } of items) {
+          expect(box.width, `${selector} is visible`).toBeGreaterThan(0);
+          expect(box.left, `${selector} starts inside the banner`).toBeGreaterThanOrEqual(
+            outer.left,
+          );
+          expect(box.right, `${selector} ends inside the banner`).toBeLessThanOrEqual(outer.right);
+        }
+        for (const [i, a] of items.entries()) {
+          for (const b of items.slice(i + 1)) {
+            const overlapX = Math.min(a.box.right, b.box.right) - Math.max(a.box.left, b.box.left);
+            const overlapY = Math.min(a.box.bottom, b.box.bottom) - Math.max(a.box.top, b.box.top);
+            expect(overlapX > 0.5 && overlapY > 0.5, `${a.selector} overlaps ${b.selector}`).toBe(
+              false,
+            );
+          }
+        }
+        expect(banner.scrollWidth).toBeLessThanOrEqual(banner.clientWidth);
+        const [, logo, , , , menu] = items;
+        expect(menu!.box.top, "the account menu shares the lockup's row").toBeLessThan(
+          logo!.box.bottom,
+        );
+      });
+    },
+  );
+
+  it.each([1280, 400])(
+    "puts the pop-up below the banner, and inside its width, at %ipx",
+    async (width) => {
+      const { el, host } = await mountWithPopup();
+      await atViewport(host, width, async () => {
+        const box = toast(el).getBoundingClientRect();
+        const banner = brandBanner(el)!.getBoundingClientRect();
+        expect(box.top).toBeGreaterThanOrEqual(banner.bottom);
+        expect(box.width).toBeGreaterThan(0);
+        expect(box.left).toBeGreaterThanOrEqual(banner.left);
+        expect(box.right).toBeLessThanOrEqual(banner.right);
+      });
+    },
+  );
+
+  it("shows no bell when the session may see no alerts", async () => {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: alertsApi(),
+      request: stubRequest,
+    });
+    await flush(el);
+    expect(bell(el)).toBeNull();
+  });
+
+  it("stops watching alerts once a read says they are not visible", async () => {
+    const liveData = new LiveData();
+    const listAlerts = vi
+      .fn()
+      .mockResolvedValueOnce({ visible: true, alerts: [alert("1")] })
+      .mockResolvedValue({ visible: false, alerts: [] });
+    const api = alertsApi({ listAlerts, liveData });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request: stubRequest });
+    await flush(el);
+    expect(bell(el)).not.toBeNull();
+    liveData.invalidate([{ type: "incidents" }]);
+    await vi.waitFor(() => expect(bell(el)).toBeNull());
+    const reads = listAlerts.mock.calls.length;
+    liveData.invalidate([{ type: "incidents" }]);
+    await flush(el);
+    expect(listAlerts).toHaveBeenCalledTimes(reads);
+  });
+
+  it("keeps the last alerts when a later read fails", async () => {
+    const liveData = new LiveData();
+    const listAlerts = vi
+      .fn()
+      .mockResolvedValueOnce({ visible: true, alerts: [alert("1")] })
+      .mockRejectedValue({ code: "server.internal" });
+    const api = alertsApi({ listAlerts, liveData });
+    const record = vi.spyOn(diag, "record");
+    try {
+      const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+        api,
+        request: stubRequest,
+      });
+      await flush(el);
+      liveData.invalidate([{ type: "incidents" }]);
+      await vi.waitFor(() =>
+        expect(record).toHaveBeenCalledWith("warn", "alerts.load_failed", {
+          code: "server.internal",
+        }),
+      );
+      await flush(el);
+      expect(countOf(el)).toBe(1);
+      expect(toast(el).open).toBe(false);
+    } finally {
+      record.mockRestore();
+    }
+  });
+
+  it("pops up a new alert, and opens the panel when the pop-up is pressed", async () => {
+    const { el } = await mountWithPopup();
+    expect(toast(el).message).toContain("A card payment of 12.50 taken while offline");
+    expect(toast(el).tone).toBe("error");
+    toastButton(el, "message").click();
+    expect(panel(el).matches(":popover-open")).toBe(true);
+    await flush(el);
+    expect(toast(el).open).toBe(false);
+  });
+
+  it("counts several new alerts in one pop-up, with the error tone only when one is an error", async () => {
+    const liveData = new LiveData();
+    const listAlerts = vi
+      .fn()
+      .mockResolvedValueOnce({ visible: true, alerts: [] })
+      .mockResolvedValue({ visible: true, alerts: [alert("1"), alert("2")] });
+    const api = alertsApi({ listAlerts, liveData });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request: stubRequest });
+    await flush(el);
+    liveData.invalidate([{ type: "incidents" }]);
+    await vi.waitFor(() => expect(toast(el).open).toBe(true));
+    expect(toast(el).message).toBe("2 new alerts");
+    expect(toast(el).tone).toBe("info");
+  });
+
+  it("gives the pop-up a fresh countdown when a later batch brings the same text", async () => {
+    const liveData = new LiveData();
+    const listAlerts = vi
+      .fn()
+      .mockResolvedValueOnce({ visible: true, alerts: [] })
+      .mockResolvedValueOnce({ visible: true, alerts: [alert("1"), alert("2")] })
+      .mockResolvedValue({
+        visible: true,
+        alerts: [alert("1"), alert("2"), alert("3"), alert("4")],
+      });
+    const api = alertsApi({ listAlerts, liveData });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request: stubRequest });
+    await flush(el);
+    liveData.invalidate([{ type: "incidents" }]);
+    await vi.waitFor(() => expect(toast(el).open).toBe(true));
+    await flush(el);
+    // wt-toast never calls show() on itself, and an equal message changes none of its properties,
+    // so show() is the only thing that restarts its countdown (proven in wt-toast.test.ts).
+    const show = vi.spyOn(toast(el), "show");
+    liveData.invalidate([{ type: "incidents" }]);
+    await vi.waitFor(() => expect(listAlerts).toHaveBeenCalledTimes(3));
+    await flush(el);
+    expect(toast(el).message).toBe("2 new alerts");
+    expect(show).toHaveBeenCalled();
+  });
+
+  it("moves focus into the panel when the pop-up is pressed", async () => {
+    const { el } = await mountWithPopup();
+    toastButton(el, "message").focus();
+    toastButton(el, "message").click();
+    const focused = bell(el)!.shadowRoot!.activeElement;
+    expect(focused).not.toBeNull();
+    expect(focused!.closest("wt-row-actions")).not.toBeNull();
+    expect(focused!.tagName.toLowerCase()).toBe("wt-button");
+  });
+
+  it("returns focus to where it was when the pop-up is closed from the keyboard", async () => {
+    const { el } = await mountWithPopup();
+    const accountMenu = el.shadowRoot!.querySelector<HTMLElement>("[data-test=account-menu]")!;
+    accountMenu.focus();
+    expect(el.shadowRoot!.activeElement).toBe(accountMenu);
+    toastButton(el, "close").focus();
+    toastButton(el, "close").click();
+    await flush(el);
+    expect(toast(el).open).toBe(false);
+    expect(el.shadowRoot!.activeElement).toBe(accountMenu);
+  });
+
+  it("leaves focus alone when the pop-up closes without having had focus", async () => {
+    const { el } = await mountWithPopup();
+    const accountMenu = el.shadowRoot!.querySelector<HTMLElement>("[data-test=account-menu]")!;
+    accountMenu.focus();
+    accountMenu.blur();
+    toastButton(el, "close").click();
+    await flush(el);
+    expect(toast(el).open).toBe(false);
+    expect(el.shadowRoot!.activeElement).toBeNull();
+  });
+
+  it("marks an alert handled from the panel and the bell updates", async () => {
+    const api = alertsApi({
+      listAlerts: vi
+        .fn()
+        .mockResolvedValueOnce({ visible: true, alerts: [alert("7")] })
+        .mockResolvedValue({ visible: true, alerts: [] }),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request: stubRequest });
+    await flush(el);
+    bell(el)!.shadowRoot!.querySelector<HTMLElement>("[data-test=alert-handle]")!.click();
+    expect(api.markIncidentHandled).toHaveBeenCalledWith("7");
+    await vi.waitFor(() => expect(countOf(el)).toBe(0));
+  });
+
+  it("shows the error on the bell when marking handled fails", async () => {
+    const api = alertsApi({
+      listAlerts: vi.fn().mockResolvedValue({ visible: true, alerts: [alert("7")] }),
+      markIncidentHandled: vi.fn().mockRejectedValue({ code: "alert.not_found" }),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request: stubRequest });
+    await flush(el);
+    bell(el)!.shadowRoot!.querySelector<HTMLElement>("[data-test=alert-handle]")!.click();
+    await vi.waitFor(() =>
+      expect(bell(el)!.shadowRoot!.querySelector("[role=alert]")?.textContent).toContain(
+        codeMessage("alert.not_found"),
+      ),
+    );
+    expect(countOf(el)).toBe(1);
+  });
+
+  it("handling on the Alerts screen also updates the bell, which reads the same query", async () => {
+    const api = alertsApi({
+      listAlerts: vi
+        .fn()
+        .mockResolvedValueOnce({ visible: true, alerts: [alert("7")] })
+        .mockResolvedValue({ visible: true, alerts: [] }),
+      listHandledAlerts: vi.fn().mockResolvedValue({ visible: true, alerts: [] }),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request: stubRequest });
+    await flush(el);
+    bell(el)!.shadowRoot!.querySelector<HTMLElement>("[data-test=alerts-see-all]")!.click();
+    await flush(el);
+    const screen = el.shadowRoot!.querySelector("dashboard-alerts-screen")!;
+    await vi.waitFor(() =>
+      expect(
+        screen
+          .shadowRoot!.querySelector("[data-test=open-alerts-table]")!
+          .shadowRoot!.querySelector("[data-test=alert-handle]"),
+      ).not.toBeNull(),
+    );
+    screen
+      .shadowRoot!.querySelector("[data-test=open-alerts-table]")!
+      .shadowRoot!.querySelector<HTMLElement>("[data-test=alert-handle]")!
+      .click();
+    await vi.waitFor(() => expect(countOf(el)).toBe(0));
+  });
+
+  it("See all opens the Alerts screen", async () => {
+    const api = alertsApi({
+      listAlerts: vi.fn().mockResolvedValue({ visible: true, alerts: [alert("1")] }),
+      listHandledAlerts: vi.fn().mockResolvedValue({ visible: true, alerts: [] }),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request: stubRequest });
+    await flush(el);
+    bell(el)!.shadowRoot!.querySelector<HTMLElement>("[data-test=alerts-see-all]")!.click();
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("dashboard-alerts-screen")).not.toBeNull();
+    expect(location.pathname).toMatch(/^\/manage\/alerts/);
+  });
+
+  it("opens the Alerts screen from a deep link for a non-staff session", async () => {
+    history.replaceState(null, "", "/manage/alerts");
+    const api = alertsApi({
+      listHandledAlerts: vi.fn().mockResolvedValue({ visible: false, alerts: [] }),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request: stubRequest });
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("dashboard-alerts-screen")).not.toBeNull();
+  });
+
+  it("follows a Go to request from the panel to that screen", async () => {
+    const api = alertsApi({
+      listAlerts: vi.fn().mockResolvedValue({
+        visible: true,
+        alerts: [
+          {
+            key: "printer.offline:kitchen",
+            kind: "ongoing",
+            // No printer code has wording on this branch; the wording is not under test here.
+            code: "printer.offline",
+            params: { printerName: "Kitchen" },
+            severity: "warning",
+            since: "2026-09-14T12:00:00.000Z",
+            area: "printing",
+            screen: "printers",
+          },
+        ],
+      }),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request: stubRequest });
+    await flush(el);
+    bell(el)!.shadowRoot!.querySelector<HTMLElement>("[data-test=alert-go-to]")!.click();
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("dashboard-printers-screen")).not.toBeNull();
+    expect(location.pathname).toBe("/manage/printers");
+  });
+
+  it("does not open the Alerts screen for a staff session", async () => {
+    history.replaceState(null, "", "/manage/alerts");
+    const api = alertsApi({
+      getMe: vi.fn().mockResolvedValue({ ...meResponse, role: "staff", permissions: [] }),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request: stubRequest });
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("dashboard-alerts-screen")).toBeNull();
+    expect(api.listAlerts).not.toHaveBeenCalled();
+  });
+
+  it("does not carry a Mark handled failure from an ended session onto the next one", async () => {
+    let fail!: (error: unknown) => void;
+    const api = alertsApi({
+      listAlerts: vi.fn().mockResolvedValue({ visible: true, alerts: [alert("7")] }),
+      markIncidentHandled: vi.fn().mockReturnValue(
+        new Promise((_resolve, reject) => {
+          fail = reject;
+        }),
+      ),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request: stubRequest });
+    await flush(el);
+    bell(el)!.shadowRoot!.querySelector<HTMLElement>("[data-test=alert-handle]")!.click();
+    // main.ts reports an expired session before the request's promise rejects.
+    window.dispatchEvent(
+      new CustomEvent("waitron-session-invalid", {
+        detail: { code: "management_session.required" },
+      }),
+    );
+    await flush(el);
+    fail({ code: "management_session.required" });
+    await flush(el);
+    el.shadowRoot!.querySelector("dashboard-login-screen")!.dispatchEvent(
+      new CustomEvent("logged-in", { bubbles: true, composed: true, detail: {} }),
+    );
+    await vi.waitFor(() => expect(bell(el)).not.toBeNull());
+    await flush(el);
+    expect(bell(el)!.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+  });
+
+  it("clears the pop-up, the bell's error and a pending Mark handled on logout", async () => {
+    const liveData = new LiveData();
+    let current = [alert("1")];
+    const api = alertsApi({
+      liveData,
+      listAlerts: vi.fn(async () => ({ visible: true, alerts: current })),
+      markIncidentHandled: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "alert.not_found" })
+        .mockReturnValue(new Promise(() => undefined)),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request: stubRequest });
+    const logOutAndIn = async () => {
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=logout]")!.click();
+      await flush(el);
+      el.shadowRoot!.querySelector("dashboard-login-screen")!.dispatchEvent(
+        new CustomEvent("logged-in", { bubbles: true, composed: true, detail: {} }),
+      );
+      await vi.waitFor(() => expect(bell(el)).not.toBeNull());
+      await flush(el);
+      await (bell(el) as AlertsBell).updateComplete;
+    };
+    const handle = () =>
+      bell(el)!.shadowRoot!.querySelector<HTMLElement>("[data-test=alert-handle]")!;
+    await flush(el);
+    current = [alert("1"), alert("2")];
+    liveData.invalidate([{ type: "incidents" }]);
+    await vi.waitFor(() => expect(toast(el).open).toBe(true));
+    handle().click();
+    await vi.waitFor(() =>
+      expect(bell(el)!.shadowRoot!.querySelector("[role=alert]")).not.toBeNull(),
+    );
+
+    await logOutAndIn();
+    expect(toast(el).open).toBe(false);
+    expect(bell(el)!.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+
+    handle().click();
+    await vi.waitFor(() => expect(handle().hasAttribute("loading")).toBe(true));
+    await logOutAndIn();
+    expect(handle().hasAttribute("loading")).toBe(false);
+  });
+
+  it("removes the bell when a re-check finds the session is now staff", async () => {
+    const getMe = vi
+      .fn()
+      .mockResolvedValueOnce({ ...meResponse, sessionDefault: "en-GB" })
+      .mockResolvedValue({
+        ...meResponse,
+        sessionDefault: "en-GB",
+        role: "staff",
+        permissions: [],
+      });
+    const api = alertsApi({
+      getMe,
+      listAlerts: vi.fn().mockResolvedValue({ visible: true, alerts: [alert("1")] }),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request: stubRequest });
+    await flush(el);
+    expect(bell(el)).not.toBeNull();
+    document.dispatchEvent(new Event("visibilitychange"));
+    await vi.waitFor(() => expect(getMe).toHaveBeenCalledTimes(2));
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("dashboard-my-schedule-screen")).not.toBeNull();
+    expect(bell(el)).toBeNull();
+  });
+
+  it("drops a Mark handled failure that lands after a re-check found the session is now staff", async () => {
+    let fail!: (error: unknown) => void;
+    const manager = { ...meResponse, sessionDefault: "en-GB" };
+    const getMe = vi
+      .fn()
+      .mockResolvedValueOnce(manager)
+      .mockResolvedValueOnce({ ...manager, role: "staff", permissions: [] })
+      .mockResolvedValue(manager);
+    const api = alertsApi({
+      getMe,
+      listAlerts: vi.fn().mockResolvedValue({ visible: true, alerts: [alert("7")] }),
+      markIncidentHandled: vi.fn().mockReturnValue(
+        new Promise((_resolve, reject) => {
+          fail = reject;
+        }),
+      ),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request: stubRequest });
+    await flush(el);
+    bell(el)!.shadowRoot!.querySelector<HTMLElement>("[data-test=alert-handle]")!.click();
+    document.dispatchEvent(new Event("visibilitychange"));
+    await vi.waitFor(() => expect(getMe).toHaveBeenCalledTimes(2));
+    await flush(el);
+    expect(bell(el)).toBeNull();
+    fail({ code: "alert.not_found" });
+    await flush(el);
+    // Back to a manager: the same session, so only the alerts reset can tell the failure is stale.
+    document.dispatchEvent(new Event("visibilitychange"));
+    await vi.waitFor(() => expect(getMe).toHaveBeenCalledTimes(3));
+    await vi.waitFor(() => expect(bell(el)).not.toBeNull());
+    await flush(el);
+    await (bell(el) as AlertsBell).updateComplete;
+    expect(bell(el)!.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+    expect(
+      bell(el)!.shadowRoot!.querySelector("[data-test=alert-handle]")!.hasAttribute("loading"),
+    ).toBe(false);
+  });
+
+  it("forgets the previous session's alerts on logout", async () => {
+    const api = alertsApi({
+      listAlerts: vi.fn().mockResolvedValue({ visible: true, alerts: [alert("1")] }),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request: stubRequest });
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=logout]")!.click();
+    await flush(el);
+    // The next session's first alerts read fails, so anything the bell shows is left over.
+    (api as unknown as { listAlerts: unknown }).listAlerts = vi
+      .fn()
+      .mockRejectedValue({ code: "server.internal" });
+    el.shadowRoot!.querySelector("dashboard-login-screen")!.dispatchEvent(
+      new CustomEvent("logged-in", { bubbles: true, composed: true, detail: {} }),
+    );
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=account-menu]")).not.toBeNull();
+    expect(bell(el)).toBeNull();
+  });
 });

@@ -32,6 +32,8 @@ test("defines the core colour contract", () => {
     "--wt-color-on-primary",
     "--wt-color-danger",
     "--wt-color-on-danger",
+    "--wt-color-warning",
+    "--wt-color-on-warning",
     "--wt-color-border",
     "--wt-color-focus",
     "--wt-color-scrim",

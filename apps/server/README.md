@@ -16,10 +16,10 @@ whoever reads its source.
 duty under Spain's Veri\*Factu regulation (art. 16.4). A `/health` that reports `200` is a claim that
 no tenant was wholesale abandoned this pass and no Stripe settlement-audit period has been
 permanently parked — it is **not** a claim that every individual fiscal record has actually been
-accepted by AEAT. A tenant whose records reach AEAT but are individually rejected (a `certKind`
-provisioned as the wrong kind, say) reads `200` with `lastOkAt` refreshing every pass; that is
-visible only via `recordsHalted`/`incidentsRaised` in the `drain.complete` log line and the
-`incidents` table, deliberately, not through this endpoint — see
+accepted by AEAT. A tenant whose records reach AEAT but are individually rejected reads `200` with
+`lastOkAt` refreshing every pass; that is visible only via `recordsHalted`/`incidentsRaised` in the
+`drain.complete` log line, the `incidents` table, and the dashboard's alerts bell and Alerts screen
+(as `fiscal.` alerts, to anyone holding `fiscal.view`), deliberately, not through this endpoint — see
 ["What `/health` means"](#what-health-means) below for the exact boundary, and why, before treating
 a `503` as noise or its absence as "nothing is wrong."
 
@@ -464,8 +464,9 @@ things — three visible in the body above without needing the logs, one that ne
   `WAITRON_SKIP_RETRY_MS` interval, folded as a minimum against an earlier gate — see the env-var
   table above) or a `failed` one (which retries on its own backoff and does NOT flip this field —
   see `src/pass.ts`'s own comment on why). `fiscal.drain` has no equivalent terminal outcome at
-  all — a halted fiscal record is a different, already-persisted signal (the `incidents` table, and
-  `recordsHalted`/`incidentsRaised` in `drain.complete`), deliberately not fed into `/health`; see
+  all — a halted fiscal record is a different, already-persisted signal (the `incidents` table, the
+  dashboard's alerts bell and Alerts screen, and `recordsHalted`/`incidentsRaised` in `drain.complete`),
+  deliberately not fed into `/health`; see
   the opening section above. Find a park via the error-level `reconcile.run_parked` log line, which
   carries the tenant, duty, period and `errorCode`.
 

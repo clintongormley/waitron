@@ -1519,6 +1519,26 @@ export interface BackupStatusView {
   archiveUnderCurrentKey: boolean;
 }
 
+/** LOCAL copy of the server's `Alert` (`packages/module/src/alerts.ts`). */
+export interface AlertView {
+  key: string;
+  kind: "event" | "ongoing";
+  code: string;
+  params: Record<string, unknown>;
+  severity: "warning" | "error";
+  since: string | null;
+  area: string;
+  screen?: string;
+  handledAt?: string;
+  handledBy?: string | null;
+}
+
+/** An alerts list read: `visible` is false when this session may see no alerts at all. */
+export interface AlertsResponse {
+  visible: boolean;
+  alerts: AlertView[];
+}
+
 /** The `POST /api/backup/apply` body — the destination, the chosen recovery key, and the policy
  * (schedule + retention). Mirrors the server's `readApplyBody`. */
 export interface BackupApplyBody {
@@ -3201,6 +3221,26 @@ export class DashboardApi {
    * {@link BackupStatusView}). Backs the always-available status view. */
   getBackupStatus(): Promise<BackupStatusView> {
     return this.#request<BackupStatusView>("/api/backup/status", "GET");
+  }
+
+  // ── Alerts ────────────────────────────────────────────────────────────────────────────────────
+
+  /** `GET /management-api/alerts` — this session's open alerts, and whether it may see any. */
+  listAlerts(): Promise<AlertsResponse> {
+    return this.#request<AlertsResponse>("/management-api/alerts", "GET");
+  }
+
+  /** `GET /management-api/alerts/handled` — incidents handled in the last 30 days. */
+  listHandledAlerts(): Promise<AlertsResponse> {
+    return this.#request<AlertsResponse>("/management-api/alerts/handled", "GET");
+  }
+
+  /** `POST /management-api/alerts/incidents/:id/handled` — succeeds when already handled. */
+  markIncidentHandled(incidentId: string): Promise<void> {
+    return this.#request<void>(
+      `/management-api/alerts/incidents/${encodeURIComponent(incidentId)}/handled`,
+      "POST",
+    );
   }
 
   /** Download the encrypted, configuration-only preparation artifact. The ordinary request helper
