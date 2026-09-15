@@ -202,8 +202,8 @@ function toDeviceBinding(
  * cookie success path, so a firewall probe on a non-device request is a pure read — and so is the
  * devMode override branch above, which resolves the binding by id and writes nothing.
  *
- * `deps.cfg` is typed to `{ tenantId }` — matching `requireSession` — and not read, so any route group
- * carrying only `{ tenantId }` can gate on it without contriving a full config.
+ * `deps` carries the database and the devMode flag and nothing else — matching `requireSession` — so
+ * any route group can gate on it without contriving a full till config.
  */
 export async function tryReadDevice(
   deps: { db: Database; devMode?: boolean },

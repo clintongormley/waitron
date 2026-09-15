@@ -13,7 +13,7 @@ import { provisionNode } from "./provision-till.js";
 // stripe-account.test.ts and aeat-transport.test.ts.
 
 // Well-formed but absent — the shape a mistyped argument actually takes, since a malformed one
-// never survives the `nodeId()`/`tenantId()` brand.
+// never survives the `nodeId()` brand.
 const ABSENT = "00000000-0000-0000-0000-000000000000";
 
 // The full manifest (`manifestSets()`), not just [core, fiscal]: each module lands on top of its

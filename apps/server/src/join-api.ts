@@ -35,8 +35,7 @@ import type { Logger } from "./logger.js";
 
 /**
  * Everything `mountJoinApi` needs. `cfg` is the FULL `TillConfig` because the verbs it calls are typed
- * that way (`listPendingJoinRequests`, `challengeFor` and `acceptDeviceJoinRequest` read
- * `cfg.tenantId`, and accept stamps the device from the REQUEST's own `location_id`); the routes touch
+ * that way (accept stamps the device from the REQUEST's own `location_id`); the routes touch
  * none of the fiscal ids on it. `pairingMode` is the SAME holder `boot.ts` hands the device mount — one
  * window for the venue, a property of the wiring rather than a rule anyone has to remember.
  */

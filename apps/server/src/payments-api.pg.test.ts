@@ -275,7 +275,7 @@ describe("connect", () => {
     const venue = await seedVenue();
     const app = mountApp(venue);
     // A live key on a preproduction host: the seat's prefix guard fires only because the route passed
-    // `environment` AND `tenantId` through.
+    // `environment` through.
     const res = await send(app, "POST", "/management-api/payments/providers/stripe/connect", {
       cookie: venue.managerCookie,
       body: { ...GOOD_KEY, secretKey: "sk_live_ok" },

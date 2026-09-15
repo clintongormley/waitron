@@ -62,10 +62,10 @@ import { previewPrintJob } from "./print-job-preview.js";
 import { formatTestPage } from "./test-page.js";
 
 /**
- * The deployment holds one tenant per database. Everything `mountPrintApi` needs. `cfg` is the FULL
+ * The deployment holds one taxpayer per database. Everything `mountPrintApi` needs. `cfg` is the FULL
  * `TillConfig` (branded ids), not a `{ locationId }` subset: the shared join verbs
  * (`createJoinRequest`, `readAgentJoinStatus`, and the accept verb in join-api.ts) are typed `cfg:
- * TillConfig` and read `cfg.tenantId`/`cfg.locationId`, and the pull route echoes `cfg.nodeId` so the
+ * TillConfig` and read `cfg.locationId`, and the pull route echoes `cfg.nodeId` so the
  * agent can tell which node it is talking to. `readMembership` reads the venue's held chart so the pull
  * can list its routable servers (the agent follows the primary across a failover, mirroring the till's
  * `GET /api/till`). `pairingMode` is the venue-wide window the knock is admitted under — the SAME holder

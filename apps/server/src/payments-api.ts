@@ -36,8 +36,8 @@ import type { TillConfig } from "./till-config.js";
 import type { Logger } from "./logger.js";
 
 /**
- * Everything `mountPaymentsApi` needs. One tenant per database, so no query filters by `cfg.tenantId`
- * and a by-id read needs only the id. `ring` is
+ * Everything `mountPaymentsApi` needs. One taxpayer per database, so a by-id read needs only the
+ * id. `ring` is
  * the vault key ring the host opened once at boot: this is the FIRST dashboard write to the credential
  * vault. `pool` is the lazy card-provider pool — these routes only `evict` it so a credential change
  * takes effect without a restart; the pay path (Task 12) is what `get`s from it. `providers` is the

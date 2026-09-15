@@ -78,7 +78,7 @@ const suite = usePgliteDb({
       insert into locations (name, invoice_locales, operation_description)
       values ('Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
     locationId = loc.rows[0]!.id;
-    // The FULL TillConfig the print verbs are typed on (branded ids). Only tenantId/locationId are read
+    // The FULL TillConfig the print verbs are typed on (branded ids). Only locationId is read
     // by the join verbs and the routes; nodeId is echoed on the pull; the other fiscal ids are unused
     // here, so a branded random uuid stands in.
     cfg = {

@@ -127,9 +127,9 @@ export interface AssembleDeps {
  */
 export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBundle> {
   const { tenant, primaryNode } = await withTransaction(deps.appDb, async (tx) => {
-    // `[0]!` is safe: `designated.tenantId`/`nodeId` are the primary till's provisioned ids
-    // (`config.till`), whose tenant + node rows are minted as its FK parents at provision, so both
-    // by-id lookups always return exactly one row.
+    // `[0]!` is safe on both reads: the taxpayer row is the one row every provisioned database
+    // holds, and `designated.nodeId` is the primary till's provisioned id (`config.till`), whose
+    // node row is minted as its FK parent at provision.
     const t = (
       await tx
         .select({ country: tenants.country, taxId: tenants.taxId })

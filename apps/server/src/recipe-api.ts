@@ -27,8 +27,8 @@ import { requireBodyUuid, requireUuidParam } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 
 /**
- * Everything the dashboard's recipe-authoring routes need: `db` + this venue's own `cfg.tenantId`
- * are passed to every `withTransaction` below. The deployment holds one tenant per database.
+ * Everything the dashboard's recipe-authoring routes need: `db` is what every `withTransaction`
+ * below runs on. The deployment holds one taxpayer per database.
  * `cfg.nodeId` is this node's origin id, threaded into every write's `withTransaction` exactly as
  * `CatalogueApiDeps` does. The `ingredients`/`recipe_lines` tables themselves carry no
  * sync-capture trigger, but a recipe write UPDATEs `products` — `setProductRecipe` →
@@ -87,9 +87,6 @@ const run = createErrorBoundary(STATUS, "recipe.failed");
  * database. The `recipe.manage` gate runs on every route through one constant.
  */
 export function mountRecipeApi(app: Hono, deps: RecipeApiDeps, log: Logger): void {
-  // Brand the tenant id ONCE per mount rather than per write route — a stable value for the life
-  // of the mount (cfg.tenantId is fixed), the low-risk form of the dedup (deps keeps cfg: { tenantId:
-  // string }, the sibling convention).
   // Open a transaction as the app role, confirm the caller's management session carries
   // RECIPE_WRITE_PERMISSION, then run `fn`. Every route funnels its DB work through here so the gate is
   // applied identically and in exactly one place — the catalogue §3 seam.

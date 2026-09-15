@@ -10,7 +10,7 @@
 // Usage — build first, exactly like `dist/server.js`, for the reason `record-one-sale.ts`'s header
 // records:
 //   pnpm --filter @waitron/server build
-//   DATABASE_URL=postgres://... node apps/server/dist/register-till.js <tenantId> <nodeId>
+//   DATABASE_URL=postgres://... node apps/server/dist/register-till.js <nodeId>
 //
 // The connection string is read ONLY from `DATABASE_URL`, never accepted as an argument, so it stays
 // out of shell history and process listings.
@@ -24,16 +24,14 @@ import { provisionNode } from "../src/provision-till.js";
 
 function usageError(message: string): never {
   console.error(`register-till: ${message}`);
-  console.error(
-    "usage: DATABASE_URL=<...> node apps/server/dist/register-till.js <tenantId> <nodeId>",
-  );
+  console.error("usage: DATABASE_URL=<...> node apps/server/dist/register-till.js <nodeId>");
   process.exit(1);
 }
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
-  if (args.length !== 2) {
-    usageError(`expected 2 arguments, got ${args.length}`);
+  if (args.length !== 1) {
+    usageError(`expected 1 argument, got ${args.length}`);
   }
   const [nodeArg] = args;
 

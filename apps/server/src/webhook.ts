@@ -21,9 +21,13 @@ const PURPOSE = "payments.stripe";
  * which deliberately break the endpoint's otherwise-5xx "never drop a settlement" bias:
  *
  * - `payment.webhook_signature_invalid` — the signature check, this route's one gate.
- *   database access); the request is unroutable, not merely unlucky.
  * - `payment.credential_environment_mismatch` — a live key on a pre-production host (or vice versa):
  *   a provisioning MISTAKE, not a transient state, so retrying forever changes nothing.
+ *
+ * `shared.invalid_id` used to be the third entry, for a malformed `:tenantId` path segment. The route
+ * has no path segment and constructs no branded id from request input any more, so nothing here can
+ * throw it; a future route that DOES construct one from the request has to put it back deliberately,
+ * because anything absent from this set is answered 5xx.
  *
  * Everything else stays 5xx so Stripe retries: `server.credential_unusable` (a missing field can be a
  * transient mid-provisioning state), `credentials.missing` (a credential not yet provisioned), and any DB
@@ -31,7 +35,6 @@ const PURPOSE = "payments.stripe";
  */
 const CLIENT_ERROR_CODES: ReadonlySet<string> = new Set([
   "payment.webhook_signature_invalid",
-  "shared.invalid_id",
   "payment.credential_environment_mismatch",
 ]);
 

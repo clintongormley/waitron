@@ -1911,7 +1911,7 @@ export async function startServer(
     // UNAUTHENTICATED knock and join-status routes, the `requireDevice`-guarded KDS routes (a kitchen
     // screen reads and bumps only its own bound station), and the `device.manage`-gated management routes
     // (list devices, revoke one, rebind one). It reuses the EXACT `db` and — unlike the sibling mounts,
-    // which pass a `{ tenantId }` subset — the FULL `till` config `mountTillApi` receives above, because
+    // which pass only what they read — the FULL `till` config `mountTillApi` receives above, because
     // the device verbs are typed `cfg: TillConfig` and `listStationQueue` scopes the queue by `cfg.nodeId`
     // (the routes touch none of the fiscal ids on it). `secureCookies` is the SAME hoisted binding, so the
     // device cookie is `Secure` iff TLS is configured. Routes only — no database work at boot; the
@@ -1970,13 +1970,13 @@ export async function startServer(
       log,
     );
   }
-  // The deployment holds one tenant per database. The dashboard's management HTTP surface
+  // The deployment holds one taxpayer per database. The dashboard's management HTTP surface
   // (manager login, staff/person management, passkey ceremonies) on the SAME app, the identical
   // convention `mountWebhook` and `mountTillApi` above follow. It reuses the EXACT values
-  // `mountTillApi` receives so the two cannot drift: the same `db`, the same tenant
-  // (`till.tenantId`) and the same `secureCookies` binding hoisted above (one value, read by both
-  // mounts — not a re-typed `config.tls !== undefined`). No fiscal backend, clock or card
-  // provider: the management routes read and write only the tenant's own identity records.
+  // `mountTillApi` receives so the two cannot drift: the same `db` and the same `secureCookies`
+  // binding hoisted above (one value, read by both mounts — not a re-typed
+  // `config.tls !== undefined`). No fiscal backend, clock or card provider: the management routes
+  // read and write only this box's own identity records.
   // `rpId`/`origin` are the passkey Relying Party config from `loadConfig` — a passkey is bound
   // to its RP ID + origin, so these are config, never hardcoded (spec §4c). Routes only — no
   // database work at boot.
@@ -2038,9 +2038,9 @@ export async function startServer(
     },
     log,
   );
-  // The deployment holds one tenant per database. The dashboard's diagnostics surface (read the
+  // The deployment holds one taxpayer per database. The dashboard's diagnostics surface (read the
   // recent log tail, read + raise verbosity) on the SAME app, the identical convention. It reuses
-  // the EXACT `db` and tenant (`till.tenantId`) `mountManagementApi` above receives, plus the
+  // the EXACT `db` `mountManagementApi` above receives, plus the
   // `reader` over the rotating files and the in-memory `verbosity` controller the logger reads.
   // All three routes are gated behind `diagnostics.view`. Routes only — no database work at boot;
   // the gate runs per request.
@@ -2068,9 +2068,9 @@ export async function startServer(
     log,
   );
   mountUnitsApi(app, { db, venueLocale }, log);
-  // The deployment holds one tenant per database. The dashboard's gated purchase-invoice write
+  // The deployment holds one taxpayer per database. The dashboard's gated purchase-invoice write
   // group (facturas recibidas: header + VAT desglose) on the SAME app, the identical convention.
-  // Reuses the EXACT `db` and tenant `mountCatalogueApi` above receives (`till.tenantId`) so the
+  // Reuses the EXACT `db` `mountCatalogueApi` above receives so the
   // two cannot drift. No `nodeId` (the purchase tables carry no sync-capture trigger), no fiscal
   // backend, clock, card provider or media store — these routes touch only the two
   // purchase-invoice tables. Routes only — no database work at boot; the `purchase.manage` gate
@@ -2079,8 +2079,8 @@ export async function startServer(
   mountPurchasingApi(app, { db }, log);
   // Mount every ENABLED module's routes generically (SP1). `setsToMigrate` is the enabled module
   // set on this trading branch (boot.ts:552), so a module toggled off mounts nothing — no
-  // hand-written guard at the mount site. `routeCtx` binds cfg to the two `TillConfig` fields a
-  // module route reads (`tenantId`/`locationId`); `core.openTab` closes over the FULL `till` HERE,
+  // hand-written guard at the mount site. `routeCtx` binds cfg to the one `TillConfig` field a
+  // module route reads (`locationId`); `core.openTab` closes over the FULL `till` HERE,
   // so `nodeId`/`tillId` never enter the module's cfg. Bookings is the first `*-api.ts` behind the
   // seat; the other `mount*Api` calls stay as they are.
   const routeCtx: ModuleRouteContext = {
@@ -2093,8 +2093,8 @@ export async function startServer(
     core: { openTab: (tx, req) => openTab(tx, till, req) },
   };
   for (const m of setsToMigrate) m.routes?.mount(app, routeCtx, log);
-  // The deployment holds one tenant per database. The dashboard's gated reporting surface on the
-  // SAME app, the identical convention. Reuses the EXACT `db` and tenant (`till.tenantId`)
+  // The deployment holds one taxpayer per database. The dashboard's gated reporting surface on the
+  // SAME app, the identical convention. Reuses the EXACT `db`
   // `mountPurchasingApi` above receives so the two cannot drift. `nodeId` here is `dataNodeId` —
   // the node whose DATA this server DISPLAYS, not its own identity: on a MIRROR that is the
   // ORIGIN (the primary whose replicated sales it holds), so the per-till/fiscal reports
@@ -2591,7 +2591,7 @@ export async function startServer(
     // singleton fiscal pass on EVERY trading node (primary or sell-only secondary), returning the
     // inner `PassReport` unchanged so the `/health` contract is untouched (see its own header). The
     // providers are enumerated per pass (`connectedCardProviderSweep`): the demo/prepare simulator, if
-    // one was built, plus every pooled provider `till.tenantId` has a sealed credential for — the
+    // one was built, plus every pooled provider this box has a sealed credential for — the
     // money-critical backstop that resolves a SumUp payment whose outcome was lost between the reader
     // push and the first poll (`payment.pending_outcome_unactionable`).
     pass: withPendingSweep(

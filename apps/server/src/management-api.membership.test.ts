@@ -106,7 +106,7 @@ async function seedStaff(): Promise<string> {
 }
 
 /** Mount the management API on a fresh Hono app for one tenant. The membership route reads only
- * `deps.db` + `deps.cfg.tenantId`; the other deps are inert here (no route under test touches them). */
+ * `deps.db`; the other deps are inert here (no route under test touches them). */
 function mountApp(designated: AdoptResult): Hono {
   const app = new Hono();
   mountManagementApi(

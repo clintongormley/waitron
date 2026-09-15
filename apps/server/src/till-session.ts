@@ -83,9 +83,9 @@ export function readSessionId(c: Context): string | null {
  * login/logout routes in `till-api.ts` deliberately do NOT (logging in has no prior session, and
  * logout tolerates a missing or already-closed one).
  *
- * `deps.cfg` is typed to the ONE field this reads — `tenantId` — rather than the full `TillConfig`, so
- * both the till API (`TillApiDeps`) and the staff schedule API (`ScheduleApiDeps`, which carries only
- * `{ tenantId }`) can gate their routes on it without contriving a full till config.
+ * `deps` is typed to the ONE thing this reads — the database — rather than the full `TillConfig`, so
+ * both the till API (`TillApiDeps`) and the staff schedule API (`ScheduleApiDeps`) can gate their
+ * routes on it without contriving a till config.
  */
 export async function requireSession(
   deps: { db: Database },

@@ -130,24 +130,23 @@ import {
 
 /**
  * Everything the dashboard's management HTTP routes need. The management surface reads and writes only
- * the tenant's own identity records, so — unlike `TillApiDeps` — it wires no fiscal backend, clock or
- * card provider. `cfg.tenantId` is the dashboard's own tenant (provisioning stamped it), scoping every
- * `withTransaction` below. `secureCookies` follows the resolved trading transport (operator TLS, persisted
+ * this box's own identity records, so — unlike `TillApiDeps` — it wires no fiscal backend, clock or
+ * card provider. `secureCookies` follows the resolved trading transport (operator TLS, persisted
  * box leaf, or leaf-less HTTP development), mirroring `TillApiDeps.secureCookies`.
  */
 export interface ManagementApiDeps {
   db: Database;
-  /** `cfg.tenantId` is the dashboard's own tenant, scoping every `withTransaction` below. `nodeId` is
-   * this node's id, carried on the uniform write-path `cfg` shape every mounted API takes; it no
-   * longer stamps a capture origin (the application outbox and its capture triggers were removed). */
+  /** `nodeId` is this node's id, carried on the uniform write-path `cfg` shape every mounted API
+   * takes; it no longer stamps a capture origin (the application outbox and its capture triggers were
+   * removed). */
   cfg: { nodeId: string };
   /**
-   * The venue's own config — the tenant + LOCATION the floor-zone and table config routes (FP-1) scope
+   * The venue's own config — the LOCATION the floor-zone and table config routes (FP-1) scope
    * their reads and writes to. The zone/table verbs are location-scoped (`floor_zones` / `dining_tables`
-   * carry a `location_id`), so those routes need the venue's location, which `cfg.tenantId` alone cannot
-   * give; `boot.ts` threads the deployed `till` config here, the SAME value `mountTillApi` receives, so
+   * carry a `location_id`), so those routes need the venue's location, which the `cfg` above does not
+   * carry; `boot.ts` threads the deployed `till` config here, the SAME value `mountTillApi` receives, so
    * the dashboard "Sala" config surface and the operator till surface CRUD the same tables under one
-   * scope. Only `tenantId` + `locationId` are read on this surface (the fiscal ids a `TillConfig` also
+   * scope. Only `locationId` is read on this surface (the fiscal ids a `TillConfig` also
    * carries are inert here — these are config routes that touch no fiscal path). OPTIONAL so the
    * identity/passkey unit-test harnesses, which never exercise the zone/table routes, can omit it; a
    * request that reaches one of those routes without it fails closed (see `requireVenueCfg`).
@@ -226,7 +225,7 @@ async function deliverAccountAction(
  *
  * `shared.invalid_id` is listed for completeness of the branded-id family but is not, on today's
  * routes, reachable on this surface: request ids are screened with `isUuid` and passed to the identity
- * functions as plain strings, and `cfg.tenantId` arrives pre-validated from boot — the only thrower is
+ * functions as plain strings — the only thrower is
  * `@waitron/shared`'s branded-id constructor, which no route here calls with request input. Left in
  * rather than dropped so a future route that DOES construct a branded id gets the 400 rather than the
  * `?? 400` default; see this task's report for the reviewer note.
@@ -491,8 +490,8 @@ function requireVenueCfg(deps: ManagementApiDeps): TillConfig {
  * applied identically and in exactly one place (the `gated` seam `catalogue-api.ts` uses). The route's
  * own `requireManagementSession` (→ 401) still runs FIRST, BEFORE this — this helper only carries the
  * `withTransaction` + `asAppUser` + `authorizeManager` block that followed it. `cfg` is the venue config the
- * route resolved via `requireVenueCfg`, whose `tenantId` scopes the transaction (the zone/table verbs
- * are location-scoped, so they take `cfg`, unlike the status verbs).
+ * route resolved via `requireVenueCfg`, whose `locationId` the zone/table verbs scope to (they take
+ * `cfg`, unlike the status verbs).
  */
 function withVenueAuth<T>(
   deps: ManagementApiDeps,

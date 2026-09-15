@@ -15,21 +15,25 @@ export type JoinRequestKind = "device" | "print_agent";
  * cannot outlive the window that admitted it by more than one window. */
 export const JOIN_TTL_MS = 15 * 60 * 1000;
 
-/** Pending rows per (tenant, kind). Ten is enough for the largest install anyone runs at once, and it
- * bounds both the admin's attention and the numbers the decoy rule must avoid. */
+/** Pending rows per kind, across the whole database. Ten is enough for the largest install anyone
+ * runs at once, and it bounds both the admin's attention and the numbers the decoy rule must avoid. */
 export const PENDING_CAP = 10;
 
-/** Advisory-lock namespace (the first arg of the two-int `pg_advisory_xact_lock`) for per-tenant join
+/** Advisory-lock namespace (the first arg of the two-int `pg_advisory_xact_lock`) for join
  * allocation. A fixed small integer, distinct from every other advisory-lock namespace in the repo
- * (`packages/migrations/src/apply.ts` holds the migration lock in the SEPARATE one-int space); the
- * second arg is `hashtext(tenantId)`, so distinct tenants take distinct locks. A `hashtext` collision
- * between two tenant ids would only over-serialise them — a harmless wait, never a wrong lock — so the
- * hash's cross-version stability the migration lock avoids does not matter here. */
+ * (`packages/migrations/src/apply.ts` holds the migration lock in the SEPARATE one-int space). */
 const JOIN_ALLOC_LOCK_NAMESPACE = 4_915_071;
 
-/** Delete this tenant's lapsed requests. Called at the head of every verb that reads or counts them, so
- * a lapsed row never occupies the cap, never blocks a number, and never appears in the pending list.
- * Swept opportunistically at read, not by a background job. */
+/** The second arg of the two-int lock, and a CONSTANT on purpose: every read this lock protects —
+ * the cap count and `pendingNumbers` — spans the whole `join_requests` table with no location or
+ * kind predicate, so ONE key per database is the key that matches them. Keying it to anything
+ * narrower (a location, say) lets two creators at different keys run concurrently while still
+ * reading each other's table, which is the exact race the lock exists to stop. */
+const JOIN_ALLOC_LOCK_KEY = 1;
+
+/** Delete every lapsed request in the database. Called at the head of every verb that reads or counts
+ * them, so a lapsed row never occupies the cap, never blocks a number, and never appears in the
+ * pending list. Swept opportunistically at read, not by a background job. */
 async function sweepLapsed(tx: Transaction, cfg: TillConfig): Promise<void> {
   void cfg;
   await tx
@@ -37,7 +41,7 @@ async function sweepLapsed(tx: Transaction, cfg: TillConfig): Promise<void> {
     .where(lt(joinRequests.createdAt, new Date(Date.now() - JOIN_TTL_MS).toISOString()));
 }
 
-/** Every number currently spoken for in this tenant, EITHER kind, split by role. The cross-surface
+/** Every number currently spoken for in this database, EITHER kind, split by role. The cross-surface
  * scope is the point (design §1.2 rule 3): an agent request and a device request must never show the
  * same number, or an admin comparing across two screens can be honestly misled. */
 export async function pendingNumbers(
@@ -62,18 +66,22 @@ function twoDigits(n: number): string {
 
 /**
  * Mint a pending join request: one real number and two decoys, obeying the cross-surface exclusion
- * (design §1.2 rule 3) and the per-(tenant, kind) cap.
+ * (design §1.2 rule 3) and the per-kind cap.
  *
- * INVARIANT: number allocation and the cap are serialised per TENANT (across BOTH kinds). A
- * transaction-scoped advisory lock on the tenant is taken FIRST, so the whole sweep → count →
- * pendingNumbers → pick → insert sequence is atomic against other creators in the same tenant. WHY:
- * two concurrent creators otherwise cannot see each other's uncommitted rows, so both pick off a
- * stale reserved-set — one's real can collide with the other's (rule 3, the guarantee the one-in-three
- * guess rate rests on), and both can pass a count of 9 and insert to 11 (bypassing the cap and the
- * decoy budget). The key is the TENANT, not (tenant, kind): the exclusion and the ≤20-pending budget
- * span both `device` and `print_agent`. `pg_advisory_xact_lock` releases at commit/rollback and blocks
- * until acquired, so the second creator waits for the first to commit, then reads its row. It is
- * PUBLIC-executable, so `app_user` (the route's role) may call it.
+ * INVARIANT: number allocation and the cap are serialised across the WHOLE DATABASE (both kinds,
+ * every location). One transaction-scoped advisory lock, on a constant key, is taken FIRST, so the
+ * whole sweep → count → pendingNumbers → pick → insert sequence is atomic against every other
+ * creator. WHY: two concurrent creators otherwise cannot see each other's uncommitted rows, so both
+ * pick off a stale reserved-set — one's real can collide with the other's (rule 3, the guarantee the
+ * one-in-three guess rate rests on), and both can pass a count of 9 and insert to 11 (bypassing the
+ * cap and the decoy budget).
+ *
+ * The key is a CONSTANT, not a hash of anything on the config, because the two reads it protects are
+ * database-wide: the count below filters on `kind` alone, and `pendingNumbers` reads every row. A
+ * narrower key would let two creators take different locks and still read the same table — the guard
+ * would stop guarding, silently, with no error anywhere. `pg_advisory_xact_lock` releases at
+ * commit/rollback and blocks until acquired, so the second creator waits for the first to commit,
+ * then reads its row. It is PUBLIC-executable, so `app_user` (the route's role) may call it.
  */
 export async function createJoinRequest(
   tx: Transaction,
@@ -87,7 +95,7 @@ export async function createJoinRequest(
   },
 ): Promise<{ joinId: string; verificationNumber: string; token: string }> {
   await tx.execute(
-    sql`select pg_advisory_xact_lock(${JOIN_ALLOC_LOCK_NAMESPACE}, hashtext(${cfg.locationId}))`,
+    sql`select pg_advisory_xact_lock(${JOIN_ALLOC_LOCK_NAMESPACE}, ${JOIN_ALLOC_LOCK_KEY})`,
   );
   await sweepLapsed(tx, cfg);
 

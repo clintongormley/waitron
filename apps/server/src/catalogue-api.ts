@@ -78,17 +78,16 @@ import { setProductCourse, setProductStation } from "./kitchen.js";
 import type { TillConfig } from "./till-config.js";
 import type { Logger } from "./logger.js";
 
-/** Catalogue and content-language routes. One tenant per database, so no operation filters by tenant. */
+/** Catalogue and content-language routes. One taxpayer per database, so nothing filters by one. */
 export interface CatalogueApiDeps {
   contentTranslationGaps?: (
     tx: Transaction,
     language: string,
   ) => Promise<{ kind: string; id: string }[]>;
   db: Database;
-  /** `cfg.tenantId` is the tenant the writes below stamp (one tenant per database). `nodeId` is this
-   * node's id, carried on the uniform write-path `cfg` shape every mounted API takes; it no longer
-   * stamps a capture origin — the application outbox and its capture triggers were removed (native
-   * replication ships every row). */
+  /** `nodeId` is this node's id, carried on the uniform write-path `cfg` shape every mounted API
+   * takes; it no longer stamps a capture origin — the application outbox and its capture triggers
+   * were removed (native replication ships every row). */
   cfg: { nodeId: string };
   /**
    * The venue whose kitchen stations and courses the product editor may route a product to. OPTIONAL
@@ -340,9 +339,6 @@ function parseOptionGroupIds(value: unknown): string[] | undefined {
 }
 
 export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger): void {
-  // Brand the tenant id ONCE per mount rather than per write route — a stable value for the life
-  // of the mount (cfg.tenantId is fixed), the low-risk form of the dedup (deps keeps cfg: { tenantId:
-  // string }, the sibling convention).
   // Open a transaction as the app role, confirm the caller's management session carries
   // CATALOGUE_WRITE_PERMISSION, then run `fn`. Every route funnels its DB work through here so the gate
   // is applied identically and in exactly one place — the design §3 seam.

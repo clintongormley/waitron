@@ -171,11 +171,11 @@ declare module "@waitron/shared" {
      * `database` is operator-typed configuration and never a secret. */
     "provisioning.database_unstamped": { database: string };
     /** `applyVenue` hit a unique-key violation (SQLSTATE 23505, detected by `isUniqueViolation`
-     * from `packages/db`, which walks the `cause` chain). `applyVenue` guards the natural keys it
-     * knows — the tenant `(country, tax_id)` and each series `(node_id, code)` — with
-     * `ON CONFLICT DO NOTHING`, so this is the residual case those clauses do not absorb: most
-     * plausibly a second `venue` run racing between this run's plan and its apply. Named here rather
-     * than left to reach the operator as `unexpected failure` (`bin.ts`'s catch-all).
+     * from `packages/db`, which walks the `cause` chain). `applyVenue` guards the keys it knows —
+     * the taxpayer row's `id` and each series `(node_id, code)` — with `ON CONFLICT DO NOTHING`, so
+     * this is the residual case those clauses do not absorb: most plausibly a second `venue` run
+     * racing between this run's plan and its apply. Named here rather than left to reach the
+     * operator as `unexpected failure` (`bin.ts`'s catch-all).
      *
      * `database` only, and never the driver's own error: a `DrizzleQueryError` can quote the failing
      * statement back in its message, and this file's header forbids a param that could carry one.
@@ -207,7 +207,10 @@ declare module "@waitron/shared" {
      * (`packages/db/src/schema/tenants.ts`), so the alternative to refusing is not "two taxpayers":
      * it is a primary-key violation reported as a driver error nobody can act on. Refused by name
      * instead, at the write boundary, so an operator who mistypes a NIF on a re-provision is told
-     * what happened. Comparison is on the canonical values — both sides trimmed and upper-cased,
+     * what happened. The write itself is `insert … on conflict do nothing` followed by a read,
+     * so two plans racing to be the first are decided by the row rather than by a lock — the loser
+     * reads the winner's identity and lands here or on the idempotent path, never on a raw `23505`.
+     * Comparison is on the canonical values — both sides trimmed and upper-cased,
      * the same normalisation `planVenue` applies — so a casing or surrounding-space difference is
      * the SAME identity and proceeds as an idempotent re-run.
      *

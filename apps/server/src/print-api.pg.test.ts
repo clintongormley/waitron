@@ -86,7 +86,7 @@ beforeAll(async () => {
   staffCookie = `${MANAGEMENT_COOKIE}=${staffSid}`;
 });
 
-/** The FULL TillConfig for a seeded tenant. Only tenantId/locationId are read by the join verbs and
+/** The FULL TillConfig for a seeded venue. Only locationId is read by the join verbs and
  * routes here; nodeId is echoed on the pull and the rest are unused, so branded random uuids stand in. */
 function cfgOf(tenant: Tenant): TillConfig {
   return {

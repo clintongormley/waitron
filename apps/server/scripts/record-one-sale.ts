@@ -18,7 +18,7 @@
 //   pnpm --filter @waitron/server build
 //   DATABASE_URL=postgres://... WAITRON_ENV=production|preproduction \
 //     node apps/server/dist/record-one-sale.js \
-//     <tenantId> <tillId> <seriesId> <description> <baseAmount> <vatRate> [tipAmount]
+//     <tillId> <nodeId> <seriesId> <description> <baseAmount> <vatRate> [tipAmount]
 //
 // `baseAmount` is the line's tax-EXCLUSIVE amount (quantity is always 1 — this script records one
 // line, never a basket). `vatRate` is a percentage literal, e.g. "10.00" meaning 10%. `tipAmount`
@@ -58,7 +58,7 @@ function usageError(message: string): never {
   console.error(
     "usage: DATABASE_URL=<...> WAITRON_ENV=<production|preproduction> " +
       "node apps/server/dist/record-one-sale.js " +
-      "<tenantId> <tillId> <nodeId> <seriesId> <description> <baseAmount> <vatRate> [tipAmount]",
+      "<tillId> <nodeId> <seriesId> <description> <baseAmount> <vatRate> [tipAmount]",
   );
   process.exit(1);
 }
@@ -95,8 +95,8 @@ function systemClock(): TrustedClock {
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
-  if (args.length !== 7 && args.length !== 8) {
-    usageError(`expected 7 or 8 arguments, got ${args.length}`);
+  if (args.length !== 6 && args.length !== 7) {
+    usageError(`expected 6 or 7 arguments, got ${args.length}`);
   }
   const [tillArg, nodeArg, seriesArg, description, baseAmountArg, vatRateArg, tipArg] = args;
 

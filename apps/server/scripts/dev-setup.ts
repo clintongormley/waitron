@@ -417,7 +417,7 @@ async function seedDemoDevices(
   ids: DevVenueIds,
   seedLocale: SeedLocale,
 ): Promise<void> {
-  // The enrol verbs are typed `cfg: TillConfig`; they read only `tenantId`/`locationId` (and the join
+  // The enrol verbs are typed `cfg: TillConfig`; they read only `locationId` (and the join
   // request carries the venue), so the sale-side fields carry inert-but-valid placeholders (no card,
   // no tips, `prepay`) — the enrol path never persists them.
   const cfg: TillConfig = {

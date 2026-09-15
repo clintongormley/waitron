@@ -40,8 +40,8 @@ export interface PromoteRunResult {
 
 /**
  * `appDb` authenticates + authorizes (as `app_user` under `withTransaction` + `asAppUser`, the
- * dashboard-login shape) AND backs `verifyBreakGlass`'s verifier read; `tenantId` scopes the auth
- * transaction. `run` is the boot-wired promote closure (Task 7) — the endpoint delegates to it and
+ * dashboard-login shape) AND backs `verifyBreakGlass`'s verifier read. `run` is the boot-wired
+ * promote closure (Task 7) — the endpoint delegates to it and
  * never calls the promote functions itself.
  */
 export interface PromoteApiDeps {

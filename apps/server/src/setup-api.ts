@@ -67,9 +67,9 @@ export interface SetupDeps {
   /** `adoptFromPrimary({ ownerDb, ring, fetchBundle, persistTrading, … })` bound in boot: the
    * mirror-side sibling of `provision`. Fetches the primary's bundle SERVER-SIDE (so the admin
    * credential never touches a browser→primary hop), adopts the venue into this box's own database,
-   * seals the sync token, and persists `trading.env` — returning the adopted `tenantId`. OPTIONAL for
+   * seals the sync token, and persists `trading.env`. OPTIONAL for
    * the same reason `provision` is: a `POST /setup-api/adopt` that arrives before it is wired is
-   * answered `503 setup.not_ready`. Returns the adopted `tenantId` plus the freshly minted
+   * answered `503 setup.not_ready`. Returns the freshly minted
    * `breakGlassSecret` — the offline promote fallback, surfaced ONCE in the connect response below and
    * never logged (the mirror-bundle sync-token discipline). */
   adopt?: (req: AdoptRequest) => Promise<{ breakGlassSecret: string }>;

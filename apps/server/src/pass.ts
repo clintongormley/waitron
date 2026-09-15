@@ -280,8 +280,8 @@ function noteAwaitingCert(deps: PassDeps, awaiting: boolean): void {
 
 /**
  * One line per run that did NOT succeed, carrying its `errorCode` and enough identity to act on —
- * `tenantId`, `duty`, `period` — rather than leaving a reader to correlate `reconcile.complete`'s
- * bare counts back to which (tenant, duty, period) they belong to. Level escalates with what the
+ * `duty` and `period` — rather than leaving a reader to correlate `reconcile.complete`'s
+ * bare counts back to which (duty, period) they belong to. Level escalates with what the
  * outcome actually means: `failed` is still retrying on its own backoff (`warn`), `parked` has
  * exhausted `maxAttempts` and nothing will claim it again (`error`) — the identical distinction
  * `DutyReport.parked`'s own doc comment draws for why only `parked` may flip `/health`.

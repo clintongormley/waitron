@@ -3,15 +3,16 @@
 // amount outstanding, settles at the net, prints an empty outstanding list. There is no till app yet
 // — this is the only way to see the deferred/settle path run against the real backend.
 //
-// Prerequisites, same as record-one-sale.ts plus a rectificative series: the tenant/till/node/
-// standard-series/rectificative-series must already exist and the node's SIF be registered.
+// Prerequisites, same as record-one-sale.ts plus a rectificative series: the taxpayer row, the till,
+// the node, the standard series and the rectificative series must already exist, and the node's SIF
+// be registered.
 //
 // Usage — build first (this repo's .js-suffixed relative imports resolve through esbuild's bundler,
 // not plain `node <file>.ts`):
 //   pnpm --filter @waitron/server build
 //   DATABASE_URL=postgres://... WAITRON_ENV=production|preproduction \
 //     node apps/server/dist/settle-invoice-first.js \
-//     <tenantId> <tillId> <nodeId> <standardSeriesId> <rectificativeSeriesId>
+//     <tillId> <nodeId> <standardSeriesId> <rectificativeSeriesId>
 //
 // The connection string is read ONLY from DATABASE_URL. WAITRON_ENV is REQUIRED (it stamps the
 // unrecoverable `entorno` onto the chain) — see record-one-sale.ts's header for why no default.
@@ -40,7 +41,7 @@ function usageError(message: string): never {
   console.error(
     "usage: DATABASE_URL=<...> WAITRON_ENV=<production|preproduction> " +
       "node apps/server/dist/settle-invoice-first.js " +
-      "<tenantId> <tillId> <nodeId> <standardSeriesId> <rectificativeSeriesId>",
+      "<tillId> <nodeId> <standardSeriesId> <rectificativeSeriesId>",
   );
   process.exit(1);
 }
@@ -68,8 +69,8 @@ function systemClock(): TrustedClock {
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
-  if (args.length !== 5) {
-    usageError(`expected 5 arguments, got ${args.length}`);
+  if (args.length !== 4) {
+    usageError(`expected 4 arguments, got ${args.length}`);
   }
   const [tillArg, nodeArg, stdSeriesArg, rectSeriesArg] = args;
 

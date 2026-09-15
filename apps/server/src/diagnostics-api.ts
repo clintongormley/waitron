@@ -14,8 +14,8 @@ import "./errors.js";
 
 /**
  * Everything the dashboard's diagnostics HTTP routes need. Like `ManagementApiDeps`, the surface reads
- * and writes only the tenant's own records, so it wires no fiscal backend or clock. `cfg.tenantId` is
- * the dashboard's own tenant (provisioning stamped it), scoping the `withTransaction` authorize gate below.
+ * and writes only this box's own records, so it wires no fiscal backend or clock. `db` is what the
+ * `withTransaction` authorize gate below runs on.
  * `reader` reads back the box's rotating log files; `verbosity` is the in-memory controller `boot.ts`
  * built and the logger reads its `current()` at each call (which also owns its own default level).
  */

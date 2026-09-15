@@ -96,7 +96,7 @@ async function setupVenue(): Promise<Venue> {
   };
 }
 
-/** One Hono app per tenant — `mountPurchasingApi` binds ONE tenant via `cfg.tenantId`, so each venue's
+/** One Hono app per venue — `mountPurchasingApi` takes only `db`, so each venue's
  * routes need their own app (mirrors `catalogue-api.pg.test.ts`). */
 function mountApp(): Hono {
   const app = new Hono();

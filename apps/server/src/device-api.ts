@@ -34,9 +34,9 @@ import type { Logger } from "./logger.js";
 
 /**
  * Everything `mountDeviceApi` needs. `cfg` is the FULL `TillConfig` (the shape `mountTillApi` receives),
- * NOT a `{ tenantId }` subset: the verbs this surface calls are typed `cfg: TillConfig`
- * (`createJoinRequest` reads `cfg.tenantId`/`cfg.locationId` to stamp the request, `listStationQueue`
- * reads `cfg.nodeId` to scope the queue to this node), so the config has to carry those three fields and
+ * not a narrower subset: the verbs this surface calls are typed `cfg: TillConfig`
+ * (`createJoinRequest` reads `cfg.locationId` to stamp the request, `listStationQueue`
+ * reads `cfg.nodeId` to scope the queue to this node), so the config has to carry both fields and
  * a narrower object would not typecheck. The routes touch NONE of the fiscal ids on it. `secureCookies`
  * marks the device cookie `Secure` only under the TLS transport resolved by `boot.ts` — operator
  * TLS or the persisted box leaf. A leaf-less loopback development host stays usable over HTTP.

@@ -39,8 +39,8 @@ export interface VenueResult {
  *
  * A database contains one taxpayer and one operational venue. Repeating the same plan returns the
  * existing location, till, node and series without rerunning module seeds. A different location is
- * refused; so is a different taxpayer. Locking the taxpayer row serialises competing plans before
- * either checks the existing location.
+ * refused; so is a different taxpayer. Two plans racing to be the first are serialised by the
+ * taxpayer row's own insert, not by a lock — see the ensure-tenant case for the measurement.
  */
 export async function applyVenue(
   actions: readonly VenueAction[],
@@ -51,7 +51,6 @@ export async function applyVenue(
     throw new Error("applyVenue: plan is missing ensure-tenant");
   }
 
-  // the derived id as its scope and inserts locations under it. This holds because BOTH production
   return withTransaction(deps.db, async (tx) => {
     let locationId = "";
     let tillId = "";
@@ -63,23 +62,35 @@ export async function applyVenue(
     for (const action of actions) {
       switch (action.kind) {
         case "ensure-tenant": {
-          // The database holds ONE taxpayer, the row keyed `id = 1`. Read it, lock it, and decide:
-          // absent → insert it; the same identity → nothing to do; a different identity → refuse by
-          // name. `FOR UPDATE` on the read serialises two plans racing to create the first row, so
-          // the loser waits and then sees what the winner wrote instead of colliding on the key.
+          // The database holds ONE taxpayer, the row keyed `id = 1`: write it if it is not there,
+          // then read back whatever is there and decide — the same identity is nothing to do, a
+          // different identity is refused by name.
+          //
+          // The write comes FIRST, because it is the only step here that two concurrent plans can be
+          // serialised on. `select … for update` cannot do it: a row that does not exist yet locks
+          // nothing, so both plans read zero rows, both insert, and the loser gets a raw `23505`
+          // instead of an answer. The insert waits on the winner's uncommitted row instead, and then
+          // does nothing.
+          //
+          // `on conflict do nothing` names NO arbiter deliberately. An arbitered
+          // `on conflict (id) do nothing` absorbs only a clash on the key it names: two plans
+          // carrying the SAME country and tax id then clash on `tenants_country_tax_id_key` instead
+          // and the loser still dies. Both shapes were run against two live transactions on
+          // postgres:18-alpine; `venue-apply.race.pg.test.ts` is the standing case and reports
+          // `23505 / tenants_country_tax_id_key` for the same-identity race and
+          // `23505 / tenants_pkey` for the different-identity one if this is put back either way.
+          //
           // Comparison is on the canonical values (trimmed, upper-cased — the same normalisation
           // `planVenue` applies before it builds the action), so `es`/`ES` and stray surrounding
           // space are the SAME taxpayer and the re-run stays idempotent.
+          await tx.execute(sql`
+            insert into tenants (id, country, tax_id, legal_name)
+            values (1, ${action.country}, ${action.taxId}, ${action.legalName})
+            on conflict do nothing`);
           const stored = await tx.execute<{ country: string; tax_id: string }>(
-            sql`select country, tax_id from tenants where id = 1 for update`,
+            sql`select country, tax_id from tenants where id = 1`,
           );
-          const row = stored.rows[0];
-          if (row === undefined) {
-            await tx.execute(sql`
-              insert into tenants (id, country, tax_id, legal_name)
-              values (1, ${action.country}, ${action.taxId}, ${action.legalName})`);
-            break;
-          }
+          const row = stored.rows[0]!;
           const sameIdentity =
             row.country.trim().toUpperCase() === action.country.trim().toUpperCase() &&
             row.tax_id.trim().toUpperCase() === action.taxId.trim().toUpperCase();
@@ -89,8 +100,8 @@ export async function applyVenue(
           break;
         }
         case "seed-admin":
-          // Seed the venue's admin ONCE. Like ensure-tenant's ON CONFLICT DO NOTHING, this makes a
-          // re-run a no-op — the admin belongs to the taxpayer, not to a venue, so an idempotent
+          // Seed the venue's admin ONCE. Like ensure-tenant's `on conflict do nothing`, this
+          // makes a re-run a no-op — the admin belongs to the taxpayer, not to a venue, so an idempotent
           // same-venue re-run must not add a duplicate admin. A plain insert did exactly
           // that. `insert … select … where not exists` seeds the admin only if the database has none
           // yet (the role='admin' predicate). Raw SQL like

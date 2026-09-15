@@ -63,7 +63,7 @@ const suite = usePgliteDb({
       insert into locations (name, invoice_locales, operation_description)
       values ('Barra', array['es-ES'], 'Venta en establecimiento') returning id`);
     locationId = loc.rows[0]!.id;
-    // The full TillConfig the print/join verbs are typed on. The routes read only tenantId/locationId
+    // The full TillConfig the print/join verbs are typed on. The routes read only locationId
     // and echo nodeId on the pull; the fiscal ids are unused here, so a branded random uuid stands in —
     // and nodeId needs no `nodes` row, exactly as `print-api.test.ts` seeds none.
     cfg = {

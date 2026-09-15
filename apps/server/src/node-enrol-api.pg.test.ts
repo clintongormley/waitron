@@ -54,7 +54,7 @@ beforeAll(async () => {
   tenantA = await seedTenantWithLocation();
 });
 
-/** The FULL TillConfig for the seeded tenant. Only tenantId/locationId are read by `selfEnrolNodeAgent`
+/** The FULL TillConfig for the seeded venue. Only locationId is read by `selfEnrolNodeAgent`
  * and nodeId is what the row is keyed by; the fiscal ids are unused, so branded random uuids stand in.
  * A FRESH nodeId per call keeps each mounted app's enrol row independent across the shared clone. */
 function cfgOf(tenant: Tenant): TillConfig {

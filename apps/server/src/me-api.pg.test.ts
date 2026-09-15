@@ -145,7 +145,7 @@ async function setupVenue(): Promise<VenueResult> {
   );
 }
 
-/** Seed a staff person under `tenantId` (on the app role, which holds INSERT on persons). Returns its id. */
+/** Seed a staff person (on the app role, which holds INSERT on persons). Returns its id. */
 async function seedPerson(name: string): Promise<string> {
   return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);

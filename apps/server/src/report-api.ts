@@ -161,11 +161,11 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
       return fn(tx);
     });
 
-  // The (nodeId, clock) triple every reporting route below derives identically — extracted
+  // The (nodeId, clock) pair every reporting route below derives identically — extracted
   // so overview/daily-close/period cannot drift on branding or on how the venue clock is resolved.
   // Closes over `deps` (unlike `resolveVenueClock`, which is a top-level function taking `nodeId`
-  // explicitly); the modelo-303 route above does NOT use this, since it derives its own `tenantId`
-  // from the authoritative `tenants` row rather than from `deps.cfg`.
+  // explicitly); the modelo-303 route above does NOT use this, since it reads the taxpayer's own
+  // `tenants` row for the identity it files under.
   const buildReportContext = async (
     tx: Transaction,
   ): Promise<{
@@ -330,8 +330,8 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
 
   // The manager overview's "orders taking too long" list (KDS order-timing alerts, design §7.4): THIS
   // node's currently-open kitchen orders whose worst unserved line is overdue/forgotten, worst-first.
-  // A live snapshot, not a business-day query — `buildReportContext` is reused for the (tenantId,
-  // nodeId) pair only; its `clock` is irrelevant here (no business day involved) and left unused.
+  // A live snapshot, not a business-day query — `buildReportContext` is reused for its `nodeId`
+  // only; its `clock` is irrelevant here (no business day involved) and left unused.
   // Gated on `report.view`, the same seam the dashboard's other three live/period reads use.
   app.get("/management-api/reports/overdue-orders", (c) =>
     run(c, log, async () => {

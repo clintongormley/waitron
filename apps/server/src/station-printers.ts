@@ -20,11 +20,10 @@ import type { PrintConfig } from "@waitron/printing";
 // `authorizeManager` rather than gating inside the verb. The scope is `PrintConfig` (the tenant +
 // location the till/route carries), the same type `enqueuePrintJob`/`createPrinter` run under. The
 // mapping carries no location of its own (the station and printer each already carry one), and one
-// tenant per database, so nothing in `cfg` narrows these reads and deletes; the insert stamps
-// `cfg.tenantId`.
+// taxpayer per database, so nothing in `cfg` narrows these reads, inserts or deletes.
 
 /** The mapping row as the dashboard printer-editor and the mirrored station read consume it (design §5,
- *  decision R-F) — just the pair of ids; the tenant is implicit in the scope. */
+ *  decision R-F) — just the pair of ids. */
 export interface StationPrinter {
   stationId: string;
   printerId: string;

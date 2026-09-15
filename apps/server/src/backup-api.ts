@@ -14,8 +14,8 @@ import type { Logger } from "./logger.js";
 // "every file that throws one of these imports ./errors.js" convention errors.ts states.
 import "./errors.js";
 
-/** Everything the authenticated backup admin routes need. `db` + `cfg.tenantId` scope the management
- * gate (mirroring `RecoveryBundleDeps`/`DiagnosticsApiDeps`); `supervisor` is the live backup duty the
+/** Everything the authenticated backup admin routes need. `db` is what the management gate runs on
+ * (mirroring `RecoveryBundleDeps`/`DiagnosticsApiDeps`); `supervisor` is the live backup duty the
  * routes read and hot-reload; `stateDir` is where `backup.env` is written. */
 export interface BackupApiDeps {
   supervisor: BackupSupervisor;

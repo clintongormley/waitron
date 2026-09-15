@@ -64,7 +64,7 @@ declare module "@waitron/shared" {
     "server.till_config_missing": { key: string };
     /**
      * A `WAITRON_TILL_*` value is present but not usable — a branded-id constructor
-     * (`@waitron/shared`'s `tenantId`/`tillId`/`nodeId`/`seriesId`/`locationId`) rejected it as not a
+     * (`@waitron/shared`'s `tillId`/`nodeId`/`seriesId`/`locationId`) rejected it as not a
      * uuid. `key` names the variable and is again the only field; the rejected value is NOT carried,
      * for the same reason as `server.till_config_missing` above, and `server.*` for the same reason
      * too.
