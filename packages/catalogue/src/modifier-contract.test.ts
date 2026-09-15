@@ -28,6 +28,18 @@ describe("modifier definition contract", () => {
       parseModifierInput({ type: "yes-no", name: { en: "Gift wrap" }, defaultValue: true }),
     ).toThrow(expect.objectContaining({ code: "modifier.invalid", params: { field: "type" } }));
   });
+  it("rejects removeAllergens on a choice", () => {
+    const bad = {
+      type: "extras",
+      name,
+      required: false,
+      maxTotalQuantity: null,
+      choices: [{ id: choiceId, name: { en: "c" }, removeAllergens: ["gluten"] }],
+    };
+    expect(() => parseModifierInput(bad)).toThrow(
+      expect.objectContaining({ code: "modifier.invalid" }),
+    );
+  });
   it("accepts direct dietary invalidations and rejects legacy origin authoring", () => {
     expect(
       parseModifierInput({

@@ -154,10 +154,9 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "allergen.invalid_presence": 400,
   "allergen.invalid_source": 400,
   "allergen.add_remove_conflict": 400,
-  // The diet-write validation codes (Task 4): an untrusted product `dietOverride` or option
-  // `addOrigins`/`removeOrigins` that fails the taxonomy/label/disjointness checks in the core diet
-  // validators is a CLIENT fault → 400. Listed explicitly as the house style requires; the `?? 400`
-  // default already covers them.
+  // The diet-write validation codes: an untrusted product `dietOverride` that fails the
+  // taxonomy/label/disjointness checks in the core diet validators is a CLIENT fault → 400. Listed
+  // explicitly as the house style requires; the `?? 400` default already covers them.
   "diet.invalid_origin": 400,
   "diet.invalid_label": 400,
   "diet.add_remove_conflict": 400,
@@ -1242,9 +1241,6 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         active?: unknown;
         maxQuantity?: unknown;
         addAllergens?: unknown;
-        removeAllergens?: unknown;
-        addOrigins?: unknown;
-        removeOrigins?: unknown;
       }>(c);
       if (!isPlainObject(body.name)) {
         throw new AppError("management.request_invalid", { field: "name" });
@@ -1270,17 +1266,6 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         ...(body.addAllergens === undefined
           ? {}
           : { addAllergens: body.addAllergens as ProductAllergens | null }),
-        ...(body.removeAllergens === undefined
-          ? {}
-          : { removeAllergens: body.removeAllergens as string[] | null }),
-        // The origin overlay (Task 4) is threaded raw like the allergen overlay; the core's
-        // `normalizeOriginOverlay` validates each entry against the taxonomy (`diet.invalid_origin`).
-        ...(body.addOrigins === undefined
-          ? {}
-          : { addOrigins: body.addOrigins as string[] | null }),
-        ...(body.removeOrigins === undefined
-          ? {}
-          : { removeOrigins: body.removeOrigins as string[] | null }),
       };
       // The group :id is screened for SHAPE only; a well-formed-but-missing/foreign group makes the
       // tenant-consistent (tenant_id, group_id) FK raise 23503 → the opaque 500 the STATUS map documents
@@ -1311,9 +1296,6 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         active?: unknown;
         maxQuantity?: unknown;
         addAllergens?: unknown;
-        removeAllergens?: unknown;
-        addOrigins?: unknown;
-        removeOrigins?: unknown;
       }>(c);
       const patch: UpdateOptionGroupItemInput = {};
       if (body.name !== undefined) {
@@ -1342,16 +1324,6 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       }
       if (body.addAllergens !== undefined) {
         patch.addAllergens = body.addAllergens as ProductAllergens | null;
-      }
-      if (body.removeAllergens !== undefined) {
-        patch.removeAllergens = body.removeAllergens as string[] | null;
-      }
-      // The origin overlay (Task 4), threaded raw like the allergen overlay; the core validates.
-      if (body.addOrigins !== undefined) {
-        patch.addOrigins = body.addOrigins as string[] | null;
-      }
-      if (body.removeOrigins !== undefined) {
-        patch.removeOrigins = body.removeOrigins as string[] | null;
       }
       await gated(sessionId, async (tx) => {
         await assertOwned(tx, "option_group_items", itemId, groupId);

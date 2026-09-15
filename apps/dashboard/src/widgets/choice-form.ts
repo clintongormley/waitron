@@ -84,11 +84,6 @@ export class ChoiceForm extends LitElement {
     this.effects = value
       ? {
           ...(value.addAllergens === undefined ? {} : { addAllergens: value.addAllergens }),
-          ...(value.removeAllergens === undefined
-            ? {}
-            : { removeAllergens: value.removeAllergens }),
-          ...(value.addOrigins === undefined ? {} : { addOrigins: value.addOrigins }),
-          ...(value.removeOrigins === undefined ? {} : { removeOrigins: value.removeOrigins }),
           ...(value.dietaryEffect === undefined ? {} : { dietaryEffect: value.dietaryEffect }),
         }
       : {};
@@ -147,9 +142,11 @@ export class ChoiceForm extends LitElement {
     return { busy: this.busy, locales: this.locales, error: (key) => this.#error(key) };
   }
   #pickerValue(): AllergenDietaryValue {
+    // A choice no longer carries a removes list; the picker still renders its (now inert) removes
+    // combobox until Task 5 simplifies the widget, so feed it an empty list and ignore what it emits.
     return {
       addAllergens: Object.keys(this.effects.addAllergens ?? {}),
-      removeAllergens: this.effects.removeAllergens ?? [],
+      removeAllergens: [],
       dietary: (this.effects.dietaryEffect?.invalidates ?? []) as DietaryLabel[],
     };
   }
@@ -164,7 +161,6 @@ export class ChoiceForm extends LitElement {
             v.addAllergens.map((code) => [code, { presence: "contains" as const }]),
           )
         : {},
-      removeAllergens: v.removeAllergens,
       dietaryEffect: { invalidates: v.dietary },
     });
   }

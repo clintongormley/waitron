@@ -290,27 +290,14 @@ export interface TillOptionItem {
    */
   maxQuantity: number;
   /**
-   * The option's per-item allergen OVERLAY (modifier↔allergen), carried so the extra's OWN allergens can
-   * be shown beside the dish (added in a later task — the dish and its extras are no longer combined into
-   * one figure). `addAllergens`: the codes this option CONTRIBUTES ("extra cheese" → milk), keyed by
-   * allergen code, null when it adds nothing. `removeAllergens`: the codes it STRIPS from the dish's
-   * declared set ("gluten-free bun" → gluten), null when it strips nothing. A LOCAL redefinition of
-   * catalogue's `ResolvedOptionItem` overlay, deliberately NOT imported from `@waitron/catalogue` — same
-   * bundle-decoupling rationale as every other type in this file. `GET /api/products` sends both (a
-   * straight passthrough of catalogue's `listAvailableProducts`, which projects them onto each item).
+   * The option's OWN allergens, carried so the extra's own list can be shown beside the dish — the dish
+   * and its extras are not combined into one figure. `addAllergens`: the codes this option declares
+   * ("extra cheese" → milk), keyed by allergen code, null when it declares none. A LOCAL redefinition of
+   * catalogue's `ResolvedOptionItem`, deliberately NOT imported from `@waitron/catalogue` — same
+   * bundle-decoupling rationale as every other type in this file. `GET /api/products` sends it (a
+   * straight passthrough of catalogue's `listAvailableProducts`, which projects it onto each item).
    */
   addAllergens: Record<string, { presence: "contains" | "may_contain"; source?: string }> | null;
-  removeAllergens: string[] | null;
-  /**
-   * The option's per-item ORIGIN overlay (dietary-classification) — the diet twin of
-   * `addAllergens`/`removeAllergens`, carried so the extra's OWN diet can be shown beside the dish (added
-   * in a later task). `addOrigins`: the ingredient origins this option CONTRIBUTES ("add bacon" →
-   * `["meat"]`), null when it adds nothing. `removeOrigins`: the origins it STRIPS ("no cheese" →
-   * `["dairy"]`), null when it strips nothing. Carried as `string[]` (the wire shape from catalogue's
-   * `listAvailableProducts`).
-   */
-  addOrigins: string[] | null;
-  removeOrigins: string[] | null;
   dietaryEffect?: { invalidates: string[] } | null;
 }
 
@@ -346,12 +333,7 @@ export type Modifier = { id: string; name: Record<string, string>; available: bo
       type: "options";
       defaultChoiceId: string | null;
       choices: (Pick<TillOptionItem, "id" | "name"> &
-        Partial<
-          Pick<
-            TillOptionItem,
-            "addAllergens" | "removeAllergens" | "addOrigins" | "removeOrigins" | "dietaryEffect"
-          >
-        > & {
+        Partial<Pick<TillOptionItem, "addAllergens" | "dietaryEffect">> & {
           available: boolean;
         })[];
     }
@@ -516,9 +498,6 @@ export interface TillMenuOffer {
         string,
         { presence: "contains" | "may_contain"; source?: string }
       > | null;
-      removeAllergens: string[] | null;
-      addOrigins: string[] | null;
-      removeOrigins: string[] | null;
     }[];
   }[];
 }

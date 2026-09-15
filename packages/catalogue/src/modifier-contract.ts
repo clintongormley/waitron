@@ -1,9 +1,5 @@
 import { AppError, isUuid } from "@waitron/shared";
-import {
-  assertAllergenOverlayDisjoint,
-  validateAllergens,
-  validateRemoveAllergens,
-} from "./allergens.js";
+import { validateAllergens } from "./allergens.js";
 import { validateDietaryDeclarations } from "./dietary-declarations.js";
 import type { VatClass } from "./pricing.js";
 import { MAX_MODIFIER_INTEGER, isModifierPrice } from "./modifier-limits.js";
@@ -60,15 +56,11 @@ function id(value: unknown, field: string): string {
   if (typeof value !== "string" || !isUuid(value)) invalid(field);
   return value;
 }
-const effectKeys = ["addAllergens", "removeAllergens", "dietaryEffect"];
+const effectKeys = ["addAllergens", "dietaryEffect"];
 function effects(row: Record<string, unknown>): ModifierEffects {
   const out: ModifierEffects = {};
   if (row.addAllergens !== undefined)
     out.addAllergens = row.addAllergens === null ? null : validateAllergens(row.addAllergens);
-  if (row.removeAllergens !== undefined)
-    out.removeAllergens =
-      row.removeAllergens === null ? null : validateRemoveAllergens(row.removeAllergens);
-  assertAllergenOverlayDisjoint(out.addAllergens ?? null, out.removeAllergens ?? null);
   if (row.dietaryEffect === undefined || row.dietaryEffect === null) {
     out.dietaryEffect = { invalidates: [] };
   } else {

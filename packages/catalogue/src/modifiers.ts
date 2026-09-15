@@ -58,9 +58,6 @@ export async function listModifiers(tx: Transaction, tenantId: string): Promise<
         name: item.name,
         available: item.active,
         ...(item.addAllergens === null ? {} : { addAllergens: item.addAllergens }),
-        ...(item.removeAllergens === null ? {} : { removeAllergens: item.removeAllergens }),
-        ...(item.addOrigins === null ? {} : { addOrigins: item.addOrigins }),
-        ...(item.removeOrigins === null ? {} : { removeOrigins: item.removeOrigins }),
         dietaryEffect: item.dietaryEffect ?? { invalidates: [] },
         ...(group.type === "extras"
           ? {
@@ -174,9 +171,6 @@ async function writeChoices(
       preselected: input.type === "extras" ? (choice as ExtraChoice).preselected : false,
       vatClass: input.type === "extras" ? ((choice as ExtraChoice).vatClass ?? null) : null,
       addAllergens: choice.addAllergens ?? null,
-      removeAllergens: choice.removeAllergens ?? null,
-      addOrigins: choice.addOrigins ?? null,
-      removeOrigins: choice.removeOrigins ?? null,
       dietaryEffect: choice.dietaryEffect ?? null,
     };
     if (old.some((item) => item.id === choice.id)) {

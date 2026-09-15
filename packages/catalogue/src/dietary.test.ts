@@ -3,7 +3,6 @@ import {
   deriveDietProfile,
   overlayDietProfile,
   validateOrigin,
-  validateOrigins,
   validateContainsTag,
   validateDietOverride,
   assertDietOverrideDisjoint,
@@ -103,17 +102,6 @@ describe("validateOrigin / assertDietOverrideDisjoint", () => {
     expect(() => assertDietOverrideDisjoint(null)).not.toThrow();
     expect(() => assertDietOverrideDisjoint({ addContains: ["meat"] })).not.toThrow();
     expect(() => assertDietOverrideDisjoint({ removeContains: ["meat"] })).not.toThrow();
-  });
-});
-
-describe("validateOrigins (Task 4)", () => {
-  it("returns the narrowed list for valid origins", () => {
-    expect(validateOrigins(["meat", "dairy"])).toEqual(["meat", "dairy"]);
-    expect(validateOrigins([])).toEqual([]);
-  });
-  it("rejects a non-array and a non-origin entry", () => {
-    expect(() => validateOrigins("meat")).toThrow(/diet.invalid_origin/);
-    expect(() => validateOrigins(["meat", "wombat"])).toThrow(/diet.invalid_origin/);
   });
 });
 

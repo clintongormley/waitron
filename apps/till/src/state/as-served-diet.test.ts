@@ -3,11 +3,9 @@ import { asServedDiet, asServedAllergens } from "./as-served.js";
 import type { OrderLine } from "./working-order.js";
 import type { DietDerivation, DietOverride, TillOptionItem, TillProduct } from "../api/client.js";
 
-/** A minimal option item carrying only the fields a line selection reads (id + the origin overlays). */
-function item(
-  id: string,
-  overlay: { addOrigins?: string[] | null; removeOrigins?: string[] | null },
-): TillOptionItem {
+/** A minimal option item. A line selection no longer changes the line's diet/allergens — each dish
+ *  shows its OWN figures — so the item carries only the fields the shape needs. */
+function item(id: string): TillOptionItem {
   return {
     id,
     name: { en: id },
@@ -15,9 +13,6 @@ function item(
     vatClass: null,
     maxQuantity: 1,
     addAllergens: null,
-    removeAllergens: null,
-    addOrigins: overlay.addOrigins ?? null,
-    removeOrigins: overlay.removeOrigins ?? null,
   };
 }
 
@@ -77,7 +72,7 @@ describe("asServedDiet — the dish's own diet, no modifier fold", () => {
         maxTotalQuantity: null,
         choices: [
           {
-            ...item("bacon", {}),
+            ...item("bacon"),
             dietaryEffect: { invalidates: ["no_meat", "halal"] },
             available: true,
             preselected: false,
@@ -94,17 +89,13 @@ describe("asServedDiet — the dish's own diet, no modifier fold", () => {
   it("shows the dish's own derived diet, ignoring a no-cheese extra", () => {
     // Base plant + dairy, reviewed ⇒ vegetarian but NOT vegan. A no-cheese extra used to flip it vegan;
     // now the dish shows its own diet and the extra changes nothing.
-    const prod = product({ origins: ["plant", "dairy"], pending: false }, [
-      item("no-cheese", { removeOrigins: ["dairy"] }),
-    ]);
+    const prod = product({ origins: ["plant", "dairy"], pending: false }, [item("no-cheese")]);
     expect(asServedDiet(line(prod)).vegan).toBe("no");
     expect(asServedDiet(line(prod, "no-cheese")).vegan).toBe("no");
   });
 
   it("shows the dish's own vegan diet, ignoring an add-meat extra", () => {
-    const prod = product({ origins: ["plant"], pending: false }, [
-      item("add-bacon", { addOrigins: ["meat"] }),
-    ]);
+    const prod = product({ origins: ["plant"], pending: false }, [item("add-bacon")]);
     const asServed = asServedDiet(line(prod, "add-bacon"));
     expect(asServed.vegan).toBe("yes");
     expect(asServed.vegetarian).toBe("yes");
@@ -112,9 +103,7 @@ describe("asServedDiet — the dish's own diet, no modifier fold", () => {
   });
 
   it("a pending derivation reads unknown (never a positive claim), extra or no extra", () => {
-    const prod = product({ origins: ["plant", "dairy"], pending: true }, [
-      item("no-cheese", { removeOrigins: ["dairy"] }),
-    ]);
+    const prod = product({ origins: ["plant", "dairy"], pending: true }, [item("no-cheese")]);
     const asServed = asServedDiet(line(prod, "no-cheese"));
     expect(asServed.vegan).toBe("unknown");
     expect(asServed.vegetarian).toBe("unknown");
@@ -141,9 +130,7 @@ describe("asServedDiet — the dish's own diet, no modifier fold", () => {
   it("a forced-vegan dish reads its own vegan:'yes'; a selected add-meat extra does not change it", () => {
     // The owner forces vegan:"yes" on the DISH. The extra's meat is shown separately (Task 4), so the
     // dish's own diet stays vegan:"yes" — the fold that used to cap this is gone.
-    const prod = product({ origins: ["plant"], pending: false }, [
-      item("add-bacon", { addOrigins: ["meat"] }),
-    ]);
+    const prod = product({ origins: ["plant"], pending: false }, [item("add-bacon")]);
     prod.dietOverride = { vegan: "yes" };
     expect(asServedDiet(line(prod)).vegan).toBe("yes");
     const asServed = asServedDiet(line(prod, "add-bacon"));
@@ -179,7 +166,7 @@ it("shows the dish's own allergens, ignoring a selected extra that used to add o
       maxTotalQuantity: null,
       choices: [
         {
-          ...item("cheese", {}),
+          ...item("cheese"),
           addAllergens: { milk: { presence: "contains" } },
           available: true,
           preselected: false,
@@ -204,7 +191,7 @@ it("the dish's own allergens and diet ignore a canonical extras selection", () =
       maxTotalQuantity: null,
       choices: [
         {
-          ...item("bacon", { addOrigins: ["meat"] }),
+          ...item("bacon"),
           addAllergens: { milk: { presence: "contains" } },
           available: true,
           preselected: false,
@@ -238,8 +225,6 @@ it.each(["submitted", "saved"] as const)(
             id: "oat",
             name: { en: "Oat" },
             available: true,
-            removeAllergens: ["milk"],
-            removeOrigins: ["dairy"],
           },
         ],
       },
@@ -269,7 +254,6 @@ it.each(["submitted", "saved"] as const)(
     expect(asServedAllergens(selected)).toEqual({
       allergens: { milk: { presence: "contains" } },
       pending: false,
-      removed: [],
     });
     expect(asServedDiet(selected)).toEqual({ vegan: "no", vegetarian: "yes", contains: [] });
   },

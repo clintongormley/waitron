@@ -476,7 +476,6 @@ const extrasModifier: Modifier = {
       preselected: false,
       vatClass: null,
       addAllergens: { gluten: { presence: "contains" } },
-      removeAllergens: ["milk"],
       dietaryEffect: { invalidates: ["vegan"] },
     },
     {
@@ -524,8 +523,6 @@ it("shows a choice's allergen and dietary summary only when present", async () =
   const first = el.shadowRoot!.querySelector('[data-test="summary-c1"]')!;
   expect(first.textContent).toContain(t("modifiers.adds_allergens"));
   expect(first.textContent).toContain(allergenName("gluten"));
-  expect(first.textContent).toContain(t("modifiers.removes_allergens"));
-  expect(first.textContent).toContain(allergenName("milk"));
   expect(first.textContent).toContain(t("modifiers.dietary_removed"));
   expect(first.textContent).toContain(t("editor.diet.vegan"));
   const second = el.shadowRoot!.querySelector('[data-test="summary-c2"]')!;

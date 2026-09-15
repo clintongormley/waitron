@@ -1519,11 +1519,10 @@ async function addOption(
   tenantId: TillConfig["tenantId"],
   productId: string,
   name: string,
-  // The allergen OVERLAY this option carries as served (Task 8): the codes it adds and the codes it
-  // removes. Omitted for a plain option (the modifier sub-item tests), so both columns stay null.
+  // The option's OWN allergens and dietary effect. Omitted for a plain option (the modifier sub-item
+  // tests), so both columns stay null.
   overlay?: {
     add?: AllergenMap;
-    remove?: string[];
     dietaryEffect?: { invalidates: string[] } | null;
   },
 ): Promise<string> {
@@ -1548,7 +1547,6 @@ async function addOption(
       vatClass: "reduced",
       sort: 0,
       addAllergens: overlay?.add ?? null,
-      removeAllergens: overlay?.remove ?? null,
       dietaryEffect: overlay?.dietaryEffect ?? null,
     })
     .returning({ id: optionGroupItems.id });
@@ -2346,8 +2344,8 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
     await withTenant(db, cfg.tenantId, async (tx) => {
       await asAppUser(tx);
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
-      // A gluten burger with a gluten-free-bun swap: base `{gluten: contains}`. The option's remove is no
-      // longer folded in — the dish shows its OWN gluten.
+      // A gluten burger with a "gluten-free bun" option: base `{gluten: contains}`. The option states no
+      // allergens of its own; the dish shows its OWN gluten (options are never folded into the dish).
       const burger = await createProduct(tx, cfg.tenantId, {
         catalogueId,
         categoryId: null,
@@ -2357,9 +2355,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
         vatClass: "general",
         allergens: { gluten: { presence: "contains" } },
       });
-      const gfBun = await addOption(tx, cfg.tenantId, burger.id, "Pan sin gluten", {
-        remove: ["gluten"],
-      });
+      const gfBun = await addOption(tx, cfg.tenantId, burger.id, "Pan sin gluten");
       const { id: orderId } = await placeOrderWith(tx, cfg, [
         { productId: burger.id, quantity: "1", options: [{ optionGroupItemId: gfBun }] },
       ]);
@@ -2389,15 +2385,15 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
     });
   });
 
-  // A dish whose OWN allergens are unreviewed (products.allergens NULL) stays `pending` — a remove
-  // cannot subtract from an unknown base, so `removed` is empty and only always-safe adds would show.
+  // A dish whose OWN allergens are unreviewed (products.allergens NULL) stays `pending` — the dish
+  // shows only its own (unknown) allergens, and an attached option never changes that.
   it("marks the as-served profile pending when the dish's base allergens are unreviewed", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTenant(db, cfg.tenantId, async (tx) => {
       await asAppUser(tx);
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const dish = await makeProduct(tx, cfg, catalogueId, {}); // no allergens → published NULL
-      const opt = await addOption(tx, cfg.tenantId, dish, "Extra", { remove: ["gluten"] });
+      const opt = await addOption(tx, cfg.tenantId, dish, "Extra");
       await placeOrderWith(tx, cfg, [
         { productId: dish, quantity: "1", options: [{ optionGroupItemId: opt }] },
       ]);
@@ -4681,7 +4677,6 @@ it("shows the dish's own allergens and diet for a nonprice option selection (no 
       dietaryDeclarations: ["vegan"],
     });
     const choiceId = await addOption(tx, cfg.tenantId, product.id, "Oat", {
-      remove: ["milk"],
       dietaryEffect: { invalidates: [] },
     });
     const { id: orderId } = await placeOrderWith(tx, cfg, [

@@ -51,14 +51,6 @@ export function validateOrigin(value: unknown): DietaryOrigin {
   return value as DietaryOrigin;
 }
 
-/** Validate a caller/JSON-supplied origin LIST (an option's add/remove overlay). Mirrors
- * `validateRemoveAllergens`: a non-array is `diet.invalid_origin` (`origin` echoes the value), and
- * every entry passes `validateOrigin`. Returns the narrowed list. */
-export function validateOrigins(value: unknown): DietaryOrigin[] {
-  if (!Array.isArray(value)) throw new AppError("diet.invalid_origin", { origin: String(value) });
-  return value.map(validateOrigin);
-}
-
 /** Validate a single contains-tag against `CONTAINS_TAGS` (meat/fish ONLY) — the override's
  * `addContains`/`removeContains` entries. The parallel of {@link validateOrigin} but over the
  * strictly smaller contains set, so an otherwise-valid origin like `"plant"` is rejected here. A bad
@@ -127,8 +119,8 @@ export function overlayDietProfile(
   return out;
 }
 
-/** Reject an override that both adds and removes the same contains-tag (mirrors
- * assertAllergenOverlayDisjoint). Defence-in-depth at the core (CLAUDE.md §3). */
+/** Reject an override that both adds and removes the same contains-tag. Defence-in-depth at the core
+ * (CLAUDE.md §3). */
 export function assertDietOverrideDisjoint(override: DietOverride | null): void {
   if (!override?.addContains || !override.removeContains) return;
   const removing = new Set<string>(override.removeContains);

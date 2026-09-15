@@ -221,11 +221,6 @@ export const optionGroupItems = pgTable(
     maxQuantity: integer("max_quantity").notNull().default(1),
     preselected: boolean("preselected").notNull().default(false),
     addAllergens: jsonb("add_allergens").$type<AllergenMap>(),
-    // `remove_allergens`: codes this option REMOVES ("gluten-free bun" → gluten). NULL = removes
-    // nothing. A remove only takes effect against a REVIEWED base (Cautious policy, design §4).
-    removeAllergens: jsonb("remove_allergens").$type<string[]>(),
-    addOrigins: jsonb("add_origins").$type<string[]>(),
-    removeOrigins: jsonb("remove_origins").$type<string[]>(),
     dietaryEffect: jsonb("dietary_effect").$type<{ invalidates: string[] }>(),
     sort: integer("sort").notNull().default(0),
     active: boolean("active").notNull().default(true),

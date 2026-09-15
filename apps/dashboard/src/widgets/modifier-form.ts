@@ -368,7 +368,6 @@ export class ModifierForm extends LitElement {
       name: nonBlankNames(choice.name),
       available: choice.available,
       ...(choice.addAllergens === undefined ? {} : { addAllergens: choice.addAllergens }),
-      ...(choice.removeAllergens === undefined ? {} : { removeAllergens: choice.removeAllergens }),
       ...(choice.dietaryEffect === undefined ? {} : { dietaryEffect: choice.dietaryEffect }),
     }));
     let value: ModifierInput;

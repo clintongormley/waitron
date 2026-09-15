@@ -293,9 +293,6 @@ describe("till-basket", () => {
       vatClass: null,
       maxQuantity: 1,
       addAllergens: null,
-      removeAllergens: ["gluten"],
-      addOrigins: null,
-      removeOrigins: null,
     };
     const burger: TillProduct = {
       ...cafe,
@@ -337,9 +334,6 @@ describe("till-basket", () => {
       vatClass: null,
       maxQuantity: 1,
       addAllergens: { milk: { presence: "contains" } },
-      removeAllergens: null,
-      addOrigins: null,
-      removeOrigins: null,
     };
     const burger: TillProduct = {
       ...cafe,
@@ -406,9 +400,6 @@ describe("till-basket", () => {
       vatClass: null,
       maxQuantity: 1,
       addAllergens: { milk: { presence: "contains" } },
-      removeAllergens: null,
-      addOrigins: null,
-      removeOrigins: null,
     };
     const tostada: TillProduct = {
       ...cafe,
@@ -525,9 +516,6 @@ describe("till-basket", () => {
       vatClass: null,
       maxQuantity: 1,
       addAllergens: null,
-      removeAllergens: null,
-      addOrigins: ["meat"],
-      removeOrigins: null,
     };
     const salad: TillProduct = {
       ...cafe,

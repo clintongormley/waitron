@@ -164,9 +164,6 @@ describe("catalogue operations", () => {
                   maxQuantity: 1,
                   vatClass: null,
                   addAllergens: null,
-                  removeAllergens: null,
-                  addOrigins: null,
-                  removeOrigins: null,
                   dietaryEffect: null,
                 },
               ],
@@ -192,9 +189,6 @@ describe("catalogue operations", () => {
                   maxQuantity: 1,
                   vatClass: null,
                   addAllergens: null,
-                  removeAllergens: null,
-                  addOrigins: null,
-                  removeOrigins: null,
                   dietaryEffect: null,
                 },
               ],
@@ -1030,9 +1024,6 @@ describe("catalogue operations", () => {
         // Inserted without an explicit cap → the NOT-NULL default 1 (per-option quantity).
         maxQuantity: 1,
         addAllergens: null,
-        removeAllergens: null,
-        addOrigins: null,
-        removeOrigins: null,
         dietaryEffect: null,
       });
       expect(group.items[1]).toMatchObject({
@@ -1046,13 +1037,12 @@ describe("catalogue operations", () => {
     });
   });
 
-  // Task 4: the till read carries the published diet profile + the two diet overlays on the product,
-  // and the per-option ORIGIN overlay (addOrigins/removeOrigins) on each resolved item — the diet twin
-  // of the allergen projection above. Task 6 (till) consumes these.
-  it("listAvailableProducts carries the diet profile and option origin overlays", async () => {
+  // Task 4: the till read carries the published diet profile + the two diet overlays on the product.
+  // Task 6 (till) consumes these.
+  it("listAvailableProducts carries the diet profile", async () => {
     await asTenant(async (tx) => {
       const cat = await createCatalogue(tx, tenantId, { name: "Deli" });
-      const dish = await createProduct(tx, tenantId, {
+      await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: null,
         descriptions: { en: "falafel wrap" },
@@ -1062,39 +1052,12 @@ describe("catalogue operations", () => {
         dietOverride: { vegan: "no", halal: "yes", addContains: ["meat"] },
       });
 
-      // A group whose item carries an origin overlay: "add bacon" introduces meat, "no cheese" removes
-      // dairy — inserted directly so the projection is exercised independent of the write path.
-      const [extras] = await tx
-        .insert(optionGroups)
-        .values({ tenantId, name: { en: "Extras" }, active: true })
-        .returning({ id: optionGroups.id });
-      await tx.insert(optionGroupItems).values({
-        tenantId,
-        groupId: extras!.id,
-        name: { en: "Add bacon" },
-        priceDelta: "1.00",
-        vatClass: null,
-        sort: 0,
-        active: true,
-        addOrigins: ["meat"],
-        removeOrigins: ["dairy"],
-      });
-      await tx.insert(productOptionGroups).values({
-        tenantId,
-        productId: dish.id,
-        groupId: extras!.id,
-        sort: 0,
-      });
-
       await assignCatalogueToLocation(tx, locationId, cat.id);
       const [available] = (await listAvailableProducts(tx, locationId)).products;
 
       expect(available!.diet).toMatchObject({ vegan: "no", halal: "yes", contains: ["meat"] });
       expect(available!.dietOverride).toEqual({ vegan: "no", halal: "yes", addContains: ["meat"] });
       expect(available!.dietDerivation).toBeNull();
-      const item = available!.optionGroups[0]!.items[0]!;
-      expect(item.addOrigins).toEqual(["meat"]);
-      expect(item.removeOrigins).toEqual(["dairy"]);
     });
   });
 
@@ -2028,113 +1991,78 @@ describe("catalogue operations", () => {
       });
     });
 
-    it("createOptionGroupItem persists an allergen overlay", async () => {
+    it("createOptionGroupItem persists the option's own allergens", async () => {
       await asTenant(async (tx) => {
         const g = await createOptionGroup(tx, tenantId, { name: { en: "Buns" } });
-        const item = await createOptionGroupItem(tx, tenantId, g.id, {
-          name: { en: "Gluten-free bun" },
-          removeAllergens: ["gluten"],
-        });
-        expect(item.removeAllergens).toEqual(["gluten"]);
-        expect(item.addAllergens).toBeNull();
-        // Omitting the overlay entirely leaves both columns NULL.
+        // Omitting the declaration leaves the column NULL.
         const plain = await createOptionGroupItem(tx, tenantId, g.id, {
           name: { en: "Plain bun" },
         });
         expect(plain.addAllergens).toBeNull();
-        expect(plain.removeAllergens).toBeNull();
-        // The add side round-trips too.
+        // The declaration round-trips.
         const cheese = await createOptionGroupItem(tx, tenantId, g.id, {
           name: { en: "Extra cheese" },
           addAllergens: { milk: { presence: "contains" } },
         });
         expect(cheese.addAllergens).toEqual({ milk: { presence: "contains" } });
-        expect(cheese.removeAllergens).toBeNull();
+        // An empty map collapses to NULL (the single "no allergens" representation).
+        const empty = await createOptionGroupItem(tx, tenantId, g.id, {
+          name: { en: "Empty" },
+          addAllergens: {},
+        });
+        expect(empty.addAllergens).toBeNull();
       });
     });
 
-    it("createOptionGroupItem rejects a conflicting overlay", async () => {
+    it("createOptionGroupItem rejects a non-EU-14 allergen code", async () => {
       await asTenant(async (tx) => {
         const g = await createOptionGroup(tx, tenantId, { name: { en: "x" } });
         await expect(
           createOptionGroupItem(tx, tenantId, g.id, {
             name: { en: "x" },
-            addAllergens: { gluten: { presence: "contains" } },
-            removeAllergens: ["gluten"],
+            addAllergens: { wombat: { presence: "contains" } } as never,
           }),
-        ).rejects.toThrow(/allergen.add_remove_conflict/);
+        ).rejects.toThrow(/allergen.invalid_code/);
       });
     });
 
-    it("updateOptionGroupItem enforces disjointness on the RESULTING row, not just the patch", async () => {
+    it("updateOptionGroupItem sets and clears the option's allergens", async () => {
       await asTenant(async (tx) => {
         const g = await createOptionGroup(tx, tenantId, { name: { en: "x" } });
-        // Stored with gluten already REMOVED; patching only the add side to gluten would make the
-        // resulting row conflict, so the read-current-side check must reject it.
-        const item = await createOptionGroupItem(tx, tenantId, g.id, {
-          name: { en: "GF bun" },
-          removeAllergens: ["gluten"],
-        });
-        await expect(
-          updateOptionGroupItem(tx, tenantId, item.id, {
-            addAllergens: { gluten: { presence: "contains" } },
-          }),
-        ).rejects.toThrow(/allergen.add_remove_conflict/);
-        // The row is unchanged after the rejected patch.
-        const [after] = await listOptionGroupItems(tx, g.id);
-        expect(after!.addAllergens).toBeNull();
-        expect(after!.removeAllergens).toEqual(["gluten"]);
-
-        // A non-conflicting single-side patch lands and clearing to null works.
+        const item = await createOptionGroupItem(tx, tenantId, g.id, { name: { en: "bun" } });
         await updateOptionGroupItem(tx, tenantId, item.id, {
           addAllergens: { milk: { presence: "contains" } },
         });
-        const [merged] = await listOptionGroupItems(tx, g.id);
-        expect(merged!.addAllergens).toEqual({ milk: { presence: "contains" } });
-        expect(merged!.removeAllergens).toEqual(["gluten"]);
-
-        await updateOptionGroupItem(tx, tenantId, item.id, {
-          removeAllergens: null,
-          addAllergens: null,
-        });
+        const [set] = await listOptionGroupItems(tx, g.id);
+        expect(set!.addAllergens).toEqual({ milk: { presence: "contains" } });
+        // `null` clears it back to none.
+        await updateOptionGroupItem(tx, tenantId, item.id, { addAllergens: null });
         const [cleared] = await listOptionGroupItems(tx, g.id);
         expect(cleared!.addAllergens).toBeNull();
-        expect(cleared!.removeAllergens).toBeNull();
-
-        // Symmetric direction: stored ADD, patch REMOVE only — the resulting-row check reads the
-        // stored add side and rejects the conflict.
-        const cheese = await createOptionGroupItem(tx, tenantId, g.id, {
-          name: { en: "Extra cheese" },
-          addAllergens: { milk: { presence: "contains" } },
-        });
-        await expect(
-          updateOptionGroupItem(tx, tenantId, cheese.id, { removeAllergens: ["milk"] }),
-        ).rejects.toThrow(/allergen.add_remove_conflict/);
       });
     });
 
-    it("updateOptionGroupItem leaving the overlay untouched writes neither column", async () => {
+    it("updateOptionGroupItem leaving the declaration untouched keeps it", async () => {
       await asTenant(async (tx) => {
         const g = await createOptionGroup(tx, tenantId, { name: { en: "x" } });
         const item = await createOptionGroupItem(tx, tenantId, g.id, {
-          name: { en: "GF bun" },
-          removeAllergens: ["gluten"],
+          name: { en: "cheese" },
+          addAllergens: { milk: { presence: "contains" } },
         });
-        // A patch that touches only non-overlay fields must leave the stored overlay intact — it never
-        // reads or rewrites the overlay columns.
+        // A patch that touches only non-allergen fields must leave the stored declaration intact — it
+        // never rewrites the column.
         await updateOptionGroupItem(tx, tenantId, item.id, {
-          name: { en: "GF bun v2" },
+          name: { en: "cheese v2" },
           priceDelta: "0.20",
         });
         const [after] = await listOptionGroupItems(tx, g.id);
-        expect(after!.name).toEqual({ en: "GF bun v2" });
+        expect(after!.name).toEqual({ en: "cheese v2" });
         expect(after!.priceDelta).toBe("0.20");
-        expect(after!.removeAllergens).toEqual(["gluten"]);
-        expect(after!.addAllergens).toBeNull();
+        expect(after!.addAllergens).toEqual({ milk: { presence: "contains" } });
       });
     });
 
-    it("listAvailableProducts projects the option overlay onto ResolvedOptionItem", async () => {
+    it("listAvailableProducts projects the option's allergens onto ResolvedOptionItem", async () => {
       await asTenant(async (tx) => {
         const cat = await createCatalogue(tx, tenantId, { name: "Deli" });
         const burger = await createProduct(tx, tenantId, {
@@ -2145,14 +2073,14 @@ describe("catalogue operations", () => {
           unitPrice: "9.00",
           vatClass: "general",
         });
-        const g = await createOptionGroup(tx, tenantId, { name: { en: "Buns" } });
-        const gf = await createOptionGroupItem(tx, tenantId, g.id, {
-          name: { en: "Gluten-free bun" },
-          removeAllergens: ["gluten"],
+        const g = await createOptionGroup(tx, tenantId, { name: { en: "Extras" } });
+        const cheese = await createOptionGroupItem(tx, tenantId, g.id, {
+          name: { en: "Extra cheese" },
+          addAllergens: { milk: { presence: "contains" } },
         });
-        // A sibling item with no overlay proves the projected fields default to null on the sell path.
+        // A sibling item with no declaration proves the projected field defaults to null on the sell path.
         const plain = await createOptionGroupItem(tx, tenantId, g.id, {
-          name: { en: "Plain bun" },
+          name: { en: "Plain" },
         });
         await setProductOptionGroups(tx, tenantId, burger.id, [g.id]);
         await assignCatalogueToLocation(tx, locationId, cat.id);
@@ -2161,67 +2089,10 @@ describe("catalogue operations", () => {
         const items = products
           .find((p) => p.id === burger.id)!
           .optionGroups.flatMap((grp) => grp.items);
-        const gfItem = items.find((i) => i.id === gf.id)!;
-        expect(gfItem.removeAllergens).toEqual(["gluten"]);
-        expect(gfItem.addAllergens).toBeNull();
+        const cheeseItem = items.find((i) => i.id === cheese.id)!;
+        expect(cheeseItem.addAllergens).toEqual({ milk: { presence: "contains" } });
         const plainItem = items.find((i) => i.id === plain.id)!;
-        expect(plainItem.removeAllergens).toBeNull();
         expect(plainItem.addAllergens).toBeNull();
-      });
-    });
-
-    // Task 4: the ORIGIN overlay is the diet twin of the allergen overlay — createOptionGroupItem /
-    // updateOptionGroupItem accept addOrigins/removeOrigins, validate each against the origin taxonomy,
-    // collapse an empty list to NULL, and round-trip through listOptionGroupItems.
-    it("createOptionGroupItem persists an origin overlay and rejects a bad origin", async () => {
-      await asTenant(async (tx) => {
-        const g = await createOptionGroup(tx, tenantId, { name: { en: "Extras" } });
-        const bacon = await createOptionGroupItem(tx, tenantId, g.id, {
-          name: { en: "Add bacon" },
-          addOrigins: ["meat"],
-          removeOrigins: ["dairy"],
-        });
-        expect(bacon.addOrigins).toEqual(["meat"]);
-        expect(bacon.removeOrigins).toEqual(["dairy"]);
-        // Omitting the overlay leaves both columns NULL; an empty list collapses to NULL too.
-        const plain = await createOptionGroupItem(tx, tenantId, g.id, { name: { en: "Nothing" } });
-        expect(plain.addOrigins).toBeNull();
-        expect(plain.removeOrigins).toBeNull();
-        const empty = await createOptionGroupItem(tx, tenantId, g.id, {
-          name: { en: "Empty" },
-          addOrigins: [],
-        });
-        expect(empty.addOrigins).toBeNull();
-        // A non-origin entry is rejected before the write.
-        await expect(
-          createOptionGroupItem(tx, tenantId, g.id, {
-            name: { en: "bad" },
-            addOrigins: ["wombat"],
-          }),
-        ).rejects.toThrow(/diet.invalid_origin/);
-      });
-    });
-
-    it("updateOptionGroupItem threads the origin overlay and clears it with null", async () => {
-      await asTenant(async (tx) => {
-        const g = await createOptionGroup(tx, tenantId, { name: { en: "Extras" } });
-        const item = await createOptionGroupItem(tx, tenantId, g.id, { name: { en: "Add bacon" } });
-        await updateOptionGroupItem(tx, tenantId, item.id, { addOrigins: ["meat"] });
-        const [added] = await listOptionGroupItems(tx, g.id);
-        expect(added!.addOrigins).toEqual(["meat"]);
-        // A single-side patch leaves the other side alone; a null clears.
-        await updateOptionGroupItem(tx, tenantId, item.id, { removeOrigins: ["fish"] });
-        const [both] = await listOptionGroupItems(tx, g.id);
-        expect(both!.addOrigins).toEqual(["meat"]);
-        expect(both!.removeOrigins).toEqual(["fish"]);
-        await updateOptionGroupItem(tx, tenantId, item.id, { addOrigins: null });
-        const [cleared] = await listOptionGroupItems(tx, g.id);
-        expect(cleared!.addOrigins).toBeNull();
-        expect(cleared!.removeOrigins).toEqual(["fish"]);
-        // A bad origin on update is rejected too.
-        await expect(
-          updateOptionGroupItem(tx, tenantId, item.id, { removeOrigins: ["wombat"] }),
-        ).rejects.toThrow(/diet.invalid_origin/);
       });
     });
 

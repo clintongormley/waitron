@@ -223,9 +223,6 @@ export class TillModifierPicker extends LitElement {
                     ...choice,
                     vatClass: choice.vatClass ?? null,
                     addAllergens: choice.addAllergens ?? null,
-                    removeAllergens: choice.removeAllergens ?? null,
-                    addOrigins: choice.addOrigins ?? null,
-                    removeOrigins: choice.removeOrigins ?? null,
                   })),
               },
             ]

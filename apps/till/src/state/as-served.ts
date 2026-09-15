@@ -11,12 +11,10 @@ import type { OrderLine } from "./working-order.js";
 
 /** The dish's own allergen profile: its declared set, and `pending` when the dish's own allergens are
  *  unreviewed (a null base). A local shape — catalogue's `AsServedAllergens` and the modifier fold it
- *  served are removed. `removed` is always empty now (nothing subtracts from the dish) and kept only so
- *  the basket's shared render reads one field. Each extra's own list is shown separately (Task 4). */
+ *  served are removed. Each extra's own list is shown separately (Task 4). */
 interface AsServedAllergens {
   allergens: NonNullable<OrderLine["product"]["allergens"]>;
   pending: boolean;
-  removed: string[];
 }
 
 /** The dish's OWN published allergens — no modifier contribution (removed in the nutrition redesign). */
@@ -24,7 +22,6 @@ export function asServedAllergens(line: OrderLine): AsServedAllergens {
   return {
     allergens: line.product.allergens ?? {},
     pending: line.product.allergens == null,
-    removed: [],
   };
 }
 

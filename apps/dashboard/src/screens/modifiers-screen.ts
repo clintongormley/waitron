@@ -283,19 +283,11 @@ export class ModifiersScreen extends LitElement {
   // the owner wants this information present only when a choice actually carries it.
   #choiceSummary(choice: ModifierChoice) {
     const adds = Object.keys(choice.addAllergens ?? {});
-    const removes = choice.removeAllergens ?? [];
     const diet = choice.dietaryEffect?.invalidates ?? [];
     return html`${
       adds.length
         ? html`<div>
             ${t("modifiers.adds_allergens")}: ${adds.map((code) => allergenName(code)).join(", ")}
-          </div>`
-        : nothing
-    }${
-      removes.length
-        ? html`<div>
-            ${t("modifiers.removes_allergens")}:
-            ${removes.map((code) => allergenName(code)).join(", ")}
           </div>`
         : nothing
     }${
