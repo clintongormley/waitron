@@ -317,6 +317,13 @@ declare module "@waitron/shared" {
      */
     "reader.provider_disconnected": { providerId: string };
     /**
+     * An active card reader's provider reports its battery at or below the warning/error floor — an
+     * ongoing dashboard alert, not a thrown request error. `reader` is the reader's display name and
+     * `percent` its whole-percent battery reading; neither is a secret. Raised by the battery alert
+     * source (`alert-sources.ts`).
+     */
+    "reader.battery_low": { reader: string; percent: number };
+    /**
      * The deployment holds one tenant per database. A basket line named a product the till cannot
      * sell at its location — it is not in the location's assigned catalogue or is deactivated.
      * `productId` is a uuid the caller already holds, not a secret, so echoing it is what makes

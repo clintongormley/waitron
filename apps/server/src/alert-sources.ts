@@ -5,9 +5,17 @@
 import { and, count, eq, gte, inArray, lt, min, or } from "drizzle-orm";
 import { printAgents, printJobs, printers } from "@waitron/db";
 import type { AlertSource, OngoingAlert } from "@waitron/module";
+import {
+  type CardProviderContribution,
+  cardProviderById,
+  type CardProviderRuntimeDeps,
+  cardReaders,
+} from "@waitron/payments";
 import { MAX_DELIVERY_ATTEMPTS } from "@waitron/printing";
+import type { TenantId } from "@waitron/shared";
 import type { BackupStatus } from "./backup-status.js";
 import type { AwaitingCertStatus } from "./pass.js";
+import type { TtlCache } from "./ttl-cache.js";
 import "./errors.js";
 
 /** The dashboard screen a backup alert links to. */
@@ -209,6 +217,67 @@ export function printingAlertSource(): AlertSource {
           severity: "error",
           since: new Date(r.oldest!).toISOString(),
           screen: "printers",
+        });
+      }
+      return alerts;
+    },
+  };
+}
+
+/** A reader at or below this whole-percent battery reading raises a warning. */
+export const BATTERY_WARN = 20;
+/** At or below this it is an error — the reader is close to dying at the till. */
+export const BATTERY_ERROR = 10;
+
+/**
+ * The card-reader battery alert source. One `reader.battery_low` per ACTIVE reader whose provider
+ * reports a battery at or below {@link BATTERY_WARN} (warning) or {@link BATTERY_ERROR} (error). A
+ * reader whose provider reports no battery (Stripe, and any SumUp reader that does not send one)
+ * raises nothing. Each reader's reading comes through `cache` keyed on the reader id, so an open
+ * dashboard asking every minute does not hammer the provider — a reading is reused for the cache's
+ * TTL (five minutes at boot). Reads `card_readers` directly, the same table the payments API owns.
+ */
+export function batteryAlertSource(deps: {
+  providers: readonly CardProviderContribution[];
+  runtimeDeps: (tenantId: TenantId) => CardProviderRuntimeDeps;
+  cache: TtlCache<number | null>;
+}): AlertSource {
+  return {
+    area: "card_reader",
+    permission: "payments.manage",
+    async read({ tx, tenantId }): Promise<readonly OngoingAlert[]> {
+      // A by-id/list read still scopes to the tenant — one database per tenant is NOT the query's
+      // isolation boundary (CLAUDE.md §3).
+      const readers = await tx
+        .select({
+          id: cardReaders.id,
+          provider: cardReaders.provider,
+          ref: cardReaders.providerRef,
+          name: cardReaders.name,
+        })
+        .from(cardReaders)
+        .where(and(eq(cardReaders.tenantId, tenantId), eq(cardReaders.active, true)));
+      const alerts: OngoingAlert[] = [];
+      for (const r of readers) {
+        const percent = await deps.cache.get(r.id, async () => {
+          // `cardProviderById` THROWS `payment.provider_unknown` on an unrecognised provider id (it
+          // never returns undefined), and a seat whose `status` throws propagates out of `read` too.
+          // Either way the registry collapses this whole source to one
+          // `alert.source_unavailable:card_reader` — the spec's source-level failure model — so a
+          // misconfigured reader is surfaced as a broken check, not silently dropped. That is why
+          // there is no null-check here.
+          const seat = cardProviderById(deps.providers, r.provider);
+          const status = await seat.readers.status(deps.runtimeDeps(tenantId), r.ref);
+          return status.batteryPercent ?? null;
+        });
+        if (percent === null || percent > BATTERY_WARN) continue;
+        alerts.push({
+          key: `reader.battery_low:${r.id}`,
+          code: "reader.battery_low",
+          params: { reader: r.name, percent },
+          severity: percent <= BATTERY_ERROR ? "error" : "warning",
+          since: null,
+          screen: "payments",
         });
       }
       return alerts;

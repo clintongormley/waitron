@@ -30,6 +30,7 @@ import { StripeReconciler } from "@waitron/payments-stripe";
 import {
   SimulatorPaymentProvider,
   type CardProviderContribution,
+  type CardProviderRuntimeDeps,
   type PaymentProvider,
 } from "@waitron/payments";
 import { recordIncidentOnce } from "@waitron/core";
@@ -37,7 +38,7 @@ import { CARD_PROVIDERS } from "@waitron/composition";
 import { applyMigrations, migrationOptionsFor } from "@waitron/migrations";
 import { assertSingleOperationalVenue, readOperationalVenueIds } from "@waitron/provisioning";
 import { enabledModules, fiscalSlot, orderedMigrationSets, reconcile } from "@waitron/module";
-import type { ModuleRouteContext } from "@waitron/module";
+import type { AlertSource, ModuleRouteContext } from "@waitron/module";
 import { AppError, type TenantId } from "@waitron/shared";
 import {
   ALL_ALERT_CLAIMS,
@@ -80,7 +81,15 @@ import { corsForVenue } from "./cors.js";
 import { mountDiagnosticsApi } from "./diagnostics-api.js";
 import { mountAlertsApi } from "./alerts-api.js";
 import { createAlertRegistry } from "./alerts.js";
-import type { BackupOutcomeHolder } from "./alert-sources.js";
+import {
+  awaitingCertAlertSource,
+  backupAlertSource,
+  type BackupOutcomeHolder,
+  batteryAlertSource,
+  printingAlertSource,
+} from "./alert-sources.js";
+import type { BackupStatus } from "./backup-status.js";
+import { createTtlCache } from "./ttl-cache.js";
 import {
   createHealthState,
   healthApp,
@@ -2039,21 +2048,8 @@ export async function startServer(
   // All three routes are gated behind `diagnostics.view`. Routes only — no database work at boot;
   // the gate runs per request.
   mountDiagnosticsApi(app, { db, cfg: { tenantId: till.tenantId }, reader, verbosity }, log);
-  // Dashboard alerts. Claims come from every module; ongoing checks only from the enabled set,
-  // whose tables are migrated.
-  mountAlertsApi(
-    app,
-    {
-      db,
-      cfg: { tenantId: till.tenantId },
-      registry: createAlertRegistry({
-        claims: ALL_ALERT_CLAIMS,
-        sources: enabledAlertSources(setsToMigrate),
-      }),
-      now,
-    },
-    log,
-  );
+  // The dashboard alerts surface is mounted lower down, once `backupSupervisor` exists — the backups
+  // alert source closes over it. See the `mountAlertsApi` call beside the other management-api mounts.
   // Catalogue writes and language settings share the management permission gate.
   mountCatalogueApi(
     app,
@@ -2160,10 +2156,10 @@ export async function startServer(
   // primary whose probe passes. A probe failure or a non-primary role leaves backup off and is logged,
   // never stopping sales (§5). Provenance and the disk re-read both read the RAW `base` env, not the
   // merged `env`, so a file-sourced value is distinguishable from an env-sourced one (spec §3.2).
-  // The in-process record of each backup destination's last sweep outcome, read by the backups alert
-  // source (Task 7 assembles that source, after this supervisor exists). Declared here so the sweep the
-  // supervisor starts fills it and the later source reads the same holder; it is process-lived and
-  // empty until the first sweep tick after boot.
+  // The in-process record of each backup destination's last sweep outcome. The sweep the supervisor
+  // starts fills it and the backups alert source (assembled just below, once the supervisor exists)
+  // reads this same holder — so both refer to one map. It is process-lived and empty until the first
+  // sweep tick after boot.
   const backupOutcomes: BackupOutcomeHolder = { failed: new Map() };
   const backupSupervisor = new BackupSupervisor({
     buildConfig: async () => loadBackupConfig(await loadBoxEnv(base, config.stateDir)),
@@ -2186,6 +2182,55 @@ export async function startServer(
     log,
   });
   await backupSupervisor.reload();
+
+  // Dashboard alerts. Mounted HERE, after the backup supervisor exists, because the backups source
+  // reads the supervisor's live status; the claims list comes from every module, but the ongoing
+  // checks run only for the enabled set (whose tables are migrated) plus the four server-owned
+  // sources below. Route mounts are order-independent among themselves, so sitting beside the other
+  // management-api mounts is fine as long as it precedes any catch-all handler.
+  //
+  // The runtime context each card-provider seat call takes for the battery read — this tenant's db
+  // handle, the vault key ring, the tenant id — built exactly as `payments-api.ts` builds its
+  // `runtimeDeps`, minus the test-only `fetch` (none is injected on this path, so production uses the
+  // global fetch). It reuses the same `db`/`ring` bindings, never a second copy.
+  const cardRuntimeDeps = (tenantId: TenantId): CardProviderRuntimeDeps => ({
+    db,
+    ring,
+    tenantId,
+  });
+  // The battery reading is reused for five minutes so an open dashboard's minute-by-minute poll does
+  // not hammer the provider; the backup freshness for one minute.
+  const backupCache = createTtlCache<BackupStatus>({ ttlMs: 60_000, now });
+  const batteryCache = createTtlCache<number | null>({ ttlMs: 5 * 60_000, now });
+  const backupSource = backupAlertSource({
+    listStatus: () =>
+      backupCache.get("status", () => backupSupervisor.status().then((s) => s.backupStatus)),
+    outcomes: backupOutcomes,
+    now,
+  });
+  const serverAlertSources: AlertSource[] = [
+    backupSource,
+    awaitingCertAlertSource(awaitingFiscalCert),
+    printingAlertSource(),
+    batteryAlertSource({
+      providers: CARD_PROVIDERS,
+      runtimeDeps: cardRuntimeDeps,
+      cache: batteryCache,
+    }),
+  ];
+  mountAlertsApi(
+    app,
+    {
+      db,
+      cfg: { tenantId: till.tenantId },
+      registry: createAlertRegistry({
+        claims: ALL_ALERT_CLAIMS,
+        sources: [...enabledAlertSources(setsToMigrate), ...serverAlertSources],
+      }),
+      now,
+    },
+    log,
+  );
 
   // The carrier that would drain this node's fenced tail (`servingPrimaryNodeId` of the held chart),
   // captured at boot. The carrier's publisher-side slot on THIS node is named by the CARRIER (the

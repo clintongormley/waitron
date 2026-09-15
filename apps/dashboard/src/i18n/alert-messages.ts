@@ -138,4 +138,8 @@ export const ALERT_MESSAGES: Readonly<
     en: "{count} print job(s) are stuck at “{printer}”. Check the printer on the Printers page.",
     es: "{count} trabajo(s) de impresión atascado(s) en «{printer}». Revisa la impresora en la página de Impresoras.",
   },
+  "reader.battery_low": {
+    en: "Card reader “{reader}” battery is low ({percent}%). Charge it to avoid interruptions at the till.",
+    es: "La batería del lector de tarjetas «{reader}» está baja ({percent} %). Cárgalo para evitar interrupciones en la caja.",
+  },
 };

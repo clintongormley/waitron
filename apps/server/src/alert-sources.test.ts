@@ -1,17 +1,28 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, CORE_MIGRATIONS, withTenant } from "@waitron/db";
+import { asAppUser, CORE_MIGRATIONS, type Database, withTenant } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
+import type { AlertSource } from "@waitron/module";
+import {
+  type CardProviderContribution,
+  type CardProviderRuntimeDeps,
+  PAYMENTS_MIGRATIONS,
+  type ReaderStatus,
+} from "@waitron/payments";
 import type { TenantId } from "@waitron/shared";
 import {
   awaitingCertAlertSource,
   backupAlertSource,
   type BackupOutcomeHolder,
+  batteryAlertSource,
+  BATTERY_ERROR,
+  BATTERY_WARN,
   printingAlertSource,
   recordBackupOutcome,
 } from "./alert-sources.js";
 import type { BackupStatus } from "./backup-status.js";
+import { createTtlCache } from "./ttl-cache.js";
 
 const NOW = new Date("2026-09-15T12:00:00Z");
 const ctx = { tx: {} as never, tenantId: "t1" as never, now: NOW };
@@ -323,5 +334,167 @@ describe("printingAlertSource — tenant scoping", () => {
     const mine = await seedTenant(suite.db);
     await seedLocation(mine);
     expect(await readAlerts(mine)).toEqual([]);
+  });
+});
+
+// The battery source reads `card_readers` (a payments-module table) and calls the card-provider seat,
+// so this suite migrates the payments set on top of core and runs as the app role, like the printing
+// block. The provider is a stub — no SumUp server — so a `batteryPercent` is whatever the test sets.
+const batterySuite = usePgliteDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
+
+async function seedReader(t: {
+  tenantId: TenantId;
+  provider?: string;
+  providerRef: string;
+  name: string;
+  active?: boolean;
+}): Promise<string> {
+  const { rows } = await batterySuite.db.execute<{ id: string }>(sql`
+    insert into card_readers (tenant_id, provider, provider_ref, name, active)
+    values (${t.tenantId}, ${t.provider ?? "stub"}, ${t.providerRef}, ${t.name}, ${t.active ?? true})
+    returning id`);
+  return rows[0]!.id;
+}
+
+/** A card-provider seat whose only live method is `readers.status`: it returns the battery reading a
+ * test configures per providerRef and counts each call, so a test can prove the TTL cache. Every other
+ * method throws — the source never reaches them. */
+function stubProvider(opts: {
+  id?: string;
+  battery: (ref: string) => number | undefined;
+  calls: { n: number };
+}): CardProviderContribution {
+  const unused = (): never => {
+    throw new Error("stubProvider: this method is not used by the battery source");
+  };
+  return {
+    providerId: opts.id ?? "stub",
+    credentialPurpose: "payments.stripe",
+    credentialFields: [],
+    readerAdd: { kind: "reference", refLabelKey: "x" },
+    connect: unused,
+    build: unused,
+    readers: {
+      canUnpair: false,
+      list: unused,
+      add: unused,
+      remove: unused,
+      status: async (_deps: CardProviderRuntimeDeps, ref: string): Promise<ReaderStatus> => {
+        opts.calls.n += 1;
+        const percent = opts.battery(ref);
+        return percent === undefined ? { online: true } : { online: true, batteryPercent: percent };
+      },
+    },
+  };
+}
+
+const stubRuntimeDeps =
+  (db: Database) =>
+  (tenantId: TenantId): CardProviderRuntimeDeps => ({ db, ring: {} as never, tenantId });
+
+async function readBattery(source: AlertSource, tenantId: TenantId, now = NOW) {
+  return withTenant(batterySuite.db, tenantId, async (tx) => {
+    await asAppUser(tx);
+    return source.read({ tx, tenantId, now });
+  });
+}
+
+describe("batteryAlertSource", () => {
+  it("warns at the warning floor, errors at the error floor, and is silent above or absent", async () => {
+    const tenantId = await seedTenant(batterySuite.db);
+    const at25 = await seedReader({ tenantId, providerRef: "p25", name: "R25" });
+    const at20 = await seedReader({ tenantId, providerRef: "p20", name: "R20" });
+    const at10 = await seedReader({ tenantId, providerRef: "p10", name: "R10" });
+    await seedReader({ tenantId, providerRef: "pNone", name: "RNone" });
+
+    const percentByRef: Record<string, number | undefined> = {
+      p25: 25,
+      p20: BATTERY_WARN,
+      p10: BATTERY_ERROR,
+      pNone: undefined,
+    };
+    const calls = { n: 0 };
+    const source = batteryAlertSource({
+      providers: [stubProvider({ battery: (ref) => percentByRef[ref], calls })],
+      runtimeDeps: stubRuntimeDeps(batterySuite.db),
+      cache: createTtlCache<number | null>({ ttlMs: 5 * 60_000, now: () => NOW }),
+    });
+
+    const alerts = await readBattery(source, tenantId);
+    // 25 is above the warning floor and pNone reports no battery, so neither raises anything.
+    const byKey = new Map(alerts.map((a) => [a.key, a]));
+    expect(new Set(byKey.keys())).toEqual(
+      new Set([`reader.battery_low:${at10}`, `reader.battery_low:${at20}`]),
+    );
+    expect(byKey.get(`reader.battery_low:${at20}`)).toMatchObject({
+      code: "reader.battery_low",
+      severity: "warning",
+      since: null,
+      screen: "payments",
+      params: { reader: "R20", percent: BATTERY_WARN },
+    });
+    expect(byKey.get(`reader.battery_low:${at10}`)).toMatchObject({
+      code: "reader.battery_low",
+      severity: "error",
+      params: { reader: "R10", percent: BATTERY_ERROR },
+    });
+    // A reader at 25 is above the warning floor — assert it was skipped, not merely absent.
+    expect(byKey.has(`reader.battery_low:${at25}`)).toBe(false);
+  });
+
+  it("reuses one provider status read for five minutes, then reads again", async () => {
+    const tenantId = await seedTenant(batterySuite.db);
+    await seedReader({ tenantId, providerRef: "p1", name: "R1" });
+
+    let clock = NOW;
+    const calls = { n: 0 };
+    const source = batteryAlertSource({
+      providers: [stubProvider({ battery: () => 5, calls })],
+      runtimeDeps: stubRuntimeDeps(batterySuite.db),
+      cache: createTtlCache<number | null>({ ttlMs: 5 * 60_000, now: () => clock }),
+    });
+
+    await readBattery(source, tenantId, clock);
+    // A second read four minutes later stays inside the 5-minute window: still one provider call.
+    clock = new Date(NOW.getTime() + 4 * 60_000);
+    await readBattery(source, tenantId, clock);
+    expect(calls.n).toBe(1);
+
+    // Six minutes on, the cached reading has expired, so the source asks the provider again.
+    clock = new Date(NOW.getTime() + 6 * 60_000);
+    await readBattery(source, tenantId, clock);
+    expect(calls.n).toBe(2);
+  });
+
+  it("raises nothing for another tenant's low reader", async () => {
+    const other = await seedTenant(batterySuite.db);
+    await seedReader({ tenantId: other, providerRef: "pOther", name: "Foreign" });
+    const calls = { n: 0 };
+    const source = batteryAlertSource({
+      providers: [stubProvider({ battery: () => 5, calls })],
+      runtimeDeps: stubRuntimeDeps(batterySuite.db),
+      cache: createTtlCache<number | null>({ ttlMs: 5 * 60_000, now: () => NOW }),
+    });
+
+    // The other tenant's low reader fires for its own tenant (control)…
+    expect((await readBattery(source, other)).map((a) => a.code)).toEqual(["reader.battery_low"]);
+
+    // …but a fresh tenant with no readers of its own sees none of it.
+    const mine = await seedTenant(batterySuite.db);
+    expect(await readBattery(source, mine)).toEqual([]);
+  });
+
+  it("ignores a deactivated low reader", async () => {
+    const tenantId = await seedTenant(batterySuite.db);
+    await seedReader({ tenantId, providerRef: "pOff", name: "Retired", active: false });
+    const calls = { n: 0 };
+    const source = batteryAlertSource({
+      providers: [stubProvider({ battery: () => 5, calls })],
+      runtimeDeps: stubRuntimeDeps(batterySuite.db),
+      cache: createTtlCache<number | null>({ ttlMs: 5 * 60_000, now: () => NOW }),
+    });
+    expect(await readBattery(source, tenantId)).toEqual([]);
+    // The disabled reader was never enumerated, so the provider was never asked.
+    expect(calls.n).toBe(0);
   });
 });
