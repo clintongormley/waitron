@@ -172,19 +172,19 @@ const suite = usePgliteDb({
 
         const department = await tx.execute<{ id: string }>(sql`
         insert into departments
-          (tenant_id, location_id, name, trading_name, default_service_mode)
-        values (${tenantId}, ${loc.rows[0]!.id}, 'Restaurant', 'Restaurant', 'prepay')
+          (location_id, name, trading_name, default_service_mode)
+        values (${loc.rows[0]!.id}, 'Restaurant', 'Restaurant', 'prepay')
         returning id`);
         const zone = await tx.execute<{ id: string }>(sql`
         insert into floor_zones (tenant_id, location_id, name)
         values (${tenantId}, ${loc.rows[0]!.id}, 'Counter') returning id`);
         await tx.execute(sql`
         insert into zone_service_policies
-          (tenant_id, location_id, zone_id, department_id, default_menu_id, is_counter_default)
-        values (${tenantId}, ${loc.rows[0]!.id}, ${zone.rows[0]!.id}, ${department.rows[0]!.id}, ${cat.id}, true)`);
+          (location_id, zone_id, department_id, default_menu_id, is_counter_default)
+        values (${loc.rows[0]!.id}, ${zone.rows[0]!.id}, ${department.rows[0]!.id}, ${cat.id}, true)`);
         await tx.execute(sql`
-        insert into zone_menus (tenant_id, zone_id, menu_id)
-        values (${tenantId}, ${zone.rows[0]!.id}, ${cat.id})`);
+        insert into zone_menus (zone_id, menu_id)
+        values (${zone.rows[0]!.id}, ${cat.id})`);
         const section = await createMenuSection(tx, tenantId, {
           menuId: cat.id,
           name: { es: "Bebidas" },
@@ -196,8 +196,8 @@ const suite = usePgliteDb({
           grossPrice: "1.75",
         });
         await tx.execute(sql`
-          insert into preparation_routes (tenant_id, location_id, product_id, station_id)
-          values (${tenantId}, ${loc.rows[0]!.id}, ${p.id}, ${defaultStationId})`);
+          insert into preparation_routes (location_id, product_id, station_id)
+          values (${loc.rows[0]!.id}, ${p.id}, ${defaultStationId})`);
 
         const hiddenMenu = await createCatalogue(tx, tenantId, { name: "Staff" });
         const hiddenSection = await createMenuSection(tx, tenantId, {
@@ -1449,16 +1449,16 @@ describe("GET /api/products (session-guarded catalogue)", () => {
       values (${cfg.tenantId}, ${cfg.locationId}, ${`Device zone ${deviceId}`}) returning id`);
     await suite.db.execute(sql`
       insert into zone_service_policies
-        (tenant_id, location_id, zone_id, department_id, service_mode)
-      select ${cfg.tenantId}, ${cfg.locationId}, ${second.rows[0]!.id}, department_id, 'prepay'
+        (location_id, zone_id, department_id, service_mode)
+      select ${cfg.locationId}, ${second.rows[0]!.id}, department_id, 'prepay'
       from zone_service_policies
-      where tenant_id = ${cfg.tenantId} and zone_id = ${counterZoneId}`);
+      where zone_id = ${counterZoneId}`);
     await suite.db.execute(sql`
-      insert into zone_menus (tenant_id, zone_id, menu_id)
-      values (${cfg.tenantId}, ${second.rows[0]!.id}, ${aguaProduct.catalogueId})`);
+      insert into zone_menus (zone_id, menu_id)
+      values (${second.rows[0]!.id}, ${aguaProduct.catalogueId})`);
     await suite.db.execute(sql`
-      insert into device_zone_defaults (tenant_id, device_id, zone_id)
-      values (${cfg.tenantId}, ${deviceId}, ${second.rows[0]!.id})`);
+      insert into device_zone_defaults (device_id, zone_id)
+      values (${deviceId}, ${second.rows[0]!.id})`);
 
     const res = await app.request("/api/default-service-zone/offers", {
       headers: { cookie: `${SESSION_COOKIE}=${sessionId}; ${deviceCookie}` },
@@ -2535,20 +2535,20 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
     await suite.db.execute(sql`
       with department as (
         insert into departments
-          (tenant_id, location_id, name, trading_name, default_service_mode)
-        values (${cfg.tenantId}, ${cfg.locationId}, 'Dining room', 'Restaurant', 'table_tab')
+          (location_id, name, trading_name, default_service_mode)
+        values (${cfg.locationId}, 'Dining room', 'Restaurant', 'table_tab')
         returning id
       )
       insert into zone_service_policies
-        (tenant_id, location_id, zone_id, department_id)
-      select ${cfg.tenantId}, ${cfg.locationId}, ${zoneId}, department.id
+        (location_id, zone_id, department_id)
+      select ${cfg.locationId}, ${zoneId}, department.id
       from department`);
     await suite.db.execute(sql`
-      insert into zone_menus (tenant_id, zone_id, menu_id)
-      values (${cfg.tenantId}, ${zoneId}, ${aguaProduct.catalogueId})`);
+      insert into zone_menus (zone_id, menu_id)
+      values (${zoneId}, ${aguaProduct.catalogueId})`);
     await suite.db.execute(sql`
       update zone_service_policies set default_menu_id = ${aguaProduct.catalogueId}
-      where tenant_id = ${cfg.tenantId} and zone_id = ${zoneId}`);
+      where zone_id = ${zoneId}`);
 
     // Create a table IN that zone through the till route, so `createTable`'s zoneId assignment (and its
     // composite zone FK) is exercised — not a raw insert.
@@ -3045,7 +3045,7 @@ async function modifierOfferFixture() {
       vatClass: "general",
     });
     await tx.execute(
-      sql`insert into preparation_routes (tenant_id,location_id,product_id,station_id) select tenant_id,location_id,${product.id},station_id from preparation_routes where tenant_id=${cfg.tenantId} and product_id=${aguaProduct.id}`,
+      sql`insert into preparation_routes (location_id,product_id,station_id) select location_id,${product.id},station_id from preparation_routes where product_id=${aguaProduct.id}`,
     );
     const note = await createModifier(
       tx,
@@ -3307,13 +3307,13 @@ describe("canonical modifier HTTP serialization", () => {
     );
     const zoneId = zone.rows[0]!.id;
     await suite.db.execute(
-      sql`with department as (insert into departments (tenant_id,location_id,name,trading_name,default_service_mode) values (${cfg.tenantId},${cfg.locationId},'Modifier tables','Restaurant','table_tab') returning id) insert into zone_service_policies (tenant_id,location_id,zone_id,department_id) select ${cfg.tenantId},${cfg.locationId},${zoneId},department.id from department`,
+      sql`with department as (insert into departments (location_id,name,trading_name,default_service_mode) values (${cfg.locationId},'Modifier tables','Restaurant','table_tab') returning id) insert into zone_service_policies (location_id,zone_id,department_id) select ${cfg.locationId},${zoneId},department.id from department`,
     );
     await suite.db.execute(
-      sql`insert into zone_menus (tenant_id,zone_id,menu_id) values (${cfg.tenantId},${zoneId},${aguaProduct.catalogueId})`,
+      sql`insert into zone_menus (zone_id,menu_id) values (${zoneId},${aguaProduct.catalogueId})`,
     );
     await suite.db.execute(
-      sql`update zone_service_policies set default_menu_id=${aguaProduct.catalogueId} where tenant_id=${cfg.tenantId} and zone_id=${zoneId}`,
+      sql`update zone_service_policies set default_menu_id=${aguaProduct.catalogueId} where zone_id=${zoneId}`,
     );
     const table = await f.app.request("/api/tables", {
       method: "POST",

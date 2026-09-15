@@ -145,9 +145,9 @@ export async function seedCatalogues(
       }
       await tx.execute(sql`
         insert into preparation_routes
-          (tenant_id, location_id, category_id, station_id, no_preparation)
+          (location_id, category_id, station_id, no_preparation)
         values (
-          ${tenantId}, ${locationId}, ${category.id},
+          ${locationId}, ${category.id},
           ${cat.station === null ? null : stationIds[cat.station]}, ${cat.station === null}
         )`);
       const section = await createMenuSection(tx, tenantId, {

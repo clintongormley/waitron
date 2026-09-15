@@ -391,7 +391,7 @@ describe("venue service routing", () => {
       });
       await tx.execute(sql`
         update zone_service_policies set is_counter_default = true
-        where tenant_id = ${tenantId} and zone_id = ${zone.rows[0]!.id}`);
+        where zone_id = ${zone.rows[0]!.id}`);
 
       await tx.execute(sql`
         insert into working_orders (id, tenant_id, till_id, node_id, order_number)
@@ -475,7 +475,7 @@ describe("venue service routing", () => {
         where tenant_id = ${tenantId} and id = ${menu.id}`);
       await tx.execute(sql`
         update departments set name = 'Renamed department'
-        where tenant_id = ${tenantId} and id = ${department.id}`);
+        where id = ${department.id}`);
       await expect(
         listWorkingLineContexts(
           tx,
@@ -502,7 +502,7 @@ describe("venue service routing", () => {
       }>(sql`
         select menu_name, department_name, category_name
         from working_line_contexts
-        where tenant_id = ${tenantId} and working_order_line_id = ${workingLineId}`);
+        where working_order_line_id = ${workingLineId}`);
       expect(attribution.rows).toEqual([
         {
           menu_name: "Deli takeaway",
@@ -1062,8 +1062,8 @@ describe("resolvePreparationRoutes", () => {
       );
       // createPreparationRoute refuses a route to another location's station, so it is written directly.
       await tx.execute(sql`
-        insert into preparation_routes (tenant_id, location_id, product_id, station_id)
-        values (${tenantId}, ${cfg.locationId}, ${stationElsewhere.id}, ${elsewhere})`);
+        insert into preparation_routes (location_id, product_id, station_id)
+        values (${cfg.locationId}, ${stationElsewhere.id}, ${elsewhere})`);
 
       await expect(
         rejection(resolvePreparationRoutes(tx, cfg, zoneId, [routedElsewhere.id])),

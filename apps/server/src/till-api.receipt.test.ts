@@ -178,19 +178,19 @@ async function setupVenue(): Promise<{
       grossPrice: "1.50",
     });
     await tx.execute(sql`
-        insert into zone_menus (tenant_id, zone_id, menu_id, display_order)
-        select ${cfg.tenantId}, zone_id, ${cat.id}, 0
+        insert into zone_menus (zone_id, menu_id, display_order)
+        select zone_id, ${cat.id}, 0
         from zone_service_policies
-        where tenant_id = ${cfg.tenantId} and location_id = ${cfg.locationId}
+        where location_id = ${cfg.locationId}
           and is_counter_default`);
     await tx.execute(sql`
         update zone_service_policies set default_menu_id = ${cat.id}
-        where tenant_id = ${cfg.tenantId} and location_id = ${cfg.locationId}
+        where location_id = ${cfg.locationId}
           and is_counter_default`);
     await tx.execute(sql`
         insert into preparation_routes
-          (tenant_id, location_id, category_id, station_id, no_preparation)
-        values (${cfg.tenantId}, ${cfg.locationId}, ${bebidas.id}, null, true)`);
+          (location_id, category_id, station_id, no_preparation)
+        values (${cfg.locationId}, ${bebidas.id}, null, true)`);
     const staff = await tx.execute<{ id: string }>(sql`
         insert into persons (tenant_id, display_name, pin_hash, role)
         values (${cfg.tenantId}, 'Cajera', ${hashPin("5555")}, 'staff') returning id`);

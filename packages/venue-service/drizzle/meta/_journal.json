@@ -50,6 +50,27 @@
       "when": 1789248713309,
       "tag": "0006_unit_snapshot_identity",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1789489633088,
+      "tag": "0007_drop_tenant_id_custom_keys",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1789489642018,
+      "tag": "0008_drop_tenant_id",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1789489660643,
+      "tag": "0009_drop_tenant_id_sql",
+      "breakpoints": true
     }
   ]
 }

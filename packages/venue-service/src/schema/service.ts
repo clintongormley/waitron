@@ -23,7 +23,6 @@ import {
   kitchenStations,
   locations,
   products,
-  tenants,
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
@@ -32,7 +31,6 @@ export const departments = pgTable(
   "departments",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    tenantId: uuid("tenant_id").notNull(),
     locationId: uuid("location_id").notNull(),
     name: text("name").notNull(),
     tradingName: text("trading_name").notNull(),
@@ -44,16 +42,10 @@ export const departments = pgTable(
       .defaultNow(),
   },
   (t) => [
-    unique("departments_tenant_id_key").on(t.tenantId, t.id),
-    unique("departments_location_name_key").on(t.tenantId, t.locationId, t.name),
+    unique("departments_location_name_key").on(t.locationId, t.name),
     foreignKey({
-      columns: [t.tenantId],
-      foreignColumns: [tenants.id],
-      name: "departments_tenant_fk",
-    }),
-    foreignKey({
-      columns: [t.tenantId, t.locationId],
-      foreignColumns: [locations.tenantId, locations.id],
+      columns: [t.locationId],
+      foreignColumns: [locations.id],
       name: "departments_location_fk",
     }),
     check(
@@ -66,7 +58,6 @@ export const departments = pgTable(
 export const zoneServicePolicies = pgTable(
   "zone_service_policies",
   {
-    tenantId: uuid("tenant_id").notNull(),
     locationId: uuid("location_id").notNull(),
     zoneId: uuid("zone_id").notNull(),
     departmentId: uuid("department_id").notNull(),
@@ -75,25 +66,25 @@ export const zoneServicePolicies = pgTable(
     isCounterDefault: boolean("is_counter_default").notNull().default(false),
   },
   (t) => [
-    primaryKey({ columns: [t.tenantId, t.zoneId], name: "zone_service_policies_pk" }),
+    primaryKey({ columns: [t.zoneId], name: "zone_service_policies_pk" }),
     foreignKey({
-      columns: [t.tenantId, t.locationId],
-      foreignColumns: [locations.tenantId, locations.id],
+      columns: [t.locationId],
+      foreignColumns: [locations.id],
       name: "zone_service_policies_location_fk",
     }),
     foreignKey({
-      columns: [t.tenantId, t.zoneId],
-      foreignColumns: [floorZones.tenantId, floorZones.id],
+      columns: [t.zoneId],
+      foreignColumns: [floorZones.id],
       name: "zone_service_policies_zone_fk",
     }),
     foreignKey({
-      columns: [t.tenantId, t.departmentId],
-      foreignColumns: [departments.tenantId, departments.id],
+      columns: [t.departmentId],
+      foreignColumns: [departments.id],
       name: "zone_service_policies_department_fk",
     }),
     foreignKey({
-      columns: [t.tenantId, t.defaultMenuId],
-      foreignColumns: [catalogues.tenantId, catalogues.id],
+      columns: [t.defaultMenuId],
+      foreignColumns: [catalogues.id],
       name: "zone_service_policies_default_menu_fk",
     }),
     check(
@@ -106,44 +97,42 @@ export const zoneServicePolicies = pgTable(
 export const zoneMenus = pgTable(
   "zone_menus",
   {
-    tenantId: uuid("tenant_id").notNull(),
     zoneId: uuid("zone_id").notNull(),
     menuId: uuid("menu_id").notNull(),
     displayOrder: integer("display_order").notNull().default(0),
   },
   (t) => [
-    primaryKey({ columns: [t.tenantId, t.zoneId, t.menuId], name: "zone_menus_pk" }),
+    primaryKey({ columns: [t.zoneId, t.menuId], name: "zone_menus_pk" }),
     foreignKey({
-      columns: [t.tenantId, t.zoneId],
-      foreignColumns: [zoneServicePolicies.tenantId, zoneServicePolicies.zoneId],
+      columns: [t.zoneId],
+      foreignColumns: [zoneServicePolicies.zoneId],
       name: "zone_menus_zone_fk",
     }).onDelete("cascade"),
     foreignKey({
-      columns: [t.tenantId, t.menuId],
-      foreignColumns: [catalogues.tenantId, catalogues.id],
+      columns: [t.menuId],
+      foreignColumns: [catalogues.id],
       name: "zone_menus_menu_fk",
     }),
-    index("zone_menus_order_idx").on(t.tenantId, t.zoneId, t.displayOrder),
+    index("zone_menus_order_idx").on(t.zoneId, t.displayOrder),
   ],
 );
 
 export const deviceZoneDefaults = pgTable(
   "device_zone_defaults",
   {
-    tenantId: uuid("tenant_id").notNull(),
     deviceId: uuid("device_id").notNull(),
     zoneId: uuid("zone_id").notNull(),
   },
   (t) => [
-    primaryKey({ columns: [t.tenantId, t.deviceId], name: "device_zone_defaults_pk" }),
+    primaryKey({ columns: [t.deviceId], name: "device_zone_defaults_pk" }),
     foreignKey({
-      columns: [t.tenantId, t.deviceId],
-      foreignColumns: [devices.tenantId, devices.id],
+      columns: [t.deviceId],
+      foreignColumns: [devices.id],
       name: "device_zone_defaults_device_fk",
     }),
     foreignKey({
-      columns: [t.tenantId, t.zoneId],
-      foreignColumns: [floorZones.tenantId, floorZones.id],
+      columns: [t.zoneId],
+      foreignColumns: [floorZones.id],
       name: "device_zone_defaults_zone_fk",
     }),
   ],
@@ -153,7 +142,6 @@ export const preparationRoutes = pgTable(
   "preparation_routes",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    tenantId: uuid("tenant_id").notNull(),
     locationId: uuid("location_id").notNull(),
     zoneId: uuid("zone_id"),
     categoryId: uuid("category_id"),
@@ -162,15 +150,14 @@ export const preparationRoutes = pgTable(
     noPreparation: boolean("no_preparation").notNull().default(false),
   },
   (t) => [
-    unique("preparation_routes_tenant_id_key").on(t.tenantId, t.id),
     foreignKey({
-      columns: [t.tenantId, t.locationId],
-      foreignColumns: [locations.tenantId, locations.id],
+      columns: [t.locationId],
+      foreignColumns: [locations.id],
       name: "preparation_routes_location_fk",
     }),
     foreignKey({
-      columns: [t.tenantId, t.zoneId],
-      foreignColumns: [floorZones.tenantId, floorZones.id],
+      columns: [t.zoneId],
+      foreignColumns: [floorZones.id],
       name: "preparation_routes_zone_fk",
     }),
     foreignKey({
@@ -179,13 +166,13 @@ export const preparationRoutes = pgTable(
       name: "preparation_routes_category_fk",
     }),
     foreignKey({
-      columns: [t.tenantId, t.productId],
-      foreignColumns: [products.tenantId, products.id],
+      columns: [t.productId],
+      foreignColumns: [products.id],
       name: "preparation_routes_product_fk",
     }),
     foreignKey({
-      columns: [t.tenantId, t.stationId],
-      foreignColumns: [kitchenStations.tenantId, kitchenStations.id],
+      columns: [t.stationId],
+      foreignColumns: [kitchenStations.id],
       name: "preparation_routes_station_fk",
     }),
     check("preparation_routes_subject_ck", sql`num_nonnulls(${t.categoryId}, ${t.productId}) = 1`),
@@ -193,13 +180,7 @@ export const preparationRoutes = pgTable(
       "preparation_routes_target_ck",
       sql`num_nonnulls(${t.stationId}, nullif(${t.noPreparation}, false)) = 1`,
     ),
-    index("preparation_routes_lookup_idx").on(
-      t.tenantId,
-      t.locationId,
-      t.zoneId,
-      t.productId,
-      t.categoryId,
-    ),
+    index("preparation_routes_lookup_idx").on(t.locationId, t.zoneId, t.productId, t.categoryId),
   ],
 );
 
@@ -207,7 +188,6 @@ export const departmentHours = pgTable(
   "department_hours",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    tenantId: uuid("tenant_id").notNull(),
     departmentId: uuid("department_id").notNull(),
     weekday: integer("weekday").notNull(),
     opensAt: time("opens_at").notNull(),
@@ -215,25 +195,18 @@ export const departmentHours = pgTable(
   },
   (t) => [
     foreignKey({
-      columns: [t.tenantId, t.departmentId],
-      foreignColumns: [departments.tenantId, departments.id],
+      columns: [t.departmentId],
+      foreignColumns: [departments.id],
       name: "department_hours_department_fk",
     }).onDelete("cascade"),
     check("department_hours_weekday_ck", sql`${t.weekday} between 0 and 6`),
-    unique("department_hours_interval_key").on(
-      t.tenantId,
-      t.departmentId,
-      t.weekday,
-      t.opensAt,
-      t.closesAt,
-    ),
+    unique("department_hours_interval_key").on(t.departmentId, t.weekday, t.opensAt, t.closesAt),
   ],
 );
 
 export const orderServiceContexts = pgTable(
   "order_service_contexts",
   {
-    tenantId: uuid("tenant_id").notNull(),
     workingOrderId: uuid("working_order_id").notNull(),
     locationId: uuid("location_id").notNull(),
     zoneId: uuid("zone_id").notNull(),
@@ -241,20 +214,20 @@ export const orderServiceContexts = pgTable(
     serviceMode: text("service_mode").notNull(),
   },
   (t) => [
-    primaryKey({ columns: [t.tenantId, t.workingOrderId], name: "order_service_contexts_pk" }),
+    primaryKey({ columns: [t.workingOrderId], name: "order_service_contexts_pk" }),
     foreignKey({
-      columns: [t.tenantId, t.workingOrderId],
-      foreignColumns: [workingOrders.tenantId, workingOrders.id],
+      columns: [t.workingOrderId],
+      foreignColumns: [workingOrders.id],
       name: "order_service_contexts_order_fk",
     }).onDelete("cascade"),
     foreignKey({
-      columns: [t.tenantId, t.zoneId],
-      foreignColumns: [floorZones.tenantId, floorZones.id],
+      columns: [t.zoneId],
+      foreignColumns: [floorZones.id],
       name: "order_service_contexts_zone_fk",
     }),
     foreignKey({
-      columns: [t.tenantId, t.departmentId],
-      foreignColumns: [departments.tenantId, departments.id],
+      columns: [t.departmentId],
+      foreignColumns: [departments.id],
       name: "order_service_contexts_department_fk",
     }),
     check(
@@ -267,7 +240,6 @@ export const orderServiceContexts = pgTable(
 export const workingLineContexts = pgTable(
   "working_line_contexts",
   {
-    tenantId: uuid("tenant_id").notNull(),
     workingOrderLineId: uuid("working_order_line_id").notNull(),
     menuItemId: uuid("menu_item_id").notNull(),
     menuId: uuid("menu_id").notNull(),
@@ -289,15 +261,15 @@ export const workingLineContexts = pgTable(
     dietOverride: jsonb("diet_override").$type<unknown>(),
   },
   (t) => [
-    primaryKey({ columns: [t.tenantId, t.workingOrderLineId], name: "working_line_contexts_pk" }),
+    primaryKey({ columns: [t.workingOrderLineId], name: "working_line_contexts_pk" }),
     foreignKey({
-      columns: [t.tenantId, t.workingOrderLineId],
-      foreignColumns: [workingOrderLines.tenantId, workingOrderLines.id],
+      columns: [t.workingOrderLineId],
+      foreignColumns: [workingOrderLines.id],
       name: "working_line_contexts_line_fk",
     }).onDelete("cascade"),
     foreignKey({
-      columns: [t.tenantId, t.menuItemId],
-      foreignColumns: [menuItems.tenantId, menuItems.id],
+      columns: [t.menuItemId],
+      foreignColumns: [menuItems.id],
       name: "working_line_contexts_menu_item_fk",
     }),
     check("working_line_contexts_unit_precision_ck", sql`${t.unitPrecision} between 0 and 3`),

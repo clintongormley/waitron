@@ -7,8 +7,8 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
     async run(tx, node) {
       await tx.execute(sql`
         insert into departments
-          (tenant_id, location_id, name, trading_name, default_service_mode, is_default)
-        select ${node.tenantId}, ${node.locationId}, 'Venue', 'Venue', 'prepay', true
+          (location_id, name, trading_name, default_service_mode, is_default)
+        select ${node.locationId}, 'Venue', 'Venue', 'prepay', true
         where not exists (
           select 1 from departments
           where location_id = ${node.locationId}
@@ -35,9 +35,9 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
         const zoneId = zone.rows[0]!.id;
         await tx.execute(sql`
           insert into zone_service_policies
-            (tenant_id, location_id, zone_id, department_id, service_mode, is_counter_default)
-          values (${node.tenantId}, ${node.locationId}, ${zoneId}, ${departmentId}, null, true)
-          on conflict (tenant_id, zone_id)
+            (location_id, zone_id, department_id, service_mode, is_counter_default)
+          values (${node.locationId}, ${zoneId}, ${departmentId}, null, true)
+          on conflict (zone_id)
           do update set is_counter_default = true`);
       }
       const policy = await tx.execute<{ zone_id: string }>(sql`
@@ -52,9 +52,9 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
       const menuId = menu.rows[0]!.catalogue_id;
       if (menuId !== null) {
         await tx.execute(sql`
-          insert into zone_menus (tenant_id, zone_id, menu_id, display_order)
-          values (${node.tenantId}, ${zoneId}, ${menuId}, 0)
-          on conflict (tenant_id, zone_id, menu_id) do nothing`);
+          insert into zone_menus (zone_id, menu_id, display_order)
+          values (${zoneId}, ${menuId}, 0)
+          on conflict (zone_id, menu_id) do nothing`);
         await tx.execute(sql`
           update zone_service_policies set default_menu_id = ${menuId}
           where zone_id = ${zoneId}

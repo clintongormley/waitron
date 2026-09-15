@@ -224,22 +224,22 @@ async function setupVenue(): Promise<{
       grossPrice: "1.50",
     });
     await tx.execute(sql`
-      insert into zone_menus (tenant_id, zone_id, menu_id, display_order)
-      select ${cfg.tenantId}, zone_id, ${cat.id}, 0
+      insert into zone_menus (zone_id, menu_id, display_order)
+      select zone_id, ${cat.id}, 0
       from zone_service_policies
-      where tenant_id = ${cfg.tenantId} and location_id = ${cfg.locationId}
+      where location_id = ${cfg.locationId}
         and is_counter_default`);
     await tx.execute(sql`
       update zone_service_policies set default_menu_id = ${cat.id}
-      where tenant_id = ${cfg.tenantId} and location_id = ${cfg.locationId}
+      where location_id = ${cfg.locationId}
         and is_counter_default`);
     await tx.execute(sql`
-      insert into preparation_routes (tenant_id, location_id, category_id, station_id)
+      insert into preparation_routes (location_id, category_id, station_id)
       values
-        (${cfg.tenantId}, ${cfg.locationId}, ${comida.id},
+        (${cfg.locationId}, ${comida.id},
           (select id from kitchen_stations
            where tenant_id = ${cfg.tenantId} and location_id = ${cfg.locationId} and is_default)),
-        (${cfg.tenantId}, ${cfg.locationId}, ${bebidas.id},
+        (${cfg.locationId}, ${bebidas.id},
           (select id from kitchen_stations
            where tenant_id = ${cfg.tenantId} and location_id = ${cfg.locationId} and is_default))`);
     // A staff person with a KNOWN PIN ("5555"), inserted on the app role (which holds INSERT on
@@ -2010,7 +2010,7 @@ describe("handheld sales and device capability gates", () => {
     );
     await suite.admin.execute(sql`
       update departments set default_service_mode = 'invoice_first'
-      where tenant_id = ${cfg.tenantId} and location_id = ${cfg.locationId}`);
+      where location_id = ${cfg.locationId}`);
     const modeCfg: TillConfig = { ...cfg, orderFlow: "invoice_first" };
     const each = available.find((p) => p.pricingUnit === "each")!;
     const app = new Hono();

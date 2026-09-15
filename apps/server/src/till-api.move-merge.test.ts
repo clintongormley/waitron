@@ -306,17 +306,17 @@ describe("POST /api/tabs/:id/{move,join,merge}", () => {
       const fromTab = await openTab(tx, d.cfg, { tableId: from.id });
       const department = await tx.execute<{ id: string }>(sql`
           insert into departments
-            (tenant_id, location_id, name, trading_name, default_service_mode)
-          values (${d.cfg.tenantId}, ${d.cfg.locationId}, 'Restaurant', 'Restaurant', 'table_tab')
+            (location_id, name, trading_name, default_service_mode)
+          values (${d.cfg.locationId}, 'Restaurant', 'Restaurant', 'table_tab')
           returning id`);
       const zone = await tx.execute<{ id: string }>(sql`
           insert into floor_zones (tenant_id, location_id, name)
           values (${d.cfg.tenantId}, ${d.cfg.locationId}, 'Dining room') returning id`);
       await tx.execute(sql`
           insert into order_service_contexts
-            (tenant_id, working_order_id, location_id, zone_id, department_id, service_mode)
+            (working_order_id, location_id, zone_id, department_id, service_mode)
           values (
-            ${d.cfg.tenantId}, ${intoTab.tabId}, ${d.cfg.locationId}, ${zone.rows[0]!.id},
+            ${intoTab.tabId}, ${d.cfg.locationId}, ${zone.rows[0]!.id},
             ${department.rows[0]!.id}, 'table_tab'
           )`);
       return { intoTabId: intoTab.tabId, fromTabId: fromTab.tabId };

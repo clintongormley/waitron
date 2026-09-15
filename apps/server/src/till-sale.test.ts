@@ -182,7 +182,7 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
     await assignCatalogueToLocation(tx, venue.locationId, cat.id);
     const zone = await tx.execute<{ id: string }>(sql`
       select zone_id as id from zone_service_policies
-      where tenant_id = ${cfg.tenantId} and location_id = ${cfg.locationId}
+      where location_id = ${cfg.locationId}
         and is_counter_default`);
     const section = await createMenuSection(tx, cfg.tenantId, {
       menuId: cat.id,
@@ -230,14 +230,14 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
       variantIds = { double: variants[0]!.id, unavailable: variants[1]!.id };
     }
     await tx.execute(sql`
-      insert into zone_menus (tenant_id, zone_id, menu_id)
-      values (${cfg.tenantId}, ${zone.rows[0]!.id}, ${cat.id})`);
+      insert into zone_menus (zone_id, menu_id)
+      values (${zone.rows[0]!.id}, ${cat.id})`);
     await tx.execute(sql`
       update zone_service_policies set default_menu_id = ${cat.id}
-      where tenant_id = ${cfg.tenantId} and zone_id = ${zone.rows[0]!.id}`);
+      where zone_id = ${zone.rows[0]!.id}`);
     await tx.execute(sql`
-      insert into preparation_routes (tenant_id, location_id, category_id, station_id)
-      values (${cfg.tenantId}, ${cfg.locationId}, ${bebidas.id},
+      insert into preparation_routes (location_id, category_id, station_id)
+      values (${cfg.locationId}, ${bebidas.id},
         (select id from kitchen_stations
          where tenant_id = ${cfg.tenantId} and location_id = ${cfg.locationId} and is_default))`);
     return {
@@ -465,7 +465,7 @@ describe("recordTillSale", () => {
       from order_service_contexts o
       join working_order_lines w on w.working_order_id = o.working_order_id
       join working_line_contexts l on l.working_order_line_id = w.id
-      where o.tenant_id = ${cfg.tenantId}`);
+      where o.location_id = ${cfg.locationId}`);
     expect(snapshots.rows).toEqual([
       {
         zone_id: zoneId,

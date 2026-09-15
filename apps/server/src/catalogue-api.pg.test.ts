@@ -197,13 +197,13 @@ describe("category dependants and bulk add over real Postgres", () => {
       insert into kitchen_stations (tenant_id, location_id, name)
       values (${v.tenantId}, ${v.locationId}, 'Plancha') returning id`);
     const routed = await suite.admin.execute<{ id: string }>(sql`
-      insert into preparation_routes (tenant_id, location_id, zone_id, category_id, station_id)
-      values (${v.tenantId}, ${v.locationId}, ${zone.rows[0]!.id}, ${categoryId}, ${station.rows[0]!.id})
+      insert into preparation_routes (location_id, zone_id, category_id, station_id)
+      values (${v.locationId}, ${zone.rows[0]!.id}, ${categoryId}, ${station.rows[0]!.id})
       returning id`);
     // `no_preparation` routes report a null station — the read's `case` arm.
     const direct = await suite.admin.execute<{ id: string }>(sql`
-      insert into preparation_routes (tenant_id, location_id, category_id, no_preparation)
-      values (${v.tenantId}, ${v.locationId}, ${categoryId}, true) returning id`);
+      insert into preparation_routes (location_id, category_id, no_preparation)
+      values (${v.locationId}, ${categoryId}, true) returning id`);
 
     const res = await send(
       app,
@@ -233,7 +233,7 @@ describe("category dependants and bulk add over real Postgres", () => {
         .status,
     ).toBe(204);
     const left = await suite.admin.execute(
-      sql`select 1 from preparation_routes where tenant_id = ${v.tenantId} and category_id = ${categoryId}`,
+      sql`select 1 from preparation_routes where category_id = ${categoryId}`,
     );
     expect(left.rows).toHaveLength(0);
   });

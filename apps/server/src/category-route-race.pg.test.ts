@@ -60,8 +60,8 @@ it("waits for a route attachment, then cascades the route away with the category
       .rows[0]!.pid;
     const adding = app(attach, tenantId, async (tx) => {
       const route = await tx.execute<{ id: string }>(sql`
-        insert into preparation_routes (tenant_id, location_id, category_id, no_preparation)
-        values (${tenantId}, ${locationId}, ${category.id}, true) returning id
+        insert into preparation_routes (location_id, category_id, no_preparation)
+        values (${locationId}, ${category.id}, true) returning id
       `);
       ready();
       await wait;
@@ -83,7 +83,7 @@ it("waits for a route attachment, then cascades the route away with the category
     expect(deletion.status).toBe("fulfilled");
     const routes = await suite.admin.execute<{ id: string }>(sql`
       select id from preparation_routes
-      where tenant_id = ${tenantId} and category_id = ${category.id}
+      where category_id = ${category.id}
     `);
     expect(routes.rows).toEqual([]);
     const remaining = await suite.admin.execute<{ id: string }>(sql`

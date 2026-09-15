@@ -142,7 +142,9 @@ describe("provisionVenue", () => {
     const defaults = await db.execute<{ menus: number; zone_menus: number }>(sql`
       select
         (select count(*)::int from catalogues where tenant_id = ${result.tenantId}) as menus,
-        (select count(*)::int from zone_menus where tenant_id = ${result.tenantId}) as zone_menus`);
+        (select count(*)::int from zone_menus zm
+          join zone_service_policies p on p.zone_id = zm.zone_id
+          where p.location_id = ${result.locationId}) as zone_menus`);
     expect(defaults.rows[0]).toEqual({ menus: 1, zone_menus: 1 });
 
     // The box is now stamped for the requested environment.

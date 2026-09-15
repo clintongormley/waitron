@@ -93,7 +93,6 @@ export async function replaceDepartmentHours(
   if (hours.length > 0) {
     await tx.insert(departmentHours).values(
       hours.map((interval) => ({
-        tenantId: cfg.tenantId,
         departmentId,
         weekday: interval.weekday,
         opensAt: interval.opensAt,
@@ -160,7 +159,6 @@ export async function createDepartment(
   const [row] = await tx
     .insert(departments)
     .values({
-      tenantId: cfg.tenantId,
       locationId: cfg.locationId,
       name: input.name,
       tradingName: input.tradingName ?? input.name,
@@ -354,14 +352,13 @@ export async function configureZone(
   await tx
     .insert(zoneServicePolicies)
     .values({
-      tenantId: cfg.tenantId,
       locationId: cfg.locationId,
       zoneId: input.zoneId,
       departmentId: input.departmentId,
       serviceMode: input.serviceMode ?? null,
     })
     .onConflictDoUpdate({
-      target: [zoneServicePolicies.tenantId, zoneServicePolicies.zoneId],
+      target: [zoneServicePolicies.zoneId],
       set: { departmentId: input.departmentId, serviceMode: input.serviceMode ?? null },
     });
 }
@@ -391,9 +388,9 @@ export async function allowMenuInZone(
   if (policy === undefined) throw new AppError("service_zone.not_found", { zoneId });
   await tx
     .insert(zoneMenus)
-    .values({ tenantId: cfg.tenantId, zoneId, menuId, displayOrder: options.displayOrder ?? 0 })
+    .values({ zoneId, menuId, displayOrder: options.displayOrder ?? 0 })
     .onConflictDoUpdate({
-      target: [zoneMenus.tenantId, zoneMenus.zoneId, zoneMenus.menuId],
+      target: [zoneMenus.zoneId, zoneMenus.menuId],
       set: { displayOrder: options.displayOrder ?? 0 },
     });
   if (options.makeDefault === true) {
@@ -545,9 +542,9 @@ export async function setDeviceDefaultZone(
   await resolveZoneContext(tx, cfg, zoneId);
   await tx
     .insert(deviceZoneDefaults)
-    .values({ tenantId: cfg.tenantId, deviceId, zoneId })
+    .values({ deviceId, zoneId })
     .onConflictDoUpdate({
-      target: [deviceZoneDefaults.tenantId, deviceZoneDefaults.deviceId],
+      target: [deviceZoneDefaults.deviceId],
       set: { zoneId },
     });
 }
@@ -576,7 +573,6 @@ export async function recordOrderServiceContext(
 ): Promise<void> {
   const context = await resolveZoneContext(tx, cfg, zoneId);
   await tx.insert(orderServiceContexts).values({
-    tenantId: cfg.tenantId,
     workingOrderId,
     locationId: cfg.locationId,
     zoneId: context.zoneId,
@@ -721,7 +717,6 @@ export async function recordWorkingLineContexts(
     lines.map((line) => {
       const offer = byMenuItem.get(line.menuItemId)!;
       return {
-        tenantId: cfg.tenantId,
         workingOrderLineId: line.workingOrderLineId,
         menuItemId: offer.id,
         menuId: offer.menuId,
@@ -753,7 +748,6 @@ export async function copyOrderServiceContext(
   const context = await findOrderServiceContext(tx, cfg, fromWorkingOrderId);
   if (context === null) return;
   await tx.insert(orderServiceContexts).values({
-    tenantId: cfg.tenantId,
     workingOrderId: toWorkingOrderId,
     locationId: cfg.locationId,
     zoneId: context.zoneId,
@@ -844,7 +838,6 @@ export async function createPreparationRoute(
     const [row] = await tx
       .insert(preparationRoutes)
       .values({
-        tenantId: cfg.tenantId,
         locationId: cfg.locationId,
         zoneId: input.zoneId ?? null,
         categoryId: input.categoryId ?? null,

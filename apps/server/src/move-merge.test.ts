@@ -173,17 +173,17 @@ async function configureTableZone(
   const zoneId = randomUUID();
   await db.execute(sql`
     insert into departments
-      (id, tenant_id, location_id, name, trading_name, default_service_mode)
+      (id, location_id, name, trading_name, default_service_mode)
     values
-      (${departmentId}, ${cfg.tenantId}, ${cfg.locationId}, ${name}, ${name}, ${serviceMode})`);
+      (${departmentId}, ${cfg.locationId}, ${name}, ${name}, ${serviceMode})`);
   await db.execute(sql`
     insert into floor_zones (id, tenant_id, location_id, name)
     values (${zoneId}, ${cfg.tenantId}, ${cfg.locationId}, ${name})`);
   await db.execute(sql`
     insert into zone_service_policies
-      (tenant_id, location_id, zone_id, department_id, service_mode)
+      (location_id, zone_id, department_id, service_mode)
     values
-      (${cfg.tenantId}, ${cfg.locationId}, ${zoneId}, ${departmentId}, ${serviceMode})`);
+      (${cfg.locationId}, ${zoneId}, ${departmentId}, ${serviceMode})`);
   await db.execute(sql`update dining_tables set zone_id = ${zoneId} where id = ${tableId}`);
   return { zoneId, departmentId };
 }
@@ -271,8 +271,8 @@ describe("moveTabLines", () => {
     const to = await openTabOn(cfg, t2, []);
     const department = await db.execute<{ id: string }>(sql`
       insert into departments
-        (tenant_id, location_id, name, trading_name, default_service_mode)
-      values (${cfg.tenantId}, ${cfg.locationId}, 'Flow test', 'Flow test', 'prepay')
+        (location_id, name, trading_name, default_service_mode)
+      values (${cfg.locationId}, 'Flow test', 'Flow test', 'prepay')
       returning id`);
     const zones = await db.execute<{ id: string; name: string }>(sql`
       insert into floor_zones (tenant_id, location_id, name)
@@ -284,10 +284,10 @@ describe("moveTabLines", () => {
     const tabZone = zones.rows.find((zone) => zone.name === "Flow tab")!;
     await db.execute(sql`
       insert into order_service_contexts
-        (tenant_id, working_order_id, location_id, zone_id, department_id, service_mode)
+        (working_order_id, location_id, zone_id, department_id, service_mode)
       values
-        (${cfg.tenantId}, ${from}, ${cfg.locationId}, ${prepayZone.id}, ${department.rows[0]!.id}, 'prepay'),
-        (${cfg.tenantId}, ${to}, ${cfg.locationId}, ${tabZone.id}, ${department.rows[0]!.id}, 'table_tab')`);
+        (${from}, ${cfg.locationId}, ${prepayZone.id}, ${department.rows[0]!.id}, 'prepay'),
+        (${to}, ${cfg.locationId}, ${tabZone.id}, ${department.rows[0]!.id}, 'table_tab')`);
 
     await expect(asApp(cfg, (tx) => moveTabLines(tx, cfg, from, to))).rejects.toMatchObject({
       code: "service_zone.mode_incompatible",
@@ -342,9 +342,9 @@ describe("moveTab", () => {
     const destination = await configureTableZone(cfg, dst, "Upstairs", "prepay");
     await db.execute(sql`
       insert into order_service_contexts
-        (tenant_id, working_order_id, location_id, zone_id, department_id, service_mode)
+        (working_order_id, location_id, zone_id, department_id, service_mode)
       values
-        (${cfg.tenantId}, ${tabId}, ${cfg.locationId}, ${source.zoneId}, ${source.departmentId}, 'table_tab')`);
+        (${tabId}, ${cfg.locationId}, ${source.zoneId}, ${source.departmentId}, 'table_tab')`);
 
     const before = await linesOf(tabId);
     await asApp(cfg, (tx) => moveTab(tx, cfg, tabId, dst));
@@ -456,9 +456,9 @@ describe("joinTable", () => {
     const destination = await configureTableZone(cfg, t2, "Join upstairs", "table_tab");
     await db.execute(sql`
       insert into order_service_contexts
-        (tenant_id, working_order_id, location_id, zone_id, department_id, service_mode)
+        (working_order_id, location_id, zone_id, department_id, service_mode)
       values
-        (${cfg.tenantId}, ${tabId}, ${cfg.locationId}, ${source.zoneId}, ${source.departmentId}, 'table_tab')`);
+        (${tabId}, ${cfg.locationId}, ${source.zoneId}, ${source.departmentId}, 'table_tab')`);
 
     await expect(asApp(cfg, (tx) => joinTable(tx, cfg, tabId, t2))).rejects.toMatchObject({
       code: "service_zone.join_mismatch",

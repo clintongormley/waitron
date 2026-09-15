@@ -42,7 +42,7 @@ it("deleting a category removes its preparation routes and the category", async 
     );
     await expect(deleteCategory(tx, tenantId, category.id)).resolves.toBeUndefined();
     const routes = await tx.execute(
-      sql`select 1 from preparation_routes where tenant_id = ${tenantId} and category_id = ${category.id}`,
+      sql`select 1 from preparation_routes where category_id = ${category.id}`,
     );
     expect(routes.rows).toHaveLength(0);
     await expect(readCategory(tx, tenantId, category.id)).rejects.toMatchObject({

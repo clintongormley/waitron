@@ -862,23 +862,23 @@ describe("listTablesWithState (occupancy)", () => {
     await asApp(cfg, async (tx) => {
       const department = await tx.execute<{ id: string }>(sql`
         insert into departments
-          (tenant_id, location_id, name, trading_name, default_service_mode)
-        values (${cfg.tenantId}, ${cfg.locationId}, 'Restaurant', 'Restaurant', 'table_tab')
+          (location_id, name, trading_name, default_service_mode)
+        values (${cfg.locationId}, 'Restaurant', 'Restaurant', 'table_tab')
         returning id`);
       await tx.execute(sql`
         insert into zone_service_policies
-          (tenant_id, location_id, zone_id, department_id, service_mode, default_menu_id)
+          (location_id, zone_id, department_id, service_mode, default_menu_id)
         values (
-          ${cfg.tenantId}, ${cfg.locationId}, ${zone.id}, ${department.rows[0]!.id},
+          ${cfg.locationId}, ${zone.id}, ${department.rows[0]!.id},
           'table_tab', ${menuId}
         )`);
       await tx.execute(sql`
-        insert into zone_menus (tenant_id, zone_id, menu_id)
-        values (${cfg.tenantId}, ${zone.id}, ${menuId})`);
+        insert into zone_menus (zone_id, menu_id)
+        values (${zone.id}, ${menuId})`);
       await tx.execute(sql`
         insert into preparation_routes
-          (tenant_id, location_id, category_id, station_id, no_preparation)
-        values (${cfg.tenantId}, ${cfg.locationId}, ${categoryId}, null, true)`);
+          (location_id, category_id, station_id, no_preparation)
+        values (${cfg.locationId}, ${categoryId}, null, true)`);
     });
     // A SECOND table with no tab — exercises the LEFT-join-reads-0 branch for a free table.
     const freeTable = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "T2" }));

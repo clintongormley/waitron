@@ -133,16 +133,16 @@ describe("seedDemoRestaurant", () => {
                p.is_counter_default,
                array_agg(c.name order by zm.display_order) as menus
         from zone_service_policies p
-        join floor_zones z on z.tenant_id = p.tenant_id and z.id = p.zone_id
-        join departments d on d.tenant_id = p.tenant_id and d.id = p.department_id
-        join zone_menus zm on zm.tenant_id = p.tenant_id and zm.zone_id = p.zone_id
-        join catalogues c on c.tenant_id = zm.tenant_id and c.id = zm.menu_id
+        join floor_zones z on z.id = p.zone_id
+        join departments d on d.id = p.department_id
+        join zone_menus zm on zm.zone_id = p.zone_id
+        join catalogues c on c.id = zm.menu_id
         group by z.name, d.name, p.service_mode, d.default_service_mode, p.is_counter_default
         order by z.name`);
       const { rows: hoursRows } = await tx.execute<{ department_name: string; days: number }>(sql`
         select d.name as department_name, count(distinct h.weekday)::int as days
         from department_hours h
-        join departments d on d.tenant_id = h.tenant_id and d.id = h.department_id
+        join departments d on d.id = h.department_id
         group by d.name
         order by d.name`);
       const { rows: stationRows } = await tx.execute<{ name: string }>(sql`
@@ -164,9 +164,9 @@ describe("seedDemoRestaurant", () => {
       }>(sql`
         select z.name as zone_name, s.name as station_name
         from preparation_routes r
-        join categories c on c.tenant_id = r.tenant_id and c.id = r.category_id
-        join floor_zones z on z.tenant_id = r.tenant_id and z.id = r.zone_id
-        join kitchen_stations s on s.tenant_id = r.tenant_id and s.id = r.station_id
+        join categories c on c.id = r.category_id
+        join floor_zones z on z.id = r.zone_id
+        join kitchen_stations s on s.id = r.station_id
         where c.name->>'en' = 'Drinks'
         order by z.name`);
       return {

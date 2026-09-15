@@ -191,20 +191,20 @@ async function setupVenue(orderFlow: TillConfig["orderFlow"] = "prepay"): Promis
       });
       const department = await tx.execute<{ id: string }>(sql`
       insert into departments
-        (tenant_id, location_id, name, trading_name, default_service_mode)
-      values (${tenantId}, ${locationId}, 'Restaurant', 'Restaurant', ${orderFlow}) returning id`);
+        (location_id, name, trading_name, default_service_mode)
+      values (${locationId}, 'Restaurant', 'Restaurant', ${orderFlow}) returning id`);
       const zone = await tx.execute<{ id: string }>(sql`
       insert into floor_zones (tenant_id, location_id, name)
       values (${tenantId}, ${locationId}, 'Counter') returning id`);
       await tx.execute(sql`
       insert into zone_service_policies
-        (tenant_id, location_id, zone_id, department_id, default_menu_id, is_counter_default)
-      values (${tenantId}, ${locationId}, ${zone.rows[0]!.id}, ${department.rows[0]!.id}, ${cat.id}, true)`);
+        (location_id, zone_id, department_id, default_menu_id, is_counter_default)
+      values (${locationId}, ${zone.rows[0]!.id}, ${department.rows[0]!.id}, ${cat.id}, true)`);
       await tx.execute(sql`
-      insert into zone_menus (tenant_id, zone_id, menu_id, display_order)
+      insert into zone_menus (zone_id, menu_id, display_order)
       values
-        (${tenantId}, ${zone.rows[0]!.id}, ${cat.id}, 0),
-        (${tenantId}, ${zone.rows[0]!.id}, ${premium.id}, 1)`);
+        (${zone.rows[0]!.id}, ${cat.id}, 0),
+        (${zone.rows[0]!.id}, ${premium.id}, 1)`);
       return {
         cafeId: cafe.id,
         aguaId: agua.id,
@@ -802,7 +802,7 @@ describe("openTab service context", () => {
       await asAppUser(tx);
       await tx.execute(sql`
         update departments set default_service_mode = 'table_tab'
-        where tenant_id = ${cfg.tenantId} and location_id = ${cfg.locationId}`);
+        where location_id = ${cfg.locationId}`);
       const table = await tx.execute<{ id: string }>(sql`
         insert into dining_tables (tenant_id, location_id, label, zone_id)
         values (${cfg.tenantId}, ${cfg.locationId}, 'Offer table', ${zoneId}) returning id`);
@@ -828,12 +828,12 @@ describe("openTab service context", () => {
       const station = await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
       await tx.execute(sql`
         insert into preparation_routes
-          (tenant_id, location_id, zone_id, product_id, station_id)
-        values (${cfg.tenantId}, ${cfg.locationId}, ${zoneId},
+          (location_id, zone_id, product_id, station_id)
+        values (${cfg.locationId}, ${zoneId},
           (select product_id from menu_items where id = ${premiumCafeOfferId}), ${station.id})`);
       await tx.execute(sql`
         update departments set default_service_mode = 'table_tab'
-        where tenant_id = ${cfg.tenantId} and location_id = ${cfg.locationId}`);
+        where location_id = ${cfg.locationId}`);
       const table = await tx.execute<{ id: string }>(sql`
         insert into dining_tables (tenant_id, location_id, label, zone_id)
         values (${cfg.tenantId}, ${cfg.locationId}, 'Round table', ${zoneId}) returning id`);
@@ -856,21 +856,21 @@ describe("openTab service context", () => {
       await asAppUser(tx);
       const department = await tx.execute<{ id: string }>(sql`
         update departments set default_service_mode = 'table_tab'
-        where tenant_id = ${cfg.tenantId} and location_id = ${cfg.locationId}
+        where location_id = ${cfg.locationId}
         returning id`);
       const downstairsZone = await tx.execute<{ id: string }>(sql`
         insert into floor_zones (tenant_id, location_id, name)
         values (${cfg.tenantId}, ${cfg.locationId}, 'Downstairs') returning id`);
       await tx.execute(sql`
         insert into zone_service_policies
-          (tenant_id, location_id, zone_id, department_id, default_menu_id)
-        values (${cfg.tenantId}, ${cfg.locationId}, ${downstairsZone.rows[0]!.id},
+          (location_id, zone_id, department_id, default_menu_id)
+        values (${cfg.locationId}, ${downstairsZone.rows[0]!.id},
           ${department.rows[0]!.id}, ${catalogueId})`);
       await tx.execute(sql`
-        insert into zone_menus (tenant_id, zone_id, menu_id)
+        insert into zone_menus (zone_id, menu_id)
         values
-          (${cfg.tenantId}, ${downstairsZone.rows[0]!.id}, ${catalogueId}),
-          (${cfg.tenantId}, ${downstairsZone.rows[0]!.id},
+          (${downstairsZone.rows[0]!.id}, ${catalogueId}),
+          (${downstairsZone.rows[0]!.id},
             (select menu_id from menu_items where id = ${premiumCafeOfferId}))`);
       const upstairsBar = await createStation(tx, cfg, { name: "Upstairs bar" });
       const downstairsBar = await createStation(tx, cfg, { name: "Downstairs bar" });
@@ -878,10 +878,10 @@ describe("openTab service context", () => {
         select category_id from products where tenant_id = ${cfg.tenantId} and id = ${cafeId}`);
       await tx.execute(sql`
         insert into preparation_routes
-          (tenant_id, location_id, zone_id, category_id, station_id)
+          (location_id, zone_id, category_id, station_id)
         values
-          (${cfg.tenantId}, ${cfg.locationId}, ${zoneId}, ${product.rows[0]!.category_id}, ${upstairsBar.id}),
-          (${cfg.tenantId}, ${cfg.locationId}, ${downstairsZone.rows[0]!.id}, ${product.rows[0]!.category_id}, ${downstairsBar.id})`);
+          (${cfg.locationId}, ${zoneId}, ${product.rows[0]!.category_id}, ${upstairsBar.id}),
+          (${cfg.locationId}, ${downstairsZone.rows[0]!.id}, ${product.rows[0]!.category_id}, ${downstairsBar.id})`);
 
       const upstairsTable = await tx.execute<{ id: string }>(sql`
         insert into dining_tables (tenant_id, location_id, label, zone_id)
@@ -918,11 +918,11 @@ describe("openTab service context", () => {
       await asAppUser(tx);
       await tx.execute(sql`
         update departments set default_service_mode = 'table_tab'
-        where tenant_id = ${cfg.tenantId} and location_id = ${cfg.locationId}`);
+        where location_id = ${cfg.locationId}`);
       await tx.execute(sql`
         insert into preparation_routes
-          (tenant_id, location_id, zone_id, product_id, no_preparation)
-        values (${cfg.tenantId}, ${cfg.locationId}, ${zoneId}, ${cafeId}, true)`);
+          (location_id, zone_id, product_id, no_preparation)
+        values (${cfg.locationId}, ${zoneId}, ${cafeId}, true)`);
       const table = await tx.execute<{ id: string }>(sql`
         insert into dining_tables (tenant_id, location_id, label, zone_id)
         values (${cfg.tenantId}, ${cfg.locationId}, 'Deli shelf', ${zoneId}) returning id`);
@@ -2138,17 +2138,17 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
       await asAppUser(tx);
       await tx.execute(sql`
         update departments set default_service_mode = 'table_tab'
-        where tenant_id = ${cfg.tenantId} and location_id = ${cfg.locationId}`);
+        where location_id = ${cfg.locationId}`);
       const bar = await createStation(tx, cfg, { name: "Bar", isDefault: true });
       const kitchen = await createStation(tx, cfg, { name: "Kitchen" });
       const product = await tx.execute<{ category_id: string }>(sql`
         select category_id from products where tenant_id = ${cfg.tenantId} and id = ${cafeId}`);
       await tx.execute(sql`
-        insert into preparation_routes (tenant_id, location_id, zone_id, category_id, station_id)
-        values (${cfg.tenantId}, ${cfg.locationId}, ${zoneId}, ${product.rows[0]!.category_id}, ${bar.id})`);
+        insert into preparation_routes (location_id, zone_id, category_id, station_id)
+        values (${cfg.locationId}, ${zoneId}, ${product.rows[0]!.category_id}, ${bar.id})`);
       await tx.execute(sql`
-        insert into preparation_routes (tenant_id, location_id, zone_id, product_id, station_id)
-        values (${cfg.tenantId}, ${cfg.locationId}, ${zoneId}, ${aguaId}, ${kitchen.id})`);
+        insert into preparation_routes (location_id, zone_id, product_id, station_id)
+        values (${cfg.locationId}, ${zoneId}, ${aguaId}, ${kitchen.id})`);
       const section = await createMenuSection(tx, cfg.tenantId, {
         menuId: catalogueId,
         name: { [LOCALE]: "Agua" },

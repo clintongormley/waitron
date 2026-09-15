@@ -379,24 +379,23 @@ async function placeTable(shop: Shop): Promise<void> {
     const department = await tx.execute<{ department_id: string }>(sql`
       select department_id
       from zone_service_policies
-      where tenant_id = ${shop.cfg.tenantId}
-        and location_id = ${shop.cfg.locationId}
+      where location_id = ${shop.cfg.locationId}
       limit 1`);
     await tx.execute(sql`
       insert into zone_service_policies
-        (tenant_id, location_id, zone_id, department_id, service_mode, default_menu_id)
+        (location_id, zone_id, department_id, service_mode, default_menu_id)
       values (
-        ${shop.cfg.tenantId}, ${shop.cfg.locationId}, ${zone.id},
+        ${shop.cfg.locationId}, ${zone.id},
         ${department.rows[0]!.department_id}, 'table_tab', ${shop.menuId}
       )`);
     await tx.execute(sql`
-      insert into zone_menus (tenant_id, zone_id, menu_id)
-      values (${shop.cfg.tenantId}, ${zone.id}, ${shop.menuId})`);
+      insert into zone_menus (zone_id, menu_id)
+      values (${zone.id}, ${shop.menuId})`);
     await tx.execute(sql`
       insert into preparation_routes
-        (tenant_id, location_id, category_id, station_id, no_preparation)
+        (location_id, category_id, station_id, no_preparation)
       values (
-        ${shop.cfg.tenantId}, ${shop.cfg.locationId}, ${shop.categoryId}, null, true
+        ${shop.cfg.locationId}, ${shop.categoryId}, null, true
       )`);
     await setTablePlacement(tx, shop.cfg, shop.tableId, {
       zoneId: zone.id,
