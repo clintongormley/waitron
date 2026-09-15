@@ -84,11 +84,11 @@ brainstorm → spec → plan → PR; fiscal-adjacent ones take owner sign-off at
 2. **Somewhere for things that went wrong to show up** (A5) — designed 2026-09-14; the `till.configure`
    split it depended on has LANDED (#363). Branch 1, the alerts framework and recorded incidents, has
    LANDED (#368): it shows recorded incidents such as a rejected filing or a payment drift in the
-   dashboard's bell and Alerts screen. Branch 2, the ongoing
-   checks, is BUILT on branch `feat/dashboard-alerts-ongoing`, awaiting merge: a stalled print agent, a
-   fiscal outbox that has stopped, a missing tax certificate, waiting print jobs, a low reader battery
-   and a failed or stale backup now surface too. Items that wait on this surface point back to A5
-   (A6's low reader battery, B2's "backups off or stale" reminder).
+   dashboard's bell and Alerts screen. Branch 2, the ongoing checks, has LANDED (#371): a silent print
+   agent, a fiscal outbox that has stopped or fallen behind, a missing tax certificate, print jobs
+   stuck at a printer, a low reader battery, and backups that are off, failing or stale now surface
+   too. What A5 still lacks is the pairing alert ("devices tried to join") and a standby that has
+   fallen behind; see A5.
 
 3. **Backups that leave the box** (B2) — S3 first, then Drive. With the mirror deferred, a bucket is a
    standalone primary's only off-box copy. Only `LocalFsBackend` exists.
@@ -907,8 +907,11 @@ they guard — **LANDED #363** (2026-09-14), adds `layout.configure` / `venue.co
 `system.manage` with no access change, and the alerts work uses `system.manage` for backup alerts; (1)
 the alerts framework and recorded incidents — **LANDED #368**
 (2026-09-15): the bell, its panel, the Alerts screen with Open and Handled tabs, the
-pop-up for new alerts, and wording for every recorded incident code; (2) the ongoing checks — BUILT on
-branch `feat/dashboard-alerts-ongoing`, awaiting merge.
+pop-up for new alerts, and wording for every recorded incident code; (2) the ongoing checks — **LANDED
+#371** (2026-09-15): backups, fiscal submission and the awaiting-certificate pause, print agents and
+printers, and reader battery. The printing codes shipped as `agent.silent` and `printer.jobs_waiting`,
+not the spec's provisional `printing.*` names, to match the printing package's existing code families;
+codes are never renamed once shipped.
 The questions below are answered there; the notes stay as the origin of the item.
 
 What branch 1 surfaced, each checked by a whole-repo grep on 2026-09-14:
@@ -945,9 +948,9 @@ Two halves, one branch each (owner decision 2026-09-12).
   per-person inbox, `state` versus `local`, push versus poll. (Branch 1 settles these: a pop-up
   toast; handled state shared by the whole venue in the `incidents` table; incident changes pushed to
   the dashboard through the `incidents` change source, plus a one-minute refresh for the ongoing
-  checks. The pairing consumer is not built; the ongoing-check consumers — a stalled agent, a stopped
-  fiscal outbox, a missing certificate, waiting print jobs, a low reader battery, and a failed or
-  stale backup — are built on `feat/dashboard-alerts-ongoing`, awaiting merge.)
+  checks. The ongoing-check consumers — a silent agent, a stopped or lagging fiscal outbox, a missing
+  certificate, print jobs stuck at a printer, a low reader battery, and backups off, failing or stale
+  — LANDED #371. Still not built: the pairing consumer, and a standby that has fallen behind.)
 
 ### A6. Payments
 
@@ -961,7 +964,7 @@ Two halves, one branch each (owner decision 2026-09-12).
   failing case first (the cradle stays silent), with a standalone payment as the control. Also unread:
   `GET /v1.1/receipts/{transaction_id}`, richer than the four fields the adapter keeps.
 - **What #329 left open:** adding or adopting a reader does not shut out a provider disconnect at the
-  same moment (an accepted race); Stripe's reader list is one page; low battery waits on A5; status
+  same moment (an accepted race); Stripe's reader list is one page; low battery now alerts on the dashboard (A5, #371); status
   never refreshes by itself, and polling must go through the passive-session controller.
 - **The SumUp reconciler** — settlement-report audit and orphan self-heal. `resolvePending` is the
   interim backstop; without an affiliate key a create whose response is lost resolves `failed` and
@@ -1227,8 +1230,9 @@ walked was not recorded here. `deploy/README.md` keeps the advice for whoever in
 - **Whole-state-volume capture** (its own §5-reviewed slice): capture the whole state directory EXCEPT
   an explicit exclusion set, with a completeness guard that fails when a new top-level entry is
   neither captured nor excluded — the curated list went stale on `modules.json` already.
-- **The "backups off or stale" reminder** belongs in A5's notification surface; when a nightly report
-  job exists, the backup slot should fire after it.
+- **The "backups off or stale" reminder** — LANDED as dashboard alerts (#371), which also flag a
+  destination whose last attempt failed. Still open: when a nightly report job exists, the backup slot
+  should fire after it.
 - **The cold-restore operator surface** (promote Slice 4): connection rebinding, advertised origin,
   an authenticated entry.
 - **Reconsider the backup container against off-the-shelf tools** (a brainstorm): `WBA1` plus
