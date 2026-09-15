@@ -24,10 +24,12 @@ const photo = new Uint8Array([0xff, 0xd8, 0xff, 1, 2, 3]);
 async function fixture(role = "manager") {
   const id = await seedTenant(suite.db);
   const person = await suite.db.execute<{ id: string }>(
-    sql`insert into persons (tenant_id, display_name, pin_hash, role) values (${id},'Manager',${hashPin("1234")},${role}) returning id`,
+    // A fresh display name per call: live display names are unique across the database, and this
+    // fixture runs twice in one test (a staff caller, then a manager).
+    sql`insert into persons (display_name, pin_hash, role) values (${`Manager ${crypto.randomUUID()}`},${hashPin("1234")},${role}) returning id`,
   );
   const session = await suite.db.transaction((tx) =>
-    startManagementSession(tx, { tenantId: id, personId: person.rows[0]!.id }),
+    startManagementSession(tx, { personId: person.rows[0]!.id }),
   );
   const app = new Hono();
   MEDIA_ROUTES.mount(

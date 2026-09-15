@@ -42,7 +42,7 @@ const suite = usePgliteDb({
 
 /** A fresh person per test, so each test's clock state is isolated in the shared append-only table. */
 async function freshPerson(name: string): Promise<string> {
-  return seedPerson(suite.db, tenantId, name);
+  return seedPerson(suite.db, name);
 }
 
 function event(personId: string, at: string): ClockEventInput {

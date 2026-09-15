@@ -49,8 +49,8 @@ let nodeId: string;
 // its owner (chain.concurrency.test.ts's reasoning), so each test mints new rows in a new tenant.
 beforeEach(async () => {
   tenantId = await seedTenant(suite.admin);
-  personId = await seedPerson(suite.admin, tenantId, "Ana");
-  otherPersonId = await seedPerson(suite.admin, tenantId, "Ben");
+  personId = await seedPerson(suite.admin, "Ana");
+  otherPersonId = await seedPerson(suite.admin, "Ben");
   locationId = await seedLocation(suite.admin, tenantId);
   nodeId = await seedNode(suite.admin, brandTenantId(tenantId), brandLocationId(locationId));
 });

@@ -39,7 +39,7 @@ async function makePending(personId: string): Promise<void> {
 
 describe("management account actions", () => {
   it("does not mint a hidden invitation code even when a code key is supplied", async () => {
-    const personId = await seedManager(suite.db, tenantId, { email: "no-hidden-code@x.com" });
+    const personId = await seedManager(suite.db, { email: "no-hidden-code@x.com" });
     await makePending(personId);
     const issued = await run((tx) =>
       issueAccountAction(tx, {
@@ -59,7 +59,7 @@ describe("management account actions", () => {
   });
 
   it("inspects an invitation proof without consuming it, then completes the same action", async () => {
-    const personId = await seedManager(suite.db, tenantId, { email: "inspect@x.com" });
+    const personId = await seedManager(suite.db, { email: "inspect@x.com" });
     await makePending(personId);
     const issued = await run((tx) =>
       issueAccountAction(tx, { tenantId, personId, purpose: "invitation" }),
@@ -84,7 +84,7 @@ describe("management account actions", () => {
 
   it("accepts the email-change code once and counts wrong guesses", async () => {
     const codeKey = Buffer.alloc(32, 7);
-    const personId = await seedManager(suite.db, tenantId, { email: "code@x.com" });
+    const personId = await seedManager(suite.db, { email: "code@x.com" });
     await suite.db.execute(
       sql`update persons set pending_email = 'changed@x.com' where id = ${personId}`,
     );
@@ -137,7 +137,7 @@ describe("management account actions", () => {
   });
 
   it("requires an invitation PIN and activates a pending account only after complete setup", async () => {
-    const personId = await seedManager(suite.db, tenantId, { email: "pending@x.com" });
+    const personId = await seedManager(suite.db, { email: "pending@x.com" });
     await makePending(personId);
     const issued = await run((tx) =>
       issueAccountAction(tx, { tenantId, personId, purpose: "invitation" }),
@@ -172,12 +172,11 @@ describe("management account actions", () => {
   });
 
   it("stores only a token hash and consumes an invitation into a fresh session", async () => {
-    const personId = await seedManager(suite.db, tenantId, {
+    const personId = await seedManager(suite.db, {
       email: "new-person@x.com",
     });
     const oldSession = await run((tx) =>
       loginManager(tx, {
-        tenantId,
         email: "new-person@x.com",
         password: "correct horse",
       }),
@@ -208,7 +207,6 @@ describe("management account actions", () => {
     await expect(
       run((tx) =>
         loginManager(tx, {
-          tenantId,
           email: "new-person@x.com",
           password: "a new secure password",
         }),
@@ -264,7 +262,7 @@ describe("management account actions", () => {
   });
 
   it("invalidates an earlier action of the same purpose", async () => {
-    const personId = await seedManager(suite.db, tenantId, { email: "resend@x.com" });
+    const personId = await seedManager(suite.db, { email: "resend@x.com" });
     await makePending(personId);
     const first = await run((tx) =>
       issueAccountAction(tx, { tenantId, personId, purpose: "invitation" }),
@@ -299,7 +297,7 @@ describe("management account actions", () => {
   });
 
   it("finds password-reset accounts by normalized email without revealing unknown addresses", async () => {
-    const personId = await seedManager(suite.db, tenantId, { email: "known@x.com" });
+    const personId = await seedManager(suite.db, { email: "known@x.com" });
     await suite.db.execute(sql`update persons set email = 'Known@X.com' where id = ${personId}`);
     await expect(
       run((tx) => requestAccountRecoveryAction(tx, { tenantId, email: "  KNOWN@X.COM  " })),
@@ -310,7 +308,7 @@ describe("management account actions", () => {
   });
 
   it("uses the recovery entry to issue a setup link for a pending account", async () => {
-    const personId = await seedManager(suite.db, tenantId, { email: "recovery-pending@x.com" });
+    const personId = await seedManager(suite.db, { email: "recovery-pending@x.com" });
     await makePending(personId);
     const now = new Date("2026-09-11T12:00:00Z");
     const issued = await run((tx) =>
@@ -345,7 +343,7 @@ describe("management account actions", () => {
   });
 
   it("does not issue recovery actions for suspended or malformed accounts", async () => {
-    const personId = await seedManager(suite.db, tenantId, { email: "recovery-suspended@x.com" });
+    const personId = await seedManager(suite.db, { email: "recovery-suspended@x.com" });
     await suite.db.execute(sql`update persons set status = 'suspended' where id = ${personId}`);
     for (const email of ["recovery-suspended@x.com", "malformed"]) {
       await expect(
@@ -355,7 +353,7 @@ describe("management account actions", () => {
   });
 
   it("changes the password without opening a session that bypasses an enrolled authenticator", async () => {
-    const personId = await seedManager(suite.db, tenantId, { email: "mfa-reset@x.com" });
+    const personId = await seedManager(suite.db, { email: "mfa-reset@x.com" });
     await suite.db.execute(
       sql`update persons set totp_secret = 'sealed-placeholder' where id = ${personId}`,
     );
@@ -379,7 +377,7 @@ describe("management account actions", () => {
   });
 
   it("refuses an expired token", async () => {
-    const personId = await seedManager(suite.db, tenantId, { email: "expired@x.com" });
+    const personId = await seedManager(suite.db, { email: "expired@x.com" });
     const now = new Date("2026-09-08T12:00:00.000Z");
     const issued = await run((tx) =>
       issueAccountAction(tx, {
@@ -406,7 +404,7 @@ describe("management account actions", () => {
   });
 
   it("refuses a valid token presented for the wrong purpose without consuming it", async () => {
-    const personId = await seedManager(suite.db, tenantId, { email: "purpose@x.com" });
+    const personId = await seedManager(suite.db, { email: "purpose@x.com" });
     await makePending(personId);
     const issued = await run((tx) =>
       issueAccountAction(tx, { tenantId, personId, purpose: "invitation" }),

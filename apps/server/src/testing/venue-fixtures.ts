@@ -137,11 +137,11 @@ export async function setupVenue(db: Database): Promise<Venue> {
     await assignCatalogueToLocation(tx, venue.locationId, cat.id);
 
     const mgr = await tx.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, role)
-      values (${cfg.tenantId}, 'The Manager', ${hashPin("1234")}, 'manager') returning id`);
+      insert into persons (display_name, pin_hash, role)
+      values ('The Manager', ${hashPin("1234")}, 'manager') returning id`);
     const stf = await tx.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, role)
-      values (${cfg.tenantId}, 'The Clerk', ${hashPin("1234")}, 'staff') returning id`);
+      insert into persons (display_name, pin_hash, role)
+      values ('The Clerk', ${hashPin("1234")}, 'staff') returning id`);
     const managerSession = await startManagementSession(tx, {
       tenantId: cfg.tenantId,
       personId: mgr.rows[0]!.id,

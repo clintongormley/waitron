@@ -1,7 +1,6 @@
 import { captureError, CORE_MIGRATIONS, pgErrorCode, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { IDENTITY_MIGRATIONS } from "./migrations.js";
@@ -83,14 +82,9 @@ function authVerified(
   };
 }
 
-let tenantId: string;
-
 const suite = usePgliteDb({
   resetPerTest: false,
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
-  setup: async (db) => {
-    tenantId = await seedTenant(db);
-  },
 });
 
 const run = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> => withTransaction(suite.db, fn);
@@ -99,7 +93,6 @@ const begin = (sessionId: string) =>
   run((tx) =>
     beginPasskeyRegistration(tx, {
       managementSessionId: sessionId,
-      tenantId,
       rpId: "localhost",
       rpName: "Waitron",
     }),
@@ -109,7 +102,6 @@ const finish = (sessionId: string, challengeHandle: string, name?: unknown) =>
   run((tx) =>
     finishPasskeyRegistration(tx, {
       managementSessionId: sessionId,
-      tenantId,
       challengeHandle,
       response: {} as never,
       name,
@@ -125,7 +117,7 @@ const seedCredential = (personId: string, credentialId: string, counter = 0) =>
   run(async (tx) => {
     const [row] = await tx
       .insert(webauthnCredentials)
-      .values({ tenantId, personId, credentialId, publicKey: "AQID", counter })
+      .values({ personId, credentialId, publicKey: "AQID", counter })
       .returning({ id: webauthnCredentials.id });
     return row!.id;
   });
@@ -137,7 +129,7 @@ beforeEach(() => {
 
 // One PGlite database is shared across the suite (usePgliteDb registers beforeAll, not beforeEach),
 // so clear the passkey rows between tests to keep them order-independent (CLAUDE.md §4). The credential
-// id the mock returns is fixed, and (tenant_id, credential_id) is unique — without this a second test
+// id the mock returns is fixed, and `credential_id` is unique — without this a second test
 // registering the same id would hit the unique constraint rather than exercise its own path.
 afterEach(async () => {
   await run((tx) => tx.delete(webauthnCredentials));
@@ -146,7 +138,7 @@ afterEach(async () => {
 
 describe("passkey registration", () => {
   it("issues options, stores a challenge, then persists the credential and consumes the challenge", async () => {
-    const { personId, sessionId } = await openManagementSession(suite.db, tenantId, "admin");
+    const { personId, sessionId } = await openManagementSession(suite.db, "admin");
     mockVerify.mockResolvedValue(verified("cred-abc"));
 
     const begun = await begin(sessionId);
@@ -185,7 +177,7 @@ describe("passkey registration", () => {
   });
 
   it("pins userVerification to 'required' in the registration options (phishing-resistant primary login)", async () => {
-    const { sessionId } = await openManagementSession(suite.db, tenantId, "admin");
+    const { sessionId } = await openManagementSession(suite.db, "admin");
     const begun = await begin(sessionId);
     // Tell the authenticator user verification is MANDATORY up front, matching the verify side which
     // rejects a response lacking the UV flag. The library default is 'preferred'
@@ -207,7 +199,7 @@ describe("passkey registration", () => {
     [undefined, null],
     ["x".repeat(80), "x".repeat(80)],
   ])("stores the optional passkey name %j", async (name, expected) => {
-    const { personId, sessionId } = await openManagementSession(suite.db, tenantId, "admin");
+    const { personId, sessionId } = await openManagementSession(suite.db, "admin");
     mockVerify.mockResolvedValue(verified("cred-named"));
     const begun = await begin(sessionId);
     await finish(sessionId, begun.challengeHandle, name);
@@ -220,7 +212,7 @@ describe("passkey registration", () => {
   it.each(["x".repeat(81), 123, null])(
     "refuses an invalid passkey name %j before registering",
     async (name) => {
-      const { sessionId } = await openManagementSession(suite.db, tenantId, "admin");
+      const { sessionId } = await openManagementSession(suite.db, "admin");
       mockVerify.mockResolvedValue(verified("cred-invalid-name"));
       const begun = await begin(sessionId);
       await expect(finish(sessionId, begun.challengeHandle, name)).rejects.toMatchObject({
@@ -232,7 +224,7 @@ describe("passkey registration", () => {
   );
 
   it("requires user verification on the registration verify (requireUserVerification: true)", async () => {
-    const { sessionId } = await openManagementSession(suite.db, tenantId, "admin");
+    const { sessionId } = await openManagementSession(suite.db, "admin");
     mockVerify.mockResolvedValue(verified("cred-abc"));
     const begun = await begin(sessionId);
     await finish(sessionId, begun.challengeHandle);
@@ -242,7 +234,7 @@ describe("passkey registration", () => {
   });
 
   it("excludes already-registered credentials from a second ceremony", async () => {
-    const { sessionId } = await openManagementSession(suite.db, tenantId, "admin");
+    const { sessionId } = await openManagementSession(suite.db, "admin");
     mockVerify.mockResolvedValue(verified("cred-existing"));
 
     const first = await begin(sessionId);
@@ -253,7 +245,7 @@ describe("passkey registration", () => {
   });
 
   it("persists the authenticator's transports as a JSON array string", async () => {
-    const { personId, sessionId } = await openManagementSession(suite.db, tenantId, "admin");
+    const { personId, sessionId } = await openManagementSession(suite.db, "admin");
     // The authenticator reports its transports on registration; they are stored so a later ceremony
     // can hand them back as an excludeCredentials/allowCredentials hint (schema: webauthn.ts).
     mockVerify.mockResolvedValue(verified("cred-abc", ["internal", "usb"]));
@@ -268,7 +260,7 @@ describe("passkey registration", () => {
   });
 
   it("stores null for a non-array transports value the untrusted client could forge", async () => {
-    const { personId, sessionId } = await openManagementSession(suite.db, tenantId, "admin");
+    const { personId, sessionId } = await openManagementSession(suite.db, "admin");
     // `verifyRegistrationResponse` copies transports verbatim from the client, so at runtime it may be
     // a non-array despite its declared type. serializeTransports coerces anything but an array to null
     // (Array.isArray guard); drop that guard and this value would be stored as the string '"usb"'.
@@ -286,7 +278,7 @@ describe("passkey registration", () => {
   });
 
   it("hands an excluded credential's stored transports back as an excludeCredentials hint", async () => {
-    const { sessionId } = await openManagementSession(suite.db, tenantId, "admin");
+    const { sessionId } = await openManagementSession(suite.db, "admin");
     mockVerify.mockResolvedValue(verified("cred-hybrid", ["hybrid", "internal"]));
 
     // Register a credential whose transports are recorded, then begin a second ceremony: the stored
@@ -301,7 +293,7 @@ describe("passkey registration", () => {
   });
 
   it("throws passkey.verification_failed when the ceremony does not verify", async () => {
-    const { sessionId } = await openManagementSession(suite.db, tenantId, "admin");
+    const { sessionId } = await openManagementSession(suite.db, "admin");
     mockVerify.mockResolvedValue({ verified: false });
 
     const begun = await begin(sessionId);
@@ -321,7 +313,7 @@ describe("passkey registration", () => {
   });
 
   it("throws passkey.verification_failed when no challenge is on file for the handle", async () => {
-    const { sessionId } = await openManagementSession(suite.db, tenantId, "admin");
+    const { sessionId } = await openManagementSession(suite.db, "admin");
     // A well-formed but unknown handle: nothing was ever stored under it.
     const code = await codeOf(() => finish(sessionId, "00000000-0000-4000-8000-000000000000"));
     expect(code).toBe("passkey.verification_failed");
@@ -330,7 +322,7 @@ describe("passkey registration", () => {
   });
 
   it("throws passkey.challenge_expired once the challenge is older than CHALLENGE_TTL_MS", async () => {
-    const { sessionId } = await openManagementSession(suite.db, tenantId, "admin");
+    const { sessionId } = await openManagementSession(suite.db, "admin");
     const begun = await begin(sessionId);
     // Age the challenge past the TTL via a raw update — deterministic, no clock injection, exactly as
     // management-session.test.ts ages last_seen_at.
@@ -349,7 +341,7 @@ describe("passkey registration", () => {
   });
 
   it("maps a THROW from the library to passkey.verification_failed (not an opaque 500)", async () => {
-    const { sessionId } = await openManagementSession(suite.db, tenantId, "admin");
+    const { sessionId } = await openManagementSession(suite.db, "admin");
     // `@simplewebauthn/server` throws a GENERIC Error on a malformed/mismatched response — not a mapped
     // `passkey.*` code. Unwrapped it would reach `run` as a non-AppError → opaque server.internal 500;
     // finishPasskeyRegistration must turn it into a clean passkey.verification_failed.
@@ -371,15 +363,15 @@ describe("passkey registration", () => {
   });
 
   it("rejects re-registering a credential already on file as passkey.already_registered (not an opaque 500)", async () => {
-    const { sessionId } = await openManagementSession(suite.db, tenantId, "admin");
+    const { sessionId } = await openManagementSession(suite.db, "admin");
     mockVerify.mockResolvedValue(verified("cred-dup"));
 
     // First ceremony persists the credential.
     const first = await begin(sessionId);
     expect((await finish(sessionId, first.challengeHandle)).credentialId).toBe("cred-dup");
 
-    // A SECOND ceremony returning the SAME credential id collides on the
-    // (tenant_id, credential_id) unique constraint: the insert raises 23505. Unwrapped it reaches
+    // A SECOND ceremony returning the SAME credential id collides on the `credential_id` unique
+    // constraint: the insert raises 23505. Unwrapped it reaches
     // `run` as a non-AppError → opaque server.internal 500; finishPasskeyRegistration must translate
     // it into a clean passkey.already_registered (the register route maps that → 409).
     const second = await begin(sessionId);
@@ -398,7 +390,7 @@ describe("passkey registration", () => {
     // The negative control for the isUniqueViolation catch: a NON-unique insert failure must propagate
     // untranslated. A forged verifier result with no credential id violates the NOT NULL constraint,
     // so `isUniqueViolation` is false and the raw error is rethrown.
-    const { sessionId } = await openManagementSession(suite.db, tenantId, "admin");
+    const { sessionId } = await openManagementSession(suite.db, "admin");
     mockVerify.mockResolvedValue(verified(null as never));
     const begun = await begin(sessionId);
 
@@ -410,13 +402,11 @@ describe("passkey registration", () => {
 });
 
 describe("passkey authentication", () => {
-  const beginAuth = () =>
-    run((tx) => beginPasskeyAuthentication(tx, { tenantId, rpId: "localhost" }));
+  const beginAuth = () => run((tx) => beginPasskeyAuthentication(tx, { rpId: "localhost" }));
 
   const authenticate = (challengeHandle: string, credentialId: string) =>
     run((tx) =>
       finishPasskeyAuthentication(tx, {
-        tenantId,
         challengeHandle,
         response: { id: credentialId } as never,
         rpId: "localhost",
@@ -425,7 +415,7 @@ describe("passkey authentication", () => {
     );
 
   it("authenticates a registered passkey into a management session, bumping the counter", async () => {
-    const personId = await seedPerson(suite.db, tenantId, "admin");
+    const personId = await seedPerson(suite.db, "admin");
     const credRowId = await seedCredential(personId, "cred-abc", 0);
     mockVerifyAuth.mockResolvedValue(authVerified(1));
 
@@ -443,7 +433,6 @@ describe("passkey authentication", () => {
     const session = await authenticate(begun.challengeHandle, "cred-abc");
     // The verifier seam: a passkey resolves to its owner's management session, like loginManager.
     expect(session.personId).toBe(personId);
-    expect(session.tenantId).toBe(tenantId);
     expect(session.id).toBeTruthy();
 
     // The stored counter advanced to the verifier's newCounter (replay defence).
@@ -478,7 +467,7 @@ describe("passkey authentication", () => {
   });
 
   it("requires user verification on the authentication verify (requireUserVerification: true)", async () => {
-    const personId = await seedPerson(suite.db, tenantId, "admin");
+    const personId = await seedPerson(suite.db, "admin");
     await seedCredential(personId, "cred-abc", 0);
     mockVerifyAuth.mockResolvedValue(authVerified(1));
     const begun = await beginAuth();
@@ -488,7 +477,7 @@ describe("passkey authentication", () => {
   });
 
   it("never lowers the stored counter — a lower newCounter cannot regress it (concurrency clone-defence)", async () => {
-    const personId = await seedPerson(suite.db, tenantId, "admin");
+    const personId = await seedPerson(suite.db, "admin");
     const credRowId = await seedCredential(personId, "cred-abc", 10);
     // `verifyAuthenticationResponse` rejects a genuine REPLAY (newCounter <= stored, stored > 0) before
     // the counter update is reached; this guards the CONCURRENT case instead — two logins both read
@@ -510,7 +499,7 @@ describe("passkey authentication", () => {
   });
 
   it("consumes the challenge on the first finish: a second finish with the SAME handle is rejected", async () => {
-    const personId = await seedPerson(suite.db, tenantId, "admin");
+    const personId = await seedPerson(suite.db, "admin");
     await seedCredential(personId, "cred-abc", 0);
     mockVerifyAuth.mockResolvedValue(authVerified(1));
 
@@ -536,7 +525,7 @@ describe("passkey authentication", () => {
   });
 
   it("throws passkey.verification_failed when the assertion does not verify, leaving counter and challenge intact", async () => {
-    const personId = await seedPerson(suite.db, tenantId, "admin");
+    const personId = await seedPerson(suite.db, "admin");
     const credRowId = await seedCredential(personId, "cred-abc", 7);
     mockVerifyAuth.mockResolvedValue({ ...authVerified(9), verified: false });
 
@@ -564,7 +553,7 @@ describe("passkey authentication", () => {
   });
 
   it("throws passkey.verification_failed when no challenge is on file for the handle", async () => {
-    const personId = await seedPerson(suite.db, tenantId, "admin");
+    const personId = await seedPerson(suite.db, "admin");
     await seedCredential(personId, "cred-abc", 0);
     // A well-formed but unknown handle: nothing was ever stored under it.
     expect(
@@ -575,7 +564,7 @@ describe("passkey authentication", () => {
   });
 
   it("throws passkey.challenge_expired once the challenge is older than CHALLENGE_TTL_MS", async () => {
-    const personId = await seedPerson(suite.db, tenantId, "admin");
+    const personId = await seedPerson(suite.db, "admin");
     await seedCredential(personId, "cred-abc", 0);
     const begun = await beginAuth();
     // Age the challenge past the TTL via a raw update — deterministic, no clock injection, exactly as
@@ -601,7 +590,7 @@ describe("passkey authentication", () => {
   });
 
   it("refuses a person suspended AFTER enrolling a passkey, minting no session", async () => {
-    const personId = await seedPerson(suite.db, tenantId, "admin");
+    const personId = await seedPerson(suite.db, "admin");
     await seedCredential(personId, "cred-abc", 0);
     // Suspend the owner AFTER the passkey is on file — the scenario the password sibling (loginManager)
     // already guards, and the one this gate closes for the passkey branch.
@@ -626,7 +615,7 @@ describe("passkey authentication", () => {
   });
 
   it("maps a THROW from the library to passkey.verification_failed (not an opaque 500)", async () => {
-    const personId = await seedPerson(suite.db, tenantId, "admin");
+    const personId = await seedPerson(suite.db, "admin");
     const credRowId = await seedCredential(personId, "cred-abc", 4);
     // A generic library throw (bad signature, origin/RPID mismatch, malformed attestation) must become
     // a clean passkey.verification_failed, not reach `run` as a non-AppError → opaque 500.
@@ -654,7 +643,6 @@ describe("passkey authentication", () => {
       codeOf(() =>
         run((tx) =>
           finishPasskeyAuthentication(tx, {
-            tenantId,
             challengeHandle: begun.challengeHandle,
             response: response as never,
             rpId: "localhost",

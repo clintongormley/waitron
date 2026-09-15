@@ -53,11 +53,11 @@ declare module "@waitron/shared" {
      * boundary — not 6–15 digits, or contained a disallowed character. Telephone is optional, so an
      * absent/empty value is not rejected; only a non-empty malformed one carries this code. */
     "person.telephone_invalid": Record<string, never>;
-    /** Another person in this tenant already holds this normalised email. */
+    /** Another person already holds this normalised email. */
     "person.email_taken": { email: string };
     /** Another active or pending person already uses this display name. */
     "person.display_name_taken": { displayName: string };
-    /** An account change would leave the tenant without an active administrator. */
+    /** An account change would leave the venue without an active administrator. */
     "person.last_admin": Record<string, never>;
     /** The requested direct status change is not part of the account lifecycle. */
     "person.transition_invalid": Record<string, never>;
@@ -78,8 +78,8 @@ declare module "@waitron/shared" {
      * deleted on this path: finish consumes it with a DELETE, then the TTL check throws and the
      * transaction rolls back, restoring the row to lapse by its TTL rather than being swept.) */
     "passkey.challenge_expired": Record<string, never>;
-    /** This credential is already enrolled for this tenant — `finishPasskeyRegistration`'s insert hit
-     * the `(tenant_id, credential_id)` unique constraint (`isUniqueViolation`). The domain concept is
+    /** This credential is already enrolled — `finishPasskeyRegistration`'s insert hit the
+     * `credential_id` unique constraint (`isUniqueViolation`). The domain concept is
      * "already registered", not the column that collided (§3). Near-unreachable in practice — the
      * register route is session-gated and `beginPasskeyRegistration` feeds `excludeCredentials` so a
      * compliant authenticator refuses a duplicate — but a non-compliant client can still POST one, and

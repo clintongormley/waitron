@@ -40,12 +40,12 @@ function asApp<T>(tenantId: string, fn: (tx: Transaction) => Promise<T>): Promis
 
 /** Seed a person of `role` and an open management session for them, as the superuser owner. Returns
  * the session id the store's authorizeManager gate resolves. */
-async function seedSession(tenantId: string, role: PersonRoleValue): Promise<string> {
+async function seedSession(role: PersonRoleValue): Promise<string> {
   const person = await suite.admin.execute<{ id: string }>(sql`
-    insert into persons (tenant_id, display_name, pin_hash, role)
-    values (${tenantId}, 'Operator', 'seed-pin-hash', ${role}) returning id`);
+    insert into persons (display_name, pin_hash, role)
+    values ('Operator', 'seed-pin-hash', ${role}) returning id`);
   const session = await withTransaction(suite.admin, (tx) =>
-    startManagementSession(tx, { tenantId, personId: person.rows[0]!.id }),
+    startManagementSession(tx, { personId: person.rows[0]!.id }),
   );
   return session.id;
 }
@@ -97,7 +97,7 @@ describe("device-profile store on real Postgres, as the app role", () => {
 
   beforeAll(async () => {
     managerTenant = await seedTenant(suite.admin);
-    managerSession = await seedSession(managerTenant, "manager");
+    managerSession = await seedSession("manager");
   });
 
   it("round-trips a manager-authored profile through create → get with validated capabilities", async () => {
@@ -131,7 +131,7 @@ describe("device-profile store on real Postgres, as the app role", () => {
 
   it("carries the device form factor through create → get → list", async () => {
     const tenantId = await seedTenant(suite.admin);
-    const session = await seedSession(tenantId, "manager");
+    const session = await seedSession("manager");
     const created = await asApp(tenantId, (tx) =>
       createDeviceProfile(tx, {
         managementSessionId: session,
@@ -161,7 +161,7 @@ describe("device-profile store on real Postgres, as the app role", () => {
     // coerced to null by validateInactivityTimeout even when a value is passed (a display never logs
     // out). Proof-by-deletion: drop the `formFactor === "kds"` guard and the kds row reads 600.
     const tenantId = await seedTenant(suite.admin);
-    const session = await seedSession(tenantId, "manager");
+    const session = await seedSession("manager");
     const handheld = await asApp(tenantId, (tx) =>
       createDeviceProfile(tx, {
         managementSessionId: session,
@@ -192,7 +192,7 @@ describe("device-profile store on real Postgres, as the app role", () => {
 
   it("stores and returns a canvas reference that satisfies the composite FK", async () => {
     const tenantId = await seedTenant(suite.admin);
-    const session = await seedSession(tenantId, "manager");
+    const session = await seedSession("manager");
     const canvasId = await seedCanvas(tenantId, session, "The canvas");
     const created = await asApp(tenantId, (tx) =>
       createDeviceProfile(tx, {
@@ -215,7 +215,7 @@ describe("device-profile store on real Postgres, as the app role", () => {
 
   it("lists a tenant's device profiles by name", async () => {
     const tenantId = await seedTenant(suite.admin);
-    const session = await seedSession(tenantId, "manager");
+    const session = await seedSession("manager");
     const first = await asApp(tenantId, (tx) =>
       createDeviceProfile(tx, {
         managementSessionId: session,
@@ -248,7 +248,7 @@ describe("device-profile store on real Postgres, as the app role", () => {
 
   it("updates a profile's name, canvas and capabilities in place", async () => {
     const tenantId = await seedTenant(suite.admin);
-    const session = await seedSession(tenantId, "manager");
+    const session = await seedSession("manager");
     const canvasId = await seedCanvas(tenantId, session, "Target canvas");
     const created = await asApp(tenantId, (tx) =>
       createDeviceProfile(tx, {
@@ -285,7 +285,7 @@ describe("device-profile store on real Postgres, as the app role", () => {
 
   it("deletes an unreferenced profile", async () => {
     const tenantId = await seedTenant(suite.admin);
-    const session = await seedSession(tenantId, "manager");
+    const session = await seedSession("manager");
     const created = await asApp(tenantId, (tx) =>
       createDeviceProfile(tx, {
         managementSessionId: session,
@@ -312,7 +312,7 @@ describe("device-profile store on real Postgres, as the app role", () => {
     // deleteDeviceProfile and this fails with a raw 23001 instead of the AppError. RESTRICT means the
     // profile survives, asserted via rowCount as the owner.
     const tenantId = await seedTenant(suite.admin);
-    const session = await seedSession(tenantId, "manager");
+    const session = await seedSession("manager");
     const created = await asApp(tenantId, (tx) =>
       createDeviceProfile(tx, {
         managementSessionId: session,
@@ -347,7 +347,7 @@ describe("device-profile store on real Postgres, as the app role", () => {
     // throws rather than reporting a silent success. Proof-by-deletion: drop the length === 0 check and
     // this resolves, failing the assertion.
     const tenantId = await seedTenant(suite.admin);
-    const session = await seedSession(tenantId, "manager");
+    const session = await seedSession("manager");
     const code = await codeOf(() =>
       asApp(tenantId, (tx) =>
         updateDeviceProfile(tx, {
@@ -365,7 +365,7 @@ describe("device-profile store on real Postgres, as the app role", () => {
 
   it("throws device_profile.not_found when deleting an absent id", async () => {
     const tenantId = await seedTenant(suite.admin);
-    const session = await seedSession(tenantId, "manager");
+    const session = await seedSession("manager");
     const code = await codeOf(() =>
       asApp(tenantId, (tx) =>
         deleteDeviceProfile(tx, {
@@ -382,7 +382,7 @@ describe("device-profile store on real Postgres, as the app role", () => {
     // write. Deleting the authorizeManager call from createDeviceProfile makes this succeed → a row
     // lands, failing both assertions.
     const staffTenant = await seedTenant(suite.admin);
-    const staffSession = await seedSession(staffTenant, "staff");
+    const staffSession = await seedSession("staff");
     const code = await codeOf(() =>
       asApp(staffTenant, (tx) =>
         createDeviceProfile(tx, {
@@ -400,7 +400,7 @@ describe("device-profile store on real Postgres, as the app role", () => {
 
   it("rejects an unknown capability with device_profile.invalid {bad_capabilities} before any INSERT", async () => {
     const tenantId = await seedTenant(suite.admin);
-    const session = await seedSession(tenantId, "manager");
+    const session = await seedSession("manager");
     // authorize FIRST (manager is permitted), THEN validate — so an unknown flag from an AUTHORISED
     // actor is what proves validate runs before the write.
     const error = await errorOf(() =>
@@ -422,7 +422,7 @@ describe("device-profile store on real Postgres, as the app role", () => {
 
   it("translates a duplicate name to device_profile.name_taken (23505 → clean 409), no second row", async () => {
     const tenantId = await seedTenant(suite.admin);
-    const session = await seedSession(tenantId, "manager");
+    const session = await seedSession("manager");
     await asApp(tenantId, (tx) =>
       createDeviceProfile(tx, {
         managementSessionId: session,
@@ -449,7 +449,7 @@ describe("device-profile store on real Postgres, as the app role", () => {
 
   it("translates a duplicate name on UPDATE to device_profile.name_taken", async () => {
     const tenantId = await seedTenant(suite.admin);
-    const session = await seedSession(tenantId, "manager");
+    const session = await seedSession("manager");
     await asApp(tenantId, (tx) =>
       createDeviceProfile(tx, {
         managementSessionId: session,

@@ -27,12 +27,12 @@ function asApp<T>(tenantId: string, fn: (tx: Transaction) => Promise<T>): Promis
   });
 }
 
-async function seedSession(tenantId: string, role: PersonRoleValue): Promise<string> {
+async function seedSession(role: PersonRoleValue): Promise<string> {
   const person = await suite.admin.execute<{ id: string }>(sql`
-    insert into persons (tenant_id, display_name, pin_hash, role)
-    values (${tenantId}, 'Operator', 'seed-pin-hash', ${role}) returning id`);
+    insert into persons (display_name, pin_hash, role)
+    values ('Operator', 'seed-pin-hash', ${role}) returning id`);
   const session = await withTransaction(suite.admin, (tx) =>
-    startManagementSession(tx, { tenantId, personId: person.rows[0]!.id }),
+    startManagementSession(tx, { personId: person.rows[0]!.id }),
   );
   return session.id;
 }
@@ -57,7 +57,7 @@ describe("tenant theme store on real Postgres, as the app role", () => {
 
   it("round-trips a manager-authored theme through put → get", async () => {
     const managerTenant = await seedTenant(suite.admin);
-    const managerSession = await seedSession(managerTenant, "manager");
+    const managerSession = await seedSession("manager");
     const theme: ThemeOverride = { tokens: { "--wt-color-primary": "#ff0000" } };
     await asApp(managerTenant, (tx) =>
       putTenantTheme(tx, { managementSessionId: managerSession, theme }),
@@ -67,7 +67,7 @@ describe("tenant theme store on real Postgres, as the app role", () => {
 
   it("upserts the single per-tenant row on a second put — no duplicate", async () => {
     const tenantId = await seedTenant(suite.admin);
-    const session = await seedSession(tenantId, "manager");
+    const session = await seedSession("manager");
     await asApp(tenantId, (tx) =>
       putTenantTheme(tx, {
         managementSessionId: session,
@@ -89,7 +89,7 @@ describe("tenant theme store on real Postgres, as the app role", () => {
     // putTenantTheme makes this succeed → codeOf returns "did not throw…" and a row lands, failing both
     // assertions.
     const staffTenant = await seedTenant(suite.admin);
-    const staffSession = await seedSession(staffTenant, "staff");
+    const staffSession = await seedSession("staff");
     const code = await codeOf(() =>
       asApp(staffTenant, (tx) =>
         putTenantTheme(tx, {
@@ -104,7 +104,7 @@ describe("tenant theme store on real Postgres, as the app role", () => {
 
   it("rejects an invalid theme with theme.invalid before any INSERT", async () => {
     const tenantId = await seedTenant(suite.admin);
-    const session = await seedSession(tenantId, "manager");
+    const session = await seedSession("manager");
     // authorize FIRST (manager is permitted), THEN validate — so an invalid theme from an AUTHORISED
     // actor proves validate runs before the write. An un-allowlisted token fails validateThemeOverride.
     const code = await codeOf(() =>

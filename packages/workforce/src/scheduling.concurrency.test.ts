@@ -58,9 +58,7 @@ describe("publishRoster under real contention", () => {
     // A distinct publisher person per call, so the surviving `published_by` identifies the ONE winner
     // and proves no refused publisher overwrote it.
     const persons = await Promise.all(
-      Array.from({ length: PUBLISHERS }, (_, i) =>
-        seedPerson(suite.admin, tenantId, `publisher-${i}`),
-      ),
+      Array.from({ length: PUBLISHERS }, (_, i) => seedPerson(suite.admin, `publisher-${i}`)),
     );
     const dbs = await Promise.all(Array.from({ length: PUBLISHERS }, () => suite.pg.connect()));
     try {

@@ -41,8 +41,8 @@ async function twoPeopleAndAShift(): Promise<{
   toPerson: string;
   fromShift: string;
 }> {
-  const requester = await seedPerson(suite.db, tenantId, `req-${crypto.randomUUID()}`);
-  const toPerson = await seedPerson(suite.db, tenantId, `to-${crypto.randomUUID()}`);
+  const requester = await seedPerson(suite.db, `req-${crypto.randomUUID()}`);
+  const toPerson = await seedPerson(suite.db, `to-${crypto.randomUUID()}`);
   const fromShift = await insertDraftShift(suite.db, {
     personId: requester,
     locationId,
@@ -106,7 +106,7 @@ describe("requestSwap", () => {
     // `intruder` tries to offer it. Prove by deletion — remove the ownership check and this stops
     // throwing (the intruder's swap inserts).
     const { toPerson, fromShift } = await twoPeopleAndAShift();
-    const intruder = await seedPerson(suite.db, tenantId, `intr-${crypto.randomUUID()}`);
+    const intruder = await seedPerson(suite.db, `intr-${crypto.randomUUID()}`);
     const code = await codeOfRejection(() =>
       run((tx) =>
         requestSwap(tx, {
@@ -141,7 +141,7 @@ describe("requestSwap", () => {
     // `toPerson`. Prove by deletion — drop the `toShiftOwner === toPersonId` check in requestSwap and
     // this offer inserts instead of throwing, reddening the assertion.
     const { requester, toPerson, fromShift } = await twoPeopleAndAShift();
-    const thirdPerson = await seedPerson(suite.db, tenantId, `third-${crypto.randomUUID()}`);
+    const thirdPerson = await seedPerson(suite.db, `third-${crypto.randomUUID()}`);
     const foreignReturnShift = await insertDraftShift(suite.db, {
       personId: thirdPerson,
       locationId,
@@ -191,7 +191,7 @@ describe("acceptSwap", () => {
     // Only the swap's `to_person` may accept. Prove by deletion — remove the acceptor check and a
     // stranger's accept succeeds.
     const { requester, toPerson, fromShift } = await twoPeopleAndAShift();
-    const stranger = await seedPerson(suite.db, tenantId, `str-${crypto.randomUUID()}`);
+    const stranger = await seedPerson(suite.db, `str-${crypto.randomUUID()}`);
     const swapId = await insertShiftSwap(suite.db, {
       requestedByPersonId: requester,
       fromShiftId: fromShift,
@@ -231,7 +231,7 @@ describe("acceptSwap", () => {
     // the permission check runs before the state-guarded UPDATE, so the non-recipient never learns the
     // swap's state.
     const { requester, toPerson, fromShift } = await twoPeopleAndAShift();
-    const stranger = await seedPerson(suite.db, tenantId, `str-${crypto.randomUUID()}`);
+    const stranger = await seedPerson(suite.db, `str-${crypto.randomUUID()}`);
     const swapId = await insertShiftSwap(suite.db, {
       requestedByPersonId: requester,
       fromShiftId: fromShift,
@@ -247,8 +247,8 @@ describe("acceptSwap", () => {
 
 describe("decideSwap", () => {
   async function acceptedSwap(): Promise<string> {
-    const requester = await seedPerson(suite.db, tenantId, `req-${crypto.randomUUID()}`);
-    const toPerson = await seedPerson(suite.db, tenantId, `to-${crypto.randomUUID()}`);
+    const requester = await seedPerson(suite.db, `req-${crypto.randomUUID()}`);
+    const toPerson = await seedPerson(suite.db, `to-${crypto.randomUUID()}`);
     const fromShift = await insertDraftShift(suite.db, {
       personId: requester,
       locationId,
@@ -263,7 +263,7 @@ describe("decideSwap", () => {
 
   it("approves an accepted swap, stamping the decider and decided_at", async () => {
     const swapId = await acceptedSwap();
-    const decider = await seedPerson(suite.db, tenantId, `mgr-${crypto.randomUUID()}`);
+    const decider = await seedPerson(suite.db, `mgr-${crypto.randomUUID()}`);
     await run((tx) => decideSwap(tx, { swapId, decision: "approved", decidedByPersonId: decider }));
     const rows = await suite.db.execute<{
       status: string;
@@ -304,8 +304,8 @@ describe("decideSwap", () => {
     // Prove by deletion: the `and status = 'accepted'` predicate on the UPDATE is the decidability
     // guard. Remove it and this REQUESTED swap is wrongly UPDATEd (0-row path never taken, no throw),
     // reddening this test.
-    const requester = await seedPerson(suite.db, tenantId, `r-${crypto.randomUUID()}`);
-    const toPerson = await seedPerson(suite.db, tenantId, `t-${crypto.randomUUID()}`);
+    const requester = await seedPerson(suite.db, `r-${crypto.randomUUID()}`);
+    const toPerson = await seedPerson(suite.db, `t-${crypto.randomUUID()}`);
     const fromShift = await insertDraftShift(suite.db, {
       personId: requester,
       locationId,
@@ -338,10 +338,9 @@ describe("listPendingSwaps", () => {
     // test leaves an `accepted` swap behind. The queue reads every swap in the database (one tenant per
     // database), so clear the earlier tests' swaps to keep this order-independent (CLAUDE.md §4).
     await suite.db.execute(sql`delete from shift_swaps`);
-    const listTenant = tenantId;
     const listLocation = locationId;
-    const requester = await seedPerson(suite.db, listTenant, `lr-${crypto.randomUUID()}`);
-    const toPerson = await seedPerson(suite.db, listTenant, `lt-${crypto.randomUUID()}`);
+    const requester = await seedPerson(suite.db, `lr-${crypto.randomUUID()}`);
+    const toPerson = await seedPerson(suite.db, `lt-${crypto.randomUUID()}`);
     const s1 = await insertDraftShift(suite.db, {
       personId: requester,
       locationId: listLocation,

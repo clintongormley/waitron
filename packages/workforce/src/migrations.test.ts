@@ -21,9 +21,9 @@ let tenantId: string;
 
 const suite = usePgliteDb({
   resetPerTest: false,
-  // Core first (the tenants FK), then identity (persons — employments/time_entries FK it), then
-  // workforce. Ordering across packages is the runtime's job and nothing enforces it, so it is
-  // explicit here.
+  // Core first (shifts point at its `locations`, `tills` and `nodes`), then identity (persons —
+  // employments/time_entries FK it), then workforce. Ordering across packages is the runtime's job
+  // and nothing enforces it, so it is explicit here.
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS],
   setup: async (db) => {
     tenantId = await seedTenant(db);
@@ -38,30 +38,30 @@ const PIN = hashPin("1234");
 describe("persons, from the identity migration set layered under workforce", () => {
   it("stores a person and defaults role to staff and status to active", async () => {
     await suite.db.execute(sql`
-      insert into persons (tenant_id, display_name, pin_hash)
-      values (${tenantId}, 'Ana', ${PIN})`);
+      insert into persons (display_name, pin_hash)
+      values ('Ana', ${PIN})`);
     const rows = await suite.db.execute<{ role: string; status: string }>(sql`
-      select role, status from persons where tenant_id = ${tenantId} and display_name = 'Ana'`);
+      select role, status from persons where display_name = 'Ana'`);
     expect(rows.rows[0]).toEqual({ role: "staff", status: "active" });
   });
 
   it("accepts every person_role value", async () => {
     for (const role of ["staff", "supervisor", "manager", "admin"]) {
       await suite.db.execute(sql`
-        insert into persons (tenant_id, display_name, pin_hash, role)
-        values (${tenantId}, ${`role-${role}`}, ${PIN}, ${role})`);
+        insert into persons (display_name, pin_hash, role)
+        values (${`role-${role}`}, ${PIN}, ${role})`);
     }
     const rows = await suite.db.execute<{ n: number }>(sql`
       select count(*)::int as n from persons
-      where tenant_id = ${tenantId} and role in ('staff','supervisor','manager','admin')`);
+      where role in ('staff','supervisor','manager','admin')`);
     expect(rows.rows[0]!.n).toBeGreaterThanOrEqual(4);
   });
 
   it("rejects a role outside the enum", async () => {
     const error = await captureError(() =>
       suite.db.execute(sql`
-        insert into persons (tenant_id, display_name, pin_hash, role)
-        values (${tenantId}, 'Bad role', ${PIN}, 'ceo')`),
+        insert into persons (display_name, pin_hash, role)
+        values ('Bad role', ${PIN}, 'ceo')`),
     );
     expect(pgErrorCode(error)).toBe("22P02"); // invalid_text_representation
   });
@@ -69,8 +69,8 @@ describe("persons, from the identity migration set layered under workforce", () 
   it("rejects a status outside the enum", async () => {
     const error = await captureError(() =>
       suite.db.execute(sql`
-        insert into persons (tenant_id, display_name, pin_hash, status)
-        values (${tenantId}, 'Bad status', ${PIN}, 'fired')`),
+        insert into persons (display_name, pin_hash, status)
+        values ('Bad status', ${PIN}, 'fired')`),
     );
     expect(pgErrorCode(error)).toBe("22P02");
   });
@@ -78,8 +78,8 @@ describe("persons, from the identity migration set layered under workforce", () 
   it("rejects an empty display_name", async () => {
     const error = await captureError(() =>
       suite.db.execute(sql`
-        insert into persons (tenant_id, display_name, pin_hash)
-        values (${tenantId}, '', ${PIN})`),
+        insert into persons (display_name, pin_hash)
+        values ('', ${PIN})`),
     );
     expect(pgErrorCode(error)).toBe("23514"); // check_violation
     expect(pgErrorMessage(error)).toMatch(/persons_display_name_ck/);
@@ -88,20 +88,11 @@ describe("persons, from the identity migration set layered under workforce", () 
   it("rejects an empty pin_hash", async () => {
     const error = await captureError(() =>
       suite.db.execute(sql`
-        insert into persons (tenant_id, display_name, pin_hash)
-        values (${tenantId}, 'No pin', '')`),
+        insert into persons (display_name, pin_hash)
+        values ('No pin', '')`),
     );
     expect(pgErrorCode(error)).toBe("23514");
     expect(pgErrorMessage(error)).toMatch(/persons_pin_hash_ck/);
-  });
-
-  it("rejects a row whose tenant does not exist", async () => {
-    const error = await captureError(() =>
-      suite.db.execute(sql`
-        insert into persons (tenant_id, display_name, pin_hash)
-        values (gen_random_uuid(), 'Orphan', ${PIN})`),
-    );
-    expect(pgErrorCode(error)).toBe("23503"); // foreign_key_violation
   });
 });
 
@@ -111,7 +102,7 @@ describe("the D1a time & attendance tables", () => {
     locationId: string;
     nodeId: string;
   }> {
-    const personId = await seedPerson(suite.db, tenantId, `d1a-${crypto.randomUUID()}`);
+    const personId = await seedPerson(suite.db, `d1a-${crypto.randomUUID()}`);
     const locationId = await seedLocation(suite.db, tenantId);
     const nodeId = await seedNode(suite.db, brandTenantId(tenantId), brandLocationId(locationId));
     return { personId, locationId, nodeId };
@@ -179,7 +170,7 @@ describe("the D1b correction columns", () => {
     nodeId: string;
     entryId: string;
   }> {
-    const personId = await seedPerson(suite.db, tenantId, `d1b-${crypto.randomUUID()}`);
+    const personId = await seedPerson(suite.db, `d1b-${crypto.randomUUID()}`);
     const locationId = await seedLocation(suite.db, tenantId);
     const nodeId = await seedNode(suite.db, brandTenantId(tenantId), brandLocationId(locationId));
     // Genesis chain columns (node_id, recorded_at + the Slice-4 columns, all NOT NULL) so this base
@@ -272,7 +263,7 @@ describe("the D1b correction columns", () => {
 
 describe("the D2 scheduling tables (shifts + roster_versions)", () => {
   async function seedPersonAndLocation(): Promise<{ personId: string; locationId: string }> {
-    const personId = await seedPerson(suite.db, tenantId, `d2-${crypto.randomUUID()}`);
+    const personId = await seedPerson(suite.db, `d2-${crypto.randomUUID()}`);
     const locationId = await seedLocation(suite.db, tenantId);
     return { personId, locationId };
   }
@@ -399,7 +390,7 @@ describe("the D2 scheduling tables (shifts + roster_versions)", () => {
 
 describe("the D2.2 planning tables (absences, availability, shift_templates, shift_swaps)", () => {
   async function seedPersonAndLocation(): Promise<{ personId: string; locationId: string }> {
-    const personId = await seedPerson(suite.db, tenantId, `d22-${crypto.randomUUID()}`);
+    const personId = await seedPerson(suite.db, `d22-${crypto.randomUUID()}`);
     const locationId = await seedLocation(suite.db, tenantId);
     return { personId, locationId };
   }
@@ -489,7 +480,7 @@ describe("the D2.2 planning tables (absences, availability, shift_templates, shi
     // shift is gone, so deleting the shift discards the swap (changing the FK to `restrict` fails the
     // delete; to `set null` leaves the row and fails the count-0 assertion).
     const { personId, locationId } = await seedPersonAndLocation();
-    const toPerson = await seedPerson(suite.db, tenantId, `d22to-${crypto.randomUUID()}`);
+    const toPerson = await seedPerson(suite.db, `d22to-${crypto.randomUUID()}`);
     const fromShiftId = await insertDraftShift(suite.db, { personId, locationId });
     const swapId = await insertShiftSwap(suite.db, {
       requestedByPersonId: personId,
@@ -510,7 +501,7 @@ describe("the D2.2 planning tables (absences, availability, shift_templates, shi
 
   it("rejects a shift_swap whose from_shift references no shift", async () => {
     const { personId } = await seedPersonAndLocation();
-    const toPerson = await seedPerson(suite.db, tenantId, `d22to-${crypto.randomUUID()}`);
+    const toPerson = await seedPerson(suite.db, `d22to-${crypto.randomUUID()}`);
     const error = await captureError(() =>
       insertShiftSwap(suite.db, {
         requestedByPersonId: personId,

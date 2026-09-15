@@ -17,11 +17,9 @@ import type { PersonRoleValue } from "./permissions.js";
  */
 export async function verifyPersonCredential(
   tx: Transaction,
-  tenantId: string,
   personId: string,
   pin: string,
 ): Promise<{ role: PersonRoleValue; locale: string | null }> {
-  void tenantId;
   const [person] = await tx
     .select({
       role: persons.role,

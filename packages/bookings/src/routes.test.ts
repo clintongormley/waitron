@@ -58,16 +58,15 @@ async function setupVenue(): Promise<Venue> {
   const { managerSid, staffSid } = await withTransaction(db, async (tx) => {
     await asAppUser(tx);
     const mgr = await tx.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, role)
-      values (${tenantId}, 'The Manager', ${hashPin("1234")}, 'manager') returning id`);
+      insert into persons (display_name, pin_hash, role)
+      values ('The Manager', ${hashPin("1234")}, 'manager') returning id`);
     const stf = await tx.execute<{ id: string }>(sql`
-      insert into persons (tenant_id, display_name, pin_hash, role)
-      values (${tenantId}, 'The Clerk', ${hashPin("1234")}, 'staff') returning id`);
+      insert into persons (display_name, pin_hash, role)
+      values ('The Clerk', ${hashPin("1234")}, 'staff') returning id`);
     const managerSession = await startManagementSession(tx, {
-      tenantId,
       personId: mgr.rows[0]!.id,
     });
-    const staffSession = await startManagementSession(tx, { tenantId, personId: stf.rows[0]!.id });
+    const staffSession = await startManagementSession(tx, { personId: stf.rows[0]!.id });
     return { managerSid: managerSession.id, staffSid: staffSession.id };
   });
 

@@ -2,7 +2,6 @@ import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { captureError, pgErrorCode, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
 import { codeOf, seedPerson } from "../test/fixtures.js";
 
 // Real PostgreSQL — deliberately NOT skippable. PGlite serialises every query onto ONE backend
@@ -54,28 +53,25 @@ beforeEach(() => {
   mockVerifyAuth.mockReset();
 });
 
-/** A fresh tenant with one active person, one registered credential, and one login challenge on file.
+/** One active person, one registered credential, and one login challenge on file.
  * Seeded as the owner — the property under test is row-locking, proven on distinct backends. */
-async function seedFixture(): Promise<{ tenant: string; personId: string; handle: string }> {
-  const tenant = await seedTenant(suite.admin);
-  const personId = await seedPerson(suite.admin, tenant);
+async function seedFixture(): Promise<{ personId: string; handle: string }> {
+  const personId = await seedPerson(suite.admin);
   await suite.admin.execute(sql`
-    insert into webauthn_credentials (tenant_id, person_id, credential_id, public_key, counter)
-    values (${tenant}, ${personId}, ${CREDENTIAL_ID}, ${PUBLIC_KEY}, 0)`);
+    insert into webauthn_credentials (person_id, credential_id, public_key, counter)
+    values (${personId}, ${CREDENTIAL_ID}, ${PUBLIC_KEY}, 0)`);
   const chal = await suite.admin.execute<{ id: string }>(sql`
-    insert into webauthn_challenges (tenant_id, person_id, challenge)
-    values (${tenant}, null, 'chal-concurrency') returning id`);
-  return { tenant, personId, handle: chal.rows[0]!.id };
+    insert into webauthn_challenges (person_id, challenge)
+    values (null, 'chal-concurrency') returning id`);
+  return { personId, handle: chal.rows[0]!.id };
 }
 
 const finishAuth = (
   db: Parameters<typeof withTransaction>[0],
-  tenant: string,
   handle: string,
 ): Promise<{ personId: string }> =>
   withTransaction(db, (tx) =>
     finishPasskeyAuthentication(tx, {
-      tenantId: tenant,
       challengeHandle: handle,
       response: { id: CREDENTIAL_ID } as never,
       rpId: "localhost",
@@ -85,7 +81,7 @@ const finishAuth = (
 
 describe("finishPasskeyAuthentication under real concurrency", () => {
   it("consume-first row-locks the challenge, so a concurrent finish on the same handle is rejected — one session only", async () => {
-    const { tenant, personId, handle } = await seedFixture();
+    const { personId, handle } = await seedFixture();
 
     // Park the first ceremony inside verify — AFTER its consume-DELETE has run (and row-locked the
     // challenge), BEFORE its transaction commits — by making the mocked verify await a gate we hold.
@@ -102,7 +98,7 @@ describe("finishPasskeyAuthentication under real concurrency", () => {
     try {
       // C1: a real finish. Its consume-DELETE row-locks the challenge, then it parks in verify. Launch,
       // do NOT await — its transaction stays open, holding the lock.
-      c1Done = finishAuth(c1, tenant, handle);
+      c1Done = finishAuth(c1, handle);
       // Deterministic: proceed only once C1 has actually reached verify — i.e. it is PAST its consume
       // step. True on BOTH the fixed and the unfixed code (both reach verify), so this wait never hangs.
       await vi.waitFor(() => expect(mockVerifyAuth).toHaveBeenCalledTimes(1));
@@ -129,9 +125,7 @@ describe("finishPasskeyAuthentication under real concurrency", () => {
       // The losing side, played out on a real finish: the SAME handle now finds zero rows at consume →
       // passkey.verification_failed. Under live contention this is the path C2 takes the instant C1
       // commits and releases the lock.
-      expect(await codeOf(() => finishAuth(c2, tenant, handle))).toBe(
-        "passkey.verification_failed",
-      );
+      expect(await codeOf(() => finishAuth(c2, handle))).toBe("passkey.verification_failed");
 
       // Exactly ONE management session was minted for the person across both attempts.
       const sessions = await suite.admin.execute<{ count: string }>(

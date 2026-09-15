@@ -38,7 +38,7 @@ const suite = usePgliteDb({
   setup: async (db) => {
     tenantId = await seedTenant(db);
     locationId = await seedLocation(db, tenantId);
-    personId = await seedPerson(db, tenantId);
+    personId = await seedPerson(db);
   },
 });
 
@@ -603,7 +603,7 @@ describe("getPlannedVsActual", () => {
 
   it("matches a PUBLISHED planned shift to its worked session, and reports late minutes", async () => {
     const loc = await seedLocation(suite.db, tenantId);
-    const p = await seedPerson(suite.db, tenantId, `pva-${crypto.randomUUID()}`);
+    const p = await seedPerson(suite.db, `pva-${crypto.randomUUID()}`);
     await insertDraftShift(suite.db, {
       personId: p,
       locationId: loc,
@@ -626,7 +626,7 @@ describe("getPlannedVsActual", () => {
 
   it("flags a no-show (published shift, not worked) and an unplanned day (worked, not planned)", async () => {
     const loc = await seedLocation(suite.db, tenantId);
-    const noShowPerson = await seedPerson(suite.db, tenantId, `ns-${crypto.randomUUID()}`);
+    const noShowPerson = await seedPerson(suite.db, `ns-${crypto.randomUUID()}`);
     await insertDraftShift(suite.db, {
       personId: noShowPerson,
       locationId: loc,
@@ -634,7 +634,7 @@ describe("getPlannedVsActual", () => {
       endsAt: "2026-03-03T17:00:00Z",
     });
     await publishWeek(loc);
-    const unplannedPerson = await seedPerson(suite.db, tenantId, `up-${crypto.randomUUID()}`);
+    const unplannedPerson = await seedPerson(suite.db, `up-${crypto.randomUUID()}`);
     await seedSession(unplannedPerson, loc, "2026-03-04T09:00:00Z", "2026-03-04T12:00:00Z");
     const rows = await run((tx) =>
       backend.getPlannedVsActual(tx, { locationId: loc, period: week }),
@@ -651,7 +651,7 @@ describe("getPlannedVsActual", () => {
     // Owner decision (2026-08-15): "planned" = the currently-published roster, so an in-progress draft
     // and a retired (superseded) version must NOT manufacture phantom no-shows.
     const loc = await seedLocation(suite.db, tenantId);
-    const p = await seedPerson(suite.db, tenantId, `pub-${crypto.randomUUID()}`);
+    const p = await seedPerson(suite.db, `pub-${crypto.randomUUID()}`);
     // Version A: a shift on 2026-03-02, published.
     await insertDraftShift(suite.db, {
       personId: p,
@@ -689,7 +689,7 @@ describe("getPlannedVsActual", () => {
 
   it("excludes a session whose local day is OUTSIDE the window, includes one inside", async () => {
     const loc = await seedLocation(suite.db, tenantId);
-    const p = await seedPerson(suite.db, tenantId, `bound-${crypto.randomUUID()}`);
+    const p = await seedPerson(suite.db, `bound-${crypto.randomUUID()}`);
     // One day BEFORE the window (2026-03-01) — must be excluded even though the widened fetch grabs it.
     await seedSession(p, loc, "2026-03-01T09:00:00Z", "2026-03-01T12:00:00Z");
     // The last in-window day (2026-03-08) — included.
@@ -707,7 +707,7 @@ describe("getPlannedVsActual", () => {
   it("scopes to the queried location — another location's published shifts and entries do not leak in", async () => {
     const loc = await seedLocation(suite.db, tenantId);
     const other = await seedLocation(suite.db, tenantId);
-    const p = await seedPerson(suite.db, tenantId, `scope-${crypto.randomUUID()}`);
+    const p = await seedPerson(suite.db, `scope-${crypto.randomUUID()}`);
     await insertDraftShift(suite.db, {
       personId: p,
       locationId: other,

@@ -50,11 +50,11 @@ export async function seedLocation(db: Database, tenantId: string): Promise<stri
   return result.rows[0]!.id;
 }
 
-/** A person for the tenant, PIN '1234'. Returns its id. */
-export async function seedPerson(db: Database, tenantId: string, name = "Ana"): Promise<string> {
+/** A person, PIN '1234'. Returns its id. */
+export async function seedPerson(db: Database, name = "Ana"): Promise<string> {
   const result = await db.execute<{ id: string }>(sql`
-    insert into persons (tenant_id, display_name, pin_hash)
-    values (${tenantId}, ${name}, ${hashPin("1234")})
+    insert into persons (display_name, pin_hash)
+    values (${name}, ${hashPin("1234")})
     returning id`);
   return result.rows[0]!.id;
 }

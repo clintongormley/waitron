@@ -1,1 +1,0 @@
-ALTER TABLE "webauthn_credentials" ADD COLUMN "name" text;

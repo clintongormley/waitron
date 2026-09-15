@@ -47,7 +47,6 @@ type PersonLoginRow = Awaited<ReturnType<typeof selectPersonLogin>>[number];
 async function completeManagerLogin(
   tx: Transaction,
   input: {
-    tenantId: string;
     password: string;
     totp?: string;
     recoveryCode?: string;
@@ -85,20 +84,19 @@ async function completeManagerLogin(
     const recoveryOk =
       !totpOk &&
       input.recoveryCode !== undefined &&
-      (await consumeRecoveryCode(tx, input.tenantId, person.id, input.recoveryCode));
+      (await consumeRecoveryCode(tx, person.id, input.recoveryCode));
     if (!totpOk && !recoveryOk) {
       throw new AppError("totp.invalid", {});
     }
   }
   // Verifier seam: password (+ TOTP when enrolled) is one way to mint a management session; slice 1d's
   // finishPasskeyAuthentication is a sibling entry point that likewise ends in startManagementSession.
-  return startManagementSession(tx, { tenantId: input.tenantId, personId: person.id });
+  return startManagementSession(tx, { personId: person.id });
 }
 
 export async function loginManager(
   tx: Transaction,
   input: {
-    tenantId: string;
     email: string;
     password: string;
     totp?: string;
@@ -107,7 +105,7 @@ export async function loginManager(
   },
 ): Promise<ManagementSession> {
   // Dashboard sign-in resolves the person by EMAIL, not by a client-supplied id. The lookup matches
-  // the same normalised (trim + lowercase) form the write boundary stores under the per-tenant
+  // the same normalised (trim + lowercase) form the write boundary stores under the
   // case-insensitive unique index (persons_tenant_email_uq), so `lower(email)` here mirrors the index
   // and login is case-insensitive.
   const email = normalizeEmail(input.email);
@@ -133,7 +131,6 @@ export async function loginManager(
 export async function loginManagerById(
   tx: Transaction,
   input: {
-    tenantId: string;
     personId: string;
     password: string;
     totp?: string;

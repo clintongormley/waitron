@@ -23,7 +23,6 @@ function pkceChallenge(verifier: string): string {
 }
 
 interface GoogleStartInput {
-  tenantId: string;
   clientId: string;
   redirectUri: string;
   now?: Date;
@@ -48,7 +47,6 @@ async function begin(
   const now = input.now ?? new Date();
   await tx.delete(googleOidcStates).where(lt(googleOidcStates.expiresAt, now.toISOString()));
   await tx.insert(googleOidcStates).values({
-    tenantId: input.tenantId,
     personId,
     mode,
     stateHash: digest(state),
@@ -87,7 +85,7 @@ export async function beginGoogleLink(
 
 export async function claimGoogleState(
   tx: Transaction,
-  input: { tenantId: string; state: string; now?: Date },
+  input: { state: string; now?: Date },
 ): Promise<GoogleOidcClaim> {
   const rows = await tx
     .delete(googleOidcStates)
@@ -112,7 +110,7 @@ export async function claimGoogleState(
 
 export async function completeGoogleLink(
   tx: Transaction,
-  input: { tenantId: string; personId: string; subject: string },
+  input: { personId: string; subject: string },
 ): Promise<void> {
   try {
     const updated = await tx
@@ -129,7 +127,7 @@ export async function completeGoogleLink(
 
 export async function loginWithGoogle(
   tx: Transaction,
-  input: { tenantId: string; subject: string },
+  input: { subject: string },
 ): Promise<ManagementSession> {
   const [person] = await tx
     .select({ id: persons.id, status: persons.status, totpSecret: persons.totpSecret })
@@ -137,5 +135,5 @@ export async function loginWithGoogle(
     .where(eq(persons.googleSubject, input.subject));
   if (person === undefined || person.status !== "active") throw new AppError("google.invalid", {});
   if (person.totpSecret !== null) throw new AppError("google.second_factor_required", {});
-  return startManagementSession(tx, { tenantId: input.tenantId, personId: person.id });
+  return startManagementSession(tx, { personId: person.id });
 }

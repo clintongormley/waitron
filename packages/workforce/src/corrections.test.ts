@@ -49,7 +49,7 @@ async function codeOfRejection(fn: () => Promise<unknown>): Promise<string | und
 
 /** Clocks a 09:00→17:00 day for a fresh person and returns their id plus the `out` entry's id. */
 async function nineToFive(name: string): Promise<{ personId: string; outEntryId: string }> {
-  const personId = await seedPerson(suite.db, tenantId, name);
+  const personId = await seedPerson(suite.db, name);
   await run((tx) => backend.clockIn(tx, event(personId, "2026-01-05T09:00:00Z")));
   await run((tx) => backend.clockOut(tx, event(personId, "2026-01-05T17:00:00Z")));
   const rows = await suite.db.execute<{ id: string }>(sql`
@@ -59,8 +59,8 @@ async function nineToFive(name: string): Promise<{ personId: string; outEntryId:
 
 async function supervisor(name: string): Promise<string> {
   const rows = await suite.db.execute<{ id: string }>(sql`
-    insert into persons (tenant_id, display_name, pin_hash, role)
-    values (${tenantId}, ${name}, 'scrypt$00$00', 'supervisor') returning id`);
+    insert into persons (display_name, pin_hash, role)
+    values (${name}, 'scrypt$00$00', 'supervisor') returning id`);
   return rows.rows[0]!.id;
 }
 

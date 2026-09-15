@@ -38,12 +38,12 @@ function asApp<T>(tenantId: string, fn: (tx: Transaction) => Promise<T>): Promis
 
 /** Seed a person of `role` and an open management session for them, as the superuser owner. Returns
  * the session id the store's authorizeManager gate resolves. */
-async function seedSession(tenantId: string, role: PersonRoleValue): Promise<string> {
+async function seedSession(role: PersonRoleValue): Promise<string> {
   const person = await suite.admin.execute<{ id: string }>(sql`
-    insert into persons (tenant_id, display_name, pin_hash, role)
-    values (${tenantId}, 'Operator', 'seed-pin-hash', ${role}) returning id`);
+    insert into persons (display_name, pin_hash, role)
+    values ('Operator', 'seed-pin-hash', ${role}) returning id`);
   const session = await withTransaction(suite.admin, (tx) =>
-    startManagementSession(tx, { tenantId, personId: person.rows[0]!.id }),
+    startManagementSession(tx, { personId: person.rows[0]!.id }),
   );
   return session.id;
 }
@@ -76,7 +76,7 @@ describe("layout canvas store on real Postgres, as the app role", () => {
 
   beforeAll(async () => {
     managerTenant = await seedTenant(suite.admin);
-    managerSession = await seedSession(managerTenant, "manager");
+    managerSession = await seedSession("manager");
   });
 
   it("round-trips a manager-authored canvas through create → get", async () => {
@@ -94,7 +94,7 @@ describe("layout canvas store on real Postgres, as the app role", () => {
 
   it("lists a tenant's canvases", async () => {
     const tenantId = await seedTenant(suite.admin);
-    const session = await seedSession(tenantId, "manager");
+    const session = await seedSession("manager");
     const first = await asApp(tenantId, (tx) =>
       createCanvas(tx, {
         managementSessionId: session,
@@ -123,7 +123,7 @@ describe("layout canvas store on real Postgres, as the app role", () => {
 
   it("updates a canvas's name and definition in place", async () => {
     const tenantId = await seedTenant(suite.admin);
-    const session = await seedSession(tenantId, "manager");
+    const session = await seedSession("manager");
     const { id } = await asApp(tenantId, (tx) =>
       createCanvas(tx, {
         managementSessionId: session,
@@ -147,7 +147,7 @@ describe("layout canvas store on real Postgres, as the app role", () => {
 
   it("deletes a canvas", async () => {
     const tenantId = await seedTenant(suite.admin);
-    const session = await seedSession(tenantId, "manager");
+    const session = await seedSession("manager");
     const { id } = await asApp(tenantId, (tx) =>
       createCanvas(tx, {
         managementSessionId: session,
@@ -169,7 +169,7 @@ describe("layout canvas store on real Postgres, as the app role", () => {
     // superuser bypasses nothing here (the FK still applies) but the sibling FK unit test already pins
     // the raw behaviour; this pins the translation on the same real target as the rest of the suite.
     const tenantId = await seedTenant(suite.admin);
-    const session = await seedSession(tenantId, "manager");
+    const session = await seedSession("manager");
     const { id } = await asApp(tenantId, (tx) =>
       createCanvas(tx, {
         managementSessionId: session,
@@ -192,7 +192,7 @@ describe("layout canvas store on real Postgres, as the app role", () => {
     // rather than reporting a silent success. Proof-by-deletion: drop the `updated.length === 0` check
     // and this call resolves, failing the assertion. A well-formed uuid that names no row hits it.
     const tenantId = await seedTenant(suite.admin);
-    const session = await seedSession(tenantId, "manager");
+    const session = await seedSession("manager");
     const code = await codeOf(() =>
       asApp(tenantId, (tx) =>
         updateCanvas(tx, {
@@ -208,7 +208,7 @@ describe("layout canvas store on real Postgres, as the app role", () => {
 
   it("throws canvas.not_found when deleting an absent id", async () => {
     const tenantId = await seedTenant(suite.admin);
-    const session = await seedSession(tenantId, "manager");
+    const session = await seedSession("manager");
     const code = await codeOf(() =>
       asApp(tenantId, (tx) =>
         deleteCanvas(tx, {
@@ -228,7 +228,7 @@ describe("layout canvas store on real Postgres, as the app role", () => {
 
   it("returns the first stored canvas of a form factor over the built-in default", async () => {
     const tenantId = await seedTenant(suite.admin);
-    const session = await seedSession(tenantId, "manager");
+    const session = await seedSession("manager");
     const stored = phoneCanvas("Custom floor");
     await asApp(tenantId, (tx) =>
       createCanvas(tx, {
@@ -250,7 +250,7 @@ describe("layout canvas store on real Postgres, as the app role", () => {
     // createCanvas makes this succeed → codeOf returns "did not throw…" and a row lands, failing both
     // assertions.
     const staffTenant = await seedTenant(suite.admin);
-    const staffSession = await seedSession(staffTenant, "staff");
+    const staffSession = await seedSession("staff");
     const code = await codeOf(() =>
       asApp(staffTenant, (tx) =>
         createCanvas(tx, {
@@ -266,7 +266,7 @@ describe("layout canvas store on real Postgres, as the app role", () => {
 
   it("rejects an invalid definition with canvas.invalid before any INSERT", async () => {
     const tenantId = await seedTenant(suite.admin);
-    const session = await seedSession(tenantId, "manager");
+    const session = await seedSession("manager");
     // authorize FIRST (manager is permitted), THEN validate — so an invalid definition from an
     // AUTHORISED actor is what proves validate runs before the write. `{}` has no formFactor.
     const code = await codeOf(() =>
@@ -288,7 +288,7 @@ describe("layout canvas store on real Postgres, as the app role", () => {
     // — a duplicate must not surface as a raw 500. Here that runs against the real constraint;
     // canvas-store.test.ts pins the translator's own branches on crafted errors instead.
     const tenantId = await seedTenant(suite.admin);
-    const session = await seedSession(tenantId, "manager");
+    const session = await seedSession("manager");
     await asApp(tenantId, (tx) =>
       createCanvas(tx, {
         managementSessionId: session,
@@ -312,7 +312,7 @@ describe("layout canvas store on real Postgres, as the app role", () => {
   it("translates a duplicate name on UPDATE to canvas.name_taken", async () => {
     // Renaming one canvas onto another's name trips the same unique on the UPDATE path.
     const tenantId = await seedTenant(suite.admin);
-    const session = await seedSession(tenantId, "manager");
+    const session = await seedSession("manager");
     await asApp(tenantId, (tx) =>
       createCanvas(tx, {
         managementSessionId: session,

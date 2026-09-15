@@ -1,7 +1,6 @@
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
 import { isAppError } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -34,14 +33,10 @@ import {
 // person.manage check, the PIN-length assertion, and the role/status writes. Nothing here depends on
 // the privilege set (a PGlite connection is superuser holding every grant, so a grant assertion
 // would be a false pass, CLAUDE.md §4).
-let tenantId: string;
 
 const suite = usePgliteDb({
   resetPerTest: false,
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
-  setup: async (db) => {
-    tenantId = await seedTenant(db);
-  },
 });
 
 function run<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
@@ -76,12 +71,11 @@ async function emailOf(id: string): Promise<string | null> {
 
 describe("createPerson", () => {
   it("creates an active person of the given role whose PIN opens a session (manager actor)", async () => {
-    const tillId = await seedTill(suite.db, tenantId);
-    const { sessionId } = await openManagementSession(suite.db, tenantId, "manager");
+    const tillId = await seedTill(suite.db);
+    const { sessionId } = await openManagementSession(suite.db, "manager");
 
     const { id } = await run((tx) =>
       createPerson(tx, {
-        tenantId,
         managementSessionId: sessionId,
         displayName: "Bea",
         role: "supervisor",
@@ -98,12 +92,9 @@ describe("createPerson", () => {
 
     // The stored hash verifies the given PIN end to end: loginWithPin (which checks the hash and the
     // active status) opens a session for the new person.
-    const session = await run((tx) =>
-      loginWithPin(tx, { tenantId, tillId, personId: id, pin: "5678" }),
-    );
+    const session = await run((tx) => loginWithPin(tx, { tillId, personId: id, pin: "5678" }));
     expect(session).toEqual({
       id: expect.any(String),
-      tenantId,
       personId: id,
       tillId,
       role: "supervisor",
@@ -112,13 +103,12 @@ describe("createPerson", () => {
   });
 
   it("throws authorization.not_permitted for a staff actor, writing nothing", async () => {
-    const { sessionId: staffSession } = await openManagementSession(suite.db, tenantId, "staff");
+    const { sessionId: staffSession } = await openManagementSession(suite.db, "staff");
     const before = await personCount();
 
     const code = await codeOf(() =>
       run((tx) =>
         createPerson(tx, {
-          tenantId,
           managementSessionId: staffSession,
           displayName: "Ghost",
           role: "staff",
@@ -134,7 +124,7 @@ describe("createPerson", () => {
   });
 
   it("throws pin.too_short for a PIN below MIN_PIN_LENGTH (manager actor)", async () => {
-    const { sessionId } = await openManagementSession(suite.db, tenantId, "manager");
+    const { sessionId } = await openManagementSession(suite.db, "manager");
     const before = await personCount();
 
     // "12" is length 2, below MIN_PIN_LENGTH (4). The actor IS permitted, so only the length gate
@@ -142,7 +132,6 @@ describe("createPerson", () => {
     const code = await codeOf(() =>
       run((tx) =>
         createPerson(tx, {
-          tenantId,
           managementSessionId: sessionId,
           displayName: "TooShort",
           role: "staff",
@@ -158,10 +147,9 @@ describe("createPerson", () => {
 
 describe("createPerson email", () => {
   it("stores a normalized (trimmed, lower-cased) email", async () => {
-    const { sessionId } = await openManagementSession(suite.db, tenantId, "manager");
+    const { sessionId } = await openManagementSession(suite.db, "manager");
     const { id } = await run((tx) =>
       createPerson(tx, {
-        tenantId,
         managementSessionId: sessionId,
         displayName: "Owner",
         role: "manager",
@@ -173,12 +161,11 @@ describe("createPerson email", () => {
   });
 
   it("rejects a malformed email with person.email_invalid, writing no row", async () => {
-    const { sessionId } = await openManagementSession(suite.db, tenantId, "manager");
+    const { sessionId } = await openManagementSession(suite.db, "manager");
     const before = await personCount();
     const code = await codeOf(() =>
       run((tx) =>
         createPerson(tx, {
-          tenantId,
           managementSessionId: sessionId,
           displayName: "Nope",
           role: "staff",
@@ -193,12 +180,11 @@ describe("createPerson email", () => {
   });
 
   it("rejects an omitted email with person.email_invalid, writing no row", async () => {
-    const { sessionId } = await openManagementSession(suite.db, tenantId, "manager");
+    const { sessionId } = await openManagementSession(suite.db, "manager");
     const before = await personCount();
     const code = await codeOf(() =>
       run((tx) =>
         createPerson(tx, {
-          tenantId,
           managementSessionId: sessionId,
           displayName: "PinOnly",
           role: "staff",
@@ -213,8 +199,8 @@ describe("createPerson email", () => {
 
 describe("setEmail", () => {
   it("sets a normalized login email a manager can then sign in with", async () => {
-    const { sessionId } = await openManagementSession(suite.db, tenantId, "manager");
-    const target = await seedPerson(suite.db, tenantId, "supervisor");
+    const { sessionId } = await openManagementSession(suite.db, "manager");
+    const target = await seedPerson(suite.db, "supervisor");
     await run((tx) =>
       setEmail(tx, { managementSessionId: sessionId, personId: target, email: "  New@X.com " }),
     );
@@ -222,8 +208,8 @@ describe("setEmail", () => {
   });
 
   it("rejects a malformed email with person.email_invalid, leaving the email unchanged", async () => {
-    const { sessionId } = await openManagementSession(suite.db, tenantId, "manager");
-    const target = await seedPerson(suite.db, tenantId, "staff"); // email null
+    const { sessionId } = await openManagementSession(suite.db, "manager");
+    const target = await seedPerson(suite.db, "staff"); // email null
     const code = await codeOf(() =>
       run((tx) =>
         setEmail(tx, { managementSessionId: sessionId, personId: target, email: "nope" }),
@@ -234,8 +220,8 @@ describe("setEmail", () => {
   });
 
   it("throws authorization.not_permitted for a staff actor, leaving the email unchanged", async () => {
-    const { sessionId: staffSession } = await openManagementSession(suite.db, tenantId, "staff");
-    const target = await seedPerson(suite.db, tenantId, "staff"); // email null
+    const { sessionId: staffSession } = await openManagementSession(suite.db, "staff");
+    const target = await seedPerson(suite.db, "staff"); // email null
 
     // A genuine staff management session, no person.manage: rewriting a colleague's login email (an
     // account-takeover vector) must be rejected before the UPDATE. "ok@x.com" is a valid email, so
@@ -305,10 +291,10 @@ describe("asEmailTaken", () => {
 
 describe("setRole", () => {
   it("changes the role, seen by a later authorize on an already-open session", async () => {
-    const tillId = await seedTill(suite.db, tenantId);
-    const { sessionId } = await openManagementSession(suite.db, tenantId, "manager");
-    const targetId = await seedPerson(suite.db, tenantId, "staff");
-    const targetSessionId = await openSession(suite.db, tenantId, tillId, targetId);
+    const tillId = await seedTill(suite.db);
+    const { sessionId } = await openManagementSession(suite.db, "manager");
+    const targetId = await seedPerson(suite.db, "staff");
+    const targetSessionId = await openSession(suite.db, tillId, targetId);
 
     // As staff, the target holds no person.manage — its own session cannot authorize it.
     const before = await codeOf(() =>
@@ -333,8 +319,8 @@ describe("setRole", () => {
   });
 
   it("throws authorization.not_permitted for a staff actor, leaving the role unchanged", async () => {
-    const { sessionId: staffSession } = await openManagementSession(suite.db, tenantId, "staff");
-    const targetId = await seedPerson(suite.db, tenantId, "staff");
+    const { sessionId: staffSession } = await openManagementSession(suite.db, "staff");
+    const targetId = await seedPerson(suite.db, "staff");
 
     // A genuine staff management session (authenticates fine) but no person.manage — the escalation
     // attempt is staff→manager, so if the gate were absent the role would flip.
@@ -352,20 +338,19 @@ describe("setRole", () => {
 
 describe("resetPin", () => {
   it("replaces the PIN: the new PIN logs in, the old one no longer does", async () => {
-    const tillId = await seedTill(suite.db, tenantId);
-    const { sessionId } = await openManagementSession(suite.db, tenantId, "manager");
-    const targetId = await seedPerson(suite.db, tenantId, "staff"); // PIN "1234"
+    const tillId = await seedTill(suite.db);
+    const { sessionId } = await openManagementSession(suite.db, "manager");
+    const targetId = await seedPerson(suite.db, "staff"); // PIN "1234"
 
     await run((tx) =>
       resetPin(tx, { managementSessionId: sessionId, personId: targetId, pin: "8765" }),
     );
 
     const session = await run((tx) =>
-      loginWithPin(tx, { tenantId, tillId, personId: targetId, pin: "8765" }),
+      loginWithPin(tx, { tillId, personId: targetId, pin: "8765" }),
     );
     expect(session).toEqual({
       id: expect.any(String),
-      tenantId,
       personId: targetId,
       tillId,
       role: "staff",
@@ -373,14 +358,14 @@ describe("resetPin", () => {
     });
 
     const oldPin = await codeOf(() =>
-      run((tx) => loginWithPin(tx, { tenantId, tillId, personId: targetId, pin: "1234" })),
+      run((tx) => loginWithPin(tx, { tillId, personId: targetId, pin: "1234" })),
     );
     expect(oldPin).toBe("pin.invalid");
   });
 
   it("throws pin.too_short for a PIN below MIN_PIN_LENGTH, leaving the hash unchanged (manager actor)", async () => {
-    const { sessionId } = await openManagementSession(suite.db, tenantId, "manager");
-    const targetId = await seedPerson(suite.db, tenantId, "staff");
+    const { sessionId } = await openManagementSession(suite.db, "manager");
+    const targetId = await seedPerson(suite.db, "staff");
     const before = (await personRow(targetId)).pin_hash;
 
     const code = await codeOf(() =>
@@ -393,8 +378,8 @@ describe("resetPin", () => {
   });
 
   it("throws authorization.not_permitted for a staff actor, leaving the hash unchanged", async () => {
-    const { sessionId: staffSession } = await openManagementSession(suite.db, tenantId, "staff");
-    const targetId = await seedPerson(suite.db, tenantId, "staff");
+    const { sessionId: staffSession } = await openManagementSession(suite.db, "staff");
+    const targetId = await seedPerson(suite.db, "staff");
     const before = (await personRow(targetId)).pin_hash;
 
     // A genuine staff management session, no person.manage: an account-takeover attempt (rewrite the
@@ -412,8 +397,8 @@ describe("resetPin", () => {
 
 describe("setPassword", () => {
   it("setPassword lets a manager grant dashboard access, then that person can log in", async () => {
-    const { sessionId } = await openManagementSession(suite.db, tenantId, "manager");
-    const target = await seedPerson(suite.db, tenantId, "supervisor");
+    const { sessionId } = await openManagementSession(suite.db, "manager");
+    const target = await seedPerson(suite.db, "supervisor");
     // The target needs an email to sign in on the dashboard: loginManager now resolves by email.
     await run((tx) =>
       tx.execute(sql`update persons set email = 'granted@x.com' where id = ${target}`),
@@ -426,14 +411,14 @@ describe("setPassword", () => {
       }),
     );
     const session = await run((tx) =>
-      loginManager(tx, { tenantId, email: "granted@x.com", password: "second horse" }),
+      loginManager(tx, { email: "granted@x.com", password: "second horse" }),
     );
     expect(session.personId).toBe(target);
   });
 
   it("setPassword rejects a too-short password", async () => {
-    const { sessionId } = await openManagementSession(suite.db, tenantId, "manager");
-    const target = await seedPerson(suite.db, tenantId, "staff");
+    const { sessionId } = await openManagementSession(suite.db, "manager");
+    const target = await seedPerson(suite.db, "staff");
     const code = await run((tx) =>
       codeOf(() =>
         setPassword(tx, { managementSessionId: sessionId, personId: target, password: "short" }),
@@ -443,8 +428,8 @@ describe("setPassword", () => {
   });
 
   it("setPassword throws authorization.not_permitted for a staff actor, leaving password_hash unchanged", async () => {
-    const { sessionId: staffSession } = await openManagementSession(suite.db, tenantId, "staff");
-    const targetId = await seedPerson(suite.db, tenantId, "staff"); // password_hash null
+    const { sessionId: staffSession } = await openManagementSession(suite.db, "staff");
+    const targetId = await seedPerson(suite.db, "staff"); // password_hash null
     const before = (await personRow(targetId)).password_hash;
 
     // A genuine staff management session, no person.manage: granting a colleague dashboard access (a
@@ -470,7 +455,7 @@ describe("suspendPerson / reactivatePerson", () => {
   it.each(["manager", "admin"] as const)(
     "prevents a %s from suspending themselves",
     async (role) => {
-      const { sessionId, personId } = await openManagementSession(suite.db, tenantId, role);
+      const { sessionId, personId } = await openManagementSession(suite.db, role);
       expect(
         await codeOf(() =>
           run((tx) => suspendPerson(tx, { managementSessionId: sessionId, personId })),
@@ -481,7 +466,7 @@ describe("suspendPerson / reactivatePerson", () => {
   );
 
   it("rejects self-deactivation with an uppercase account ID", async () => {
-    const { sessionId, personId } = await openManagementSession(suite.db, tenantId, "admin");
+    const { sessionId, personId } = await openManagementSession(suite.db, "admin");
     expect(
       await codeOf(() =>
         run((tx) =>
@@ -493,26 +478,25 @@ describe("suspendPerson / reactivatePerson", () => {
   });
 
   it("suspend blocks login; reactivate restores it", async () => {
-    const tillId = await seedTill(suite.db, tenantId);
-    const { sessionId } = await openManagementSession(suite.db, tenantId, "manager");
-    const targetId = await seedPerson(suite.db, tenantId, "staff"); // active, PIN "1234"
+    const tillId = await seedTill(suite.db);
+    const { sessionId } = await openManagementSession(suite.db, "manager");
+    const targetId = await seedPerson(suite.db, "staff"); // active, PIN "1234"
 
     // Active to begin with: login works.
-    await run((tx) => loginWithPin(tx, { tenantId, tillId, personId: targetId, pin: "1234" }));
+    await run((tx) => loginWithPin(tx, { tillId, personId: targetId, pin: "1234" }));
 
     await run((tx) => suspendPerson(tx, { managementSessionId: sessionId, personId: targetId }));
     const suspended = await codeOf(() =>
-      run((tx) => loginWithPin(tx, { tenantId, tillId, personId: targetId, pin: "1234" })),
+      run((tx) => loginWithPin(tx, { tillId, personId: targetId, pin: "1234" })),
     );
     expect(suspended).toBe("person.suspended");
 
     await run((tx) => reactivatePerson(tx, { managementSessionId: sessionId, personId: targetId }));
     const session = await run((tx) =>
-      loginWithPin(tx, { tenantId, tillId, personId: targetId, pin: "1234" }),
+      loginWithPin(tx, { tillId, personId: targetId, pin: "1234" }),
     );
     expect(session).toEqual({
       id: expect.any(String),
-      tenantId,
       personId: targetId,
       tillId,
       role: "staff",
@@ -521,8 +505,8 @@ describe("suspendPerson / reactivatePerson", () => {
   });
 
   it("suspendPerson throws authorization.not_permitted for a staff actor, leaving status active", async () => {
-    const { sessionId: staffSession } = await openManagementSession(suite.db, tenantId, "staff");
-    const targetId = await seedPerson(suite.db, tenantId, "staff"); // active
+    const { sessionId: staffSession } = await openManagementSession(suite.db, "staff");
+    const targetId = await seedPerson(suite.db, "staff"); // active
 
     // A genuine staff management session, no person.manage: a lockout attempt (suspend a colleague)
     // must be rejected before the UPDATE, so the target stays active.
@@ -535,9 +519,9 @@ describe("suspendPerson / reactivatePerson", () => {
   });
 
   it("reactivatePerson throws authorization.not_permitted for a staff actor, leaving status suspended", async () => {
-    const { sessionId: staffSession } = await openManagementSession(suite.db, tenantId, "staff");
+    const { sessionId: staffSession } = await openManagementSession(suite.db, "staff");
     // A SUSPENDED target so reactivate would be a real change (active would hide a missing gate).
-    const targetId = await seedPerson(suite.db, tenantId, "staff", "suspended");
+    const targetId = await seedPerson(suite.db, "staff", "suspended");
 
     const code = await codeOf(() =>
       run((tx) => reactivatePerson(tx, { managementSessionId: staffSession, personId: targetId })),
@@ -551,13 +535,12 @@ describe("suspendPerson / reactivatePerson", () => {
 
 describe("listActiveStaff", () => {
   it("returns active persons' id + name, sorted, no secrets", async () => {
-    const { sessionId } = await openManagementSession(suite.db, tenantId, "manager");
+    const { sessionId } = await openManagementSession(suite.db, "manager");
 
     // Insert Zoe BEFORE Ana so an Ana-first result proves the orderBy(displayName), not insertion
     // order. "Gone" is created then suspended: it must NOT appear.
     const zoe = await run((tx) =>
       createPerson(tx, {
-        tenantId,
         managementSessionId: sessionId,
         displayName: "Zoe",
         role: "staff",
@@ -567,7 +550,6 @@ describe("listActiveStaff", () => {
     );
     const ana = await run((tx) =>
       createPerson(tx, {
-        tenantId,
         managementSessionId: sessionId,
         displayName: "Ana",
         role: "supervisor",
@@ -577,7 +559,6 @@ describe("listActiveStaff", () => {
     );
     const gone = await run((tx) =>
       createPerson(tx, {
-        tenantId,
         managementSessionId: sessionId,
         displayName: "Gone",
         role: "staff",
@@ -589,8 +570,8 @@ describe("listActiveStaff", () => {
 
     const staff = await run((tx) => listActiveStaff(tx));
 
-    // This file shares one PGlite db + tenant across every describe block, and `listActiveStaff`
-    // reads every active person in the tenant — the roster therefore also carries persons the other
+    // This file shares one PGlite database across every describe block, and `listActiveStaff`
+    // reads every active person — the roster therefore also carries persons the other
     // describes seeded. Restrict to the cohort THIS test created, the way
     // the sibling suites read specific rows by id, so the assertion is order-independent.
     const mine = new Set([zoe.id, ana.id, gone.id]);
@@ -605,14 +586,9 @@ describe("listActiveStaff", () => {
 
 describe("listPersons", () => {
   it("listPersons returns a roster with credential booleans, no secrets", async () => {
-    const { sessionId, personId: manager } = await openManagementSession(
-      suite.db,
-      tenantId,
-      "manager",
-    );
+    const { sessionId, personId: manager } = await openManagementSession(suite.db, "manager");
     await run((tx) =>
       createPerson(tx, {
-        tenantId,
         managementSessionId: sessionId,
         displayName: "Ada",
         role: "staff",
@@ -640,10 +616,9 @@ describe("listPersons", () => {
   });
 
   it("projects every created person's required email", async () => {
-    const { sessionId } = await openManagementSession(suite.db, tenantId, "manager");
+    const { sessionId } = await openManagementSession(suite.db, "manager");
     const withEmail = await run((tx) =>
       createPerson(tx, {
-        tenantId,
         managementSessionId: sessionId,
         displayName: "Mailed",
         role: "supervisor",
@@ -653,7 +628,6 @@ describe("listPersons", () => {
     );
     const second = await run((tx) =>
       createPerson(tx, {
-        tenantId,
         managementSessionId: sessionId,
         displayName: "Unmailed",
         role: "staff",
@@ -670,7 +644,7 @@ describe("listPersons", () => {
   });
 
   it("listPersons refuses a staff role", async () => {
-    const { sessionId } = await openManagementSession(suite.db, tenantId, "staff");
+    const { sessionId } = await openManagementSession(suite.db, "staff");
     const code = await run((tx) =>
       codeOf(() => listPersons(tx, { managementSessionId: sessionId })),
     );

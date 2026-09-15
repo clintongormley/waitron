@@ -32,8 +32,10 @@ import {
   type TotpKeyRing,
 } from "./mfa.js";
 
+/** Who is making the change: the management session the routes resolve it from. The two paths that
+ * issue an emailed proof also take the taxpayer id `hashCode` mixes into that proof, declared on
+ * their own inputs rather than here, because nothing else in this file reads one. */
 interface Owner {
-  tenantId: string;
   managementSessionId: string;
 }
 interface Credentials {
@@ -100,7 +102,6 @@ export async function beginOwnTotpEnrollment(
   const [row] = await tx
     .insert(totpEnrollments)
     .values({
-      tenantId: input.tenantId,
       personId: person.id,
       encryptedSecret: encryptTotpSecret(secret, input.keyRing.current),
       expiresAt,
@@ -139,7 +140,7 @@ export async function finishOwnTotpEnrollment(
     .set({ totpSecret: enrollment!.encryptedSecret })
     .where(eq(persons.id, person.id));
   await tx.delete(totpEnrollments).where(eq(totpEnrollments.id, input.enrollmentId));
-  return { codes: await replaceRecoveryCodes(tx, input.tenantId, person.id) };
+  return { codes: await replaceRecoveryCodes(tx, person.id) };
 }
 
 export async function regenerateOwnRecoveryCodes(
@@ -148,7 +149,7 @@ export async function regenerateOwnRecoveryCodes(
 ): Promise<{ codes: string[] }> {
   const person = await ownPerson(tx, input);
   verifyCurrent(person, input);
-  return { codes: await replaceRecoveryCodes(tx, input.tenantId, person.id) };
+  return { codes: await replaceRecoveryCodes(tx, person.id) };
 }
 
 export async function disableOwnTotp(
@@ -168,8 +169,7 @@ export async function unlinkOwnGoogle(tx: Transaction, input: Owner & Credential
   await tx.update(persons).set({ googleSubject: null }).where(eq(persons.id, person.id));
 }
 
-async function invalidateLinks(tx: Transaction, tenantId: string, personId: string): Promise<void> {
-  void tenantId;
+async function invalidateLinks(tx: Transaction, personId: string): Promise<void> {
   await tx
     .update(managementAccountActions)
     .set({ usedAt: sql`now()` })
@@ -208,6 +208,7 @@ export async function saveOwnProfile(
   tx: Transaction,
   input: Owner &
     Credentials & {
+      tenantId: string;
       displayName: string;
       firstNames?: string;
       lastNames?: string;
@@ -252,10 +253,10 @@ export async function saveOwnProfile(
     asPersonUniqueViolation(error, { displayName, email });
   }
   if (!changedEmail) {
-    if (person.pendingEmail !== null) await invalidateLinks(tx, input.tenantId, person.id);
+    if (person.pendingEmail !== null) await invalidateLinks(tx, person.id);
     return null;
   }
-  await invalidateLinks(tx, input.tenantId, person.id);
+  await invalidateLinks(tx, person.id);
   return issueAccountAction(tx, {
     tenantId: input.tenantId,
     personId: person.id,
@@ -267,7 +268,7 @@ export async function saveOwnProfile(
 
 export async function confirmOwnEmailChange(
   tx: Transaction,
-  input: Owner & { code: string; codeKey: Buffer },
+  input: Owner & { tenantId: string; code: string; codeKey: Buffer },
 ): Promise<string | null> {
   const person = await ownPerson(tx, input);
   const email = await confirmEmailChangeByCode(tx, {
@@ -307,7 +308,7 @@ export async function changeOwnPassword(
     .update(persons)
     .set({ passwordHash: hashPassword(input.password) })
     .where(eq(persons.id, person.id));
-  await invalidateLinks(tx, input.tenantId, person.id);
+  await invalidateLinks(tx, person.id);
   await tx
     .update(managementSessions)
     .set({ endedAt: sql`now()` })

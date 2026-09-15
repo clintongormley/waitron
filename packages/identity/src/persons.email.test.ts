@@ -4,7 +4,6 @@ import { withTransaction } from "@waitron/db";
 import { pgErrorCode } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { hashPin } from "./verify-pin.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 
 // Real PostgreSQL checks INSERT and unique-index behavior through an app_user member login.
@@ -15,32 +14,30 @@ const PIN = hashPin("1234");
 
 const suite = useTemplateDb({ template: "core_identity" });
 
-/** Insert one persons row for `tenantId`. Returns the insert promise so a caller can assert on
- * rejection (unique violation) or resolution. */
+/** Insert one persons row. Returns the insert promise so a caller can assert on rejection (unique
+ * violation) or resolution. */
 function insertPerson(
   probe: Database,
-  tenantId: string,
   displayName: string,
   email: string | null,
 ): Promise<unknown> {
   return withTransaction(probe, (tx) =>
     tx.execute(sql`
-      insert into persons (tenant_id, display_name, pin_hash, email)
-      values (${tenantId}, ${displayName}, ${PIN}, ${email})`),
+      insert into persons (display_name, pin_hash, email)
+      values (${displayName}, ${PIN}, ${email})`),
   );
 }
 
 describe("persons.email unique index (persons_tenant_email_uq)", () => {
-  it("rejects a second person with the same email (case-insensitively) in one tenant", async () => {
-    const t1 = await seedTenant(suite.admin);
+  it("rejects a second person with the same email, case-insensitively", async () => {
     const probe = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
-      await insertPerson(probe, t1, "A", "Owner@x.com");
+      await insertPerson(probe, "A", "Owner@x.com");
       // The differing case (Owner@x.com vs owner@x.com) is the point: lower(email) collides. drizzle
       // wraps the pg error, so its .message is a generic "Failed query…" — the unique-violation code
       // and the constraint name live on the underlying pg error, which `pgErrorCode` reaches by
       // walking `.cause`. 23505 = unique_violation.
-      const error = await insertPerson(probe, t1, "B", "owner@x.com")
+      const error = await insertPerson(probe, "B", "owner@x.com")
         .then(() => undefined)
         .catch((e: unknown) => e);
       expect(pgErrorCode(error)).toBe("23505");
@@ -54,24 +51,11 @@ describe("persons.email unique index (persons_tenant_email_uq)", () => {
     }
   });
 
-  it("allows the same email in different tenants", async () => {
-    const t1 = await seedTenant(suite.admin);
-    const t2 = await seedTenant(suite.admin);
+  it("allows multiple persons with NULL email", async () => {
     const probe = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
-      await insertPerson(probe, t1, "A", "owner@x.com");
-      await expect(insertPerson(probe, t2, "A", "owner@x.com")).resolves.toBeDefined();
-    } finally {
-      await probe.close();
-    }
-  });
-
-  it("allows multiple persons with NULL email in one tenant", async () => {
-    const t1 = await seedTenant(suite.admin);
-    const probe = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
-    try {
-      await insertPerson(probe, t1, "A", null);
-      await expect(insertPerson(probe, t1, "B", null)).resolves.toBeDefined();
+      await insertPerson(probe, "A", null);
+      await expect(insertPerson(probe, "B", null)).resolves.toBeDefined();
     } finally {
       await probe.close();
     }

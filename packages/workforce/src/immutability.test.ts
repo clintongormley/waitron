@@ -28,7 +28,7 @@ beforeEach(async () => {
   const tenantId = await seedTenant(suite.admin);
   const locationId = await seedLocation(suite.admin, tenantId);
   const nodeId = await seedNode(suite.admin, brandTenantId(tenantId), brandLocationId(locationId));
-  const personId = await seedPerson(suite.admin, tenantId);
+  const personId = await seedPerson(suite.admin);
   ctx = { nodeId, personId, locationId };
 });
 

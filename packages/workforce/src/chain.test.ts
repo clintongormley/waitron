@@ -37,7 +37,7 @@ let nodeId: string;
 
 beforeEach(async () => {
   tenantId = await seedTenant(pg.db);
-  personId = await seedPerson(pg.db, tenantId);
+  personId = await seedPerson(pg.db);
   locationId = await seedLocation(pg.db, tenantId);
   nodeId = await seedNode(pg.db, brandTenantId(tenantId), brandLocationId(locationId));
 });

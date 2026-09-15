@@ -1,7 +1,6 @@
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { IDENTITY_MIGRATIONS } from "./migrations.js";
@@ -17,22 +16,18 @@ import { codeOf, seedPerson } from "../test/fixtures.js";
 // timeout, and the mid-session status re-check. A PGlite connection is superuser holding every
 // grant, so a privilege or trigger assertion would be a false pass here (CLAUDE.md §4); nothing
 // below makes one.
-let tenantId: string;
 
 const suite = usePgliteDb({
   resetPerTest: false,
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
-  setup: async (db) => {
-    tenantId = await seedTenant(db);
-  },
 });
 
 const run = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> => withTransaction(suite.db, fn);
 
 describe("management session lifecycle", () => {
   it("does not extend a passive refresh's session, while an ordinary read still extends it", async () => {
-    const personId = await seedPerson(suite.db, tenantId, "manager");
-    const session = await run((tx) => startManagementSession(tx, { tenantId, personId }));
+    const personId = await seedPerson(suite.db, "manager");
+    const session = await run((tx) => startManagementSession(tx, { personId }));
     await run((tx) =>
       tx.execute(
         sql`update management_sessions set last_seen_at = now() - interval '10 minutes' where id = ${session.id}`,
@@ -49,8 +44,8 @@ describe("management session lifecycle", () => {
     );
   });
   it("starts and resolves a session, returning the person's role and locale", async () => {
-    const personId = await seedPerson(suite.db, tenantId, "manager");
-    const session = await run((tx) => startManagementSession(tx, { tenantId, personId }));
+    const personId = await seedPerson(suite.db, "manager");
+    const session = await run((tx) => startManagementSession(tx, { personId }));
     const resolved = await run((tx) => resolveManagementSession(tx, session.id));
     // `locale` is null for a seedPerson with no preference set; expiry is issued by the server.
     expect(resolved).toEqual({
@@ -58,7 +53,6 @@ describe("management session lifecycle", () => {
       role: "manager",
       email: null,
       locale: null,
-      tenantId,
       expiresAt: expect.any(String),
     });
   });
@@ -66,9 +60,9 @@ describe("management session lifecycle", () => {
   it("returns the person's set locale, not just the null default", async () => {
     // Proves `locale` is the LOOKED-UP persons.locale from the join, not a hardcoded null — a mutant
     // dropping the field (or returning null) fails here.
-    const personId = await seedPerson(suite.db, tenantId, "manager");
+    const personId = await seedPerson(suite.db, "manager");
     await run((tx) => tx.execute(sql`update persons set locale = 'es-ES' where id = ${personId}`));
-    const session = await run((tx) => startManagementSession(tx, { tenantId, personId }));
+    const session = await run((tx) => startManagementSession(tx, { personId }));
     const resolved = await run((tx) => resolveManagementSession(tx, session.id));
     expect(resolved.locale).toBe("es-ES");
   });
@@ -81,16 +75,16 @@ describe("management session lifecycle", () => {
   });
 
   it("throws management_session.required after endManagementSession", async () => {
-    const personId = await seedPerson(suite.db, tenantId, "manager");
-    const session = await run((tx) => startManagementSession(tx, { tenantId, personId }));
+    const personId = await seedPerson(suite.db, "manager");
+    const session = await run((tx) => startManagementSession(tx, { personId }));
     expect(await run((tx) => endManagementSession(tx, session.id))).toBe(true);
     const code = await run((tx) => codeOf(() => resolveManagementSession(tx, session.id)));
     expect(code).toBe("management_session.required");
   });
 
   it("throws management_session.expired past the idle timeout", async () => {
-    const personId = await seedPerson(suite.db, tenantId, "manager");
-    const session = await run((tx) => startManagementSession(tx, { tenantId, personId }));
+    const personId = await seedPerson(suite.db, "manager");
+    const session = await run((tx) => startManagementSession(tx, { personId }));
     // Age last_seen_at beyond the timeout via a raw SQL update — deterministic, no clock injection.
     await run((tx) =>
       tx.execute(
@@ -102,8 +96,8 @@ describe("management session lifecycle", () => {
   });
 
   it("throws person.suspended when the person is suspended mid-session", async () => {
-    const personId = await seedPerson(suite.db, tenantId, "manager");
-    const session = await run((tx) => startManagementSession(tx, { tenantId, personId }));
+    const personId = await seedPerson(suite.db, "manager");
+    const session = await run((tx) => startManagementSession(tx, { personId }));
     await run((tx) =>
       tx.execute(sql`update persons set status = 'suspended' where id = ${personId}`),
     );

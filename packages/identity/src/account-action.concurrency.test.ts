@@ -15,7 +15,7 @@ let personId: string;
 
 beforeEach(async () => {
   tenantId = await seedTenant(suite.admin);
-  personId = await seedManager(suite.admin, tenantId, { email: "reset-race@x.com" });
+  personId = await seedManager(suite.admin, { email: "reset-race@x.com" });
 });
 
 describe("account-action issuance under real concurrency", () => {
@@ -66,8 +66,7 @@ describe("account-action issuance under real concurrency", () => {
         const live = await suite.admin.execute<{ count: string }>(sql`
         select count(*) as count
         from management_account_actions
-        where tenant_id = ${tenantId}
-          and person_id = ${personId}
+        where person_id = ${personId}
           and purpose = ${purpose}
           and used_at is null`);
         expect(live.rows[0]!.count).toBe("1");

@@ -1,7 +1,6 @@
 import { CORE_MIGRATIONS, captureError, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
 import { AppError } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -15,15 +14,13 @@ import { insertAbsence, seedPerson } from "../test/fixtures.js";
 // grants on `absences` (that it CAN be INSERTed/UPDATEd/DELETEd) are `absences: "SIUD"` in the
 // privilege matrix, `packages/fiscal-verifactu/src/privileges.expected.ts`.
 
-let tenantId: string;
 let personId: string;
 
 const suite = usePgliteDb({
   resetPerTest: false,
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS],
   setup: async (db) => {
-    tenantId = await seedTenant(db);
-    personId = await seedPerson(db, tenantId);
+    personId = await seedPerson(db);
   },
 });
 
@@ -42,7 +39,7 @@ describe("createAbsence", () => {
   // these order-dependent (CLAUDE.md §4). Seeding a new person is cheaper than an afterEach cleanup
   // and cannot be forgotten.
   it("inserts a requested absence with no note by default", async () => {
-    const p = await seedPerson(suite.db, tenantId, `abs-${crypto.randomUUID()}`);
+    const p = await seedPerson(suite.db, `abs-${crypto.randomUUID()}`);
     const id = await run((tx) =>
       createAbsence(tx, {
         personId: p,
@@ -58,7 +55,7 @@ describe("createAbsence", () => {
   });
 
   it("stores a supplied note", async () => {
-    const p = await seedPerson(suite.db, tenantId, `abs-${crypto.randomUUID()}`);
+    const p = await seedPerson(suite.db, `abs-${crypto.randomUUID()}`);
     const id = await run((tx) =>
       createAbsence(tx, {
         personId: p,
@@ -76,7 +73,7 @@ describe("createAbsence", () => {
 
   it("rejects an absence overlapping an existing one for the same person", async () => {
     // Existing 10–15 Feb. New 12–18 Feb overlaps it (12 ≤ 15 and 10 ≤ 18) → absence.overlaps.
-    const p = await seedPerson(suite.db, tenantId, `abs-${crypto.randomUUID()}`);
+    const p = await seedPerson(suite.db, `abs-${crypto.randomUUID()}`);
     await insertAbsence(suite.db, {
       personId: p,
       startsOn: "2026-02-10",
@@ -101,7 +98,7 @@ describe("createAbsence", () => {
     // genuinely distinguish overlap from adjacency — a guard that dropped the date predicate (any
     // same-person absence blocks) would wrongly reject THIS, and a guard whose overlap was too loose
     // would wrongly accept the 12–18 case above. 16 > 15, so there is no shared day.
-    const p = await seedPerson(suite.db, tenantId, `abs-${crypto.randomUUID()}`);
+    const p = await seedPerson(suite.db, `abs-${crypto.randomUUID()}`);
     await insertAbsence(suite.db, {
       personId: p,
       startsOn: "2026-02-10",
@@ -129,7 +126,7 @@ describe("createAbsence", () => {
     // let it reach the `absences_range_ck` (ends_on >= starts_on) 23514 → a raw driver error. Delete
     // the guard in createAbsence and this reddens: the code becomes the raw PGlite constraint error,
     // not `absence.invalid` (CLAUDE.md §4 prove-by-deletion).
-    const p = await seedPerson(suite.db, tenantId, `abs-${crypto.randomUUID()}`);
+    const p = await seedPerson(suite.db, `abs-${crypto.randomUUID()}`);
     const code = await codeOfRejection(() =>
       run((tx) =>
         createAbsence(tx, {
@@ -148,7 +145,7 @@ describe("createAbsence", () => {
     // The boundary the ordering guard must NOT reject: a one-day absence is starts_on = ends_on, which
     // the `absences_range_ck` (>=) allows. A guard written `endsOn <= startsOn` would wrongly reject
     // this; `endsOn < startsOn` accepts it.
-    const p = await seedPerson(suite.db, tenantId, `abs-${crypto.randomUUID()}`);
+    const p = await seedPerson(suite.db, `abs-${crypto.randomUUID()}`);
     const id = await run((tx) =>
       createAbsence(tx, {
         personId: p,
@@ -167,8 +164,8 @@ describe("createAbsence", () => {
   it("does not treat another person's overlapping absence as a conflict", async () => {
     // The overlap is scoped to the SAME person: a second person's absence over the same days must not
     // block this one. Dropping the person_id predicate from the guard fails this.
-    const p = await seedPerson(suite.db, tenantId, `abs-${crypto.randomUUID()}`);
-    const other = await seedPerson(suite.db, tenantId, `abs-${crypto.randomUUID()}`);
+    const p = await seedPerson(suite.db, `abs-${crypto.randomUUID()}`);
+    const other = await seedPerson(suite.db, `abs-${crypto.randomUUID()}`);
     await insertAbsence(suite.db, {
       personId: other,
       startsOn: "2026-02-10",
@@ -193,7 +190,7 @@ describe("createAbsence", () => {
 describe("setAbsenceStatus", () => {
   it("moves a requested absence to approved and stamps the decider + decided_at", async () => {
     const id = await insertAbsence(suite.db, { personId });
-    const decider = await seedPerson(suite.db, tenantId, `mgr-${crypto.randomUUID()}`);
+    const decider = await seedPerson(suite.db, `mgr-${crypto.randomUUID()}`);
     await run((tx) =>
       setAbsenceStatus(tx, {
         absenceId: id,
@@ -232,8 +229,7 @@ describe("listPendingAbsences", () => {
     // database), so clear the earlier tests' absences to keep the ordered assertion below
     // order-independent (CLAUDE.md §4) — mirrors listPendingSwaps in shift-swaps.test.ts.
     await suite.db.execute(sql`delete from absences`);
-    const listTenant = tenantId;
-    const p = await seedPerson(suite.db, listTenant, `la-${crypto.randomUUID()}`);
+    const p = await seedPerson(suite.db, `la-${crypto.randomUUID()}`);
     // TWO requested absences seeded OUT OF created_at ORDER: the FIRST-inserted (the holiday) carries
     // the LATER timestamp, the SECOND-inserted (the sick_leave) the EARLIER one, so insertion order and
     // created_at order DISAGREE. `order by created_at` must return [sick_leave, holiday]; delete it and

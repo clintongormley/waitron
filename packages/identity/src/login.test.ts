@@ -1,7 +1,6 @@
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { IDENTITY_MIGRATIONS } from "./migrations.js";
@@ -12,14 +11,10 @@ import { codeOf, seedPerson, seedTill } from "../test/fixtures.js";
 // gates and the open→closed transition. Nothing here depends on the privilege set (a PGlite
 // connection is superuser holding every grant, so a grant assertion would be a false pass,
 // CLAUDE.md §4).
-let tenantId: string;
 
 const suite = usePgliteDb({
   resetPerTest: false,
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
-  setup: async (db) => {
-    tenantId = await seedTenant(db);
-  },
 });
 
 function run<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
@@ -28,12 +23,10 @@ function run<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
 
 describe("loginWithPin", () => {
   it("opens a session for a person who supplies the right PIN, left open (ended_at IS NULL)", async () => {
-    const tillId = await seedTill(suite.db, tenantId);
-    const personId = await seedPerson(suite.db, tenantId);
+    const tillId = await seedTill(suite.db);
+    const personId = await seedPerson(suite.db);
 
-    const session = await run((tx) =>
-      loginWithPin(tx, { tenantId, tillId, personId, pin: "1234" }),
-    );
+    const session = await run((tx) => loginWithPin(tx, { tillId, personId, pin: "1234" }));
 
     // toEqual, not toMatchObject: every field of Session is pinned, so an unlisted extra key would
     // fail rather than be silently ignored (CLAUDE.md §4). id is a fresh uuid, hence expect.any.
@@ -42,7 +35,6 @@ describe("loginWithPin", () => {
     // is the person's preferred UI language, null for a seedPerson with no preference set.
     expect(session).toEqual({
       id: expect.any(String),
-      tenantId,
       personId,
       tillId,
       role: "staff",
@@ -58,12 +50,10 @@ describe("loginWithPin", () => {
   it("carries the person's own role in the session (a manager, not just the staff default)", async () => {
     // Proves `role` is the LOOKED-UP role, not a hardcoded constant — a mutant returning "staff"
     // (or dropping the field) fails here.
-    const tillId = await seedTill(suite.db, tenantId);
-    const personId = await seedPerson(suite.db, tenantId, "manager");
+    const tillId = await seedTill(suite.db);
+    const personId = await seedPerson(suite.db, "manager");
 
-    const session = await run((tx) =>
-      loginWithPin(tx, { tenantId, tillId, personId, pin: "1234" }),
-    );
+    const session = await run((tx) => loginWithPin(tx, { tillId, personId, pin: "1234" }));
 
     expect(session.role).toBe("manager");
   });
@@ -71,23 +61,21 @@ describe("loginWithPin", () => {
   it("carries the person's set locale in the session (not just the null default)", async () => {
     // Proves `locale` is the LOOKED-UP persons.locale threaded through verifyPersonCredential, not a
     // hardcoded null — a mutant dropping the field (or returning null) fails here.
-    const tillId = await seedTill(suite.db, tenantId);
-    const personId = await seedPerson(suite.db, tenantId);
+    const tillId = await seedTill(suite.db);
+    const personId = await seedPerson(suite.db);
     await run((tx) => tx.execute(sql`update persons set locale = 'es-ES' where id = ${personId}`));
 
-    const session = await run((tx) =>
-      loginWithPin(tx, { tenantId, tillId, personId, pin: "1234" }),
-    );
+    const session = await run((tx) => loginWithPin(tx, { tillId, personId, pin: "1234" }));
 
     expect(session.locale).toBe("es-ES");
   });
 
   it("throws pin.invalid when the PIN does not verify", async () => {
-    const tillId = await seedTill(suite.db, tenantId);
-    const personId = await seedPerson(suite.db, tenantId);
+    const tillId = await seedTill(suite.db);
+    const personId = await seedPerson(suite.db);
 
     const code = await codeOf(() =>
-      run((tx) => loginWithPin(tx, { tenantId, tillId, personId, pin: "9999" })),
+      run((tx) => loginWithPin(tx, { tillId, personId, pin: "9999" })),
     );
     expect(code).toBe("pin.invalid");
 
@@ -99,24 +87,22 @@ describe("loginWithPin", () => {
   });
 
   it("throws person.not_found for an unknown personId", async () => {
-    const tillId = await seedTill(suite.db, tenantId);
+    const tillId = await seedTill(suite.db);
 
     const code = await codeOf(() =>
-      run((tx) =>
-        loginWithPin(tx, { tenantId, tillId, personId: crypto.randomUUID(), pin: "1234" }),
-      ),
+      run((tx) => loginWithPin(tx, { tillId, personId: crypto.randomUUID(), pin: "1234" })),
     );
     expect(code).toBe("person.not_found");
   });
 
   it("throws person.suspended for a suspended person, even with the right PIN", async () => {
-    const tillId = await seedTill(suite.db, tenantId);
-    const personId = await seedPerson(suite.db, tenantId, "staff", "suspended");
+    const tillId = await seedTill(suite.db);
+    const personId = await seedPerson(suite.db, "staff", "suspended");
 
     // Correct PIN, so this proves the suspended gate is checked BEFORE (and independently of) the
     // PIN — a suspended account cannot log in however good its credential.
     const code = await codeOf(() =>
-      run((tx) => loginWithPin(tx, { tenantId, tillId, personId, pin: "1234" })),
+      run((tx) => loginWithPin(tx, { tillId, personId, pin: "1234" })),
     );
     expect(code).toBe("person.suspended");
   });
@@ -124,11 +110,9 @@ describe("loginWithPin", () => {
 
 describe("endSession", () => {
   it("stamps ended_at and returns true, then returns false on a second call", async () => {
-    const tillId = await seedTill(suite.db, tenantId);
-    const personId = await seedPerson(suite.db, tenantId);
-    const session = await run((tx) =>
-      loginWithPin(tx, { tenantId, tillId, personId, pin: "1234" }),
-    );
+    const tillId = await seedTill(suite.db);
+    const personId = await seedPerson(suite.db);
+    const session = await run((tx) => loginWithPin(tx, { tillId, personId, pin: "1234" }));
 
     const first = await run((tx) => endSession(tx, session.id));
     expect(first).toBe(true);

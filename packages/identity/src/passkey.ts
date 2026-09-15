@@ -102,12 +102,7 @@ function parseTransports(stored: string | null): AuthenticatorTransportFuture[] 
  * so the challenge survives to lapse by its TTL rather than being eagerly swept — the semantics both
  * finish functions and `passkey.challenge_expired`'s own doc describe.
  */
-async function consumeChallenge(
-  tx: Transaction,
-  tenantId: string,
-  challengeHandle: string,
-): Promise<string> {
-  void tenantId;
+async function consumeChallenge(tx: Transaction, challengeHandle: string): Promise<string> {
   const [challenge] = await tx
     .delete(webauthnChallenges)
     .where(eq(webauthnChallenges.id, challengeHandle))
@@ -130,9 +125,9 @@ async function consumeChallenge(
  */
 export async function beginPasskeyRegistration(
   tx: Transaction,
-  input: { managementSessionId: string; tenantId: string; rpId: string; rpName: string },
+  input: { managementSessionId: string; rpId: string; rpName: string },
 ): Promise<{ challengeHandle: string; options: PublicKeyCredentialCreationOptionsJSON }> {
-  const { personId, tenantId } = await resolveManagementSession(tx, input.managementSessionId);
+  const { personId } = await resolveManagementSession(tx, input.managementSessionId);
   const [person] = await tx
     .select({ displayName: persons.displayName })
     .from(persons)
@@ -166,7 +161,7 @@ export async function beginPasskeyRegistration(
   });
   const [row] = await tx
     .insert(webauthnChallenges)
-    .values({ tenantId, personId, challenge: options.challenge })
+    .values({ personId, challenge: options.challenge })
     .returning({ id: webauthnChallenges.id });
   return { challengeHandle: row!.id, options };
 }
@@ -190,7 +185,6 @@ export async function finishPasskeyRegistration(
   tx: Transaction,
   input: {
     managementSessionId: string;
-    tenantId: string;
     challengeHandle: string;
     response: RegistrationResponseJSON;
     name?: unknown;
@@ -198,7 +192,7 @@ export async function finishPasskeyRegistration(
     origin: string;
   },
 ): Promise<{ credentialId: string }> {
-  const { personId, tenantId } = await resolveManagementSession(tx, input.managementSessionId);
+  const { personId } = await resolveManagementSession(tx, input.managementSessionId);
   if (
     input.name !== undefined &&
     (typeof input.name !== "string" || input.name.trim().length > 80)
@@ -208,7 +202,7 @@ export async function finishPasskeyRegistration(
   const name = typeof input.name === "string" ? input.name.trim() || null : null;
   // Consume the challenge up front: a locking DELETE that also enforces single-use (see
   // `consumeChallenge`). A verify failure below rolls the whole transaction back, undoing this delete.
-  const expectedChallenge = await consumeChallenge(tx, tenantId, input.challengeHandle);
+  const expectedChallenge = await consumeChallenge(tx, input.challengeHandle);
   // `@simplewebauthn/server` throws a GENERIC `Error` on a malformed/mismatched response (a
   // missing/non-base64url credential id, wrong origin/RPID, a bad attestation) — never a mapped
   // `passkey.*` code — so a bare call would reach `run` as a non-AppError and become an opaque
@@ -235,7 +229,6 @@ export async function finishPasskeyRegistration(
   // authenticator's transports are stored here (see `serializeTransports`) for a later ceremony.
   try {
     await tx.insert(webauthnCredentials).values({
-      tenantId,
       personId,
       credentialId: cred.id,
       name,
@@ -244,8 +237,8 @@ export async function finishPasskeyRegistration(
       transports: serializeTransports(cred.transports),
     });
   } catch (error) {
-    // This credential is already enrolled for the tenant: the `(tenant_id, credential_id)` unique
-    // constraint raises 23505. The only unique key this INSERT can violate is that composite one —
+    // This credential is already enrolled: the `credential_id` unique constraint raises 23505. The
+    // only unique key this INSERT can violate is that one —
     // `id` is a random-uuid PK — so `isUniqueViolation` alone identifies it without a constraint-name
     // check. Translate it into a domain code (the register route maps → 409); a raw driver error would
     // otherwise reach `run` as an opaque `server.internal` 500. Anything else is a genuine failure:
@@ -266,7 +259,7 @@ export async function finishPasskeyRegistration(
  */
 export async function beginPasskeyAuthentication(
   tx: Transaction,
-  input: { tenantId: string; rpId: string },
+  input: { rpId: string },
 ): Promise<{ challengeHandle: string; options: PublicKeyCredentialRequestOptionsJSON }> {
   // Discoverable (no allowCredentials) AND user-verifying: 'required' makes the authenticator perform UV
   // on this primary login, matching the verify side (requireUserVerification true). The library default
@@ -278,7 +271,7 @@ export async function beginPasskeyAuthentication(
   });
   const [row] = await tx
     .insert(webauthnChallenges)
-    .values({ tenantId: input.tenantId, challenge: options.challenge }) // personId null: person unknown until finish
+    .values({ challenge: options.challenge }) // personId null: person unknown until finish
     .returning({ id: webauthnChallenges.id });
   return { challengeHandle: row!.id, options };
 }
@@ -308,7 +301,6 @@ export async function beginPasskeyAuthentication(
 export async function finishPasskeyAuthentication(
   tx: Transaction,
   input: {
-    tenantId: string;
     challengeHandle: string;
     response: AuthenticationResponseJSON;
     rpId: string;
@@ -317,7 +309,7 @@ export async function finishPasskeyAuthentication(
 ): Promise<ManagementSession> {
   // Consume the challenge up front: a locking DELETE that also enforces single-use (see
   // `consumeChallenge`). Any throw below rolls the whole transaction back, undoing this delete.
-  const expectedChallenge = await consumeChallenge(tx, input.tenantId, input.challengeHandle);
+  const expectedChallenge = await consumeChallenge(tx, input.challengeHandle);
   // The credential id the authenticator returned is untrusted request input: typed `string`, but the
   // route hands `response` through as `never`, so at runtime it may be missing or non-string — a value
   // that would reach the `credential_id` text column and could 500 in the driver. Screen it first; a
@@ -325,7 +317,7 @@ export async function finishPasskeyAuthentication(
   if (typeof input.response?.id !== "string") throw new AppError("passkey.not_registered", {});
 
   // Resolve the credential the authenticator returned, joining the owning person for their status.
-  // The database holds one tenant and (tenant_id, credential_id) is unique.
+  // `credential_id` is unique, so this resolves at most one row.
   // The inner join cannot drop a matched credential:
   // `person_id` is a FK to `persons`, so the owner always exists.
   const [cred] = await tx
@@ -384,5 +376,5 @@ export async function finishPasskeyAuthentication(
     .set({ counter: newCounter })
     .where(and(eq(webauthnCredentials.id, cred.id), lt(webauthnCredentials.counter, newCounter)));
   // Verifier seam: like loginManager, a successful passkey ends in a management session.
-  return startManagementSession(tx, { tenantId: input.tenantId, personId: cred.personId });
+  return startManagementSession(tx, { personId: cred.personId });
 }

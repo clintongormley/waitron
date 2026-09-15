@@ -1,1 +1,0 @@
-ALTER TABLE "persons" ADD COLUMN "passkey_offered_at" timestamp with time zone;

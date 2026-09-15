@@ -351,7 +351,6 @@ export async function reactivatePersonForInvitation(
 export async function invitePerson(
   tx: Transaction,
   input: {
-    tenantId: string;
     managementSessionId: string;
     displayName: string;
     firstNames: string;
@@ -378,7 +377,6 @@ export async function invitePerson(
     const [row] = await tx
       .insert(persons)
       .values({
-        tenantId: input.tenantId,
         displayName,
         firstNames,
         lastNames,
@@ -410,7 +408,6 @@ export async function invitePerson(
 export async function createPerson(
   tx: Transaction,
   input: {
-    tenantId: string;
     managementSessionId: string;
     displayName: string;
     role: PersonRoleValue;
@@ -431,7 +428,6 @@ export async function createPerson(
     const [row] = await tx
       .insert(persons)
       .values({
-        tenantId: input.tenantId,
         displayName,
         pinHash: hashPin(input.pin),
         role: input.role,
@@ -524,12 +520,11 @@ export async function setEmail(
  * Sets a person's preferred UI language. Validates against the supported set (throws
  * `locale.unsupported`) so a bad code never reaches the row. Unlike every other mutator in this file
  * there is NO `authorizeManager` gate: a person sets their OWN locale, so the server routes pass the
- * SESSION's `personId` (never a body value). `tenantId` is retained for signature parity; the
- * UPDATE matches the person's id.
+ * SESSION's `personId` (never a body value). The UPDATE matches the person's id.
  */
 export async function setPersonLocale(
   tx: Transaction,
-  input: { tenantId: string; personId: string; locale: string },
+  input: { personId: string; locale: string },
 ): Promise<void> {
   const locale = assertSupportedLocale(input.locale);
   await tx.update(persons).set({ locale }).where(eq(persons.id, input.personId));
@@ -569,8 +564,8 @@ export interface StaffListEntry {
 }
 
 /**
- * Pre-login roster for the till lock screen. This read has no tenant predicate. The deployment
- * holds one tenant per database. Unlike the rest of this file it is NOT gated on `authorize` — it
+ * Pre-login roster for the till lock screen. Unlike the rest of this file it is NOT gated on
+ * `authorize` — it
  * runs before any session exists — and returns only `{ personId, displayName }` for `active`
  * persons. No PIN material, no role, no status: nothing that is unsafe to show before anyone has
  * logged in. Suspended persons are excluded — a `status = 'active'` filter, which the suite
@@ -590,8 +585,7 @@ export async function listActiveStaff(tx: Transaction): Promise<StaffListEntry[]
  * `listActiveStaff` returns. This is the roster a till surfaces when an operator must pick an
  * authorizing supervisor for a privileged action under a gated policy (the cash-drawer override —
  * cash-drawer-authorization §5): the eligible authorizers are exactly the active persons whose
- * role holds the action's permission. The active-person read has no tenant predicate. The
- * deployment holds one tenant per database.
+ * role holds the action's permission.
  *
  * Like `listActiveStaff` it returns ONLY `{ personId, displayName }` — no PIN material, role or status: the
  * caller shows the picker before the authorizing supervisor has entered a credential, so nothing
@@ -632,7 +626,7 @@ export interface PersonSummary {
 /**
  * Admin roster for the dashboard staff screen. Gated on `person.manage`: `authorizeManager` runs
  * FIRST, so a caller without the permission is rejected before anything is selected. Returns EVERY
- * person of the tenant (suspended included, unlike the pre-login `listActiveStaff`), ordered by name.
+ * person (suspended included, unlike the pre-login `listActiveStaff`), ordered by name.
  *
  * `password_hash`/`totp_secret` are selected only to derive `hasPassword`/`hasTotp`; the returned
  * `PersonSummary` carries the booleans and never the hash, the secret, or the PIN — a leak the suite

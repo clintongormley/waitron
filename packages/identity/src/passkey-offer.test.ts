@@ -1,7 +1,6 @@
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
 import { describe, expect, it } from "vitest";
 import { IDENTITY_MIGRATIONS } from "./migrations.js";
 import { markPasskeyOffered, shouldOfferPasskey } from "./passkey-offer.js";
@@ -14,14 +13,9 @@ import { seedPerson } from "../test/fixtures.js";
 // that way), so nothing here is a grant assertion; a suite that wanted one would switch role first,
 // the way packages/db/src/allocate-number.test.ts does.
 
-let tenantId: string;
-
 const suite = usePgliteDb({
   resetPerTest: false,
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
-  setup: async (db) => {
-    tenantId = await seedTenant(db);
-  },
 });
 
 function run<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
@@ -29,12 +23,11 @@ function run<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
 }
 
 /** Registers a passkey for a person, the same row shape `finishPasskeyRegistration` writes
- * (packages/identity/src/passkey.ts). The credential id is unique per call so two seeded passkeys in one tenant do not collide on
- * `webauthn_credentials_credential_id_uq`. */
-async function seedPasskey(input: { tenantId: string; personId: string }): Promise<void> {
+ * (packages/identity/src/passkey.ts). The credential id is unique per call so two seeded passkeys do
+ * not collide on `webauthn_credentials_credential_id_uq`. */
+async function seedPasskey(input: { personId: string }): Promise<void> {
   await withTransaction(suite.db, (tx) =>
     tx.insert(webauthnCredentials).values({
-      tenantId: input.tenantId,
       personId: input.personId,
       credentialId: `cred-${crypto.randomUUID()}`,
       publicKey: "AQID",
@@ -44,34 +37,34 @@ async function seedPasskey(input: { tenantId: string; personId: string }): Promi
 
 describe("the passkey offer", () => {
   it("offers a person who holds no passkey and has never been offered", async () => {
-    const personId = await seedPerson(suite.db, tenantId);
+    const personId = await seedPerson(suite.db);
 
-    await expect(run((tx) => shouldOfferPasskey(tx, { tenantId, personId }))).resolves.toBe(true);
+    await expect(run((tx) => shouldOfferPasskey(tx, { personId }))).resolves.toBe(true);
   });
 
   it("does not offer twice", async () => {
-    const personId = await seedPerson(suite.db, tenantId);
+    const personId = await seedPerson(suite.db);
 
-    await run((tx) => markPasskeyOffered(tx, { tenantId, personId }));
+    await run((tx) => markPasskeyOffered(tx, { personId }));
 
-    await expect(run((tx) => shouldOfferPasskey(tx, { tenantId, personId }))).resolves.toBe(false);
+    await expect(run((tx) => shouldOfferPasskey(tx, { personId }))).resolves.toBe(false);
   });
 
   it("does not offer a person who already holds a passkey", async () => {
-    const personId = await seedPerson(suite.db, tenantId);
-    await seedPasskey({ tenantId, personId });
+    const personId = await seedPerson(suite.db);
+    await seedPasskey({ personId });
 
-    await expect(run((tx) => shouldOfferPasskey(tx, { tenantId, personId }))).resolves.toBe(false);
+    await expect(run((tx) => shouldOfferPasskey(tx, { personId }))).resolves.toBe(false);
   });
 
   it("stamps only the named person", async () => {
-    const personId = await seedPerson(suite.db, tenantId);
-    const colleagueId = await seedPerson(suite.db, tenantId);
+    const personId = await seedPerson(suite.db);
+    const colleagueId = await seedPerson(suite.db);
 
-    await run((tx) => markPasskeyOffered(tx, { tenantId, personId }));
+    await run((tx) => markPasskeyOffered(tx, { personId }));
 
-    await expect(
-      run((tx) => shouldOfferPasskey(tx, { tenantId, personId: colleagueId })),
-    ).resolves.toBe(true);
+    await expect(run((tx) => shouldOfferPasskey(tx, { personId: colleagueId }))).resolves.toBe(
+      true,
+    );
   });
 });

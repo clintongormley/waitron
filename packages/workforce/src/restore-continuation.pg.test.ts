@@ -35,7 +35,7 @@ let nodeId: string;
 // relies on the location scope to keep a previous test's committed rows out of view.
 beforeEach(async () => {
   tenantId = await seedTenant(suite.admin);
-  personId = await seedPerson(suite.admin, tenantId);
+  personId = await seedPerson(suite.admin);
   locationId = await seedLocation(suite.admin, tenantId);
   nodeId = await seedNode(suite.admin, brandTenantId(tenantId), brandLocationId(locationId));
 });

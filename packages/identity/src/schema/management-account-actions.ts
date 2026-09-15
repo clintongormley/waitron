@@ -10,7 +10,6 @@ import {
   uuid,
   integer,
 } from "drizzle-orm/pg-core";
-import { tenants } from "@waitron/db";
 import { persons } from "./persons.js";
 
 /**
@@ -22,7 +21,6 @@ export const managementAccountActions = pgTable(
   "management_account_actions",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    tenantId: uuid("tenant_id").notNull(),
     personId: uuid("person_id").notNull(),
     purpose: text("purpose").notNull(),
     /** The replacement login address for an email-change proof. Null for invitations and resets. */
@@ -39,17 +37,12 @@ export const managementAccountActions = pgTable(
   },
   (t) => [
     foreignKey({
-      columns: [t.tenantId],
-      foreignColumns: [tenants.id],
-      name: "management_account_actions_tenant_fk",
-    }).onDelete("restrict"),
-    foreignKey({
       columns: [t.personId],
       foreignColumns: [persons.id],
       name: "management_account_actions_person_fk",
     }).onDelete("restrict"),
     uniqueIndex("management_account_actions_token_hash_uq").on(t.tokenHash),
-    index("management_account_actions_person_idx").on(t.tenantId, t.personId, t.purpose),
+    index("management_account_actions_person_idx").on(t.personId, t.purpose),
     check(
       "management_account_actions_purpose_ck",
       sql`${t.purpose} in ('invitation', 'password_reset', 'email_change')`,

@@ -113,7 +113,6 @@ export async function issueAccountAction(
   const [row] = await tx
     .insert(managementAccountActions)
     .values({
-      tenantId: input.tenantId,
       personId: input.personId,
       purpose: input.purpose,
       targetEmail: input.purpose === "email_change" ? deliveryEmail : null,
@@ -299,10 +298,7 @@ async function finishClaimedAction(
     .where(and(eq(managementSessions.personId, personId), isNull(managementSessions.endedAt)));
   return {
     personId,
-    session:
-      input.purpose === "invitation"
-        ? await startManagementSession(tx, { tenantId: input.tenantId, personId })
-        : null,
+    session: input.purpose === "invitation" ? await startManagementSession(tx, { personId }) : null,
   };
 }
 

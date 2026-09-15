@@ -48,19 +48,19 @@ function uploadBody() {
   for (const [key, value] of Object.entries(original)) form.set(key, JSON.stringify(value));
   return form;
 }
-async function session(tenantId: string, role: "manager" | "staff") {
+async function session(role: "manager" | "staff") {
   const person = await suite.admin.execute<{ id: string }>(sql`
-    insert into persons (tenant_id, display_name, pin_hash, role)
-    values (${tenantId}, ${role}, ${hashPin("1234")}, ${role}) returning id
+    insert into persons (display_name, pin_hash, role)
+    values (${role}, ${hashPin("1234")}, ${role}) returning id
   `);
   const session = await suite.admin.transaction((tx) =>
-    startManagementSession(tx, { tenantId, personId: person.rows[0]!.id }),
+    startManagementSession(tx, { personId: person.rows[0]!.id }),
   );
   return { Cookie: `${MANAGEMENT_COOKIE}=${session.id}` };
 }
 async function fixture() {
   const tenantId = await seedTenant(suite.admin);
-  const headers = await session(tenantId, "manager");
+  const headers = await session("manager");
   const app = new Hono();
   MEDIA_ROUTES.mount(
     app,
@@ -117,8 +117,8 @@ it("allows its own manager to upload, read, edit and delete using non-superuser 
 it.each(["staff"] as const)(
   "denies every library operation to a %s and preserves existing image data",
   async (actor) => {
-    const { app, tenantId, image } = await fixture();
-    const headers = await session(tenantId, actor);
+    const { app, image } = await fixture();
+    const headers = await session(actor);
     const requests: [string, RequestInit][] = [
       ["/management-api/images", { headers }],
       ["/management-api/image-labels", { headers }],

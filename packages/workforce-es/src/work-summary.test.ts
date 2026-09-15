@@ -65,7 +65,7 @@ describe("workSummary driven by a resolved convenio_config ruleset", () => {
     // pre-D2 path.
     const locationId = await seedLocation(suite.db, tenantId);
     const nodeId = await seedNode(suite.db, brandTenantId(tenantId), brandLocationId(locationId));
-    const personId = await seedPerson(suite.db, tenantId, "es-default");
+    const personId = await seedPerson(suite.db, "es-default");
     await seedEmployment(suite.db, { personId, contractedMinutesPerWeek: 2400 });
     await seedConvenioConfig(suite.db, { locationId });
     for (const day of ["2026-01-05", "2026-01-06", "2026-01-07", "2026-01-08", "2026-01-09"]) {
@@ -106,7 +106,7 @@ describe("workSummary driven by a resolved convenio_config ruleset", () => {
     const dailyLoc = await seedLocation(suite.db, tenantId);
     const dailyNode = await seedNode(suite.db, brandTenantId(tenantId), brandLocationId(dailyLoc));
     const periodLoc = await seedLocation(suite.db, tenantId);
-    const personId = await seedPerson(suite.db, tenantId, "es-model");
+    const personId = await seedPerson(suite.db, "es-model");
     await seedEmployment(suite.db, { personId, contractedMinutesPerWeek: 2400 });
     await seedConvenioConfig(suite.db, {
       locationId: dailyLoc,

@@ -44,8 +44,8 @@ describe("listShiftsForPerson", () => {
     // Person-scoping is application code. Prove by deletion — drop the
     // `person_id = ${personId}` predicate and the OTHER person's shift (seeded under the same tenant)
     // leaks into the result, reddening the `map((r) => r.id)` assertion.
-    const me = await seedPerson(suite.db, tenantId, `me-${crypto.randomUUID()}`);
-    const other = await seedPerson(suite.db, tenantId, `other-${crypto.randomUUID()}`);
+    const me = await seedPerson(suite.db, `me-${crypto.randomUUID()}`);
+    const other = await seedPerson(suite.db, `other-${crypto.randomUUID()}`);
     // Two of MINE, seeded OUT of starts_at order, plus one of the OTHER person's in the same window.
     const late = await insertDraftShift(suite.db, {
       personId: me,
@@ -89,7 +89,7 @@ describe("listShiftsForPerson", () => {
   it("uses a HALF-OPEN [from, to) local-date window — a shift at `from` is in, one at `to` is out", async () => {
     // Prove by deletion of EACH bound: drop `>= from` and the 04-Jan shift (before the window) leaks in;
     // drop `< to` and the 06-Jan shift (at the exclusive upper bound) leaks in.
-    const me = await seedPerson(suite.db, tenantId, `me-${crypto.randomUUID()}`);
+    const me = await seedPerson(suite.db, `me-${crypto.randomUUID()}`);
     const before = await insertDraftShift(suite.db, {
       personId: me,
       locationId,
@@ -122,7 +122,7 @@ describe("listShiftsForPerson", () => {
     // 2026-01-06, so a [2026-01-05, 2026-01-06) window EXCLUDES it, even though its UTC date is 05-Jan.
     // Delete the `+ starts_offset_minutes * interval '1 minute'` term and the raw UTC date (05-Jan)
     // would fall inside, leaking it in — the offset-awareness this window shares with publishRoster.
-    const me = await seedPerson(suite.db, tenantId, `me-${crypto.randomUUID()}`);
+    const me = await seedPerson(suite.db, `me-${crypto.randomUUID()}`);
     const rollsOver = await insertDraftShift(suite.db, {
       personId: me,
       locationId,
@@ -140,8 +140,8 @@ describe("listShiftsForPerson", () => {
 
 describe("listSwapsForPerson", () => {
   async function twoPeople(): Promise<{ me: string; other: string }> {
-    const me = await seedPerson(suite.db, tenantId, `me-${crypto.randomUUID()}`);
-    const other = await seedPerson(suite.db, tenantId, `other-${crypto.randomUUID()}`);
+    const me = await seedPerson(suite.db, `me-${crypto.randomUUID()}`);
+    const other = await seedPerson(suite.db, `other-${crypto.randomUUID()}`);
     return { me, other };
   }
 
@@ -151,7 +151,7 @@ describe("listSwapsForPerson", () => {
     // (below) leaks into my list, reddening the `not.toContain` assertion. `direction` is derived from
     // which column matched.
     const { me, other } = await twoPeople();
-    const third = await seedPerson(suite.db, tenantId, `third-${crypto.randomUUID()}`);
+    const third = await seedPerson(suite.db, `third-${crypto.randomUUID()}`);
     const myShift = await insertDraftShift(suite.db, { personId: me, locationId });
     const theirShift = await insertDraftShift(suite.db, { personId: other, locationId });
     const othersShift = await insertDraftShift(suite.db, { personId: other, locationId });
@@ -199,8 +199,8 @@ describe("listAbsencesForPerson", () => {
   it("returns only the requester's absences (all statuses), ordered by starts_on desc", async () => {
     // Person-scoping is application code — prove by deletion: drop the `person_id = ${personId}`
     // predicate and the OTHER person's absence leaks in, reddening the `not.toContain`.
-    const me = await seedPerson(suite.db, tenantId, `me-${crypto.randomUUID()}`);
-    const other = await seedPerson(suite.db, tenantId, `other-${crypto.randomUUID()}`);
+    const me = await seedPerson(suite.db, `me-${crypto.randomUUID()}`);
+    const other = await seedPerson(suite.db, `other-${crypto.randomUUID()}`);
     // Two of mine (a requested and a rejected, so ALL statuses show — not just requested like the
     // manager queue), seeded out of starts_on order, plus one of the other person's.
     const mineEarly = await insertAbsence(suite.db, {

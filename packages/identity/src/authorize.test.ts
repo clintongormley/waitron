@@ -1,7 +1,6 @@
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
 import { describe, expect, it } from "vitest";
 import { IDENTITY_MIGRATIONS } from "./migrations.js";
 import { authorize } from "./authorize.js";
@@ -12,14 +11,10 @@ import { codeOf, openSession, seedPerson, seedTill } from "../test/fixtures.js";
 // path's not-found / suspended / bad-PIN / lacks-permission gates, and the open-session guard.
 // Nothing here depends on the privilege set (a PGlite connection is superuser holding every grant,
 // so a grant assertion would be a false pass, CLAUDE.md §4).
-let tenantId: string;
 
 const suite = usePgliteDb({
   resetPerTest: false,
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
-  setup: async (db) => {
-    tenantId = await seedTenant(db);
-  },
 });
 
 function run<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
@@ -28,9 +23,9 @@ function run<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
 
 describe("authorize", () => {
   it("authorizes on the operator's own role when it holds the permission (no override)", async () => {
-    const tillId = await seedTill(suite.db, tenantId);
-    const managerId = await seedPerson(suite.db, tenantId, "manager");
-    const sessionId = await openSession(suite.db, tenantId, tillId, managerId);
+    const tillId = await seedTill(suite.db);
+    const managerId = await seedPerson(suite.db, "manager");
+    const sessionId = await openSession(suite.db, tillId, managerId);
 
     const result = await run((tx) => authorize(tx, { sessionId, permission: "sale.void" }));
 
@@ -44,10 +39,10 @@ describe("authorize", () => {
   });
 
   it("authorizes via a supervisor override when the operator lacks the permission", async () => {
-    const tillId = await seedTill(suite.db, tenantId);
-    const staffId = await seedPerson(suite.db, tenantId, "staff");
-    const supervisorId = await seedPerson(suite.db, tenantId, "supervisor");
-    const sessionId = await openSession(suite.db, tenantId, tillId, staffId);
+    const tillId = await seedTill(suite.db);
+    const staffId = await seedPerson(suite.db, "staff");
+    const supervisorId = await seedPerson(suite.db, "supervisor");
+    const sessionId = await openSession(suite.db, tillId, staffId);
 
     const result = await run((tx) =>
       authorize(tx, {
@@ -66,9 +61,9 @@ describe("authorize", () => {
   });
 
   it("throws authorization.not_permitted when the operator lacks it and no override is supplied", async () => {
-    const tillId = await seedTill(suite.db, tenantId);
-    const staffId = await seedPerson(suite.db, tenantId, "staff");
-    const sessionId = await openSession(suite.db, tenantId, tillId, staffId);
+    const tillId = await seedTill(suite.db);
+    const staffId = await seedPerson(suite.db, "staff");
+    const sessionId = await openSession(suite.db, tillId, staffId);
 
     const code = await codeOf(() =>
       run((tx) => authorize(tx, { sessionId, permission: "sale.void" })),
@@ -77,10 +72,10 @@ describe("authorize", () => {
   });
 
   it("throws pin.invalid when the override PIN does not verify", async () => {
-    const tillId = await seedTill(suite.db, tenantId);
-    const staffId = await seedPerson(suite.db, tenantId, "staff");
-    const supervisorId = await seedPerson(suite.db, tenantId, "supervisor");
-    const sessionId = await openSession(suite.db, tenantId, tillId, staffId);
+    const tillId = await seedTill(suite.db);
+    const staffId = await seedPerson(suite.db, "staff");
+    const supervisorId = await seedPerson(suite.db, "supervisor");
+    const sessionId = await openSession(suite.db, tillId, staffId);
 
     const code = await codeOf(() =>
       run((tx) =>
@@ -95,11 +90,11 @@ describe("authorize", () => {
   });
 
   it("throws person.not_found when the override personId is unknown", async () => {
-    const tillId = await seedTill(suite.db, tenantId);
-    const staffId = await seedPerson(suite.db, tenantId, "staff");
-    const sessionId = await openSession(suite.db, tenantId, tillId, staffId);
+    const tillId = await seedTill(suite.db);
+    const staffId = await seedPerson(suite.db, "staff");
+    const sessionId = await openSession(suite.db, tillId, staffId);
 
-    // The override names a personId that resolves to no row in this tenant — the override lookup
+    // The override names a personId that resolves to no row — the override lookup
     // returns nothing before status/PIN/permission are ever consulted.
     const code = await codeOf(() =>
       run((tx) =>
@@ -114,10 +109,10 @@ describe("authorize", () => {
   });
 
   it("throws authorization.not_permitted when the override person also lacks the permission", async () => {
-    const tillId = await seedTill(suite.db, tenantId);
-    const staffId = await seedPerson(suite.db, tenantId, "staff");
-    const otherStaffId = await seedPerson(suite.db, tenantId, "staff");
-    const sessionId = await openSession(suite.db, tenantId, tillId, staffId);
+    const tillId = await seedTill(suite.db);
+    const staffId = await seedPerson(suite.db, "staff");
+    const otherStaffId = await seedPerson(suite.db, "staff");
+    const sessionId = await openSession(suite.db, tillId, staffId);
 
     const code = await codeOf(() =>
       run((tx) =>
@@ -132,9 +127,9 @@ describe("authorize", () => {
   });
 
   it("throws session.not_open for a session that has been ended", async () => {
-    const tillId = await seedTill(suite.db, tenantId);
-    const managerId = await seedPerson(suite.db, tenantId, "manager");
-    const sessionId = await openSession(suite.db, tenantId, tillId, managerId);
+    const tillId = await seedTill(suite.db);
+    const managerId = await seedPerson(suite.db, "manager");
+    const sessionId = await openSession(suite.db, tillId, managerId);
     await run((tx) => endSession(tx, sessionId));
 
     // The manager holds sale.void, so only the ended-session guard — checked first, before any role
@@ -146,12 +141,12 @@ describe("authorize", () => {
   });
 
   it("throws person.suspended when the override targets a suspended person", async () => {
-    const tillId = await seedTill(suite.db, tenantId);
-    const staffId = await seedPerson(suite.db, tenantId, "staff");
+    const tillId = await seedTill(suite.db);
+    const staffId = await seedPerson(suite.db, "staff");
     // A suspended SUPERVISOR with the right PIN: the person would both hold sale.void and pass the
     // PIN check, so only the suspended gate — checked before both — can be the cause.
-    const suspendedSupervisorId = await seedPerson(suite.db, tenantId, "supervisor", "suspended");
-    const sessionId = await openSession(suite.db, tenantId, tillId, staffId);
+    const suspendedSupervisorId = await seedPerson(suite.db, "supervisor", "suspended");
+    const sessionId = await openSession(suite.db, tillId, staffId);
 
     const code = await codeOf(() =>
       run((tx) =>

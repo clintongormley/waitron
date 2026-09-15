@@ -62,17 +62,15 @@ async function fixture(existingTenantId?: string): Promise<Fixture> {
       const menu = await createCatalogue(tx, scopedTenantId, { name: "Drinks" });
       const category = await createCategory(tx, scopedTenantId, { name: { en: "Cocktails" } });
       const manager = await tx.execute<{ id: string }>(sql`
-        insert into persons (tenant_id, display_name, pin_hash, role)
-        values (${scopedTenantId}, ${`Manager ${scopedLocationId}`}, ${hashPin("1234")}, 'manager') returning id`);
+        insert into persons (display_name, pin_hash, role)
+        values (${`Manager ${scopedLocationId}`}, ${hashPin("1234")}, 'manager') returning id`);
       const staff = await tx.execute<{ id: string }>(sql`
-        insert into persons (tenant_id, display_name, pin_hash, role)
-        values (${scopedTenantId}, ${`Staff ${scopedLocationId}`}, ${hashPin("1234")}, 'staff') returning id`);
+        insert into persons (display_name, pin_hash, role)
+        values (${`Staff ${scopedLocationId}`}, ${hashPin("1234")}, 'staff') returning id`);
       const managerSession = await startManagementSession(tx, {
-        tenantId: scopedTenantId,
         personId: manager.rows[0]!.id,
       });
       const staffSession = await startManagementSession(tx, {
-        tenantId: scopedTenantId,
         personId: staff.rows[0]!.id,
       });
       return {

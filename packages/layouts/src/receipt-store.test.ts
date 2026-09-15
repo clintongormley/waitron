@@ -28,12 +28,12 @@ function asApp<T>(tenantId: string, fn: (tx: Transaction) => Promise<T>): Promis
   });
 }
 
-async function seedSession(tenantId: string, role: PersonRoleValue): Promise<string> {
+async function seedSession(role: PersonRoleValue): Promise<string> {
   const person = await suite.admin.execute<{ id: string }>(sql`
-    insert into persons (tenant_id, display_name, pin_hash, role)
-    values (${tenantId}, 'Operator', 'seed-pin-hash', ${role}) returning id`);
+    insert into persons (display_name, pin_hash, role)
+    values ('Operator', 'seed-pin-hash', ${role}) returning id`);
   const session = await withTransaction(suite.admin, (tx) =>
-    startManagementSession(tx, { tenantId, personId: person.rows[0]!.id }),
+    startManagementSession(tx, { personId: person.rows[0]!.id }),
   );
   return session.id;
 }
@@ -60,7 +60,7 @@ describe("tenant receipt store on real Postgres, as the app role", () => {
 
   it("round-trips a manager-authored receipt through put → get", async () => {
     const managerTenant = await seedTenant(suite.admin);
-    const managerSession = await seedSession(managerTenant, "manager");
+    const managerSession = await seedSession("manager");
     const receipt: ReceiptConfig = { headerSubtitle: "Hola" };
     await asApp(managerTenant, (tx) =>
       putReceipt(tx, { managementSessionId: managerSession, receipt }),
@@ -70,7 +70,7 @@ describe("tenant receipt store on real Postgres, as the app role", () => {
 
   it("upserts the single per-tenant row on a second put — no duplicate", async () => {
     const tenantId = await seedTenant(suite.admin);
-    const session = await seedSession(tenantId, "manager");
+    const session = await seedSession("manager");
     await asApp(tenantId, (tx) =>
       putReceipt(tx, {
         managementSessionId: session,
@@ -89,7 +89,7 @@ describe("tenant receipt store on real Postgres, as the app role", () => {
     // authorization.not_permitted BEFORE any write. Deleting the authorizeManager call from putReceipt
     // makes this succeed → codeOf returns "did not throw…" and a row lands, failing both assertions.
     const staffTenant = await seedTenant(suite.admin);
-    const staffSession = await seedSession(staffTenant, "staff");
+    const staffSession = await seedSession("staff");
     const code = await codeOf(() =>
       asApp(staffTenant, (tx) =>
         putReceipt(tx, {
@@ -104,7 +104,7 @@ describe("tenant receipt store on real Postgres, as the app role", () => {
 
   it("rejects an invalid receipt with receipt.invalid before any INSERT", async () => {
     const tenantId = await seedTenant(suite.admin);
-    const session = await seedSession(tenantId, "manager");
+    const session = await seedSession("manager");
     // authorize FIRST (manager is permitted), THEN validate — so an invalid receipt from an AUTHORISED
     // actor proves validate runs before the write. An unknown field fails validateReceiptConfig.
     const code = await codeOf(() =>

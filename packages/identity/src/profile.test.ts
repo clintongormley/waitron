@@ -30,10 +30,8 @@ const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] }
 async function fixture() {
   const tenantId = await seedTenant(suite.db);
   const email = `${randomUUID()}@example.com`;
-  const personId = await seedManager(suite.db, tenantId, { email });
-  const session = await withTransaction(suite.db, (tx) =>
-    startManagementSession(tx, { tenantId, personId }),
-  );
+  const personId = await seedManager(suite.db, { email });
+  const session = await withTransaction(suite.db, (tx) => startManagementSession(tx, { personId }));
   return { tenantId, personId, email, managementSessionId: session.id };
 }
 
@@ -128,7 +126,7 @@ describe("your profile", () => {
 
   it("validates details and maps duplicate emails without changing the profile", async () => {
     const f = await fixture();
-    await seedManager(suite.db, f.tenantId, { email: "taken@example.com" });
+    await seedManager(suite.db, { email: "taken@example.com" });
     const details = {
       ...f,
       displayName: "Name",
@@ -180,7 +178,7 @@ describe("your profile", () => {
 
   it("rejects a display name already used by an active person", async () => {
     const f = await fixture();
-    const otherId = await seedManager(suite.db, f.tenantId, { email: "other@example.com" });
+    const otherId = await seedManager(suite.db, { email: "other@example.com" });
     await suite.db.execute(
       sql`update persons set display_name = 'Already Here' where id = ${otherId}`,
     );
@@ -227,9 +225,9 @@ describe("your profile", () => {
 
   it("changes the PIN and ends open till sessions", async () => {
     const f = await fixture();
-    const tillId = await seedTill(suite.db, f.tenantId);
+    const tillId = await seedTill(suite.db);
     const till = await suite.db.execute<{ id: string }>(
-      sql`insert into sessions (tenant_id, person_id, till_id) values (${f.tenantId}, ${f.personId}, ${tillId}) returning id`,
+      sql`insert into sessions (person_id, till_id) values (${f.personId}, ${tillId}) returning id`,
     );
     await expect(
       withTransaction(suite.db, (tx) =>
@@ -247,11 +245,11 @@ describe("your profile", () => {
 
   it("lists and removes only your own passkeys", async () => {
     const f = await fixture();
-    const colleague = await seedManager(suite.db, f.tenantId, { email: "colleague@example.com" });
+    const colleague = await seedManager(suite.db, { email: "colleague@example.com" });
     const credentialId = randomUUID();
     const otherId = randomUUID();
     await suite.db.execute(
-      sql`insert into webauthn_credentials (id,tenant_id,person_id,credential_id,public_key,name) values (${credentialId},${f.tenantId},${f.personId},'own','public','Work laptop'),(${otherId},${f.tenantId},${colleague},'other','public','Colleague laptop')`,
+      sql`insert into webauthn_credentials (id,person_id,credential_id,public_key,name) values (${credentialId},${f.personId},'own','public','Work laptop'),(${otherId},${colleague},'other','public','Colleague laptop')`,
     );
     expect((await withTransaction(suite.db, (tx) => readOwnProfile(tx, f))).passkeys).toEqual([
       { id: credentialId, name: "Work laptop", createdAt: expect.any(String) },

@@ -17,15 +17,16 @@ describe("@waitron/identity barrel", () => {
  * baseline uses — not a coverage stunt. Mirrors packages/credentials/src/index.test.ts.
  */
 describe("persons constraint declarations (forces the lazy extraConfig callback)", () => {
-  it("declares persons' primary key, foreign key and check constraints", () => {
+  it("declares persons' primary key, its two partial unique indexes and its check constraints", () => {
     const config = getTableConfig(api.persons);
 
-    // The PK is inline on `id` (a column flag), not a composite in extraConfig; the FK, index and
+    // The PK is inline on `id` (a column flag), not a composite in extraConfig; the indexes and
     // checks below ARE in extraConfig, so asserting them is what forces the lazy callback to run.
     expect(config.columns.find((c) => c.name === "id")?.primary).toBe(true);
 
-    const fkNames = config.foreignKeys.map((fk) => fk.getName());
-    expect(fkNames).toContain("persons_tenant_fk");
+    const indexNames = config.indexes.map((i) => i.config.name);
+    expect(indexNames).toContain("persons_tenant_google_subject_uq");
+    expect(indexNames).toContain("persons_tenant_pending_email_uq");
 
     const checkNames = config.checks.map((c) => c.name);
     expect(checkNames).toContain("persons_display_name_ck");
@@ -38,21 +39,19 @@ describe("persons constraint declarations (forces the lazy extraConfig callback)
 /**
  * Same mechanism for sessions — its FK/index block is in the lazy extraConfig callback, so this
  * both forces it to run and pins the names the generated baseline uses. sessions keys to the
- * TILL, not the node: the three FKs are to tenants, persons and tills.
+ * TILL, not the node: the two FKs are to persons and tills.
  */
 describe("sessions constraint declarations (forces the lazy extraConfig callback)", () => {
-  it("declares sessions' primary key, its three foreign keys, and its tenant/open indexes", () => {
+  it("declares sessions' primary key, its two foreign keys, and its open-session index", () => {
     const config = getTableConfig(api.sessions);
 
     expect(config.columns.find((c) => c.name === "id")?.primary).toBe(true);
 
     const fkNames = config.foreignKeys.map((fk) => fk.getName());
-    expect(fkNames).toContain("sessions_tenant_fk");
     expect(fkNames).toContain("sessions_person_fk");
     expect(fkNames).toContain("sessions_till_fk");
 
     const indexNames = config.indexes.map((i) => i.config.name);
-    expect(indexNames).toContain("sessions_tenant_id_idx");
     expect(indexNames).toContain("sessions_open_idx");
   });
 });
@@ -60,21 +59,19 @@ describe("sessions constraint declarations (forces the lazy extraConfig callback
 /**
  * Same mechanism for management_sessions — its FK/index block is in the lazy extraConfig
  * callback, so this both forces it to run and pins the names the generated baseline references. A
- * management session belongs to a person within a tenant (browser dashboard login), so its two
- * FKs are to tenants and persons — no till.
+ * management session belongs to a person (browser dashboard login), so its one FK is to persons —
+ * no till.
  */
 describe("management_sessions constraint declarations (forces the lazy extraConfig callback)", () => {
-  it("declares management_sessions' primary key, its two foreign keys, and its tenant/open indexes", () => {
+  it("declares management_sessions' primary key, its one foreign key, and its open-session index", () => {
     const config = getTableConfig(api.managementSessions);
 
     expect(config.columns.find((c) => c.name === "id")?.primary).toBe(true);
 
     const fkNames = config.foreignKeys.map((fk) => fk.getName());
-    expect(fkNames).toContain("management_sessions_tenant_fk");
-    expect(fkNames).toContain("management_sessions_person_fk");
+    expect(fkNames).toEqual(["management_sessions_person_fk"]);
 
     const indexNames = config.indexes.map((i) => i.config.name);
-    expect(indexNames).toContain("management_sessions_tenant_id_idx");
     expect(indexNames).toContain("management_sessions_open_idx");
   });
 });
@@ -82,18 +79,16 @@ describe("management_sessions constraint declarations (forces the lazy extraConf
 /**
  * Same mechanism for webauthn_credentials — its FK/unique/index block is in the lazy extraConfig
  * callback, so this both forces it to run and pins the names the generated baseline uses. A
- * registered passkey belongs to a person within a tenant, so its two FKs are to tenants and
- * persons; the credential id is unique per tenant.
+ * registered passkey belongs to a person, so its one FK is to persons; the credential id is unique.
  */
 describe("webauthn_credentials constraint declarations (forces the lazy extraConfig callback)", () => {
-  it("declares webauthn_credentials' primary key, its two foreign keys, its per-tenant unique credential id and its person index", () => {
+  it("declares webauthn_credentials' primary key, its one foreign key, its unique credential id and its person index", () => {
     const config = getTableConfig(api.webauthnCredentials);
 
     expect(config.columns.find((c) => c.name === "id")?.primary).toBe(true);
 
     const fkNames = config.foreignKeys.map((fk) => fk.getName());
-    expect(fkNames).toContain("webauthn_credentials_tenant_fk");
-    expect(fkNames).toContain("webauthn_credentials_person_fk");
+    expect(fkNames).toEqual(["webauthn_credentials_person_fk"]);
 
     const uniqueNames = config.uniqueConstraints.map((u) => u.getName());
     expect(uniqueNames).toContain("webauthn_credentials_credential_id_uq");
@@ -104,21 +99,16 @@ describe("webauthn_credentials constraint declarations (forces the lazy extraCon
 });
 
 /**
- * Same mechanism for webauthn_challenges — its FK/index block is in the lazy extraConfig callback, so
- * this both forces it to run and pins the names the generated baseline references. A challenge belongs to a tenant; person_id is
- * nullable (a discoverable-login ceremony has no known person yet) and carries no FK, so the ONE FK is
- * to tenants.
+ * webauthn_challenges declares no constraints of its own beyond its primary key: `person_id` is
+ * nullable (a discoverable-login ceremony has no known person yet) and deliberately carries NO
+ * foreign key, so a login challenge can be minted before anyone is identified.
  */
-describe("webauthn_challenges constraint declarations (forces the lazy extraConfig callback)", () => {
-  it("declares webauthn_challenges' primary key, its single tenant foreign key, and its tenant index", () => {
+describe("webauthn_challenges constraint declarations", () => {
+  it("declares its primary key and no foreign keys or indexes", () => {
     const config = getTableConfig(api.webauthnChallenges);
 
     expect(config.columns.find((c) => c.name === "id")?.primary).toBe(true);
-
-    const fkNames = config.foreignKeys.map((fk) => fk.getName());
-    expect(fkNames).toEqual(["webauthn_challenges_tenant_fk"]);
-
-    const indexNames = config.indexes.map((i) => i.config.name);
-    expect(indexNames).toContain("webauthn_challenges_tenant_idx");
+    expect(config.foreignKeys).toEqual([]);
+    expect(config.indexes).toEqual([]);
   });
 });
