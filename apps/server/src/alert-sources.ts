@@ -145,7 +145,7 @@ export function printingAlertSource(): AlertSource {
       // strings, never Date objects (a Date would not typecheck against a string column).
       const silentBefore = new Date(now.getTime() - AGENT_SILENT_MS).toISOString();
       const agents = await tx
-        .select({ name: printAgents.name, seen: printAgents.lastSeenAt })
+        .select({ id: printAgents.id, name: printAgents.name, seen: printAgents.lastSeenAt })
         .from(printAgents)
         .where(
           and(
@@ -157,8 +157,11 @@ export function printingAlertSource(): AlertSource {
           ),
         );
       for (const a of agents) {
+        // Key on the agent id, not the display name: names are not unique, and two agents sharing one
+        // would collide to a single alert (the dashboard dedups new-arrival pop-ups by key). The human
+        // name still travels in params for the wording.
         alerts.push({
-          key: `agent.silent:${a.name}`,
+          key: `agent.silent:${a.id}`,
           code: "agent.silent",
           params: { agent: a.name },
           severity: "warning",

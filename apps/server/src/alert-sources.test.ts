@@ -126,10 +126,12 @@ async function seedAgent(t: {
   name: string;
   lastSeenAt: string | null;
   active?: boolean;
-}): Promise<void> {
-  await suite.db.execute(sql`
+}): Promise<string> {
+  const { rows } = await suite.db.execute<{ id: string }>(sql`
     insert into print_agents (tenant_id, location_id, name, token_hash, active, last_seen_at)
-    values (${t.tenantId}, ${t.locationId}, ${t.name}, 'hash', ${t.active ?? true}, ${t.lastSeenAt})`);
+    values (${t.tenantId}, ${t.locationId}, ${t.name}, 'hash', ${t.active ?? true}, ${t.lastSeenAt})
+    returning id`);
+  return rows[0]!.id;
 }
 
 async function seedJob(t: {
@@ -166,11 +168,16 @@ describe("printingAlertSource — agent.silent", () => {
   it("raises agent.silent for an agent seen 6 minutes ago, then clears on a fresh pull", async () => {
     const tenantId = await seedTenant(suite.db);
     const locationId = await seedLocation(tenantId);
-    await seedAgent({ tenantId, locationId, name: "Cocina", lastSeenAt: minsAgo(6) });
+    const agentId = await seedAgent({
+      tenantId,
+      locationId,
+      name: "Cocina",
+      lastSeenAt: minsAgo(6),
+    });
 
     expect(await readAlerts(tenantId)).toMatchObject([
       {
-        key: "agent.silent:Cocina",
+        key: `agent.silent:${agentId}`,
         code: "agent.silent",
         params: { agent: "Cocina" },
         severity: "warning",
@@ -184,6 +191,26 @@ describe("printingAlertSource — agent.silent", () => {
       sql`update print_agents set last_seen_at = ${NOW.toISOString()} where tenant_id = ${tenantId}`,
     );
     expect(await readAlerts(tenantId)).toEqual([]);
+  });
+
+  it("gives two silent agents that share a name two distinct alerts", async () => {
+    // Names are not unique; keying the alert on the name would collide these two into one and hide a
+    // down agent. The key must be per-agent-id, so both silent agents surface.
+    const tenantId = await seedTenant(suite.db);
+    const locationId = await seedLocation(tenantId);
+    const first = await seedAgent({ tenantId, locationId, name: "Cocina", lastSeenAt: minsAgo(6) });
+    const second = await seedAgent({
+      tenantId,
+      locationId,
+      name: "Cocina",
+      lastSeenAt: minsAgo(7),
+    });
+
+    const alerts = await readAlerts(tenantId);
+    expect(alerts.every((a) => a.code === "agent.silent")).toBe(true);
+    expect(new Set(alerts.map((a) => a.key))).toEqual(
+      new Set([`agent.silent:${first}`, `agent.silent:${second}`]),
+    );
   });
 
   it("ignores a deactivated silent agent and a never-seen agent", async () => {
