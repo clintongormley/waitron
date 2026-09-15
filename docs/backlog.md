@@ -1312,13 +1312,15 @@ image constraints under *Detail → Box image*.
   `@waitron/db`'s enumerated `exports` map, which is why it is not a five-minute change.
 - **A box that mints its certificate before NTP sync persists a wrong validity window**, with no
   renewal path yet. Ties to a time-health check and certificate renewal.
+- **Server shutdown can skip closing its database pools.** In `makeStartedServer`
+  (`apps/server/src/boot.ts`), the step that stops background work (`stopWork`) runs outside the
+  try/finally that closes the pools, so if it ever rejected, `closePools` would be skipped and the
+  pools left open. Trading mode's version awaits the live change listener's startup and its close
+  without catching a failure. From reading the code these are believed not to reject today; that has
+  not been tested.
 - **Hardening from onboarding 2b:** a DB-level advisory lock on `tenantId` spanning
-  guard→stamp→`applyVenue`; one `closeAll(pools)` so a throw from the first close cannot skip the
-  rest; a wizard-only box runs its trading life on the owner role rather than `app_user` until the
-  role-split retrofit.
-- The shutdown REJECT path gates its failure-log flush before exit, so a `close()` rejection plus a
-  stalled stdout pipe is an uncovered hang; `waitron.sh` pulls with `--ignore-pull-failures`, so a
-  box with no manifest entry for its architecture fails silently at pull and breaks later at `up`.
+  guard→stamp→`applyVenue`; a wizard-only box runs its trading life on the owner role rather than
+  `app_user` until the role-split retrofit.
 
 ### B8. Module framework follow-ons
 

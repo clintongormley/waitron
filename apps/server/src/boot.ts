@@ -73,6 +73,7 @@ import type {
 import { codeOf } from "@waitron/server-kit";
 import { createLogger, type Logger } from "./logger.js";
 import { withDevMigrationHint } from "./dev-migration-hint.js";
+import { closeAll } from "./close-all.js";
 import { createRotatingFileSink, createLogReader, tee } from "./log-file.js";
 import { createVerbosityController } from "./verbosity.js";
 import { requestIdMiddleware } from "./request-id.js";
@@ -222,16 +223,25 @@ export interface StartedServer {
    * (`promotion.fence_not_attested`).
    */
   promoteMirrorToPrimary?: (attestation: FenceAttestation) => Promise<MirrorPromotionResult>;
-  /** Resolves when the loop has stopped, the listener is closed and the pool is drained. */
+  /**
+   * Resolves once background work has stopped, the listeners are closed and the mode's long-lived
+   * pools are closed; rejects if any of those pools fails to close.
+   */
   close(): Promise<void>;
 }
 
 /**
  * The mode-specific half of `close()` (see `makeStartedServer`): how to stop this boot's background
- * work and which connection pools to drain. Trading mode fills both in — abort the main loop, the
- * outbound tunnel and the backup sweep, then close the app, replication and backup-manifest pools.
- * Setup mode's `stopWork` is a no-op (a setup box runs no background loop) and its `closePools`
- * drains only the app pool.
+ * work and which connection pools to drain. `closePools` closes, through `closeAll`, the long-lived
+ * pools the mode holds: setup — the app pool and the provisioning owner pool; adoption-pending and
+ * trading — the app pool and the replication pool. Trading's backup read pool is the exception:
+ * `backupSupervisor.stop()` in `stopWork` closes it, swallowing a failure to close it. Short-lived
+ * pools (an adopt's replication pool, a demote's or promote's owner pool) close in their own
+ * `finally`. Every close in `closePools` is attempted and the first failure is rethrown, so
+ * `close()` rejects; a signal-initiated shutdown then logs `server.shutdown_failed`, unless the
+ * shutdown deadline has already exited the process. Setup's `stopWork` is a no-op;
+ * adoption-pending's aborts the adoption worker; trading's stops the main loop, the live change
+ * listener, the outbound tunnel and the backup sweep.
  */
 interface BootTeardown {
   stopWork: () => Promise<void>;
@@ -637,13 +647,15 @@ export function startLandingListener(
 }
 
 /**
- * The `StartedServer` BOTH modes return, with the shared `close()` sequence written once. `close()`
- * is idempotent and always drains the connection pools, whatever the teardown does first — the
- * mode-specific parts arrive as `teardown` (a `BootTeardown`): `stopWork` stops any background work
- * and awaits it (the loop plus the outbound tunnel and backup sweep in trading mode; a no-op in
- * setup mode), then `closePools` releases the pools (app + replication + the backup manifest pool in
- * trading mode; the app pool alone in setup mode). `mdns` is the shared mDNS responder both modes start in the prefix; `close()` stops it
- * FIRST — the box is going down, so it must stop advertising `waitron.local` before anything else.
+ * The `StartedServer` every mode returns, with the shared `close()` sequence written once. `close()`
+ * is idempotent. The mode-specific parts arrive as `teardown` (a `BootTeardown`): `stopWork` stops
+ * any background work and awaits it; then, after the listeners close and in a `finally` so a
+ * listener failure still reaches it, `closePools` closes the mode's long-lived pools (setup: app +
+ * provisioning owner; adoption-pending and trading: app + replication; trading's backup read pool
+ * is closed by `stopWork` instead). A pool that fails to close rejects `close()` only after every
+ * pool in `closePools` has been attempted, and `server.stopped` is then not logged. `mdns` is the
+ * shared mDNS responder every mode starts in the prefix; `close()` stops it FIRST — the box is
+ * going down, so it must stop advertising `waitron.local` before anything else.
  */
 function makeStartedServer(
   server: ReturnType<typeof serve>,
@@ -682,19 +694,18 @@ function makeStartedServer(
       // before the listener and pools come apart. `stop()` is idempotent and destroys the UDP socket
       // once, so a second concurrent close() (guarded above) never double-destroys it either.
       // `.catch(() => {})`: `stop()` never rejects today (mdns.ts's own `Promise<void>` executor has
-      // no reject path), but a reject here must never skip the guaranteed pool teardown below, so this
-      // is defensive rather than a response to an observed failure.
+      // no reject path), but a reject here must never skip the pool teardown below, so this is
+      // defensive rather than a response to an observed failure.
       await mdns.stop().catch(() => {});
       // Stop this boot's background work and await it BEFORE the listener/pool teardown below, so
-      // close() never leaves a worker dangling. In trading mode this aborts the main loop, the
-      // outbound tunnel and the backup sweep and swallows a worker's settle-by-rejection so it can
-      // never skip the guaranteed teardown; in setup mode there is nothing to stop.
+      // close() does not leave a worker running. This await sits outside the try/finally below,
+      // so a rejecting `stopWork` skips `closePools` and leaves the pools open: a mode's `stopWork`
+      // must not reject.
       await teardown.stopWork();
       // `finally`, not a plain sequential `await`: a rejecting `server.close()` (the listener
-      // already gone — see bin.ts's own double-signal guard) must still drain the pool. `close()`
+      // already gone — see bin.ts's own double-signal guard) must still close the pools. `close()`
       // is exported on `StartedServer`, and a caller reaching for it outside `bin.ts` — a test hook
-      // above all — would otherwise be left holding an undrained pool on exactly the path that
-      // failed.
+      // above all — would otherwise be left holding open pools on exactly the path that failed.
       try {
         // closeListener drops idle keep-alive sockets (then all, after a grace) so this resolves —
         // Node's server.close() otherwise waits forever on the setup page's poll connection, which
@@ -703,7 +714,7 @@ function makeStartedServer(
       } finally {
         // Close the plain-HTTP landing listener too (when one was started), in the `finally` so a
         // rejecting `server.close()` above never leaks it. `.catch(() => {})` for the same reason the
-        // mdns stop above swallows: a reject here must not skip the guaranteed pool teardown below.
+        // mdns stop above swallows: a reject here must not skip the pool teardown below.
         if (landing !== undefined) await landing.close().catch(() => {});
         await teardown.closePools();
       }
@@ -1281,12 +1292,8 @@ export async function startServer(
             // A setup box runs no background work, so there is nothing to abort or await.
             stopWork: () => Promise.resolve(),
             // Just the app pool AND the provisioning owner pool — a setup box opens no others.
-            // `allSettled`, not sequential `await`s: a rejecting `db.close()` must NOT leak `ownerDb`.
-            // Both are closed regardless of either's outcome, so neither pool dangles on the teardown
-            // path (which `close()` runs even after a `server.close()` rejection).
-            closePools: async () => {
-              await Promise.allSettled([db.close(), ownerDb.close()]);
-            },
+            // Both are closed even if one fails; the first failure is then rethrown for the log.
+            closePools: () => closeAll([() => db.close(), () => ownerDb.close()]),
           },
           mdns,
           // The plain-HTTP trust/landing listener (Task 3): a setup box serves its own minted leaf,
@@ -1412,9 +1419,7 @@ export async function startServer(
           finishController.abort();
           await finishWorker.catch(() => {});
         },
-        closePools: async () => {
-          await Promise.allSettled([replicationDb.close(), db.close()]);
-        },
+        closePools: () => closeAll([() => replicationDb.close(), () => db.close()]),
       },
       mdns,
       // The plain-HTTP trust/landing listener (Task 3) — an adoption-pending box serves trading over
@@ -2715,12 +2720,8 @@ export async function startServer(
         // ordering guarantee the tunnel above keeps.
         await backupSupervisor.stop();
       },
-      closePools: async () => {
-        await db.close();
-        // The replication owner pool (M8), opened after the mirror-config read above and closed here
-        // beside the app pool.
-        await replicationDb.close();
-      },
+      // The app pool and the replication owner pool; both are closed even if one fails.
+      closePools: () => closeAll([() => db.close(), () => replicationDb.close()]),
     },
     mdns,
     // The plain-HTTP trust/landing listener (Task 3) — a trading box serves its own minted leaf, so a
