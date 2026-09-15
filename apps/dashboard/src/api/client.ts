@@ -2027,6 +2027,11 @@ export class DashboardApi {
     return this.#request<Unit[]>("/management-api/units", "GET");
   }
 
+  /** `GET /management-api/units/:id/products` — the products using this unit. */
+  listUnitProducts(id: string): Promise<ProductUsingUnit[]> {
+    return this.#request<ProductUsingUnit[]>(`/management-api/units/${id}/products`, "GET");
+  }
+
   createUnit(input: UnitInput): Promise<Unit> {
     return this.#request<Unit>("/management-api/units", "POST", input);
   }
@@ -2039,11 +2044,14 @@ export class DashboardApi {
     return this.#request<void>(`/management-api/units/${id}`, "DELETE");
   }
 
-  /** Move the listed products onto `targetUnitId` and return the products still using `id`. */
+  /**
+   * Move the listed products onto `targetUnitId` and return the products still using `id`.
+   * A null target reassigns them to Each (no unit).
+   */
   reassignProductsUnit(
     id: string,
     productIds: string[],
-    targetUnitId: string,
+    targetUnitId: string | null,
   ): Promise<ProductUsingUnit[]> {
     return this.#request<ProductUsingUnit[]>(
       `/management-api/units/${id}/products/reassign`,
