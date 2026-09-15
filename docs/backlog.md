@@ -1299,10 +1299,21 @@ image constraints under *Detail → Box image*.
 
 - **The `tenant` command is unplanned**; its idempotency check should attempt the insert and catch
   the unique violation, and with one tenant per database the guard is really `assertNoForeignTenant`.
-- **The credential READ path does not `validatePayload`** (`getCredential`/`tryGetCredential`,
-  `packages/credentials/src/store.ts`), so a
-  row sealed under an older `PURPOSES` list returns a missing field as `undefined` — fail-loudly
-  versus keep-serving, to settle before the first consumer relies on it.
+- **Every credential reader checks the fields it uses — decided 2026-09-15, code waits for
+  `feat/drop-tenant-id`.** Reading a credential (`getCredential`/`tryGetCredential`,
+  `packages/credentials/src/store.ts`) does not re-check it against `PURPOSES`, and stays that way:
+  a secret saved under an older field list comes back with the new field missing. The owner chose
+  this over refusing the read, because refusing would stop every venue holding that kind of secret
+  (card payments, for a Stripe field) the moment a field is added, even where the reader does not
+  need it, and would turn SumUp's deliberately optional affiliate fields into required ones. The
+  tax-certificate, Stripe and SumUp readers already refuse a missing field they need. Two do not,
+  and are the work: `apps/server/src/email-delivery.ts` passes `url`/`from` on with `!`, and
+  `apps/server/src/node-identity.ts`'s `readNodeIdentityKey` casts a missing `privateKey`
+  `as string`. Both should raise `server.credential_unusable` naming the field, as
+  `apps/server/src/stripe-account.ts` does, each with a failing test first. Wait for
+  `feat/drop-tenant-id`, which rewrites both functions and that code's parameters. Unchanged by
+  this decision: `rotate` re-checks every secret against the current list, so an out-of-date one
+  still stops a key rotation until it is re-entered (commented above `rotateCredentials`).
 - **The same hand-built SQL array appears in several packages** — `sql.join` of each value inside
   `array[...]::text[]`, in `packages/catalogue/src/provisioning.ts`,
   `packages/provisioning/src/venue-apply.ts` and `apps/server/src/configuration-transfer.ts` (find
