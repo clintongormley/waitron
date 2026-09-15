@@ -4,6 +4,7 @@
 
 import type { AlertSource, OngoingAlert } from "@waitron/module";
 import type { BackupStatus } from "./backup-status.js";
+import type { AwaitingCertStatus } from "./pass.js";
 import "./errors.js";
 
 /** The dashboard screen a backup alert links to. */
@@ -86,6 +87,32 @@ export function backupAlertSource(deps: {
         }
       }
       return alerts;
+    },
+  };
+}
+
+/**
+ * The awaiting-certificate alert source. `holder` is the same in-memory cell the fiscal pass flips
+ * (`AwaitingCertStatus`, `apps/server/src/pass.ts`) when a drain skips a tenant for a missing AEAT
+ * certificate — no database read. Shares the `fiscal` area with the module's own submission source
+ * (`packages/fiscal-verifactu/src/submission-alerts.ts`); Task 1's relaxed registry is what lets two
+ * sources own the same area.
+ */
+export function awaitingCertAlertSource(holder: AwaitingCertStatus): AlertSource {
+  return {
+    area: "fiscal",
+    permission: "fiscal.view",
+    async read(): Promise<readonly OngoingAlert[]> {
+      if (!holder.current) return [];
+      return [
+        {
+          key: "fiscal.awaiting_certificate",
+          code: "fiscal.awaiting_certificate",
+          params: {},
+          severity: "error",
+          since: null,
+        },
+      ];
     },
   };
 }

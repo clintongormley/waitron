@@ -432,5 +432,15 @@ declare module "@waitron/shared" {
      * dashboard, never thrown. See `fiscal.submission_delayed` above.
      */
     "fiscal.submission_stopped": { count: number };
+
+    /**
+     * The dashboard's awaiting-certificate ongoing check (`apps/server/src/alert-sources.ts`), not
+     * this package's own source: it reads the in-memory cell the fiscal pass flips
+     * (`AwaitingCertStatus`, `apps/server/src/pass.ts`) when a drain skips a tenant for a missing
+     * AEAT certificate. Registered here anyway, matching `fiscal.submission_delayed`'s reasoning
+     * above: the code names the fiscal domain concept, not the package that raises it. No params —
+     * the alert is a plain on/off fact, unlike the counted submission codes.
+     */
+    "fiscal.awaiting_certificate": Record<string, never>;
   }
 }

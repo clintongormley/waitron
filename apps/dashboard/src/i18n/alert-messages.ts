@@ -94,6 +94,10 @@ export const ALERT_MESSAGES: Readonly<
     en: "{count} fiscal record(s) have stopped submitting and need attention.",
     es: "{count} registro(s) fiscal(es) han detenido su envío y requieren atención.",
   },
+  "fiscal.awaiting_certificate": {
+    en: "Fiscal records are waiting because no valid tax certificate is installed. Upload the certificate to resume submitting.",
+    es: "Hay registros fiscales en espera porque no hay un certificado tributario válido instalado. Sube el certificado para reanudar los envíos.",
+  },
   "payment.offline_forward_declined": {
     en: "A card payment of {amount} taken while offline was declined when it was sent on (reference {paymentRef}). Collect the money another way.",
     es: "Un pago con tarjeta de {amount} cobrado sin conexión se rechazó al enviarlo (referencia {paymentRef}). Cobra el importe de otra forma.",
