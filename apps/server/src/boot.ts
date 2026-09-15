@@ -73,6 +73,7 @@ import type {
 import { codeOf } from "@waitron/server-kit";
 import { createLogger, type Logger } from "./logger.js";
 import { withDevMigrationHint } from "./dev-migration-hint.js";
+import { closeAll } from "./close-all.js";
 import { createRotatingFileSink, createLogReader, tee } from "./log-file.js";
 import { createVerbosityController } from "./verbosity.js";
 import { requestIdMiddleware } from "./request-id.js";
@@ -1281,12 +1282,8 @@ export async function startServer(
             // A setup box runs no background work, so there is nothing to abort or await.
             stopWork: () => Promise.resolve(),
             // Just the app pool AND the provisioning owner pool — a setup box opens no others.
-            // `allSettled`, not sequential `await`s: a rejecting `db.close()` must NOT leak `ownerDb`.
-            // Both are closed regardless of either's outcome, so neither pool dangles on the teardown
-            // path (which `close()` runs even after a `server.close()` rejection).
-            closePools: async () => {
-              await Promise.allSettled([db.close(), ownerDb.close()]);
-            },
+            // Both are closed even if one fails; the first failure is then rethrown for the log.
+            closePools: () => closeAll([() => db.close(), () => ownerDb.close()]),
           },
           mdns,
           // The plain-HTTP trust/landing listener (Task 3): a setup box serves its own minted leaf,
@@ -1412,9 +1409,7 @@ export async function startServer(
           finishController.abort();
           await finishWorker.catch(() => {});
         },
-        closePools: async () => {
-          await Promise.allSettled([replicationDb.close(), db.close()]);
-        },
+        closePools: () => closeAll([() => replicationDb.close(), () => db.close()]),
       },
       mdns,
       // The plain-HTTP trust/landing listener (Task 3) — an adoption-pending box serves trading over
@@ -2715,12 +2710,8 @@ export async function startServer(
         // ordering guarantee the tunnel above keeps.
         await backupSupervisor.stop();
       },
-      closePools: async () => {
-        await db.close();
-        // The replication owner pool (M8), opened after the mirror-config read above and closed here
-        // beside the app pool.
-        await replicationDb.close();
-      },
+      // The app pool and the replication owner pool; both are closed even if one fails.
+      closePools: () => closeAll([() => db.close(), () => replicationDb.close()]),
     },
     mdns,
     // The plain-HTTP trust/landing listener (Task 3) — a trading box serves its own minted leaf, so a
