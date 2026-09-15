@@ -62,13 +62,10 @@ export function mountUnitsApi(app: Hono, deps: UnitsApiDeps, log: Logger): void 
   const gated = <T>(sessionId: string, action: (tx: Transaction) => Promise<T>) =>
     withTransaction(deps.db, async (tx) => {
       await asAppUser(tx);
-      const auth = await authorizeManager(tx, {
+      await authorizeManager(tx, {
         managementSessionId: sessionId,
         permission: "person.manage",
       });
-      if (auth.tenantId !== deps.cfg.tenantId) {
-        throw new AppError("authorization.not_permitted", { permission: "person.manage" });
-      }
       return action(tx);
     });
 

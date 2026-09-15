@@ -57,14 +57,7 @@ export async function startChangeListener(
       } catch {
         return;
       }
-      if (
-        parsed === null ||
-        typeof parsed !== "object" ||
-        !("tenantId" in parsed) ||
-        !("resources" in parsed)
-      )
-        return;
-      if (parsed.tenantId !== null && typeof parsed.tenantId !== "string") return;
+      if (parsed === null || typeof parsed !== "object" || !("resources" in parsed)) return;
       if (!Array.isArray(parsed.resources)) return;
       const resources: ResourceChange["resources"] = [];
       for (const identity of parsed.resources as unknown[]) {
@@ -82,7 +75,7 @@ export async function startChangeListener(
             : { type: identity.type },
         );
       }
-      options.onChange({ tenantId: parsed.tenantId, resources });
+      options.onChange({ resources });
     });
     try {
       await next.connect();

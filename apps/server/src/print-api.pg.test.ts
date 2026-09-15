@@ -865,11 +865,7 @@ describe("Receipt-printer + print-mode config routes over real Postgres (printer
 it("delivers enqueue and agent completion events with fresh printer aggregates", async () => {
   const app = mountApp(tenantA);
   const bus = new LiveEvents();
-  mountLiveApi(
-    app,
-    { db: suite.admin, tenantId: tenantA.tenantId, bus, resourceTypes: ["printers", "print_jobs"] },
-    noopLog,
-  );
+  mountLiveApi(app, { db: suite.admin, bus, resourceTypes: ["printers", "print_jobs"] }, noopLog);
   const { agentId, token } = await joinAndAccept(app, "Live agent");
   const printerId = await createPrinter(app, agentId, "Live printer");
   await installChangeFeed(suite.admin, CORE_CHANGE_SOURCES);

@@ -234,8 +234,8 @@ export async function saveOwnProfile(
   const locale = assertSupportedLocale(input.locale);
   const changedEmail = email !== person.email;
   if (changedEmail) verifyCurrent(person, input);
-  await assertDisplayNameAvailable(tx, input.tenantId, displayName, person.id);
-  await assertEmailAvailable(tx, input.tenantId, email, person.id);
+  await assertDisplayNameAvailable(tx, displayName, person.id);
+  await assertEmailAvailable(tx, email, person.id);
   try {
     await tx
       .update(persons)

@@ -75,7 +75,7 @@ function parseInterests(raw: string | undefined, allowed: ReadonlySet<string>): 
 /** Events expose identities to signed-in venue people; resource reads retain their own authorization. */
 export function mountLiveApi(
   app: Hono,
-  deps: { db: Database; tenantId: string; bus: LiveEvents; resourceTypes: readonly string[] },
+  deps: { db: Database; bus: LiveEvents; resourceTypes: readonly string[] },
   log: Logger,
 ): void {
   const allowed = new Set(deps.resourceTypes);
@@ -85,9 +85,9 @@ export function mountLiveApi(
       const authenticate = async (): Promise<void> => {
         await withTransaction(deps.db, async (tx) => {
           await asAppUser(tx);
-          const session = await resolveManagementSession(tx, sessionId, { touch: false });
-          if (session.tenantId !== deps.tenantId)
-            throw new AppError("management_session.required", {});
+          // Resolving the session validates it is live (throws when missing, expired or suspended);
+          // one tenant per database, so there is no tenant to compare against.
+          await resolveManagementSession(tx, sessionId, { touch: false });
         });
       };
       await authenticate();
@@ -101,7 +101,6 @@ export function mountLiveApi(
           if (event.kind === "close") closed = true;
           else if (event.kind === "reset") reset = true;
           else {
-            if (event.change.tenantId !== null && event.change.tenantId !== deps.tenantId) return;
             for (const resource of event.change.resources) {
               if (
                 interests.some(

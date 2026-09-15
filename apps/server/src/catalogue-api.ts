@@ -352,15 +352,10 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
   const gated = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> =>
     withTransaction(deps.db, async (tx) => {
       await asAppUser(tx);
-      const auth = await authorizeManager(tx, {
+      await authorizeManager(tx, {
         managementSessionId: sessionId,
         permission: CATALOGUE_WRITE_PERMISSION,
       });
-      if (auth.tenantId !== deps.cfg.tenantId) {
-        throw new AppError("authorization.not_permitted", {
-          permission: CATALOGUE_WRITE_PERMISSION,
-        });
-      }
       return fn(tx);
     });
 

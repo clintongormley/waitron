@@ -327,12 +327,10 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
   ): Promise<T> =>
     withTransaction(deps.db, async (tx) => {
       await asAppUser(tx);
-      const authorization = await authorizeManager(tx, {
+      await authorizeManager(tx, {
         managementSessionId: sessionId,
         permission,
       });
-      if (authorization.tenantId !== deps.cfg.tenantId)
-        throw new AppError("authorization.not_permitted", { permission });
       return fn(tx);
     });
 

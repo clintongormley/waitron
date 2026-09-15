@@ -4,7 +4,6 @@ export interface ResourceIdentity {
 }
 
 export interface ResourceChange {
-  tenantId: string | null;
   resources: ResourceIdentity[];
 }
 

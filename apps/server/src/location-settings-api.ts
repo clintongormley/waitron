@@ -34,12 +34,10 @@ export function mountLocationSettingsApi(
   const gated = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>) =>
     withTransaction(deps.db, async (tx) => {
       await asAppUser(tx);
-      const authorization = await authorizeManager(tx, {
+      await authorizeManager(tx, {
         managementSessionId: sessionId,
         permission: "venue.configure",
       });
-      if (authorization.tenantId !== deps.cfg.tenantId)
-        throw new AppError("authorization.not_permitted", { permission: "venue.configure" });
       return fn(tx);
     });
   app.get("/management-api/location-settings", (c) =>

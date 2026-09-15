@@ -1701,7 +1701,6 @@ export async function startServer(
     app,
     {
       db,
-      tenantId: config.till.tenantId,
       bus: liveEvents,
       resourceTypes: liveResourceTypes(changeSources),
     },

@@ -76,11 +76,9 @@ function requiredText(value: string, field: string): string {
 
 export async function assertDisplayNameAvailable(
   tx: Transaction,
-  tenantId: string,
   displayName: string,
   excludedPersonId?: string,
 ): Promise<void> {
-  void tenantId;
   const [existing] = await tx
     .select({ id: persons.id })
     .from(persons)
@@ -96,11 +94,9 @@ export async function assertDisplayNameAvailable(
 
 export async function assertEmailAvailable(
   tx: Transaction,
-  tenantId: string,
   email: string,
   excludedPersonId?: string,
 ): Promise<void> {
-  void tenantId;
   const [existing] = await tx
     .select({ id: persons.id })
     .from(persons)
@@ -113,12 +109,7 @@ export async function assertEmailAvailable(
   if (existing !== undefined) throw new AppError("person.email_taken", { email });
 }
 
-async function revokePersonAccess(
-  tx: Transaction,
-  tenantId: string,
-  personId: string,
-): Promise<void> {
-  void tenantId;
+async function revokePersonAccess(tx: Transaction, personId: string): Promise<void> {
   await tx
     .update(sessions)
     .set({ endedAt: sql`now()` })
@@ -150,11 +141,7 @@ export async function updatePersonDetails(
     status: "pending" | "active" | "suspended";
   },
 ): Promise<void> {
-  const {
-    authorizedBy,
-    tenantId,
-    role: actorRole,
-  } = await authorizeManager(tx, {
+  const { authorizedBy, role: actorRole } = await authorizeManager(tx, {
     managementSessionId: input.managementSessionId,
     permission: "person.manage",
   });
@@ -197,8 +184,8 @@ export async function updatePersonDetails(
   if (telephone !== null && !isValidTelephone(telephone))
     throw new AppError("person.telephone_invalid", {});
   const email = normalizeAndValidateEmail(input.email);
-  await assertDisplayNameAvailable(tx, tenantId, displayName, person.id);
-  await assertEmailAvailable(tx, tenantId, email, person.id);
+  await assertDisplayNameAvailable(tx, displayName, person.id);
+  await assertEmailAvailable(tx, email, person.id);
   try {
     await tx
       .update(persons)
@@ -217,7 +204,7 @@ export async function updatePersonDetails(
     asPersonUniqueViolation(error, { displayName, email });
   }
   if (email !== person.email || input.status !== person.status)
-    await revokePersonAccess(tx, tenantId, person.id);
+    await revokePersonAccess(tx, person.id);
 }
 
 /** Marks a person inactive without rewriting their identity fields. */
@@ -225,7 +212,7 @@ export async function deactivatePerson(
   tx: Transaction,
   input: { managementSessionId: string; personId: string },
 ): Promise<void> {
-  const { authorizedBy, tenantId } = await authorizeManager(tx, {
+  const { authorizedBy } = await authorizeManager(tx, {
     managementSessionId: input.managementSessionId,
     permission: "person.manage",
   });
@@ -249,7 +236,7 @@ export async function deactivatePerson(
   }
   if (person.status === "suspended") return;
   await tx.update(persons).set({ status: "suspended" }).where(eq(persons.id, person.id));
-  await revokePersonAccess(tx, tenantId, person.id);
+  await revokePersonAccess(tx, person.id);
 }
 
 /** Invalidates a person's device PIN so only that person can choose its replacement. */
@@ -278,7 +265,7 @@ export async function resetPersonLogin(
   tx: Transaction,
   input: { managementSessionId: string; personId: string },
 ): Promise<void> {
-  const { tenantId } = await authorizeManager(tx, {
+  await authorizeManager(tx, {
     managementSessionId: input.managementSessionId,
     permission: "person.manage",
   });
@@ -318,7 +305,7 @@ export async function resetPersonLogin(
   await tx.delete(recoveryCodes).where(eq(recoveryCodes.personId, input.personId));
   await tx.delete(totpEnrollments).where(eq(totpEnrollments.personId, input.personId));
   await tx.delete(webauthnChallenges).where(eq(webauthnChallenges.personId, person.id));
-  await revokePersonAccess(tx, tenantId, person.id);
+  await revokePersonAccess(tx, person.id);
 }
 
 /** Moves an inactive account to Pending and clears credentials before a fresh invitation is issued. */
@@ -326,7 +313,7 @@ export async function reactivatePersonForInvitation(
   tx: Transaction,
   input: { managementSessionId: string; personId: string },
 ): Promise<void> {
-  const { tenantId } = await authorizeManager(tx, {
+  await authorizeManager(tx, {
     managementSessionId: input.managementSessionId,
     permission: "person.manage",
   });
@@ -337,7 +324,7 @@ export async function reactivatePersonForInvitation(
     .for("update");
   if (person === undefined) throw new AppError("person.not_found", { personId: input.personId });
   if (person.status !== "suspended") throw new AppError("person.transition_invalid", {});
-  await assertDisplayNameAvailable(tx, tenantId, person.displayName, person.id);
+  await assertDisplayNameAvailable(tx, person.displayName, person.id);
   try {
     await tx
       .update(persons)
@@ -357,7 +344,7 @@ export async function reactivatePersonForInvitation(
   await tx.delete(recoveryCodes).where(eq(recoveryCodes.personId, person.id));
   await tx.delete(totpEnrollments).where(eq(totpEnrollments.personId, person.id));
   await tx.delete(webauthnChallenges).where(eq(webauthnChallenges.personId, person.id));
-  await revokePersonAccess(tx, tenantId, person.id);
+  await revokePersonAccess(tx, person.id);
 }
 
 /** Creates the pending account an administrator has invited. Credentials are chosen by its owner. */
@@ -374,7 +361,7 @@ export async function invitePerson(
     email: string;
   },
 ): Promise<{ id: string }> {
-  const { tenantId } = await authorizeManager(tx, {
+  await authorizeManager(tx, {
     managementSessionId: input.managementSessionId,
     permission: "person.manage",
   });
@@ -385,13 +372,13 @@ export async function invitePerson(
   if (telephone !== null && !isValidTelephone(telephone))
     throw new AppError("person.telephone_invalid", {});
   const email = normalizeAndValidateEmail(input.email);
-  await assertDisplayNameAvailable(tx, tenantId, displayName);
-  await assertEmailAvailable(tx, tenantId, email);
+  await assertDisplayNameAvailable(tx, displayName);
+  await assertEmailAvailable(tx, email);
   try {
     const [row] = await tx
       .insert(persons)
       .values({
-        tenantId,
+        tenantId: input.tenantId,
         displayName,
         firstNames,
         lastNames,
@@ -431,20 +418,20 @@ export async function createPerson(
     email: string;
   },
 ): Promise<{ id: string }> {
-  const { tenantId } = await authorizeManager(tx, {
+  await authorizeManager(tx, {
     managementSessionId: input.managementSessionId,
     permission: "person.manage",
   });
   assertPinLength(input.pin);
   const email = normalizeAndValidateEmail(input.email);
   const displayName = requiredText(input.displayName, "displayName");
-  await assertDisplayNameAvailable(tx, tenantId, displayName);
-  await assertEmailAvailable(tx, tenantId, email);
+  await assertDisplayNameAvailable(tx, displayName);
+  await assertEmailAvailable(tx, email);
   try {
     const [row] = await tx
       .insert(persons)
       .values({
-        tenantId,
+        tenantId: input.tenantId,
         displayName,
         pinHash: hashPin(input.pin),
         role: input.role,

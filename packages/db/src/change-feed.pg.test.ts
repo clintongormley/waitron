@@ -142,7 +142,6 @@ describe("database change feed", () => {
       );
       await vi.waitFor(() =>
         expect(changed).toHaveBeenCalledWith({
-          tenantId: "tenant-a",
           resources: [{ type: "print-job", id: "after-reconnect" }],
         }),
       );
