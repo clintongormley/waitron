@@ -33,7 +33,7 @@ const AT = "2026-07-20T19:20:30+00:00";
 
 let seriesA = "";
 // sales.node_id is NOT NULL since the node-id rekey (2026-08-03); insertSale writes the sale's node,
-// which the composite (tenant_id, node_id) → nodes FK requires.
+// which the (node_id) → nodes FK requires.
 let nodeA = "";
 
 async function rows<T>(db: Database, query: ReturnType<typeof sql>): Promise<T[]> {

@@ -26,7 +26,7 @@ const AT = "2026-07-20T19:20:30+00:00";
 // already passes english-only.ts's SPANISH_WORDS guard as test DATA.
 const DESCRIPTIONS_A = JSON.stringify({ es: "Café solo" });
 
-// Captured at seed time (the ids the raw inserts below need for tenant-consistent FKs).
+// Captured at seed time (the ids the raw inserts below need as foreign-key targets).
 let nodeA = "";
 let productA = "";
 let stationA = "";
@@ -226,7 +226,7 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
   });
 
   it("cascades a ticket item away when its working_order_line is deleted (ON DELETE CASCADE)", async () => {
-    // The composite (tenant_id, working_order_line_id) → working_order_lines FK is ON DELETE CASCADE —
+    // The (working_order_line_id) → working_order_lines FK is ON DELETE CASCADE —
     // the analogue of order_prep's order FK. Deleting the line (as admin; the parent order is open, so
     // working_order_lines_require_open_parent permits it) removes the ticket item with it, which is how
     // a cancelled/abandoned line's item is cleaned up without any DELETE grant on ticket_items.

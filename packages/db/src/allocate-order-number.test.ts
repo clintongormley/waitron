@@ -14,10 +14,9 @@ import { withTransaction } from "./tenancy.js";
 const TENANT_A = "11111111-1111-4111-8111-111111111111";
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 
-// One counter per (tenant, node). Two nodes of the SAME tenant give the
-// independence test a real second key without a second tenant — the property
-// the park path depends on is that one register's held-order numbering never
-// disturbs another's.
+// One counter per node. Two nodes give the independence test a real second
+// key — the property the park path depends on is that one register's
+// held-order numbering never disturbs another's.
 let nodeA1 = "";
 let nodeA2 = "";
 
@@ -130,7 +129,7 @@ describe("allocateOrderNumber under concurrency", () => {
       );
       expect(new Set(pids).size).toBe(WRITERS);
 
-      // All WRITERS allocate the same (tenant, node) at once, each on its own backend, each as the
+      // All WRITERS allocate the same node's counter at once, each on its own backend, each as the
       // app role. A read-then-write allocator would hand the same number out twice here.
       const results = await Promise.all(
         dbs.map((db) =>

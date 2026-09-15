@@ -217,9 +217,8 @@ async function correct(
   });
 }
 
-/** Rows for the CURRENT test's tenant, table-wide. The suite shares one PGlite instance across the
- * file and seeds a fresh tenant per test, so an unscoped count would fold in every earlier test —
- * mirrors record-sale.test.ts's own scoped `countRows`. */
+/** Counts every row in `table`. The suite helper truncates between tests (`resetPerTest`, the
+ * default in `@waitron/db/testing/lifecycle.js`), so the count is what THIS test wrote. */
 async function countRows(table: string): Promise<number> {
   const result = await suite.db.execute<{ n: number }>(
     sql`select count(*)::int as n from ${sql.raw(table)}`,

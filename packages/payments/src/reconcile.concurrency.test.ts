@@ -26,7 +26,7 @@ const PERIOD = { from: new Date("2026-07-01T00:00:00Z"), to: new Date("2026-07-0
  * `reconcilePayments`'s single-winner guarantee for an orphan rests on TWO independent primitives:
  * `markReconcileRemediated`'s state-guarded UPDATE (store.ts, matches only a row whose
  * `reconcile_remediated_at` is still NULL) and `recordIncidentOnce`'s partial unique index on
- * `(tenant_id, till_id, code, sale_id) WHERE acknowledged_at IS NULL` (@waitron/core). Every
+ * `(till_id, code, sale_id) WHERE acknowledged_at IS NULL` (@waitron/core). Every
  * existing proof of either primitive runs a single sweep (reconcile.test.ts) or races bare store
  * calls against each other by hand
  * (incident-dedup.concurrency.test.ts, reversal.concurrency.test.ts). None of them proves the thing

@@ -9,7 +9,7 @@ import { catalogues, categories, products } from "./catalogue.js";
 import { locations, tenants } from "./tenants.js";
 
 // Real Postgres (a template clone), not PGlite: what this proves is the hand-written
-// (tenant_id, station_id) → kitchen_stations FKs on categories/products, written and read as the
+// (station_id) → kitchen_stations FKs on categories/products, written and read as the
 // non-owner `app_user` — the deployment role, which PGlite (every connection a superuser) cannot be.
 // The suite retains the reads and writes under app_user's grants.
 const TENANT_A = "11111111-1111-4111-8111-111111111111";
@@ -20,7 +20,7 @@ let categoryA = "";
 let productA = "";
 let stationA = "";
 
-describe("categories.station_id / products.station_id routing FKs (tenant-consistent, app-writable)", () => {
+describe("categories.station_id / products.station_id routing FKs (app-writable)", () => {
   const suite = useTemplateDb({ template: "core", resetPerTest: false });
 
   beforeAll(async () => {

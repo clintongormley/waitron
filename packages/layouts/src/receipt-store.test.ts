@@ -79,7 +79,7 @@ describe("tenant receipt store on real Postgres, as the app role", () => {
     );
     const next: ReceiptConfig = { footerMessage: "Gracias por su visita" };
     await asApp(tenantId, (tx) => putReceipt(tx, { managementSessionId: session, receipt: next }));
-    // ON CONFLICT (tenant_id) DO UPDATE — the second write replaces the row, never adds one.
+    // ON CONFLICT (id) DO UPDATE — the second write replaces the row, never adds one.
     expect(await rowCount()).toBe(1);
     expect(await asApp(tenantId, (tx) => getReceipt(tx, tenantId))).toEqual(next);
   });

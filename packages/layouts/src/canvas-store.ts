@@ -25,7 +25,7 @@ import { validateCanvas } from "./validate-canvas.js";
  * The writers run, in order: (1) `authorizeManager(..., "layout.configure")` — the write gate, before
  * any DB write, proven by-deletion in the suite; (2) `validateCanvas` — fail-closed on an invalid
  * `definition` (throws `canvas.invalid` before the write); (3) the drizzle write, whose 23505 on the
- * per-tenant name unique is translated to `canvas.name_taken` (see `translateWriteError`). `deleteCanvas`
+ * name unique is translated to `canvas.name_taken` (see `translateWriteError`). `deleteCanvas`
  * authorises but has no definition to validate. Reads cast the opaque jsonb back to `CanvasDef`
  * WITHOUT re-running `validateCanvas` — the value was validated on the write that stored it and the
  * only writer is this service (the return-a-typed-shape-without-re-validating rationale). The `as` cast re-attaches the
@@ -66,7 +66,7 @@ export function translateWriteError(err: unknown): never {
   throw err;
 }
 
-/** All canvases; with one tenant per database they are all this tenant's. */
+/** All canvases, in no defined order (the query has no ORDER BY). */
 export async function listCanvases(
   tx: Transaction,
   tenantId: string,
@@ -86,7 +86,7 @@ export async function listCanvases(
   }));
 }
 
-/** One canvas by id, or `undefined` when the tenant has no such canvas. */
+/** One canvas by id, or `undefined` when no canvas carries that id. */
 export async function getCanvas(
   tx: Transaction,
   tenantId: string,
@@ -198,10 +198,10 @@ export async function deleteCanvas(
 }
 
 /**
- * The tenant's first stored canvas of `formFactor`, else the built-in `DEFAULT_CANVASES[formFactor]`
+ * The first stored canvas of `formFactor`, else the built-in `DEFAULT_CANVASES[formFactor]`
  * — the "return-a-default-when-unauthored" precedent shared with `getReceipt` (receipt-store.ts). The form factor is
  * carried inside the opaque `definition` jsonb (`->> 'formFactor'`), not a column; "first" is by
- * `created_at` for a stable pick when a tenant has several of one form factor.
+ * `created_at` for a stable pick when several canvases share one form factor.
  */
 export async function getCanvasForFormFactor(
   tx: Transaction,

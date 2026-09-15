@@ -193,8 +193,8 @@ async function substitute(
   });
 }
 
-/** Rows for the CURRENT test's tenant, table-wide — the suite shares one PGlite instance and seeds
- * a fresh tenant per test, so an unscoped count would fold in every earlier test. */
+/** Counts every row in `table`. The suite helper truncates between tests (`resetPerTest`, the
+ * default in `@waitron/db/testing/lifecycle.js`), so the count is what THIS test wrote. */
 async function countRows(table: string): Promise<number> {
   const result = await suite.db.execute<{ n: number }>(
     sql`select count(*)::int as n from ${sql.raw(table)}`,
@@ -253,7 +253,7 @@ describe("recordSubstitution — the substituted tickets (input guards)", () => 
   });
 
   it("refuses to substitute a ticket already substituted by a prior F3 (at most once)", async () => {
-    // The `unique(tenant_id, substituted_sale_id)` on sale_substitutions is the real control — a
+    // The `unique(substituted_sale_id)` on sale_substitutions is the real control — a
     // ticket exchanged twice would put the same operation in two canje invoices. Translated to
     // `sale.already_substituted`, the way `recordVoid` translates its own double-void unique
     // violation into `sale.already_voided`.

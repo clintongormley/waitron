@@ -166,7 +166,7 @@ function toTenantIncident(row: TenantIncidentRow): TenantIncident {
   };
 }
 
-/** Every open incident in the tenant, newest first; ties break on id so the order is stable. */
+/** Every open incident, newest first; ties break on id so the order is stable. */
 export async function listOpenIncidents(
   tx: Transaction,
   tenantId: TenantId,

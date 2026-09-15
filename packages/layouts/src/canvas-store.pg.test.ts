@@ -161,7 +161,7 @@ describe("layout canvas store on real Postgres, as the app role", () => {
   });
 
   it("translates a delete of a profile-referenced canvas to canvas.in_use (23001 → 409), canvas survives", async () => {
-    // A device profile's composite FK device_profiles_canvas_fk → canvases(tenant_id, id) is ON DELETE
+    // A device profile's FK device_profiles_canvas_fk → canvases(id) is ON DELETE
     // RESTRICT, so deleting a canvas a profile still references trips a 23001 restrict_violation, which
     // deleteCanvas now translates (via translateWriteError) into the domain canvas.in_use — a clean 409,
     // not the raw DB error a 500 would surface. Proof-by-deletion: remove the try/catch in deleteCanvas

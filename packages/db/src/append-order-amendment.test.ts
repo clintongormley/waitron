@@ -20,7 +20,7 @@ import { locations, tenants, tills } from "./schema/tenants.js";
 // `order_amendments` is append-only for EVERY role, the owner included (reject_mutation blocks
 // UPDATE/DELETE/TRUNCATE), so nothing can clean it up between tests — the table only grows. Each
 // test therefore seeds its OWN working order and scopes its per-chain reads to that order's id
-// rather than reading a tenant-wide total that would drift as earlier tests accumulate rows.
+// rather than reading a table-wide total that would drift as earlier tests accumulate rows.
 //
 // A second tenant is seeded only to mint `nodeB`, the foreign node id the hash-tamper case swaps in.
 
@@ -34,7 +34,7 @@ const OPERATOR_A = "aaaaaaaa-2222-4000-8000-000000000001";
 const OTHER_ACTOR = "cccccccc-2222-4000-8000-000000000001";
 const AT = "2026-07-20T19:20:30+00:00";
 
-// Captured at seed time — the tenant-scoped node ids the amendments attribute to.
+// Captured at seed time — the node ids the amendments attribute to.
 let nodeA = "";
 let nodeB = "";
 // A fresh order number per seeded working order, so no two collide on the counter's uniqueness.

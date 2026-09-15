@@ -178,8 +178,8 @@ export async function recordCorrection(
     });
   }
 
-  // The gate (spec §7). Placed AFTER the sale-existence and series guards above (so a missing or
-  // cross-tenant original, or a wrong/absent corrective series, still returns its own code and never
+  // The gate (spec §7). Placed AFTER the sale-existence and series guards above (so a missing
+  // original, or a wrong/absent corrective series, still returns its own code and never
   // leaks an authz error) and BEFORE the chain work below — `checkIntegrity`'s chain-head lock and
   // `allocateInvoiceNumber`'s series-row lock — so a rejected correction consumes NO number and does
   // NO chain work, leaving no permanent series gap. `authorization.authorizedBy` is the person to
@@ -194,7 +194,7 @@ export async function recordCorrection(
   // Step 3. Art. 7.i verification, exactly as for a sale record. Nothing branches on `verification.ok` —
   // a failed check records ONE aggregated incident (below, once `saleId` exists) and the correction
   // is chained anyway. The table-wide `incidents_open_dedup` index holds at most one open incident
-  // per (tenant, till, code, sale), so emitting one row per issue would collapse to a single row and
+  // per (till, code, sale), so emitting one row per issue would collapse to a single row and
   // drop every issue after the first; `params.issues` carries them all. Mirrors `./record-sale.ts`.
   const verification = await backend.checkIntegrity(tx, input.tenantId, input.nodeId);
   const pending: Array<{ error: AppError; severity: IncidentSeverity }> = [];

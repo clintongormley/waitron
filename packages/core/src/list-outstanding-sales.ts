@@ -22,7 +22,7 @@ export interface OutstandingSale {
 }
 
 /**
- * Lists a tenant's outstanding sales: ordinary sales (`corrects_sale_id` NULL) that are neither an F3
+ * Lists the outstanding sales: ordinary sales (`corrects_sale_id` NULL) that are neither an F3
  * canje substitute (already paid via their tickets — AEAT "no cobrar dos veces"), settled, nor
  * voided. This is a plain read; `tenantId` is not read, as the database holds one tenant.
  */

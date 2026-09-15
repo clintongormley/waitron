@@ -41,8 +41,7 @@ import { IDENTITY_MIGRATIONS } from "@waitron/identity";
  * (`canvas-store.pg.test.ts`, `device-profile-store.pg.test.ts`, `theme-store.test.ts`,
  * `receipt-store.test.ts`) run the whole authorize→write path as a non-superuser member of
  * `app_user`, which a PGlite connection — superuser, holding every grant — cannot be; and
- * `device-profile-store.pg.test.ts` exercises the tenant-consistent composite FK
- * `device_profiles_canvas_fk`. Whether the first reason still warrants a container is the per-suite target review's
+ * `device-profile-store.pg.test.ts` exercises `device_profiles_canvas_fk`. Whether the first reason still warrants a container is the per-suite target review's
  * question (docs/superpowers/specs/2026-09-05-drop-rls-squash-and-outbox-deletion-design.md §4).
  * CLAUDE.md §4 documents that this repo's real-Postgres test tier needs a local Docker
  * daemon (plus `TESTCONTAINERS_RYUK_DISABLED`); `dockerRequired` turns the raw testcontainers daemon

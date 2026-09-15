@@ -38,7 +38,7 @@ const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const TILL_A1 = "aaaaaaaa-1111-4000-8000-000000000001";
 const AT = "2026-07-20T19:20:30+00:00";
 
-// working_order_lines.product_id carries a tenant-consistent composite FK to products (park &
+// working_order_lines.product_id carries a foreign key to products (park &
 // retrieve, Task 1). It is NULLABLE since ordering modifiers (Task 2) — a child modifier line has no
 // product — but every PARENT dish line still needs a real product. seed() creates one priced product
 // and stores its id here; the LINE fixture uses it.
@@ -473,12 +473,12 @@ describe("working_order_lines", () => {
  * The modifier links on the MUTABLE draft line (ordering modifiers, Task 2):
  *
  * - `parent_line_id` — a self-link so a modifier is its own child line pointing at the dish line it
- *   belongs to. Composite (tenant_id, parent_line_id) → working_order_lines(tenant_id, id), MATCH
+ *   belongs to. (parent_line_id) → working_order_lines(id), MATCH
  *   SIMPLE so a top-level line (NULL) passes. A child modifier line has no product, which is why
  *   `product_id` is now NULLABLE (was NOT NULL): the FK to products is null-permissive, so parent
  *   rows are unaffected.
- * - `option_group_item_id` — authoring TRACEABILITY only. Composite (tenant_id, option_group_item_id)
- *   → option_group_items(tenant_id, id) with onDelete SET NULL: the option's price/name/VAT are
+ * - `option_group_item_id` — authoring TRACEABILITY only. (option_group_item_id)
+ *   → option_group_items(id) with onDelete SET NULL: the option's price/name/VAT are
  *   snapshotted onto the line by value, so a catalogue DELETE of an option item must NOT be blocked
  *   and must NOT strip the draft's snapshot columns — it only clears this back-reference. It lives on
  *   working_order_lines only, never on the filed sale_lines (which stay decoupled from the mutable

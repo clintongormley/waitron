@@ -154,7 +154,7 @@ describe("kitchen_courses schema (columns, defaults, course FKs)", () => {
     expect(pgErrorCode(eRandom)).toBe("23503");
   });
 
-  it("wires all three course columns with the tenant-consistent composite FK to kitchen_courses", async () => {
+  it("wires all three course columns with a foreign key to kitchen_courses", async () => {
     // The heavy behavioural proof above covers products.course_id; working_order_lines.course_id and
     // ticket_items.course_id use the IDENTICAL hand-written DDL. Asserting each of the three FK
     // definitions structurally (pg_get_constraintdef reads the LIVE catalog, not source) catches a

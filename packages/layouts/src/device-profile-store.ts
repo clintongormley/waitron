@@ -13,8 +13,8 @@ import type { CapabilityFlag, FormFactor } from "./canvas.js";
 import { validateCapabilities, validateInactivityTimeout } from "./device-profile.js";
 
 /**
- * The list/get/create/update/delete service over `device_profiles` (design 2026-09-05 §5.1). MANY rows
- * per tenant, keyed by `id`, names unique per tenant. The twin of `canvas-store.ts`, sharing its
+ * The list/get/create/update/delete service over `device_profiles` (design 2026-09-05 §5.1). MANY rows,
+ * keyed by `id`, with distinct names. The twin of `canvas-store.ts`, sharing its
  * shape exactly — read that file's header for the (tx, …)-is-caller-scoped convention.
  *
  * Every function takes the caller's transaction, opened with
@@ -26,8 +26,8 @@ import { validateCapabilities, validateInactivityTimeout } from "./device-profil
  * any DB write, proven by-deletion in the suite; (2) `validateCapabilities` — fail-closed on an
  * unknown capability flag (throws `device_profile.invalid` {reason: "bad_capabilities"} before the
  * write, since capabilities drive the /api/pay + /api/drawer firewall); (3) the drizzle write, whose
- * 23505 on the per-tenant name unique becomes `device_profile.name_taken` and whose 23503 on the
- * tenant-consistent composite FK `device_profiles_canvas_fk` becomes `device_profile.invalid`
+ * 23505 on the name unique becomes `device_profile.name_taken` and whose 23503 on
+ * `device_profiles_canvas_fk` becomes `device_profile.invalid`
  * {reason: "bad_canvas_ref"} (see `translateWriteError`). `deleteDeviceProfile` authorises but has no
  * capabilities to validate. Reads return `capabilities` as PARSED jsonb (an array) — no `::text[]`
  * cast: it is a jsonb column, not PG `name[]` (CLAUDE.md §4's cast note is about `name[]`). The `as`
@@ -122,7 +122,7 @@ export function translateWriteError(err: unknown): never {
   throw err;
 }
 
-/** All device profiles, ordered by name; with one tenant per database they are all this tenant's. */
+/** All device profiles, ordered by name. */
 export async function listDeviceProfiles(
   tx: Transaction,
   tenantId: string,
@@ -136,7 +136,7 @@ export async function listDeviceProfiles(
   return rows.map(toRow);
 }
 
-/** One device profile by id, or `undefined` when the tenant has no such profile. */
+/** One device profile by id, or `undefined` when no profile carries that id. */
 export async function getDeviceProfile(
   tx: Transaction,
   tenantId: string,
@@ -151,7 +151,7 @@ export async function getDeviceProfile(
   return toRow(row);
 }
 
-/** Create a device profile for the tenant, returning the stored row. Manager/admin only
+/** Create a device profile, returning the stored row. Manager/admin only
  * (`layout.configure`). */
 export async function createDeviceProfile(
   tx: Transaction,

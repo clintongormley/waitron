@@ -39,7 +39,7 @@ describe("devices composite FKs (till / receipt_printer / device_profile)", () =
     await admin.execute(sql`
       insert into printers (id, location_id, name, transport, poll_id) values (${PRINTER_A}, ${LOCATION_A}, 'Printer A', 'cloud_poll', 'poll-a')
       on conflict (id) do nothing`);
-    // One `till`-form-factor device_profiles row — the (tenant_id, device_profile_id) composite-FK
+    // One `till`-form-factor device_profiles row — the (device_profile_id) foreign-key
     // target, and the form factor whose binding rule requires a register (a till).
     await admin.execute(sql`
       insert into device_profiles (id, name, form_factor) values (${PROFILE_A}, 'Profile A', 'till')

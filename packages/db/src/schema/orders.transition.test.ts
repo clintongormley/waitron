@@ -28,7 +28,7 @@ const AT = "2026-07-20T19:20:30+00:00";
 // require_open_parent — the trigger this suite's composition-freeze case exercises.
 const DESCRIPTIONS_A = JSON.stringify({ es: "Café solo", ca: "Cafè sol" });
 
-// Captured at seed time — the ids the raw inserts below need for tenant-consistent FKs.
+// Captured at seed time — the ids the raw inserts below need as foreign-key targets.
 let nodeA = "";
 let productA = "";
 // working_orders carries no UNIQUE on order_number in this slice (the allocator owns distinctness),

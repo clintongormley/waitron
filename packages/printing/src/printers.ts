@@ -14,7 +14,7 @@ import type { PaperWidth, Resolution } from "./layout.js";
  * driver error becomes a friendly domain code instead of an opaque 500. `23514` is the
  * `printers_transport_fields_ck` CHECK (a transport whose required fields are absent — the DB backstop
  * behind `REQUIRED_FIELDS`); `23505` is the partial UNIQUE `printers_local_key_key` on
- * `(tenant_id, location_id, local_key)` (a create/re-key whose device id already names a printer in
+ * `(location_id, local_key)` (a create/re-key whose device id already names a printer in
  * this venue). Both are matched down the cause chain by `@waitron/db`'s shared `isPgError` (Drizzle
  * wraps every failed query in a `DrizzleQueryError` whose own `.code` is undefined — the SQLSTATE lives
  * on `.cause.code` under node-postgres, or one level deeper under PGlite). */

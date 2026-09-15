@@ -16,8 +16,8 @@ const TILL_A1 = "aaaaaaaa-1111-4000-8000-000000000001";
 const AT = "2026-07-20T19:20:30+00:00";
 
 // Since the node-id rekey (2026-08-03) both invoice_series and sales carry a NOT NULL node_id;
-// sales keeps till_id too, and adds the composite (tenant_id, node_id) → nodes FK. seed() creates
-// one node so a sale's node shares its tenant (the composite FK), and saleValues() defaults to it.
+// sales keeps till_id too, and adds the (node_id) → nodes FK. seed() creates one node, and
+// saleValues() defaults to it.
 let seriesA = "";
 let nodeA = "";
 
@@ -120,7 +120,7 @@ async function recordCompleteSale(
 // no-op: TRUNCATE ... CASCADE fires the BEFORE TRUNCATE statement trigger on
 // every table it cascades into, not only the table named in the statement —
 // verified live against PGlite — and sales/sale_lines/tenders are reachable by
-// cascade from tenants (via till_id/tenant_id). Keeping the truncate would
+// cascade from tenants (via till_id). Keeping the truncate would
 // make sales_block_truncate/sale_lines_block_truncate/tenders_block_truncate
 // reject the fixture setup itself on every single test in this file.
 describeEachTarget("sales — the commercial record", (target) => {
@@ -280,8 +280,8 @@ describeEachTarget("sales — the commercial record", (target) => {
   });
 
   it("requires a node_id referencing nodes", async () => {
-    // Node-id rekey (2026-08-03, plan Task 4 §5): sales.node_id is now NOT NULL with a composite
-    // tenant-consistent (tenant_id, node_id) → nodes FK — the node that chained the sale (#33).
+    // Node-id rekey (2026-08-03, plan Task 4 §5): sales.node_id is NOT NULL with a
+    // (node_id) → nodes FK — the node that chained the sale (#33).
     // till_id stays (where the sale rang); this is the node beside it. (This test was the Task-3
     // scaffolding assertion that node_id was NULLABLE; the completed rekey inverts it — see this
     // task's report.)
@@ -637,7 +637,7 @@ describeEachTarget("sales — fiscal_state", (target) => {
 
 /**
  * The corrective-invoice link. `corrects_sale_id` is the generic-layer
- * projection of "this sale corrects that one" — nullable, tenant-consistent FK back onto
+ * projection of "this sale corrects that one" — a nullable FK back onto
  * `sales`, NOT unique (a sale may be corrected more than once), and it is what relaxes
  * `sales_total_ck` to permit the negative total a `rectificativa por diferencias` carries
  * (`docs/superpowers/plans/2026-08-02-rectificativas.md` §2.1).
@@ -763,7 +763,7 @@ describeEachTarget("sales — corrective link and negative total", (target) => {
         invoiceNumber: 2,
       }),
     );
-    // Foreign key violation — the composite (tenant_id, corrects_sale_id) FK onto sales.
+    // Foreign key violation — the (corrects_sale_id) FK onto sales.
     expect(pgErrorCode(error)).toBe("23503");
   });
 });
@@ -774,8 +774,8 @@ describeEachTarget("sales — corrective link and negative total", (target) => {
  * never from `sale_lines`, so this column never reaches the fiscal fingerprint (design §4). A modifier files as
  * its own child line pointing at the dish line it belongs to; a top-level line leaves it NULL.
  *
- * The composite (tenant_id, parent_line_id) → sale_lines(tenant_id, id) FK keeps the link
- * tenant-consistent (mirrors sale_lines_sale_fk); MATCH SIMPLE means a NULL parent satisfies it, so
+ * The (parent_line_id) → sale_lines(id) FK keeps the link referential (mirrors
+ * sale_lines_sale_fk); MATCH SIMPLE means a NULL parent satisfies it, so
  * ordinary lines are untouched. sale_lines carries NO reference to any option/catalogue table — the
  * "carries only the chosen variant snapshot identifier" test above guards that, and
  * `option_group_item_id` lives on the MUTABLE working_order_lines draft only, never here.

@@ -227,8 +227,8 @@ describe("the series↔node guard (record-sale)", () => {
 });
 
 describe("node references and app-role appends", () => {
-  // Property 5 (design §9.3): the app role can append node-keyed rows under withTransaction; the composite
-  // (tenant_id, node_id) FK on `sales` blocks a cross-tenant node reference.
+  // Property 5 (design §9.3): the app role can append node-keyed rows under withTransaction; the
+  // (node_id) FK on `sales` blocks a node reference that names no node.
   it("lets the app role append under its own tenant context", async () => {
     const saleId = await seedSale(suite.admin, node, 1);
     const appended = await withTransaction(suite.admin, async (tx) => {

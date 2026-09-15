@@ -73,13 +73,11 @@ async function getRow(key: { provider: string; paymentRef: string }) {
   return pg.db.transaction((tx) => getPaymentByRef(tx, key));
 }
 
-/** Seeds a second sale for the SAME tenant as `seeded`, on a second till + node of that tenant.
- * `associatePaymentWithSale`'s write-once test needs two real sales under one tenant (the
- * composite `payments_sale_fk` requires a payment's `sale_id` to belong to the payment's own
- * tenant), and `seedSale` always plants its `invoice_series` at code "A" for the node it's given —
- * since the node-id rekey the series is keyed `(tenant_id, node_id, code)`, so calling it twice
- * against the same node would collide on `invoice_series_node_code_key`. A second node
- * side-steps that without touching `../test/seed.ts`. */
+/** Seeds a second sale on a second till + node. `associatePaymentWithSale`'s write-once test needs
+ * two real sales, and `seedSale` always plants its `invoice_series` at code "A" for the node it is
+ * given — the series is keyed `(node_id, code)`, so calling it twice against the same node would
+ * collide on `invoice_series_node_code_key`. A second node side-steps that without touching
+ * `../test/seed.ts`. */
 async function seedSecondSale(seeded: Seeded): Promise<string> {
   const [till] = (
     await pg.db.execute<{ location_id: string }>(

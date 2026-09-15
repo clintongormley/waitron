@@ -160,7 +160,7 @@ describeEachTarget("allocateInvoiceNumber", (target) => {
     // used**. A rolled-back allocation was never used — nothing was recorded
     // under it and no receipt bearing it exists — so handing it out again is
     // not reuse. What must never happen is two *committed* sales sharing a
-    // number, and that is enforced by UNIQUE (tenant_id, series_id,
+    // number, and that is enforced by UNIQUE (series_id,
     // invoice_number) on `sales`, which Task 8 creates and Task 16 exercises
     // against the live write path.
     const seriesId = await makeSeries(db, { nodeId: nodeA1, code: "FA" });

@@ -20,7 +20,7 @@ const AT = "2026-07-20T19:20:30+00:00";
 // already pass english-only.ts's SPANISH_WORDS guard where `linea`/`venta` would not.
 const DESCRIPTIONS_A = JSON.stringify({ es: "Café solo", ca: "Cafè sol" });
 
-// Captured at seed time — the ids the raw inserts below need for tenant-consistent FKs.
+// Captured at seed time — the ids the raw inserts below need as foreign-key targets.
 let nodeA = "";
 let seriesA = "";
 let productA = "";
@@ -92,7 +92,7 @@ describe("park & retrieve schema", () => {
 
   it("rejects two sales sharing a working_order_id (the sale idempotency key)", async () => {
     // Two sales that both try to file against one parked order — the double-submit the
-    // UNIQUE(tenant_id, working_order_id) prevents. Distinct invoice numbers so the collision is on
+    // UNIQUE(working_order_id) prevents. Distinct invoice numbers so the collision is on
     // sales_working_order_id_key, not on sales_series_invoice_number_key.
     const wo = await openOrder(suite.db, 10);
     await suite.db.execute(insertSaleSql({ invoiceNumber: 100, workingOrderId: wo }));
@@ -104,7 +104,7 @@ describe("park & retrieve schema", () => {
 
   it("accepts a draft line with a real product and rejects one pointing at a missing product", async () => {
     const wo = await openOrder(suite.db, 11);
-    // Positive control: a valid, tenant-consistent product_id is accepted — so the rejection below
+    // Positive control: a product_id naming a real row is accepted — so the rejection below
     // is the FK biting, not the line being malformed for some other reason.
     await suite.db.execute(
       sql`insert into working_order_lines (working_order_id, line_no, product_id, name, descriptions, quantity, unit_price, unit_price_gross, vat_rate, line_total) values (${wo}, 1, ${productA}, 'Café solo', ${DESCRIPTIONS_A}::jsonb,
@@ -112,7 +112,7 @@ describe("park & retrieve schema", () => {
     );
     // Negative: a product_id with no products row is refused 23503. The BEFORE triggers
     // (require_open_parent, check_locales) pass first — open parent, matching locales — so the row
-    // reaches the composite (tenant_id, product_id) → products FK, which is what rejects it.
+    // reaches the (product_id) → products FK, which is what rejects it.
     const error = await captureError(() =>
       suite.db.execute(
         sql`insert into working_order_lines (working_order_id, line_no, product_id, name, descriptions, quantity, unit_price, unit_price_gross, vat_rate, line_total) values (${wo}, 2, ${BOGUS_PRODUCT}, 'Café solo', ${DESCRIPTIONS_A}::jsonb,

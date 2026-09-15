@@ -23,7 +23,7 @@ const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 // design owns the person schema; a raw uuid keeps this table independent of it).
 const CLOSED_BY = "cccccccc-0000-4000-8000-000000000001";
 
-// Captured at seed time — the node id the raw inserts below need for the tenant-consistent FK.
+// Captured at seed time — the node id the raw inserts below need as the foreign-key target.
 let nodeA = "";
 
 // A minimal-but-real snapshot document: `close` is the VAT-exact computeDailyClose output (owned by

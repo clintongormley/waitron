@@ -171,17 +171,16 @@ async function sell(backend: FiscalBackend, overrides: Partial<RecordSaleInput> 
 /**
  * Scoped to the CURRENT test's own till, never the bare table. This suite shares ONE PGlite
  * instance across the whole file (booting a fresh WASM Postgres per test would be far slower) and
- * reseeds a fresh tenant/till per test rather than truncating, so an earlier test's incident rows
- * would otherwise be counted here too — the identical "Deviation from the brief" record-sale.
- * test.ts's own `countRows` helper documents for `sales`/`sale_lines`/`tenders`.
+ * reseeds a fresh till per test, so an earlier test's incident rows would otherwise be counted
+ * here too.
  */
 async function incidentsForTill(till: TillId) {
   return suite.db.select().from(incidents).where(eq(incidents.tillId, till));
 }
 
 /**
- * The open-dedup suite below needs its own tenant/till per test (rather than the module-level
- * `tenantId`/`tillId` `beforeEach` already seeds) purely so each test's assertions read against
+ * The open-dedup suite below needs its own till per test (rather than the module-level
+ * `tillId` `beforeEach` already seeds) purely so each test's assertions read against
  * an isolated till — reuses `seedTenant`'s exact seeding path, just narrowed to the two ids these
  * tests care about.
  */
@@ -236,7 +235,7 @@ describe("incidents — chain verification failure", () => {
     // `predecessor-hash-mismatch` AND a `predecessor-link-mismatch`, because the hash-mismatch push
     // does not early-return (packages/fiscal-verifactu/src/verify.ts). Modelled here by a fake whose
     // `checkIntegrity` reports two issues for this till (`breakIntegrity` appends). The table-wide
-    // `incidents_open_dedup` index holds at most ONE open incident per (tenant, till, code, sale),
+    // `incidents_open_dedup` index holds at most ONE open incident per (till, code, sale),
     // so emitting one incident row per issue — all sharing this sale + `chain.verification_failed`
     // — would silently drop the second under `ON CONFLICT DO NOTHING`. record-sale AGGREGATES all
     // issues into ONE incident whose `params.issues` carries BOTH: this is the proof the

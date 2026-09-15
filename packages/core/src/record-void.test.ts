@@ -172,6 +172,8 @@ async function voidSale(
   });
 }
 
+/** Counts every row in `table`. The suite helper truncates between tests (`resetPerTest`, the
+ * default in `@waitron/db/testing/lifecycle.js`), so the count is what THIS test wrote. */
 async function countRows(table: string): Promise<number> {
   const result = await suite.db.execute<{ n: number }>(
     sql`select count(*)::int as n from ${sql.raw(table)}`,
@@ -384,8 +386,51 @@ describe("recordVoid — authorization", () => {
     expect(await countRows("sale_voids")).toBe(0);
   });
 
+  it("fails loud, and NOT as sale.not_found, when the database holds sales but no taxpayer row", async () => {
+    // `recordVoid` reads the one `tenants` row for the taxpayer the fiscal chain still keys on.
+    // Nothing enforces that the row exists any more — the foreign keys onto `tenants` were dropped
+    // with the tenant columns — so an empty table is reachable by a corrupt or half-provisioned
+    // database. It must fail as a plain Error naming that state: `sale.not_found` would be a lie
+    // (the sale was found two statements earlier) and there is nothing an operator can do about it.
+    //
+    // A hand-built transaction stub, not a real `delete from tenants`: identity's `persons.tenant_id`
+    // foreign key still points at that row (its own set is converted later), so a real database
+    // cannot be emptied while a session exists — and the session is what `authorize` needs to reach
+    // this line at all. The stub answers the sale lookup (`.from().where()`) and authorize's join
+    // (`.from().innerJoin().where()`) with a real-looking row, and the taxpayer read
+    // (`.from().limit()`) with NO row, which is the only condition under test.
+    const row = [{ tillId, nodeId, personId: "operator", role: "manager" }];
+    const fakeTx = {
+      select: () => ({
+        from: () => ({
+          where: () => Promise.resolve(row),
+          limit: () => Promise.resolve([]),
+          innerJoin: () => ({ where: () => Promise.resolve(row) }),
+        }),
+      }),
+      insert: () => {
+        throw new Error("no write may be reached: the taxpayer read fails first");
+      },
+    } as unknown as Transaction;
+
+    const backend = {
+      id: "fake",
+      checkIntegrity: () => {
+        throw new Error("checkIntegrity must not be reached without a taxpayer");
+      },
+    } as unknown as FiscalBackend;
+
+    const error = await captureError(() =>
+      recordVoid(fakeTx, backend, "00000000-0000-4000-8000-000000000001" as SaleId, "Wrong table", {
+        sessionId: managerSessionId,
+      }),
+    );
+    expect(error).not.toBeInstanceOf(AppError);
+    expect((error as Error).message).toContain("tenants is empty");
+  });
+
   it("returns sale.not_found before the gate — a missing sale never leaks an authz error", async () => {
-    // Ordering: `authorize` runs AFTER the sale-exists lookup, so a cross-tenant or missing sale is
+    // Ordering: `authorize` runs AFTER the sale-exists lookup, so a missing sale is
     // still `sale.not_found` and never `authorization.not_permitted`, even under a staff session that
     // could not have voided it anyway. A gate placed before the lookup would leak which sales exist.
     await expect(

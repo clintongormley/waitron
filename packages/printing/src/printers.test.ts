@@ -12,8 +12,7 @@ import "./errors.js";
 // PGlite, not real Postgres: `createPrinter` is a single INSERT gated by an app-layer required-field
 // pre-check plus the DB's transport CHECK + partial UNIQUE — none of which is a CONCURRENCY or
 // deployment-role-privilege property. The CHECK/UNIQUE integrity is already proven on real Postgres in
-// packages/db's printing.test.ts, so the heavier target buys this suite nothing (CLAUDE.md §4). The
-// explicit `tenant_id` the verb writes/reads is what scopes these rows.
+// packages/db's printing.test.ts, so the heavier target buys this suite nothing (CLAUDE.md §4).
 const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS] });
 
 /**

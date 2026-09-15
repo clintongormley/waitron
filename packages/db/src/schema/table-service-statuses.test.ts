@@ -38,7 +38,7 @@ describe("table_service_statuses schema (the dining_tables.status_id composite F
     });
   }
 
-  it("dining_tables.status_id is writable/readable by the non-owner app_user and enforces the tenant-consistent FK", async () => {
+  it("dining_tables.status_id is writable/readable by the non-owner app_user and enforces its FK", async () => {
     // Seed a location + a dining table (TS-1) as the owner, then set + read status_id as app_user.
     const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
     await suite.admin.execute(sql`

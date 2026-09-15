@@ -93,7 +93,7 @@ describe("nodes schema", () => {
 
   it("rejects a node whose location does not exist with a foreign-key violation", async () => {
     // The brief frames this as "a location_id belonging to another tenant", but
-    // `nodes` carries no composite (tenant_id, location_id) FK to `locations`
+    // `nodes` carries no FK to `locations` beyond the plain `location_id` one
     // (none is in scope — mirroring `tills`), so another tenant's location is a
     // perfectly valid FK target and would NOT be rejected. What the plain
     // `location_id -> locations.id` FK actually guarantees is referential

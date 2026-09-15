@@ -135,8 +135,8 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, c
   });
 
   it("the sale binding is enforced (composite FK to sales)", async () => {
-    // Proves the (tenant_id, sale_id) → sales composite FK exists and bites: a non-existent sale_id for
-    // A's own tenant → foreign_key_violation. A's tenant_id + (A, TILL_A) isolate the sale FK. A full
+    // Proves the (sale_id) → sales FK exists and bites: a sale_id naming no row →
+    // foreign_key_violation. A real till isolates the sale FK. A full
     // cross-tenant sale fixture is disproportionate for a schema task (a sale needs a series + node +
     // ~15 columns); a non-existent id proves the composite FK is wired all the same, and NULL (the
     // manual case) is proven to skip it by the positive control above.
@@ -153,7 +153,7 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, c
 
   it("the app role can set and read tills.receipt_printer_id (new column, composite FK to printers)", async () => {
     // The new bare column on tills, visible + writable under the app role (app_user holds UPDATE on
-    // tills), and its hand-written (tenant_id, receipt_printer_id) → printers composite FK accepts a
+    // tills), and its hand-written (receipt_printer_id) → printers FK accepts a
     // printer of the same tenant. Rolled back so the shared template clone is untouched.
     await rollBackAfter(suite.admin, TENANT_A, async (tx) => {
       await asAppUser(tx);

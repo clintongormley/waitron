@@ -160,7 +160,7 @@ describe("invoice_series schema", () => {
   });
 
   it("rejects a node_id that does not exist with a foreign-key violation", async () => {
-    // The composite (tenant_id, node_id) FK guarantees referential existence too: a node id with
+    // The (node_id) FK guarantees referential existence too: a node id with
     // no `nodes` row is refused.
     const error = await captureError(() =>
       db.execute(

@@ -17,11 +17,11 @@ import "@waitron/shared";
  */
 declare module "@waitron/shared" {
   interface ErrorParams {
-    /** No print job with this id is visible in the current tenant. */
+    /** No print job carries this id. */
     "print_job.not_found": { id: string };
     /** The job is a drawer command or remains eligible for automatic delivery. */
     "print_job.not_resendable": { id: string };
-    /** No printer with this id is visible in the current tenant. `id` is the id looked up. */
+    /** No printer carries this id. `id` is the id looked up. */
     "printer.not_found": { id: string };
     /** A supplied printer config was rejected by `createPrinter` (printers.ts) before any write: a
      * transport whose REQUIRED connection fields are absent — `host` for `network_tcp`, `local_key`
@@ -31,13 +31,13 @@ declare module "@waitron/shared" {
      * stable English discriminator (e.g. `network_tcp_missing_host`), never a user-facing sentence. */
     "printer.invalid_config": { reason: string };
     /** A create/register whose stable device key (USB serial / Bluetooth MAC) already names a printer
-     * in this venue — the partial UNIQUE (tenant_id, location_id, local_key). `localKey` is echoed so
+     * in this venue — the partial UNIQUE (location_id, local_key). `localKey` is echoed so
      * the dashboard can point at the existing registration. */
     "printer.already_registered": { localKey: string };
     /** An ongoing dashboard alert: `{count}` print jobs are stuck at printer `{printer}` — waiting too
      * long or out of delivery attempts. Not thrown; raised by the printing alert source. */
     "printer.jobs_waiting": { printer: string; count: number };
-    /** No print agent with this id is visible in the current tenant. `id` is the id looked up. */
+    /** No print agent carries this id. `id` is the id looked up. */
     "agent.not_found": { id: string };
     /** The agent's bearer token did not verify, or the agent has been revoked — `requireAgent`
      * fail-closed. NO params: a uniform, oracle-free 401 that never discloses which agent ids exist. */

@@ -78,7 +78,7 @@ describe("tenant theme store on real Postgres, as the app role", () => {
     await asApp(tenantId, (tx) =>
       putTenantTheme(tx, { managementSessionId: session, theme: next }),
     );
-    // ON CONFLICT (tenant_id) DO UPDATE — the second write replaces the row, never adds one.
+    // ON CONFLICT (id) DO UPDATE — the second write replaces the row, never adds one.
     expect(await rowCount()).toBe(1);
     expect(await asApp(tenantId, (tx) => getTenantTheme(tx, tenantId))).toEqual(next);
   });

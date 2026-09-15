@@ -107,10 +107,10 @@ export interface RecordSaleInput {
   /**
    * The parked working order this sale is FILED from (park & retrieve, sub-project 7b), written to
    * `sales.working_order_id` — the sale-idempotency key `sales_working_order_id_key`, and the FK
-   * target `(tenant_id, working_order_id) → working_orders`. OPTIONAL: only the till's
+   * target `(working_order_id) → working_orders(id)`. OPTIONAL: only the till's
    * retrieve-and-file path supplies one; an ordinary walk-up sale (and every non-till caller — a
    * correction, an F3, a void, a demo script) omits it, and the column inserts NULL. When supplied
-   * it MUST name a real `working_orders` row of this tenant, or the composite FK rejects the insert.
+   * it MUST name a real `working_orders` row, or the FK rejects the insert.
    */
   workingOrderId?: WorkingOrderId;
   locale: string;
@@ -212,7 +212,7 @@ export async function recordSale(
   // `incidents.sale_id` is what ties a chain failure to the receipt a customer is holding, and it
   // cannot be set before the sale row is. All of this call's issues are aggregated into a single
   // `chain.verification_failed` — the table-wide `incidents_open_dedup` index holds at most one open
-  // incident per (tenant, till, code, sale), so emitting one row per issue (all sharing this sale +
+  // incident per (till, code, sale), so emitting one row per issue (all sharing this sale +
   // code) would collapse to a single row and drop every issue after the first; carrying them in
   // `params.issues` keeps them all. Collected here rather than recorded immediately, so this stays
   // the single place that decides WHAT counts as an incident on this write path.

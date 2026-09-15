@@ -27,8 +27,8 @@ import { recordIncident } from "./incidents.js";
  * permission, or a supervisor `override` (a second person's PIN) supplies it. `authorize` returns
  * the authorizing person, which is written to `sale_voids.voided_by` at insert. That column is on an
  * append-only table with no UPDATE grant, so the authorizer MUST be supplied here, at the append, and
- * can never be back-filled. `authorize` runs AFTER the sale-exists lookup (so a cross-tenant or
- * missing sale still returns `sale.not_found`, never an authz leak) and BEFORE any chain work, so a
+ * can never be back-filled. `authorize` runs AFTER the sale-exists lookup (so a missing sale
+ * still returns `sale.not_found`, never an authz leak) and BEFORE any chain work, so a
  * rejected void consumes none.
  */
 export async function recordVoid(
@@ -50,8 +50,8 @@ export async function recordVoid(
     throw new AppError("sale.not_found", { saleId });
   }
 
-  // The gate. Placed after the sale is confirmed to exist (so a cross-tenant or missing sale still
-  // returns sale.not_found above, not an authz leak) and before any chain work below, so a rejected
+  // The gate. Placed after the sale is confirmed to exist (so a missing sale still returns
+  // sale.not_found above, not an authz leak) and before any chain work below, so a rejected
   // void consumes none. `authorization.authorizedBy` is the person to record on the append.
   const authorization = await authorize(tx, {
     sessionId: authz.sessionId,
@@ -72,9 +72,17 @@ export async function recordVoid(
   // while the fiscal module's own chain tables still key on it, so this is where the value comes
   // from until those tables are converted too. Every sibling in this package takes it as an input;
   // only this path had nowhere else to read it.
+  //
+  // An empty `tenants` table here is a database that holds sales but no taxpayer — provisioning's
+  // `ensure-tenant` writes that row before anything can sell, and no foreign key enforces it any
+  // more, so this is reachable only by a corrupt or half-provisioned database. A plain `Error`, not
+  // a domain code, for the same reason `readStandardSeriesIdTx` (`@waitron/db`) uses one: it is a
+  // programming-level invariant, not a condition an operator can act on. It must NOT reuse
+  // `sale.not_found` — the sale was found forty lines above, and that code would send whoever reads
+  // it looking for the wrong thing.
   const [taxpayer] = await tx.select({ id: tenants.id }).from(tenants).limit(1);
   if (taxpayer === undefined) {
-    throw new AppError("sale.not_found", { saleId });
+    throw new Error("tenants is empty: a database holding sales must hold its taxpayer row");
   }
   const tenantId = taxpayer.id as TenantId;
 

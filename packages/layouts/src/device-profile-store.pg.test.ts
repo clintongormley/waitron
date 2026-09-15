@@ -23,8 +23,8 @@ import {
 // `persons`/`management_sessions` reads `authorizeManager` performs — is invisible there (CLAUDE.md
 // §4). The suite retains these app-role grant checks. Seeds run as the owner (pure setup); the `core_identity` template pairs core + identity
 // migrations so authorizeManager's tables and `device_profiles` both exist.
-// It also exercises the tenant-consistent composite FK `device_profiles_canvas_fk`, which rejects a
-// canvas row keyed to a different tenant — a constraint, not a policy.
+// It also exercises `device_profiles_canvas_fk`, which rejects a `canvas_id` naming no canvas — a
+// constraint, not a policy.
 
 const suite = useTemplateDb({ template: "core_identity" });
 
@@ -305,7 +305,7 @@ describe("device-profile store on real Postgres, as the app role", () => {
   });
 
   it("translates a delete of a device-referenced profile to device_profile.in_use (23001 → 409), profile survives", async () => {
-    // Task 5 added devices.device_profile_id → device_profiles(tenant_id, id) ON DELETE RESTRICT. The
+    // Task 5 added devices.device_profile_id → device_profiles(id) ON DELETE RESTRICT. The
     // delete of a still-referenced profile trips a 23001 restrict_violation, which deleteDeviceProfile
     // now translates (via translateWriteError) into the domain device_profile.in_use — a clean 409, not
     // the raw DB error a 500 would surface. Proof-by-deletion: remove the try/catch in

@@ -169,11 +169,8 @@ async function run(backend: FiscalBackend, overrides: Partial<RecordSaleInput> =
   });
 }
 
-/**
- * Counts every row in `table`. The suite helper truncates between tests (`resetPerTest`, the default
- * in `@waitron/db/testing/lifecycle.js`), so a count here is what THIS test wrote — it was once
- * scoped by tenant instead, back when the file shared one database across every test.
- */
+/** Counts every row in `table`. The suite helper truncates between tests (`resetPerTest`, the
+ * default in `@waitron/db/testing/lifecycle.js`), so the count is what THIS test wrote. */
 async function countRows(table: string): Promise<number> {
   const result = await suite.db.execute<{ n: number }>(
     sql`select count(*)::int as n from ${sql.raw(table)}`,
@@ -183,9 +180,8 @@ async function countRows(table: string): Promise<number> {
 
 /**
  * A thin `execute` wrapper returning the raw rows, for the `sale_lines.category` assertion. Scoped
- * by the CALLER's own `where` (in practice `sale_id = ${saleId}`) rather than an unscoped `limit 1`
- * — this suite shares ONE PGlite instance across the whole file and seeds a fresh tenant per test
- * (see `countRows`'s own note), so an unscoped read would pick up rows an earlier test committed.
+ * by the CALLER's own `where` (in practice `sale_id = ${saleId}`) rather than an unscoped `limit 1`,
+ * so it reads the row this case wrote even when a test writes several sales.
  */
 async function rows<T extends Record<string, unknown>>(
   query: ReturnType<typeof sql>,
@@ -657,7 +653,7 @@ describe("recordSale — settlement modes", () => {
     // D6, made observable: `immediate` runs the SAME `settleSale` code in the same transaction, so
     // a sale settled inline must leave byte-for-byte identical `tenders` and `sale_settlements`
     // rows to the identical sale recorded `deferred` and settled later by a separate `settleSale`
-    // (modulo the ids and the sale/tenant they hang off). If the two paths ever drift, this fails —
+    // (modulo the ids and the sale they hang off). If the two paths ever drift, this fails —
     // which is the whole reason `recordSale` calls `settleSale` rather than re-implementing it.
     const later = new Date(BASE.getTime() + 5 * 60_000);
     const tendersInput: RecordSaleTender[] = [
@@ -666,7 +662,7 @@ describe("recordSale — settlement modes", () => {
     ];
     const backend = new FakeFiscalBackend(suite.db);
 
-    // Path A — immediate, on the beforeEach tenant.
+    // Path A — immediate, on the beforeEach venue.
     const a = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       await backend.registerNode(tx, nodeId, { tenantId });
@@ -677,7 +673,7 @@ describe("recordSale — settlement modes", () => {
       );
     });
 
-    // Path B — a second, independent tenant: deferred record, then a SEPARATE settleSale.
+    // Path B — a second, independent venue: deferred record, then a SEPARATE settleSale.
     const other = await seedTenant(suite.db);
     const b = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
@@ -699,7 +695,7 @@ describe("recordSale — settlement modes", () => {
       await settleSale(tx, { tenantId: other.tenantId, saleId: b.saleId, tenders: tendersInput });
     });
 
-    // Tenders, modulo id/tenant_id/sale_id, sorted for a position-independent compare.
+    // Tenders, modulo id/sale_id, sorted for a position-independent compare.
     const normalize = (rows: (typeof tenders.$inferSelect)[]) =>
       rows
         .map((r) => ({
@@ -726,7 +722,7 @@ describe("recordSale — settlement modes", () => {
     });
     expect(aTenders).toEqual(bTenders);
 
-    // Settlements, modulo id/tenant_id/sale_id. Both stamp the LATEST tender's instant (decision 5),
+    // Settlements, modulo id/sale_id. Both stamp the LATEST tender's instant (decision 5),
     // which is `later`, NOT either sale's issuance instant (BASE) — proving the max-tender path.
     const [aSettle] = await suite.db
       .select()
@@ -856,8 +852,8 @@ describe("recordSale — series validation", () => {
   it("rejects a series belonging to another node", async () => {
     // A node may own N series, but a series belongs to exactly one node. Allocating from another
     // node's series would have two chains issuing from one counter, which no constraint
-    // downstream can detect. `seedTenant({ tenantId })` mints a SECOND node under the same tenant,
-    // so `other.seriesId` is real and same-tenant but owned by a different node than the one under
+    // downstream can detect. `seedTenant({ tenantId })` mints a SECOND node,
+    // so `other.seriesId` is real but owned by a different node than the one under
     // test — the series↔node guard must reject it.
     const other = await seedTenant(suite.db, { tenantId });
     await expect(
@@ -901,8 +897,8 @@ describe("recordSale — working order linkage", () => {
   // The parked working order this sale is FILED from is the sale-idempotency key
   // (`sales_working_order_id_key`, migration for sub-project 7b): recordSale writes
   // `input.workingOrderId` onto `sales.working_order_id` when the till supplies one, and leaves it
-  // NULL for a walk-up sale rung with no draft. The composite FK
-  // `(tenant_id, working_order_id) → working_orders(tenant_id, id)` is enforced even on PGlite (its
+  // NULL for a walk-up sale rung with no draft. The FK
+  // `(working_order_id) → working_orders(id)` is enforced even on PGlite (its
   // default connection is a superuser, but constraints still hold), so the "supplied" case needs a
   // REAL working_orders row as the FK target — a fabricated id would FK-violate, which is why the
   // seed fixtures no longer mint one.
@@ -1180,7 +1176,7 @@ describe("recordSale — modifier child lines (parent_line_id)", () => {
   it("inserts NULL for a parentLineNo that names no line in the basket (the `?? null` guard)", async () => {
     // Defensive branch of `byLineNo.get(line.parentLineNo) ?? null`: a `parentLineNo` pointing at a
     // lineNo not present in this basket resolves to NO generated id, so the row inserts NULL rather
-    // than a dangling pointer — and the tenant-consistent self-FK would reject a fabricated id
+    // than a dangling pointer — and the self-FK would reject a fabricated id
     // anyway. Line 2 names lineNo 9, which does not exist here.
     const { saleId } = await run(new FakeFiscalBackend(suite.db), {
       total: "6.05",

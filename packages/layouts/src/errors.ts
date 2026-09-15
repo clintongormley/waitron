@@ -87,12 +87,12 @@ declare module "@waitron/shared" {
     // A GET-by-id on the management canvas surface named no stored canvas (an absent id). No params:
     // the caller-supplied id is not echoed (§1) — the management API answers 404 on the code alone.
     "canvas.not_found": Record<string, never>;
-    // A canvas create/update collided on the per-tenant `canvases_tenant_name_key` unique — a
+    // A canvas create/update collided on the `canvases_tenant_name_key` unique on `name` — a
     // duplicate name. `canvas-store.ts` translates the driver's 23505 into this so a duplicate returns
     // a clean 409, never a raw 500. No params: the offending name is never echoed (§1).
     "canvas.name_taken": Record<string, never>;
-    // A canvas DELETE was refused because a device profile still references it (the tenant-consistent
-    // composite FK `device_profiles_canvas_fk`, ON DELETE RESTRICT). `canvas-store.ts` translates the
+    // A canvas DELETE was refused because a device profile still references it
+    // (`device_profiles_canvas_fk`, ON DELETE RESTRICT). `canvas-store.ts` translates the
     // driver's 23001 restrict_violation into this so a still-referenced canvas returns a clean 409,
     // never a raw 500. No params: the FACT of the reference is the whole message — never echo WHICH
     // profile references it (§1); the management API maps it to 409 on the code alone.
@@ -102,9 +102,8 @@ declare module "@waitron/shared" {
     //                      §7): input was not an array, or an element was not a known CAPABILITY_FLAG
     //                      (fail-closed — an unknown flag must never reach the /api/pay + /api/drawer
     //                      firewall);
-    //   bad_canvas_ref   — `canvas_id` violated the tenant-consistent composite FK
-    //                      `device_profiles_canvas_fk` (a canvas that is absent, or belongs to another
-    //                      tenant): `device-profile-store.ts` translates the driver's 23503 so a bad
+    //   bad_canvas_ref   — `canvas_id` violated `device_profiles_canvas_fk` (it names no canvas):
+    //                      `device-profile-store.ts` translates the driver's 23503 so a bad
     //                      reference returns a clean 4xx, never a raw 500.
     //   bad_inactivity_timeout — the auto-logout idle timeout failed validateInactivityTimeout
     //                      (device-profile.ts): a non-null value that is not a positive integer (not an
@@ -119,7 +118,7 @@ declare module "@waitron/shared" {
     // params: the caller-supplied id is not echoed (§1) — the management API answers 404 on the code
     // alone. Mirrors `canvas.not_found`.
     "device_profile.not_found": Record<string, never>;
-    // A device-profile create/update collided on the per-tenant unique — a duplicate name. Translated
+    // A device-profile create/update collided on the name unique — a duplicate name. Translated
     // from the driver's 23505 so a duplicate returns a clean 409, never a raw 500. No params: the
     // offending name is never echoed (§1). Mirrors `canvas.name_taken`.
     "device_profile.name_taken": Record<string, never>;
