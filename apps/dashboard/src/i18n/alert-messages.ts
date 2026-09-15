@@ -86,6 +86,14 @@ export const ALERT_MESSAGES: Readonly<
     en: "The tax agency (AEAT) lists invoice {numSerieFactura} as cancelled, but it was not voided here. Contact support.",
     es: "La AEAT indica que la factura {numSerieFactura} está anulada, pero aquí no se anuló. Contacta con soporte.",
   },
+  "fiscal.submission_delayed": {
+    en: "{count} fiscal record(s) have been waiting {hours}h to reach the tax agency. If this persists, check that the fiscal certificate is valid.",
+    es: "{count} registro(s) fiscal(es) llevan {hours} h esperando para llegar a la Agencia Tributaria. Si continúa, comprueba que el certificado fiscal sea válido.",
+  },
+  "fiscal.submission_stopped": {
+    en: "{count} fiscal record(s) have stopped submitting and need attention.",
+    es: "{count} registro(s) fiscal(es) han detenido su envío y requieren atención.",
+  },
   "payment.offline_forward_declined": {
     en: "A card payment of {amount} taken while offline was declined when it was sent on (reference {paymentRef}). Collect the money another way.",
     es: "Un pago con tarjeta de {amount} cobrado sin conexión se rechazó al enviarlo (referencia {paymentRef}). Cobra el importe de otra forma.",
