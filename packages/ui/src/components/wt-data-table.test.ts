@@ -1,5 +1,6 @@
 import { html } from "lit";
 import { afterEach, expect, test, vi } from "vitest";
+import { userEvent } from "@vitest/browser/context";
 import { cleanup, host, mount } from "../test-helpers.js";
 import type { DataTableColumn, WtDataTable } from "./wt-data-table.js";
 import "./wt-data-table.js";
@@ -838,11 +839,14 @@ test("activates a row on click when rowClick is set", async () => {
   expect(clicked).toEqual(["b"]);
 });
 
-test("does not activate the row when an in-cell control is clicked", async () => {
+test("an in-cell control's click is not also wired to the row activator", async () => {
+  // A wiring check only: a synthetic .click() dispatches straight on the Edit button, so it proves
+  // the activator's @click is not bound to the row as well (no double-fire). It does NOT prove the
+  // z-index layering — that needs a real coordinate click, in the next test.
   const clicked: string[] = [];
   const el = await table({ rowClick: (row: Row) => clicked.push(row.id) });
   el.shadowRoot!.querySelector<HTMLButtonElement>('button[aria-label="Edit Bea"]')!.click();
-  expect(clicked).toEqual([]); // the Edit click did not activate its row
+  expect(clicked).toEqual([]);
 });
 
 test("paints the focused clickable row from a token", async () => {
@@ -856,4 +860,19 @@ test("paints the focused clickable row from a token", async () => {
   // :focus-within (focus is on the row's activator button) paints the row cell from the token.
   // Asserted via :focus-within, not :hover — getComputedStyle cannot force a hover state.
   expect(getComputedStyle(cell).backgroundColor).toBe("rgb(30, 40, 50)");
+});
+
+test("a real pointer click on an in-cell control does not fall through to the row activator", async () => {
+  // The load-bearing z-index test. The stretched activator overlays the WHOLE row, so a real mouse
+  // click at the Edit button would reach the activator (and fire rowClick) unless the in-cell control
+  // is lifted above it. A synthetic .click() can't show this — it dispatches on the element whatever
+  // paints on top — so this uses a real pointer click (userEvent, backed by the Playwright provider),
+  // which hit-tests the button's actual on-screen position. Proven by deletion: dropping the z-index
+  // lift makes Playwright unable to reach the obscured Edit button (see the task-8 fix report's
+  // negative control), so this test would fail there.
+  const clicked: string[] = [];
+  const el = await table({ rowClick: (row: Row) => clicked.push(row.id) });
+  const edit = el.shadowRoot!.querySelector<HTMLButtonElement>('button[aria-label="Edit Bea"]')!;
+  await userEvent.click(edit);
+  expect(clicked).toEqual([]); // the click reached Edit, not the activator beneath it
 });
