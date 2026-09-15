@@ -1,7 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
   check,
-  foreignKey,
   integer,
   jsonb,
   pgTable,
@@ -10,7 +9,6 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { tenants } from "@waitron/db";
 
 /**
  * The lifecycle of one scheduled run. `pending` is work enqueued but not yet attempted (a
@@ -27,14 +25,13 @@ export type RunState = (typeof runState)[number];
  * schedule — there is no successor row whose loss would silently stop a duty.
  *
  * `generation` is what makes the unique key safe. A table-wide unique on
- * (tenant_id, duty, period_from) would break the one caller that legitimately needs N rows per
+ * (duty, period_from) would break the one caller that legitimately needs N rows per
  * key: a re-sweep must run a period AGAIN without overwriting what the first sweep recorded.
  */
 export const scheduledRuns = pgTable(
   "scheduled_runs",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    tenantId: uuid("tenant_id").notNull(),
     /** `PeriodDuty.name`. Changing a duty's name orphans its history — it is an identifier. */
     duty: text("duty").notNull(),
     /** The half-open `[period_from, period_to)` stored explicitly, never derived: a later
@@ -65,26 +62,19 @@ export const scheduledRuns = pgTable(
       .defaultNow(),
   },
   (t) => [
-    // restrict, not cascade: this is an operational audit record, and the money-path FKs in
-    // packages/payments restrict for the same reason.
-    foreignKey({
-      columns: [t.tenantId],
-      foreignColumns: [tenants.id],
-      name: "scheduled_runs_tenant_fk",
-    }).onDelete("restrict"),
     // The claim-by-INSERT depends on this: ON CONFLICT DO NOTHING against this key is what makes
     // "the insert IS the lock" true.
-    uniqueIndex("scheduled_runs_key").on(t.tenantId, t.duty, t.periodFrom, t.generation),
+    uniqueIndex("scheduled_runs_key").on(t.duty, t.periodFrom, t.generation),
     // NO other index at all — not for gap derivation, and not for claimable pickup.
     //
-    // Derivation reads by (tenant_id, duty), which the unique key's own leading columns already
+    // Derivation reads by duty, which the unique key's own leading columns already
     // serve; it then filters `next_attempt_at` in JavaScript, over rows it has already fetched.
     // Every claim keys on `id`, which the primary key serves. So a partial index on
     // `next_attempt_at where state in ('pending','failed')` — which this table did carry — was
     // read by no query at all, while costing every INSERT and every claim UPDATE a second index
     // maintenance. Provisioning it "for a future cross-duty pickup query" would be speculation
     // the rest of this package refuses (see `duty.ts` on the unbuilt second duty kind), and it
-    // would contradict the very reason a (tenant_id, duty, period_from) index is refused above.
+    // would contradict the very reason a (duty, period_from) index is refused above.
     // Adding one when a query needs it is one line and a migration.
     check(
       "scheduled_runs_state_ck",

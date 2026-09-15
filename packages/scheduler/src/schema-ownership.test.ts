@@ -9,8 +9,8 @@ import * as schema from "./schema/index.js";
 /** Exactly the tables this package owns. Adding a table means editing this line, deliberately. */
 const OWNED = ["scheduled_runs"];
 
-/** Every core table this package's schema files import to declare foreign keys. None of these may
- * ever appear in this package's generated SQL. */
+/** Core tables that must never appear in this package's generated SQL: a core table re-exported
+ * from the schema entrypoint would land there as a duplicate CREATE TABLE. */
 const CORE = ["tenants"];
 
 const drizzleDir = fileURLToPath(new URL("../drizzle", import.meta.url));

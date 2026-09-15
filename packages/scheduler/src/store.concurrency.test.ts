@@ -11,12 +11,9 @@ import { seedTenant } from "@waitron/db/testing/seed.js";
 const DUTY = "test.duty";
 const NOW = new Date("2026-07-25T04:00:00Z");
 
-// resetPerTest: false because this suite seeds ONE tenant in `beforeAll` and reads it across every
-// test; the default per-test truncation would empty `tenants` after the first test and leave the
-// rest inserting `scheduled_runs` against a tenant that no longer exists. Order-independence does
-// not need the reset here: each describe claims a DISTINCT period, so the accumulating rows never
-// collide on `scheduled_runs_key`, and every read below is scoped to the row id or period it just
-// wrote.
+// Rows accumulate across tests (resetPerTest: false). Order-independence does not need the reset:
+// each describe claims a DISTINCT period, so the accumulating rows never collide on
+// `scheduled_runs_key`, and every read below is scoped to the row id or period it just wrote.
 const suite = useTemplateDb({ template: "core_scheduler", resetPerTest: false });
 
 /**
@@ -81,8 +78,8 @@ describe("two runners racing one gap", () => {
   it("produces exactly one claim", async () => {
     const period = dayPeriod(new Date("2026-07-24T00:00:00Z"));
     const [first, second] = await Promise.all([
-      withTransaction(a, (tx) => claimGap(tx, { tenantId, duty: DUTY, period, now: NOW })),
-      withTransaction(b, (tx) => claimGap(tx, { tenantId, duty: DUTY, period, now: NOW })),
+      withTransaction(a, (tx) => claimGap(tx, { duty: DUTY, period, now: NOW })),
+      withTransaction(b, (tx) => claimGap(tx, { duty: DUTY, period, now: NOW })),
     ]);
     expect([first, second].filter((r) => r !== null)).toHaveLength(1);
   });
@@ -92,7 +89,7 @@ describe("two runners racing one failed row", () => {
   it("produces exactly one claim", async () => {
     const period = dayPeriod(new Date("2026-07-23T00:00:00Z"));
     const claimed = await withTransaction(a, (tx) =>
-      claimGap(tx, { tenantId, duty: DUTY, period, now: NOW }),
+      claimGap(tx, { duty: DUTY, period, now: NOW }),
     );
     await withTransaction(a, (tx) =>
       completeRun(tx, {
@@ -125,7 +122,7 @@ describe("two runners racing one successor enqueue", () => {
   it("inserts exactly one, and the loser reads the violation as already-enqueued", async () => {
     const period = dayPeriod(new Date("2026-07-22T00:00:00Z"));
     const claimed = await withTransaction(a, (tx) =>
-      claimGap(tx, { tenantId, duty: DUTY, period, now: NOW }),
+      claimGap(tx, { duty: DUTY, period, now: NOW }),
     );
     await withTransaction(a, (tx) =>
       completeRun(tx, {
@@ -156,16 +153,14 @@ describe("two runners racing one successor enqueue", () => {
     const aHasInserted = gate();
 
     const first = withTransaction(a, async (tx) => {
-      const inserted = await enqueueSuccessor(tx, { tenantId, duty: DUTY, period, dueAt });
+      const inserted = await enqueueSuccessor(tx, { duty: DUTY, period, dueAt });
       aHasInserted.open();
       await held.passed;
       return inserted;
     });
 
     await aHasInserted.passed;
-    const second = withTransaction(b, (tx) =>
-      enqueueSuccessor(tx, { tenantId, duty: DUTY, period, dueAt }),
-    );
+    const second = withTransaction(b, (tx) => enqueueSuccessor(tx, { duty: DUTY, period, dueAt }));
     await waitForABlockedBackend();
     held.open();
 

@@ -123,7 +123,7 @@ describe("one pass as the non-superuser deployment role", () => {
       // as the deployment role, and a missing grant on any one of them is invisible under PGlite.
       const rows = await suite.admin.execute<{ count: string }>(
         sql`select count(*) as count from scheduled_runs
-            where tenant_id = ${tenantId} and duty = ${RECONCILE_DUTY} and state = 'succeeded'`,
+            where duty = ${RECONCILE_DUTY} and state = 'succeeded'`,
       );
       expect(Number(rows.rows[0]!.count)).toBeGreaterThan(0);
 

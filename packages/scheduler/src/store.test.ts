@@ -32,7 +32,7 @@ const suite = usePgliteDb({
 describe("claimGap", () => {
   it("inserts a running row and returns it", async () => {
     const claimed = await withTransaction(suite.db, (tx) =>
-      claimGap(tx, { tenantId, duty: DUTY, period: PERIOD, now: NOW }),
+      claimGap(tx, { duty: DUTY, period: PERIOD, now: NOW }),
     );
     expect(claimed).toMatchObject({ generation: 0, attempts: 1 });
     // Store timestamps are normalised ISO-8601 via `to_json(col) #>> '{}'`, which renders the
@@ -44,7 +44,7 @@ describe("claimGap", () => {
   // The insert IS the lock — a second claim of the same period conflicts on scheduled_runs_key.
   it("returns null when the row already exists", async () => {
     const again = await withTransaction(suite.db, (tx) =>
-      claimGap(tx, { tenantId, duty: DUTY, period: PERIOD, now: NOW }),
+      claimGap(tx, { duty: DUTY, period: PERIOD, now: NOW }),
     );
     expect(again).toBeNull();
   });
@@ -71,7 +71,7 @@ describe("completeRun and readSnapshot", () => {
   it("records a success with its summary and leaves nothing claimable", async () => {
     const period = dayPeriod(new Date("2026-07-23T00:00:00Z"));
     const claimed = await withTransaction(suite.db, (tx) =>
-      claimGap(tx, { tenantId, duty: DUTY, period, now: NOW }),
+      claimGap(tx, { duty: DUTY, period, now: NOW }),
     );
     await withTransaction(suite.db, (tx) =>
       completeRun(tx, {
@@ -97,7 +97,7 @@ describe("completeRun and readSnapshot", () => {
   it("records a failure with a structured code and a backoff", async () => {
     const period = dayPeriod(new Date("2026-07-22T00:00:00Z"));
     const claimed = await withTransaction(suite.db, (tx) =>
-      claimGap(tx, { tenantId, duty: DUTY, period, now: NOW }),
+      claimGap(tx, { duty: DUTY, period, now: NOW }),
     );
     await withTransaction(suite.db, (tx) =>
       completeRun(tx, {
@@ -140,7 +140,7 @@ describe("claimRow", () => {
   it("claims a failed row whose backoff elapses at exactly `now`", async () => {
     const period = dayPeriod(new Date("2026-07-18T00:00:00Z"));
     const claimed = await withTransaction(suite.db, (tx) =>
-      claimGap(tx, { tenantId, duty: DUTY, period, now: NOW }),
+      claimGap(tx, { duty: DUTY, period, now: NOW }),
     );
     const boundary = new Date("2026-07-25T05:30:00Z");
     await withTransaction(suite.db, (tx) =>
@@ -169,7 +169,7 @@ describe("claimRow", () => {
     // shares one duty, so reusing one makes `claimGap` return null on the unique key.
     const period = dayPeriod(new Date("2026-07-21T00:00:00Z"));
     const gap = await withTransaction(suite.db, (tx) =>
-      claimGap(tx, { tenantId, duty: DUTY, period, now: NOW }),
+      claimGap(tx, { duty: DUTY, period, now: NOW }),
     );
     await withTransaction(suite.db, (tx) =>
       completeRun(tx, {
@@ -211,7 +211,7 @@ describe("claimRow", () => {
   it("returns null for a failed row whose backoff has not yet elapsed", async () => {
     const period = dayPeriod(new Date("2026-07-17T00:00:00Z"));
     const claimed = await withTransaction(suite.db, (tx) =>
-      claimGap(tx, { tenantId, duty: DUTY, period, now: NOW }),
+      claimGap(tx, { duty: DUTY, period, now: NOW }),
     );
     const future = new Date("2026-07-26T00:00:00Z");
     await withTransaction(suite.db, (tx) =>
@@ -240,7 +240,6 @@ describe("claimRow", () => {
       tx
         .insert(scheduledRuns)
         .values({
-          tenantId,
           duty: DUTY,
           periodFrom: dayPeriod(new Date("2026-07-16T00:00:00Z")).from.toISOString(),
           periodTo: dayPeriod(new Date("2026-07-16T00:00:00Z")).to.toISOString(),
@@ -261,7 +260,7 @@ describe("reclaimStale", () => {
   it("reclaims a running row stranded past staleAfterMs", async () => {
     const period = dayPeriod(new Date("2026-07-20T00:00:00Z"));
     const claimed = await withTransaction(suite.db, (tx) =>
-      claimGap(tx, { tenantId, duty: DUTY, period, now: NOW }),
+      claimGap(tx, { duty: DUTY, period, now: NOW }),
     );
     const later = new Date(NOW.getTime() + 2 * 60 * 60 * 1000);
     const reclaimed = await withTransaction(suite.db, (tx) =>
@@ -273,7 +272,7 @@ describe("reclaimStale", () => {
   it("refuses a running row inside staleAfterMs", async () => {
     const period = dayPeriod(new Date("2026-07-19T00:00:00Z"));
     const claimed = await withTransaction(suite.db, (tx) =>
-      claimGap(tx, { tenantId, duty: DUTY, period, now: NOW }),
+      claimGap(tx, { duty: DUTY, period, now: NOW }),
     );
     const reclaimed = await withTransaction(suite.db, (tx) =>
       reclaimStale(tx, { id: claimed!.id, now: NOW, staleAfterMs: 60 * 60 * 1000 }),
@@ -287,7 +286,7 @@ describe("reclaimStale", () => {
   it("refuses a row that is no longer running, however stale its started_at", async () => {
     const period = dayPeriod(new Date("2026-06-01T00:00:00Z"));
     const claimed = await withTransaction(suite.db, (tx) =>
-      claimGap(tx, { tenantId, duty: DUTY, period, now: NOW }),
+      claimGap(tx, { duty: DUTY, period, now: NOW }),
     );
     await withTransaction(suite.db, (tx) =>
       completeRun(tx, {
@@ -319,7 +318,7 @@ describe("completeRun's ownership fence", () => {
   it("rejects a completion from an attempt a reclaim has since superseded", async () => {
     const period = dayPeriod(new Date("2026-05-01T00:00:00Z"));
     const original = await withTransaction(suite.db, (tx) =>
-      claimGap(tx, { tenantId, duty: DUTY, period, now: NOW }),
+      claimGap(tx, { duty: DUTY, period, now: NOW }),
     );
     const reclaimAt = new Date(NOW.getTime() + 2 * 60 * 60 * 1000);
     const reclaimed = await withTransaction(suite.db, (tx) =>
@@ -358,7 +357,7 @@ describe("completeRun's ownership fence", () => {
   it("rejects a duplicate completion once the row has already reached a terminal state", async () => {
     const period = dayPeriod(new Date("2026-04-01T00:00:00Z"));
     const claimed = await withTransaction(suite.db, (tx) =>
-      claimGap(tx, { tenantId, duty: DUTY, period, now: NOW }),
+      claimGap(tx, { duty: DUTY, period, now: NOW }),
     );
     const first = await withTransaction(suite.db, (tx) =>
       completeRun(tx, {
@@ -405,7 +404,7 @@ describe("enqueueSuccessor", () => {
   it("refuses when the period already has a non-terminal row, even one merely awaiting retry", async () => {
     const period = dayPeriod(new Date("2026-03-01T00:00:00Z"));
     const claimed = await withTransaction(suite.db, (tx) =>
-      claimGap(tx, { tenantId, duty: DUTY, period, now: NOW }),
+      claimGap(tx, { duty: DUTY, period, now: NOW }),
     );
     await withTransaction(suite.db, (tx) =>
       completeRun(tx, {
@@ -421,7 +420,6 @@ describe("enqueueSuccessor", () => {
 
     const inserted = await withTransaction(suite.db, (tx) =>
       enqueueSuccessor(tx, {
-        tenantId,
         duty: DUTY,
         period,
         dueAt: new Date(NOW.getTime() + 120_000),
@@ -445,7 +443,7 @@ describe("enqueueSuccessor", () => {
   it("treats a parked row as terminal, exactly as derivation does", async () => {
     const period = dayPeriod(new Date("2026-03-03T00:00:00Z"));
     const claimed = await withTransaction(suite.db, (tx) =>
-      claimGap(tx, { tenantId, duty: DUTY, period, now: NOW }),
+      claimGap(tx, { duty: DUTY, period, now: NOW }),
     );
     await withTransaction(suite.db, (tx) =>
       completeRun(tx, {
@@ -461,7 +459,6 @@ describe("enqueueSuccessor", () => {
 
     const inserted = await withTransaction(suite.db, (tx) =>
       enqueueSuccessor(tx, {
-        tenantId,
         duty: DUTY,
         period,
         dueAt: new Date(NOW.getTime() + 60_000),
@@ -479,7 +476,7 @@ describe("enqueueSuccessor", () => {
   it("computes the next generation as max(generation) + 1, not a fixed value", async () => {
     const period = dayPeriod(new Date("2026-03-02T00:00:00Z"));
     const gen0 = await withTransaction(suite.db, (tx) =>
-      claimGap(tx, { tenantId, duty: DUTY, period, now: NOW }),
+      claimGap(tx, { duty: DUTY, period, now: NOW }),
     );
     await withTransaction(suite.db, (tx) =>
       completeRun(tx, {
@@ -494,7 +491,7 @@ describe("enqueueSuccessor", () => {
     );
     const dueAt1 = new Date(NOW.getTime() + 60_000);
     await withTransaction(suite.db, (tx) =>
-      enqueueSuccessor(tx, { tenantId, duty: DUTY, period, dueAt: dueAt1 }),
+      enqueueSuccessor(tx, { duty: DUTY, period, dueAt: dueAt1 }),
     );
 
     const afterFirst = await withTransaction(suite.db, (tx) =>
@@ -520,7 +517,7 @@ describe("enqueueSuccessor", () => {
 
     const dueAt2 = new Date(dueAt1.getTime() + 60_000);
     const insertedSecond = await withTransaction(suite.db, (tx) =>
-      enqueueSuccessor(tx, { tenantId, duty: DUTY, period, dueAt: dueAt2 }),
+      enqueueSuccessor(tx, { duty: DUTY, period, dueAt: dueAt2 }),
     );
     expect(insertedSecond).toBe(true);
 

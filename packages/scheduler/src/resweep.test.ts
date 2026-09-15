@@ -73,7 +73,6 @@ describe("resweepAfter", () => {
     const duty = new FakeDuty(DUTY, async (call) => {
       await withTransaction(suite.db, (tx) =>
         tx.insert(scheduledRuns).values({
-          tenantId,
           duty: DUTY,
           periodFrom: call.period.from.toISOString(),
           periodTo: call.period.to.toISOString(),
@@ -149,7 +148,6 @@ describe("resweepAfter", () => {
     const duty = new FakeDuty(DUTY, () => Promise.resolve({ summary: {} }));
     await withTransaction(suite.db, async (tx) => {
       await tx.insert(scheduledRuns).values({
-        tenantId,
         duty: DUTY,
         periodFrom: old.toISOString(),
         periodTo: new Date(old.getTime() + 86_400_000).toISOString(),

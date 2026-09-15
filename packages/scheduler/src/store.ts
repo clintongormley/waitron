@@ -114,12 +114,11 @@ export async function readSnapshot(
  */
 export async function claimGap(
   tx: Transaction,
-  params: { tenantId: TenantId; duty: string; period: RunPeriod; now: Date },
+  params: { duty: string; period: RunPeriod; now: Date },
 ): Promise<ClaimedRun | null> {
   const [row] = await tx
     .insert(scheduledRuns)
     .values({
-      tenantId: params.tenantId,
       duty: params.duty,
       periodFrom: params.period.from.toISOString(),
       periodTo: params.period.to.toISOString(),
@@ -254,7 +253,7 @@ export async function completeRun(
 /**
  * Enqueue the next generation of one period, due at `dueAt`.
  *
- * Guarded and idempotent. A successor is inserted only when that (tenant, duty, period_from) has
+ * Guarded and idempotent. A successor is inserted only when that (duty, period_from) has
  * NO row at any generation in a non-terminal state — anything outside derivation's own `TERMINAL`
  * list, so a `failed` row awaiting its own retry blocks it too. The caller runs this in the SAME
  * transaction as `completeRun`, so the guard sees the run that is finishing as already terminal.
@@ -267,7 +266,7 @@ export async function completeRun(
  */
 export async function enqueueSuccessor(
   tx: Transaction,
-  params: { tenantId: TenantId; duty: string; period: RunPeriod; dueAt: Date },
+  params: { duty: string; period: RunPeriod; dueAt: Date },
 ): Promise<boolean> {
   const periodFrom = params.period.from.toISOString();
   const scope = and(eq(scheduledRuns.duty, params.duty), eq(scheduledRuns.periodFrom, periodFrom));
@@ -289,7 +288,6 @@ export async function enqueueSuccessor(
 
   try {
     await tx.insert(scheduledRuns).values({
-      tenantId: params.tenantId,
       duty: params.duty,
       periodFrom,
       periodTo: params.period.to.toISOString(),

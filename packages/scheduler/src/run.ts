@@ -191,7 +191,7 @@ async function runOne(
 ): Promise<CompletedRun | null> {
   const claimed = await withTransaction(deps.db, (tx) => {
     if (work.kind === "gap") {
-      return claimGap(tx, { tenantId, duty: duty.name, period: work.period, now });
+      return claimGap(tx, { duty: duty.name, period: work.period, now });
     }
     if (work.kind === "claimable") return claimRow(tx, { id: work.row.id, now });
     return reclaimStale(tx, { id: work.row.id, now, staleAfterMs: deps.staleAfterMs });
@@ -239,7 +239,6 @@ async function runOne(
       // re-sweep to a row this attempt does not own.
       if (!completed || resweepAfter === undefined) return [completed, null];
       const inserted = await enqueueSuccessor(tx, {
-        tenantId,
         duty: duty.name,
         period,
         dueAt: resweepAfter,

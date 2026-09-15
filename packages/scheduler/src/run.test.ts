@@ -1,9 +1,8 @@
-import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, createPgliteDb, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
-import { AppError, tenantId as brandTenantId } from "@waitron/shared";
+import { AppError } from "@waitron/shared";
 import type { TenantId } from "@waitron/shared";
 // Side-effect only: this test constructs a real `AppError<"payment.reconcile_unsettled">`, and
 // that code exists only via @waitron/payments's own `declare module "@waitron/shared"`
@@ -37,14 +36,9 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-// Force ONE duty's snapshot read to throw, leaving every other duty's read untouched. This is the
-// single-tenant way to drive a (tenant, duty) pair into `TickResult.skipped`: a skip is any pair
-// whose processing throws in runDue's outer try, and the snapshot read is the earliest such point
-// — precisely the infrastructure read failure that `skipped` documents. It replaces the former
-// phantom-tenant device (a second, non-existent tenant whose gap claim hit the tenants FK), which
-// stopped producing a skip once reads were no longer tenant-scoped: the phantom pair now reads the
-// real tenant's rows and, finding its period already claimed, derives nothing to claim and throws
-// nothing.
+// Force ONE duty's snapshot read to throw, leaving every other duty's read untouched. A skip is any
+// (tenant, duty) pair whose processing throws in runDue's outer try, and the snapshot read is the
+// earliest such point — precisely the infrastructure read failure that `skipped` documents.
 function failSnapshotFor(dutyName: string): void {
   const real = store.readSnapshot;
   vi.spyOn(store, "readSnapshot").mockImplementation((tx, params) =>
@@ -78,11 +72,9 @@ describe("runDue", () => {
 
     // Read the column directly: readSnapshot deliberately omits `summary`, since derivation never
     // needs it and a large one would be read on every tick for nothing.
-    //
-    // Filter by tenant because other cases leave their ledger rows in this shared fixture.
     const stored = await withTransaction(suite.db, (tx) =>
       tx.execute<{ summary: Record<string, unknown> }>(
-        sql`select summary from scheduled_runs where duty = 'test.duty' and tenant_id = ${tenantId}`,
+        sql`select summary from scheduled_runs where duty = 'test.duty'`,
       ),
     );
     expect(stored.rows).toHaveLength(1);
@@ -189,13 +181,13 @@ describe("runDue", () => {
   // one. Reporting it is the difference between "nothing was due" and "we never found out".
   it("reports a (tenant, duty) whose claim failed, rather than swallowing it", async () => {
     const duty = new FakeDuty();
-    const missing = brandTenantId(randomUUID());
-    const result = await runDue(deps([duty]), [missing], NOW);
+    // The snapshot read succeeds and derives a gap; only the claim that would record it throws.
+    vi.spyOn(store, "claimGap").mockRejectedValue(new Error("claim failed"));
+    const result = await runDue(deps([duty]), [tenantId], NOW);
 
+    expect(store.claimGap).toHaveBeenCalledTimes(1);
     expect(result.ran).toEqual([]);
-    expect(result.skipped).toEqual([
-      { tenantId: missing, duty: "test.duty", errorCode: "unknown" },
-    ]);
+    expect(result.skipped).toEqual([{ tenantId, duty: "test.duty", errorCode: "unknown" }]);
     expect(duty.calls).toEqual([]);
     // Skipped work is due on the skip-retry interval, NOT at the next day boundary the derivation
     // computed before the claim threw — a host sleeping on that would leave the failure untouched
@@ -231,8 +223,7 @@ describe("runDue", () => {
   // successful pair's genuinely earlier one, so the skip time is folded as a MINIMUM.
   //
   // One tenant, two duties: one runs and fails (writing a backoff), the other's snapshot read is
-  // forced to throw so its pair lands in `skipped`. See `failSnapshotFor` for why this replaces
-  // the former two-tenant phantom device.
+  // forced to throw so its pair lands in `skipped`.
   it("prefers a successful pair's earlier backoff over the skip-retry interval", async () => {
     // 1s, so the backoff this failing duty writes lands well inside the 5-minute skip interval.
     // The DEFAULT backoff (15 minutes) is longer than the skip interval, so this test cannot be
@@ -375,7 +366,7 @@ describe("runDue", () => {
     // Simulate a crashed process: claim the period directly (bypassing `runDue`, which always
     // completes what it claims) and never call `completeRun`.
     const stranded = await withTransaction(suite.db, (tx) =>
-      claimGap(tx, { tenantId, duty: "test.duty", period, now: NOW }),
+      claimGap(tx, { duty: "test.duty", period, now: NOW }),
     );
     expect(stranded).not.toBeNull();
 

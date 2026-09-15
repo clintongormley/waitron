@@ -11,8 +11,8 @@ import { SCHEDULER_MIGRATIONS } from "../migrations.js";
  * `docs/superpowers/plans/2026-08-19-shared-test-container.md`.
  *
  * One template, because every real-PG suite in this package migrates exactly the same pair — CORE
- * then SCHEDULER. That ordering (core first, since `scheduled_runs` carries a foreign key onto core's
- * `tenants`) is the runtime's responsibility and nothing enforces it across packages, so it is
+ * then SCHEDULER. That ordering (core first, since this set's baseline migration references core's
+ * `tenants` table and `app_user` role) is the runtime's responsibility and nothing enforces it across packages, so it is
  * explicit here; the now-removed per-file `startRealPostgres` ran the same pair. `store.concurrency.test.ts`
  * clones it with `useTemplateDb({ template: "core_scheduler" })`.
  *
