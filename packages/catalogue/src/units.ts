@@ -210,24 +210,25 @@ export async function reassignProductsToUnit(
   tenantId: string,
   sourceUnitId: string,
   productIds: readonly string[],
-  targetUnitId: string,
+  targetUnitId: string | null,
 ): Promise<void> {
+  const scope = and(
+    eq(productUnits.tenantId, tenantId),
+    eq(productUnits.unitId, sourceUnitId),
+    inArray(productUnits.productId, productIds),
+  );
+  if (targetUnitId === null) {
+    // Reassign to Each: drop the rows for the listed products still on the source unit.
+    await tx.delete(productUnits).where(scope);
+    return;
+  }
   const [target] = await tx
     .select({ id: units.id })
     .from(units)
     .where(and(eq(units.tenantId, tenantId), eq(units.id, targetUnitId)))
     .for("key share");
   if (target === undefined) throw new AppError("unit.not_found", { unitId: targetUnitId });
-  await tx
-    .update(productUnits)
-    .set({ unitId: targetUnitId })
-    .where(
-      and(
-        eq(productUnits.tenantId, tenantId),
-        eq(productUnits.unitId, sourceUnitId),
-        inArray(productUnits.productId, productIds),
-      ),
-    );
+  await tx.update(productUnits).set({ unitId: targetUnitId }).where(scope);
 }
 
 /** The editor read of a product's stored unit: `null` when it has no `product_units` row (it reads as

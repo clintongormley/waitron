@@ -9,6 +9,7 @@ import {
   deleteUnit,
   getUnit,
   listUnits,
+  productsUsingUnit,
   readProductUnitId,
   reassignProductsToUnit,
   updateUnit,
@@ -386,4 +387,26 @@ it("does not deadlock when two bulk reassignments list the same products in oppo
     release();
     await Promise.all([aheadDb.close(), behindDb.close()]);
   }
+});
+
+it("reassigning to null clears the products' unit (they become Each)", async () => {
+  const tenantId = await seedTenant(suite.admin);
+  const p1 = await product(tenantId);
+  const p2 = await product(tenantId);
+  const sourceUnit = await app(suite.admin, tenantId, (tx) =>
+    createUnit(tx, tenantId, { name: { en: "kg" }, precision: 3, abbreviation: { en: "u" } }, "en"),
+  );
+  await app(suite.admin, tenantId, async (tx) => {
+    await assignProductUnit(tx, tenantId, p1, sourceUnit.id);
+    await assignProductUnit(tx, tenantId, p2, sourceUnit.id);
+  });
+
+  await app(suite.admin, tenantId, (tx) =>
+    reassignProductsToUnit(tx, tenantId, sourceUnit.id, [p1, p2], null),
+  );
+
+  expect(
+    await app(suite.admin, tenantId, (tx) => productsUsingUnit(tx, tenantId, sourceUnit.id)),
+  ).toHaveLength(0);
+  expect(await app(suite.admin, tenantId, (tx) => readProductUnitId(tx, tenantId, p1))).toBeNull();
 });
