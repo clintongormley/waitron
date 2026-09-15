@@ -24,7 +24,7 @@ import { seedLegacySellingUnits, seedVenue, useCatalogueDb } from "../test/fixtu
 // PGlite verifies publication/projection; definition-publication locking races use real PostgreSQL.
 const suite = useCatalogueDb();
 
-it("publishes attached text and yes-no modifiers without requiring choice rows", async () => {
+it("publishes an attached text modifier without requiring choice rows", async () => {
   const { tenantId, locationId } = await seedVenue(suite.db);
   await seedLegacySellingUnits(suite.db, tenantId);
   await withTenant(suite.db, tenantId, async (tx) => {
@@ -49,19 +49,8 @@ it("publishes attached text and yes-no modifiers without requiring choice rows",
       { type: "text", name: { en: "Message" }, available: true },
       "en",
     );
-    const yesNo = await createModifier(
-      tx,
-      tenantId,
-      {
-        type: "yes-no",
-        name: { en: "Ice" },
-        available: true,
-        defaultValue: false,
-      },
-      "en",
-    );
     await tx.insert(productOptionGroups).values(
-      [text, yesNo].map((modifier, sort) => ({
+      [text].map((modifier, sort) => ({
         tenantId,
         productId: product.id,
         groupId: modifier.id,
@@ -74,11 +63,8 @@ it("publishes attached text and yes-no modifiers without requiring choice rows",
       sectionId: section.id,
       grossPrice: "2.00",
     });
-    expect((await listMenuOffers(tx, tenantId, [menu.id]))[0]!.modifiers).toEqual([text, yesNo]);
-    expect((await listAvailableProducts(tx, locationId)).products[0]!.modifiers).toEqual([
-      text,
-      yesNo,
-    ]);
+    expect((await listMenuOffers(tx, tenantId, [menu.id]))[0]!.modifiers).toEqual([text]);
+    expect((await listAvailableProducts(tx, locationId)).products[0]!.modifiers).toEqual([text]);
   });
 });
 
@@ -199,7 +185,7 @@ it("projects only published available choices, clears excluded defaults, and kee
     await tx.update(optionGroups).set({ active: false }).where(eq(optionGroups.id, extras.id));
     projected = (await listMenuOffers(tx, tenantId, [menu.id]))[0]!.modifiers;
     // Deactivating the options choice empties that group's choices; deactivating the whole extras
-    // group no longer hides it, because a non-yes-no modifier cannot be turned off as a whole.
+    // group no longer hides it, because a modifier cannot be turned off as a whole.
     expect(projected).toEqual([
       { ...options, choices: [], defaultChoiceId: null },
       {
@@ -209,7 +195,7 @@ it("projects only published available choices, clears excluded defaults, and kee
             id: extraId,
             name: { en: "Shot" },
             available: true,
-            dietaryEffect: { invalidates: [] },
+            suitableFor: [],
             priceDelta: "0.75",
             maxQuantity: 3,
             preselected: true,

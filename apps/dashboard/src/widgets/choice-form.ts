@@ -7,7 +7,7 @@ import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-form-error-summary.js";
-import { type DietaryLabel, type ModifierEffects, type VatClass } from "../api/client.js";
+import { type DietarySuitability, type ModifierEffects, type VatClass } from "../api/client.js";
 import { vatClassName } from "../i18n/domain.js";
 import { isModifierPrice } from "@waitron/catalogue/src/modifier-limits.js";
 import { t } from "../i18n/t.js";
@@ -84,12 +84,7 @@ export class ChoiceForm extends LitElement {
     this.effects = value
       ? {
           ...(value.addAllergens === undefined ? {} : { addAllergens: value.addAllergens }),
-          ...(value.removeAllergens === undefined
-            ? {}
-            : { removeAllergens: value.removeAllergens }),
-          ...(value.addOrigins === undefined ? {} : { addOrigins: value.addOrigins }),
-          ...(value.removeOrigins === undefined ? {} : { removeOrigins: value.removeOrigins }),
-          ...(value.dietaryEffect === undefined ? {} : { dietaryEffect: value.dietaryEffect }),
+          ...(value.suitableFor === undefined ? {} : { suitableFor: value.suitableFor }),
         }
       : {};
     this.errors = {};
@@ -128,9 +123,9 @@ export class ChoiceForm extends LitElement {
       name: nonBlankNames(this.name),
       available: this.available,
       ...this.effects,
-      // The client always sends an explicit dietary effect, never null or absent, so the record
-      // can never be mistaken for "not yet reviewed". The contract normalises anyway.
-      dietaryEffect: this.effects.dietaryEffect ?? { invalidates: [] },
+      // The client always sends an explicit suitability list (never null/absent); the contract
+      // normalises anyway. Positive: the labels the choice is suitable for.
+      suitableFor: this.effects.suitableFor ?? [],
       ...(this.kind === "extras"
         ? {
             priceDelta: this.priceDelta,
@@ -148,24 +143,20 @@ export class ChoiceForm extends LitElement {
   }
   #pickerValue(): AllergenDietaryValue {
     return {
-      addAllergens: Object.keys(this.effects.addAllergens ?? {}),
-      removeAllergens: this.effects.removeAllergens ?? [],
-      dietary: (this.effects.dietaryEffect?.invalidates ?? []) as DietaryLabel[],
+      allergens: Object.keys(this.effects.addAllergens ?? {}),
+      dietary: (this.effects.suitableFor ?? []) as DietarySuitability[],
     };
   }
   #onPicker(event: CustomEvent<{ value: AllergenDietaryValue }>): void {
     event.stopPropagation();
     const v = event.detail.value;
     this.#patch({
-      // Every added allergen is recorded as `contains`. The follow-up allergen spec
+      // Every allergen the choice contains is recorded as `contains`. The follow-up allergen spec
       // (docs/superpowers/specs — contains/may-contain removal) deletes this presence wrapper.
-      addAllergens: v.addAllergens.length
-        ? Object.fromEntries(
-            v.addAllergens.map((code) => [code, { presence: "contains" as const }]),
-          )
+      addAllergens: v.allergens.length
+        ? Object.fromEntries(v.allergens.map((code) => [code, { presence: "contains" as const }]))
         : {},
-      removeAllergens: v.removeAllergens,
-      dietaryEffect: { invalidates: v.dietary },
+      suitableFor: v.dietary,
     });
   }
   #effects() {

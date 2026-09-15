@@ -566,9 +566,8 @@ it("persists structured modifier snapshots and child links on the issued lines",
     {
       modifierId: "ice",
       name: { en: "Ice" },
-      type: "yes-no" as const,
-      value: false,
-      label: { en: "No ice" },
+      type: "text" as const,
+      text: "No ice",
     },
   ];
   const lines = correctionInput(original.saleId).lines.map((line, index) => ({

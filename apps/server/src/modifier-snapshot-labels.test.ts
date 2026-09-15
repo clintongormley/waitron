@@ -2,24 +2,12 @@ import { describe, expect, it } from "vitest";
 import { modifierSnapshotLabels } from "./modifier-snapshot-labels.js";
 
 describe("modifierSnapshotLabels", () => {
-  it("prints an affirmative yes/no as the modifier name and leaves priced extras to their child lines", () => {
+  it("prints text and options selections and leaves priced extras to their child lines", () => {
     expect(
       modifierSnapshotLabels(
         [
           { modifierId: "text", name: { fr: "Message" }, type: "text", text: "Happy birthday" },
           { modifierId: "options", name: {}, type: "options", choiceId: "one", choiceName: {} },
-          {
-            modifierId: "yes",
-            name: { en: "Ice" },
-            type: "yes-no",
-            value: true,
-          },
-          {
-            modifierId: "no",
-            name: { en: "Ice" },
-            type: "yes-no",
-            value: false,
-          },
           {
             modifierId: "extras",
             name: { en: "Extras" },
@@ -29,6 +17,6 @@ describe("modifierSnapshotLabels", () => {
         ],
         "en",
       ),
-    ).toEqual(["Message: Happy birthday", ": ", "Ice"]);
+    ).toEqual(["Message: Happy birthday", ": "]);
   });
 });

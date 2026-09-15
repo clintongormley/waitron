@@ -42,8 +42,6 @@ declare module "@waitron/shared" {
     "allergen.invalid_presence": { code: string; presence: string };
     /** An allergen's optional `source` is present but is not a string. */
     "allergen.invalid_source": { code: string };
-    /** An option's allergen overlay adds and removes the same EU-14 code — a contradiction. */
-    "allergen.add_remove_conflict": { code: string };
     /** A direct dietary declaration is not one of the supported suitability labels. */
     "diet.declaration_invalid": Record<string, never>;
     /** A supplied dietary origin is not one of the `DIETARY_ORIGINS`. */

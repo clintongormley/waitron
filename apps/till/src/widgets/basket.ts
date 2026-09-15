@@ -13,7 +13,7 @@ import { descriptionFor, snapshotDescriptionFor } from "./dish-format.js";
 import { modifierSnapshotLabels } from "./modifier-snapshot.js";
 import { dishGross, optionGross, quantityLabel } from "../state/order-line.js";
 import { asServedAllergens, asServedDiet } from "../state/as-served.js";
-import { dietBadgeStyles, dietBadges } from "./diet-badges.js";
+import { dietBadgeStyles, dietBadges, extraNutrition } from "./diet-badges.js";
 import { lineExtrasEditorStyles, renderLineExtrasEditor } from "./line-extras-editor.js";
 import { StoreChangeController } from "../state/store-controller.js";
 import type { OrderLine, WorkingOrderStore } from "../state/working-order.js";
@@ -173,6 +173,28 @@ export class TillBasket extends LitElement {
         padding: 0 0 var(--wt-space-2);
         padding-left: var(--wt-space-4);
       }
+
+      /* A selected extra's OWN allergens/diet (nutrition redesign, pass 1), indented under its option
+         row, its own list beside the dish's own rows below — never a fold. The chip/badge look comes from
+         the shared .allergen-chip and dietBadgeStyles; only the indent + spacing is basket-specific. */
+      .extra-nutrition {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--wt-space-1) var(--wt-space-2);
+        padding: 0 0 var(--wt-space-1);
+        padding-left: var(--wt-space-4);
+        font-size: var(--wt-font-size-sm, 0.85em);
+        color: var(--wt-color-text-muted);
+      }
+
+      .extra-allergens,
+      .extra-diet {
+        display: inline-flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--wt-space-1) var(--wt-space-2);
+      }
     `,
   ];
 
@@ -265,6 +287,47 @@ export class TillBasket extends LitElement {
     return this.#lineText(line, line.product.descriptions, line.product.id);
   }
 
+  /**
+   * A selected option's OWN allergens and dietary suitability, resolved from the line's product option
+   * definition by its `optionGroupItemId` — the source of truth for an extra's own list, so both a
+   * freshly-picked line and a retrieved one (each carrying the resolved product) render identically.
+   * Scans BOTH the product's `optionGroups` items (ordering modifiers) and its `modifiers` choices,
+   * since a selected extra can come from either. `undefined` when the id resolves to neither (a
+   * stale/removed option), so the row adds no per-extra chrome.
+   */
+  #optionOwnNutrition(
+    line: OrderLine,
+    optionGroupItemId: string,
+  ):
+    | {
+        addAllergens: Record<
+          string,
+          { presence: "contains" | "may_contain"; source?: string }
+        > | null;
+        suitableFor: string[];
+      }
+    | undefined {
+    const fromGroups = (line.product.optionGroups ?? [])
+      .flatMap((group) => group.items)
+      .find((candidate) => candidate.id === optionGroupItemId);
+    if (fromGroups !== undefined)
+      return {
+        addAllergens: fromGroups.addAllergens ?? null,
+        suitableFor: fromGroups.suitableFor ?? [],
+      };
+    const fromModifiers = (line.product.modifiers ?? [])
+      .flatMap((modifier) =>
+        modifier.type === "extras" || modifier.type === "options" ? modifier.choices : [],
+      )
+      .find((candidate) => candidate.id === optionGroupItemId);
+    if (fromModifiers !== undefined)
+      return {
+        addAllergens: fromModifiers.addAllergens ?? null,
+        suitableFor: fromModifiers.suitableFor ?? [],
+      };
+    return undefined;
+  }
+
   override render() {
     const lines = this.store.lines;
     if (lines.length === 0) {
@@ -318,14 +381,20 @@ export class TillBasket extends LitElement {
             // which drops the whole line (options and all). A modifier taken more than once per dish
             // (per-option quantity) shows a "×N" badge on its name — the CLIENT per-dish count carried
             // directly on the option (no derivation); a plain option (quantity 1/absent) is unchanged.
-            (option) => html`
-              <div class="option">
-                <span class="name"
-                  >${this.#lineText(line, option.name, "")}${optionQuantityBadge(option.quantity)}</span
-                >
-                <span class="option-total">${formatMoney(optionGross(line, option))}</span>
-              </div>
-            `,
+            // Beneath each extra, its OWN allergens/diet (nutrition redesign, pass 1) — resolved from the
+            // product's option definition, shown beside the dish's own rows below, never a fold.
+            (option, i) => {
+              const own = this.#optionOwnNutrition(line, option.optionGroupItemId);
+              return html`
+                <div class="option">
+                  <span class="name"
+                    >${this.#lineText(line, option.name, "")}${optionQuantityBadge(option.quantity)}</span
+                  >
+                  <span class="option-total">${formatMoney(optionGross(line, option))}</span>
+                </div>
+                ${own ? extraNutrition(own, `option-allergens-${index}-${i}`, `option-diet-${index}-${i}`) : nothing}
+              `;
+            },
           )}
           ${modifierSnapshotLabels(line.modifierSnapshots ?? [], (labels, fallback) => this.#lineText(line, labels, fallback)).map((answer) => html`<div class="option modifier-answer"><span class="name">${answer}</span></div>`)}
           ${this.#allergenRow(line, index)} ${this.#dietRow(line, index)}

@@ -629,7 +629,7 @@ describe("KDS state (ticket items + collected_at) is not part of the huella", ()
  * Attach a ONE-item option group to this shop's `agua` product and return the item's id (plus its
  * group's, for the read-back). The item's fiscal-bearing fields — `name`, `priceDelta`, `vatClass` —
  * are held CONSTANT across the two shops (the constants below); the ONLY thing `overlay` varies is the
- * catalogue allergen overlay (`removeAllergens`/`addAllergens`), which the ring path never reads. With
+ * catalogue allergen declaration (`addAllergens`), which the ring path never reads. With
  * the group at maxSelect 1 the ring can select this one item, expanding the dish into a parent row + a
  * single child modifier row whose price/name/vat are snapshotted from these constants (working-order.ts
  * `selectedOptions.map` copies name/priceDelta/vatClass and NOTHING else — the overlay is structurally
@@ -639,9 +639,11 @@ const OPTION_ITEM_NAME = { [LOCALE]: "Panecillo" };
 const OPTION_ITEM_PRICE_DELTA = "0.50";
 const OPTION_ITEM_VAT_CLASS = "general" as const;
 
+type OverlayAllergens = Record<string, { presence: "contains" | "may_contain"; source?: string }>;
+
 async function attachOption(
   shop: Shop,
-  overlay: { removeAllergens: string[] | null },
+  overlay: { addAllergens: OverlayAllergens | null },
 ): Promise<{ groupId: string; itemId: string }> {
   return withTenant(suite.admin, shop.cfg.tenantId, async (tx) => {
     await asAppUser(tx);
@@ -655,7 +657,7 @@ async function attachOption(
       name: OPTION_ITEM_NAME,
       priceDelta: OPTION_ITEM_PRICE_DELTA,
       vatClass: OPTION_ITEM_VAT_CLASS,
-      removeAllergens: overlay.removeAllergens,
+      addAllergens: overlay.addAllergens,
     });
     await setProductOptionGroups(tx, shop.cfg.tenantId, shop.aguaId, [group.id]);
     return { groupId: group.id, itemId: item.id };
@@ -723,27 +725,31 @@ async function filedChildLineCount(shop: Shop, tabId: string): Promise<number> {
   });
 }
 
-/** This shop's one option item's `removeAllergens` overlay, read back through `listOptionGroupItems`
+/** This shop's one option item's `addAllergens` declaration, read back through `listOptionGroupItems`
  *  (the authoring read side) — the field the self-check pins to prove the two shops GENUINELY differ. */
-async function overlayOf(shop: Shop, groupId: string, itemId: string): Promise<string[] | null> {
+async function overlayOf(
+  shop: Shop,
+  groupId: string,
+  itemId: string,
+): Promise<OverlayAllergens | null> {
   return withTenant(suite.admin, shop.cfg.tenantId, async (tx) => {
     await asAppUser(tx);
     const items = await listOptionGroupItems(tx, groupId);
     const item = items.find((i) => i.id === itemId);
     expect(item).toBeDefined();
-    return item!.removeAllergens;
+    return item!.addAllergens;
   });
 }
 
-// The modifier↔allergen firewall (spec §7 / CLAUDE.md §5). The per-option allergen overlay
-// (`option_group_items.add_allergens`/`remove_allergens`) is a CATALOGUE field the sale path never
-// reads: when a dish's option is rung into a child modifier line, working-order.ts snapshots ONLY the
-// option's `name`/`priceDelta`/`vatClass` onto the line (`selectedOptions.map`) — the overlay is not
-// among them — and nothing in `sale_lines` or `record-sale.ts` names an allergen column at all (the
+// The modifier↔allergen firewall (spec §7 / CLAUDE.md §5). The per-option allergen declaration
+// (`option_group_items.add_allergens`) is a CATALOGUE field the sale path never reads: when a dish's
+// option is rung into a child modifier line, working-order.ts snapshots ONLY the option's
+// `name`/`priceDelta`/`vatClass` onto the line (`selectedOptions.map`) — the declaration is not among
+// them — and nothing in `sale_lines` or `record-sale.ts` names an allergen column at all (the
 // structural half — the commit body's grep, zero hits). The as-served allergen profile is computed on
 // DISPLAY read paths (till/KDS) only. This proves the same BEHAVIOURALLY: two shops file the IDENTICAL
-// basket with the IDENTICAL option (same name/price/vat), one shop's option carrying a `removeAllergens`
-// overlay and the other's carrying none, and must file registros with the IDENTICAL huella.
+// basket with the IDENTICAL option (same name/price/vat), one shop's option carrying an `addAllergens`
+// declaration and the other's carrying none, and must file registros with the IDENTICAL huella.
 describe("an option's allergen overlay is not part of the huella", () => {
   it("files an IDENTICAL huella whether the rung option carries an allergen overlay or none — the overlay never enters the fiscal record", async () => {
     // TWO shops (own tenants), ONE shared emisor NIF → same IDEmisorFactura; each its own node → its
@@ -755,9 +761,11 @@ describe("an option's allergen overlay is not part of the huella", () => {
     const shopPlain = await seedShop(emisorNif);
 
     // Both option items are byte-identical in name/priceDelta/vatClass (the constants) so the child
-    // sale_lines are identical; only the catalogue allergen overlay differs.
-    const overlayItem = await attachOption(shopOverlay, { removeAllergens: ["gluten"] });
-    const plainItem = await attachOption(shopPlain, { removeAllergens: null });
+    // sale_lines are identical; only the catalogue allergen declaration differs.
+    const overlayItem = await attachOption(shopOverlay, {
+      addAllergens: { gluten: { presence: "contains" } },
+    });
+    const plainItem = await attachOption(shopPlain, { addAllergens: null });
 
     const overlay = await openWithOptionAndPay(shopOverlay, overlayItem.itemId);
     const plain = await openWithOptionAndPay(shopPlain, plainItem.itemId);
@@ -771,14 +779,14 @@ describe("an option's allergen overlay is not part of the huella", () => {
     expect(overlay.huella).toMatch(/^[0-9A-F]{64}$/);
 
     // Self-check (§1: a measurement where both answers look alike measures nothing). Confirm the two
-    // shops' options GENUINELY differ in overlay: the overlay shop's item strips `gluten`; the plain
-    // shop's item strips nothing (NULL). Without this, a silent break in the overlay plumbing would
-    // leave BOTH options bare and this test would pass while differing nothing — no longer testing what
-    // its name claims.
-    const overlayRemove = await overlayOf(shopOverlay, overlayItem.groupId, overlayItem.itemId);
-    const plainRemove = await overlayOf(shopPlain, plainItem.groupId, plainItem.itemId);
-    expect(overlayRemove).toEqual(["gluten"]);
-    expect(plainRemove).toBeNull();
+    // shops' options GENUINELY differ in declaration: the overlay shop's item declares `gluten`; the
+    // plain shop's item declares nothing (NULL). Without this, a silent break in the declaration
+    // plumbing would leave BOTH options bare and this test would pass while differing nothing — no
+    // longer testing what its name claims.
+    const overlayAdd = await overlayOf(shopOverlay, overlayItem.groupId, overlayItem.itemId);
+    const plainAdd = await overlayOf(shopPlain, plainItem.groupId, plainItem.itemId);
+    expect(overlayAdd).toEqual({ gluten: { presence: "contains" } });
+    expect(plainAdd).toBeNull();
 
     // Second self-check: the option was GENUINELY rung into a child `sale_lines` row on BOTH sales (one
     // per sale — the agua's single modifier). Without this, an option silently dropped on the ring path

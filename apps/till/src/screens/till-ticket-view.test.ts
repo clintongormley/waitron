@@ -549,17 +549,10 @@ it("shows saved nonprice modifier answers literally without inventing charge row
             choiceId: "salad",
             choiceName: { "es-ES": "Ensalada" },
           },
-          {
-            modifierId: "cut",
-            type: "yes-no",
-            name: { "es-ES": "Cortar" },
-            value: false,
-          },
         ],
       },
     ],
   });
-  // Ruling C: a negative yes/no answer renders nothing, so "Cortar" is absent here.
   const answers = [...el.shadowRoot!.querySelectorAll(".modifier-answer")];
   expect(answers.map((answer) => answer.textContent?.trim())).toEqual([
     "Dedicatoria: <b>Happy day</b>",

@@ -33,11 +33,13 @@ import {
 // Independent PostgreSQL backends enforce advisory-lock contention and app_user grants.
 const suite = useTemplateDb({ template: "core" });
 const textDefinition: ModifierInput = { type: "text", name: { en: "Message" }, available: true };
-const yesNoDefinition: ModifierInput = {
-  type: "yes-no",
+const extrasDefinition: ModifierInput = {
+  type: "extras",
   name: { en: "Ice" },
   available: true,
-  defaultValue: false,
+  required: false,
+  maxTotalQuantity: null,
+  choices: [],
 };
 
 function app<T>(
@@ -149,7 +151,7 @@ it("a type change waits for an attachment and refuses the committed product depe
   const result = await orderedRace(
     tenantId,
     (tx) => setProductOptionGroups(tx, tenantId, product.id, [modifier.id]),
-    (tx) => updateModifier(tx, tenantId, modifier.id, yesNoDefinition, "en"),
+    (tx) => updateModifier(tx, tenantId, modifier.id, extrasDefinition, "en"),
   );
   expect(result).toMatchObject({
     status: "rejected",
@@ -164,14 +166,14 @@ it("an attachment waits for a type change and publishes the newly committed type
   const { tenantId, product, modifier, item, menu } = await fixture();
   const result = await orderedRace(
     tenantId,
-    (tx) => updateModifier(tx, tenantId, modifier.id, yesNoDefinition, "en"),
+    (tx) => updateModifier(tx, tenantId, modifier.id, extrasDefinition, "en"),
     (tx) => setProductOptionGroups(tx, tenantId, product.id, [modifier.id]),
   );
   expect(result.status).toBe("fulfilled");
   await app(suite.admin, tenantId, async (tx) => {
     await setMenuItemOptionGroups(tx, tenantId, item.id, [{ groupId: modifier.id, options: [] }]);
     expect((await listMenuOffers(tx, tenantId, [menu.id]))[0]!.modifiers).toEqual([
-      { id: modifier.id, ...yesNoDefinition },
+      { id: modifier.id, ...extrasDefinition },
     ]);
   });
 });
@@ -190,7 +192,7 @@ it.each(["type change", "deletion"] as const)(
       (tx) =>
         operation === "deletion"
           ? deleteModifier(tx, tenantId, modifier.id)
-          : updateModifier(tx, tenantId, modifier.id, yesNoDefinition, "en"),
+          : updateModifier(tx, tenantId, modifier.id, extrasDefinition, "en"),
     );
     // orderedRace has already proven the second operation waited on the publication's advisory lock.
     // A type change still refuses the committed attachment; a delete now cascades it and succeeds,
@@ -390,7 +392,7 @@ it("allows simultaneous selection readers while excluding definition writes", as
   const result = await orderedRace(
     tenantId,
     (tx) => lockModifierDefinitions(tx, tenantId, "read"),
-    (tx) => updateModifier(tx, tenantId, modifier.id, yesNoDefinition, "en"),
+    (tx) => updateModifier(tx, tenantId, modifier.id, extrasDefinition, "en"),
   );
   expect(result.status).toBe("fulfilled");
 });

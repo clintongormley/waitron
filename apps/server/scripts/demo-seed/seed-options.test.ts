@@ -69,7 +69,7 @@ async function provisionVenue(): Promise<{ tenantId: string; locationId: string 
 }
 
 describe("seedOptions", () => {
-  it("seeds legacy groups and all four canonical modifier types with product and menu behavior", async () => {
+  it("seeds legacy groups and the three canonical modifier types with product and menu behavior", async () => {
     const { tenantId, locationId } = await provisionVenue();
 
     const { products, modifiers } = await withTenant(suite.admin, tenantId, async (tx) => {
@@ -120,7 +120,7 @@ describe("seedOptions", () => {
       coffee!.modifiers
         .filter((modifier) => modifier.name.en?.startsWith("Demo "))
         .map((modifier) => modifier.type),
-    ).toEqual(["text", "extras", "options", "yes-no"]);
+    ).toEqual(["text", "extras", "options"]);
     const toppings = modifiers.find((modifier) => modifier.name.en === "Demo add-ons")!;
     expect(toppings).toMatchObject({
       type: "extras",
@@ -134,7 +134,7 @@ describe("seedOptions", () => {
     if (toppings.type !== "extras") throw new Error("expected demo extras modifier");
     expect(toppings.choices[1]).toMatchObject({
       name: { en: "Marshmallows", es: "Nubes" },
-      dietaryEffect: { invalidates: ["no_meat"] },
+      suitableFor: ["vegetarian"],
     });
 
     // Steak: Extras (optional, 0..3) + Cooking (required, 1 of 3), in that order.

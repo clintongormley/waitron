@@ -39,9 +39,6 @@ const items: OptionGroupItem[] = [
     active: true,
     maxQuantity: 1,
     addAllergens: null,
-    removeAllergens: null,
-    addOrigins: null,
-    removeOrigins: null,
   },
   {
     id: "i2",
@@ -52,12 +49,8 @@ const items: OptionGroupItem[] = [
     sort: 1,
     active: true,
     maxQuantity: 1,
-    // Seeded so the add-picker + remove-list seeding tests have a non-null item to read back.
+    // Seeded so the add-picker seeding test has a non-null declaration to read back.
     addAllergens: { milk: { presence: "contains" } },
-    removeAllergens: ["gluten"],
-    // Likewise seeded for the origin add/remove seeding tests (Task 8b).
-    addOrigins: ["meat"],
-    removeOrigins: ["dairy"],
   },
 ];
 
@@ -65,14 +58,6 @@ const items: OptionGroupItem[] = [
 function selectValue(el: OptionGroupManager, sel: string, value: string): void {
   const node = el.shadowRoot!.querySelector<HTMLSelectElement>(sel)!;
   node.value = value;
-  node.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
-}
-
-/** Select exactly the given values in a native <select multiple> and fire its `change`, as a
- * browser does when the operator picks (or deselects) options in a multi-select. */
-function selectMultiple(el: OptionGroupManager, dataTest: string, values: string[]): void {
-  const node = el.shadowRoot!.querySelector<HTMLSelectElement>(`[data-test=${dataTest}]`)!;
-  for (const opt of Array.from(node.options)) opt.selected = values.includes(opt.value);
   node.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
 }
 
@@ -484,9 +469,6 @@ describe("option-group-manager", () => {
         active: true,
         maxQuantity: 5,
         addAllergens: null,
-        removeAllergens: null,
-        addOrigins: null,
-        removeOrigins: null,
       },
     ];
     const { el } = await mountWidget<OptionGroupManager>("dashboard-option-group-manager", {
@@ -703,58 +685,7 @@ describe("option-group-manager", () => {
     expect(fired).toBe(false);
   });
 
-  // ── Per-item allergen adds/removes (modifier↔allergen association) ────────────────────────────
-
-  it("emits removeAllergens when an item's remove-list changes", async () => {
-    const { el } = await mountWidget<OptionGroupManager>("dashboard-option-group-manager", {
-      locales: ["es"],
-      groups,
-      expandedGroupId: "g1",
-      items,
-    });
-    const detail = new Promise<{ groupId: string; itemId: string; patch: Record<string, unknown> }>(
-      (resolve) =>
-        el.addEventListener("update-option-group-item", (e) => resolve((e as CustomEvent).detail)),
-    );
-    selectMultiple(el, "item-remove-i1", ["gluten"]);
-    expect(await detail).toEqual({
-      groupId: "g1",
-      itemId: "i1",
-      patch: { removeAllergens: ["gluten"] },
-    });
-  });
-
-  it("emits removeAllergens null when an item's remove-list is cleared", async () => {
-    const { el } = await mountWidget<OptionGroupManager>("dashboard-option-group-manager", {
-      locales: ["es"],
-      groups,
-      expandedGroupId: "g1",
-      items,
-    });
-    const detail = new Promise<{ groupId: string; itemId: string; patch: Record<string, unknown> }>(
-      (resolve) =>
-        el.addEventListener("update-option-group-item", (e) => resolve((e as CustomEvent).detail)),
-    );
-    // i2 seeds ["gluten"]; deselect everything → an empty pick reverts to null (no removes).
-    selectMultiple(el, "item-remove-i2", []);
-    expect(await detail).toEqual({
-      groupId: "g1",
-      itemId: "i2",
-      patch: { removeAllergens: null },
-    });
-  });
-
-  it("seeds the remove-list from the item's current removeAllergens", async () => {
-    const { el } = await mountWidget<OptionGroupManager>("dashboard-option-group-manager", {
-      locales: ["es"],
-      groups,
-      expandedGroupId: "g1",
-      items,
-    });
-    const select = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=item-remove-i2]")!;
-    const selected = Array.from(select.selectedOptions, (o) => o.value);
-    expect(selected).toEqual(["gluten"]);
-  });
+  // ── Per-item allergen declaration (a choice states the allergens it contains) ──────────────────
 
   it("emits addAllergens when an item's add-picker changes", async () => {
     const { el } = await mountWidget<OptionGroupManager>("dashboard-option-group-manager", {
@@ -793,81 +724,6 @@ describe("option-group-manager", () => {
       "[data-test=item-add-i2]",
     )!;
     expect(picker.declaration).toEqual({ milk: { presence: "contains" } });
-  });
-
-  // ── Option-item ORIGIN overlay (Task 8b) — the diet twin of the allergen adds/removes above ────────
-
-  it("emits addOrigins when an item's add-origins list changes", async () => {
-    const { el } = await mountWidget<OptionGroupManager>("dashboard-option-group-manager", {
-      locales: ["es"],
-      groups,
-      expandedGroupId: "g1",
-      items,
-    });
-    const detail = new Promise<{ groupId: string; itemId: string; patch: Record<string, unknown> }>(
-      (resolve) =>
-        el.addEventListener("update-option-group-item", (e) => resolve((e as CustomEvent).detail)),
-    );
-    selectMultiple(el, "item-add-origins-i1", ["meat"]);
-    expect(await detail).toEqual({
-      groupId: "g1",
-      itemId: "i1",
-      patch: { addOrigins: ["meat"] },
-    });
-  });
-
-  it("emits removeOrigins when an item's remove-origins list changes", async () => {
-    const { el } = await mountWidget<OptionGroupManager>("dashboard-option-group-manager", {
-      locales: ["es"],
-      groups,
-      expandedGroupId: "g1",
-      items,
-    });
-    const detail = new Promise<{ groupId: string; itemId: string; patch: Record<string, unknown> }>(
-      (resolve) =>
-        el.addEventListener("update-option-group-item", (e) => resolve((e as CustomEvent).detail)),
-    );
-    selectMultiple(el, "item-remove-origins-i1", ["dairy"]);
-    expect(await detail).toEqual({
-      groupId: "g1",
-      itemId: "i1",
-      patch: { removeOrigins: ["dairy"] },
-    });
-  });
-
-  it("emits addOrigins null when an item's add-origins list is cleared", async () => {
-    const { el } = await mountWidget<OptionGroupManager>("dashboard-option-group-manager", {
-      locales: ["es"],
-      groups,
-      expandedGroupId: "g1",
-      items,
-    });
-    const detail = new Promise<{ groupId: string; itemId: string; patch: Record<string, unknown> }>(
-      (resolve) =>
-        el.addEventListener("update-option-group-item", (e) => resolve((e as CustomEvent).detail)),
-    );
-    // i2 seeds ["meat"]; deselect everything → an empty pick reverts to null (adds nothing).
-    selectMultiple(el, "item-add-origins-i2", []);
-    expect(await detail).toEqual({
-      groupId: "g1",
-      itemId: "i2",
-      patch: { addOrigins: null },
-    });
-  });
-
-  it("seeds the origin add/remove lists from the item's current addOrigins/removeOrigins", async () => {
-    const { el } = await mountWidget<OptionGroupManager>("dashboard-option-group-manager", {
-      locales: ["es"],
-      groups,
-      expandedGroupId: "g1",
-      items,
-    });
-    const add = el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=item-add-origins-i2]")!;
-    const remove = el.shadowRoot!.querySelector<HTMLSelectElement>(
-      "[data-test=item-remove-origins-i2]",
-    )!;
-    expect(Array.from(add.selectedOptions, (o) => o.value)).toEqual(["meat"]);
-    expect(Array.from(remove.selectedOptions, (o) => o.value)).toEqual(["dairy"]);
   });
 
   it("surfaces an itemError as a role=alert inline message, localised", async () => {

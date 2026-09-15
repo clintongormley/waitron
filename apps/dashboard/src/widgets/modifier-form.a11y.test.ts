@@ -7,7 +7,6 @@ afterEach(cleanupWidgets);
 const common = { id: "m", name: { es: "Modificador" }, available: true };
 const values: Modifier[] = [
   { ...common, type: "text" },
-  { ...common, type: "yes-no", defaultValue: false },
   {
     ...common,
     type: "options",
@@ -28,7 +27,7 @@ const values: Modifier[] = [
         maxQuantity: 1,
         preselected: false,
         addAllergens: { milk: { presence: "contains" } },
-        dietaryEffect: { invalidates: ["vegetarian"] },
+        suitableFor: ["vegetarian"],
       },
     ],
   },

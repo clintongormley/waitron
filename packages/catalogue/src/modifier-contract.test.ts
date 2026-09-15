@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { isModifierOffered } from "@waitron/shared";
 import { parseModifierInput, validateModifierSelections } from "./modifier-contract.js";
 
 const modifierId = "11111111-1111-4111-8111-111111111111";
@@ -24,16 +23,40 @@ const extras = {
 };
 
 describe("modifier definition contract", () => {
-  it("accepts direct dietary invalidations and rejects legacy origin authoring", () => {
+  it("rejects the removed yes-no type", () => {
+    expect(() =>
+      parseModifierInput({ type: "yes-no", name: { en: "Gift wrap" }, defaultValue: true }),
+    ).toThrow(expect.objectContaining({ code: "modifier.invalid", params: { field: "type" } }));
+  });
+  it("rejects removeAllergens on a choice", () => {
+    const bad = {
+      type: "extras",
+      name,
+      required: false,
+      maxTotalQuantity: null,
+      choices: [{ id: choiceId, name: { en: "c" }, removeAllergens: ["gluten"] }],
+    };
+    expect(() => parseModifierInput(bad)).toThrow(
+      expect.objectContaining({ code: "modifier.invalid" }),
+    );
+  });
+  it("accepts a positive dietary suitability list and rejects a retired label", () => {
     expect(
       parseModifierInput({
         type: "extras",
         name,
-        choices: [{ ...extra, dietaryEffect: { invalidates: ["no_meat", "halal"] } }],
+        choices: [{ ...extra, suitableFor: ["vegan", "halal"] }],
       }),
     ).toMatchObject({
-      choices: [{ dietaryEffect: { invalidates: ["no_meat", "halal"] } }],
+      choices: [{ suitableFor: ["vegan", "halal"] }],
     });
+    expect(() =>
+      parseModifierInput({
+        type: "extras",
+        name,
+        choices: [{ ...extra, suitableFor: ["no_meat"] }],
+      }),
+    ).toThrow(expect.objectContaining({ code: "diet.declaration_invalid" }));
     expect(() =>
       parseModifierInput({
         type: "extras",
@@ -42,7 +65,7 @@ describe("modifier definition contract", () => {
       }),
     ).toThrow(expect.objectContaining({ code: "modifier.invalid" }));
   });
-  it("accepts all four types with canonical defaults", () => {
+  it("accepts every type with canonical defaults", () => {
     expect(parseModifierInput({ type: "text", name })).toEqual({
       type: "text",
       name,
@@ -60,7 +83,7 @@ describe("modifier definition contract", () => {
             id: choiceId,
             name,
             available: true,
-            dietaryEffect: { invalidates: [] },
+            suitableFor: [],
             priceDelta: "0.00",
             maxQuantity: 1,
             preselected: false,
@@ -74,20 +97,13 @@ describe("modifier definition contract", () => {
       type: "options",
       name,
       available: true,
-      choices: [{ id: choiceId, name, available: true, dietaryEffect: { invalidates: [] } }],
+      choices: [{ id: choiceId, name, available: true, suitableFor: [] }],
       defaultChoiceId: null,
-    });
-    expect(parseModifierInput({ type: "yes-no", name })).toEqual({
-      type: "yes-no",
-      name,
-      available: true,
-      defaultValue: false,
     });
   });
   it.each([
     { type: "text", name, choices: [] },
     { type: "options", name, choices: [{ id: choiceId, name, priceDelta: "1.00" }] },
-    { type: "yes-no", name, choices: [] },
     { ...extras, maxTotalQuantity: 0 },
     { ...extras, choices: [{ ...extra, priceDelta: "-0.01" }] },
     { type: "options", name, choices: [{ id: choiceId, name }], defaultChoiceId: modifierId },
@@ -127,8 +143,8 @@ describe("modifier definition contract", () => {
         choices: [{ ...extra, available: false }],
       }),
     ).toThrow();
-    // A non-yes-no modifier can no longer be turned off as a whole, so a sent `available: false`
-    // is ignored and an empty options modifier is still refused.
+    // A modifier can no longer be turned off as a whole, so a sent `available: false` is ignored
+    // and an empty options modifier is still refused.
     expect(() =>
       parseModifierInput({ type: "options", name, available: false, choices: [] }),
     ).toThrow();
@@ -136,7 +152,7 @@ describe("modifier definition contract", () => {
 });
 
 describe("explicit order selections", () => {
-  it("validates all four values, preserving false and literal text", () => {
+  it("validates every value, preserving literal text", () => {
     const definitions = [
       extras,
       { id: "text", type: "text" as const, name, available: true },
@@ -148,19 +164,11 @@ describe("explicit order selections", () => {
         choices: [{ id: choiceId, name, available: true }],
         defaultChoiceId: null,
       },
-      {
-        id: "boolean",
-        type: "yes-no" as const,
-        name,
-        available: true,
-        defaultValue: false,
-      },
     ];
     const selections = [
       { modifierId, type: "extras", choices: [{ choiceId, quantity: 2 }] },
       { modifierId: "text", type: "text", text: " <b>literal</b> " },
       { modifierId: "option", type: "options", choiceId },
-      { modifierId: "boolean", type: "yes-no", value: false },
     ];
     expect(validateModifierSelections(definitions, selections)).toEqual(selections);
   });
@@ -201,17 +209,6 @@ describe("explicit order selections", () => {
         [selection],
       ),
     ).toThrow();
-    // Only a yes-no modifier can be turned off as a whole; an off one rejects any selection.
-    const offYesNo = {
-      id: modifierId,
-      type: "yes-no" as const,
-      name,
-      available: false,
-      defaultValue: false,
-    };
-    expect(() =>
-      validateModifierSelections([offYesNo], [{ modifierId, type: "yes-no", value: true }]),
-    ).toThrow();
   });
   it("does not waive required groups with no offered choices or apply server defaults", () => {
     expect(() =>
@@ -223,13 +220,6 @@ describe("explicit order selections", () => {
         [],
       ),
     ).toThrow();
-    // A yes-no modifier that is turned off is not required and needs no selection.
-    expect(
-      validateModifierSelections(
-        [{ id: modifierId, type: "yes-no", name, available: false, defaultValue: false }],
-        [],
-      ),
-    ).toEqual([]);
   });
   it("omits blank text and bounds literal text at 500 characters", () => {
     const text = { id: modifierId, type: "text" as const, name, available: true };
@@ -254,12 +244,8 @@ function expectInvalid(run: () => unknown, field: string) {
 
 const extraInput = { type: "extras", name, choices: [extra] };
 const optionInput = { type: "options", name, choices: [{ id: choiceId, name }] };
-const booleanInput = { type: "yes-no", name };
-
 describe("strict definition input boundaries", () => {
   it.each([
-    [{ ...booleanInput, available: null }, "available"],
-    [{ ...booleanInput, defaultValue: null }, "defaultValue"],
     [{ ...extraInput, required: null }, "required"],
     [{ ...extraInput, choices: [{ ...extra, available: null }] }, "choices.0.available"],
     [{ ...extraInput, choices: [{ ...extra, priceDelta: null }] }, "choices.0.priceDelta"],
@@ -270,11 +256,6 @@ describe("strict definition input boundaries", () => {
   });
 
   it.each(["false", 0, [], {}])("rejects non-Boolean values %#", (value) => {
-    expectInvalid(() => parseModifierInput({ ...booleanInput, available: value }), "available");
-    expectInvalid(
-      () => parseModifierInput({ ...booleanInput, defaultValue: value }),
-      "defaultValue",
-    );
     expectInvalid(() => parseModifierInput({ ...extraInput, required: value }), "required");
     expectInvalid(
       () =>
@@ -300,7 +281,6 @@ describe("strict definition input boundaries", () => {
 
   it.each([
     [{ type: "text", name, defaultValue: false }, "modifier.defaultValue"],
-    [{ ...booleanInput, maxTotalQuantity: null }, "modifier.maxTotalQuantity"],
     [{ ...extraInput, defaultChoiceId: null }, "modifier.defaultChoiceId"],
     [{ ...optionInput, required: null }, "modifier.required"],
     [
@@ -364,9 +344,6 @@ describe("strict definition input boundaries", () => {
 
   it("retains explicit false and nullable fields while clearing unavailable defaults before checking the cap", () => {
     expect(
-      parseModifierInput({ ...booleanInput, available: false, defaultValue: false }),
-    ).toMatchObject({ available: false, defaultValue: false });
-    expect(
       parseModifierInput({
         ...extraInput,
         required: false,
@@ -388,13 +365,6 @@ describe("strict definition input boundaries", () => {
 });
 
 describe("adversarial explicit selections", () => {
-  const boolean = {
-    ...booleanInput,
-    id: modifierId,
-    type: "yes-no" as const,
-    available: true,
-    defaultValue: false,
-  };
   const option = {
     id: modifierId,
     name,
@@ -405,31 +375,10 @@ describe("adversarial explicit selections", () => {
   };
   const text = { id: modifierId, name, available: true, type: "text" as const };
 
-  it.each([undefined, null, 0, 1, "false", [], {}])(
-    "requires an actual Boolean selection %#",
-    (value) => {
-      expectInvalid(
-        () => validateModifierSelections([boolean], [{ modifierId, type: "yes-no", value }]),
-        "value",
-      );
-    },
-  );
-  it("does not manufacture a missing Boolean or default option selection", () => {
-    expectInvalid(() => validateModifierSelections([boolean], []), "required");
+  it("does not manufacture a missing default option selection", () => {
     expectInvalid(() => validateModifierSelections([option], []), "required");
-    expect(
-      validateModifierSelections([boolean], [{ modifierId, type: "yes-no", value: false }]),
-    ).toEqual([{ modifierId, type: "yes-no", value: false }]);
   });
   it("rejects cross-type selection fields, client prices and labels", () => {
-    expectInvalid(
-      () =>
-        validateModifierSelections(
-          [boolean],
-          [{ modifierId, type: "yes-no", value: false, choiceId }],
-        ),
-      "selection.choiceId",
-    );
     expectInvalid(
       () =>
         validateModifierSelections(
@@ -507,7 +456,7 @@ describe("adversarial explicit selections", () => {
   });
 });
 
-describe("preselected extras and label-free yes/no", () => {
+describe("preselected extras", () => {
   it("accepts a preselected extras choice and rejects defaultQuantity", () => {
     const parsed = parseModifierInput({
       type: "extras",
@@ -591,29 +540,6 @@ describe("preselected extras and label-free yes/no", () => {
     );
   });
 
-  it("parses a yes-no modifier with no custom labels and rejects them", () => {
-    const parsed = parseModifierInput({
-      type: "yes-no",
-      name: { en: "Decaf" },
-      defaultValue: true,
-    });
-    expect(parsed).toEqual({
-      type: "yes-no",
-      name: { en: "Decaf" },
-      available: true,
-      defaultValue: true,
-    });
-    expect(() =>
-      parseModifierInput({
-        type: "yes-no",
-        name: { en: "Decaf" },
-        yesLabel: { en: "Y" },
-        noLabel: { en: "N" },
-        defaultValue: true,
-      }),
-    ).toThrow(expect.objectContaining({ code: "modifier.invalid" }));
-  });
-
   it("fixes availability to true for extras regardless of the value sent", () => {
     const input = parseModifierInput({
       type: "extras",
@@ -626,16 +552,9 @@ describe("preselected extras and label-free yes/no", () => {
     expect(input.available).toBe(true);
   });
 
-  it("reads availability for a yes-no modifier", () => {
-    const off = parseModifierInput({ type: "yes-no", name: { en: "Gift wrap" }, available: false });
-    expect(off.available).toBe(false);
-    const on = parseModifierInput({ type: "yes-no", name: { en: "Gift wrap" } });
-    expect(on.available).toBe(true);
-  });
-
-  it("normalises an absent, null, or empty dietary effect on a choice to an empty invalidates list", () => {
+  it("normalises an absent, null, or empty suitability on a choice to an empty list", () => {
     const id = crypto.randomUUID();
-    const choiceOf = (dietaryEffect: unknown) =>
+    const choiceOf = (suitableFor: unknown) =>
       (
         parseModifierInput({
           type: "options",
@@ -646,19 +565,14 @@ describe("preselected extras and label-free yes/no", () => {
               id,
               name: { en: "Ketchup" },
               available: true,
-              ...(dietaryEffect === "absent" ? {} : { dietaryEffect }),
+              ...(suitableFor === "absent" ? {} : { suitableFor }),
             },
           ],
-        }) as { choices: { dietaryEffect?: { invalidates: string[] } | null }[] }
-      ).choices[0]!.dietaryEffect;
-    expect(choiceOf("absent")).toEqual({ invalidates: [] });
-    expect(choiceOf(null)).toEqual({ invalidates: [] });
-    expect(choiceOf({ invalidates: [] })).toEqual({ invalidates: [] });
-  });
-
-  it("isModifierOffered is true for a non-yes-no type and follows availability for yes-no", () => {
-    expect(isModifierOffered({ type: "extras", available: false })).toBe(true);
-    expect(isModifierOffered({ type: "yes-no", available: false })).toBe(false);
-    expect(isModifierOffered({ type: "yes-no", available: true })).toBe(true);
+        }) as { choices: { suitableFor?: string[] | null }[] }
+      ).choices[0]!.suitableFor;
+    expect(choiceOf("absent")).toEqual([]);
+    expect(choiceOf(null)).toEqual([]);
+    expect(choiceOf([])).toEqual([]);
+    expect(choiceOf(["vegan", "kosher"])).toEqual(["vegan", "kosher"]);
   });
 });

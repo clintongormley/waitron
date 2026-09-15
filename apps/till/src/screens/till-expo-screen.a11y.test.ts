@@ -50,11 +50,9 @@ const queue: ExpoOrder[] = [
             // A dish with selected options (ordering modifiers, Task 14) — the indented "+ name" sub-text
             // is non-interactive plain text under the same item box, swept here for both themes.
             modifiers: [{ descriptions: { "es-ES": "Sin gluten" } }],
-            // As-served allergens (modifier↔allergen, Task 9): a CONTAINS-milk chip and a struck
-            // localised "NO Cereals containing gluten" removal callout — their danger colour +
-            // strike-through swept for contrast here.
+            // The dish's own allergens (modifier↔allergen): a CONTAINS-milk chip — its colour swept for
+            // contrast here.
             asServed: { allergens: { milk: { presence: "contains" } }, pending: false },
-            removed: ["gluten"],
             // As-served diet (dietary-classification, Task 7): a vegetarian+halal success-toned badge
             // pair, swept for contrast here alongside the allergen chips.
             asServedDiet: { vegan: "no", vegetarian: "yes", contains: [], halal: "yes" },
@@ -137,7 +135,6 @@ const queue: ExpoOrder[] = [
             awayAt: null,
             // Own allergens unreviewed (null base) ⇒ pending — the "not reviewed" warning, swept here.
             asServed: { allergens: {}, pending: true },
-            removed: [],
             queuedAt: FIRED,
             thresholds: DEFAULT_THRESHOLDS,
             band: "fresh",

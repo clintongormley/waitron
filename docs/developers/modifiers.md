@@ -13,6 +13,11 @@ Use the reusable definition for configuration and explicit selections for each o
 the complete definition input. DELETE returns `{ ok: true }`. Choices have UUIDs supplied by the
 editor, so an options default can name a newly added choice before its first save.
 
+A modifier's `type` is one of `text`, `extras` or `options`. There is no `yes-no` type; the contract
+(`parseModifierInput` in `packages/catalogue/src/modifier-contract.ts`) rejects any other value with
+`modifier.invalid`. Every modifier is always offered as a whole — there is no modifier-level
+availability, only a per-choice `available` flag.
+
 For a venue whose default content language is English:
 
 ```http
@@ -20,23 +25,32 @@ POST /management-api/modifiers
 Content-Type: application/json
 
 {
-  "type": "yes-no",
-  "name": { "en": "Cutlery" },
-  "defaultValue": true
+  "type": "options",
+  "name": { "en": "Bread" },
+  "defaultChoiceId": null,
+  "choices": [
+    { "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", "name": { "en": "White" }, "available": true },
+    { "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", "name": { "en": "Gluten-free" }, "available": true,
+      "suitableFor": ["vegan", "vegetarian"] }
+  ]
 }
 ```
 
-A yes-no modifier carries no label fields: its own name is what the till shows. The response
-includes the new UUID and normalized defaults:
+The response includes the normalized definition:
 
 ```json
 {
   "modifier": {
     "id": "11111111-1111-4111-8111-111111111111",
-    "type": "yes-no",
-    "name": { "en": "Cutlery" },
+    "type": "options",
+    "name": { "en": "Bread" },
     "available": true,
-    "defaultValue": true
+    "defaultChoiceId": null,
+    "choices": [
+      { "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", "name": { "en": "White" }, "available": true },
+      { "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", "name": { "en": "Gluten-free" }, "available": true,
+        "suitableFor": ["vegan", "vegetarian"] }
+    ]
   }
 }
 ```
@@ -66,29 +80,45 @@ limits (`packages/catalogue/src/modifier-limits.ts`), lists what is wrong in its
 and emits `wt-choice-save` with `{ value: ChoiceDraft }` or `wt-choice-cancel` with `{}`. Nothing reaches the
 server until the modifier itself is saved.
 
-Products can compose the modifier form directly and select the saved definition. The optional choice
-fields `addAllergens`, `removeAllergens`, `addOrigins`, `removeOrigins`, `dietaryEffect`, and extras
-`vatClass` keep existing effects and tax inheritance. The choice form renders the allergen and
-dietary effects through the shared `dashboard-allergen-dietary-picker` widget
-(`apps/dashboard/src/widgets/allergen-dietary-picker.ts`): added allergens are recorded as
-`contains`, and there is no presence or source field in the modifier choice UI. Products can adopt
+Products can compose the modifier form directly and select the saved definition. A choice carries two
+optional nutrition fields, plus `vatClass` on an extra for tax inheritance:
+
+- `addAllergens` — the allergens the choice contains. A map keyed by allergen code whose value records
+  `{ presence: "contains" }`; the modifier choice UI records only `contains` and offers no
+  presence or source field. This is a single "contains" list: there is no "removes" list, and the old
+  `removeAllergens`/`addOrigins`/`removeOrigins` fields are gone.
+- `suitableFor` — a positive dietary list over exactly four labels, `vegan`, `vegetarian`, `halal`,
+  `kosher` (stored in the `dietary_suitability` column, validated by `validateDietarySuitability` in
+  `packages/catalogue/src/dietary-declarations.ts`; anything else is `diet.declaration_invalid`). It
+  replaces the old negative `dietaryEffect = { invalidates: [...] }` model — a choice states what it
+  is suitable for, never what it invalidates.
+
+The choice form renders both through the shared `dashboard-allergen-dietary-picker` widget
+(`apps/dashboard/src/widgets/allergen-dietary-picker.ts`): one allergen multi-select under
+"Nutritional information" and a four-item checklist under "Dietary preferences". Products can adopt
 the same widget during integration.
 
 ## Ordering and stored facts
 
-Send `modifierSelections` on each requested parent line. For the example above:
+Send `modifierSelections` on each requested parent line. Each selection's `type` matches its
+modifier's type — `text` carries `text`, `options` carries one `choiceId`, `extras` carries a
+`choices` array of `{ choiceId, quantity }`:
 
 ```json
 {
   "menuItemId": "22222222-2222-4222-8222-222222222222",
   "quantity": "2",
   "modifierSelections": [
-    { "modifierId": "11111111-1111-4111-8111-111111111111", "type": "yes-no", "value": false }
+    { "modifierId": "11111111-1111-4111-8111-111111111111", "type": "options",
+      "choiceId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" },
+    { "modifierId": "33333333-3333-4333-8333-333333333333", "type": "extras",
+      "choices": [{ "choiceId": "cccccccc-cccc-4ccc-8ccc-cccccccccccc", "quantity": 1 }] },
+    { "modifierId": "44444444-4444-4444-8444-444444444444", "type": "text", "text": "No onions" }
   ]
 }
 ```
 
-Text, options and Yes/no become structured `modifierSnapshots` on the parent. Extras also retain
+Text and options become structured `modifierSnapshots` on the parent. Extras also retain
 selected IDs and quantities there, while their price stays in the existing child-line machinery.
 Never send the legacy `options` payload alongside canonical selections. Defaults are client draft
 seeds; the server does not fill in missing answers. Duplicate modifiers and duplicate extras choices
@@ -102,8 +132,10 @@ on `pricingUnit === "each"`.
 Held responses carry the original snapshots and explicit selections. A quantity-only update sends
 `workingOrderLineId` and the same selections, preserving the original prices. Changed answers take
 the normal new-selection validation path. `TabLine.descriptions` and `modifierSnapshots`, receipt
-lines and kitchen lines carry stored presentation facts. Nonprice option effects join their saved
-choice IDs to current allergen/dietary declarations, matching the existing live-effects policy.
+lines and kitchen lines carry stored presentation facts. Allergen and dietary information is resolved
+live from a saved choice's current declarations, never stored. The till basket and the kitchen/expo
+screens do not combine a dish with its extras into an "as-served" figure: the dish shows its own
+allergens and diet (its recipe-derived list) and each selected extra shows its own, independently.
 
 ## Storage and integration order
 

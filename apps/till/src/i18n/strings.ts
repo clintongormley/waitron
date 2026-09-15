@@ -222,19 +222,14 @@ export const en = {
   "allergens.print": "Print",
   "allergens.close": "Close",
   // As-served allergens on the basket dish line (modifier↔allergen, Task 7). `as_served` labels the
-  // per-line chip row (the dish's declared allergens folded with its modifiers). `none` is shown when
-  // the fold leaves an empty set on a REVIEWED dish (nothing to declare). `not_reviewed` is the
+  // per-line chip row (the dish's OWN declared allergens — no modifier fold; each extra shows its own
+  // list separately). `none` is shown when that set is empty on a REVIEWED dish (nothing to declare).
+  // `not_reviewed` is the
   // Cautious note the waiter sees whenever the dish's own allergens are unreviewed — the note must
   // read as "review pending" (the browser test pins /review|pendiente/i).
   "allergens.as_served": "As served",
   "allergens.as_served_none": "No declared allergens",
   "allergens.not_reviewed": "Allergens not fully reviewed",
-  // The KDS/expo "as-served" allergen line (modifier↔allergen, Task 9). `without` is the negation prefix
-  // for a REMOVED base allergen — rendered as a struck "NO <allergen>" callout on the kitchen/pass ticket
-  // (e.g. "SIN Leche"; "SIN" is Spanish, the kitchen's own gluten-free idiom). The allergen NAME beside
-  // it is localised via `allergenName`, the SAME helper the "contains" chips use, so an es-ES ticket never
-  // mixes a Spanish chip with a raw English removal code (fix round 1).
-  "allergens.without": "NO",
   // Dietary classification (dietary-classification, Task 7). The POSITIVE diet labels shown as badges
   // beside the as-served allergen chips (basket line, KDS/expo) — rendered ONLY when the profile
   // asserts the claim (`vegan`/`vegetarian` === "yes"; `halal`/`kosher` === "yes"). `contains.meat`/
@@ -621,7 +616,6 @@ export const es: Record<StringKey, string> = {
   "allergens.as_served": "Tal como se sirve",
   "allergens.as_served_none": "Sin alérgenos declarados",
   "allergens.not_reviewed": "Alérgenos pendientes de revisión",
-  "allergens.without": "SIN",
   "diet.label": "Dieta",
   "diet.vegan": "Vegano",
   "diet.vegetarian": "Vegetariano",

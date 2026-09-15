@@ -12,9 +12,6 @@ export function modifierSnapshotLabels(
         return [`${name(snapshot.name)}: ${snapshot.text}`];
       case "options":
         return [`${name(snapshot.name)}: ${name(snapshot.choiceName)}`];
-      case "yes-no":
-        // A yes prints the modifier name; a no prints nothing.
-        return snapshot.value ? [name(snapshot.name)] : [];
       case "extras":
         return [];
     }

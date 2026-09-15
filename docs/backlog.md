@@ -577,7 +577,7 @@ What it left open:
   dashboard tests including both-theme accessibility, the fiscal privilege and immutability suites, and
   the real Veri\*Factu backend accepting a controlled zero-rate sale. What it does not record is the
   plan's own step 8: the single journey through the actual routes against a real database, creating a
-  unit, a category and all four modifier types from inside a dirty product draft and taking the result
+  unit, a category and three modifier types from inside a dirty product draft and taking the result
   through the till. That is the shape of check that #344 showed matters — the image library passed
   review and CI and still returned a 500 to the first person who opened it. **Next action:** walk it
   once on a dev stack before treating the overhaul as finished.
@@ -597,6 +597,10 @@ limits is how many choices you may preselect. Create on the Modifiers list becam
 button beside the heading.
 [Design](superpowers/specs/2026-09-13-modifiers-editing-rework-design.md),
 [plan](superpowers/plans/2026-09-13-modifiers-editing-rework.md).
+_Superseded 2026-09-15:_ the modifier nutrition redesign removed the Yes/no modifier type entirely —
+the server now rejects it — so the Yes/no wording behaviour described above no longer exists. The
+three types are Text, Extras and Options. See
+[the redesign](superpowers/specs/2026-09-15-modifier-nutrition-redesign-design.md).
 
 What it left open:
 
@@ -628,6 +632,12 @@ simply has no dietary effect. Nothing on the till or in the product editor chang
 shared shape requires.
 [Design](superpowers/specs/2026-09-14-modifiers-overhaul-design.md),
 [plan](superpowers/plans/2026-09-14-modifiers-overhaul.md).
+_Superseded 2026-09-15:_ the modifier nutrition redesign dropped the Yes/no type, so no modifier
+keeps a modifier-wide switch — every modifier is now offered as a whole and availability is per
+choice. It also replaced the negative "no longer suitable for" dietary control with a positive
+"suitable for" list over vegan/vegetarian/halal/kosher, and stopped the till and kitchen screens
+combining a dish with its extras. See
+[the redesign](superpowers/specs/2026-09-15-modifier-nutrition-redesign-design.md).
 
 What it left open:
 

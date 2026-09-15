@@ -155,10 +155,7 @@ export interface ZoneMenuOffer {
       readonly addAllergens: Readonly<
         Record<string, { readonly presence: "contains" | "may_contain"; readonly source?: string }>
       > | null;
-      readonly removeAllergens: readonly string[] | null;
-      readonly addOrigins: readonly string[] | null;
-      readonly removeOrigins: readonly string[] | null;
-      readonly dietaryEffect?: { readonly invalidates: readonly string[] } | null;
+      readonly suitableFor?: readonly string[] | null;
     }[];
   }[];
 }

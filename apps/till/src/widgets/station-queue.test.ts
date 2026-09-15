@@ -2,8 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { setContentLanguages } from "@waitron/ui";
 import type { StationThresholds } from "@waitron/shared";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
-import { allergenName } from "../i18n/allergen-names.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { allergenName } from "../i18n/allergen-names.js";
 import { TillStationQueue } from "./station-queue.js";
 import type { StationQueueGroup } from "../api/client.js";
 
@@ -279,6 +279,44 @@ describe("till-station-queue", () => {
       });
       expect(el.shadowRoot!.querySelectorAll(".line-modifiers")).toHaveLength(0);
     });
+
+    it("shows each extra's own allergens and diet on the line, distinct from the dish's own", async () => {
+      const withExtraNutrition: StationQueueGroup = {
+        ...withModifiers,
+        items: [
+          {
+            ...withModifiers.items[0]!,
+            // The DISH declares its own gluten; the EXTRA declares its own milk + halal.
+            asServed: { allergens: { gluten: { presence: "contains" } }, pending: false },
+            modifiers: [
+              {
+                descriptions: { "es-ES": "Bacon" },
+                addAllergens: { milk: { presence: "contains" } },
+                suitableFor: ["halal"],
+              },
+            ],
+          },
+        ],
+      };
+      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+        groups: [withExtraNutrition],
+        view: "rail",
+        stationId: "st-9",
+      });
+      const milkName = allergenName("milk", currentLocale());
+      const optAllergens = el.shadowRoot!.querySelector(
+        '[data-test="item-modifier-allergens-ti-9-0"]',
+      );
+      expect(optAllergens).not.toBeNull();
+      expect(optAllergens!.textContent).toContain(milkName);
+      const optDiet = el.shadowRoot!.querySelector('[data-test="item-modifier-diet-ti-9-0"]');
+      expect(optDiet).not.toBeNull();
+      expect(optDiet!.querySelector("[data-diet='halal']")).not.toBeNull();
+      // The dish's OWN allergen row shows its gluten, a node distinct from the extra's milk (no fold).
+      const dishAllergens = el.shadowRoot!.querySelector('[data-item-allergens="ti-9"]');
+      expect(dishAllergens!.textContent).toMatch(/gluten/i);
+      expect(dishAllergens!.textContent).not.toContain(milkName);
+    });
   });
 
   describe("per-line customisation (Task 5): snapshotted doneness + note as sub-text under the dish", () => {
@@ -390,11 +428,10 @@ describe("till-station-queue", () => {
     });
   });
 
-  describe("as-served allergens (Task 9): contains chips, localised NO <allergen> removals, not-reviewed note", () => {
-    // A fired dish carrying the server-attached as-served profile: it CONTAINS milk (a "+ extra cheese"
-    // option added it) and REMOVED gluten (a "gluten-free bun" option stripped it) — the exact shape
-    // `listStationQueue` returns (Task 8), which the KDS renders as the chips + "NO <allergen>" callout
-    // this suite asserts below.
+  describe("as-served allergens: the dish's own contains chips + not-reviewed note", () => {
+    // A fired dish carrying the server-attached OWN allergen profile: it CONTAINS milk — the exact shape
+    // `listStationQueue` returns, which the KDS renders as the chips this suite asserts below. No modifier
+    // contribution: each dish shows its own figures, and each extra's own list is shown separately.
     const withAllergens: StationQueueGroup = {
       orderId: "wo-a",
       orderNumber: 11,
@@ -412,12 +449,11 @@ describe("till-station-queue", () => {
           course: null,
           firedAt: "2026-08-17T10:00:00.000Z",
           asServed: { allergens: { milk: { presence: "contains" } }, pending: false },
-          removed: ["gluten"],
         },
       ],
     };
 
-    // A dish whose OWN allergens are unreviewed (a null base) — the Cautious fold is `pending`, so the
+    // A dish whose OWN allergens are unreviewed (a null base) — the profile is `pending`, so the
     // KDS must warn the cook the plate is not verified rather than read it as allergen-free.
     const pendingItem: StationQueueGroup = {
       orderId: "wo-p",
@@ -436,63 +472,30 @@ describe("till-station-queue", () => {
           course: null,
           firedAt: "2026-08-17T10:00:00.000Z",
           asServed: { allergens: {}, pending: true },
-          removed: [],
         },
       ],
     };
 
-    it("rail: shows a struck 'NO <allergen>' removal callout and a localised 'Milk' contains chip", async () => {
+    it("rail: shows the dish's own localised 'Milk' contains chip", async () => {
       const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
         groups: [withAllergens],
         view: "rail",
         stationId: "st-a",
       });
       const item = el.shadowRoot!.querySelector('[data-item="ti-a"]')!;
-      // The removal callout localises the code (default locale en-GB) — never the raw English code.
-      const removed = item.querySelector('[data-removed="gluten"]')!;
-      expect(removed).not.toBeNull();
-      expect(removed.textContent).toContain(
-        `${t("allergens.without")} ${allergenName("gluten", currentLocale())}`,
-      );
       expect(item.textContent).toMatch(/milk/i);
     });
 
-    it("kanban: shows the same removal callout and contains chip beneath the cell's dish", async () => {
+    it("kanban: shows the dish's own contains chip beneath the cell's dish", async () => {
       const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
         groups: [withAllergens],
         stationId: "st-a",
       });
       const cell = el.shadowRoot!.querySelector('[data-column="queued"] [data-item="ti-a"]')!;
-      expect(cell.querySelector('[data-removed="gluten"]')!.textContent).toContain(
-        allergenName("gluten", currentLocale()),
-      );
       expect(cell.textContent).toMatch(/milk/i);
     });
 
-    it("localises the removal callout for the operator locale (es-ES shows 'SIN Leche', not 'MILK')", async () => {
-      // A removed MILK code proves localisation: es 'Leche' differs unmistakably from the English code.
-      const esRemoval: StationQueueGroup = {
-        ...withAllergens,
-        items: [
-          { ...withAllergens.items[0]!, id: "ti-es", asServed: undefined, removed: ["milk"] },
-        ],
-      };
-      setLocale("es-ES");
-      try {
-        const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
-          groups: [esRemoval],
-          view: "rail",
-          stationId: "st-es",
-        });
-        const removed = el.shadowRoot!.querySelector('[data-item="ti-es"] [data-removed="milk"]')!;
-        expect(removed.textContent).toContain("SIN Leche");
-        expect(removed.textContent).not.toMatch(/milk/i);
-      } finally {
-        setLocale("en-GB");
-      }
-    });
-
-    it("shows a not-reviewed warning when the as-served fold is pending", async () => {
+    it("shows a not-reviewed warning when the dish's own allergens are pending", async () => {
       const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
         groups: [pendingItem],
         view: "rail",
@@ -502,9 +505,9 @@ describe("till-station-queue", () => {
       expect(item.textContent).toContain(t("allergens.not_reviewed"));
     });
 
-    it("a plain item with no as-served profile and nothing removed renders no allergen row (regression-safe)", async () => {
+    it("a plain item with no as-served profile renders no allergen row (regression-safe)", async () => {
       const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
-        groups, // the top-level fixture — no item carries asServed/removed
+        groups, // the top-level fixture — no item carries asServed
         view: "rail",
         stationId: "st-1",
       });

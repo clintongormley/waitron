@@ -171,13 +171,9 @@ export const optionGroups = pgTable(
       .notNull()
       .references(() => tenants.id),
     name: jsonb("name").$type<Record<string, string>>().notNull(),
-    type: text("type")
-      .$type<"text" | "extras" | "options" | "yes-no">()
-      .notNull()
-      .default("extras"),
+    type: text("type").$type<"text" | "extras" | "options">().notNull().default("extras"),
     maxTotalQuantity: integer("max_total_quantity"),
     defaultChoiceId: uuid("default_choice_id"),
-    defaultValue: boolean("default_value").notNull().default(false),
     minSelect: integer("min_select").notNull().default(0),
     maxSelect: integer("max_select").notNull().default(1),
     required: boolean("required").notNull().default(false),
@@ -185,7 +181,7 @@ export const optionGroups = pgTable(
     active: boolean("active").notNull().default(true),
   },
   (t) => [
-    check("option_groups_type_ck", sql`${t.type} in ('text','extras','options','yes-no')`),
+    check("option_groups_type_ck", sql`${t.type} in ('text','extras','options')`),
     check(
       "option_groups_total_ck",
       sql`${t.maxTotalQuantity} is null or ${t.maxTotalQuantity} >= 1`,
@@ -225,12 +221,9 @@ export const optionGroupItems = pgTable(
     maxQuantity: integer("max_quantity").notNull().default(1),
     preselected: boolean("preselected").notNull().default(false),
     addAllergens: jsonb("add_allergens").$type<AllergenMap>(),
-    // `remove_allergens`: codes this option REMOVES ("gluten-free bun" → gluten). NULL = removes
-    // nothing. A remove only takes effect against a REVIEWED base (Cautious policy, design §4).
-    removeAllergens: jsonb("remove_allergens").$type<string[]>(),
-    addOrigins: jsonb("add_origins").$type<string[]>(),
-    removeOrigins: jsonb("remove_origins").$type<string[]>(),
-    dietaryEffect: jsonb("dietary_effect").$type<{ invalidates: string[] }>(),
+    // The choice's POSITIVE dietary suitability (a subset of vegan/vegetarian/halal/kosher). Replaces
+    // the retired negative `dietary_effect = { invalidates }`; shown per item, never folded.
+    dietarySuitability: jsonb("dietary_suitability").$type<string[]>(),
     sort: integer("sort").notNull().default(0),
     active: boolean("active").notNull().default(true),
   },

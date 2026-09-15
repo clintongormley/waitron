@@ -8,23 +8,33 @@ import { AllergenDietaryPicker, type AllergenDietaryValue } from "./allergen-die
 afterEach(cleanupWidgets);
 
 /**
- * Drives one of the three inner `wt-combobox`es exactly as the real primitive does: set its
- * `.values` and dispatch its `wt-change` carrying `{ values }`. This mirrors wt-combobox's own
- * `dispatchWtChange(this, sourceEvent, { values: this.values })`, so the test exercises the same
- * seam the widget sees in the app rather than a private helper.
+ * Drives the single allergen `wt-combobox` exactly as the real primitive does: set its `.values` and
+ * dispatch its `wt-change` carrying `{ values }`. This mirrors wt-combobox's own
+ * `dispatchWtChange(this, sourceEvent, { values: this.values })`, so the test exercises the same seam
+ * the widget sees in the app rather than a private helper.
  */
-async function pickInCombobox(
-  el: AllergenDietaryPicker,
-  which: "add-allergens" | "remove-allergens" | "dietary",
-  values: string[],
-): Promise<void> {
+async function pickAllergens(el: AllergenDietaryPicker, values: string[]): Promise<void> {
   const combobox = el.shadowRoot!.querySelector<HTMLElement & { values: string[] }>(
-    `[data-test=${which}]`,
+    '[data-test="allergens"]',
   )!;
   combobox.values = values;
   combobox.dispatchEvent(
     new CustomEvent("wt-change", { detail: { values }, bubbles: true, composed: true }),
   );
+  await el.updateComplete;
+}
+
+/** Toggles one dietary checkbox by its label value, firing the native `change` the widget listens for. */
+async function toggleDiet(
+  el: AllergenDietaryPicker,
+  label: string,
+  checked: boolean,
+): Promise<void> {
+  const box = el.shadowRoot!.querySelector<HTMLInputElement>(
+    `[data-test="dietary"] input[value="${label}"]`,
+  )!;
+  box.checked = checked;
+  box.dispatchEvent(new Event("change", { bubbles: true }));
   await el.updateComplete;
 }
 
@@ -36,45 +46,77 @@ function trackChanges(el: AllergenDietaryPicker): AllergenDietaryValue[] {
 }
 
 describe("allergen-dietary-picker", () => {
-  it("emits the three lists on change and keeps adds and removes disjoint", async () => {
-    const { el } = await mountWidget<AllergenDietaryPicker>("dashboard-allergen-dietary-picker", {
-      value: { addAllergens: [], removeAllergens: ["gluten"], dietary: [] },
-    });
-    const changes = trackChanges(el);
-    // Choosing gluten under "adds" must drop it from "removes" (they are mutually exclusive).
-    await pickInCombobox(el, "add-allergens", ["gluten"]);
-    expect(changes.at(-1)).toEqual({ addAllergens: ["gluten"], removeAllergens: [], dietary: [] });
+  it("renders one allergen list and four dietary checkboxes, no remove-allergens control", async () => {
+    const { el } = await mountWidget<AllergenDietaryPicker>(
+      "dashboard-allergen-dietary-picker",
+      {},
+    );
+    expect(el.shadowRoot!.querySelector('[data-test="remove-allergens"]')).toBeNull();
+    expect(el.shadowRoot!.querySelector('[data-test="add-allergens"]')).toBeNull();
+    expect(el.shadowRoot!.querySelector('[data-test="allergens"]')).not.toBeNull();
+    expect(
+      el.shadowRoot!.querySelectorAll('[data-test="dietary"] input[type="checkbox"]').length,
+    ).toBe(4);
   });
 
-  it("drops an allergen from adds when the same code is chosen under removes", async () => {
-    const { el } = await mountWidget<AllergenDietaryPicker>("dashboard-allergen-dietary-picker", {
-      value: { addAllergens: ["milk"], removeAllergens: [], dietary: [] },
-    });
-    const changes = trackChanges(el);
-    await pickInCombobox(el, "remove-allergens", ["milk"]);
-    expect(changes.at(-1)).toEqual({ addAllergens: [], removeAllergens: ["milk"], dietary: [] });
+  it("gives each dietary checkbox a semantic name and a visible label", async () => {
+    const { el } = await mountWidget<AllergenDietaryPicker>(
+      "dashboard-allergen-dietary-picker",
+      {},
+    );
+    const boxes = [
+      ...el.shadowRoot!.querySelectorAll<HTMLInputElement>(
+        '[data-test="dietary"] input[type="checkbox"]',
+      ),
+    ];
+    expect(boxes.map((b) => b.name)).toEqual([
+      "diet-vegan",
+      "diet-vegetarian",
+      "diet-halal",
+      "diet-kosher",
+    ]);
+    // Each checkbox is wrapped by a label whose text is its accessible name.
+    for (const box of boxes) expect(box.closest("label")?.textContent?.trim()).toBeTruthy();
   });
 
-  it("emits the dietary list without disturbing the allergen lists", async () => {
+  it("emits the chosen allergens and re-dispatches only its own wt-change", async () => {
     const { el } = await mountWidget<AllergenDietaryPicker>("dashboard-allergen-dietary-picker", {
-      value: { addAllergens: ["milk"], removeAllergens: ["gluten"], dietary: [] },
+      value: { allergens: [], dietary: [] },
     });
     const changes = trackChanges(el);
-    await pickInCombobox(el, "dietary", ["vegan", "vegetarian"]);
-    expect(changes.at(-1)).toEqual({
-      addAllergens: ["milk"],
-      removeAllergens: ["gluten"],
-      dietary: ["vegan", "vegetarian"],
-    });
+    await pickAllergens(el, ["gluten", "milk"]);
+    // Exactly one event: the inner combobox's own wt-change is stopped, so the consumer never sees two.
+    expect(changes).toHaveLength(1);
+    expect(changes.at(-1)).toEqual({ allergens: ["gluten", "milk"], dietary: [] });
   });
 
-  it("emits empty lists when a selection is cleared", async () => {
+  it("adds a dietary label in canonical order without disturbing the allergens", async () => {
     const { el } = await mountWidget<AllergenDietaryPicker>("dashboard-allergen-dietary-picker", {
-      value: { addAllergens: ["milk"], removeAllergens: [], dietary: ["vegan"] },
+      value: { allergens: ["milk"], dietary: ["vegetarian"] },
     });
     const changes = trackChanges(el);
-    await pickInCombobox(el, "add-allergens", []);
-    expect(changes.at(-1)).toEqual({ addAllergens: [], removeAllergens: [], dietary: ["vegan"] });
+    await toggleDiet(el, "vegan", true);
+    // vegan precedes vegetarian in DIETARY_SUITABILITY, so the emitted list keeps that fixed order.
+    expect(changes.at(-1)).toEqual({ allergens: ["milk"], dietary: ["vegan", "vegetarian"] });
+  });
+
+  it("removes a dietary label when its checkbox is unchecked", async () => {
+    const { el } = await mountWidget<AllergenDietaryPicker>("dashboard-allergen-dietary-picker", {
+      value: { allergens: [], dietary: ["vegan", "halal"] },
+    });
+    const changes = trackChanges(el);
+    await toggleDiet(el, "vegan", false);
+    expect(changes.at(-1)).toEqual({ allergens: [], dietary: ["halal"] });
+  });
+
+  it("checks the boxes that match the current dietary value", async () => {
+    const { el } = await mountWidget<AllergenDietaryPicker>("dashboard-allergen-dietary-picker", {
+      value: { allergens: [], dietary: ["halal", "kosher"] },
+    });
+    const checked = [
+      ...el.shadowRoot!.querySelectorAll<HTMLInputElement>('[data-test="dietary"] input:checked'),
+    ].map((i) => i.value);
+    expect(checked).toEqual(["halal", "kosher"]);
   });
 
   // Token-painting check. No dashboard widget scans its stylesheet yet, so this mirrors the proven

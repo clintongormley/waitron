@@ -17,12 +17,6 @@ export function snapshotSelections(definitions: readonly Modifier[], value: unkn
     const common = { modifierId: definition.id, name: definition.name };
     if (selection.type === "text")
       snapshots.push({ ...common, type: "text", text: selection.text });
-    if (selection.type === "yes-no" && definition.type === "yes-no")
-      snapshots.push({
-        ...common,
-        type: "yes-no",
-        value: selection.value,
-      });
     if (selection.type === "options" && definition.type === "options")
       snapshots.push({
         ...common,
@@ -56,8 +50,6 @@ export function selectionsFromSnapshots(
     switch (snapshot.type) {
       case "text":
         return { ...common, type: "text", text: snapshot.text };
-      case "yes-no":
-        return { ...common, type: "yes-no", value: snapshot.value };
       case "options":
         return { ...common, type: "options", choiceId: snapshot.choiceId };
       case "extras":

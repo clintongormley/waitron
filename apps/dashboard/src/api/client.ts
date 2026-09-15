@@ -192,6 +192,12 @@ export const DIETARY_LABELS = [
 ] as const;
 export type DietaryLabel = (typeof DIETARY_LABELS)[number];
 
+/** The POSITIVE per-choice dietary set a modifier choice declares itself "suitable for" — a
+ * browser-local copy of catalogue's `DIETARY_SUITABILITY` (NOT imported — the #70 bundle rule). Smaller
+ * than {@link DIETARY_LABELS} (the product-recipe set), which keeps `no_meat`/`no_fish`. */
+export const DIETARY_SUITABILITY = ["vegan", "vegetarian", "halal", "kosher"] as const;
+export type DietarySuitability = (typeof DIETARY_SUITABILITY)[number];
+
 /** The contains-tags a diet override may hand-assert / hand-strip — the strictly-smaller subset of
  * {@link DietaryOrigin} the derivation surfaces as `contains`. A LOCAL copy of `@waitron/catalogue`'s
  * `CONTAINS_TAGS` union (no runtime import — the #70 bundle rule). */
@@ -427,13 +433,11 @@ export interface OptionGroup {
   active: boolean;
 }
 
-/** Browser-local canonical modifier definition; choices retain existing dietary effects. */
+/** Browser-local canonical modifier definition; each choice states its own allergens and its positive
+ * dietary suitability (a subset of vegan/vegetarian/halal/kosher). */
 export interface ModifierEffects {
   addAllergens?: AllergenDeclaration;
-  removeAllergens?: string[] | null;
-  addOrigins?: string[] | null;
-  removeOrigins?: string[] | null;
-  dietaryEffect?: { invalidates: DietaryLabel[] } | null;
+  suitableFor?: string[] | null;
 }
 export interface ModifierChoice extends ModifierEffects {
   id: string;
@@ -457,10 +461,6 @@ export type ModifierInput = ModifierCommon &
         choices: ModifierExtraChoice[];
       }
     | { type: "options"; defaultChoiceId: string | null; choices: ModifierChoice[] }
-    | {
-        type: "yes-no";
-        defaultValue: boolean;
-      }
   );
 export type Modifier = ModifierInput & { id: string };
 
@@ -477,21 +477,10 @@ export interface OptionGroupItem {
   active: boolean;
   /** The most of this option a diner may take (`max_quantity`); 1 = no per-option quantity. */
   maxQuantity: number;
-  /** Allergens this option ADDS to the dish it modifies (the three-state declaration — `null` here
-   * means "adds nothing", the picker's PENDING state being inert for an add). Non-optional on the
-   * read row to match the server shape (Task 5). */
+  /** The option's OWN allergens (the three-state declaration — `null` here means "declares none", the
+   * picker's PENDING state being inert for a declaration). Non-optional on the read row to match the
+   * server shape. */
   addAllergens: AllergenDeclaration;
-  /** Allergen codes this option REMOVES from the dish (e.g. "no cheese" removes `milk`), or `null`
-   * for none. A code appearing in both `addAllergens` and here is rejected server-side
-   * (`allergen.add_remove_conflict`). */
-  removeAllergens: string[] | null;
-  /** Dietary ORIGINS this option ADDS to the dish ("add bacon" → ["meat"]), or `null` for none — the
-   * diet twin of `addAllergens` (Task 5 folds these into the as-served diet). */
-  addOrigins: string[] | null;
-  /** Dietary origins this option REMOVES from the dish ("no cheese" → ["dairy"]), or `null` for none.
-   * Unlike allergens an origin add/remove is not a conflict (add wins the fold), so there is no
-   * disjointness check. */
-  removeOrigins: string[] | null;
 }
 
 /** The `POST /management-api/option-groups` body — mirrors catalogue's `CreateOptionGroupInput`.
@@ -532,14 +521,8 @@ export interface OptionGroupItemInput {
   active?: boolean;
   /** The per-option quantity cap; omitted defaults to 1 (no per-option quantity). An integer >= 1. */
   maxQuantity?: number;
-  /** Allergens this option adds / removes (see {@link OptionGroupItem}); omitted (or `null`) adds /
-   * removes nothing. A code in both is rejected `allergen.add_remove_conflict`. */
+  /** The option's OWN allergens (see {@link OptionGroupItem}); omitted (or `null`) declares none. */
   addAllergens?: AllergenDeclaration;
-  removeAllergens?: string[] | null;
-  /** Dietary origins this option adds / removes (see {@link OptionGroupItem}); omitted (or `null`) adds /
-   * removes nothing. Each entry is validated against the origin taxonomy server-side. */
-  addOrigins?: string[] | null;
-  removeOrigins?: string[] | null;
 }
 
 /** The `PATCH /management-api/option-groups/:groupId/items/:itemId` body — mirrors catalogue's
@@ -553,14 +536,9 @@ export interface OptionGroupItemPatch {
   active?: boolean;
   /** Absent leaves the stored value unchanged; a present value is re-validated as an integer >= 1. */
   maxQuantity?: number;
-  /** Allergens this option adds / removes (see {@link OptionGroupItem}); absent leaves each unchanged,
-   * `null` clears it. A code in both is rejected `allergen.add_remove_conflict`. */
+  /** The option's OWN allergens (see {@link OptionGroupItem}); absent leaves it unchanged, `null`
+   * clears it. */
   addAllergens?: AllergenDeclaration;
-  removeAllergens?: string[] | null;
-  /** Dietary origins this option adds / removes (see {@link OptionGroupItem}); absent leaves each
-   * unchanged, `null` clears it. Each present side is validated against the origin taxonomy. */
-  addOrigins?: string[] | null;
-  removeOrigins?: string[] | null;
 }
 
 // ── Ingredient & product-recipe types ─────────────────────────────────────────────────────────────

@@ -868,7 +868,7 @@ describe("mountCatalogueApi — products", () => {
           priceDelta: "1.00",
           maxQuantity: 2,
           preselected: false,
-          dietaryEffect: { invalidates: ["vegan", "halal"] },
+          suitableFor: ["vegan", "halal"],
         },
       ],
     };
@@ -1759,38 +1759,36 @@ describe("mountCatalogueApi — option group items", () => {
     expect(res.status).toBe(204);
   });
 
-  // ── Allergen overlay (modifier↔allergen, Task 5): the routes accept addAllergens/removeAllergens
-  // and defer validation to the ops, exactly as product `allergens` is threaded. ──────────────────
-  it("POST /option-groups/:id/items accepts an allergen overlay and returns it", async () => {
+  // ── Allergen declaration: the routes accept the option's own `addAllergens` and defer validation to
+  // the ops, exactly as product `allergens` is threaded. ───────────────────────────────────────────
+  it("POST /option-groups/:id/items accepts the option's allergens and returns them", async () => {
     const app = mountApp();
-    const g = await createGroupVia(app, { name: { es: "Panes" } });
+    const g = await createGroupVia(app, { name: { es: "Extras" } });
     const res = await send(app, "POST", `/management-api/option-groups/${g.id}/items`, {
-      body: { name: { en: "Gluten-free bun", es: "Pan sin gluten" }, removeAllergens: ["gluten"] },
+      body: {
+        name: { en: "Extra cheese", es: "Queso extra" },
+        addAllergens: { milk: { presence: "contains" } },
+      },
     });
     expect(res.status).toBe(201);
     expect((await res.json()) as Record<string, unknown>).toMatchObject({
-      addAllergens: null,
-      removeAllergens: ["gluten"],
+      addAllergens: { milk: { presence: "contains" } },
     });
   });
 
-  it("POST /option-groups/:id/items 400s on a conflicting overlay", async () => {
+  it("POST /option-groups/:id/items 400s on a non-EU-14 allergen code", async () => {
     const app = mountApp();
     const g = await createGroupVia(app, { name: { es: "x" } });
     const res = await send(app, "POST", `/management-api/option-groups/${g.id}/items`, {
-      body: {
-        name: { en: "x", es: "x" },
-        addAllergens: { gluten: { presence: "contains" } },
-        removeAllergens: ["gluten"],
-      },
+      body: { name: { en: "x", es: "x" }, addAllergens: { wombat: { presence: "contains" } } },
     });
     expect(res.status).toBe(400);
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
-      error: { code: "allergen.add_remove_conflict" },
+      error: { code: "allergen.invalid_code" },
     });
   });
 
-  it("PATCH /option-groups/:id/items/:itemId threads an allergen overlay (204) and it lands", async () => {
+  it("PATCH /option-groups/:id/items/:itemId threads the option's allergens (204) and they land", async () => {
     const app = mountApp();
     const g = await createGroupVia(app, { name: { es: "x" } });
     const created = await send(app, "POST", `/management-api/option-groups/${g.id}/items`, {
@@ -1798,10 +1796,7 @@ describe("mountCatalogueApi — option group items", () => {
     });
     const itemId = ((await created.json()) as { id: string }).id;
     const res = await send(app, "PATCH", `/management-api/option-groups/${g.id}/items/${itemId}`, {
-      body: {
-        addAllergens: { milk: { presence: "contains" } },
-        removeAllergens: ["gluten"],
-      },
+      body: { addAllergens: { milk: { presence: "contains" } } },
     });
     expect(res.status).toBe(204);
     const rows = (await (
@@ -1809,93 +1804,6 @@ describe("mountCatalogueApi — option group items", () => {
     ).json()) as Record<string, unknown>[];
     expect(rows.find((r) => r["id"] === itemId)).toMatchObject({
       addAllergens: { milk: { presence: "contains" } },
-      removeAllergens: ["gluten"],
-    });
-  });
-
-  it("PATCH /option-groups/:id/items/:itemId 400s on a conflicting overlay", async () => {
-    const app = mountApp();
-    const g = await createGroupVia(app, { name: { es: "x" } });
-    const created = await send(app, "POST", `/management-api/option-groups/${g.id}/items`, {
-      body: { name: { es: "x" } },
-    });
-    const itemId = ((await created.json()) as { id: string }).id;
-    const res = await send(app, "PATCH", `/management-api/option-groups/${g.id}/items/${itemId}`, {
-      body: {
-        addAllergens: { gluten: { presence: "contains" } },
-        removeAllergens: ["gluten"],
-      },
-    });
-    expect(res.status).toBe(400);
-    expect((await res.json()) as { error: { code: string } }).toMatchObject({
-      error: { code: "allergen.add_remove_conflict" },
-    });
-  });
-
-  // ── Origin overlay (Task 4): the diet twin of the allergen overlay — the routes accept
-  // addOrigins/removeOrigins and defer validation to the ops. ──────────────────────────────────────
-  it("POST /option-groups/:id/items accepts an origin overlay and returns it", async () => {
-    const app = mountApp();
-    const g = await createGroupVia(app, { name: { es: "Extras" } });
-    const res = await send(app, "POST", `/management-api/option-groups/${g.id}/items`, {
-      body: {
-        name: { en: "Add bacon", es: "Añadir beicon" },
-        addOrigins: ["meat"],
-        removeOrigins: ["dairy"],
-      },
-    });
-    expect(res.status).toBe(201);
-    expect((await res.json()) as Record<string, unknown>).toMatchObject({
-      addOrigins: ["meat"],
-      removeOrigins: ["dairy"],
-    });
-  });
-
-  it("POST /option-groups/:id/items 400s on a non-origin addOrigins entry", async () => {
-    const app = mountApp();
-    const g = await createGroupVia(app, { name: { es: "x" } });
-    const res = await send(app, "POST", `/management-api/option-groups/${g.id}/items`, {
-      body: { name: { en: "x", es: "x" }, addOrigins: ["wombat"] },
-    });
-    expect(res.status).toBe(400);
-    expect(
-      (await res.json()) as { error: { code: string; params: { origin: string } } },
-    ).toMatchObject({ error: { code: "diet.invalid_origin", params: { origin: "wombat" } } });
-  });
-
-  it("PATCH /option-groups/:id/items/:itemId threads an origin overlay (204) and it lands", async () => {
-    const app = mountApp();
-    const g = await createGroupVia(app, { name: { es: "x" } });
-    const created = await send(app, "POST", `/management-api/option-groups/${g.id}/items`, {
-      body: { name: { es: "x" } },
-    });
-    const itemId = ((await created.json()) as { id: string }).id;
-    const res = await send(app, "PATCH", `/management-api/option-groups/${g.id}/items/${itemId}`, {
-      body: { addOrigins: ["meat"], removeOrigins: ["fish"] },
-    });
-    expect(res.status).toBe(204);
-    const rows = (await (
-      await send(app, "GET", `/management-api/option-groups/${g.id}/items`)
-    ).json()) as Record<string, unknown>[];
-    expect(rows.find((r) => r["id"] === itemId)).toMatchObject({
-      addOrigins: ["meat"],
-      removeOrigins: ["fish"],
-    });
-  });
-
-  it("PATCH /option-groups/:id/items/:itemId 400s on a non-origin removeOrigins entry", async () => {
-    const app = mountApp();
-    const g = await createGroupVia(app, { name: { es: "x" } });
-    const created = await send(app, "POST", `/management-api/option-groups/${g.id}/items`, {
-      body: { name: { es: "x" } },
-    });
-    const itemId = ((await created.json()) as { id: string }).id;
-    const res = await send(app, "PATCH", `/management-api/option-groups/${g.id}/items/${itemId}`, {
-      body: { removeOrigins: ["wombat"] },
-    });
-    expect(res.status).toBe(400);
-    expect((await res.json()) as { error: { code: string } }).toMatchObject({
-      error: { code: "diet.invalid_origin" },
     });
   });
 });

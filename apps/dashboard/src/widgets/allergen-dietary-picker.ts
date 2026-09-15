@@ -3,27 +3,24 @@ import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-combobox.js";
 import { ALLERGEN_CODES, allergenName } from "../i18n/domain.js";
-import { DIETARY_LABELS, type DietaryLabel } from "../api/client.js";
+import { DIETARY_SUITABILITY, type DietarySuitability } from "../api/client.js";
 import { t } from "../i18n/t.js";
 
 /**
- * What a caller (a modifier choice today, a product editor later) has said an option does to a
- * dish: the allergens it ADDS, the allergens it REMOVES, and the dietary preferences it rules out.
- * `addAllergens`/`removeAllergens` are always disjoint — the same code cannot be both added and
- * removed — which this widget enforces on every change.
+ * What a caller (a modifier choice today, a product editor later) has said an option is: the
+ * allergens it CONTAINS, and the dietary preferences it is SUITABLE FOR. Both are plain code lists.
  */
 export interface AllergenDietaryValue {
-  addAllergens: string[];
-  removeAllergens: string[];
-  dietary: DietaryLabel[];
+  allergens: string[];
+  dietary: DietarySuitability[];
 }
 
-const EMPTY: AllergenDietaryValue = { addAllergens: [], removeAllergens: [], dietary: [] };
+const EMPTY: AllergenDietaryValue = { allergens: [], dietary: [] };
 
 /**
- * Three multi-select comboboxes over the shared allergen and dietary vocabularies. It is domain-blind:
- * it knows nothing about modifiers or products, only that a thing can add allergens, remove allergens
- * and invalidate dietary claims. Consumers bind `.value` and listen for `wt-change`.
+ * One allergen multi-select plus a four-item dietary checklist over the shared vocabularies. It is
+ * domain-blind: it knows nothing about modifiers or products, only that a thing contains allergens
+ * and is suitable for dietary preferences. Consumers bind `.value` and listen for `wt-change`.
  */
 @customElement("dashboard-allergen-dietary-picker")
 export class AllergenDietaryPicker extends LitElement {
@@ -33,6 +30,29 @@ export class AllergenDietaryPicker extends LitElement {
       :host {
         display: grid;
         gap: var(--wt-space-3);
+      }
+      fieldset {
+        display: grid;
+        gap: var(--wt-space-2);
+        margin: 0;
+        padding: var(--wt-space-3);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-md);
+      }
+      legend {
+        padding-inline: var(--wt-space-1);
+        font-weight: var(--wt-font-weight-bold);
+      }
+      .diet {
+        display: flex;
+        align-items: center;
+        gap: var(--wt-space-2);
+        font: inherit;
+      }
+      .diet input {
+        min-width: var(--wt-tap-min);
+        min-height: var(--wt-tap-min);
+        accent-color: var(--wt-color-primary);
       }
     `,
   ];
@@ -51,57 +71,55 @@ export class AllergenDietaryPicker extends LitElement {
     return ALLERGEN_CODES.map((code) => ({ value: code, label: allergenName(code) }));
   }
 
-  #onAdd(event: CustomEvent<{ values: string[] }>): void {
+  #onAllergens(event: CustomEvent<{ values: string[] }>): void {
     // wt-combobox already stops its own source event; stop this re-dispatched one before we emit ours
     // so a consumer never sees the inner combobox's wt-change alongside the widget's.
     event.stopPropagation();
-    const addAllergens = event.detail.values;
-    // Disjoint: anything now added is dropped from removes.
-    const removeAllergens = this.value.removeAllergens.filter((c) => !addAllergens.includes(c));
-    this.#emit({ ...this.value, addAllergens, removeAllergens });
+    this.#emit({ ...this.value, allergens: event.detail.values });
   }
 
-  #onRemove(event: CustomEvent<{ values: string[] }>): void {
+  #onDietary(event: Event): void {
+    // The native checkbox change does not compose out of the shadow root, but stopping it keeps the
+    // "re-emit exactly one wt-change" contract explicit rather than relying on that detail.
     event.stopPropagation();
-    const removeAllergens = event.detail.values;
-    const addAllergens = this.value.addAllergens.filter((c) => !removeAllergens.includes(c));
-    this.#emit({ ...this.value, addAllergens, removeAllergens });
-  }
-
-  #onDietary(event: CustomEvent<{ values: string[] }>): void {
-    event.stopPropagation();
-    this.#emit({ ...this.value, dietary: event.detail.values as DietaryLabel[] });
+    const chosen = new Set(this.value.dietary);
+    const input = event.target as HTMLInputElement;
+    if (input.checked) chosen.add(input.value as DietarySuitability);
+    else chosen.delete(input.value as DietarySuitability);
+    // Keep the canonical DIETARY_SUITABILITY order so the emitted list is deterministic.
+    this.#emit({
+      ...this.value,
+      dietary: DIETARY_SUITABILITY.filter((label) => chosen.has(label)),
+    });
   }
 
   override render() {
     return html`
       <wt-combobox
         multiple
-        data-test="add-allergens"
-        label=${t("modifiers.add_allergen")}
+        data-test="allergens"
+        label=${t("modifiers.allergens")}
         ?disabled=${this.busy}
         .options=${this.#allergenOptions()}
-        .values=${this.value.addAllergens}
-        @wt-change=${(e: CustomEvent<{ values: string[] }>) => this.#onAdd(e)}
+        .values=${this.value.allergens}
+        @wt-change=${(e: CustomEvent<{ values: string[] }>) => this.#onAllergens(e)}
       ></wt-combobox>
-      <wt-combobox
-        multiple
-        data-test="remove-allergens"
-        label=${t("modifiers.remove_allergen")}
-        ?disabled=${this.busy}
-        .options=${this.#allergenOptions()}
-        .values=${this.value.removeAllergens}
-        @wt-change=${(e: CustomEvent<{ values: string[] }>) => this.#onRemove(e)}
-      ></wt-combobox>
-      <wt-combobox
-        multiple
-        data-test="dietary"
-        label=${t("modifiers.invalidates_dietary")}
-        ?disabled=${this.busy}
-        .options=${DIETARY_LABELS.map((l) => ({ value: l, label: t(`editor.diet.${l}`) }))}
-        .values=${this.value.dietary}
-        @wt-change=${(e: CustomEvent<{ values: string[] }>) => this.#onDietary(e)}
-      ></wt-combobox>
+      <fieldset data-test="dietary">
+        <legend>${t("modifiers.dietary_preferences")}</legend>
+        ${DIETARY_SUITABILITY.map(
+          (label) =>
+            html`<label class="diet"
+              ><input
+                type="checkbox"
+                name=${`diet-${label}`}
+                value=${label}
+                ?disabled=${this.busy}
+                .checked=${this.value.dietary.includes(label)}
+                @change=${(e: Event) => this.#onDietary(e)}
+              /><span>${t(`editor.diet.${label}`)}</span></label
+            >`,
+        )}
+      </fieldset>
     `;
   }
 }

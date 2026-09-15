@@ -3051,17 +3051,6 @@ async function modifierOfferFixture() {
       { type: "text", name: { es: "Nota" }, available: true },
       "es",
     );
-    const answer = await createModifier(
-      tx,
-      cfg.tenantId,
-      {
-        type: "yes-no",
-        name: { es: "Cubiertos" },
-        available: true,
-        defaultValue: true,
-      },
-      "es",
-    );
     const option = await createModifier(
       tx,
       cfg.tenantId,
@@ -3099,12 +3088,7 @@ async function modifierOfferFixture() {
       },
       "es",
     );
-    await setProductOptionGroups(tx, cfg.tenantId, product.id, [
-      note.id,
-      answer.id,
-      option.id,
-      extra.id,
-    ]);
+    await setProductOptionGroups(tx, cfg.tenantId, product.id, [note.id, option.id, extra.id]);
     const section = await createMenuSection(tx, cfg.tenantId, {
       menuId: aguaProduct.catalogueId,
       name: { es: "Pruebas" },
@@ -3117,26 +3101,18 @@ async function modifierOfferFixture() {
     });
     await setMenuItemOptionGroups(tx, cfg.tenantId, offer.id, [
       { groupId: note.id, options: [] },
-      { groupId: answer.id, options: [] },
       { groupId: option.id, options: [{ optionId: choiceId, priceDelta: "0.00" }] },
       { groupId: extra.id, options: [{ optionId: extraId, priceDelta: "0.35" }] },
     ]);
-    return { product, offer, note, answer, option, extra };
+    return { product, offer, note, option, extra };
   });
   const selections: ModifierSelection[] = [
     { modifierId: data.note.id, type: "text", text: "<b>sin sal</b>" },
-    { modifierId: data.answer.id, type: "yes-no", value: false },
     { modifierId: data.option.id, type: "options", choiceId },
     { modifierId: data.extra.id, type: "extras", choices: [{ choiceId: extraId, quantity: 2 }] },
   ];
   const snapshots: ModifierSnapshot[] = [
     { modifierId: data.note.id, type: "text", name: { es: "Nota" }, text: "<b>sin sal</b>" },
-    {
-      modifierId: data.answer.id,
-      type: "yes-no",
-      name: { es: "Cubiertos" },
-      value: false,
-    },
     {
       modifierId: data.option.id,
       type: "options",
@@ -3159,7 +3135,7 @@ async function modifierOfferFixture() {
 }
 
 describe("canonical modifier HTTP serialization", () => {
-  it("publishes all four modes, parks explicit answers and prices published extras exactly", async () => {
+  it("publishes every mode, parks explicit answers and prices published extras exactly", async () => {
     const f = await modifierOfferFixture();
     const products = await f.app.request("/api/products", { headers: f.headers });
     expect(products.status).toBe(200);
@@ -3170,7 +3146,7 @@ describe("canonical modifier HTTP serialization", () => {
       productBody.products
         .find((product) => product.id === f.product.id)!
         .modifiers.map((modifier) => modifier.type),
-    ).toEqual(["text", "yes-no", "options", "extras"]);
+    ).toEqual(["text", "options", "extras"]);
     const offers = await f.app.request("/api/default-service-zone/offers", { headers: f.headers });
     expect(offers.status).toBe(200);
     const offerBody = (await offers.json()) as { offers: { id: string; modifiers: Modifier[] }[] };
@@ -3219,12 +3195,16 @@ describe("canonical modifier HTTP serialization", () => {
       await updateModifier(
         tx,
         cfg.tenantId,
-        f.answer.id,
+        f.option.id,
         {
-          type: "yes-no",
+          type: "options",
           name: { es: "Nombre nuevo" },
-          defaultValue: true,
           available: true,
+          choices: [
+            { id: f.choiceId, name: { es: "Nuevo frío" }, available: true },
+            { id: f.otherChoiceId, name: { es: "Caliente" }, available: true },
+          ],
+          defaultChoiceId: null,
         },
         "es",
       );

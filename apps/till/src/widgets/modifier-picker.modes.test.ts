@@ -42,19 +42,12 @@ const product = {
       defaultChoiceId: "salad",
       choices: [{ id: "salad", name: { es: "Ensalada" }, available: true }],
     },
-    {
-      id: "cut",
-      name: { es: "Cortar" },
-      available: true,
-      type: "yes-no",
-      defaultValue: false,
-    },
   ],
 } satisfies TillProduct;
 
 afterEach(cleanupWidgets);
 
-it("seeds all four modes once and sends explicit false, literal text and selected quantities", async () => {
+it("seeds every mode once and sends literal text and selected quantities", async () => {
   const store = new WorkingOrderStore();
   const { el: grid } = await mountWidget<TillProductGrid>("till-product-grid", {
     products: [product],
@@ -81,40 +74,10 @@ it("seeds all four modes once and sends explicit false, literal text and selecte
     { modifierId: "note", type: "text", text: " <b>Happy day</b> " },
     { modifierId: "extra", type: "extras", choices: [{ choiceId: "cheese", quantity: 2 }] },
     { modifierId: "side", type: "options", choiceId: "salad" },
-    { modifierId: "cut", type: "yes-no", value: false },
   ]);
   expect(formatMoney(store.total)).toBe(formatMoney("10.00"));
   expect(store.lines[0]?.modifierSnapshots?.find((entry) => entry.type === "text")).toMatchObject({
     text: " <b>Happy day</b> ",
-  });
-});
-
-it("renders a yes/no modifier as a toggle and preserves an explicit no", async () => {
-  const store = new WorkingOrderStore();
-  const yesNo = {
-    ...product,
-    modifiers: [
-      { id: "cut", name: { es: "Cortar" }, available: true, type: "yes-no", defaultValue: true },
-    ],
-  } satisfies TillProduct;
-  const { el: grid } = await mountWidget<TillProductGrid>("till-product-grid", {
-    products: [yesNo],
-    store,
-  });
-  grid.shadowRoot!.querySelector<HTMLElement>(".tile")!.click();
-  await grid.updateComplete;
-  const picker = grid.shadowRoot!.querySelector<TillModifierPicker>("till-modifier-picker")!;
-  await picker.updateComplete;
-  const toggle = picker.shadowRoot!.querySelector<HTMLElement>('wt-switch[name="modifier-cut"]');
-  expect(toggle).not.toBeNull();
-  // The default answer is yes; the operator switches it off, and the explicit no must survive.
-  toggle!.dispatchEvent(new CustomEvent("wt-change", { detail: { checked: false } }));
-  await picker.updateComplete;
-  picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!.click();
-  expect(store.lines[0]?.modifierSelections).toContainEqual({
-    modifierId: "cut",
-    type: "yes-no",
-    value: false,
   });
 });
 
@@ -219,14 +182,13 @@ it("reopens an explicit draft without reapplying defaults to an empty extras sel
     initialSelections: [
       { modifierId: "extra", type: "extras", choices: [] },
       { modifierId: "side", type: "options", choiceId: "salad" },
-      { modifierId: "cut", type: "yes-no", value: false },
     ],
   });
   expect(el.shadowRoot!.querySelector('[data-test="opt-cheese-count"]')!.textContent).toBe("0");
 });
 
 describe.each(["light", "dark"] as const)("modifier modes accessibility (%s)", (theme) => {
-  it("exposes labels and keyboard controls for all four modes", async () => {
+  it("exposes labels and keyboard controls for every mode", async () => {
     const { host } = await mountWidget<TillModifierPicker>(
       "till-modifier-picker",
       { product },

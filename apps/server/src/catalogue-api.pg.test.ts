@@ -511,7 +511,6 @@ describe("canonical modifier routes", () => {
         choices: [{ id: choiceId, name, priceDelta: "1.20", maxQuantity: 2, preselected: true }],
       },
       { type: "options", name, choices: [{ id: crypto.randomUUID(), name }] },
-      { type: "yes-no", name, defaultValue: false },
     ];
     const saved: unknown[] = [];
     for (const body of bodies) {
@@ -524,10 +523,9 @@ describe("canonical modifier routes", () => {
       );
       expect(response.status).toBe(201);
       const { modifier } = (await response.json()) as {
-        modifier: { id: string; type: string; defaultValue?: boolean };
+        modifier: { id: string; type: string };
       };
       expect(modifier).toMatchObject({ ...body, available: true });
-      if (body.type === "yes-no") expect(modifier.defaultValue).toBe(false);
       const read = await send(
         app,
         "GET",
@@ -556,7 +554,7 @@ describe("canonical modifier routes", () => {
           r.json(),
         )) as { modifiers: unknown[] }
       ).modifiers,
-    ).toHaveLength(4);
+    ).toHaveLength(3);
   });
   it("refuses another tenant's manager and staff", async () => {
     const venue = await setupVenue();

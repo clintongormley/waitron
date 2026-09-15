@@ -2,13 +2,10 @@ import { describe, it, expect } from "vitest";
 import {
   deriveDietProfile,
   overlayDietProfile,
-  deriveAsServedDiet,
   validateOrigin,
-  validateOrigins,
   validateContainsTag,
   validateDietOverride,
   assertDietOverrideDisjoint,
-  type DietDerivation,
   type DietOverride,
   type DietProfile,
 } from "./dietary.js";
@@ -88,71 +85,6 @@ describe("overlayDietProfile", () => {
   });
 });
 
-describe("deriveAsServedDiet", () => {
-  it("remove dairy from a reviewed {plant,dairy} → vegan", () => {
-    const d: DietDerivation = { origins: ["dairy", "plant"], pending: false };
-    expect(deriveAsServedDiet(d, null, [{ add: null, remove: ["dairy"] }]).vegan).toBe("yes");
-  });
-  it("add meat → not vegetarian, contains meat", () => {
-    const d: DietDerivation = { origins: ["plant"], pending: false };
-    const out = deriveAsServedDiet(d, null, [{ add: ["meat"], remove: null }]);
-    expect(out).toMatchObject({ vegan: "no", vegetarian: "no", contains: ["meat"] });
-  });
-  it("CRUX: remove over a PENDING base cannot manufacture vegan", () => {
-    const d: DietDerivation = { origins: ["dairy"], pending: true };
-    expect(deriveAsServedDiet(d, null, [{ add: null, remove: ["dairy"] }]).vegan).toBe("unknown");
-  });
-  it("CRUX: add meat downgrades even when base is pending", () => {
-    const d: DietDerivation = { origins: ["plant"], pending: true };
-    expect(deriveAsServedDiet(d, null, [{ add: ["meat"], remove: null }]).contains).toEqual([
-      "meat",
-    ]);
-  });
-
-  // The as-served cap (final-review fix): an option ADD can only DOWNGRADE a forced-positive
-  // vegan/vegetarian label — never let the owner's forced positive stand on a plate an added origin
-  // has made unsuitable. Prove-by-deletion target: remove the cap and the first two fail.
-  it("CAP: forced vegan:'yes' + add meat → vegan:'no', contains meat (false positive prevented)", () => {
-    const d: DietDerivation = { origins: ["plant"], pending: false };
-    const out = deriveAsServedDiet(d, { vegan: "yes" }, [{ add: ["meat"], remove: null }]);
-    expect(out.vegan).toBe("no");
-    expect(out.contains).toContain("meat");
-  });
-  it("CAP: forced vegetarian:'yes' + add meat → vegetarian:'no'", () => {
-    const d: DietDerivation = { origins: ["plant"], pending: false };
-    const out = deriveAsServedDiet(d, { vegetarian: "yes" }, [{ add: ["meat"], remove: null }]);
-    expect(out.vegetarian).toBe("no");
-  });
-  it("CAP: forced vegan:'yes' + add dairy → vegan:'no' but vegetarian:'yes' (dairy is veg-ok)", () => {
-    const d: DietDerivation = { origins: ["plant"], pending: false };
-    const out = deriveAsServedDiet(d, { vegan: "yes" }, [{ add: ["dairy"], remove: null }]);
-    expect(out.vegan).toBe("no");
-    expect(out.vegetarian).toBe("yes");
-  });
-  it("CAP: forced vegan:'yes' with NO incompatible add (only a remove) still stands", () => {
-    const d: DietDerivation = { origins: ["dairy"], pending: false };
-    const out = deriveAsServedDiet(d, { vegan: "yes" }, [{ add: null, remove: ["dairy"] }]);
-    expect(out.vegan).toBe("yes"); // base override preserved — no add downgraded it
-  });
-  it("CAP: halal/kosher forced values are UNCHANGED by an add (no origin→halal/kosher signal)", () => {
-    const d: DietDerivation = { origins: ["plant"], pending: false };
-    const out = deriveAsServedDiet(d, { halal: "yes", kosher: "yes" }, [
-      { add: ["meat"], remove: null },
-    ]);
-    expect(out.halal).toBe("yes");
-    expect(out.kosher).toBe("yes");
-  });
-
-  it("add WINS over a remove of the same origin across options (cross-option conflict)", () => {
-    const d: DietDerivation = { origins: ["meat", "plant"], pending: false };
-    const out = deriveAsServedDiet(d, null, [
-      { add: null, remove: ["meat"] },
-      { add: ["meat"], remove: null },
-    ]);
-    expect(out.contains).toContain("meat");
-  });
-});
-
 describe("validateOrigin / assertDietOverrideDisjoint", () => {
   it("accepts a valid origin, rejects junk", () => {
     expect(validateOrigin("meat")).toBe("meat");
@@ -170,17 +102,6 @@ describe("validateOrigin / assertDietOverrideDisjoint", () => {
     expect(() => assertDietOverrideDisjoint(null)).not.toThrow();
     expect(() => assertDietOverrideDisjoint({ addContains: ["meat"] })).not.toThrow();
     expect(() => assertDietOverrideDisjoint({ removeContains: ["meat"] })).not.toThrow();
-  });
-});
-
-describe("validateOrigins (Task 4)", () => {
-  it("returns the narrowed list for valid origins", () => {
-    expect(validateOrigins(["meat", "dairy"])).toEqual(["meat", "dairy"]);
-    expect(validateOrigins([])).toEqual([]);
-  });
-  it("rejects a non-array and a non-origin entry", () => {
-    expect(() => validateOrigins("meat")).toThrow(/diet.invalid_origin/);
-    expect(() => validateOrigins(["meat", "wombat"])).toThrow(/diet.invalid_origin/);
   });
 });
 

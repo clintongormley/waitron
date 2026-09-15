@@ -3,8 +3,8 @@ import { setContentLanguages } from "@waitron/ui";
 import type { StationThresholds } from "@waitron/shared";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
-import { allergenName } from "../i18n/allergen-names.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { allergenName } from "../i18n/allergen-names.js";
 import { TillExpoScreen } from "./till-expo-screen.js";
 import type { ExpoItem, ExpoOrder, TillApi } from "../api/client.js";
 
@@ -252,6 +252,39 @@ describe("till-expo-screen", () => {
     }
   });
 
+  it("shows each extra's own allergens and diet on the pass, distinct from the dish's own", async () => {
+    const item: ExpoItem = {
+      ...threeCourseOrder.courses[0]!.items[0]!,
+      // The DISH declares its own gluten; the EXTRA declares its own milk + halal.
+      asServed: { allergens: { gluten: { presence: "contains" } }, pending: false },
+      modifiers: [
+        {
+          descriptions: { "es-ES": "Bacon" },
+          addAllergens: { milk: { presence: "contains" } },
+          suitableFor: ["halal"],
+        },
+      ],
+    };
+    const order: ExpoOrder = {
+      ...threeCourseOrder,
+      courses: [{ ...threeCourseOrder.courses[0]!, items: [item] }],
+    };
+    const el = await mount({ api: stubApi([order]) });
+    const milkName = allergenName("milk", currentLocale());
+    const optAllergens = el.shadowRoot!.querySelector(
+      `[data-test="item-modifier-allergens-${item.id}-0"]`,
+    );
+    expect(optAllergens).not.toBeNull();
+    expect(optAllergens!.textContent).toContain(milkName);
+    const optDiet = el.shadowRoot!.querySelector(`[data-test="item-modifier-diet-${item.id}-0"]`);
+    expect(optDiet).not.toBeNull();
+    expect(optDiet!.querySelector("[data-diet='halal']")).not.toBeNull();
+    // The dish's OWN allergen row shows its gluten, a node distinct from the extra's milk (no fold).
+    const dishAllergens = el.shadowRoot!.querySelector(`[data-item-allergens="${item.id}"]`);
+    expect(dishAllergens!.textContent).toMatch(/gluten/i);
+    expect(dishAllergens!.textContent).not.toContain(milkName);
+  });
+
   it("registers as a custom element", () => {
     expect(customElements.get("till-expo-screen")).toBe(TillExpoScreen);
   });
@@ -443,10 +476,9 @@ describe("till-expo-screen", () => {
     });
   });
 
-  describe("as-served allergens (Task 9): contains chips, localised NO <allergen> removals, not-reviewed note", () => {
-    // A fired pass item carrying the server-attached as-served profile: CONTAINS milk and REMOVED
-    // gluten — the exact shape `listExpoQueue` returns (Task 8), which the pass renders as the chips +
-    // removal callout this suite asserts below.
+  describe("as-served allergens: the dish's own contains chips + not-reviewed note", () => {
+    // A fired pass item carrying the server-attached OWN allergen profile: CONTAINS milk — the exact
+    // shape `listExpoQueue` returns, which the pass renders as the chips this suite asserts below.
     const orderWithAllergens: ExpoOrder = {
       orderId: "wo-a",
       orderNumber: 11,
@@ -472,7 +504,6 @@ describe("till-expo-screen", () => {
               thresholds: DEFAULT_THRESHOLDS,
               band: "fresh",
               asServed: { allergens: { milk: { presence: "contains" } }, pending: false },
-              removed: ["gluten"],
             },
             {
               id: "ti-p",
@@ -485,65 +516,28 @@ describe("till-expo-screen", () => {
               queuedAt: FIRED,
               thresholds: DEFAULT_THRESHOLDS,
               band: "fresh",
-              // Own allergens unreviewed (null base) ⇒ the Cautious fold is pending.
+              // Own allergens unreviewed (null base) ⇒ the Cautious profile is pending.
               asServed: { allergens: {}, pending: true },
-              removed: [],
             },
           ],
         },
       ],
     };
 
-    it("shows a struck 'NO <allergen>' removal callout and a localised 'Milk' contains chip", async () => {
+    it("shows the dish's own localised 'Milk' contains chip", async () => {
       const el = await mount({ api: stubApi([orderWithAllergens]) });
       const item = el.shadowRoot!.querySelector<HTMLElement>('[data-item="ti-a"]')!;
-      // The removal callout localises the code (default locale en-GB) — never the raw English code.
-      const removed = item.querySelector('[data-removed="gluten"]')!;
-      expect(removed).not.toBeNull();
-      expect(removed.textContent).toContain(
-        `${t("allergens.without")} ${allergenName("gluten", currentLocale())}`,
-      );
       expect(item.textContent).toMatch(/milk/i);
     });
 
-    it("localises the removal callout for the operator locale (es-ES shows 'SIN Leche', not 'MILK')", async () => {
-      const esOrder: ExpoOrder = {
-        ...orderWithAllergens,
-        courses: [
-          {
-            ...orderWithAllergens.courses[0]!,
-            items: [
-              {
-                ...orderWithAllergens.courses[0]!.items[0]!,
-                id: "ti-es",
-                asServed: undefined,
-                removed: ["milk"],
-              },
-            ],
-          },
-        ],
-      };
-      setLocale("es-ES");
-      try {
-        const el = await mount({ api: stubApi([esOrder]) });
-        const removed = el.shadowRoot!.querySelector<HTMLElement>(
-          '[data-item="ti-es"] [data-removed="milk"]',
-        )!;
-        expect(removed.textContent).toContain("SIN Leche");
-        expect(removed.textContent).not.toMatch(/milk/i);
-      } finally {
-        setLocale("en-GB");
-      }
-    });
-
-    it("shows a not-reviewed warning when the as-served fold is pending", async () => {
+    it("shows a not-reviewed warning when the dish's own allergens are pending", async () => {
       const el = await mount({ api: stubApi([orderWithAllergens]) });
       const item = el.shadowRoot!.querySelector<HTMLElement>('[data-item="ti-p"]')!;
       expect(item.textContent).toContain(t("allergens.not_reviewed"));
     });
 
-    it("a plain item with no as-served profile and nothing removed renders no allergen row (regression-safe)", async () => {
-      const el = await mount({ api: stubApi() }); // threeCourseOrder — no item carries asServed/removed
+    it("a plain item with no as-served profile renders no allergen row (regression-safe)", async () => {
+      const el = await mount({ api: stubApi() }); // threeCourseOrder — no item carries asServed
       expect(el.shadowRoot!.querySelectorAll(".item-allergens")).toHaveLength(0);
     });
   });

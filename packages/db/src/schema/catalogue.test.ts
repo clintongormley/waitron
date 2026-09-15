@@ -97,17 +97,18 @@ describe("catalogue — menu, taxonomy and priced items", () => {
     ]);
   });
 
-  it("option_group_items carries the nullable add_origins/remove_origins jsonb columns", async () => {
+  it("option_group_items keeps only add_allergens; remove_allergens/add_origins/remove_origins are dropped", async () => {
     const cols = await rows<{ column_name: string; data_type: string; is_nullable: string }>(
       db,
       sql`select column_name, data_type, is_nullable from information_schema.columns
           where table_name = 'option_group_items'
-            and column_name in ('add_origins','remove_origins')
+            and column_name in ('add_allergens','remove_allergens','add_origins','remove_origins')
           order by column_name`,
     );
+    // The nutrition redesign collapsed a choice's allergens to a single "contains" list: only
+    // add_allergens survives; the removes list and the two origin lists are gone.
     expect(cols).toEqual([
-      { column_name: "add_origins", data_type: "jsonb", is_nullable: "YES" },
-      { column_name: "remove_origins", data_type: "jsonb", is_nullable: "YES" },
+      { column_name: "add_allergens", data_type: "jsonb", is_nullable: "YES" },
     ]);
   });
 

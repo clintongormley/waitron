@@ -21,18 +21,12 @@ export { createCategory, listCategories, updateCategory } from "./categories.js"
 export type { Category } from "./categories.js";
 import type { Transaction } from "@waitron/db";
 import "./errors.js"; // load the code registry for `options.group_invalid`/`options.item_invalid` thrown below
-import {
-  assertAllergenOverlayDisjoint,
-  validateAllergens,
-  validateRemoveAllergens,
-  type ProductAllergens,
-} from "./allergens.js";
+import { validateAllergens, type ProductAllergens } from "./allergens.js";
 import { republish, type RecipeDerivation } from "./derivation.js";
 import {
   deriveDietProfile,
   overlayDietProfile,
   validateDietOverride,
-  validateOrigins,
   type DietDerivation,
   type DietOverride,
   type DietProfile,
@@ -133,10 +127,7 @@ export interface MenuOfferOption {
   maxQuantity: number;
   vatClass: VatClass | null;
   addAllergens: ProductAllergens | null;
-  removeAllergens: string[] | null;
-  addOrigins: string[] | null;
-  removeOrigins: string[] | null;
-  dietaryEffect?: { invalidates: string[] } | null;
+  suitableFor?: string[] | null;
 }
 
 export interface Product {
@@ -240,19 +231,13 @@ export interface ResolvedOptionItem {
    * THIS option a diner may take on one dish (per-option quantity). The sale path validates a selected
    * option's quantity is an integer in `1..maxQuantity` and prices the child at `dishQty × optionQty`. */
   maxQuantity: number;
-  /** The per-option allergen OVERLAY (Task 4). `addAllergens`: codes this option contributes
-   * ("extra cheese" → milk), null when it adds nothing; `removeAllergens`: codes it strips
-   * ("gluten-free bun" → gluten), null when it removes nothing. A later task merges these onto the
-   * dish's published allergens to compute the as-served profile. */
+  /** The option's OWN allergens (`addAllergens`): codes this option contributes ("extra cheese" →
+   * milk), null when it declares none. Shown beside the dish's own allergens — the dish and its extras
+   * are not combined into one figure. */
   addAllergens: ProductAllergens | null;
-  removeAllergens: string[] | null;
-  /** The per-option ORIGIN overlay (Task 4), the diet twin of the allergen overlay. `addOrigins`:
-   * origins this option introduces ("add bacon" → ["meat"]), null when it adds nothing;
-   * `removeOrigins`: origins it removes ("no cheese" → ["dairy"]), null when it removes nothing. Task 5
-   * folds these into the dish's as-served diet (`deriveAsServedDiet`). */
-  addOrigins: string[] | null;
-  removeOrigins: string[] | null;
-  dietaryEffect?: { invalidates: string[] } | null;
+  /** The option's OWN positive dietary suitability (a subset of vegan/vegetarian/halal/kosher), shown
+   * beside the dish's own — never folded. */
+  suitableFor?: string[] | null;
 }
 
 /**
@@ -885,10 +870,7 @@ export async function listMenuOffers(
       maxQuantity: optionGroupItems.maxQuantity,
       vatClass: optionGroupItems.vatClass,
       addAllergens: optionGroupItems.addAllergens,
-      removeAllergens: optionGroupItems.removeAllergens,
-      addOrigins: optionGroupItems.addOrigins,
-      removeOrigins: optionGroupItems.removeOrigins,
-      dietaryEffect: optionGroupItems.dietaryEffect,
+      suitableFor: optionGroupItems.dietarySuitability,
     })
     .from(menuItemOptionGroups)
     .innerJoin(
@@ -957,10 +939,7 @@ export async function listMenuOffers(
       maxQuantity: option.maxQuantity,
       vatClass: option.vatClass as VatClass | null,
       addAllergens: option.addAllergens as ProductAllergens | null,
-      removeAllergens: option.removeAllergens as string[] | null,
-      addOrigins: option.addOrigins as string[] | null,
-      removeOrigins: option.removeOrigins as string[] | null,
-      dietaryEffect: option.dietaryEffect as { invalidates: string[] } | null,
+      suitableFor: option.suitableFor as string[] | null,
     });
   }
   const content = await readContentLanguages(tx, tenantId, FALLBACK_LOCALE);
@@ -1713,10 +1692,7 @@ export async function listAvailableProducts(
         vatClass: optionGroupItems.vatClass,
         maxQuantity: optionGroupItems.maxQuantity,
         addAllergens: optionGroupItems.addAllergens,
-        removeAllergens: optionGroupItems.removeAllergens,
-        addOrigins: optionGroupItems.addOrigins,
-        removeOrigins: optionGroupItems.removeOrigins,
-        dietaryEffect: optionGroupItems.dietaryEffect,
+        suitableFor: optionGroupItems.dietarySuitability,
       })
       .from(productOptionGroups)
       .innerJoin(optionGroups, eq(optionGroups.id, productOptionGroups.groupId))
@@ -1764,10 +1740,7 @@ export async function listAvailableProducts(
           vatClass: r.vatClass as VatClass | null,
           maxQuantity: r.maxQuantity!,
           addAllergens: r.addAllergens as ProductAllergens | null,
-          removeAllergens: r.removeAllergens as string[] | null,
-          addOrigins: r.addOrigins as string[] | null,
-          removeOrigins: r.removeOrigins as string[] | null,
-          dietaryEffect: r.dietaryEffect as { invalidates: string[] } | null,
+          suitableFor: r.suitableFor as string[] | null,
         });
       }
     }
@@ -1840,13 +1813,8 @@ export interface OptionGroupItem {
   /** The most of this option a diner may take (`option_group_items.max_quantity`); 1 = no per-option
    * quantity. Always an integer >= 1, mirrored from the column's `>= 1` CHECK. */
   maxQuantity: number;
-  /** The per-option allergen overlay (Task 4): codes this option adds/removes, each null when empty. */
+  /** The option's OWN allergens: codes this option declares, null when it declares none. */
   addAllergens: ProductAllergens | null;
-  removeAllergens: string[] | null;
-  /** The per-option ORIGIN overlay (Task 4), the diet twin: origins this option adds/removes, each
-   * null when empty. */
-  addOrigins: string[] | null;
-  removeOrigins: string[] | null;
 }
 
 export interface CreateOptionGroupInput {
@@ -1882,14 +1850,9 @@ export interface CreateOptionGroupItemInput {
   active?: boolean;
   /** The per-option quantity cap; omitted defaults to 1 (no per-option quantity). An integer >= 1. */
   maxQuantity?: number;
-  /** The per-option allergen overlay (Task 4). Omitted leaves the column NULL; `null` is the same.
-   * Validated and checked disjoint before the write — never trusted from the caller (CLAUDE.md §3). */
+  /** The option's OWN allergens. Omitted leaves the column NULL; `null` is the same. Validated before
+   * the write — never trusted from the caller (CLAUDE.md §3). */
   addAllergens?: ProductAllergens | null;
-  removeAllergens?: string[] | null;
-  /** The per-option ORIGIN overlay (Task 4). Omitted leaves the column NULL; `null` is the same. Each
-   * entry is validated against the origin taxonomy before the write (`validateOrigins`). */
-  addOrigins?: string[] | null;
-  removeOrigins?: string[] | null;
 }
 
 export interface UpdateOptionGroupItemInput {
@@ -1900,15 +1863,9 @@ export interface UpdateOptionGroupItemInput {
   active?: boolean;
   /** Absent leaves the stored value unchanged; a present value is re-validated as an integer >= 1. */
   maxQuantity?: number;
-  /** Patch the overlay. Omitted leaves the column unchanged; `null` clears it. Disjointness is
-   * enforced on the RESULTING row (the current other side is read when only one is patched). */
+  /** Patch the option's OWN allergens. Omitted leaves the column unchanged; `null` clears it.
+   * Validated before the write — never trusted from the caller (CLAUDE.md §3). */
   addAllergens?: ProductAllergens | null;
-  removeAllergens?: string[] | null;
-  /** Patch the ORIGIN overlay. Omitted leaves the column unchanged; `null` clears it. Each present
-   * side is validated against the origin taxonomy (`validateOrigins`); an origin add/remove is not a
-   * conflict (add wins the fold), so no disjointness check — unlike the allergen overlay. */
-  addOrigins?: string[] | null;
-  removeOrigins?: string[] | null;
 }
 
 const OPTION_GROUP_COLUMNS = {
@@ -1931,9 +1888,6 @@ const OPTION_GROUP_ITEM_COLUMNS = {
   active: optionGroupItems.active,
   maxQuantity: optionGroupItems.maxQuantity,
   addAllergens: optionGroupItems.addAllergens,
-  removeAllergens: optionGroupItems.removeAllergens,
-  addOrigins: optionGroupItems.addOrigins,
-  removeOrigins: optionGroupItems.removeOrigins,
 };
 
 // Legacy caps also populate max_total_quantity, whose finite values must be positive.
@@ -1960,69 +1914,18 @@ function validateOptionGroupItemMaxQuantity(maxQuantity: number): void {
 }
 
 /**
- * Validate and normalise a create/update overlay patch (Task 4). Returns `undefined` when the caller
- * touched NEITHER side (so the write omits both columns and the row defaults apply), otherwise the
- * resolved `{ addAllergens, removeAllergens }` with each patched side `null` when cleared and the
- * validated value when present, and each UNPATCHED side taken from `current` (the stored row) — or
- * `null` when `current` is omitted, which is the CREATE case (no stored row, so an unpatched side
- * defaults to null). Disjointness is checked on the RESULTING pair (defence-in-depth — never trust the
- * caller, CLAUDE.md §3), so `updateOptionGroupItem` passes the stored row as `current` and the check
- * holds on the row the patch lands on, not just on the patch.
+ * Validate and normalise the option's own-allergens patch. Returns `undefined` when the caller did not
+ * touch `addAllergens` (so the write omits the column and the row default applies), otherwise
+ * `{ addAllergens }` — `null` when cleared, the validated map when present. An empty map `{}` collapses
+ * to NULL so the column has a single "no allergens" representation. Validated regardless of caller —
+ * never trusted (CLAUDE.md §3).
  */
-function normalizeOverlay(
-  input: {
-    addAllergens?: ProductAllergens | null;
-    removeAllergens?: string[] | null;
-  },
-  current?: { addAllergens: ProductAllergens | null; removeAllergens: string[] | null },
-): { addAllergens: ProductAllergens | null; removeAllergens: string[] | null } | undefined {
-  const hasAdd = input.addAllergens !== undefined;
-  const hasRemove = input.removeAllergens !== undefined;
-  if (!hasAdd && !hasRemove) return undefined;
-  const fallback = current ?? { addAllergens: null, removeAllergens: null };
-  const add = !hasAdd
-    ? fallback.addAllergens
-    : input.addAllergens == null
-      ? null
-      : validateAllergens(input.addAllergens);
-  const remove = !hasRemove
-    ? fallback.removeAllergens
-    : input.removeAllergens == null
-      ? null
-      : validateRemoveAllergens(input.removeAllergens);
-  // Collapse an empty overlay to NULL so the column has a single "no overlay" representation: an empty
-  // add map `{}` or empty remove list `[]` means exactly what NULL means (contributes nothing to the
-  // as-served fold), and storing both would force every consumer to handle two shapes for one meaning.
-  const addNorm = add && Object.keys(add).length > 0 ? add : null;
-  const removeNorm = remove && remove.length > 0 ? remove : null;
-  assertAllergenOverlayDisjoint(addNorm, removeNorm);
-  return { addAllergens: addNorm, removeAllergens: removeNorm };
-}
-
-/**
- * Validate + normalise the per-option ORIGIN overlay patch (Task 4) — the diet twin of
- * {@link normalizeOverlay}, but simpler: origins carry NO disjointness rule (an add and a remove of
- * the same origin is not a contradiction — the as-served fold applies removes then adds, so add wins),
- * so each side is normalised INDEPENDENTLY and there is no current-row read. Only the sides the caller
- * touched appear in the result, so an UPDATE writes exactly the patched columns (Drizzle `.set()`
- * ignores absent keys) and a CREATE lets the untouched columns default to NULL. A present side is
- * validated against the origin taxonomy (`validateOrigins`), then an empty list collapses to NULL so
- * the column has a single "no overlay" representation (mirroring the allergen overlay's collapse).
- */
-function normalizeOriginOverlay(input: {
-  addOrigins?: string[] | null;
-  removeOrigins?: string[] | null;
-}): { addOrigins?: string[] | null; removeOrigins?: string[] | null } {
-  // A present side normalises identically: null/empty collapse to null, otherwise the validated
-  // non-empty list. Called only for a side the caller supplied (not undefined).
-  const side = (v: string[] | null): string[] | null => {
-    const validated = v == null ? null : validateOrigins(v);
-    return validated && validated.length > 0 ? validated : null;
-  };
-  const out: { addOrigins?: string[] | null; removeOrigins?: string[] | null } = {};
-  if (input.addOrigins !== undefined) out.addOrigins = side(input.addOrigins);
-  if (input.removeOrigins !== undefined) out.removeOrigins = side(input.removeOrigins);
-  return out;
+function normalizeOverlay(input: {
+  addAllergens?: ProductAllergens | null;
+}): { addAllergens: ProductAllergens | null } | undefined {
+  if (input.addAllergens === undefined) return undefined;
+  const add = input.addAllergens == null ? null : validateAllergens(input.addAllergens);
+  return { addAllergens: add && Object.keys(add).length > 0 ? add : null };
 }
 
 export async function createOptionGroup(
@@ -2119,19 +2022,14 @@ export async function createOptionGroupItem(
       ...(input.vatClass === undefined ? {} : { vatClass: input.vatClass }),
       ...(input.sort === undefined ? {} : { sort: input.sort }),
       ...(input.active === undefined ? {} : { active: input.active }),
-      // Both overlay columns default to NULL when the caller touched neither; validated + disjoint.
+      // The allergen column defaults to NULL when the caller omits it; validated when present.
       ...(normalizeOverlay(input) ?? {}),
-      // The origin overlay columns default to NULL likewise; validated against the taxonomy.
-      ...normalizeOriginOverlay(input),
     })
     .returning(OPTION_GROUP_ITEM_COLUMNS);
   return {
     ...row!,
     vatClass: row!.vatClass as VatClass | null,
     addAllergens: row!.addAllergens as ProductAllergens | null,
-    removeAllergens: row!.removeAllergens as string[] | null,
-    addOrigins: row!.addOrigins as string[] | null,
-    removeOrigins: row!.removeOrigins as string[] | null,
   };
 }
 
@@ -2149,9 +2047,6 @@ export async function listOptionGroupItems(
     ...r,
     vatClass: r.vatClass as VatClass | null,
     addAllergens: r.addAllergens as ProductAllergens | null,
-    removeAllergens: r.removeAllergens as string[] | null,
-    addOrigins: r.addOrigins as string[] | null,
-    removeOrigins: r.removeOrigins as string[] | null,
   }));
 }
 
@@ -2166,32 +2061,10 @@ export async function updateOptionGroupItem(
   // (Drizzle `.set()` only writes provided keys); a patch that sets it is re-validated here before the
   // write, the same clean-error-before-the-CHECK posture create takes.
   if (patch.maxQuantity !== undefined) validateOptionGroupItemMaxQuantity(patch.maxQuantity);
-  // Disjointness must hold on the RESULTING row, not just the patch: when only one side is patched,
-  // `normalizeOverlay` falls the OTHER side back to the stored value (`current`) and checks the
-  // effective pair — the SAME validation create runs, unified. Defence-in-depth at the core — never
-  // trust the caller (CLAUDE.md §3). A well-formed id that names no row leaves `cur` undefined, so
-  // the effective sides fall back to null and the (zero-row) UPDATE is a silent no-op.
-  const touchesOverlay = patch.addAllergens !== undefined || patch.removeAllergens !== undefined;
-  const write: Record<string, unknown> = { ...patch };
-  if (touchesOverlay) {
-    const [cur] = await tx
-      .select({
-        addAllergens: optionGroupItems.addAllergens,
-        removeAllergens: optionGroupItems.removeAllergens,
-      })
-      .from(optionGroupItems)
-      .where(and(eq(optionGroupItems.tenantId, tenantId), eq(optionGroupItems.id, itemId)));
-    Object.assign(
-      write,
-      normalizeOverlay(patch, {
-        addAllergens: (cur?.addAllergens as ProductAllergens | null) ?? null,
-        removeAllergens: (cur?.removeAllergens as string[] | null) ?? null,
-      }),
-    );
-  }
-  // The origin overlay is independent (no disjointness → no current-row read): validate + normalise
-  // each patched side and write exactly those columns.
-  Object.assign(write, normalizeOriginOverlay(patch));
+  // The allergen column is single-field: `normalizeOverlay` validates a present `addAllergens` and
+  // collapses an empty map to NULL; Drizzle `.set()` writes only the keys present, so an omitted
+  // `addAllergens` leaves the stored value untouched. Validated regardless of caller (CLAUDE.md §3).
+  const write: Record<string, unknown> = { ...patch, ...(normalizeOverlay(patch) ?? {}) };
   await tx
     .update(optionGroupItems)
     .set(write)

@@ -14,14 +14,14 @@ const extras: ChoiceDraft = {
   priceDelta: "1.00",
   maxQuantity: 1,
   addAllergens: { milk: { presence: "contains" } },
-  dietaryEffect: { invalidates: ["vegetarian"] },
+  suitableFor: ["vegetarian"],
 };
 const options: ChoiceDraft = {
   id: "c",
   name: { es: "Opción" },
   available: true,
   addAllergens: { milk: { presence: "contains" } },
-  dietaryEffect: { invalidates: ["vegetarian"] },
+  suitableFor: ["vegetarian"],
 };
 
 describe.each(["light", "dark"] as const)("choice form (%s)", (theme) => {

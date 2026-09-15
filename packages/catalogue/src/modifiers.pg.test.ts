@@ -156,9 +156,11 @@ it("blocks a type change for attached definitions, but permits other edits", asy
   // A product attachment no longer blocks deletion (the delete cascades it away); the delete-detach
   // path is covered separately. A TYPE CHANGE is still refused while attached.
   await expect(
-    app(tenant, (tx) => updateModifier(tx, tenant, definition.id, { type: "yes-no", name }, "en")),
+    app(tenant, (tx) =>
+      updateModifier(tx, tenant, definition.id, { type: "extras", name, choices: [] }, "en"),
+    ),
   ).rejects.toMatchObject({ code: "modifier.in_use" });
-  // A non-yes-no modifier cannot be turned off as a whole, so a sent available:false is ignored
+  // A modifier cannot be turned off as a whole, so a sent available:false is ignored
   // (forced true) rather than rejected — the edit is still permitted while attached.
   expect(
     await app(tenant, (tx) =>
@@ -234,7 +236,7 @@ it("serializes deletion behind an attachment write, then cascades the committed 
   ).toEqual([]);
 });
 
-it("blocks a default-language change while a yes/no modifier name is untranslated", async () => {
+it("blocks a default-language change while a modifier name is untranslated", async () => {
   const tenant = await seedTenant(suite.admin);
   await app(tenant, async (tx) => {
     const role = await tx.execute<{ role: string; superuser: boolean }>(
@@ -245,7 +247,7 @@ it("blocks a default-language change while a yes/no modifier name is untranslate
       tx,
       tenant,
       {
-        type: "yes-no",
+        type: "text",
         name: { en: "Hot" },
       },
       "en",
@@ -261,13 +263,14 @@ it("blocks a default-language change while a yes/no modifier name is untranslate
   });
 });
 
-it("preserves unavailable attachments when editing a product, but refuses a new attachment", async () => {
+it("preserves inactive attachments when editing a product, but refuses a new attachment", async () => {
   const tenant = await seedTenant(suite.admin);
   await seedLegacySellingUnits(suite.admin, tenant);
-  // Only a yes-no modifier can be turned off as a whole, so it is the type that can become an
-  // inactive group — the state this test needs to exercise the attachment guard.
-  const yesNo = { type: "yes-no" as const, name };
-  const definition = await app(tenant, (tx) => createModifier(tx, tenant, yesNo, "en"));
+  // A modifier can no longer be turned off as a whole through the editor, so the inactive-group
+  // state this attachment guard rejects is forced directly on the row.
+  const definition = await app(tenant, (tx) =>
+    createModifier(tx, tenant, { type: "text", name }, "en"),
+  );
   const products = await app(tenant, async (tx) => {
     const catalogue = await createCatalogue(tx, brandTenantId(tenant), { name: "Menu" });
     const products = [];
@@ -285,8 +288,8 @@ it("preserves unavailable attachments when editing a product, but refuses a new 
     await setProductOptionGroups(tx, brandTenantId(tenant), products[0]!.id, [definition.id]);
     return products;
   });
-  await app(tenant, (tx) =>
-    updateModifier(tx, tenant, definition.id, { ...yesNo, available: false }, "en"),
+  await withTenant(suite.admin, tenant, (tx) =>
+    tx.update(optionGroups).set({ active: false }).where(eq(optionGroups.id, definition.id)),
   );
   await app(tenant, (tx) =>
     setProductOptionGroups(tx, brandTenantId(tenant), products[0]!.id, [definition.id]),
