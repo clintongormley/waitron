@@ -13,7 +13,7 @@ export interface ProductEditorDraft {
   description: LocalizedText | null;
   kitchenName: string | null;
   image: string | null;
-  unitId: string;
+  unitId: string | null;
   unitPrice: string;
   available: boolean;
   vatClass: "general" | "reduced" | "super_reduced" | "zero";

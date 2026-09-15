@@ -311,7 +311,7 @@ export interface ProductEditorInput {
   description: Record<string, string> | null;
   kitchenName: string | null;
   image: string | null;
-  unitId: string;
+  unitId: string | null;
   unitPrice: string;
   available: boolean;
   vatClass: VatClass;
