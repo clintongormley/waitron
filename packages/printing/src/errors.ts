@@ -34,10 +34,16 @@ declare module "@waitron/shared" {
      * in this venue — the partial UNIQUE (tenant_id, location_id, local_key). `localKey` is echoed so
      * the dashboard can point at the existing registration. */
     "printer.already_registered": { localKey: string };
+    /** An ongoing dashboard alert: `{count}` print jobs are stuck at printer `{printer}` — waiting too
+     * long or out of delivery attempts. Not thrown; raised by the printing alert source. */
+    "printer.jobs_waiting": { printer: string; count: number };
     /** No print agent with this id is visible in the current tenant. `id` is the id looked up. */
     "agent.not_found": { id: string };
     /** The agent's bearer token did not verify, or the agent has been revoked — `requireAgent`
      * fail-closed. NO params: a uniform, oracle-free 401 that never discloses which agent ids exist. */
     "agent.unauthorized": Record<string, never>;
+    /** An ongoing dashboard alert: agent `{agent}` has not checked in for several minutes. Not thrown;
+     * raised by the printing alert source. */
+    "agent.silent": { agent: string };
   }
 }

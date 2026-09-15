@@ -2,7 +2,10 @@
 // polls. The registry stamps each returned alert's `kind` and `area`; a source only supplies the
 // per-alert facts. Later tasks append more factories to this file, so keep each one self-contained.
 
+import { and, count, eq, gte, inArray, lt, min, or } from "drizzle-orm";
+import { printAgents, printJobs, printers } from "@waitron/db";
 import type { AlertSource, OngoingAlert } from "@waitron/module";
+import { MAX_DELIVERY_ATTEMPTS } from "@waitron/printing";
 import type { BackupStatus } from "./backup-status.js";
 import type { AwaitingCertStatus } from "./pass.js";
 import "./errors.js";
@@ -113,6 +116,99 @@ export function awaitingCertAlertSource(holder: AwaitingCertStatus): AlertSource
           since: null,
         },
       ];
+    },
+  };
+}
+
+/** An agent quiet for longer than this has stopped checking in; printing may be stalled. */
+export const AGENT_SILENT_MS = 5 * 60 * 1000;
+/** A document job older than this that has not printed is stuck at its printer. */
+export const JOBS_WAITING_MS = 2 * 60 * 1000;
+
+/**
+ * The printing alert source. Two ongoing checks an operator can act on from the Impresoras page:
+ * a print agent that has gone quiet (`agent.silent`, one per active agent whose `last_seen_at` is
+ * older than {@link AGENT_SILENT_MS}), and print jobs stuck at a printer (`printer.jobs_waiting`, one
+ * per active printer holding a `document` job that has waited past {@link JOBS_WAITING_MS} or a
+ * `failed` job that has exhausted its delivery attempts). A drawer pulse never counts — only document
+ * jobs surface here. Reads the `@waitron/db` tables directly rather than the printing package, which
+ * owns no reader for this shape.
+ */
+export function printingAlertSource(): AlertSource {
+  return {
+    area: "printing",
+    permission: "printer.manage",
+    async read({ tx, tenantId, now }): Promise<readonly OngoingAlert[]> {
+      const alerts: OngoingAlert[] = [];
+
+      // `last_seen_at` and `created_at` are drizzle mode:"string" columns, so the thresholds are ISO
+      // strings, never Date objects (a Date would not typecheck against a string column).
+      const silentBefore = new Date(now.getTime() - AGENT_SILENT_MS).toISOString();
+      const agents = await tx
+        .select({ name: printAgents.name, seen: printAgents.lastSeenAt })
+        .from(printAgents)
+        .where(
+          and(
+            eq(printAgents.tenantId, tenantId),
+            eq(printAgents.active, true),
+            // A NULL `last_seen_at` (an agent never seen) is UNKNOWN under `lt`, so it is excluded and
+            // `seen` below is always a real timestamp.
+            lt(printAgents.lastSeenAt, silentBefore),
+          ),
+        );
+      for (const a of agents) {
+        alerts.push({
+          key: `agent.silent:${a.name}`,
+          code: "agent.silent",
+          params: { agent: a.name },
+          severity: "warning",
+          since: new Date(a.seen!).toISOString(),
+          screen: "printers",
+        });
+      }
+
+      // One row per active printer with at least one waiting document job. Both tables carry their own
+      // tenant predicate — one database per tenant is NOT the query's isolation boundary (CLAUDE.md §3).
+      const stuckBefore = new Date(now.getTime() - JOBS_WAITING_MS).toISOString();
+      const rows = await tx
+        .select({
+          id: printers.id,
+          printer: printers.name,
+          n: count(),
+          oldest: min(printJobs.createdAt),
+        })
+        .from(printers)
+        .innerJoin(printJobs, eq(printJobs.printerId, printers.id))
+        .where(
+          and(
+            eq(printers.tenantId, tenantId),
+            eq(printers.active, true),
+            eq(printJobs.tenantId, tenantId),
+            eq(printJobs.kind, "document"),
+            or(
+              // Waiting too long in a non-terminal state…
+              and(
+                inArray(printJobs.status, ["queued", "printing", "failed"]),
+                lt(printJobs.createdAt, stuckBefore),
+              ),
+              // …or failed with no attempts left, however recent.
+              and(eq(printJobs.status, "failed"), gte(printJobs.attempts, MAX_DELIVERY_ATTEMPTS)),
+            ),
+          ),
+        )
+        .groupBy(printers.id, printers.name);
+      for (const r of rows) {
+        // A group only forms when a job matched, and `created_at` is notNull, so `oldest` is present.
+        alerts.push({
+          key: `printer.jobs_waiting:${r.id}`,
+          code: "printer.jobs_waiting",
+          params: { printer: r.printer, count: Number(r.n) },
+          severity: "error",
+          since: new Date(r.oldest!).toISOString(),
+          screen: "printers",
+        });
+      }
+      return alerts;
     },
   };
 }

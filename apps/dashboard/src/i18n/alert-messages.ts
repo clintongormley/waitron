@@ -130,4 +130,12 @@ export const ALERT_MESSAGES: Readonly<
     en: `Automatic refunds failed for {count} card payments. Waitron will not try them again; refund them in the card provider's own dashboard.${MORE_EN}`,
     es: `Las devoluciones automáticas han fallado en {count} pagos con tarjeta. Waitron no las volverá a intentar; devuélvelos desde el panel del proveedor.${MORE_ES}`,
   },
+  "agent.silent": {
+    en: "Print agent “{agent}” has gone quiet — it has not checked in for several minutes. Printing may be affected.",
+    es: "El agente de impresión «{agent}» está en silencio: lleva varios minutos sin dar señales. La impresión puede verse afectada.",
+  },
+  "printer.jobs_waiting": {
+    en: "{count} print job(s) are stuck at “{printer}”. Check the printer on the Printers page.",
+    es: "{count} trabajo(s) de impresión atascado(s) en «{printer}». Revisa la impresora en la página de Impresoras.",
+  },
 };
