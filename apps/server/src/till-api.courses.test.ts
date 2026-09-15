@@ -68,7 +68,7 @@ const suite = usePgliteDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     const tenantId = await seedTenant(db);
-    await seedLegacySellingUnits(db, tenantId);
+    await seedLegacySellingUnits(db);
     // invoice_locales is `es-ES` (full-tag, fiscal). The products are authored under the BARE `es`
     // key; `priceOrderLines` re-keys their descriptions to the location's `es-ES` before the park/place
     // line-insert fires `check_locales`, which demands a line's `descriptions` keys equal the

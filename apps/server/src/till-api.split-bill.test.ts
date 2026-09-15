@@ -51,7 +51,7 @@ const suite = usePgliteDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     const tenantId = await seedTenant(db);
-    await seedLegacySellingUnits(db, tenantId);
+    await seedLegacySellingUnits(db);
     const loc = await db.execute<{ id: string }>(sql`
       insert into locations (tenant_id, name, invoice_locales, operation_description)
       values (${tenantId}, 'Counter', array['es-ES'], 'Retail') returning id`);

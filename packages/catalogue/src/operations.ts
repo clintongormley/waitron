@@ -57,7 +57,8 @@ import { validateDietaryDeclarations, type DietaryLabel } from "./dietary-declar
  * Catalogue operations — CRUD over `catalogues`/`categories`/`products`, catalogue↔location
  * assignment, and the read the till sells from (`listAvailableProducts`).
  *
- * Inserts take the tenant id explicitly and share the caller's transaction.
+ * Every operation shares the caller's transaction. Inserts into the core tables still take the
+ * tenant id, which those tables carry.
  *
  * Deactivation is `active = false`, never DELETE: a product may sit behind historical sale-line
  * snapshots, and the app role holds no DELETE grant (`products: "SIU"` in
@@ -441,8 +442,7 @@ export async function createCatalogue(
   return row!;
 }
 
-export async function listCatalogues(tx: Transaction, tenantId: TenantId): Promise<Catalogue[]> {
-  void tenantId;
+export async function listCatalogues(tx: Transaction): Promise<Catalogue[]> {
   return tx
     .select(CATALOGUE_COLUMNS)
     .from(catalogues)
@@ -452,28 +452,19 @@ export async function listCatalogues(tx: Transaction, tenantId: TenantId): Promi
 
 export async function createMenuSection(
   tx: Transaction,
-  tenantId: TenantId,
   input: { menuId: string; name: Record<string, string>; displayOrder?: number },
 ): Promise<MenuSection> {
-  const [row] = await tx
-    .insert(menuSections)
-    .values({ tenantId, ...input })
-    .returning({
-      id: menuSections.id,
-      menuId: menuSections.menuId,
-      name: menuSections.name,
-      displayOrder: menuSections.displayOrder,
-      active: menuSections.active,
-    });
+  const [row] = await tx.insert(menuSections).values(input).returning({
+    id: menuSections.id,
+    menuId: menuSections.menuId,
+    name: menuSections.name,
+    displayOrder: menuSections.displayOrder,
+    active: menuSections.active,
+  });
   return row!;
 }
 
-export async function listMenuSections(
-  tx: Transaction,
-  tenantId: TenantId,
-  menuId: string,
-): Promise<MenuSection[]> {
-  void tenantId;
+export async function listMenuSections(tx: Transaction, menuId: string): Promise<MenuSection[]> {
   const [menu] = await tx
     .select({ id: catalogues.id })
     .from(catalogues)
@@ -494,11 +485,9 @@ export async function listMenuSections(
 
 export async function updateMenuSection(
   tx: Transaction,
-  tenantId: TenantId,
   sectionId: string,
   patch: { name: Record<string, string> },
 ): Promise<void> {
-  void tenantId;
   const [row] = await tx
     .update(menuSections)
     .set(patch)
@@ -509,7 +498,6 @@ export async function updateMenuSection(
 
 export async function createMenuItem(
   tx: Transaction,
-  tenantId: TenantId,
   input: {
     menuId: string;
     productId: string;
@@ -518,7 +506,7 @@ export async function createMenuItem(
     displayOrder?: number;
   },
 ): Promise<MenuItem> {
-  await lockModifierDefinitions(tx, tenantId);
+  await lockModifierDefinitions(tx);
   const [product] = await tx
     .select({ id: products.id })
     .from(products)
@@ -541,9 +529,9 @@ export async function createMenuItem(
     .where(and(eq(menuItems.menuId, input.menuId), eq(menuItems.productId, input.productId)));
   const [row] = await tx
     .insert(menuItems)
-    .values({ tenantId, ...input })
+    .values(input)
     .onConflictDoUpdate({
-      target: [menuItems.tenantId, menuItems.menuId, menuItems.productId],
+      target: [menuItems.menuId, menuItems.productId],
       set: {
         sectionId: input.sectionId,
         grossPrice: input.grossPrice,
@@ -592,7 +580,7 @@ export async function createMenuItem(
       byGroup.set(option.groupId, group);
     }
     if (byGroup.size > 0) {
-      await setMenuItemOptionGroups(tx, tenantId, row!.id, [...byGroup.values()]);
+      await setMenuItemOptionGroups(tx, row!.id, [...byGroup.values()]);
     }
   }
   return row!;
@@ -600,12 +588,10 @@ export async function createMenuItem(
 
 export async function updateMenuItem(
   tx: Transaction,
-  tenantId: TenantId,
   menuId: string,
   menuItemId: string,
   patch: { sectionId?: string; grossPrice?: string; displayOrder?: number },
 ): Promise<void> {
-  void tenantId;
   const [row] = await tx
     .update(menuItems)
     .set(patch)
@@ -618,11 +604,9 @@ export async function updateMenuItem(
 
 export async function deactivateMenuItem(
   tx: Transaction,
-  tenantId: TenantId,
   menuId: string,
   menuItemId: string,
 ): Promise<void> {
-  void tenantId;
   const [row] = await tx
     .update(menuItems)
     .set({ active: false })
@@ -636,14 +620,13 @@ export async function deactivateMenuItem(
 /** Replace the groups and choices offered for one menu item, including their menu-specific prices. */
 export async function setMenuItemOptionGroups(
   tx: Transaction,
-  tenantId: TenantId,
   menuItemId: string,
   groups: {
     groupId: string;
     options: { optionId: string; priceDelta: string }[];
   }[],
 ): Promise<void> {
-  await lockModifierDefinitions(tx, tenantId);
+  await lockModifierDefinitions(tx);
   const [menuItem] = await tx
     .select({ productId: menuItems.productId })
     .from(menuItems)
@@ -733,7 +716,6 @@ export async function setMenuItemOptionGroups(
   if (groups.length === 0) return;
   await tx.insert(menuItemOptionGroups).values(
     groups.map((group, displayOrder) => ({
-      tenantId,
       menuItemId,
       groupId: group.groupId,
       displayOrder,
@@ -741,7 +723,6 @@ export async function setMenuItemOptionGroups(
   );
   const options = groups.flatMap((group) =>
     group.options.map((option) => ({
-      tenantId,
       menuItemId,
       groupId: group.groupId,
       optionId: option.optionId,
@@ -751,11 +732,7 @@ export async function setMenuItemOptionGroups(
   if (options.length > 0) await tx.insert(menuItemOptions).values(options);
 }
 
-export async function listMenuOffers(
-  tx: Transaction,
-  tenantId: TenantId,
-  menuIds: string[],
-): Promise<MenuOffer[]> {
+export async function listMenuOffers(tx: Transaction, menuIds: string[]): Promise<MenuOffer[]> {
   if (menuIds.length === 0) return [];
   const rows = await tx
     .select({
@@ -881,10 +858,9 @@ export async function listMenuOffers(
       suitableFor: option.suitableFor as string[] | null,
     });
   }
-  const content = await readContentLanguages(tx, tenantId, FALLBACK_LOCALE);
+  const content = await readContentLanguages(tx, FALLBACK_LOCALE);
   const modifiersByItem = await readMenuModifiers(
     tx,
-    tenantId,
     rows.map((row) => row.id),
   );
   const variantRows = await tx
@@ -978,11 +954,9 @@ export async function catalogueExists(tx: Transaction, catalogueId: string): Pro
 
 export async function renameCatalogue(
   tx: Transaction,
-  tenantId: TenantId,
   catalogueId: string,
   name: string,
 ): Promise<void> {
-  void tenantId;
   const [row] = await tx
     .update(catalogues)
     .set({ name, updatedAt: sql`now()` })
@@ -1123,11 +1097,11 @@ export async function createProduct(
   if (input.unitId === null) {
     selectedUnit = null;
   } else if (input.unitId !== undefined) {
-    selectedUnit = await getSellableUnit(tx, tenantId, input.unitId); // 404s an unknown unit
+    selectedUnit = await getSellableUnit(tx, input.unitId); // 404s an unknown unit
   } else if (input.pricingUnit === "each") {
     selectedUnit = null;
   } else if (input.pricingUnit === "weight") {
-    selectedUnit = await getSeededUnit(tx, tenantId, "kg"); // legacy weight → the retained kg seed
+    selectedUnit = await getSeededUnit(tx, "kg"); // legacy weight → the retained kg seed
     if (selectedUnit === null)
       throw new AppError("management.request_invalid", { field: "unitId" });
   } else {
@@ -1172,8 +1146,8 @@ export async function createProduct(
       image: input.image ?? null,
     })
     .returning({ id: products.id });
-  if (selectedUnit !== null) await assignProductUnit(tx, tenantId, row!.id, selectedUnit.id);
-  const membership = await replaceProductCategories(tx, tenantId, row!.id, {
+  if (selectedUnit !== null) await assignProductUnit(tx, row!.id, selectedUnit.id);
+  const membership = await replaceProductCategories(tx, row!.id, {
     categoryIds: input.categoryId === null ? [] : [input.categoryId],
     primaryCategoryId: input.categoryId,
   });
@@ -1189,12 +1163,7 @@ export async function createProduct(
   );
 }
 
-export async function listProducts(
-  tx: Transaction,
-  tenantId: TenantId,
-  catalogueId?: string,
-): Promise<Product[]> {
-  void tenantId;
+export async function listProducts(tx: Transaction, catalogueId?: string): Promise<Product[]> {
   const rows = await tx
     .select({
       ...PRODUCT_COLUMNS,
@@ -1253,7 +1222,6 @@ export async function listProducts(
 
 export async function updateProduct(
   tx: Transaction,
-  tenantId: TenantId,
   id: string,
   patch: UpdateProductInput,
 ): Promise<void> {
@@ -1278,11 +1246,11 @@ export async function updateProduct(
     // the only thing that ever did, and nothing mounts it), so changing it would alter a legacy
     // route's contract with nothing to gain. `docs/developers/product-categories.md` says which
     // path is which; `docs/backlog.md` carries removing this one when a client needs it relaxed.
-    await lockCategories(tx, tenantId);
-    const current = await readProductCategories(tx, tenantId, id);
+    await lockCategories(tx);
+    const current = await readProductCategories(tx, id);
     if (categoryId === null && current.categoryIds.length > 1)
       throw new AppError("category.primary_required", {});
-    await replaceProductCategories(tx, tenantId, id, {
+    await replaceProductCategories(tx, id, {
       categoryIds: categoryId === null ? [] : [...new Set([...current.categoryIds, categoryId])],
       primaryCategoryId: categoryId,
     });
@@ -1304,13 +1272,13 @@ export async function updateProduct(
   if (unitId === null) {
     unitAction = { kind: "clear" };
   } else if (unitId !== undefined) {
-    unitAction = { kind: "set", unit: await getSellableUnit(tx, tenantId, unitId) };
+    unitAction = { kind: "set", unit: await getSellableUnit(tx, unitId) };
   } else if (pricingUnit === undefined) {
     unitAction = { kind: "keep" };
   } else if (pricingUnit === "each") {
     unitAction = { kind: "clear" };
   } else if (pricingUnit === "weight") {
-    const kg = await getSeededUnit(tx, tenantId, "kg");
+    const kg = await getSeededUnit(tx, "kg");
     if (kg === null) throw new AppError("management.request_invalid", { field: "unitId" });
     unitAction = { kind: "set", unit: kg };
   } else {
@@ -1332,8 +1300,8 @@ export async function updateProduct(
       updatedAt: sql`now()`,
     })
     .where(eq(products.id, id));
-  if (unitAction.kind === "set") await assignProductUnit(tx, tenantId, id, unitAction.unit.id);
-  else if (unitAction.kind === "clear") await clearProductUnit(tx, tenantId, id);
+  if (unitAction.kind === "set") await assignProductUnit(tx, id, unitAction.unit.id);
+  else if (unitAction.kind === "clear") await clearProductUnit(tx, id);
   // Republish exactly the overlays that changed. When BOTH did, one combined SELECT+UPDATE
   // (`republishProductOverlays`) does the work of the two single-overlay round trips, landing the same
   // `allergens` and `diet` values; when only one changed, the matching single-overlay function runs so
@@ -1476,7 +1444,7 @@ export interface LocationCatalogue extends Catalogue {
 }
 
 /**
- * EVERY catalogue the tenant owns, each flagged with whether `locationId` may sell from it
+ * EVERY catalogue, each flagged with whether `locationId` may sell from it
  * (`sellable`) and whether it is that location's default (`isDefault`) — the dashboard's
  * location↔menu membership screen. Unlike {@link listAccessibleCatalogues} (which returns ONLY the
  * accessible set, for the till), this returns the full list so the screen can offer the not-yet-sold
@@ -1485,10 +1453,9 @@ export interface LocationCatalogue extends Catalogue {
  */
 export async function listCataloguesForLocation(
   tx: Transaction,
-  tenantId: TenantId,
   locationId: string,
 ): Promise<LocationCatalogue[]> {
-  const all = await listCatalogues(tx, tenantId);
+  const all = await listCatalogues(tx);
   const { ids, defaultId } = await resolveAccessibleCatalogueIds(tx, locationId);
   const sellable = new Set(ids);
   return all.map((c) => ({ ...c, sellable: sellable.has(c.id), isDefault: c.id === defaultId }));
@@ -1542,7 +1509,6 @@ export async function listAvailableProducts(
   const rows = await tx
     .select({
       id: products.id,
-      tenantId: products.tenantId,
       name: products.name,
       customerName: products.customerName,
       unitId: units.id,
@@ -1661,9 +1627,7 @@ export async function listAvailableProducts(
   }
 
   const modifiersByProduct =
-    rows.length === 0
-      ? new Map<string, Modifier[]>()
-      : await readProductModifiers(tx, rows[0]!.tenantId, productIds);
+    rows.length === 0 ? new Map<string, Modifier[]>() : await readProductModifiers(tx, productIds);
 
   // `products` is the imported table, so the mapped rows take a local name of their own.
   const available = rows.map((row) => ({
@@ -1848,7 +1812,7 @@ export async function createOptionGroup(
   tenantId: TenantId,
   input: CreateOptionGroupInput,
 ): Promise<OptionGroup> {
-  await lockModifierDefinitions(tx, tenantId);
+  await lockModifierDefinitions(tx);
   // Resolve the column defaults HERE so the invariant is validated against the values that will land
   // (the DB defaults are min 0, max 1, required false).
   const minSelect = input.minSelect ?? 0;
@@ -1871,7 +1835,7 @@ export async function createOptionGroup(
   return row!;
 }
 
-/** Every option group of the tenant (active AND inactive), for the authoring editor. Ordered by `sort`
+/** Every option group (active AND inactive), for the authoring editor. Ordered by `sort`
  * then `id` so the editor list is stable. */
 export async function listOptionGroups(tx: Transaction): Promise<OptionGroup[]> {
   return tx
@@ -1882,11 +1846,10 @@ export async function listOptionGroups(tx: Transaction): Promise<OptionGroup[]> 
 
 export async function updateOptionGroup(
   tx: Transaction,
-  tenantId: TenantId,
   id: string,
   patch: UpdateOptionGroupInput,
 ): Promise<void> {
-  await lockModifierDefinitions(tx, tenantId);
+  await lockModifierDefinitions(tx);
   // Read the stored bounds and MERGE the patch onto them before validating: a partial patch that only
   // touches one of the three invariant fields (e.g. `required: true` with the stored `min_select`, or a
   // lowered `max_select` against the stored `min_select`) must be checked against the row it lands on,
@@ -1921,7 +1884,7 @@ export async function createOptionGroupItem(
   groupId: string,
   input: CreateOptionGroupItemInput,
 ): Promise<OptionGroupItem> {
-  await lockModifierDefinitions(tx, tenantId);
+  await lockModifierDefinitions(tx);
   // Resolve the default HERE so the invariant is validated against the value that will land (the DB
   // default is 1), the same posture createOptionGroup takes for its bounds.
   const maxQuantity = input.maxQuantity ?? 1;
@@ -1967,11 +1930,10 @@ export async function listOptionGroupItems(
 
 export async function updateOptionGroupItem(
   tx: Transaction,
-  tenantId: TenantId,
   itemId: string,
   patch: UpdateOptionGroupItemInput,
 ): Promise<void> {
-  await lockModifierDefinitions(tx, tenantId);
+  await lockModifierDefinitions(tx);
   // maxQuantity's invariant is single-field: a patch that omits it leaves the stored value untouched
   // (Drizzle `.set()` only writes provided keys); a patch that sets it is re-validated here before the
   // write, the same clean-error-before-the-CHECK posture create takes.
@@ -1995,7 +1957,7 @@ export async function setProductOptionGroups(
   productId: string,
   groupIds: string[],
 ): Promise<void> {
-  await lockModifierDefinitions(tx, tenantId);
+  await lockModifierDefinitions(tx);
   const [product] = await tx
     .select({ id: products.id })
     .from(products)
@@ -2035,10 +1997,8 @@ export async function setProductOptionGroups(
  * product form (Task 12) uses to show which groups are attached and in what order. */
 export async function listProductOptionGroupIds(
   tx: Transaction,
-  tenantId: TenantId,
   productId: string,
 ): Promise<string[]> {
-  void tenantId;
   const rows = await tx
     .select({ groupId: productOptionGroups.groupId })
     .from(productOptionGroups)

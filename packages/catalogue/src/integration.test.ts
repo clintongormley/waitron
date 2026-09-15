@@ -103,12 +103,7 @@ describe("catalogue → priceBasket → recordSale (end-to-end)", () => {
       const cat = await createCatalogue(tx, tenantId, { name: "Deli" });
       const food = await createCategory(tx, tenantId, { name: { en: "Food" } });
       const kgUnitId = (
-        await createUnit(
-          tx,
-          tenantId,
-          { name: { en: "kg" }, precision: 3, abbreviation: { en: "u" } },
-          "en",
-        )
+        await createUnit(tx, { name: { en: "kg" }, precision: 3, abbreviation: { en: "u" } }, "en")
       ).id;
       const product = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
@@ -119,7 +114,7 @@ describe("catalogue → priceBasket → recordSale (end-to-end)", () => {
         vatClass: "reduced",
       });
       const breakfast = await createCategory(tx, tenantId, { name: { en: "Breakfast" } });
-      await replaceProductCategories(tx, tenantId, product.id, {
+      await replaceProductCategories(tx, product.id, {
         categoryIds: [food.id, breakfast.id],
         primaryCategoryId: food.id,
       });

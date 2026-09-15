@@ -85,7 +85,7 @@ describe("print-on-fire concurrency — FOR SHARE on the mapping read", () => {
   it("a concurrent deactivatePrinter WAITS for the fire to commit instead of aborting it", async () => {
     // ---- Setup, committed on the admin connection so both racing backends see it ----
     const tenantId = await seedTenant(suite.admin);
-    await seedLegacySellingUnits(suite.admin, tenantId);
+    await seedLegacySellingUnits(suite.admin);
     const loc = await suite.admin.execute<{ id: string }>(sql`
       insert into locations (tenant_id, name, invoice_locales, operation_description)
       values (${tenantId}, 'Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);

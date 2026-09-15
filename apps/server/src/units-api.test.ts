@@ -38,7 +38,7 @@ beforeEach(async () => {
 
 function app() {
   const app = new Hono();
-  mountUnitsApi(app, { db: suite.db, cfg: { tenantId }, venueLocale: "en-GB" }, log);
+  mountUnitsApi(app, { db: suite.db, venueLocale: "en-GB" }, log);
   return app;
 }
 
@@ -181,8 +181,8 @@ describe("unit management routes", () => {
           values (${tenantId}, ${menu.rows[0]!.id}, ${name}, 'each', '1', 'general')
           returning id`);
         await tx.execute(sql`
-          insert into product_units (tenant_id, product_id, unit_id)
-          values (${tenantId}, ${product.rows[0]!.id}, ${from.id})`);
+          insert into product_units (product_id, unit_id)
+          values (${product.rows[0]!.id}, ${from.id})`);
         ids.push(product.rows[0]!.id);
       }
       return ids;

@@ -83,7 +83,6 @@ import type { Logger } from "./logger.js";
 export interface CatalogueApiDeps {
   contentTranslationGaps?: (
     tx: Transaction,
-    tenantId: string,
     language: string,
   ) => Promise<{ kind: string; id: string }[]>;
   db: Database;
@@ -431,18 +430,14 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
 
   app.get("/management-api/modifiers", (c) =>
     run(c, log, async () => {
-      const modifiers = await gated(requireManagementSession(c), (tx) =>
-        listModifiers(tx, tenantId),
-      );
+      const modifiers = await gated(requireManagementSession(c), (tx) => listModifiers(tx));
       return c.json({ modifiers });
     }),
   );
   app.get("/management-api/modifiers/:id", (c) =>
     run(c, log, async () => {
       const id = requireUuidParam(c.req.param("id"), "ModifierId");
-      const modifier = await gated(requireManagementSession(c), (tx) =>
-        getModifier(tx, tenantId, id),
-      );
+      const modifier = await gated(requireManagementSession(c), (tx) => getModifier(tx, id));
       return c.json({ modifier });
     }),
   );
@@ -468,7 +463,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
   app.delete("/management-api/modifiers/:id", (c) =>
     run(c, log, async () => {
       const id = requireUuidParam(c.req.param("id"), "ModifierId");
-      await gated(requireManagementSession(c), (tx) => deleteModifier(tx, tenantId, id));
+      await gated(requireManagementSession(c), (tx) => deleteModifier(tx, id));
       return c.json({ ok: true });
     }),
   );
@@ -477,7 +472,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     run(c, log, async () => {
       const id = requireUuidParam(c.req.param("id"), "ModifierId");
       const dependants = await gated(requireManagementSession(c), (tx) =>
-        modifierDependants(tx, tenantId, id),
+        modifierDependants(tx, id),
       );
       return c.json({ dependants });
     }),
@@ -488,7 +483,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const sessionId = requireManagementSession(c);
       return c.json(
         await gated(sessionId, (tx) =>
-          readContentLanguages(tx, tenantId, deps.venueLocale ?? FALLBACK_LOCALE),
+          readContentLanguages(tx, deps.venueLocale ?? FALLBACK_LOCALE),
         ),
       );
     }),
@@ -499,7 +494,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     run(c, log, async () => {
       const config = await withTransaction(deps.db, async (tx) => {
         await asAppUser(tx);
-        return readContentLanguages(tx, tenantId, deps.venueLocale ?? FALLBACK_LOCALE);
+        return readContentLanguages(tx, deps.venueLocale ?? FALLBACK_LOCALE);
       });
       return c.json(config);
     }),
@@ -523,7 +518,6 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       await gated(sessionId, (tx) =>
         writeContentLanguages(
           tx,
-          tenantId,
           config,
           deps.venueLocale ?? FALLBACK_LOCALE,
           deps.contentTranslationGaps,
@@ -537,7 +531,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
   app.get("/management-api/catalogues", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const rows = await gated(sessionId, (tx) => listCatalogues(tx, tenantId));
+      const rows = await gated(sessionId, (tx) => listCatalogues(tx));
       return c.json(rows);
     }),
   );
@@ -562,7 +556,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const body = await readJsonBody<Record<string, unknown>>(c);
       const name = requireString(body.name, "name");
       if (name.trim() === "") throw new AppError("management.request_invalid", { field: "name" });
-      await gated(sessionId, (tx) => renameCatalogue(tx, tenantId, catalogueId, name));
+      await gated(sessionId, (tx) => renameCatalogue(tx, catalogueId, name));
       return c.body(null, 204);
     }),
   );
@@ -571,7 +565,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const menuId = requireUuidParam(c.req.param("id"), "MenuId");
-      const rows = await gated(sessionId, (tx) => listMenuOffers(tx, tenantId, [menuId]));
+      const rows = await gated(sessionId, (tx) => listMenuOffers(tx, [menuId]));
       return c.json(rows);
     }),
   );
@@ -580,7 +574,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const menuId = requireUuidParam(c.req.param("id"), "MenuId");
-      return c.json(await gated(sessionId, (tx) => listMenuSections(tx, tenantId, menuId)));
+      return c.json(await gated(sessionId, (tx) => listMenuSections(tx, menuId)));
     }),
   );
 
@@ -596,11 +590,10 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const created = await gated(sessionId, async (tx) => {
         await validateContentTranslations(
           tx,
-          tenantId,
           body.name as Record<string, string>,
           deps.venueLocale ?? FALLBACK_LOCALE,
         );
-        return createMenuSection(tx, tenantId, {
+        return createMenuSection(tx, {
           menuId,
           name: body.name as Record<string, string>,
           ...(displayOrder === undefined ? {} : { displayOrder }),
@@ -620,8 +613,8 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       }
       const name = body.name as Record<string, string>;
       await gated(sessionId, async (tx) => {
-        await validateContentTranslations(tx, tenantId, name, deps.venueLocale ?? FALLBACK_LOCALE);
-        await updateMenuSection(tx, tenantId, sectionId, { name });
+        await validateContentTranslations(tx, name, deps.venueLocale ?? FALLBACK_LOCALE);
+        await updateMenuSection(tx, sectionId, { name });
       });
       return c.body(null, 204);
     }),
@@ -645,7 +638,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const sectionId = requireUuidParam(body.sectionId, "MenuSectionId");
       const displayOrder = parseOptionalInteger(body.displayOrder, "displayOrder");
       const created = await gated(sessionId, (tx) =>
-        createMenuItem(tx, tenantId, {
+        createMenuItem(tx, {
           menuId,
           productId,
           sectionId,
@@ -668,7 +661,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       }
       const displayOrder = parseOptionalInteger(body.displayOrder, "displayOrder");
       await gated(sessionId, (tx) =>
-        updateMenuItem(tx, tenantId, menuId, menuItemId, {
+        updateMenuItem(tx, menuId, menuItemId, {
           ...(body.grossPrice === undefined ? {} : { grossPrice: body.grossPrice as string }),
           ...(displayOrder === undefined ? {} : { displayOrder }),
         }),
@@ -682,7 +675,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const sessionId = requireManagementSession(c);
       const menuId = requireUuidParam(c.req.param("id"), "MenuId");
       const menuItemId = requireUuidParam(c.req.param("itemId"), "MenuItemId");
-      await gated(sessionId, (tx) => deactivateMenuItem(tx, tenantId, menuId, menuItemId));
+      await gated(sessionId, (tx) => deactivateMenuItem(tx, menuId, menuItemId));
       return c.body(null, 204);
     }),
   );
@@ -692,9 +685,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const sessionId = requireManagementSession(c);
       const menuId = requireUuidParam(c.req.param("id"), "MenuId");
       const menuItemId = requireUuidParam(c.req.param("itemId"), "MenuItemId");
-      return c.json(
-        await gated(sessionId, (tx) => listMenuVariants(tx, tenantId, menuItemId, menuId)),
-      );
+      return c.json(await gated(sessionId, (tx) => listMenuVariants(tx, menuItemId, menuId)));
     }),
   );
 
@@ -706,7 +697,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const body = await readJsonBody<Record<string, unknown>>(c);
       const variants = parseMenuVariants(body.variants);
       return c.json(
-        await gated(sessionId, (tx) => setMenuVariants(tx, tenantId, menuItemId, variants, menuId)),
+        await gated(sessionId, (tx) => setMenuVariants(tx, menuItemId, variants, menuId)),
       );
     }),
   );
@@ -730,9 +721,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const locationId = requireUuidParam(c.req.param("locationId"), "LocationId");
-      const rows = await gated(sessionId, (tx) =>
-        listCataloguesForLocation(tx, tenantId, locationId),
-      );
+      const rows = await gated(sessionId, (tx) => listCataloguesForLocation(tx, locationId));
       return c.json(rows);
     }),
   );
@@ -777,7 +766,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
   app.get("/management-api/categories", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const rows = await gated(sessionId, (tx) => listCategories(tx, tenantId));
+      const rows = await gated(sessionId, (tx) => listCategories(tx));
       return c.json(rows);
     }),
   );
@@ -798,7 +787,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     run(c, log, async () => {
       const session = requireManagementSession(c);
       const id = requireUuidParam(c.req.param("id"), "CategoryId");
-      return c.json(await gated(session, (tx) => readCategory(tx, tenantId, id)));
+      return c.json(await gated(session, (tx) => readCategory(tx, id)));
     }),
   );
   app.patch("/management-api/categories/:id", (c) =>
@@ -808,7 +797,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const input = categoryInput(await readJsonBody<Record<string, unknown>>(c), false);
       return c.json(
         await gated(session, (tx) =>
-          updateCategory(tx, tenantId, id, input, deps.venueLocale ?? FALLBACK_LOCALE),
+          updateCategory(tx, id, input, deps.venueLocale ?? FALLBACK_LOCALE),
         ),
       );
     }),
@@ -817,7 +806,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     run(c, log, async () => {
       const session = requireManagementSession(c);
       const id = requireUuidParam(c.req.param("id"), "CategoryId");
-      await gated(session, (tx) => deleteCategory(tx, tenantId, id));
+      await gated(session, (tx) => deleteCategory(tx, id));
       return c.body(null, 204);
     }),
   );
@@ -826,14 +815,14 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     run(c, log, async () => {
       const session = requireManagementSession(c);
       const id = requireUuidParam(c.req.param("id"), "CategoryId");
-      return c.json(await gated(session, (tx) => categoryDependants(tx, tenantId, id)));
+      return c.json(await gated(session, (tx) => categoryDependants(tx, id)));
     }),
   );
   app.get("/management-api/categories/:id/products", (c) =>
     run(c, log, async () => {
       const session = requireManagementSession(c);
       const id = requireUuidParam(c.req.param("id"), "CategoryId");
-      return c.json(await gated(session, (tx) => listCategoryProducts(tx, tenantId, id)));
+      return c.json(await gated(session, (tx) => listCategoryProducts(tx, id)));
     }),
   );
   // Add a whole selection of products to one category in a single transaction. The body screen
@@ -849,21 +838,21 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       if (!Array.isArray(body.productIds) || body.productIds.some((v) => typeof v !== "string"))
         throw new AppError("management.request_invalid", { field: "productIds" });
       const productIds = body.productIds.map((pid) => requireUuidParam(pid as string, "ProductId"));
-      await gated(session, (tx) => addProductsToCategory(tx, tenantId, id, productIds));
+      await gated(session, (tx) => addProductsToCategory(tx, id, productIds));
       return c.body(null, 204);
     }),
   );
   app.get("/management-api/products", (c) =>
     run(c, log, async () => {
       const session = requireManagementSession(c);
-      return c.json(await gated(session, (tx) => listProducts(tx, tenantId)));
+      return c.json(await gated(session, (tx) => listProducts(tx)));
     }),
   );
   app.get("/management-api/products/:id/categories", (c) =>
     run(c, log, async () => {
       const session = requireManagementSession(c);
       const id = requireUuidParam(c.req.param("id"), "ProductId");
-      return c.json(await gated(session, (tx) => readProductCategories(tx, tenantId, id)));
+      return c.json(await gated(session, (tx) => readProductCategories(tx, id)));
     }),
   );
   app.put("/management-api/products/:id/categories", (c) =>
@@ -884,7 +873,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         throw new AppError("management.request_invalid", { field: "primaryCategoryId" });
       return c.json(
         await gated(session, (tx) =>
-          replaceProductCategories(tx, tenantId, id, {
+          replaceProductCategories(tx, id, {
             categoryIds: body.categoryIds as string[],
             ...(body.primaryCategoryId === undefined
               ? {}
@@ -900,7 +889,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const catalogueId = requireUuidParam(c.req.param("id"), "CatalogueId");
-      const rows = await gated(sessionId, (tx) => listProducts(tx, tenantId, catalogueId));
+      const rows = await gated(sessionId, (tx) => listProducts(tx, catalogueId));
       return c.json(rows);
     }),
   );
@@ -930,7 +919,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const productId = requireUuidParam(c.req.param("id"), "ProductId");
-      return c.json(await gated(sessionId, (tx) => readProductEditor(tx, tenantId, productId)));
+      return c.json(await gated(sessionId, (tx) => readProductEditor(tx, productId)));
     }),
   );
 
@@ -1046,7 +1035,6 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         if (customerName !== null) {
           await validateContentTranslations(
             tx,
-            tenantId,
             customerName,
             deps.venueLocale ?? FALLBACK_LOCALE,
           );
@@ -1164,11 +1152,10 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         if (patch.customerName != null)
           await validateContentTranslations(
             tx,
-            tenantId,
             patch.customerName,
             deps.venueLocale ?? FALLBACK_LOCALE,
           );
-        await updateProduct(tx, tenantId, productId, patch);
+        await updateProduct(tx, productId, patch);
         if (optionGroupIds !== undefined) {
           await setProductOptionGroups(tx, tenantId, productId, optionGroupIds);
         }
@@ -1186,9 +1173,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const productId = requireUuidParam(c.req.param("id"), "ProductId");
-      const ids = await gated(sessionId, (tx) =>
-        listProductOptionGroupIds(tx, tenantId, productId),
-      );
+      const ids = await gated(sessionId, (tx) => listProductOptionGroupIds(tx, productId));
       return c.json(ids);
     }),
   );
@@ -1238,12 +1223,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         ...(body.active === undefined ? {} : { active: body.active }),
       };
       const created = await gated(sessionId, async (tx) => {
-        await validateContentTranslations(
-          tx,
-          tenantId,
-          input.name,
-          deps.venueLocale ?? FALLBACK_LOCALE,
-        );
+        await validateContentTranslations(tx, input.name, deps.venueLocale ?? FALLBACK_LOCALE);
         return createOptionGroup(tx, tenantId, input);
       });
       return c.json(created, 201);
@@ -1291,13 +1271,8 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         await assertOwned(tx, "option_groups", groupId);
         if (Object.keys(patch).length === 0) return;
         if (patch.name !== undefined)
-          await validateContentTranslations(
-            tx,
-            tenantId,
-            patch.name,
-            deps.venueLocale ?? FALLBACK_LOCALE,
-          );
-        await updateOptionGroup(tx, tenantId, groupId, patch);
+          await validateContentTranslations(tx, patch.name, deps.venueLocale ?? FALLBACK_LOCALE);
+        await updateOptionGroup(tx, groupId, patch);
       });
       return c.body(null, 204);
     }),
@@ -1355,12 +1330,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       // tenant-consistent (tenant_id, group_id) FK raise 23503 → the opaque 500 the STATUS map documents
       // for a foreign id, the same posture the product routes take on a foreign catalogueId.
       const created = await gated(sessionId, async (tx) => {
-        await validateContentTranslations(
-          tx,
-          tenantId,
-          input.name,
-          deps.venueLocale ?? FALLBACK_LOCALE,
-        );
+        await validateContentTranslations(tx, input.name, deps.venueLocale ?? FALLBACK_LOCALE);
         return createOptionGroupItem(tx, tenantId, groupId, input);
       });
       return c.json(created, 201);
@@ -1413,13 +1383,8 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         await assertOwned(tx, "option_group_items", itemId, groupId);
         if (Object.keys(patch).length === 0) return;
         if (patch.name !== undefined)
-          await validateContentTranslations(
-            tx,
-            tenantId,
-            patch.name,
-            deps.venueLocale ?? FALLBACK_LOCALE,
-          );
-        await updateOptionGroupItem(tx, tenantId, itemId, patch);
+          await validateContentTranslations(tx, patch.name, deps.venueLocale ?? FALLBACK_LOCALE);
+        await updateOptionGroupItem(tx, itemId, patch);
       });
       return c.body(null, 204);
     }),

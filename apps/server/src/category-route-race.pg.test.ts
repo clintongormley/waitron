@@ -69,7 +69,7 @@ it("waits for a route attachment, then cascades the route away with the category
     });
     void adding.catch(() => ready());
     await attached;
-    const deleting = app(remove, tenantId, (tx) => deleteCategory(tx, tenantId, category.id));
+    const deleting = app(remove, tenantId, (tx) => deleteCategory(tx, category.id));
     settled = Promise.allSettled([adding, deleting]);
     try {
       await blocked(pid);

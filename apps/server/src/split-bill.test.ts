@@ -66,7 +66,7 @@ interface Seeded {
 
 async function setupVenue(): Promise<Seeded> {
   const tenantId = await seedTenant(db);
-  await seedLegacySellingUnits(db, tenantId);
+  await seedLegacySellingUnits(db);
   const loc = await db.execute<{ id: string }>(sql`
     insert into locations (tenant_id, name, invoice_locales, operation_description)
     values (${tenantId}, 'Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);

@@ -24,7 +24,7 @@ function app<T>(
 async function configuredTenant() {
   const tenantId = await seedTenant(suite.admin);
   await app(suite.admin, tenantId, (tx) =>
-    writeContentLanguages(tx, tenantId, { defaultLanguage: "en", languages: ["en", "fr"] }),
+    writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "fr"] }),
   );
   const menu = await suite.admin.execute<{ id: string }>(
     sql`insert into catalogues (tenant_id, name) values (${tenantId}, 'Lunch') returning id`,
@@ -52,13 +52,13 @@ it("reads and edits its content languages as app_user with SELECT/INSERT/UPDATE 
       sql`select current_user as role, rolsuper as superuser from pg_roles where rolname = current_user`,
     );
     expect(role.rows).toEqual([{ role: "app_user", superuser: false }]);
-    expect(await readContentLanguages(tx, t, "it-IT")).toEqual({
+    expect(await readContentLanguages(tx, "it-IT")).toEqual({
       defaultLanguage: "it",
       languages: ["it"],
     });
-    await writeContentLanguages(tx, t, { defaultLanguage: "it", languages: ["it", "de"] });
-    await writeContentLanguages(tx, t, { defaultLanguage: "de", languages: ["it", "de"] });
-    expect(await readContentLanguages(tx, t, "es")).toEqual({
+    await writeContentLanguages(tx, { defaultLanguage: "it", languages: ["it", "de"] });
+    await writeContentLanguages(tx, { defaultLanguage: "de", languages: ["it", "de"] });
+    expect(await readContentLanguages(tx, "es")).toEqual({
       defaultLanguage: "de",
       languages: ["de", "it"],
     });
@@ -70,9 +70,7 @@ it("reads and edits its content languages as app_user with SELECT/INSERT/UPDATE 
     expect(grants.rows).toEqual([{ privileges: "INSERT,SELECT,UPDATE" }]);
   });
   await expect(
-    app(suite.admin, t, (tx) =>
-      tx.execute(sql`delete from content_languages where tenant_id = ${t}`),
-    ),
+    app(suite.admin, t, (tx) => tx.execute(sql`delete from content_languages`)),
   ).rejects.toThrow();
 });
 
@@ -91,7 +89,7 @@ it("a default switch waits for an authoring transaction and rejects its newly co
     const pid = (await configuration.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`))
       .rows[0]!.pid;
     const writing = app(author, tenantId, async (tx) => {
-      await validateContentTranslations(tx, tenantId, { en: "Bread" }, "es");
+      await validateContentTranslations(tx, { en: "Bread" }, "es");
       ready();
       await wait;
       await tx.execute(sql`insert into products (tenant_id, catalogue_id, name, customer_name, pricing_unit, unit_price, vat_class)
@@ -99,7 +97,7 @@ it("a default switch waits for an authoring transaction and rejects its newly co
     });
     await validated;
     const changing = app(configuration, tenantId, (tx) =>
-      writeContentLanguages(tx, tenantId, { defaultLanguage: "fr", languages: ["en", "fr"] }),
+      writeContentLanguages(tx, { defaultLanguage: "fr", languages: ["en", "fr"] }),
     );
     const settled = Promise.allSettled([changing, writing]);
     try {
@@ -116,8 +114,7 @@ it("a default switch waits for an authoring transaction and rejects its newly co
         params: { language: "fr", count: 1 },
       });
     expect(
-      (await app(suite.admin, tenantId, (tx) => readContentLanguages(tx, tenantId, "es")))
-        .defaultLanguage,
+      (await app(suite.admin, tenantId, (tx) => readContentLanguages(tx, "es"))).defaultLanguage,
     ).toBe("en");
   } finally {
     release();
@@ -140,13 +137,13 @@ it("an authoring transaction waits for the default switch and validates against 
     const pid = (await author.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`))
       .rows[0]!.pid;
     const changing = app(configuration, tenantId, async (tx) => {
-      await writeContentLanguages(tx, tenantId, { defaultLanguage: "fr", languages: ["en", "fr"] });
+      await writeContentLanguages(tx, { defaultLanguage: "fr", languages: ["en", "fr"] });
       ready();
       await wait;
     });
     await changed;
     const writing = app(author, tenantId, (tx) =>
-      validateContentTranslations(tx, tenantId, { en: "Bread" }, "es"),
+      validateContentTranslations(tx, { en: "Bread" }, "es"),
     );
     const settled = Promise.allSettled([writing, changing]);
     try {

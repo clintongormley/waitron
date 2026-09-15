@@ -91,7 +91,7 @@ const suite = usePgliteDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     const tenantId = await seedTenant(db);
-    await seedLegacySellingUnits(db, tenantId);
+    await seedLegacySellingUnits(db);
     // `seedTenant` sets legal_name = 'Test SL' and a generated tax_id; read the tax_id back so the
     // `GET /api/till` assertion can pin the exact NIF the route must echo.
     const tenant = await db.execute<{ tax_id: string }>(
@@ -185,11 +185,11 @@ const suite = usePgliteDb({
         await tx.execute(sql`
         insert into zone_menus (zone_id, menu_id)
         values (${zone.rows[0]!.id}, ${cat.id})`);
-        const section = await createMenuSection(tx, tenantId, {
+        const section = await createMenuSection(tx, {
           menuId: cat.id,
           name: { es: "Bebidas" },
         });
-        const offer = await createMenuItem(tx, tenantId, {
+        const offer = await createMenuItem(tx, {
           menuId: cat.id,
           productId: p.id,
           sectionId: section.id,
@@ -200,11 +200,11 @@ const suite = usePgliteDb({
           values (${loc.rows[0]!.id}, ${p.id}, ${defaultStationId})`);
 
         const hiddenMenu = await createCatalogue(tx, tenantId, { name: "Staff" });
-        const hiddenSection = await createMenuSection(tx, tenantId, {
+        const hiddenSection = await createMenuSection(tx, {
           menuId: hiddenMenu.id,
           name: { es: "Staff" },
         });
-        const hiddenOffer = await createMenuItem(tx, tenantId, {
+        const hiddenOffer = await createMenuItem(tx, {
           menuId: hiddenMenu.id,
           productId: p.id,
           sectionId: hiddenSection.id,
@@ -3091,17 +3091,17 @@ async function modifierOfferFixture() {
       "es",
     );
     await setProductOptionGroups(tx, cfg.tenantId, product.id, [note.id, option.id, extra.id]);
-    const section = await createMenuSection(tx, cfg.tenantId, {
+    const section = await createMenuSection(tx, {
       menuId: aguaProduct.catalogueId,
       name: { es: "Pruebas" },
     });
-    const offer = await createMenuItem(tx, cfg.tenantId, {
+    const offer = await createMenuItem(tx, {
       menuId: aguaProduct.catalogueId,
       sectionId: section.id,
       productId: product.id,
       grossPrice: "1.75",
     });
-    await setMenuItemOptionGroups(tx, cfg.tenantId, offer.id, [
+    await setMenuItemOptionGroups(tx, offer.id, [
       { groupId: note.id, options: [] },
       { groupId: option.id, options: [{ optionId: choiceId, priceDelta: "0.00" }] },
       { groupId: extra.id, options: [{ optionId: extraId, priceDelta: "0.35" }] },

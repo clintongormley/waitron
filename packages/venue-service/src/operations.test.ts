@@ -68,9 +68,9 @@ async function seedUnitTenant(): Promise<{
 }> {
   const tenantId = brandTenantId(await seedTenant(db));
   const seeded = await db.execute<{ id: string; seed_key: "each" | "kg" }>(sql`
-    insert into units (tenant_id, seed_key, name, abbreviation, precision, hardware_unit) values
-      (${tenantId}, 'each', '{"en":"each"}'::jsonb, '{"en":"ea"}'::jsonb, 0, null),
-      (${tenantId}, 'kg', '{"en":"kg"}'::jsonb, '{"en":"kg"}'::jsonb, 3, 'kg')
+    insert into units (seed_key, name, abbreviation, precision, hardware_unit) values
+      ('each', '{"en":"each"}'::jsonb, '{"en":"ea"}'::jsonb, 0, null),
+      ('kg', '{"en":"kg"}'::jsonb, '{"en":"kg"}'::jsonb, 3, 'kg')
     returning id, seed_key`);
   return {
     tenantId,
@@ -93,30 +93,30 @@ describe("venue service routing", () => {
     await scoped(tenantId, async (tx) => {
       const department = await createDepartment(
         tx,
-        { tenantId, locationId },
+        { locationId },
         { name: "Restaurant", defaultServiceMode: "table_tab" },
       );
-      await expect(listVenueReadiness(tx, { tenantId, locationId })).resolves.toEqual([
+      await expect(listVenueReadiness(tx, { locationId })).resolves.toEqual([
         { code: "zone.department_missing", zoneId: zone.rows[0]!.id, zoneName: "Terrace" },
       ]);
 
       await configureZone(
         tx,
-        { tenantId, locationId },
+        { locationId },
         {
           zoneId: zone.rows[0]!.id,
           departmentId: department.id,
         },
       );
-      await expect(listVenueReadiness(tx, { tenantId, locationId })).resolves.toEqual([
+      await expect(listVenueReadiness(tx, { locationId })).resolves.toEqual([
         { code: "zone.menu_missing", zoneId: zone.rows[0]!.id, zoneName: "Terrace" },
       ]);
 
       const menu = await createCatalogue(tx, tenantId, { name: "Terrace menu" });
-      await allowMenuInZone(tx, { tenantId, locationId }, zone.rows[0]!.id, menu.id, {
+      await allowMenuInZone(tx, { locationId }, zone.rows[0]!.id, menu.id, {
         makeDefault: true,
       });
-      await expect(listVenueReadiness(tx, { tenantId, locationId })).resolves.toEqual([
+      await expect(listVenueReadiness(tx, { locationId })).resolves.toEqual([
         {
           code: "zone.menu_empty",
           zoneId: zone.rows[0]!.id,
@@ -136,17 +136,17 @@ describe("venue service routing", () => {
         unitPrice: "0.00",
         vatClass: "general",
       });
-      const section = await createMenuSection(tx, tenantId, {
+      const section = await createMenuSection(tx, {
         menuId: menu.id,
         name: { en: "Drinks", fr: "Boissons" },
       });
-      await createMenuItem(tx, tenantId, {
+      await createMenuItem(tx, {
         menuId: menu.id,
         productId: product.id,
         sectionId: section.id,
         grossPrice: "3.00",
       });
-      await expect(listVenueReadiness(tx, { tenantId, locationId })).resolves.toEqual([
+      await expect(listVenueReadiness(tx, { locationId })).resolves.toEqual([
         {
           code: "zone.route_missing",
           zoneId: zone.rows[0]!.id,
@@ -155,13 +155,13 @@ describe("venue service routing", () => {
           productName: "Sparkling water",
         },
       ]);
-      await writeContentLanguages(tx, tenantId, {
+      await writeContentLanguages(tx, {
         defaultLanguage: "fr",
         languages: ["fr", "en"],
       });
       // The readiness list is staff-facing, so it keeps naming the product by its staff name even
       // though the venue's default language changed and the product has French customer text.
-      await expect(listVenueReadiness(tx, { tenantId, locationId })).resolves.toEqual([
+      await expect(listVenueReadiness(tx, { locationId })).resolves.toEqual([
         {
           code: "zone.route_missing",
           zoneId: zone.rows[0]!.id,
@@ -191,25 +191,23 @@ describe("venue service routing", () => {
       );
       await createPreparationRoute(
         tx,
-        { tenantId, locationId },
+        { locationId },
         {
           productId: product.id,
           target: { kind: "no_preparation" },
         },
       );
-      await expect(listVenueReadiness(tx, { tenantId, locationId })).resolves.toEqual([]);
-      await expect(
-        deactivateDepartment(tx, { tenantId, locationId }, department.id),
-      ).rejects.toMatchObject({
+      await expect(listVenueReadiness(tx, { locationId })).resolves.toEqual([]);
+      await expect(deactivateDepartment(tx, { locationId }, department.id)).rejects.toMatchObject({
         code: "department.has_active_zones",
         params: { departmentId: department.id, zoneId: zone.rows[0]!.id },
       });
 
       await tx.execute(sql`update floor_zones set active = false where id = ${zone.rows[0]!.id}`);
       await expect(
-        deactivateDepartment(tx, { tenantId, locationId }, department.id),
+        deactivateDepartment(tx, { locationId }, department.id),
       ).resolves.toBeUndefined();
-      await expect(listVenueReadiness(tx, { tenantId, locationId })).resolves.toEqual([
+      await expect(listVenueReadiness(tx, { locationId })).resolves.toEqual([
         { code: "venue.department_missing" },
       ]);
     });
@@ -237,7 +235,7 @@ describe("venue service routing", () => {
     await scoped(tenantId, async (tx) => {
       const department = await createDepartment(
         tx,
-        { tenantId, locationId },
+        { locationId },
         {
           name: "Restaurant and bar",
           defaultServiceMode: "table_tab",
@@ -245,7 +243,7 @@ describe("venue service routing", () => {
       );
       await configureZone(
         tx,
-        { tenantId, locationId },
+        { locationId },
         {
           zoneId: upstairsZone.rows[0]!.id,
           departmentId: department.id,
@@ -253,14 +251,14 @@ describe("venue service routing", () => {
       );
       await configureZone(
         tx,
-        { tenantId, locationId },
+        { locationId },
         {
           zoneId: downstairsZone.rows[0]!.id,
           departmentId: department.id,
           serviceMode: "prepay",
         },
       );
-      await expect(listServiceZones(tx, { tenantId, locationId })).resolves.toEqual([
+      await expect(listServiceZones(tx, { locationId })).resolves.toEqual([
         {
           id: downstairsZone.rows[0]!.id,
           name: "Downstairs",
@@ -290,7 +288,7 @@ describe("venue service routing", () => {
       });
       await createPreparationRoute(
         tx,
-        { tenantId, locationId },
+        { locationId },
         {
           zoneId: upstairsZone.rows[0]!.id,
           categoryId: category.id,
@@ -299,7 +297,7 @@ describe("venue service routing", () => {
       );
       await createPreparationRoute(
         tx,
-        { tenantId, locationId },
+        { locationId },
         {
           zoneId: downstairsZone.rows[0]!.id,
           categoryId: category.id,
@@ -308,16 +306,12 @@ describe("venue service routing", () => {
       );
 
       await expect(
-        resolvePreparationRoutes(tx, { tenantId, locationId }, upstairsZone.rows[0]!.id, [
-          negroni.id,
-        ]),
+        resolvePreparationRoutes(tx, { locationId }, upstairsZone.rows[0]!.id, [negroni.id]),
       ).resolves.toEqual(
         new Map([[negroni.id, { kind: "station", stationId: upstairsBar.rows[0]!.id }]]),
       );
       await expect(
-        resolvePreparationRoutes(tx, { tenantId, locationId }, downstairsZone.rows[0]!.id, [
-          negroni.id,
-        ]),
+        resolvePreparationRoutes(tx, { locationId }, downstairsZone.rows[0]!.id, [negroni.id]),
       ).resolves.toEqual(
         new Map([[negroni.id, { kind: "station", stationId: downstairsBar.rows[0]!.id }]]),
       );
@@ -341,7 +335,7 @@ describe("venue service routing", () => {
     await scoped(tenantId, async (tx) => {
       const department = await createDepartment(
         tx,
-        { tenantId, locationId },
+        { locationId },
         {
           name: "Deli",
           defaultServiceMode: "prepay",
@@ -349,7 +343,7 @@ describe("venue service routing", () => {
       );
       await configureZone(
         tx,
-        { tenantId, locationId },
+        { locationId },
         {
           zoneId: zone.rows[0]!.id,
           departmentId: department.id,
@@ -365,28 +359,28 @@ describe("venue service routing", () => {
         unitPrice: "0.00",
         vatClass: "reduced",
       });
-      const section = await createMenuSection(tx, tenantId, {
+      const section = await createMenuSection(tx, {
         menuId: menu.id,
         name: { en: "Counter" },
       });
-      const offer = await createMenuItem(tx, tenantId, {
+      const offer = await createMenuItem(tx, {
         menuId: menu.id,
         productId: ham.id,
         sectionId: section.id,
         grossPrice: "24.90",
       });
       const hiddenMenu = await createCatalogue(tx, tenantId, { name: "Staff" });
-      const hiddenSection = await createMenuSection(tx, tenantId, {
+      const hiddenSection = await createMenuSection(tx, {
         menuId: hiddenMenu.id,
         name: { en: "Staff" },
       });
-      const hiddenOffer = await createMenuItem(tx, tenantId, {
+      const hiddenOffer = await createMenuItem(tx, {
         menuId: hiddenMenu.id,
         productId: ham.id,
         sectionId: hiddenSection.id,
         grossPrice: "1.00",
       });
-      await allowMenuInZone(tx, { tenantId, locationId }, zone.rows[0]!.id, menu.id, {
+      await allowMenuInZone(tx, { locationId }, zone.rows[0]!.id, menu.id, {
         makeDefault: true,
       });
       await tx.execute(sql`
@@ -398,7 +392,7 @@ describe("venue service routing", () => {
         values ('00000000-0000-4000-8000-000000000001', ${tenantId}, ${brandTillId(till.rows[0]!.id)}, ${nodeId}, 1)`);
       await recordOrderServiceContext(
         tx,
-        { tenantId, locationId },
+        { locationId },
         "00000000-0000-4000-8000-000000000001",
         zone.rows[0]!.id,
       );
@@ -418,15 +412,12 @@ describe("venue service routing", () => {
         lineTotal: "6.23",
         category: "Cold cuts",
       });
-      await recordWorkingLineContexts(
-        tx,
-        { tenantId, locationId },
-        "00000000-0000-4000-8000-000000000001",
-        [{ workingOrderLineId: workingLineId, menuItemId: offer.id }],
-      );
+      await recordWorkingLineContexts(tx, { locationId }, "00000000-0000-4000-8000-000000000001", [
+        { workingOrderLineId: workingLineId, menuItemId: offer.id },
+      ]);
       await configureZone(
         tx,
-        { tenantId, locationId },
+        { locationId },
         {
           zoneId: zone.rows[0]!.id,
           departmentId: department.id,
@@ -434,26 +425,22 @@ describe("venue service routing", () => {
         },
       );
 
+      await expect(resolveZoneContext(tx, { locationId }, zone.rows[0]!.id)).resolves.toMatchObject(
+        {
+          serviceMode: "invoice_first",
+        },
+      );
       await expect(
-        resolveZoneContext(tx, { tenantId, locationId }, zone.rows[0]!.id),
-      ).resolves.toMatchObject({
-        serviceMode: "invoice_first",
-      });
-      await expect(
-        getOrderServiceContext(
-          tx,
-          { tenantId, locationId },
-          "00000000-0000-4000-8000-000000000001",
-        ),
+        getOrderServiceContext(tx, { locationId }, "00000000-0000-4000-8000-000000000001"),
       ).resolves.toEqual({
         zoneId: zone.rows[0]!.id,
         departmentId: department.id,
         serviceMode: "prepay",
       });
-      const visible = await listZoneOffers(tx, { tenantId, locationId }, zone.rows[0]!.id);
+      const visible = await listZoneOffers(tx, { locationId }, zone.rows[0]!.id);
       expect(visible.defaultMenuId).toBe(menu.id);
       expect(visible.menus).toEqual([{ id: menu.id, name: "Deli takeaway", isDefault: true }]);
-      await expect(resolveNewOrderZone(tx, { tenantId, locationId }, {})).resolves.toMatchObject({
+      await expect(resolveNewOrderZone(tx, { locationId }, {})).resolves.toMatchObject({
         zoneId: zone.rows[0]!.id,
         departmentId: department.id,
         serviceMode: "invoice_first",
@@ -465,10 +452,10 @@ describe("venue service routing", () => {
         grossPrice: "24.90",
       });
       await expect(
-        resolveZoneOffer(tx, { tenantId, locationId }, zone.rows[0]!.id, offer.id),
+        resolveZoneOffer(tx, { locationId }, zone.rows[0]!.id, offer.id),
       ).resolves.toMatchObject({ id: offer.id, productId: ham.id, grossPrice: "24.90" });
       await expect(
-        resolveZoneOffer(tx, { tenantId, locationId }, zone.rows[0]!.id, hiddenOffer.id),
+        resolveZoneOffer(tx, { locationId }, zone.rows[0]!.id, hiddenOffer.id),
       ).rejects.toMatchObject({ code: "service_zone.offer_not_allowed" });
       await tx.execute(sql`
         update catalogues set name = 'Renamed menu'
@@ -477,11 +464,7 @@ describe("venue service routing", () => {
         update departments set name = 'Renamed department'
         where id = ${department.id}`);
       await expect(
-        listWorkingLineContexts(
-          tx,
-          { tenantId, locationId },
-          "00000000-0000-4000-8000-000000000001",
-        ),
+        listWorkingLineContexts(tx, { locationId }, "00000000-0000-4000-8000-000000000001"),
       ).resolves.toEqual([
         expect.objectContaining({
           workingOrderLineId: workingLineId,
@@ -533,21 +516,17 @@ describe("venue service routing", () => {
       });
       await copyOrderServiceContext(
         tx,
-        { tenantId, locationId },
+        { locationId },
         "00000000-0000-4000-8000-000000000001",
         copiedOrderId,
       );
-      await copyWorkingLineContext(tx, { tenantId, locationId }, workingLineId, copiedLineId);
-      await expect(
-        getOrderServiceContext(tx, { tenantId, locationId }, copiedOrderId),
-      ).resolves.toEqual({
+      await copyWorkingLineContext(tx, { locationId }, workingLineId, copiedLineId);
+      await expect(getOrderServiceContext(tx, { locationId }, copiedOrderId)).resolves.toEqual({
         zoneId: zone.rows[0]!.id,
         departmentId: department.id,
         serviceMode: "prepay",
       });
-      await expect(
-        listWorkingLineContexts(tx, { tenantId, locationId }, copiedOrderId),
-      ).resolves.toEqual([
+      await expect(listWorkingLineContexts(tx, { locationId }, copiedOrderId)).resolves.toEqual([
         expect.objectContaining({
           workingOrderLineId: copiedLineId,
           menuItemId: offer.id,
@@ -665,7 +644,7 @@ describe("venue service routing", () => {
     await scoped(tenantId, async (tx) => {
       const department = await createDepartment(
         tx,
-        { tenantId, locationId },
+        { locationId },
         {
           name: "Restaurant",
           tradingName: "Terrace restaurant",
@@ -675,7 +654,7 @@ describe("venue service routing", () => {
       await expect(
         configureZone(
           tx,
-          { tenantId, locationId },
+          { locationId },
           {
             zoneId: "00000000-0000-4000-8000-000000000099",
             departmentId: department.id,
@@ -685,7 +664,7 @@ describe("venue service routing", () => {
       await expect(
         configureZone(
           tx,
-          { tenantId, locationId },
+          { locationId },
           {
             zoneId: zone.rows[0]!.id,
             departmentId: "00000000-0000-4000-8000-000000000099",
@@ -695,7 +674,7 @@ describe("venue service routing", () => {
       await expect(
         allowMenuInZone(
           tx,
-          { tenantId, locationId },
+          { locationId },
           zone.rows[0]!.id,
           "00000000-0000-4000-8000-000000000099",
         ),
@@ -703,31 +682,25 @@ describe("venue service routing", () => {
 
       const menu = await createCatalogue(tx, tenantId, { name: "Terrace" });
       await expect(
-        allowMenuInZone(tx, { tenantId, locationId }, zone.rows[0]!.id, menu.id),
+        allowMenuInZone(tx, { locationId }, zone.rows[0]!.id, menu.id),
       ).rejects.toMatchObject({ code: "service_zone.not_found" });
       await configureZone(
         tx,
-        { tenantId, locationId },
+        { locationId },
         {
           zoneId: zone.rows[0]!.id,
           departmentId: department.id,
           serviceMode: "ticket_then_pay",
         },
       );
-      await allowMenuInZone(tx, { tenantId, locationId }, zone.rows[0]!.id, menu.id);
-      await expect(listZoneOffers(tx, { tenantId, locationId }, zone.rows[0]!.id)).resolves.toEqual(
-        {
-          defaultMenuId: null,
-          menus: [{ id: menu.id, name: "Terrace", isDefault: false }],
-          offers: [],
-        },
-      );
+      await allowMenuInZone(tx, { locationId }, zone.rows[0]!.id, menu.id);
+      await expect(listZoneOffers(tx, { locationId }, zone.rows[0]!.id)).resolves.toEqual({
+        defaultMenuId: null,
+        menus: [{ id: menu.id, name: "Terrace", isDefault: false }],
+        offers: [],
+      });
       await expect(
-        getOrderServiceContext(
-          tx,
-          { tenantId, locationId },
-          "00000000-0000-4000-8000-000000000099",
-        ),
+        getOrderServiceContext(tx, { locationId }, "00000000-0000-4000-8000-000000000099"),
       ).rejects.toMatchObject({ code: "order.service_context_missing" });
 
       const category = await createCategory(tx, tenantId, { name: { en: "Packaged" } });
@@ -741,24 +714,24 @@ describe("venue service routing", () => {
       });
       const routeId = await createPreparationRoute(
         tx,
-        { tenantId, locationId },
+        { locationId },
         {
           productId: product.id,
           target: { kind: "no_preparation" },
         },
       );
       await expect(
-        resolvePreparationRoutes(tx, { tenantId, locationId }, zone.rows[0]!.id, [product.id]),
+        resolvePreparationRoutes(tx, { locationId }, zone.rows[0]!.id, [product.id]),
       ).resolves.toEqual(new Map([[product.id, { kind: "no_preparation" }]]));
-      await deletePreparationRoute(tx, { tenantId, locationId }, routeId);
+      await deletePreparationRoute(tx, { locationId }, routeId);
       await expect(
-        resolvePreparationRoutes(tx, { tenantId, locationId }, zone.rows[0]!.id, [product.id]),
+        resolvePreparationRoutes(tx, { locationId }, zone.rows[0]!.id, [product.id]),
       ).rejects.toMatchObject({
         code: "route.missing",
         params: { zoneId: zone.rows[0]!.id, productId: product.id },
       });
       await expect(
-        resolvePreparationRoutes(tx, { tenantId, locationId }, zone.rows[0]!.id, [
+        resolvePreparationRoutes(tx, { locationId }, zone.rows[0]!.id, [
           "00000000-0000-4000-8000-000000000099",
         ]),
       ).rejects.toMatchObject({
@@ -784,7 +757,7 @@ describe("venue service routing", () => {
     await scoped(tenantId, async (tx) => {
       const department = await createDepartment(
         tx,
-        { tenantId, locationId },
+        { locationId },
         {
           name: "Restaurant",
           defaultServiceMode: "table_tab",
@@ -792,7 +765,7 @@ describe("venue service routing", () => {
       );
       await configureZone(
         tx,
-        { tenantId, locationId },
+        { locationId },
         {
           zoneId: zone.rows[0]!.id,
           departmentId: department.id,
@@ -809,7 +782,7 @@ describe("venue service routing", () => {
         vatClass: "general",
       });
       await expect(
-        resolvePreparationRoutes(tx, { tenantId, locationId }, zone.rows[0]!.id, [product.id]),
+        resolvePreparationRoutes(tx, { locationId }, zone.rows[0]!.id, [product.id]),
       ).rejects.toMatchObject({
         code: "route.missing",
         params: { zoneId: zone.rows[0]!.id, productId: product.id },
@@ -817,7 +790,7 @@ describe("venue service routing", () => {
       await expect(
         createPreparationRoute(
           tx,
-          { tenantId, locationId },
+          { locationId },
           {
             categoryId: category.id,
             target: { kind: "station", stationId: station.rows[0]!.id },
@@ -1057,7 +1030,7 @@ describe("resolvePreparationRoutes", () => {
       );
       await createPreparationRoute(
         tx,
-        { tenantId, locationId: brandLocationId(otherLocationId) },
+        { locationId: brandLocationId(otherLocationId) },
         { categoryId: routedElsewhere.categoryId, target: station(elsewhere) },
       );
       // createPreparationRoute refuses a route to another location's station, so it is written directly.
@@ -1128,7 +1101,7 @@ describe("resolvePreparationRoutes", () => {
       const grill = await insertStation(tx, tenantId, cfg.locationId, "Grill");
       const closedBar = await insertStation(tx, tenantId, cfg.locationId, "Closed bar");
       const menu = await createCatalogue(tx, tenantId, { name: "Dining" });
-      const section = await createMenuSection(tx, tenantId, {
+      const section = await createMenuSection(tx, {
         menuId: menu.id,
         name: { en: "Everything" },
       });
@@ -1136,7 +1109,7 @@ describe("resolvePreparationRoutes", () => {
       const ok = await productWithCategory(tx, tenantId, menu.id, "Steak");
       const missing = await productWithCategory(tx, tenantId, menu.id, "Mystery dish");
       for (const [displayOrder, product] of [inactive, ok, missing].entries()) {
-        await createMenuItem(tx, tenantId, {
+        await createMenuItem(tx, {
           menuId: menu.id,
           productId: product.id,
           sectionId: section.id,

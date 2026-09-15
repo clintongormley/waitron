@@ -2,13 +2,11 @@ import { sql } from "drizzle-orm";
 import { expect, it } from "vitest";
 import { asAppUser, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
 import { listImages, uploadImage } from "./images.js";
 
 const suite = useTemplateDb({ template: "media" });
 
 it("preserves exclusions, phrases and OR while stemming multilingual searches as app_user", async () => {
-  const tenantId = await seedTenant(suite.admin);
   await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const role = await tx.execute<{ role: string; superuser: boolean }>(
@@ -19,7 +17,6 @@ it("preserves exclusions, phrases and OR while stemming multilingual searches as
     for (const [index, name] of names.entries()) {
       await uploadImage(
         tx,
-        tenantId,
         {
           bytes: new Uint8Array([0xff, 0xd8, 0xff, index]),
           names: { en: name },
@@ -40,7 +37,7 @@ it("preserves exclusions, phrases and OR while stemming multilingual searches as
       ["bread -roll OR fish", ["Bread loaf", "Fish plate"]],
     ];
     for (const [query, expected] of cases) {
-      const result = await listImages(tx, tenantId, { query, fallbackLanguage: "en" });
+      const result = await listImages(tx, { query, fallbackLanguage: "en" });
       expect.soft(result.images.map((image) => image.names.en).sort(), query).toEqual(expected);
       expect.soft(result.total, query).toBe(expected.length);
     }
@@ -48,7 +45,6 @@ it("preserves exclusions, phrases and OR while stemming multilingual searches as
 });
 
 it("ranks, filters and paginates multilingual results as app_user", async () => {
-  const tenantId = await seedTenant(suite.admin);
   await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const add = async (
@@ -60,7 +56,6 @@ it("ranks, filters and paginates multilingual results as app_user", async () => 
       (
         await uploadImage(
           tx,
-          tenantId,
           {
             bytes: new Uint8Array([0xff, 0xd8, 0xff, marker]),
             names,
@@ -77,14 +72,14 @@ it("ranks, filters and paginates multilingual results as app_user", async () => 
     const label = await add(3, { en: "Cake" }, "Slice", ["Summer menu"]);
     expect(
       (
-        await listImages(tx, tenantId, {
+        await listImages(tx, {
           query: "bread",
           sort: "relevance",
           fallbackLanguage: "en",
         })
       ).images.map((image) => image.id),
     ).toEqual([name.id, alt.id]);
-    const page = await listImages(tx, tenantId, {
+    const page = await listImages(tx, {
       query: "bread",
       offset: 1,
       limit: 1,
@@ -92,7 +87,7 @@ it("ranks, filters and paginates multilingual results as app_user", async () => 
     });
     expect(page.total).toBe(2);
     expect(page.images.map((image) => image.id)).toEqual([alt.id]);
-    const filtered = await listImages(tx, tenantId, {
+    const filtered = await listImages(tx, {
       query: "bread",
       label: " FOOD ",
       fallbackLanguage: "en",
@@ -100,12 +95,12 @@ it("ranks, filters and paginates multilingual results as app_user", async () => 
     expect(filtered.total).toBe(1);
     expect(filtered.images.map((image) => image.id)).toEqual([name.id]);
     expect(
-      (
-        await listImages(tx, tenantId, { query: '"summer menu"', fallbackLanguage: "en" })
-      ).images.map((image) => image.id),
+      (await listImages(tx, { query: '"summer menu"', fallbackLanguage: "en" })).images.map(
+        (image) => image.id,
+      ),
     ).toEqual([label.id]);
     for (const query of ["formatge", "etxe", "pera"]) {
-      const result = await listImages(tx, tenantId, { query, fallbackLanguage: "en" });
+      const result = await listImages(tx, { query, fallbackLanguage: "en" });
       expect(result.total, query).toBe(1);
       expect(
         result.images.map((image) => image.id),
@@ -114,9 +109,7 @@ it("ranks, filters and paginates multilingual results as app_user", async () => 
     }
     for (const query of ["bread -formatge", "bread -etxe"]) {
       expect(
-        (await listImages(tx, tenantId, { query, fallbackLanguage: "en" })).images.map(
-          (image) => image.id,
-        ),
+        (await listImages(tx, { query, fallbackLanguage: "en" })).images.map((image) => image.id),
         query,
       ).toEqual([alt.id]);
     }
@@ -135,12 +128,10 @@ it.each([
   { name: "Bread", query: "\\", matched: false },
   { name: "Bread", query: '""', matched: false },
 ])("handles $query against $name", async ({ name, query, matched }) => {
-  const tenantId = await seedTenant(suite.admin);
   await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const { image } = await uploadImage(
       tx,
-      tenantId,
       {
         bytes: new Uint8Array([0xff, 0xd8, 0xff]),
         names: { en: name },
@@ -149,7 +140,7 @@ it.each([
       },
       { fallbackLanguage: "en", maxUploadBytes: 100 },
     );
-    const result = await listImages(tx, tenantId, { query, fallbackLanguage: "en" });
+    const result = await listImages(tx, { query, fallbackLanguage: "en" });
     expect(result.images.map((row) => row.id)).toEqual(matched ? [image.id] : []);
     expect(result.total).toBe(matched ? 1 : 0);
   });
@@ -161,13 +152,11 @@ it("returns rows for the default relevance sort when the search is empty", async
   // ORDER BY ("non-integer constant in ORDER BY") — a 500 on every first load. No earlier test
   // exercised this combination: the search suite only used relevance WITH a query, and an empty
   // query fell through to the date default. listImages must fall back to a date ordering instead.
-  const tenantId = await seedTenant(suite.admin);
   await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     for (const [index, name] of ["First", "Second"].entries()) {
       await uploadImage(
         tx,
-        tenantId,
         {
           bytes: new Uint8Array([0xff, 0xd8, 0xff, index]),
           names: { en: name },
@@ -177,7 +166,7 @@ it("returns rows for the default relevance sort when the search is empty", async
         { fallbackLanguage: "en", maxUploadBytes: 100 },
       );
     }
-    const result = await listImages(tx, tenantId, {
+    const result = await listImages(tx, {
       query: "",
       sort: "relevance",
       fallbackLanguage: "en",

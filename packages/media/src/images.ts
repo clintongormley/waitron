@@ -109,7 +109,6 @@ export function normalizeImageMetadata(input: ImageMetadataInput): ImageMetadata
 
 async function metadata(
   tx: Transaction,
-  tenantId: string,
   input: ImageMetadataInput,
   fallbackLanguage: string,
 ): Promise<ImageMetadataInput> {
@@ -119,10 +118,10 @@ async function metadata(
   // content-language advisory lock, so naming it once here serializes the whole save against a
   // default-language change — alt text needs no second call.
   try {
-    await validateContentTranslations(tx, tenantId, value.names, fallbackLanguage);
+    await validateContentTranslations(tx, value.names, fallbackLanguage);
   } catch (error) {
     if (error instanceof AppError && error.code === "content.translation_required") {
-      const config = await readContentLanguages(tx, tenantId, fallbackLanguage);
+      const config = await readContentLanguages(tx, fallbackLanguage);
       throw new AppError("image.translation_required", {
         field: "names",
         language: config.defaultLanguage,
@@ -131,18 +130,13 @@ async function metadata(
     throw error;
   }
   const existing = new Map(
-    (await listImageLabels(tx, tenantId)).map((label) => [label.toLowerCase(), label]),
+    (await listImageLabels(tx)).map((label) => [label.toLowerCase(), label]),
   );
   value.labels = value.labels.map((label) => existing.get(label.toLowerCase()) ?? label).sort();
   return value;
 }
 
-export async function listImageUsages(
-  tx: Transaction,
-  tenantId: string,
-  imageId: string,
-): Promise<ImageUsage[]> {
-  void tenantId;
+export async function listImageUsages(tx: Transaction, imageId: string): Promise<ImageUsage[]> {
   const image = await tx
     .select({ filename: mediaImages.filename })
     .from(mediaImages)
@@ -199,11 +193,7 @@ export async function listImageUsages(
   ];
 }
 
-export async function readImage(
-  tx: Transaction,
-  tenantId: string,
-  imageId: string,
-): Promise<ImageRecord> {
+export async function readImage(tx: Transaction, imageId: string): Promise<ImageRecord> {
   const [row] = await tx.select().from(mediaImages).where(eq(mediaImages.id, imageId));
   if (!row) throw new AppError("image.not_found", { imageId });
   return {
@@ -214,13 +204,12 @@ export async function readImage(
     labels: row.labels,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
-    usageCount: (await listImageUsages(tx, tenantId, imageId)).length,
+    usageCount: (await listImageUsages(tx, imageId)).length,
   };
 }
 
 export async function uploadImage(
   tx: Transaction,
-  tenantId: string,
   input: ImageMetadataInput & { bytes: Uint8Array },
   options: UploadImageOptions,
 ): Promise<{ created: boolean; image: ImageRecord }> {
@@ -228,27 +217,25 @@ export async function uploadImage(
     throw new AppError("image.too_large", { maxBytes: options.maxUploadBytes });
   const extension = validateImageBytes(input.bytes);
   const filename = `${createHash("sha256").update(input.bytes).digest("hex")}.${extension}`;
-  const values = await metadata(tx, tenantId, input, options.fallbackLanguage ?? FALLBACK_LOCALE);
+  const values = await metadata(tx, input, options.fallbackLanguage ?? FALLBACK_LOCALE);
   // The content-language lock also serializes duplicate uploads.
   const [existing] = await tx
     .select({ id: mediaImages.id })
     .from(mediaImages)
     .where(eq(mediaImages.filename, filename));
-  if (existing) return { created: false, image: await readImage(tx, tenantId, existing.id) };
+  if (existing) return { created: false, image: await readImage(tx, existing.id) };
   const [row] = await tx
     .insert(mediaImages)
     .values({ filename, ...values })
     .returning({ id: mediaImages.id });
   await tx.insert(mediaImageData).values({ imageId: row!.id, bytes: input.bytes });
-  return { created: true, image: await readImage(tx, tenantId, row!.id) };
+  return { created: true, image: await readImage(tx, row!.id) };
 }
 
 export async function readImageBytes(
   tx: Transaction,
-  tenantId: string,
   filename: string,
 ): Promise<{ bytes: Uint8Array; contentType: string } | null> {
-  void tenantId;
   const [row] = await tx
     .select({ bytes: mediaImageData.bytes })
     .from(mediaImages)
@@ -265,24 +252,22 @@ export async function readImageBytes(
 
 export async function updateImage(
   tx: Transaction,
-  tenantId: string,
   imageId: string,
   input: ImageMetadataInput,
   fallbackLanguage: string = FALLBACK_LOCALE,
 ): Promise<ImageRecord> {
-  await readImage(tx, tenantId, imageId);
-  const values = await metadata(tx, tenantId, input, fallbackLanguage);
+  await readImage(tx, imageId);
+  const values = await metadata(tx, input, fallbackLanguage);
   const updated = await tx
     .update(mediaImages)
     .set({ ...values, updatedAt: new Date() })
     .where(eq(mediaImages.id, imageId))
     .returning({ id: mediaImages.id });
   if (updated.length === 0) throw new AppError("image.not_found", { imageId });
-  return readImage(tx, tenantId, imageId);
+  return readImage(tx, imageId);
 }
 
-export async function listImageLabels(tx: Transaction, tenantId: string): Promise<string[]> {
-  void tenantId;
+export async function listImageLabels(tx: Transaction): Promise<string[]> {
   const result = await tx.execute<{ label: string }>(sql`
     select distinct unnest(labels) as label from media_images order by label
   `);
@@ -291,10 +276,8 @@ export async function listImageLabels(tx: Transaction, tenantId: string): Promis
 
 export async function listImageTranslationGaps(
   tx: Transaction,
-  tenantId: string,
   language: string,
 ): Promise<{ kind: "image"; id: string }[]> {
-  void tenantId;
   const code = contentLanguageCode(language);
   const rows = await tx.select({ id: mediaImages.id, names: mediaImages.names }).from(mediaImages);
   // Only a missing name is a gap; alt text is optional, so its absence never blocks a
@@ -306,7 +289,6 @@ export async function listImageTranslationGaps(
 
 export async function deleteImage(
   tx: Transaction,
-  tenantId: string,
   imageId: string,
 ): Promise<{ deleted: boolean; uses: ImageUsage[] }> {
   // FOR UPDATE conflicts with the FK's KEY SHARE lock when a product or category attaches this image.
@@ -316,7 +298,7 @@ export async function deleteImage(
     .where(eq(mediaImages.id, imageId))
     .for("update");
   if (!image) throw new AppError("image.not_found", { imageId });
-  const uses = await listImageUsages(tx, tenantId, imageId);
+  const uses = await listImageUsages(tx, imageId);
   if (uses.length > 0) return { deleted: false, uses };
   await tx.delete(mediaImages).where(eq(mediaImages.id, imageId));
   return { deleted: true, uses: [] };
@@ -335,7 +317,6 @@ export interface ListImagesOptions {
 
 export async function listImages(
   tx: Transaction,
-  tenantId: string,
   options: ListImagesOptions = {},
 ): Promise<{ images: ImageRecord[]; total: number }> {
   const query = options.query?.trim() ?? "";
@@ -357,11 +338,7 @@ export async function listImages(
   ) {
     throw new AppError("image.invalid_query", {});
   }
-  const config = await readContentLanguages(
-    tx,
-    tenantId,
-    options.fallbackLanguage ?? FALLBACK_LOCALE,
-  );
+  const config = await readContentLanguages(tx, options.fallbackLanguage ?? FALLBACK_LOCALE);
   const requestedLanguage = contentLanguageCode(options.language ?? config.defaultLanguage);
   const language = config.languages.includes(requestedLanguage)
     ? requestedLanguage

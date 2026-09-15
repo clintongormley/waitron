@@ -35,14 +35,11 @@ const columns = {
   parentId: categoryDetails.parentId,
 };
 
-/** Hierarchy edits, membership replacement and deletion share one tenant lock. */
-export async function lockCategories(tx: Transaction, tenantId: string): Promise<void> {
-  await tx.execute(
-    sql`select pg_advisory_xact_lock(hashtextextended(${`categories:${tenantId}`}, 0))`,
-  );
+/** Hierarchy edits, membership replacement and deletion share one lock. */
+export async function lockCategories(tx: Transaction): Promise<void> {
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${"categories"}, 0))`);
 }
-export async function listCategories(tx: Transaction, tenantId: string): Promise<Category[]> {
-  void tenantId;
+export async function listCategories(tx: Transaction): Promise<Category[]> {
   return tx
     .select(columns)
     .from(categories)
@@ -50,12 +47,7 @@ export async function listCategories(tx: Transaction, tenantId: string): Promise
 
     .orderBy(categories.createdAt, categories.id);
 }
-export async function readCategory(
-  tx: Transaction,
-  tenantId: string,
-  id: string,
-): Promise<Category> {
-  void tenantId;
+export async function readCategory(tx: Transaction, id: string): Promise<Category> {
   const [row] = await tx
     .select(columns)
     .from(categories)
@@ -64,25 +56,15 @@ export async function readCategory(
   if (!row) throw new AppError("category.not_found", { categoryId: id });
   return row;
 }
-async function validateParent(
-  tx: Transaction,
-  tenantId: string,
-  id: string,
-  parentId: string | null,
-): Promise<void> {
+async function validateParent(tx: Transaction, id: string, parentId: string | null): Promise<void> {
   const seen = new Set([id]);
   while (parentId !== null) {
     if (seen.has(parentId)) throw new AppError("category.parent_cycle", {});
     seen.add(parentId);
-    parentId = (await readCategory(tx, tenantId, parentId)).parentId;
+    parentId = (await readCategory(tx, parentId)).parentId;
   }
 }
-async function validateImage(
-  tx: Transaction,
-  tenantId: string,
-  filename: string | null,
-): Promise<void> {
-  void tenantId;
+async function validateImage(tx: Transaction, filename: string | null): Promise<void> {
   if (filename === null) return;
   const media = await tx.execute<{ present: boolean }>(
     sql`select to_regclass('public.media_images') is not null as present`,
@@ -115,39 +97,36 @@ export async function createCategory(
   input: CategoryInput,
   fallbackLanguage: string = FALLBACK_LOCALE,
 ): Promise<Category> {
-  await validateContentTranslations(tx, tenantId, input.name, fallbackLanguage);
+  await validateContentTranslations(tx, input.name, fallbackLanguage);
   validateColor(input.color);
-  await lockCategories(tx, tenantId);
+  await lockCategories(tx);
   const id = crypto.randomUUID();
-  await validateParent(tx, tenantId, id, input.parentId ?? null);
-  await validateImage(tx, tenantId, input.image ?? null);
+  await validateParent(tx, id, input.parentId ?? null);
+  await validateImage(tx, input.image ?? null);
   await tx.insert(categories).values({ id, tenantId, name: input.name });
   await tx.insert(categoryDetails).values({
-    tenantId,
     categoryId: id,
     parentId: input.parentId ?? null,
     image: input.image ?? null,
     color: input.color ?? null,
   });
-  return readCategory(tx, tenantId, id);
+  return readCategory(tx, id);
 }
 export async function updateCategory(
   tx: Transaction,
-  tenantId: string,
   id: string,
   patch: Partial<CategoryInput>,
   fallbackLanguage: string = FALLBACK_LOCALE,
 ): Promise<Category> {
   // Take the content lock before the hierarchy lock, as creation does.
-  if (patch.name !== undefined)
-    await validateContentTranslations(tx, tenantId, patch.name, fallbackLanguage);
-  await lockCategories(tx, tenantId);
-  const current = await readCategory(tx, tenantId, id);
+  if (patch.name !== undefined) await validateContentTranslations(tx, patch.name, fallbackLanguage);
+  await lockCategories(tx);
+  const current = await readCategory(tx, id);
   const parentId = patch.parentId === undefined ? current.parentId : patch.parentId;
   const image = patch.image === undefined ? current.image : patch.image;
   const color = patch.color === undefined ? current.color : patch.color;
-  await validateParent(tx, tenantId, id, parentId);
-  await validateImage(tx, tenantId, image);
+  await validateParent(tx, id, parentId);
+  await validateImage(tx, image);
   validateColor(color);
   await tx
     .update(categories)
@@ -155,16 +134,16 @@ export async function updateCategory(
     .where(eq(categories.id, id));
   await tx
     .insert(categoryDetails)
-    .values({ tenantId, categoryId: id, parentId, image, color })
+    .values({ categoryId: id, parentId, image, color })
     .onConflictDoUpdate({
-      target: [categoryDetails.tenantId, categoryDetails.categoryId],
+      target: categoryDetails.categoryId,
       set: { parentId, image, color },
     });
-  return readCategory(tx, tenantId, id);
+  return readCategory(tx, id);
 }
-export async function deleteCategory(tx: Transaction, tenantId: string, id: string): Promise<void> {
-  await lockCategories(tx, tenantId);
-  const category = await readCategory(tx, tenantId, id); // 404s an absent id
+export async function deleteCategory(tx: Transaction, id: string): Promise<void> {
+  await lockCategories(tx);
+  const category = await readCategory(tx, id); // 404s an absent id
   // Lock the identity: route inserts hold its FK's KEY SHARE lock.
   await tx
     .select({ id: categories.id })
@@ -196,12 +175,8 @@ export interface CategoryDependants {
   routes: { id: string; station: string | null; zone: string | null }[];
 }
 /** What deleting a category would touch — the preview behind the delete confirmation. */
-export async function categoryDependants(
-  tx: Transaction,
-  tenantId: string,
-  id: string,
-): Promise<CategoryDependants> {
-  const category = await readCategory(tx, tenantId, id); // 404s an absent id
+export async function categoryDependants(tx: Transaction, id: string): Promise<CategoryDependants> {
+  const category = await readCategory(tx, id); // 404s an absent id
   const productRows = await tx
     .select({ id: products.id, name: products.name, primary: products.categoryId })
     .from(products)
@@ -242,10 +217,8 @@ export async function categoryDependants(
 }
 export async function readProductCategories(
   tx: Transaction,
-  tenantId: string,
   productId: string,
 ): Promise<ProductCategoryMembership> {
-  void tenantId;
   const [product] = await tx
     .select({
       primaryCategoryId: products.categoryId,
@@ -262,18 +235,17 @@ export async function readProductCategories(
 }
 export async function replaceProductCategories(
   tx: Transaction,
-  tenantId: string,
   productId: string,
   input: ProductCategoryInput,
 ): Promise<ProductCategoryMembership> {
-  await lockCategories(tx, tenantId);
-  const current = await readProductCategories(tx, tenantId, productId);
+  await lockCategories(tx);
+  const current = await readProductCategories(tx, productId);
   if (
     !Array.isArray(input.categoryIds) ||
     new Set(input.categoryIds).size !== input.categoryIds.length
   )
     throw new AppError("category.membership_invalid", {});
-  for (const id of input.categoryIds) await readCategory(tx, tenantId, id);
+  for (const id of input.categoryIds) await readCategory(tx, id);
   // A reporting category is optional. When omitted, keep a surviving current one, fall back to the
   // first submitted id only when there was none, and otherwise leave it cleared.
   let primary = input.primaryCategoryId;
@@ -292,7 +264,7 @@ export async function replaceProductCategories(
   if (input.categoryIds.length)
     await tx
       .insert(productCategories)
-      .values(input.categoryIds.map((categoryId) => ({ tenantId, productId, categoryId })));
+      .values(input.categoryIds.map((categoryId) => ({ productId, categoryId })));
   await tx
     .update(products)
     .set({ categoryId: primary, updatedAt: sql`now()` })
@@ -309,12 +281,11 @@ export async function replaceProductCategories(
  */
 export async function addProductsToCategory(
   tx: Transaction,
-  tenantId: string,
   categoryId: string,
   productIds: string[],
 ): Promise<void> {
-  await lockCategories(tx, tenantId);
-  await readCategory(tx, tenantId, categoryId); // 404s an absent category
+  await lockCategories(tx);
+  await readCategory(tx, categoryId); // 404s an absent category
   // A coerced non-array, or a malformed id reaching a uuid column, would otherwise surface as a
   // TypeError or a 22P02 — neither of which a route can serve as anything but a 500.
   if (!Array.isArray(productIds) || productIds.some((id) => !isUuid(id)))
@@ -330,7 +301,7 @@ export async function addProductsToCategory(
   if (found.length !== productIds.length) throw new AppError("category.membership_invalid", {});
   await tx
     .insert(productCategories)
-    .values(productIds.map((productId) => ({ tenantId, productId, categoryId })))
+    .values(productIds.map((productId) => ({ productId, categoryId })))
     .onConflictDoNothing();
   const needReporting = found.filter((p) => p.primaryCategoryId === null).map((p) => p.id);
   if (needReporting.length)
@@ -339,8 +310,8 @@ export async function addProductsToCategory(
       .set({ categoryId, updatedAt: sql`now()` })
       .where(inArray(products.id, needReporting));
 }
-export async function listCategoryProducts(tx: Transaction, tenantId: string, categoryId: string) {
-  await readCategory(tx, tenantId, categoryId);
+export async function listCategoryProducts(tx: Transaction, categoryId: string) {
+  await readCategory(tx, categoryId);
   const selected = alias(productCategories, "selected_membership");
   return tx
     .select({

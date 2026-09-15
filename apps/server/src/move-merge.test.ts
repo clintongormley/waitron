@@ -59,9 +59,9 @@ interface Seeded {
 async function setupVenue(): Promise<Seeded> {
   const tenantId = await seedTenant(db);
   await db.execute(sql`
-    insert into units (tenant_id, seed_key, name, abbreviation, precision, hardware_unit) values
-      (${tenantId}, 'each', '{"en":"each"}'::jsonb, '{"en":"ea"}'::jsonb, 0, null),
-      (${tenantId}, 'kg', '{"en":"kg"}'::jsonb, '{"en":"kg"}'::jsonb, 3, 'kg')`);
+    insert into units (seed_key, name, abbreviation, precision, hardware_unit) values
+      ('each', '{"en":"each"}'::jsonb, '{"en":"ea"}'::jsonb, 0, null),
+      ('kg', '{"en":"kg"}'::jsonb, '{"en":"kg"}'::jsonb, 3, 'kg')`);
   const loc = await db.execute<{ id: string }>(sql`
     insert into locations (tenant_id, name, invoice_locales, operation_description)
     values (${tenantId}, 'Barra', array[${LOCALE}], 'Venta en establecimiento') returning id`);
@@ -541,7 +541,7 @@ describe("mergeTabs consolidate (freeSourceTable: true)", () => {
     // intoTab: café at 1.50. Then raise the catalogue price and open fromTab: café at 9.99. A re-price
     // would make both 9.99; the move must keep each line's OWN locked gross (the load-bearing check).
     const intoTab = await openTabOn(cfg, tInto, [{ productId: cafeId, quantity: "1" }]);
-    await asApp(cfg, (tx) => updateProduct(tx, cfg.tenantId, cafeId, { unitPrice: "9.99" }));
+    await asApp(cfg, (tx) => updateProduct(tx, cafeId, { unitPrice: "9.99" }));
     const fromTab = await openTabOn(cfg, tFrom, [{ productId: cafeId, quantity: "1" }]);
     // A manual status on the source (TS-2 schema) must clear when it is freed.
     const status = await seedStatus(cfg, "Needs cleaning");

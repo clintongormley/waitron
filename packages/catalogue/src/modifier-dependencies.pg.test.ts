@@ -53,10 +53,10 @@ function app<T>(
 
 async function fixture() {
   const venue = await seedVenue(suite.admin);
-  await seedLegacySellingUnits(suite.admin, venue.tenantId);
+  await seedLegacySellingUnits(suite.admin);
   return app(suite.admin, venue.tenantId, async (tx) => {
     const menu = await createCatalogue(tx, venue.tenantId, { name: "Menu" });
-    const section = await createMenuSection(tx, venue.tenantId, {
+    const section = await createMenuSection(tx, {
       menuId: menu.id,
       name: { en: "Drinks" },
     });
@@ -68,7 +68,7 @@ async function fixture() {
       unitPrice: "2.00",
       vatClass: "reduced",
     });
-    const item = await createMenuItem(tx, venue.tenantId, {
+    const item = await createMenuItem(tx, {
       menuId: menu.id,
       sectionId: section.id,
       productId: product.id,
@@ -155,9 +155,7 @@ it("a type change waits for an attachment and refuses the committed product depe
     status: "rejected",
     reason: { code: "modifier.in_use", params: { dependency: "product" } },
   });
-  expect(await app(suite.admin, tenantId, (tx) => getModifier(tx, tenantId, modifier.id))).toEqual(
-    modifier,
-  );
+  expect(await app(suite.admin, tenantId, (tx) => getModifier(tx, modifier.id))).toEqual(modifier);
 });
 
 it("an attachment waits for a type change and publishes the newly committed type", async () => {
@@ -169,8 +167,8 @@ it("an attachment waits for a type change and publishes the newly committed type
   );
   expect(result.status).toBe("fulfilled");
   await app(suite.admin, tenantId, async (tx) => {
-    await setMenuItemOptionGroups(tx, tenantId, item.id, [{ groupId: modifier.id, options: [] }]);
-    expect((await listMenuOffers(tx, tenantId, [menu.id]))[0]!.modifiers).toEqual([
+    await setMenuItemOptionGroups(tx, item.id, [{ groupId: modifier.id, options: [] }]);
+    expect((await listMenuOffers(tx, [menu.id]))[0]!.modifiers).toEqual([
       { id: modifier.id, ...extrasDefinition },
     ]);
   });
@@ -185,19 +183,17 @@ it.each(["type change", "deletion"] as const)(
     );
     const result = await orderedRace(
       tenantId,
-      (tx) =>
-        setMenuItemOptionGroups(tx, tenantId, item.id, [{ groupId: modifier.id, options: [] }]),
+      (tx) => setMenuItemOptionGroups(tx, item.id, [{ groupId: modifier.id, options: [] }]),
       (tx) =>
         operation === "deletion"
-          ? deleteModifier(tx, tenantId, modifier.id)
+          ? deleteModifier(tx, modifier.id)
           : updateModifier(tx, tenantId, modifier.id, extrasDefinition, "en"),
     );
     // orderedRace has already proven the second operation waited on the publication's advisory lock.
     // A type change still refuses the committed attachment; a delete now cascades it and succeeds,
     // because no open order references the modifier.
     const offers = async () =>
-      (await app(suite.admin, tenantId, (tx) => listMenuOffers(tx, tenantId, [menu.id])))[0]!
-        .modifiers;
+      (await app(suite.admin, tenantId, (tx) => listMenuOffers(tx, [menu.id])))[0]!.modifiers;
     if (operation === "type change") {
       expect(result).toMatchObject({ status: "rejected", reason: { code: "modifier.in_use" } });
       expect(await offers()).toEqual([modifier]);
@@ -205,7 +201,7 @@ it.each(["type change", "deletion"] as const)(
       expect(result.status).toBe("fulfilled");
       expect(await offers()).toEqual([]);
       await expect(
-        app(suite.admin, tenantId, (tx) => getModifier(tx, tenantId, modifier.id)),
+        app(suite.admin, tenantId, (tx) => getModifier(tx, modifier.id)),
       ).rejects.toMatchObject({ code: "modifier.not_found" });
     }
   },
@@ -220,17 +216,16 @@ it("menu publication waits for deletion and rejects the removed attachment", asy
     tenantId,
     async (tx) => {
       await setProductOptionGroups(tx, tenantId, product.id, []);
-      await deleteModifier(tx, tenantId, modifier.id);
+      await deleteModifier(tx, modifier.id);
     },
-    (tx) => setMenuItemOptionGroups(tx, tenantId, item.id, [{ groupId: modifier.id, options: [] }]),
+    (tx) => setMenuItemOptionGroups(tx, item.id, [{ groupId: modifier.id, options: [] }]),
   );
   expect(result).toMatchObject({
     status: "rejected",
     reason: { code: "options.group_invalid", params: { reason: "not_attached" } },
   });
   expect(
-    (await app(suite.admin, tenantId, (tx) => listMenuOffers(tx, tenantId, [menu.id])))[0]!
-      .modifiers,
+    (await app(suite.admin, tenantId, (tx) => listMenuOffers(tx, [menu.id])))[0]!.modifiers,
   ).toEqual([]);
 });
 
@@ -241,7 +236,7 @@ it("refuses deletion solely because an actual order retains a saved modifier sna
   ];
   await app(suite.admin, tenantId, async (tx) => {
     await setProductOptionGroups(tx, tenantId, product.id, [modifier.id]);
-    await setMenuItemOptionGroups(tx, tenantId, item.id, [{ groupId: modifier.id, options: [] }]);
+    await setMenuItemOptionGroups(tx, item.id, [{ groupId: modifier.id, options: [] }]);
     const [order] = await tx
       .insert(workingOrders)
       .values({ tenantId, tillId, nodeId, orderNumber: 1 })
@@ -260,19 +255,17 @@ it("refuses deletion solely because an actual order retains a saved modifier sna
       vatRate: "10.00",
       lineTotal: "2.00",
     });
-    await setMenuItemOptionGroups(tx, tenantId, item.id, []);
+    await setMenuItemOptionGroups(tx, item.id, []);
     await setProductOptionGroups(tx, tenantId, product.id, []);
   });
   await expect(
-    app(suite.admin, tenantId, (tx) => deleteModifier(tx, tenantId, modifier.id)),
+    app(suite.admin, tenantId, (tx) => deleteModifier(tx, modifier.id)),
   ).rejects.toMatchObject({ code: "modifier.in_use", params: { dependency: "order" } });
   const saved = await app(suite.admin, tenantId, (tx) =>
     tx.select({ snapshots: workingOrderLines.modifierSnapshots }).from(workingOrderLines),
   );
   expect(saved).toEqual([{ snapshots }]);
-  expect(await app(suite.admin, tenantId, (tx) => getModifier(tx, tenantId, modifier.id))).toEqual(
-    modifier,
-  );
+  expect(await app(suite.admin, tenantId, (tx) => getModifier(tx, modifier.id))).toEqual(modifier);
 });
 
 it("allows simultaneous selection readers while excluding definition writes", async () => {
@@ -290,13 +283,13 @@ it("allows simultaneous selection readers while excluding definition writes", as
   try {
     secondDb = await suite.pg.connect();
     first = app(firstDb, tenantId, async (tx) => {
-      await lockModifierDefinitions(tx, tenantId, "read");
+      await lockModifierDefinitions(tx, "read");
       firstReady = true;
       await gate;
     });
     await expect.poll(() => firstReady).toBe(true);
     second = app(secondDb, tenantId, async (tx) => {
-      await lockModifierDefinitions(tx, tenantId, "read");
+      await lockModifierDefinitions(tx, "read");
       secondReady = true;
       await gate;
     });
@@ -309,7 +302,7 @@ it("allows simultaneous selection readers while excluding definition writes", as
   }
   const result = await orderedRace(
     tenantId,
-    (tx) => lockModifierDefinitions(tx, tenantId, "read"),
+    (tx) => lockModifierDefinitions(tx, "read"),
     (tx) => updateModifier(tx, tenantId, modifier.id, extrasDefinition, "en"),
   );
   expect(result.status).toBe("fulfilled");
@@ -326,17 +319,17 @@ it.each(["create group", "update group", "create choice", "update choice"] as co
     });
     const result = await orderedRace(
       tenantId,
-      (tx) => lockModifierDefinitions(tx, tenantId, "read"),
+      (tx) => lockModifierDefinitions(tx, "read"),
       async (tx) => {
         switch (operation) {
           case "create group":
             return createOptionGroup(tx, tenantId, { name: { en: "New" } });
           case "update group":
-            return updateOptionGroup(tx, tenantId, group.id, { active: false });
+            return updateOptionGroup(tx, group.id, { active: false });
           case "create choice":
             return createOptionGroupItem(tx, tenantId, group.id, { name: { en: "New" } });
           case "update choice":
-            return updateOptionGroupItem(tx, tenantId, item.id, { active: false });
+            return updateOptionGroupItem(tx, item.id, { active: false });
         }
       },
     );

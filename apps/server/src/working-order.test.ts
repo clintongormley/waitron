@@ -129,9 +129,9 @@ interface SeededVenue {
 async function setupVenue(orderFlow: TillConfig["orderFlow"] = "prepay"): Promise<SeededVenue> {
   const tenantId = await seedTenant(db);
   const seededUnits = await db.execute<{ id: string; seed_key: "each" | "kg" }>(sql`
-    insert into units (tenant_id, seed_key, name, abbreviation, precision, hardware_unit) values
-      (${tenantId}, 'each', '{"en":"each"}'::jsonb, '{"en":"ea"}'::jsonb, 0, null),
-      (${tenantId}, 'kg', '{"en":"kg"}'::jsonb, '{"en":"kg"}'::jsonb, 3, 'kg')
+    insert into units (seed_key, name, abbreviation, precision, hardware_unit) values
+      ('each', '{"en":"each"}'::jsonb, '{"en":"ea"}'::jsonb, 0, null),
+      ('kg', '{"en":"kg"}'::jsonb, '{"en":"kg"}'::jsonb, 3, 'kg')
     returning id, seed_key`);
   const eachUnitId = seededUnits.rows.find((unit) => unit.seed_key === "each")!.id;
   const kgUnitId = seededUnits.rows.find((unit) => unit.seed_key === "kg")!.id;
@@ -169,21 +169,21 @@ async function setupVenue(orderFlow: TillConfig["orderFlow"] = "prepay"): Promis
       });
       await assignCatalogueToLocation(tx, locationId, cat.id);
       const premium = await createCatalogue(tx, tenantId, { name: "Carta premium" });
-      const section = await createMenuSection(tx, tenantId, {
+      const section = await createMenuSection(tx, {
         menuId: cat.id,
         name: { [LOCALE]: "Bebidas" },
       });
-      const premiumSection = await createMenuSection(tx, tenantId, {
+      const premiumSection = await createMenuSection(tx, {
         menuId: premium.id,
         name: { [LOCALE]: "Bebidas" },
       });
-      const cafeOffer = await createMenuItem(tx, tenantId, {
+      const cafeOffer = await createMenuItem(tx, {
         menuId: cat.id,
         productId: cafe.id,
         sectionId: section.id,
         grossPrice: "2.50",
       });
-      const premiumCafeOffer = await createMenuItem(tx, tenantId, {
+      const premiumCafeOffer = await createMenuItem(tx, {
         menuId: premium.id,
         productId: cafe.id,
         sectionId: premiumSection.id,
@@ -1128,8 +1128,8 @@ describe("getHeldOrder", () => {
     const { productId, menuItemId, unitId } = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       const inserted = await tx.execute<{ id: string }>(sql`
-        insert into units (tenant_id, name, abbreviation, precision, hardware_unit)
-        values (${cfg.tenantId}, ${JSON.stringify({ [LOCALE]: "kg" })}::jsonb, ${JSON.stringify({ [LOCALE]: "kg" })}::jsonb, 3, 'kg')
+        insert into units (name, abbreviation, precision, hardware_unit)
+        values (${JSON.stringify({ [LOCALE]: "kg" })}::jsonb, ${JSON.stringify({ [LOCALE]: "kg" })}::jsonb, 3, 'kg')
         returning id`);
       const unitId = inserted.rows[0]!.id;
       const product = await createProduct(tx, cfg.tenantId, {
@@ -1140,11 +1140,11 @@ describe("getHeldOrder", () => {
         unitPrice: "12.00",
         vatClass: "general",
       });
-      const section = await createMenuSection(tx, cfg.tenantId, {
+      const section = await createMenuSection(tx, {
         menuId: catalogueId,
         name: { [LOCALE]: "Charcutería" },
       });
-      const menuItem = await createMenuItem(tx, cfg.tenantId, {
+      const menuItem = await createMenuItem(tx, {
         menuId: catalogueId,
         productId: product.id,
         sectionId: section.id,
@@ -1161,7 +1161,7 @@ describe("getHeldOrder", () => {
     });
     await db.execute(sql`
       update units set name = ${JSON.stringify({ [LOCALE]: "kilogramo" })}::jsonb
-      where tenant_id = ${cfg.tenantId} and id = ${unitId}`);
+      where id = ${unitId}`);
 
     const order = await getHeldOrder({ db }, cfg, id);
     const stored = await db.execute<{
@@ -1211,7 +1211,7 @@ describe("getHeldOrder", () => {
         productId: cafeId,
         groupId: group.id,
       });
-      await setMenuItemOptionGroups(tx, cfg.tenantId, premiumCafeOfferId, [
+      await setMenuItemOptionGroups(tx, premiumCafeOfferId, [
         { groupId: group.id, options: [{ optionId: option.id, priceDelta: "0.75" }] },
       ]);
       return option.id;
@@ -1274,8 +1274,7 @@ describe("getHeldOrder", () => {
           allergens = ${JSON.stringify({ milk: { presence: "contains" } })}::jsonb
       where tenant_id = ${cfg.tenantId} and id = ${cafeId}`);
     await db.execute(sql`
-      update menu_items set active = false
-      where tenant_id = ${cfg.tenantId} and id = ${premiumCafeOfferId}`);
+      update menu_items set active = false where id = ${premiumCafeOfferId}`);
 
     const order = await getHeldOrder({ db }, cfg, id);
     expect(order.lines).toEqual([
@@ -1384,7 +1383,7 @@ describe("updateHeldOrder", () => {
         productId: cafeId,
         groupId: group.id,
       });
-      await setMenuItemOptionGroups(tx, cfg.tenantId, premiumCafeOfferId, [
+      await setMenuItemOptionGroups(tx, premiumCafeOfferId, [
         { groupId: group.id, options: [{ optionId: option.id, priceDelta: "0.75" }] },
       ]);
       return option.id;
@@ -1412,11 +1411,9 @@ describe("updateHeldOrder", () => {
       where tenant_id = ${cfg.tenantId} and working_order_id = ${id} order by line_no`);
 
     await db.execute(sql`
-      update menu_items set gross_price = 9.00
-      where tenant_id = ${cfg.tenantId} and id = ${premiumCafeOfferId}`);
+      update menu_items set gross_price = 9.00 where id = ${premiumCafeOfferId}`);
     await db.execute(sql`
-      update menu_item_options set price_delta = 4.00
-      where tenant_id = ${cfg.tenantId} and menu_item_id = ${premiumCafeOfferId}`);
+      update menu_item_options set price_delta = 4.00 where menu_item_id = ${premiumCafeOfferId}`);
     await updateHeldOrder({ db }, cfg, id, {
       lines: [
         {
@@ -1472,8 +1469,7 @@ describe("updateHeldOrder", () => {
     const lineId = before.rows[0]!.id;
 
     await db.execute(sql`
-      update menu_items set gross_price = 9.00
-      where tenant_id = ${cfg.tenantId} and id = ${premiumCafeOfferId}`);
+      update menu_items set gross_price = 9.00 where id = ${premiumCafeOfferId}`);
     await updateHeldOrder({ db }, cfg, id, {
       lines: [
         {
@@ -1978,7 +1974,7 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
       await setCategoryStation(tx, cfg, drinks.id, bar.id);
       await setCategoryStation(tx, cfg, food.id, kitchen.id);
       const product = await makeProduct(tx, cfg, catalogueId, { categoryId: drinks.id });
-      await replaceProductCategories(tx, cfg.tenantId, product, {
+      await replaceProductCategories(tx, product, {
         categoryIds: [food.id, drinks.id],
         primaryCategoryId: drinks.id,
       });
@@ -1991,7 +1987,7 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
         .where(eq(workingOrderLines.workingOrderId, orderId));
       expect(before).toEqual({ category: "Drinks" });
 
-      await updateCategory(tx, cfg.tenantId, drinks.id, {
+      await updateCategory(tx, drinks.id, {
         name: { en: "Cocktails" },
         parentId: food.id,
       });
@@ -2149,11 +2145,11 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
       await tx.execute(sql`
         insert into preparation_routes (location_id, zone_id, product_id, station_id)
         values (${cfg.locationId}, ${zoneId}, ${aguaId}, ${kitchen.id})`);
-      const section = await createMenuSection(tx, cfg.tenantId, {
+      const section = await createMenuSection(tx, {
         menuId: catalogueId,
         name: { [LOCALE]: "Agua" },
       });
-      const aguaOffer = await createMenuItem(tx, cfg.tenantId, {
+      const aguaOffer = await createMenuItem(tx, {
         menuId: catalogueId,
         productId: aguaId,
         sectionId: section.id,
@@ -4936,10 +4932,9 @@ describe("canonical modifier selections", () => {
           cafeId,
           definitions.map((d) => d.id),
         );
-        await catalogue.assignProductUnit(tx, cfg.tenantId, cafeId, kgUnitId);
+        await catalogue.assignProductUnit(tx, cafeId, kgUnitId);
         await catalogue.setMenuItemOptionGroups(
           tx,
-          cfg.tenantId,
           cafeOfferId,
           definitions.map((d) => ({
             groupId: d.id,
@@ -5020,7 +5015,7 @@ describe("canonical modifier selections", () => {
         );
         if (source === "product") {
           await catalogue.setProductOptionGroups(tx, cfg.tenantId, cafeId, []);
-          await catalogue.setMenuItemOptionGroups(tx, cfg.tenantId, cafeOfferId, []);
+          await catalogue.setMenuItemOptionGroups(tx, cafeOfferId, []);
           await catalogue.updateModifier(
             tx,
             cfg.tenantId,
@@ -5095,7 +5090,7 @@ it("does not let an omitted canonical payload waive an empty required menu extra
       "es",
     );
     await catalogue.setProductOptionGroups(tx, cfg.tenantId, cafeId, [modifier.id]);
-    await catalogue.setMenuItemOptionGroups(tx, cfg.tenantId, cafeOfferId, [
+    await catalogue.setMenuItemOptionGroups(tx, cafeOfferId, [
       { groupId: modifier.id, options: [{ optionId: choiceId, priceDelta: "0.50" }] },
     ]);
     await tx

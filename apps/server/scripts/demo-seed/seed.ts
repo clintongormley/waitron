@@ -64,7 +64,7 @@ export async function seedDemoRestaurant(
     });
     await seedFloor(tx, { tenantId, locationId, locale, menuIds });
     await seedStaff(tx, brandTenantId(tenantId));
-    await seedMedia(tx, { tenantId, productsByImage });
+    await seedMedia(tx, { productsByImage });
     return (await listAvailableProducts(tx, locationId)).products;
   });
 

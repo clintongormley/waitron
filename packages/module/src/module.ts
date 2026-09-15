@@ -372,11 +372,7 @@ export interface WaitronModule {
   readonly configurationTransfer?: ModuleConfigurationTransfer;
   /** Required localized fields contributed to a content-default change check. */
   readonly contentTranslations?: {
-    gaps(
-      tx: Transaction,
-      tenantId: string,
-      language: string,
-    ): Promise<{ kind: string; id: string }[]>;
+    gaps(tx: Transaction, language: string): Promise<{ kind: string; id: string }[]>;
   };
 }
 

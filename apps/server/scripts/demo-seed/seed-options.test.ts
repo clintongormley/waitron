@@ -89,7 +89,7 @@ describe("seedOptions", () => {
       });
       return {
         products: (await listAvailableProducts(tx, locationId)).products,
-        modifiers: await listModifiers(tx, tenantId),
+        modifiers: await listModifiers(tx),
       };
     });
 

@@ -201,7 +201,6 @@ describe("configuration transfer database path", () => {
     await withTransaction(suite.db, async (tx) => {
       const uploaded = await uploadImage(
         tx,
-        source.tenantId,
         {
           bytes: new Uint8Array([0xff, 0xd8, 0xff, 1]),
           names: { es: "Pan" },
@@ -232,11 +231,11 @@ describe("configuration transfer database path", () => {
         insert into categories (id, tenant_id, name) values
           ('23232323-aaaa-aaaa-aaaa-232323232323', ${source.tenantId}, '{"es":"Panadería"}'::jsonb)`);
       await tx.execute(sql`
-        insert into category_details (tenant_id, category_id, image) values
-          (${source.tenantId}, '23232323-aaaa-aaaa-aaaa-232323232323', ${uploaded.image.filename})`);
+        insert into category_details (category_id, image) values
+          ('23232323-aaaa-aaaa-aaaa-232323232323', ${uploaded.image.filename})`);
       await tx.execute(sql`
-        insert into product_categories (tenant_id, product_id, category_id) values
-          (${source.tenantId}, '22222222-aaaa-aaaa-aaaa-222222222222',
+        insert into product_categories (product_id, category_id) values
+          ('22222222-aaaa-aaaa-aaaa-222222222222',
            '23232323-aaaa-aaaa-aaaa-232323232323')`);
       await tx.execute(sql`
         update products set category_id = '23232323-aaaa-aaaa-aaaa-232323232323'
@@ -361,7 +360,7 @@ describe("configuration transfer database path", () => {
     });
     await withTransaction(targetSuite.db, async (tx) => {
       const [metadata] = transferred.tables.media_images!;
-      const bytes = await readImageBytes(tx, target.tenantId, metadata!.filename as string);
+      const bytes = await readImageBytes(tx, metadata!.filename as string);
       expect(bytes?.bytes).toEqual(new Uint8Array([0xff, 0xd8, 0xff, 1]));
       const attached = await tx.execute<{ image: string }>(
         sql`select image from products where tenant_id = ${target.tenantId}`,
@@ -377,10 +376,10 @@ describe("configuration transfer database path", () => {
           p.category_id = c.id as primary,
           exists (
             select 1 from product_categories pc
-            where pc.tenant_id = p.tenant_id and pc.product_id = p.id and pc.category_id = c.id
+            where pc.product_id = p.id and pc.category_id = c.id
           ) as member
         from categories c
-        join category_details d on d.tenant_id = c.tenant_id and d.category_id = c.id
+        join category_details d on d.category_id = c.id
         join products p on p.tenant_id = c.tenant_id
         where c.tenant_id = ${target.tenantId} and p.name = 'Café'
       `);
@@ -541,7 +540,7 @@ it("transfers every modifier type, remaps default choice ids and preserves menu 
   const original = await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     const menu = await createCatalogue(tx, tenantId(source.tenantId), { name: "Modifier menu" });
-    const section = await createMenuSection(tx, tenantId(source.tenantId), {
+    const section = await createMenuSection(tx, {
       menuId: menu.id,
       name: { es: "Bebidas" },
     });
@@ -595,7 +594,7 @@ it("transfers every modifier type, remaps default choice ids and preserves menu 
       product.id,
       definitions.map((definition) => definition.id),
     );
-    await createMenuItem(tx, tenantId(source.tenantId), {
+    await createMenuItem(tx, {
       menuId: menu.id,
       sectionId: section.id,
       productId: product.id,
@@ -621,7 +620,7 @@ it("transfers every modifier type, remaps default choice ids and preserves menu 
   });
   await withTransaction(targetSuite.db, async (tx) => {
     await asAppUser(tx);
-    const definitions = await listModifiers(tx, target.tenantId);
+    const definitions = await listModifiers(tx);
     expect(definitions).toHaveLength(3);
     expect(
       definitions.every((definition) =>
@@ -640,7 +639,7 @@ it("transfers every modifier type, remaps default choice ids and preserves menu 
     const menus = await tx.execute<{ id: string }>(
       sql`select id from catalogues where tenant_id = ${target.tenantId} and name = 'Modifier menu'`,
     );
-    const offers = await listMenuOffers(tx, tenantId(target.tenantId), [menus.rows[0]!.id]);
+    const offers = await listMenuOffers(tx, [menus.rows[0]!.id]);
     expect(offers[0]!.grossPrice).toBe("2.75");
     expect(offers[0]!.modifiers.map((modifier) => modifier.type)).toEqual([
       "text",

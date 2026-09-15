@@ -23,7 +23,7 @@ declare module "@waitron/shared" {
     "unit.precision_invalid": Record<string, never>;
     /** A quantity is malformed, non-positive, too precise, or outside numeric(12,3). */
     "quantity.invalid": { reason: "format" | "positive" | "precision" | "limit" };
-    /** A unit id is absent from the caller's tenant. */
+    /** A unit id names no unit. */
     "unit.not_found": { unitId: string };
     /** A unit cannot be deleted while products retain real assignments to it; each product carries
      * its id and availability so a caller can list them and link to each product's editor. */

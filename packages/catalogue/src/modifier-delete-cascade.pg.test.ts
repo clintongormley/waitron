@@ -43,12 +43,12 @@ function app<T>(
 it("cascades an option_groups delete through the published menu link rows", async () => {
   const venue = await seedVenue(suite.admin);
   const { tenantId } = venue;
-  await seedLegacySellingUnits(suite.admin, tenantId);
+  await seedLegacySellingUnits(suite.admin);
 
   const choice = { id: randomUUID(), name: { en: "Oat" }, available: true };
   const { groupId, optionId } = await app(suite.admin, tenantId, async (tx) => {
     const menu = await createCatalogue(tx, tenantId, { name: "Menu" });
-    const section = await createMenuSection(tx, tenantId, {
+    const section = await createMenuSection(tx, {
       menuId: menu.id,
       name: { en: "Drinks" },
     });
@@ -60,7 +60,7 @@ it("cascades an option_groups delete through the published menu link rows", asyn
       unitPrice: "2.00",
       vatClass: "reduced",
     });
-    const item = await createMenuItem(tx, tenantId, {
+    const item = await createMenuItem(tx, {
       menuId: menu.id,
       sectionId: section.id,
       productId: product.id,
@@ -75,7 +75,7 @@ it("cascades an option_groups delete through the published menu link rows", asyn
     // Attach to the product, then publish the group on the menu item with one priced option — this
     // writes the menu_item_option_groups row and the menu_item_options row the delete must reach.
     await setProductOptionGroups(tx, tenantId, product.id, [modifier.id]);
-    await setMenuItemOptionGroups(tx, tenantId, item.id, [
+    await setMenuItemOptionGroups(tx, item.id, [
       { groupId: modifier.id, options: [{ optionId: choice.id, priceDelta: "0" }] },
     ]);
     return { groupId: modifier.id, optionId: choice.id };

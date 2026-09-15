@@ -35,9 +35,7 @@ function app<T>(
 }
 async function fixture() {
   const tenantId = await seedTenant(suite.admin);
-  const { image } = await app(suite.admin, tenantId, (tx) =>
-    uploadImage(tx, tenantId, metadata, options),
-  );
+  const { image } = await app(suite.admin, tenantId, (tx) => uploadImage(tx, metadata, options));
   const menu = await suite.admin.execute<{ id: string }>(
     sql`insert into catalogues (tenant_id, name) values (${tenantId}, 'Lunch') returning id`,
   );
@@ -68,7 +66,7 @@ it("grants metadata CRUD and immutable byte insertion, and refuses truncation", 
       sql`select current_user as role, rolsuper as superuser from pg_roles where rolname = current_user`,
     );
     expect(role.rows).toEqual([{ role: "app_user", superuser: false }]);
-    expect((await readImageBytes(tx, tenantId, image.filename))?.bytes).toEqual(photo);
+    expect((await readImageBytes(tx, image.filename))?.bytes).toEqual(photo);
     const grants = await tx.execute<{ table: string; privileges: string }>(sql`
       select relname as table, string_agg(privilege_type, ',' order by privilege_type) as privileges
       from pg_class cross join lateral aclexplode(relacl)
@@ -206,7 +204,7 @@ it("waits for an attaching product then reports its committed use instead of del
       await wait;
     });
     await attached;
-    const deleting = app(remove, tenantId, (tx) => deleteImage(tx, tenantId, image.id));
+    const deleting = app(remove, tenantId, (tx) => deleteImage(tx, image.id));
     try {
       await blocked(pid);
     } finally {
@@ -236,7 +234,7 @@ it("makes an attachment wait for deletion then rejects the missing reference", a
     const pid = (await attach.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`))
       .rows[0]!.pid;
     const deleting = app(remove, tenantId, async (tx) => {
-      expect(await deleteImage(tx, tenantId, image.id)).toEqual({ deleted: true, uses: [] });
+      expect(await deleteImage(tx, image.id)).toEqual({ deleted: true, uses: [] });
       ready();
       await wait;
     });
@@ -253,9 +251,7 @@ it("makes an attachment wait for deletion then rejects the missing reference", a
     const [result, deletion] = await settled;
     expect(result.status).toBe("rejected");
     expect(deletion.status).toBe("fulfilled");
-    expect(
-      await app(suite.admin, tenantId, (tx) => readImageBytes(tx, tenantId, image.filename)),
-    ).toBeNull();
+    expect(await app(suite.admin, tenantId, (tx) => readImageBytes(tx, image.filename))).toBeNull();
   } finally {
     release();
     await Promise.all([attach.close(), remove.close()]);
@@ -281,12 +277,12 @@ it("waits for an attaching category then reports its committed use instead of de
     const pid = (await remove.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`))
       .rows[0]!.pid;
     const adding = app(attach, tenantId, async (tx) => {
-      await updateCategory(tx, tenantId, category.id, { image: image.filename });
+      await updateCategory(tx, category.id, { image: image.filename });
       ready();
       await wait;
     });
     await attached;
-    const deleting = app(remove, tenantId, (tx) => deleteImage(tx, tenantId, image.id));
+    const deleting = app(remove, tenantId, (tx) => deleteImage(tx, image.id));
     try {
       await blocked(pid);
     } finally {
@@ -322,13 +318,13 @@ it("makes a category attachment wait for deletion then rejects the missing refer
     const pid = (await attach.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`))
       .rows[0]!.pid;
     const deleting = app(remove, tenantId, async (tx) => {
-      expect(await deleteImage(tx, tenantId, image.id)).toEqual({ deleted: true, uses: [] });
+      expect(await deleteImage(tx, image.id)).toEqual({ deleted: true, uses: [] });
       ready();
       await wait;
     });
     await deleted;
     const adding = app(attach, tenantId, (tx) =>
-      updateCategory(tx, tenantId, category.id, { image: image.filename }),
+      updateCategory(tx, category.id, { image: image.filename }),
     );
     const settled = Promise.allSettled([adding, deleting]);
     try {
@@ -339,9 +335,7 @@ it("makes a category attachment wait for deletion then rejects the missing refer
     const [result, deletion] = await settled;
     expect(result.status).toBe("rejected");
     expect(deletion.status).toBe("fulfilled");
-    expect(
-      await app(suite.admin, tenantId, (tx) => readImageBytes(tx, tenantId, image.filename)),
-    ).toBeNull();
+    expect(await app(suite.admin, tenantId, (tx) => readImageBytes(tx, image.filename))).toBeNull();
   } finally {
     release();
     await Promise.all([attach.close(), remove.close()]);

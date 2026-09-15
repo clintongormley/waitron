@@ -59,7 +59,6 @@ function metadata(value: unknown): ImageMetadataInput {
 }
 export const MEDIA_ROUTES: ModuleRoutes = {
   mount(app, ctx, log) {
-    const tenantId = ctx.cfg.tenantId;
     const fallbackLanguage = ctx.cfg.contentDefaultLanguage ?? FALLBACK_LOCALE;
     const maxUploadBytes = ctx.maxUploadBytes ?? 5 * 1024 * 1024;
     const gated = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>) =>
@@ -84,15 +83,13 @@ export const MEDIA_ROUTES: ModuleRoutes = {
         };
         if (query.offset !== undefined) options.offset = Number(query.offset);
         if (query.limit !== undefined) options.limit = Number(query.limit);
-        return c.json(
-          await gated(requireManagementSession(c), (tx) => listImages(tx, tenantId, options)),
-        );
+        return c.json(await gated(requireManagementSession(c), (tx) => listImages(tx, options)));
       }),
     );
     app.get("/management-api/image-labels", (c) =>
       run(c, log, async () =>
         c.json({
-          labels: await gated(requireManagementSession(c), (tx) => listImageLabels(tx, tenantId)),
+          labels: await gated(requireManagementSession(c), (tx) => listImageLabels(tx)),
         }),
       ),
     );
@@ -102,8 +99,8 @@ export const MEDIA_ROUTES: ModuleRoutes = {
         const id = requireUuidParam(c.req.param("id"), "ImageId");
         return c.json(
           await gated(session, async (tx) => ({
-            image: await readImage(tx, tenantId, id),
-            uses: await listImageUsages(tx, tenantId, id),
+            image: await readImage(tx, id),
+            uses: await listImageUsages(tx, id),
           })),
         );
       }),
@@ -134,7 +131,6 @@ export const MEDIA_ROUTES: ModuleRoutes = {
             });
             return uploadImage(
               tx,
-              tenantId,
               { ...input, bytes: new Uint8Array(await file.arrayBuffer()) },
               { maxUploadBytes, fallbackLanguage },
             );
@@ -151,9 +147,7 @@ export const MEDIA_ROUTES: ModuleRoutes = {
         const id = requireUuidParam(c.req.param("id"), "ImageId");
         const input = metadata(await readJsonBody(c));
         return c.json({
-          image: await gated(session, (tx) =>
-            updateImage(tx, tenantId, id, input, fallbackLanguage),
-          ),
+          image: await gated(session, (tx) => updateImage(tx, id, input, fallbackLanguage)),
         });
       }),
     );
@@ -161,7 +155,7 @@ export const MEDIA_ROUTES: ModuleRoutes = {
       run(c, log, async () => {
         const session = requireManagementSession(c);
         const id = requireUuidParam(c.req.param("id"), "ImageId");
-        return c.json(await gated(session, (tx) => deleteImage(tx, tenantId, id)));
+        return c.json(await gated(session, (tx) => deleteImage(tx, id)));
       }),
     );
     app.get("/media/:filename", (c) =>
@@ -170,7 +164,7 @@ export const MEDIA_ROUTES: ModuleRoutes = {
         if (!MEDIA_FILENAME.test(filename)) return c.body(null, 404);
         const content = await withTransaction(ctx.db, async (tx) => {
           await asAppUser(tx);
-          return readImageBytes(tx, tenantId, filename);
+          return readImageBytes(tx, filename);
         });
         if (!content) return c.body(null, 404);
         return c.body(new Uint8Array(content.bytes), 200, {

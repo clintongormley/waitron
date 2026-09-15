@@ -42,11 +42,11 @@ const optionsGroup = (choice: {
 
 it("reports products, menus and the open-order count a delete would touch", async () => {
   const { tenantId, tillId, nodeId } = await seedVenue(suite.admin);
-  await seedLegacySellingUnits(suite.admin, tenantId);
+  await seedLegacySellingUnits(suite.admin);
   const choice = { id: randomUUID(), name: { en: "Oat" }, available: true };
   const seeded = await app(tenantId, async (tx) => {
     const menu = await createCatalogue(tx, tenantId, { name: "Menu" });
-    const section = await createMenuSection(tx, tenantId, {
+    const section = await createMenuSection(tx, {
       menuId: menu.id,
       name: { en: "Drinks" },
     });
@@ -66,7 +66,7 @@ it("reports products, menus and the open-order count a delete would touch", asyn
       unitPrice: "2.00",
       vatClass: "reduced",
     });
-    const itemQ = await createMenuItem(tx, tenantId, {
+    const itemQ = await createMenuItem(tx, {
       menuId: menu.id,
       sectionId: section.id,
       productId: productQ.id,
@@ -77,7 +77,7 @@ it("reports products, menus and the open-order count a delete would touch", asyn
     // on Q's item requires the group attached to Q too, so both products appear as dependants.
     await setProductOptionGroups(tx, tenantId, productP.id, [modifier.id]);
     await setProductOptionGroups(tx, tenantId, productQ.id, [modifier.id]);
-    await setMenuItemOptionGroups(tx, tenantId, itemQ.id, [
+    await setMenuItemOptionGroups(tx, itemQ.id, [
       { groupId: modifier.id, options: [{ optionId: choice.id, priceDelta: "0" }] },
     ]);
     const [order] = await tx
@@ -100,9 +100,7 @@ it("reports products, menus and the open-order count a delete would touch", asyn
     });
     return { modifierId: modifier.id, productP, productQ, itemQ };
   });
-  const dependants = await app(tenantId, (tx) =>
-    modifierDependants(tx, tenantId, seeded.modifierId),
-  );
+  const dependants = await app(tenantId, (tx) => modifierDependants(tx, seeded.modifierId));
   expect(dependants.products.map((p) => p.id)).toContain(seeded.productP.id);
   expect(dependants.products.map((p) => p.id)).toContain(seeded.productQ.id);
   expect(dependants.products).toHaveLength(2);

@@ -2055,11 +2055,11 @@ export async function startServer(
       cfg: { tenantId: till.tenantId, nodeId: till.nodeId },
       // The venue the product editor routes a product's station/course against.
       venueCfg: till,
-      contentTranslationGaps: async (tx, tenantId, language) => {
+      contentTranslationGaps: async (tx, language) => {
         const gaps = [];
         for (const module of setsToMigrate) {
           if (module.contentTranslations)
-            gaps.push(...(await module.contentTranslations.gaps(tx, tenantId, language)));
+            gaps.push(...(await module.contentTranslations.gaps(tx, language)));
         }
         return gaps;
       },
@@ -2067,7 +2067,7 @@ export async function startServer(
     },
     log,
   );
-  mountUnitsApi(app, { db, cfg: { tenantId: till.tenantId }, venueLocale }, log);
+  mountUnitsApi(app, { db, venueLocale }, log);
   // The deployment holds one tenant per database. The dashboard's gated purchase-invoice write
   // group (facturas recibidas: header + VAT desglose) on the SAME app, the identical convention.
   // Reuses the EXACT `db` and tenant `mountCatalogueApi` above receives (`till.tenantId`) so the

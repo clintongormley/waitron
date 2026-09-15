@@ -154,8 +154,8 @@ describe("seedDemoRestaurant", () => {
       }>(sql`
         select mi.product_id, c.name as menu_name, mi.gross_price
         from menu_items mi
-        join products p on p.tenant_id = mi.tenant_id and p.id = mi.product_id
-        join catalogues c on c.tenant_id = mi.tenant_id and c.id = mi.menu_id
+        join products p on p.id = mi.product_id
+        join catalogues c on c.id = mi.menu_id
         where p.name = 'Negroni'
         order by mi.gross_price`);
       const { rows: cocktailRouteRows } = await tx.execute<{

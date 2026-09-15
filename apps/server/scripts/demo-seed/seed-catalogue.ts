@@ -109,7 +109,7 @@ export async function seedCatalogues(
   { locationId, locale }: SeedCataloguesInput,
 ): Promise<SeedCataloguesResult> {
   const stationIds = await resolveStationIds(tx, tenantId, locationId);
-  await writeContentLanguages(tx, tenantId, {
+  await writeContentLanguages(tx, {
     defaultLanguage: locale,
     languages: locale === "en" ? ["en", "es"] : ["es", "en"],
   });
@@ -150,7 +150,7 @@ export async function seedCatalogues(
           ${locationId}, ${category.id},
           ${cat.station === null ? null : stationIds[cat.station]}, ${cat.station === null}
         )`);
-      const section = await createMenuSection(tx, tenantId, {
+      const section = await createMenuSection(tx, {
         menuId: catalogue.id,
         name: cat.name,
         displayOrder: categoryIndex,
@@ -160,7 +160,6 @@ export async function seedCatalogues(
           ? (
               await createUnit(
                 tx,
-                tenantId,
                 {
                   name: product.unit.name,
                   precision: product.unit.precision,
@@ -187,7 +186,7 @@ export async function seedCatalogues(
           unitPrice: product.unitPrice,
           vatClass: product.vatClass,
         });
-        const menuItem = await createMenuItem(tx, tenantId, {
+        const menuItem = await createMenuItem(tx, {
           menuId: catalogue.id,
           productId: created.id,
           sectionId: section.id,
@@ -198,7 +197,6 @@ export async function seedCatalogues(
         if (product.variants?.length) {
           const variants = await setProductVariants(
             tx,
-            tenantId,
             created.id,
             product.variants.map((variant) => ({
               name: variant.staffName ?? variant.customerName[locale],
@@ -212,7 +210,6 @@ export async function seedCatalogues(
           );
           await setMenuVariants(
             tx,
-            tenantId,
             menuItem.id,
             variants.map((variant, index) => ({
               variantId: variant.id,
@@ -243,19 +240,19 @@ export async function seedCatalogues(
   const hotDrinks = await createCategory(tx, tenantId, {
     name: { en: "Hot drinks", es: "Bebidas calientes" },
   });
-  await replaceProductCategories(tx, tenantId, coffeeId, {
+  await replaceProductCategories(tx, coffeeId, {
     categoryIds: [drinksId, hotDrinks.id],
     primaryCategoryId: drinksId,
   });
 
   const negroniId = productsByImage.get("negroni.png");
   if (negroniId === undefined) throw new Error("demo-seed: Negroni product was not created");
-  const cocktailSection = await createMenuSection(tx, tenantId, {
+  const cocktailSection = await createMenuSection(tx, {
     menuId: diaId,
     name: { en: "Cocktails", es: "Cócteles" },
     displayOrder: MENU_DEL_DIA.categories.length,
   });
-  await createMenuItem(tx, tenantId, {
+  await createMenuItem(tx, {
     menuId: diaId,
     productId: negroniId,
     sectionId: cocktailSection.id,

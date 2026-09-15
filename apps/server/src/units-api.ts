@@ -19,7 +19,6 @@ import { isUuid } from "./till-session.js";
 
 export interface UnitsApiDeps {
   db: Database;
-  cfg: { tenantId: string };
   venueLocale: string;
 }
 
@@ -72,14 +71,14 @@ export function mountUnitsApi(app: Hono, deps: UnitsApiDeps, log: Logger): void 
   app.get("/management-api/units", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      return c.json(await gated(sessionId, (tx) => listUnits(tx, deps.cfg.tenantId)));
+      return c.json(await gated(sessionId, (tx) => listUnits(tx)));
     }),
   );
 
   app.get("/management-api/units/:id", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      return c.json(await gated(sessionId, (tx) => getUnit(tx, deps.cfg.tenantId, unitId(c))));
+      return c.json(await gated(sessionId, (tx) => getUnit(tx, unitId(c))));
     }),
   );
 
@@ -115,9 +114,9 @@ export function mountUnitsApi(app: Hono, deps: UnitsApiDeps, log: Logger): void 
       const targetUnitId = body.unitId as string | null;
       return c.json(
         await gated(sessionId, async (tx) => {
-          await getUnit(tx, deps.cfg.tenantId, id); // 404 for an unknown or foreign source unit
-          await reassignProductsToUnit(tx, deps.cfg.tenantId, id, productIds, targetUnitId);
-          return productsUsingUnit(tx, deps.cfg.tenantId, id);
+          await getUnit(tx, id); // 404 for an unknown source unit
+          await reassignProductsToUnit(tx, id, productIds, targetUnitId);
+          return productsUsingUnit(tx, id);
         }),
       );
     }),
@@ -139,7 +138,6 @@ export function mountUnitsApi(app: Hono, deps: UnitsApiDeps, log: Logger): void 
       const created = await gated(sessionId, (tx) =>
         createUnit(
           tx,
-          deps.cfg.tenantId,
           {
             name: body.name as Record<string, string>,
             precision: body.precision as number,
@@ -176,18 +174,14 @@ export function mountUnitsApi(app: Hono, deps: UnitsApiDeps, log: Logger): void 
         }
         patch.precision = body.precision;
       }
-      return c.json(
-        await gated(sessionId, (tx) =>
-          updateUnit(tx, deps.cfg.tenantId, id, patch, deps.venueLocale),
-        ),
-      );
+      return c.json(await gated(sessionId, (tx) => updateUnit(tx, id, patch, deps.venueLocale)));
     }),
   );
 
   app.delete("/management-api/units/:id", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      await gated(sessionId, (tx) => deleteUnit(tx, deps.cfg.tenantId, unitId(c)));
+      await gated(sessionId, (tx) => deleteUnit(tx, unitId(c)));
       return c.body(null, 204);
     }),
   );

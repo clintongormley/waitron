@@ -42,7 +42,7 @@ const suite = usePgliteDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     tenantId = await seedTenant(db);
-    await seedLegacySellingUnits(db, tenantId);
+    await seedLegacySellingUnits(db);
     // One location for the tenant, seeded as the owner (fixture setup like seedTenant) so
     // the location↔menu membership routes have a `:locationId` to act on. Minimal required columns only.
     const loc = await db.execute<{ id: string }>(sql`
@@ -809,9 +809,7 @@ describe("mountCatalogueApi — products", () => {
     const app = mountApp("es-ES");
     const catalogueId = await createCatalogueVia(app, "Editor catalogue");
     const unitId = (
-      await suite.db.execute<{ id: string }>(
-        sql`select id from units where tenant_id = ${tenantId} and seed_key = 'each'`,
-      )
+      await suite.db.execute<{ id: string }>(sql`select id from units where seed_key = 'each'`)
     ).rows[0]!.id;
     const category = await send(app, "POST", "/management-api/categories", {
       body: { name: { es: "Cafés" } },
@@ -2282,14 +2280,14 @@ describe("menu-section translations", () => {
         insert into catalogues (tenant_id, name) values (${ownerId}, 'Section edit') returning id`);
       return (
         await suite.db.execute<{ id: string }>(sql`
-        insert into menu_sections (tenant_id, menu_id, name)
-        values (${ownerId}, ${menu.rows[0]!.id}, '{"en":"Cocktails","de":"Getränke"}'::jsonb) returning id`)
+        insert into menu_sections (menu_id, name)
+        values (${menu.rows[0]!.id}, '{"en":"Cocktails","de":"Getränke"}'::jsonb) returning id`)
       ).rows[0]!.id;
     };
     const sectionId = await seedSection(tenantId);
     await suite.db.execute(sql`
-      insert into content_languages (tenant_id, default_language, languages) values (${tenantId}, 'en', array['en','fr'])
-      on conflict (tenant_id) do update set default_language = 'en', languages = array['en','fr']`);
+      insert into content_languages (default_language, languages) values ('en', array['en','fr'])
+      on conflict (id) do update set default_language = 'en', languages = array['en','fr']`);
     try {
       const path = `/management-api/menu-sections/${sectionId}`;
       const input = { name: { en: "Drinks", fr: "Boissons", de: "Getränke" } };
@@ -2318,11 +2316,11 @@ describe("menu-section translations", () => {
       ).toBe(404);
       expect((await send(app, "PATCH", path, { body: input })).status).toBe(204);
       const own = await suite.db.execute<{ name: Record<string, string> }>(
-        sql`select name from menu_sections where tenant_id = ${tenantId} and id = ${sectionId}`,
+        sql`select name from menu_sections where id = ${sectionId}`,
       );
       expect(own.rows).toEqual([input]);
     } finally {
-      await suite.db.execute(sql`delete from content_languages where tenant_id = ${tenantId}`);
+      await suite.db.execute(sql`delete from content_languages`);
     }
   });
 });
@@ -2331,9 +2329,9 @@ describe("menu-section list", () => {
   it("lists empty sections in display order", async () => {
     const app = mountApp();
     const menuId = await createCatalogueVia(app, "Empty sections");
-    await suite.db.execute(sql`insert into menu_sections (tenant_id, menu_id, name, display_order)
-      values (${tenantId}, ${menuId}, '{"es":"Postres"}'::jsonb, 2),
-             (${tenantId}, ${menuId}, '{"es":"Bebidas"}'::jsonb, 1)`);
+    await suite.db.execute(sql`insert into menu_sections (menu_id, name, display_order)
+      values (${menuId}, '{"es":"Postres"}'::jsonb, 2),
+             (${menuId}, '{"es":"Bebidas"}'::jsonb, 1)`);
     const path = `/management-api/catalogues/${menuId}/sections`;
     expect((await send(app, "GET", path, { cookie: null })).status).toBe(401);
     expect((await send(app, "GET", path, { cookie: staffCookie })).status).toBe(403);

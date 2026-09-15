@@ -239,7 +239,7 @@ async function seedMirror(admin: Database): Promise<{ nodeId: string; standardSe
  * (`token_hash` = scrypt of `DEVICE_TOKEN`, the same shape `acceptDeviceJoinRequest` stores, so the
  * device cookie verifies). */
 async function seedSaleVenue(admin: Database, nodeId: string): Promise<void> {
-  await seedLegacySellingUnits(admin, MIRROR_TENANT_ID);
+  await seedLegacySellingUnits(admin);
   await admin.execute(sql`
     insert into tills (id, tenant_id, location_id, name)
     values (${MIRROR_TILL_ID}, ${MIRROR_TENANT_ID}, ${MIRROR_LOCATION_ID}, 'Barra')

@@ -254,7 +254,7 @@ describe("category dependants and bulk add over real Postgres", () => {
     ).toBe(204);
     const members = await suite.admin.execute<{ product_id: string }>(
       sql`select product_id from product_categories
-          where tenant_id = ${v.tenantId} and category_id = ${categoryId} order by product_id`,
+          where category_id = ${categoryId} order by product_id`,
     );
     expect(members.rows.map((r) => r.product_id)).toEqual([first, second].sort());
     // Neither product had a reporting category, so each took this one.

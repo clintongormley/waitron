@@ -21,8 +21,7 @@ import { MAX_MODIFIER_INTEGER } from "./modifier-limits.js";
 import { validateContentTranslations } from "./content-languages.js";
 import "./errors.js";
 
-export async function listModifiers(tx: Transaction, tenantId: string): Promise<Modifier[]> {
-  void tenantId;
+export async function listModifiers(tx: Transaction): Promise<Modifier[]> {
   const groups = await tx
     .select()
     .from(optionGroups)
@@ -80,12 +79,8 @@ export async function listModifiers(tx: Transaction, tenantId: string): Promise<
   });
 }
 
-export async function getModifier(
-  tx: Transaction,
-  tenantId: string,
-  modifierId: string,
-): Promise<Modifier> {
-  const found = (await listModifiers(tx, tenantId)).find((modifier) => modifier.id === modifierId);
+export async function getModifier(tx: Transaction, modifierId: string): Promise<Modifier> {
+  const found = (await listModifiers(tx)).find((modifier) => modifier.id === modifierId);
   if (!found) throw new AppError("modifier.not_found", { modifierId });
   return found;
 }
@@ -101,8 +96,7 @@ const openOrderUse = (modifierId: string) => sql`
       )
     )`;
 
-async function assertUnused(tx: Transaction, tenantId: string, modifierId: string): Promise<void> {
-  void tenantId;
+async function assertUnused(tx: Transaction, modifierId: string): Promise<void> {
   const result = await tx.execute<{ dependency: string }>(sql`
     select 'product' as dependency from product_option_groups where group_id = ${modifierId}
     union all select 'menu' as dependency from menu_item_option_groups where group_id = ${modifierId}
@@ -112,16 +106,11 @@ async function assertUnused(tx: Transaction, tenantId: string, modifierId: strin
     throw new AppError("modifier.in_use", { modifierId, dependency: result.rows[0].dependency });
 }
 
-async function validateLabels(
-  tx: Transaction,
-  tenantId: string,
-  input: ModifierInput,
-  fallback: string,
-) {
-  await validateContentTranslations(tx, tenantId, input.name, fallback);
+async function validateLabels(tx: Transaction, input: ModifierInput, fallback: string) {
+  await validateContentTranslations(tx, input.name, fallback);
   if (input.type === "extras" || input.type === "options") {
     for (const choice of input.choices)
-      await validateContentTranslations(tx, tenantId, choice.name, fallback);
+      await validateContentTranslations(tx, choice.name, fallback);
   }
 }
 function groupValues(input: ModifierInput) {
@@ -191,12 +180,12 @@ export async function createModifier(
   fallbackLanguage: string,
 ): Promise<Modifier> {
   const input = parseModifierInput(value);
-  await validateLabels(tx, tenantId, input, fallbackLanguage);
-  await lockModifierDefinitions(tx, tenantId);
+  await validateLabels(tx, input, fallbackLanguage);
+  await lockModifierDefinitions(tx);
   const id = randomUUID();
   await tx.insert(optionGroups).values({ tenantId, id, ...groupValues(input) });
   await writeChoices(tx, tenantId, id, input);
-  return getModifier(tx, tenantId, id);
+  return getModifier(tx, id);
 }
 export async function updateModifier(
   tx: Transaction,
@@ -206,21 +195,17 @@ export async function updateModifier(
   fallbackLanguage: string,
 ): Promise<Modifier> {
   const input = parseModifierInput(value);
-  await validateLabels(tx, tenantId, input, fallbackLanguage);
-  await lockModifierDefinitions(tx, tenantId);
-  const old = await getModifier(tx, tenantId, modifierId);
-  if (old.type !== input.type) await assertUnused(tx, tenantId, modifierId);
+  await validateLabels(tx, input, fallbackLanguage);
+  await lockModifierDefinitions(tx);
+  const old = await getModifier(tx, modifierId);
+  if (old.type !== input.type) await assertUnused(tx, modifierId);
   await tx.update(optionGroups).set(groupValues(input)).where(eq(optionGroups.id, modifierId));
   await writeChoices(tx, tenantId, modifierId, input);
-  return getModifier(tx, tenantId, modifierId);
+  return getModifier(tx, modifierId);
 }
-export async function deleteModifier(
-  tx: Transaction,
-  tenantId: string,
-  modifierId: string,
-): Promise<void> {
-  await lockModifierDefinitions(tx, tenantId);
-  await getModifier(tx, tenantId, modifierId); // 404s an absent id
+export async function deleteModifier(tx: Transaction, modifierId: string): Promise<void> {
+  await lockModifierDefinitions(tx);
+  await getModifier(tx, modifierId); // 404s an absent id
   // A product or menu attachment is cascaded away by the delete, so neither blocks it. An OPEN order
   // is different: its line still references this modifier — by saved snapshot or chosen item — and
   // deleting would orphan a live, un-settled basket line, so a live reference refuses the delete.
@@ -242,10 +227,9 @@ export interface ModifierDependants {
  * product the menu item is (its staff name). */
 export async function modifierDependants(
   tx: Transaction,
-  tenantId: string,
   modifierId: string,
 ): Promise<ModifierDependants> {
-  await getModifier(tx, tenantId, modifierId); // 404s an absent id
+  await getModifier(tx, modifierId); // 404s an absent id
   const productRows = await tx
     .select({ id: products.id, name: products.name })
     .from(products)

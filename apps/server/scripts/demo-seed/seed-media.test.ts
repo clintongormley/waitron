@@ -81,7 +81,7 @@ describe("seedMedia", () => {
         locationId,
         locale: LOCALE,
       });
-      await seedMedia(tx, { tenantId, productsByImage });
+      await seedMedia(tx, { productsByImage });
       // Read every product's stored image back, as app_user, keyed by product id.
       const { rows } = await tx.execute<{ id: string; image: string | null }>(
         sql`select id, image from products where tenant_id = ${tenantId}`,
@@ -106,7 +106,7 @@ describe("seedMedia", () => {
 
       const storedImage = await withTransaction(suite.admin, async (tx) => {
         await asAppUser(tx);
-        return readImageBytes(tx, tenantId, stored!);
+        return readImageBytes(tx, stored!);
       });
       expect(storedImage?.contentType).toBe("image/png");
       const writtenBytes = storedImage!.bytes;
@@ -138,11 +138,11 @@ describe("seedMedia", () => {
         locationId,
         locale: LOCALE,
       });
-      await seedMedia(tx, { tenantId, productsByImage });
+      await seedMedia(tx, { productsByImage });
       const before = await tx.execute(
         sql`select id, filename, names, alt_text from media_images order by id`,
       );
-      await seedMedia(tx, { tenantId, productsByImage });
+      await seedMedia(tx, { productsByImage });
       const after = await tx.execute(
         sql`select id, filename, names, alt_text from media_images order by id`,
       );

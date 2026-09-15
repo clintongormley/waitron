@@ -247,7 +247,6 @@ beforeAll(async () => {
       await withTransaction(baselineAdmin, async (tx) => {
         await uploadImage(
           tx,
-          F.tenantId,
           {
             bytes: BASELINE_MEDIA,
             names: { es: "Pan" },
@@ -390,7 +389,7 @@ describe("fiscal restore (real Postgres, end to end)", () => {
         }>(sql`select filename, names, labels from media_images`);
         expect(images.rows).toHaveLength(1);
         expect(images.rows[0]).toMatchObject({ names: { es: "Pan" }, labels: ["Food"] });
-        const restored = await readImageBytes(tx, F.tenantId, images.rows[0]!.filename);
+        const restored = await readImageBytes(tx, images.rows[0]!.filename);
         expect(restored?.bytes).toEqual(new Uint8Array(BASELINE_MEDIA));
       });
       const ledger = await db.execute<{ n: number }>(

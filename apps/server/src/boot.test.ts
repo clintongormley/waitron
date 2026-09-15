@@ -2127,7 +2127,6 @@ describe("startServer, against a real container as the deployment role", () => {
       const imageName = await withTransaction(suite.admin, async (tx) => {
         const result = await uploadImage(
           tx,
-          TILL_ENV.WAITRON_TILL_TENANT_ID,
           {
             bytes: imageBytes,
             names: { en: "Bread", es: "Pan" },

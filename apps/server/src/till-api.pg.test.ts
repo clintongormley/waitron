@@ -187,8 +187,7 @@ async function setupVenue(): Promise<{
     const comida = await createCategory(tx, cfg.tenantId, { name: { [LOCALE]: "Comida" } });
     const bebidas = await createCategory(tx, cfg.tenantId, { name: { [LOCALE]: "Bebidas" } });
     const seededUnits = await tx.execute<{ id: string; seed_key: string }>(sql`
-      select id, seed_key from units
-      where tenant_id = ${cfg.tenantId} and seed_key = 'kg'`);
+      select id, seed_key from units where seed_key = 'kg'`);
     const kgId = seededUnits.rows.find((unit) => unit.seed_key === "kg")!.id;
     const jamon = await createProduct(tx, cfg.tenantId, {
       catalogueId: cat.id,
@@ -207,17 +206,17 @@ async function setupVenue(): Promise<{
       vatClass: "general",
     });
     await assignCatalogueToLocation(tx, venue.locationId, cat.id);
-    const section = await createMenuSection(tx, cfg.tenantId, {
+    const section = await createMenuSection(tx, {
       menuId: cat.id,
       name: { es: "Carta" },
     });
-    const jamonItem = await createMenuItem(tx, cfg.tenantId, {
+    const jamonItem = await createMenuItem(tx, {
       menuId: cat.id,
       productId: jamon.id,
       sectionId: section.id,
       grossPrice: "24.90",
     });
-    const aguaItem = await createMenuItem(tx, cfg.tenantId, {
+    const aguaItem = await createMenuItem(tx, {
       menuId: cat.id,
       productId: agua.id,
       sectionId: section.id,
@@ -2255,7 +2254,7 @@ it("files every modifier mode through cash checkout and reprints their saved fac
       "es",
     );
     await setProductOptionGroups(tx, cfg.tenantId, product.id, [note.id, option.id, extra.id]);
-    await setMenuItemOptionGroups(tx, cfg.tenantId, product.menuItemId, [
+    await setMenuItemOptionGroups(tx, product.menuItemId, [
       { groupId: note.id, options: [] },
       { groupId: option.id, options: [{ optionId, priceDelta: "0.00" }] },
       { groupId: extra.id, options: [{ optionId: extraId, priceDelta: "0.35" }] },

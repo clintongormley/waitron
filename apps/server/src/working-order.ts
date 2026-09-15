@@ -175,7 +175,7 @@ async function priceOrderLines(
     // for. Callers passing [] ignore `priced` (they persist no lines); it is returned only for type-consistency.
     return { lineRows: [], priced: priceBasket([]), lineContexts: [] };
   }
-  await lockModifierDefinitions(tx, cfg.tenantId, "read");
+  await lockModifierDefinitions(tx, "read");
   const catalogue = await listAvailableProducts(tx, cfg.locationId);
   const usesOffers = zoneId !== undefined;
   const offerBySelectionId = new Map<
@@ -200,7 +200,7 @@ async function priceOrderLines(
     }
   }
   const productVariantsByProduct = usesOffers
-    ? await listProductVariantsForProducts(tx, cfg.tenantId, [
+    ? await listProductVariantsForProducts(tx, [
         ...new Set([...offerBySelectionId.values()].map((offer) => offer.productId)),
       ])
     : new Map();

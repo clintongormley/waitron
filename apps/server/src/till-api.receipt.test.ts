@@ -167,11 +167,11 @@ async function setupVenue(): Promise<{
       vatClass: "general",
     });
     await assignCatalogueToLocation(tx, venue.locationId, cat.id);
-    const section = await createMenuSection(tx, cfg.tenantId, {
+    const section = await createMenuSection(tx, {
       menuId: cat.id,
       name: { [LOCALE]: "Bebidas" },
     });
-    const menuItem = await createMenuItem(tx, cfg.tenantId, {
+    const menuItem = await createMenuItem(tx, {
       menuId: cat.id,
       productId: product.id,
       sectionId: section.id,

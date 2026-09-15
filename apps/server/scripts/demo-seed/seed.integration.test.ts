@@ -193,7 +193,7 @@ describe("demo seed end-to-end", () => {
     expect(read.image!).toMatch(MEDIA_FILENAME);
     const storedImage = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
-      return readImageBytes(tx, venue.tenantId, read.image!);
+      return readImageBytes(tx, read.image!);
     });
     expect(storedImage?.contentType).toBe("image/png");
     expect(storedImage!.bytes.length).toBeGreaterThan(0);

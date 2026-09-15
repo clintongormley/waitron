@@ -41,20 +41,19 @@ const columns = {
 
 export async function readProductEditor(
   tx: Transaction,
-  tenantId: TenantId,
   productId: string,
 ): Promise<ProductEditorValue> {
   const [row] = await tx.select(columns).from(products).where(eq(products.id, productId));
   if (!row) throw new AppError("product.not_found", { productId });
-  const categories = await readProductCategories(tx, tenantId, productId);
+  const categories = await readProductCategories(tx, productId);
   return {
     ...row,
     vatClass: row.vatClass as VatClass,
     dietaryDeclarations: validateDietaryDeclarations(row.dietaryDeclarations),
-    unitId: await readProductUnitId(tx, tenantId, productId),
+    unitId: await readProductUnitId(tx, productId),
     ...categories,
-    modifierIds: await listProductOptionGroupIds(tx, tenantId, productId),
-    variants: await listProductVariants(tx, tenantId, productId),
+    modifierIds: await listProductOptionGroupIds(tx, productId),
+    variants: await listProductVariants(tx, productId),
   };
 }
 
@@ -73,7 +72,7 @@ export async function saveProductEditor(
   // supplied customer name is validated — validateContentTranslations({}) would wrongly demand a
   // default-language entry.
   if (value.customerName !== null)
-    await validateContentTranslations(tx, tenantId, value.customerName, fallbackLanguage);
+    await validateContentTranslations(tx, value.customerName, fallbackLanguage);
   if (productId !== null) {
     const [product] = await tx
       .select({ id: products.id })
@@ -106,7 +105,7 @@ export async function saveProductEditor(
     });
     productId = created.id;
   } else {
-    await updateProduct(tx, tenantId, productId, {
+    await updateProduct(tx, productId, {
       name: value.name,
       customerName: value.customerName,
       description: value.description,
@@ -120,11 +119,11 @@ export async function saveProductEditor(
       dietaryDeclarations: value.dietaryDeclarations,
     });
   }
-  await replaceProductCategories(tx, tenantId, productId, {
+  await replaceProductCategories(tx, productId, {
     categoryIds: value.categoryIds,
     primaryCategoryId: value.primaryCategoryId,
   });
-  await setProductVariants(tx, tenantId, productId, value.variants, fallbackLanguage);
+  await setProductVariants(tx, productId, value.variants, fallbackLanguage);
   await setProductOptionGroups(tx, tenantId, productId, value.modifierIds);
-  return readProductEditor(tx, tenantId, productId);
+  return readProductEditor(tx, productId);
 }

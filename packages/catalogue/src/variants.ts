@@ -1,6 +1,6 @@
 import { and, asc, eq, inArray, notInArray } from "drizzle-orm";
 import { catalogues, products, type Transaction } from "@waitron/db";
-import { AppError, decimal, toScale, type TenantId } from "@waitron/shared";
+import { AppError, decimal, toScale } from "@waitron/shared";
 import { validateContentTranslations } from "./content-languages.js";
 import { menuItems, menuSections } from "./schema/menu.js";
 import { menuItemVariants, productVariants } from "./schema/variants.js";
@@ -52,8 +52,7 @@ function validateAvailability(available: boolean): void {
     throw new AppError("product.variant_invalid", { field: "available" });
 }
 
-async function lockProduct(tx: Transaction, tenantId: TenantId, productId: string): Promise<void> {
-  void tenantId;
+async function lockProduct(tx: Transaction, productId: string): Promise<void> {
   const [product] = await tx
     .select({ id: products.id })
     .from(products)
@@ -64,19 +63,16 @@ async function lockProduct(tx: Transaction, tenantId: TenantId, productId: strin
 
 export async function listProductVariants(
   tx: Transaction,
-  tenantId: TenantId,
   productId: string,
 ): Promise<ProductVariant[]> {
-  return (await listProductVariantsForProducts(tx, tenantId, [productId])).get(productId) ?? [];
+  return (await listProductVariantsForProducts(tx, [productId])).get(productId) ?? [];
 }
 
 /** Read variants for several products in one query. */
 export async function listProductVariantsForProducts(
   tx: Transaction,
-  tenantId: TenantId,
   productIds: readonly string[],
 ): Promise<Map<string, ProductVariant[]>> {
-  void tenantId;
   const grouped = new Map<string, ProductVariant[]>();
   if (productIds.length === 0) return grouped;
   const rows = await tx
@@ -100,7 +96,6 @@ export async function listProductVariantsForProducts(
 /** The caller owns the transaction, including product fields and supporting associations. */
 export async function setProductVariants(
   tx: Transaction,
-  tenantId: TenantId,
   productId: string,
   inputs: readonly ProductVariantInput[],
   fallbackLanguage: string,
@@ -117,11 +112,11 @@ export async function setProductVariants(
     // The staff `name` is plain text and needs no translation check; the customer-facing map is what
     // must satisfy the enabled languages. A null customer name is legal — it falls back to `name`.
     if (input.customerName != null)
-      await validateContentTranslations(tx, tenantId, input.customerName, fallbackLanguage);
+      await validateContentTranslations(tx, input.customerName, fallbackLanguage);
     normalized.push({ ...input, unitPrice });
   }
-  await lockProduct(tx, tenantId, productId);
-  const current = await listProductVariants(tx, tenantId, productId);
+  await lockProduct(tx, productId);
+  const current = await listProductVariants(tx, productId);
   const currentIds = new Set(current.map((v) => v.id));
   for (const id of seen) {
     if (!currentIds.has(id)) throw new AppError("product.variant_not_found", { variantId: id });
@@ -154,7 +149,7 @@ export async function setProductVariants(
       displayOrder,
     };
     if (input.id === undefined) {
-      await tx.insert(productVariants).values({ tenantId, productId, ...values });
+      await tx.insert(productVariants).values({ productId, ...values });
     } else {
       await tx
         .update(productVariants)
@@ -162,16 +157,14 @@ export async function setProductVariants(
         .where(and(eq(productVariants.productId, productId), eq(productVariants.id, input.id)));
     }
   }
-  return listProductVariants(tx, tenantId, productId);
+  return listProductVariants(tx, productId);
 }
 
 export async function listMenuVariants(
   tx: Transaction,
-  tenantId: TenantId,
   menuItemId: string,
   menuId?: string,
 ): Promise<MenuVariant[]> {
-  void tenantId;
   if (menuId !== undefined) {
     const [offer] = await tx
       .select({ id: menuItems.id })
@@ -188,7 +181,6 @@ export async function listMenuVariants(
 
 export async function setMenuVariants(
   tx: Transaction,
-  tenantId: TenantId,
   menuItemId: string,
   inputs: readonly MenuVariant[],
   menuId?: string,
@@ -204,8 +196,8 @@ export async function setMenuVariants(
     );
   if (!offer) throw new AppError("menu_item.not_found", { menuItemId });
   // Product saves and publication take the same lock before checking dependencies or replacing rows.
-  await lockProduct(tx, tenantId, offer.productId);
-  const variants = await listProductVariants(tx, tenantId, offer.productId);
+  await lockProduct(tx, offer.productId);
+  const variants = await listProductVariants(tx, offer.productId);
   const ids = new Set(variants.map((v) => v.id));
   const seen = new Set<string>();
   const values = inputs.map((input, displayOrder) => {
@@ -218,7 +210,6 @@ export async function setMenuVariants(
     return {
       ...input,
       unitPrice: validatePrice(input.unitPrice),
-      tenantId,
       menuItemId,
       productId: offer.productId,
       displayOrder,
@@ -237,11 +228,7 @@ export async function setMenuVariants(
       .insert(menuItemVariants)
       .values(value)
       .onConflictDoUpdate({
-        target: [
-          menuItemVariants.tenantId,
-          menuItemVariants.menuItemId,
-          menuItemVariants.variantId,
-        ],
+        target: [menuItemVariants.menuItemId, menuItemVariants.variantId],
         set: {
           unitPrice: value.unitPrice,
           available: value.available,
@@ -249,7 +236,7 @@ export async function setMenuVariants(
         },
       });
   }
-  return listMenuVariants(tx, tenantId, menuItemId);
+  return listMenuVariants(tx, menuItemId);
 }
 
 // Extends ProductPresentation so the compiler keeps the six name pieces in step: a resolved
@@ -306,7 +293,6 @@ export function selectMenuVariant(
 
 export async function resolveMenuVariant(
   tx: Transaction,
-  tenantId: TenantId,
   menuItemId: string,
   variantId: string | null,
 ): Promise<SelectedVariant> {
@@ -336,7 +322,7 @@ export async function resolveMenuVariant(
   ) {
     throw new AppError("product.unavailable", { productId: offer.productId });
   }
-  const variants = await listProductVariants(tx, tenantId, offer.productId);
+  const variants = await listProductVariants(tx, offer.productId);
   if (variants.length && variantId === null)
     throw new AppError("product.variant_required", { productId: offer.productId });
   if (variantId === null)
@@ -351,9 +337,7 @@ export async function resolveMenuVariant(
       unitPrice: offer.unitPrice,
     };
   const variant = variants.find((v) => v.id === variantId);
-  const published = (await listMenuVariants(tx, tenantId, menuItemId)).find(
-    (v) => v.variantId === variantId,
-  );
+  const published = (await listMenuVariants(tx, menuItemId)).find((v) => v.variantId === variantId);
   if (!variant?.available || !published?.available)
     throw new AppError("product.variant_unavailable", { variantId });
   return {

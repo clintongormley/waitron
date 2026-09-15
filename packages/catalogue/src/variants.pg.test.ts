@@ -29,7 +29,6 @@ async function fixture() {
     const menu = await createCatalogue(tx, tenantId, { name: "Bar" });
     const unit = await createUnit(
       tx,
-      tenantId,
       { name: { en: "each" }, precision: 0, abbreviation: { en: "u" } },
       "en",
     );
@@ -45,11 +44,11 @@ async function fixture() {
     });
     expect(product.description).toEqual({ en: "Freshly roasted" });
     expect(product.kitchenName).toBe("BAR COFFEE");
-    const section = await createMenuSection(tx, tenantId, {
+    const section = await createMenuSection(tx, {
       menuId: menu.id,
       name: { en: "Drinks" },
     });
-    const offer = await createMenuItem(tx, tenantId, {
+    const offer = await createMenuItem(tx, {
       menuId: menu.id,
       sectionId: section.id,
       productId: product.id,
@@ -57,7 +56,6 @@ async function fixture() {
     });
     const variants = await setProductVariants(
       tx,
-      tenantId,
       product.id,
       [
         {
@@ -82,17 +80,16 @@ it("creates, reads, edits and deletes variants as the non-superuser app role", a
       sql`select current_user as role, rolsuper as superuser from pg_roles where rolname = current_user`,
     );
     expect(role.rows).toEqual([{ role: "app_user", superuser: false }]);
-    expect(await listProductVariants(tx, tenantId, productId)).toEqual([variant]);
+    expect(await listProductVariants(tx, productId)).toEqual([variant]);
     expect(
       await setProductVariants(
         tx,
-        tenantId,
         productId,
         [{ ...variant, available: false, unitPrice: "2.50" }],
         "en",
       ),
     ).toEqual([{ ...variant, available: false, unitPrice: "2.50" }]);
-    expect(await setProductVariants(tx, tenantId, productId, [], "en")).toEqual([]);
+    expect(await setProductVariants(tx, productId, [], "en")).toEqual([]);
   });
 });
 
@@ -113,16 +110,14 @@ it("a concurrent variant removal waits for publication and then reports the depe
     const pid = (await remover.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`))
       .rows[0]!.pid;
     publishing = app(publisher, tenantId, async (tx) => {
-      await setMenuVariants(tx, tenantId, offerId, [
+      await setMenuVariants(tx, offerId, [
         { variantId: variant.id, unitPrice: "4.00", available: true },
       ]);
       ready();
       await gate;
     });
     await Promise.race([published, publishing]);
-    removing = app(remover, tenantId, (tx) =>
-      setProductVariants(tx, tenantId, productId, [], "en"),
-    );
+    removing = app(remover, tenantId, (tx) => setProductVariants(tx, productId, [], "en"));
     const rejected = expect(removing).rejects.toMatchObject({
       code: "product.variant_in_use",
       params: { variantId: variant.id, menuItemIds: [offerId] },
@@ -140,9 +135,9 @@ it("a concurrent variant removal waits for publication and then reports the depe
     release();
     await publishing;
     await rejected;
-    expect(
-      await app(suite.admin, tenantId, (tx) => listProductVariants(tx, tenantId, productId)),
-    ).toEqual([variant]);
+    expect(await app(suite.admin, tenantId, (tx) => listProductVariants(tx, productId))).toEqual([
+      variant,
+    ]);
   } finally {
     release();
     await Promise.allSettled([publishing, removing]);

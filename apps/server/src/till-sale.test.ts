@@ -184,11 +184,11 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
       select zone_id as id from zone_service_policies
       where location_id = ${cfg.locationId}
         and is_counter_default`);
-    const section = await createMenuSection(tx, cfg.tenantId, {
+    const section = await createMenuSection(tx, {
       menuId: cat.id,
       name: { [LOCALE]: "Bebidas" },
     });
-    const offer = await createMenuItem(tx, cfg.tenantId, {
+    const offer = await createMenuItem(tx, {
       menuId: cat.id,
       productId: water.id,
       sectionId: section.id,
@@ -198,7 +198,6 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
     if (options.variants) {
       const variants = await setProductVariants(
         tx,
-        cfg.tenantId,
         water.id,
         // "Doble" carries all three names and "Fuera" only its staff name, so a frozen line shows the
         // variant's customer text and kitchen name each falling back on its own. The product itself
@@ -223,7 +222,7 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
         ],
         LOCALE,
       );
-      await setMenuVariants(tx, cfg.tenantId, offer.id, [
+      await setMenuVariants(tx, offer.id, [
         { variantId: variants[0]!.id, unitPrice: "4.10", available: true },
         { variantId: variants[1]!.id, unitPrice: "4.80", available: false },
       ]);
@@ -353,7 +352,7 @@ describe("recordTillSale", () => {
     const workingOrderId = randomUUID();
     await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
-      await setMenuVariants(tx, cfg.tenantId, waterOfferId, [
+      await setMenuVariants(tx, waterOfferId, [
         { variantId: variantIds!.double, unitPrice: "4.10", available: true },
         { variantId: variantIds!.unavailable, unitPrice: "4.80", available: true },
       ]);
@@ -368,14 +367,13 @@ describe("recordTillSale", () => {
         null,
         { zoneId },
       );
-      await updateProduct(tx, cfg.tenantId, waterProductId, {
+      await updateProduct(tx, waterProductId, {
         name: "Agua renombrada",
         kitchenName: "NEW BAR",
         unitPrice: "99.00",
       });
       await setProductVariants(
         tx,
-        cfg.tenantId,
         waterProductId,
         [
           {
@@ -399,7 +397,7 @@ describe("recordTillSale", () => {
         ],
         LOCALE,
       );
-      await setMenuVariants(tx, cfg.tenantId, waterOfferId, [
+      await setMenuVariants(tx, waterOfferId, [
         { variantId: variantIds!.double, unitPrice: "31.00", available: true },
         { variantId: variantIds!.unavailable, unitPrice: "41.00", available: true },
       ]);

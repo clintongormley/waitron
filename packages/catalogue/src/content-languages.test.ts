@@ -24,7 +24,6 @@ describe("site content languages", () => {
       const catalogue = await createCatalogue(tx, tenantId, { name: "Bar" });
       const unit = await createUnit(
         tx,
-        tenantId,
         { name: { en: "each", fr: "unité" }, precision: 0, abbreviation: { en: "u" } },
         "en",
       );
@@ -41,7 +40,6 @@ describe("site content languages", () => {
       });
       const [variant] = await setProductVariants(
         tx,
-        tenantId,
         product.id,
         [
           {
@@ -55,19 +53,18 @@ describe("site content languages", () => {
         ],
         "en",
       );
-      expect(await listContentTranslationGaps(tx, tenantId, "fr")).toEqual([
+      expect(await listContentTranslationGaps(tx, "fr")).toEqual([
         { kind: "variant", id: variant!.id },
       ]);
       await setProductVariants(
         tx,
-        tenantId,
         product.id,
         [{ ...variant!, customerName: { en: "Small cup", fr: "Petit" } }],
         "en",
       );
-      expect(await listContentTranslationGaps(tx, tenantId, "fr")).toEqual([]);
-      await writeContentLanguages(tx, tenantId, { defaultLanguage: "fr", languages: ["fr", "en"] });
-      expect((await readContentLanguages(tx, tenantId, "en")).defaultLanguage).toBe("fr");
+      expect(await listContentTranslationGaps(tx, "fr")).toEqual([]);
+      await writeContentLanguages(tx, { defaultLanguage: "fr", languages: ["fr", "en"] });
+      expect((await readContentLanguages(tx, "en")).defaultLanguage).toBe("fr");
     });
   });
   it("counts a partial customer name as a gap but a blank one as none", async () => {
@@ -137,14 +134,13 @@ describe("site content languages", () => {
   it.each(["", "invalid_locale", "und"])(
     "uses the shared fallback for an absent setting and invalid preference %j",
     async (fallbackLanguage) => {
-      const tenantId = await seedTenant(suite.db);
       await withTransaction(suite.db, async (tx) => {
-        expect(await readContentLanguages(tx, tenantId, fallbackLanguage)).toEqual({
+        expect(await readContentLanguages(tx, fallbackLanguage)).toEqual({
           defaultLanguage: "en",
           languages: ["en"],
         });
-        await writeContentLanguages(tx, tenantId, { defaultLanguage: "fr", languages: ["fr"] });
-        expect(await readContentLanguages(tx, tenantId, fallbackLanguage)).toEqual({
+        await writeContentLanguages(tx, { defaultLanguage: "fr", languages: ["fr"] });
+        expect(await readContentLanguages(tx, fallbackLanguage)).toEqual({
           defaultLanguage: "fr",
           languages: ["fr"],
         });
@@ -155,27 +151,25 @@ describe("site content languages", () => {
   it("recognizes regional translation keys consistently when changing the default", async () => {
     const tenantId = await seedTenant(suite.db);
     await withTransaction(suite.db, async (tx) => {
-      await writeContentLanguages(tx, tenantId, { defaultLanguage: "en", languages: ["en", "fr"] });
+      await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "fr"] });
       const menu = await tx.execute<{ id: string }>(
         sql`insert into catalogues (tenant_id, name) values (${tenantId}, 'Lunch') returning id`,
       );
       await tx.execute(sql`insert into products (tenant_id, catalogue_id, name, customer_name, pricing_unit, unit_price, vat_class)
         values (${tenantId}, ${menu.rows[0]!.id}, 'Bread', '{"en":"Bread","fr-FR":"Pain"}'::jsonb, 'each', '2.00', 'general')`);
       await expect(
-        writeContentLanguages(tx, tenantId, { defaultLanguage: "fr", languages: ["fr", "en"] }),
+        writeContentLanguages(tx, { defaultLanguage: "fr", languages: ["fr", "en"] }),
       ).resolves.toBeUndefined();
     });
   });
   it("checks contributed content before changing the default", async () => {
-    const tenantId = await seedTenant(suite.db);
     await withTransaction(suite.db, (tx) =>
-      writeContentLanguages(tx, tenantId, { defaultLanguage: "en", languages: ["en"] }),
+      writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en"] }),
     );
     await expect(
       withTransaction(suite.db, (tx) =>
         writeContentLanguages(
           tx,
-          tenantId,
           { defaultLanguage: "fr", languages: ["fr", "en"] },
           "en",
           async () => [{ kind: "image", id: "photo" }],
@@ -187,16 +181,15 @@ describe("site content languages", () => {
     });
   });
   it("requires the configured default for content while allowing missing additional translations", async () => {
-    const tenantId = await seedTenant(suite.db);
     await withTransaction(suite.db, async (tx) => {
-      await writeContentLanguages(tx, tenantId, { defaultLanguage: "en", languages: ["en", "fr"] });
+      await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "fr"] });
       await expect(
-        validateContentTranslations(tx, tenantId, { en: "Bread" }, "es-ES"),
+        validateContentTranslations(tx, { en: "Bread" }, "es-ES"),
       ).resolves.toBeUndefined();
     });
     await expect(
       withTransaction(suite.db, (tx) =>
-        validateContentTranslations(tx, tenantId, { fr: "Pain", en: "  " }, "es-ES"),
+        validateContentTranslations(tx, { fr: "Pain", en: "  " }, "es-ES"),
       ),
     ).rejects.toMatchObject({ code: "content.translation_required", params: { language: "en" } });
   });
@@ -204,7 +197,7 @@ describe("site content languages", () => {
   it("refuses to change the default while a product lacks its translation", async () => {
     const tenantId = await seedTenant(suite.db);
     await withTransaction(suite.db, async (tx) => {
-      await writeContentLanguages(tx, tenantId, { defaultLanguage: "en", languages: ["en", "fr"] });
+      await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "fr"] });
       const menu = await tx.execute<{ id: string }>(
         sql`insert into catalogues (tenant_id, name) values (${tenantId}, 'Lunch') returning id`,
       );
@@ -213,23 +206,23 @@ describe("site content languages", () => {
     });
     await expect(
       withTransaction(suite.db, (tx) =>
-        writeContentLanguages(tx, tenantId, { defaultLanguage: "fr", languages: ["en", "fr"] }),
+        writeContentLanguages(tx, { defaultLanguage: "fr", languages: ["en", "fr"] }),
       ),
     ).rejects.toMatchObject({
       code: "content.default_missing",
       params: { language: "fr", count: 1 },
     });
     await withTransaction(suite.db, async (tx) => {
-      expect((await readContentLanguages(tx, tenantId, "es")).defaultLanguage).toBe("en");
+      expect((await readContentLanguages(tx, "es")).defaultLanguage).toBe("en");
       await tx.execute(
         sql`update products set customer_name = '{"en":"Bread","fr":"Pain"}'::jsonb where tenant_id = ${tenantId}`,
       );
-      await writeContentLanguages(tx, tenantId, { defaultLanguage: "fr", languages: ["en", "fr"] });
-      expect(await readContentLanguages(tx, tenantId, "es")).toEqual({
+      await writeContentLanguages(tx, { defaultLanguage: "fr", languages: ["en", "fr"] });
+      expect(await readContentLanguages(tx, "es")).toEqual({
         defaultLanguage: "fr",
         languages: ["fr", "en"],
       });
-      await writeContentLanguages(tx, tenantId, { defaultLanguage: "fr", languages: ["fr"] });
+      await writeContentLanguages(tx, { defaultLanguage: "fr", languages: ["fr"] });
       const customerNames = await tx.execute<{ customer_name: Record<string, string> }>(
         sql`select customer_name from products where tenant_id = ${tenantId}`,
       );
@@ -237,16 +230,15 @@ describe("site content languages", () => {
     });
   });
   it("refuses to change the default while a unit lacks its translation", async () => {
-    const tenantId = await seedTenant(suite.db);
     await withTransaction(suite.db, async (tx) => {
-      await writeContentLanguages(tx, tenantId, { defaultLanguage: "en", languages: ["en", "fr"] });
+      await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "fr"] });
       await tx.execute(sql`
-        insert into units (tenant_id, name, abbreviation, precision)
-        values (${tenantId}, '{"en":"cup"}'::jsonb, '{"en":"c"}'::jsonb, 0)`);
+        insert into units (name, abbreviation, precision)
+        values ('{"en":"cup"}'::jsonb, '{"en":"c"}'::jsonb, 0)`);
     });
     await expect(
       withTransaction(suite.db, (tx) =>
-        writeContentLanguages(tx, tenantId, { defaultLanguage: "fr", languages: ["en", "fr"] }),
+        writeContentLanguages(tx, { defaultLanguage: "fr", languages: ["en", "fr"] }),
       ),
     ).rejects.toMatchObject({
       code: "content.default_missing",
@@ -254,17 +246,16 @@ describe("site content languages", () => {
     });
   });
   it("uses the site's supplied default before configuration and persists runtime additions", async () => {
-    const tenantId = await seedTenant(suite.db);
     await withTransaction(suite.db, async (tx) => {
-      expect(await readContentLanguages(tx, tenantId, "en-GB")).toEqual({
+      expect(await readContentLanguages(tx, "en-GB")).toEqual({
         defaultLanguage: "en",
         languages: ["en"],
       });
-      await writeContentLanguages(tx, tenantId, {
+      await writeContentLanguages(tx, {
         defaultLanguage: "en",
         languages: ["en", "fr", "ca", "ja"],
       });
-      expect(await readContentLanguages(tx, tenantId, "es-ES")).toEqual({
+      expect(await readContentLanguages(tx, "es-ES")).toEqual({
         defaultLanguage: "en",
         languages: ["en", "fr", "ca", "ja"],
       });
@@ -277,9 +268,8 @@ describe("site content languages", () => {
     { defaultLanguage: "en", languages: ["en", "en-GB"] },
     { defaultLanguage: "zz", languages: ["zz"] },
   ])("refuses an invalid configuration %j", async (config) => {
-    const tenantId = await seedTenant(suite.db);
     await expect(
-      withTransaction(suite.db, (tx) => writeContentLanguages(tx, tenantId, config)),
+      withTransaction(suite.db, (tx) => writeContentLanguages(tx, config)),
     ).rejects.toThrow();
   });
 });

@@ -37,15 +37,15 @@ it("deleting a category removes its preparation routes and the category", async 
     const category = await createCategory(tx, tenantId, { name: { en: "Drinks" } });
     await createPreparationRoute(
       tx,
-      { tenantId, locationId },
+      { locationId },
       { categoryId: category.id, target: { kind: "no_preparation" } },
     );
-    await expect(deleteCategory(tx, tenantId, category.id)).resolves.toBeUndefined();
+    await expect(deleteCategory(tx, category.id)).resolves.toBeUndefined();
     const routes = await tx.execute(
       sql`select 1 from preparation_routes where category_id = ${category.id}`,
     );
     expect(routes.rows).toHaveLength(0);
-    await expect(readCategory(tx, tenantId, category.id)).rejects.toMatchObject({
+    await expect(readCategory(tx, category.id)).rejects.toMatchObject({
       code: "category.not_found",
     });
   });
@@ -63,7 +63,6 @@ it("an open order keeps its copied category label after the category is deleted"
     const category = await createCategory(tx, tenantId, { name: { en: "Bakery" } });
     const unit = await createUnit(
       tx,
-      tenantId,
       { name: { en: "each" }, precision: 0, abbreviation: { en: "ea" } },
       "en",
     );
@@ -88,7 +87,7 @@ it("an open order keeps its copied category label after the category is deleted"
          2, 2, 10, 2, 'Bakery')
     `);
 
-    await deleteCategory(tx, tenantId, category.id);
+    await deleteCategory(tx, category.id);
     const snapshot = await tx.execute<{ category: string | null }>(sql`
       select category from working_order_lines where tenant_id = ${tenantId}
         and working_order_id = ${order.rows[0]!.id}
@@ -111,24 +110,24 @@ it("dependants lists a category's preparation routes with station and zone names
     // A route may carry a zone, and a zoned route requires the zone to be a configured service zone.
     const department = await createDepartment(
       tx,
-      { tenantId, locationId },
+      { locationId },
       { name: "Restaurant", defaultServiceMode: "table_tab" },
     );
     await configureZone(
       tx,
-      { tenantId, locationId },
+      { locationId },
       { zoneId: zone.rows[0]!.id, departmentId: department.id },
     );
     const routeId = await createPreparationRoute(
       tx,
-      { tenantId, locationId },
+      { locationId },
       {
         categoryId: category.id,
         zoneId: zone.rows[0]!.id,
         target: { kind: "station", stationId: station.rows[0]!.id },
       },
     );
-    const deps = await categoryDependants(tx, tenantId, category.id);
+    const deps = await categoryDependants(tx, category.id);
     expect(deps.routes).toEqual([{ id: routeId, station: "Plancha", zone: "Terrace" }]);
   });
 });
@@ -140,10 +139,10 @@ it("dependants reports a no-preparation route with a null station", async () => 
     const category = await createCategory(tx, tenantId, { name: { en: "Drinks" } });
     const routeId = await createPreparationRoute(
       tx,
-      { tenantId, locationId },
+      { locationId },
       { categoryId: category.id, target: { kind: "no_preparation" } },
     );
-    const deps = await categoryDependants(tx, tenantId, category.id);
+    const deps = await categoryDependants(tx, category.id);
     expect(deps.routes).toEqual([{ id: routeId, station: null, zone: null }]);
   });
 });

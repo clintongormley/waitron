@@ -47,7 +47,6 @@ beforeEach(async () => {
     menuId = menu.id;
     const unit = await createUnit(
       tx,
-      tenantId,
       { name: { en: "each" }, precision: 0, abbreviation: { en: "u" } },
       "en",
     );
@@ -60,12 +59,12 @@ beforeEach(async () => {
       vatClass: "reduced",
     });
     productId = product.id;
-    const section = await createMenuSection(tx, tenantId, {
+    const section = await createMenuSection(tx, {
       menuId: menu.id,
       name: { en: "Drinks" },
     });
     offerId = (
-      await createMenuItem(tx, tenantId, {
+      await createMenuItem(tx, {
         menuId: menu.id,
         sectionId: section.id,
         productId,
@@ -80,7 +79,6 @@ describe("product variants", () => {
     const saved = await run((tx) =>
       setProductVariants(
         tx,
-        tenantId,
         productId,
         [
           { ...variant("Small", "2.00"), customerName: { en: "Small", es: "Pequeño" } },
@@ -109,7 +107,6 @@ describe("product variants", () => {
     const updated = await run((tx) =>
       setProductVariants(
         tx,
-        tenantId,
         productId,
         [
           { ...saved[1]!, available: false },
@@ -119,7 +116,7 @@ describe("product variants", () => {
       ),
     );
     expect(updated.map((v) => v.id)).toEqual([saved[1]!.id, saved[0]!.id]);
-    expect(await run((tx) => listProductVariants(tx, tenantId, productId))).toEqual(updated);
+    expect(await run((tx) => listProductVariants(tx, productId))).toEqual(updated);
     expect(updated[0]!.available).toBe(false);
   });
 
@@ -130,27 +127,26 @@ describe("product variants", () => {
         run((tx) =>
           setProductVariants(
             tx,
-            tenantId,
             productId,
             [variant("Good", "2.00"), variant("Bad", unitPrice)],
             "en",
           ),
         ),
       ).rejects.toMatchObject({ code: "product.variant_invalid" });
-      expect(await run((tx) => listProductVariants(tx, tenantId, productId))).toEqual([]);
+      expect(await run((tx) => listProductVariants(tx, productId))).toEqual([]);
     },
   );
 
   it("rejects duplicate and foreign variant identities", async () => {
     const [saved] = await run((tx) =>
-      setProductVariants(tx, tenantId, productId, [variant("Small", "2.00")], "en"),
+      setProductVariants(tx, productId, [variant("Small", "2.00")], "en"),
     );
     await expect(
-      run((tx) => setProductVariants(tx, tenantId, productId, [saved!, saved!], "en")),
+      run((tx) => setProductVariants(tx, productId, [saved!, saved!], "en")),
     ).rejects.toMatchObject({ code: "product.variant_invalid" });
     await expect(
       run((tx) =>
-        setProductVariants(tx, tenantId, productId, [{ ...saved!, id: crypto.randomUUID() }], "en"),
+        setProductVariants(tx, productId, [{ ...saved!, id: crypto.randomUUID() }], "en"),
       ),
     ).rejects.toMatchObject({ code: "product.variant_not_found" });
   });
@@ -160,7 +156,6 @@ describe("product variants", () => {
       run((tx) =>
         setProductVariants(
           tx,
-          tenantId,
           productId,
           [{ ...variant("Small", "2.00"), customerName: { es: "Pequeño" } }],
           "en",
@@ -171,37 +166,30 @@ describe("product variants", () => {
 
   it("keeps menu prices independent and requires explicit publication of new variants", async () => {
     const variants = await run((tx) =>
-      setProductVariants(
-        tx,
-        tenantId,
-        productId,
-        [variant("Small", "2.00"), variant("Large", "3.00")],
-        "en",
-      ),
+      setProductVariants(tx, productId, [variant("Small", "2.00"), variant("Large", "3.00")], "en"),
     );
-    expect(await run((tx) => listMenuVariants(tx, tenantId, offerId))).toEqual([]);
+    expect(await run((tx) => listMenuVariants(tx, offerId))).toEqual([]);
     await run((tx) =>
-      setMenuVariants(tx, tenantId, offerId, [
+      setMenuVariants(tx, offerId, [
         { variantId: variants[0]!.id, unitPrice: "4.00", available: true },
       ]),
     );
     await run((tx) =>
       setProductVariants(
         tx,
-        tenantId,
         productId,
         [{ ...variants[0]!, unitPrice: "2.50" }, variants[1]!],
         "en",
       ),
     );
-    const published = await run((tx) => listMenuVariants(tx, tenantId, offerId));
+    const published = await run((tx) => listMenuVariants(tx, offerId));
     expect(published).toEqual([{ variantId: variants[0]!.id, unitPrice: "4.00", available: true }]);
-    expect((await run((tx) => listProducts(tx, tenantId)))[0]!.variants).toEqual([
+    expect((await run((tx) => listProducts(tx)))[0]!.variants).toEqual([
       expect.objectContaining({ id: variants[0]!.id, name: "Small", unitPrice: "2.50" }),
       expect.objectContaining({ id: variants[1]!.id, name: "Large", unitPrice: "3.00" }),
     ]);
-    expect(await run((tx) => listMenuOffers(tx, tenantId, []))).toEqual([]);
-    const offers = await run((tx) => listMenuOffers(tx, tenantId, [menuId]));
+    expect(await run((tx) => listMenuOffers(tx, []))).toEqual([]);
+    const offers = await run((tx) => listMenuOffers(tx, [menuId]));
     expect(offers[0]!.variants).toEqual([
       {
         id: variants[0]!.id,
@@ -216,19 +204,18 @@ describe("product variants", () => {
     await run((tx) =>
       setProductVariants(
         tx,
-        tenantId,
         productId,
         [{ ...variants[0]!, unitPrice: "2.50", available: false }, variants[1]!],
         "en",
       ),
     );
-    expect((await run((tx) => listMenuOffers(tx, tenantId, [menuId])))[0]!.variants).toEqual([
+    expect((await run((tx) => listMenuOffers(tx, [menuId])))[0]!.variants).toEqual([
       expect.objectContaining({ id: variants[0]!.id, available: false }),
     ]);
     await expect(
-      run((tx) => setProductVariants(tx, tenantId, productId, [variants[1]!], "en")),
+      run((tx) => setProductVariants(tx, productId, [variants[1]!], "en")),
     ).rejects.toMatchObject({ code: "product.variant_in_use" });
-    expect(await run((tx) => listProductVariants(tx, tenantId, productId))).toHaveLength(2);
+    expect(await run((tx) => listProductVariants(tx, productId))).toHaveLength(2);
   });
 
   it("refuses to publish a variant belonging to another product and publishes nothing", async () => {
@@ -269,20 +256,18 @@ describe("product variants", () => {
 
 it("prices the required published variant instead of the base or product variant price", async () => {
   const [small] = await run((tx) =>
-    setProductVariants(tx, tenantId, productId, [variant("Small", "2.00")], "en"),
+    setProductVariants(tx, productId, [variant("Small", "2.00")], "en"),
   );
-  await expect(run((tx) => resolveMenuVariant(tx, tenantId, offerId, null))).rejects.toMatchObject({
+  await expect(run((tx) => resolveMenuVariant(tx, offerId, null))).rejects.toMatchObject({
     code: "product.variant_required",
   });
-  await expect(
-    run((tx) => resolveMenuVariant(tx, tenantId, offerId, small!.id)),
-  ).rejects.toMatchObject({ code: "product.variant_unavailable" });
+  await expect(run((tx) => resolveMenuVariant(tx, offerId, small!.id))).rejects.toMatchObject({
+    code: "product.variant_unavailable",
+  });
   await run((tx) =>
-    setMenuVariants(tx, tenantId, offerId, [
-      { variantId: small!.id, unitPrice: "4.00", available: true },
-    ]),
+    setMenuVariants(tx, offerId, [{ variantId: small!.id, unitPrice: "4.00", available: true }]),
   );
-  const selected = await run((tx) => resolveMenuVariant(tx, tenantId, offerId, small!.id));
+  const selected = await run((tx) => resolveMenuVariant(tx, offerId, small!.id));
   expect(selected).toEqual({
     variantId: small!.id,
     name: "Coffee",
@@ -332,7 +317,7 @@ it("prices the required published variant instead of the base or product variant
     variantDescriptions: { en: "Small" },
   });
   await run((tx) =>
-    updateProduct(tx, tenantId, productId, {
+    updateProduct(tx, productId, {
       name: "Renamed",
       unitPrice: "99.00",
       active: false,
@@ -340,7 +325,7 @@ it("prices the required published variant instead of the base or product variant
   );
   expect(selected.name).toBe("Coffee");
   expect(selected.unitPrice).toBe("4.00");
-  await expect(
-    run((tx) => resolveMenuVariant(tx, tenantId, offerId, small!.id)),
-  ).rejects.toMatchObject({ code: "product.unavailable" });
+  await expect(run((tx) => resolveMenuVariant(tx, offerId, small!.id))).rejects.toMatchObject({
+    code: "product.unavailable",
+  });
 });

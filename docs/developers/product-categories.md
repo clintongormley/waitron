@@ -156,11 +156,13 @@ calls `replaceProductCategories`.
 category IDs, station references and `products.category_id` remain. The latter means primary only;
 category writes in product operations call the shared membership replacement operation.
 `category_details` owns parent and image references, and `product_categories` owns membership.
-Both new tables belong to catalogue, have tenant-consistent foreign keys and state classification.
+Both new tables belong to catalogue, have foreign keys onto the core product and category rows, and
+state classification.
 
-Hierarchy edits, membership replacements and category deletion take the same transaction lock per
-tenant. Deletion also locks the core category row against a concurrent preparation-route insert.
-The media migration adds the image foreign key; attaching an image locks its row against deletion.
+Hierarchy edits, membership replacements and category deletion take the same transaction lock.
+Deletion also locks the core category row against a concurrent preparation-route insert.
+The media set adds the image foreign key (`category_details_media_image_fk`, created in media's
+`0006_drop_tenant_id_sql`); attaching an image locks its row against deletion.
 Configuration transfer places media rows before category image references and preserves membership
 and primary choice. Category parent references target existing core identities, so metadata rows can
 be restored in any order after those identities.

@@ -12,7 +12,7 @@ import {
 import type { Transaction } from "@waitron/db";
 import { listMenuOffers, type MenuOffer } from "@waitron/catalogue";
 import type { PreparationRoute, ServiceMode } from "@waitron/module";
-import { AppError, type LocationId, type TenantId } from "@waitron/shared";
+import { AppError, type LocationId } from "@waitron/shared";
 import {
   departments,
   departmentHours,
@@ -26,7 +26,6 @@ import {
 import "./errors.js";
 
 export interface VenueScope {
-  tenantId: TenantId;
   locationId: LocationId;
 }
 
@@ -459,7 +458,6 @@ export async function listZoneOffers(
   const menuOrder = new Map(menus.map((menu, index) => [menu.id, index]));
   const offers = await listMenuOffers(
     tx,
-    cfg.tenantId,
     menus.map((menu) => menu.id),
   );
   offers.sort(

@@ -31,43 +31,38 @@ async function product(tx: Transaction, tenantId: string, name: string) {
 
 describe("unit operations", () => {
   it("requires an abbreviation in the default language", async () => {
-    const tenantId = await seedTenant(suite.db);
     await withTransaction(suite.db, async (tx) => {
       await expect(
-        createUnit(tx, tenantId, { name: { en: "Litre" }, precision: 3, abbreviation: {} }, "en"),
+        createUnit(tx, { name: { en: "Litre" }, precision: 3, abbreviation: {} }, "en"),
       ).rejects.toMatchObject({ code: "content.translation_required" });
     });
   });
 
   it("stores and returns the abbreviation", async () => {
-    const tenantId = await seedTenant(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const unit = await createUnit(
         tx,
-        tenantId,
         { name: { en: "Litre" }, precision: 3, abbreviation: { en: "l" } },
         "en",
       );
       expect(unit.abbreviation).toEqual({ en: "l" });
-      const [listed] = await listUnits(tx, tenantId);
+      const [listed] = await listUnits(tx);
       expect(listed!.abbreviation).toEqual({ en: "l" });
     });
   });
 
   it("updates the abbreviation and revalidates it against the default language", async () => {
-    const tenantId = await seedTenant(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const unit = await createUnit(
         tx,
-        tenantId,
         { name: { en: "Litre" }, precision: 3, abbreviation: { en: "l" } },
         "en",
       );
-      const updated = await updateUnit(tx, tenantId, unit.id, { abbreviation: { en: "L" } }, "en");
+      const updated = await updateUnit(tx, unit.id, { abbreviation: { en: "L" } }, "en");
       expect(updated.abbreviation).toEqual({ en: "L" });
-      await expect(
-        updateUnit(tx, tenantId, unit.id, { abbreviation: {} }, "en"),
-      ).rejects.toMatchObject({ code: "content.translation_required" });
+      await expect(updateUnit(tx, unit.id, { abbreviation: {} }, "en")).rejects.toMatchObject({
+        code: "content.translation_required",
+      });
     });
   });
 
@@ -76,23 +71,22 @@ describe("unit operations", () => {
     await withTransaction(suite.db, async (tx) => {
       const unit = await createUnit(
         tx,
-        tenantId,
         { name: { en: "portion" }, precision: 2, abbreviation: { en: "u" } },
         "en",
       );
-      expect(await getUnit(tx, tenantId, unit.id)).toEqual(unit);
-      expect(await listUnits(tx, tenantId)).toEqual([unit]);
-      await updateUnit(tx, tenantId, unit.id, { name: { en: "serving" }, precision: 1 }, "en");
-      expect(await getUnit(tx, tenantId, unit.id)).toMatchObject({
+      expect(await getUnit(tx, unit.id)).toEqual(unit);
+      expect(await listUnits(tx)).toEqual([unit]);
+      await updateUnit(tx, unit.id, { name: { en: "serving" }, precision: 1 }, "en");
+      expect(await getUnit(tx, unit.id)).toMatchObject({
         name: { en: "serving" },
         precision: 1,
       });
 
       const productId = await product(tx, tenantId, "Soup");
-      await assignProductUnit(tx, tenantId, productId, unit.id);
+      await assignProductUnit(tx, productId, unit.id);
       await tx.execute(sql`
         update products set active = false where tenant_id = ${tenantId} and id = ${productId}`);
-      await expect(deleteUnit(tx, tenantId, unit.id)).rejects.toMatchObject({
+      await expect(deleteUnit(tx, unit.id)).rejects.toMatchObject({
         code: "unit.in_use",
         params: { products: [{ id: productId, name: "Soup", available: false }] },
       });
@@ -104,20 +98,19 @@ describe("unit operations", () => {
     await withTransaction(suite.db, async (tx) => {
       const unit = await createUnit(
         tx,
-        tenantId,
         { name: { en: "portion" }, precision: 0, abbreviation: { en: "u" } },
         "en",
       );
-      expect(await productsUsingUnit(tx, tenantId, unit.id)).toEqual([]);
+      expect(await productsUsingUnit(tx, unit.id)).toEqual([]);
 
       const soup = await product(tx, tenantId, "Soup");
       const tea = await product(tx, tenantId, "Tea");
-      await assignProductUnit(tx, tenantId, soup, unit.id);
-      await assignProductUnit(tx, tenantId, tea, unit.id);
+      await assignProductUnit(tx, soup, unit.id);
+      await assignProductUnit(tx, tea, unit.id);
       await tx.execute(sql`
         update products set active = false where tenant_id = ${tenantId} and id = ${tea}`);
 
-      const using = await productsUsingUnit(tx, tenantId, unit.id);
+      const using = await productsUsingUnit(tx, unit.id);
       expect(using).toHaveLength(2);
       expect(using).toEqual(
         expect.arrayContaining([
@@ -133,27 +126,23 @@ describe("unit operations", () => {
     await withTransaction(suite.db, async (tx) => {
       const from = await createUnit(
         tx,
-        tenantId,
         { name: { en: "each" }, precision: 0, abbreviation: { en: "u" } },
         "en",
       );
       const to = await createUnit(
         tx,
-        tenantId,
         { name: { en: "kg" }, precision: 3, abbreviation: { en: "u" } },
         "en",
       );
       const a = await product(tx, tenantId, "A");
       const b = await product(tx, tenantId, "B");
-      await assignProductUnit(tx, tenantId, a, from.id);
-      await assignProductUnit(tx, tenantId, b, from.id);
-      expect(await productsUsingUnit(tx, tenantId, from.id)).toHaveLength(2);
+      await assignProductUnit(tx, a, from.id);
+      await assignProductUnit(tx, b, from.id);
+      expect(await productsUsingUnit(tx, from.id)).toHaveLength(2);
 
-      await reassignProductsToUnit(tx, tenantId, from.id, [a, b], to.id);
-      expect(await productsUsingUnit(tx, tenantId, from.id)).toEqual([]);
-      expect((await productsUsingUnit(tx, tenantId, to.id)).map((p) => p.id).sort()).toEqual(
-        [a, b].sort(),
-      );
+      await reassignProductsToUnit(tx, from.id, [a, b], to.id);
+      expect(await productsUsingUnit(tx, from.id)).toEqual([]);
+      expect((await productsUsingUnit(tx, to.id)).map((p) => p.id).sort()).toEqual([a, b].sort());
     });
   });
 
@@ -164,32 +153,24 @@ describe("unit operations", () => {
     await withTransaction(suite.db, async (tx) => {
       const from = await createUnit(
         tx,
-        owner,
         { name: { en: "each" }, precision: 0, abbreviation: { en: "u" } },
         "en",
       );
       const to = await createUnit(
         tx,
-        owner,
         { name: { en: "kg" }, precision: 3, abbreviation: { en: "u" } },
         "en",
       );
       const a = await product(tx, owner, "A");
-      await assignProductUnit(tx, owner, a, from.id);
+      await assignProductUnit(tx, a, from.id);
 
       await expect(
-        reassignProductsToUnit(
-          tx,
-          owner,
-          from.id,
-          [a, "00000000-0000-4000-8000-0000000000aa"],
-          to.id,
-        ),
+        reassignProductsToUnit(tx, from.id, [a, "00000000-0000-4000-8000-0000000000aa"], to.id),
       ).resolves.toBeUndefined();
 
       // The valid id moved; the unmatched id neither stopped it nor was itself touched.
-      expect(await productsUsingUnit(tx, owner, from.id)).toEqual([]);
-      expect((await productsUsingUnit(tx, owner, to.id)).map((p) => p.id)).toEqual([a]);
+      expect(await productsUsingUnit(tx, from.id)).toEqual([]);
+      expect((await productsUsingUnit(tx, to.id)).map((p) => p.id)).toEqual([a]);
     });
   });
 
@@ -198,14 +179,13 @@ describe("unit operations", () => {
     await withTransaction(suite.db, async (tx) => {
       const from = await createUnit(
         tx,
-        tenantId,
         { name: { en: "each" }, precision: 0, abbreviation: { en: "u" } },
         "en",
       );
       const a = await product(tx, tenantId, "A");
-      await assignProductUnit(tx, tenantId, a, from.id);
+      await assignProductUnit(tx, a, from.id);
       await expect(
-        reassignProductsToUnit(tx, tenantId, from.id, [a], "00000000-0000-4000-8000-000000000000"),
+        reassignProductsToUnit(tx, from.id, [a], "00000000-0000-4000-8000-000000000000"),
       ).rejects.toMatchObject({ code: "unit.not_found" });
     });
   });

@@ -234,17 +234,17 @@ async function seedShop(db: Database, emisorNif: string): Promise<Shop> {
       vatClass: "general",
     });
     await assignCatalogueToLocation(tx, cfg.locationId, cat.id);
-    const section = await createMenuSection(tx, cfg.tenantId, {
+    const section = await createMenuSection(tx, {
       menuId: cat.id,
       name: { [LOCALE]: "Bebidas" },
     });
-    const aguaMenuItem = await createMenuItem(tx, cfg.tenantId, {
+    const aguaMenuItem = await createMenuItem(tx, {
       menuId: cat.id,
       productId: agua.id,
       sectionId: section.id,
       grossPrice: "1.50",
     });
-    const cafeMenuItem = await createMenuItem(tx, cfg.tenantId, {
+    const cafeMenuItem = await createMenuItem(tx, {
       menuId: cat.id,
       productId: cafe.id,
       sectionId: section.id,

@@ -20,7 +20,6 @@ beforeEach(async () => {
     catalogue: await createCatalogue(tx, tenantId, { name: "Menu" }),
     unit: await createUnit(
       tx,
-      tenantId,
       { name: { en: "each" }, precision: 0, abbreviation: { en: "u" } },
       "en",
     ),
@@ -88,9 +87,7 @@ it("saves and reads the canonical editor shape with independent content and vari
     stationId: null,
     courseId: null,
   });
-  expect(await withTransaction(fx.db, (tx) => readProductEditor(tx, tenantId, saved.id))).toEqual(
-    saved,
-  );
+  expect(await withTransaction(fx.db, (tx) => readProductEditor(tx, saved.id))).toEqual(saved);
   const updated = await withTransaction(fx.db, (tx) =>
     saveProductEditor(
       tx,
@@ -145,7 +142,7 @@ it("changes the product's unit on update", async () => {
     saveProductEditor(tx, tenantId, null, catalogueId, input, "en"),
   );
   const other = await withTransaction(fx.db, (tx) =>
-    createUnit(tx, tenantId, { name: { en: "kg" }, precision: 3, abbreviation: { en: "u" } }, "en"),
+    createUnit(tx, { name: { en: "kg" }, precision: 3, abbreviation: { en: "u" } }, "en"),
   );
   const updated = await withTransaction(fx.db, (tx) =>
     saveProductEditor(tx, tenantId, saved.id, catalogueId, { ...saved, unitId: other.id }, "en"),
@@ -199,7 +196,7 @@ it("rolls back product and variants when a supporting association fails", async 
       ),
     ),
   ).rejects.toMatchObject({ code: "modifier.invalid" });
-  expect(await withTransaction(fx.db, (tx) => listProducts(tx, tenantId, catalogueId))).toEqual([]);
+  expect(await withTransaction(fx.db, (tx) => listProducts(tx, catalogueId))).toEqual([]);
 });
 
 it("round-trips real category and modifier associations", async () => {
@@ -253,7 +250,7 @@ it.each([
       ),
     ),
   ).rejects.toMatchObject({ code: "product.invalid", params: { field } });
-  expect(await withTransaction(fx.db, (tx) => listProducts(tx, tenantId, catalogueId))).toEqual([]);
+  expect(await withTransaction(fx.db, (tx) => listProducts(tx, catalogueId))).toEqual([]);
 });
 
 /**

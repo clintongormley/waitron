@@ -13,22 +13,20 @@ import {
   unique,
   uuid,
 } from "drizzle-orm/pg-core";
-import { catalogues, optionGroupItems, optionGroups, products, tenants } from "@waitron/db";
+import { catalogues, optionGroupItems, optionGroups, products } from "@waitron/db";
 
-/** One content-language policy shared by the tenant's reusable catalogue and media. */
+/** The one content-language policy shared by the reusable catalogue and media: at most one row,
+ * `id` pinned to 1 (the `deployment` / `mirror_config` / `node_membership` singleton shape in
+ * `@waitron/db`). */
 export const contentLanguages = pgTable(
   "content_languages",
   {
-    tenantId: uuid("tenant_id").primaryKey(),
+    id: integer("id").primaryKey().notNull().default(1),
     defaultLanguage: text("default_language").notNull(),
     languages: text("languages").array().notNull(),
   },
   (t) => [
-    foreignKey({
-      columns: [t.tenantId],
-      foreignColumns: [tenants.id],
-      name: "content_languages_tenant_fk",
-    }).onDelete("restrict"),
+    check("content_languages_singleton_ck", sql`${t.id} = 1`),
     check("content_languages_default_ck", sql`${t.defaultLanguage} = any(${t.languages})`),
     check(
       "content_languages_list_ck",
@@ -42,26 +40,20 @@ export const menuSections = pgTable(
   "menu_sections",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    tenantId: uuid("tenant_id").notNull(),
     menuId: uuid("menu_id").notNull(),
     name: jsonb("name").$type<Record<string, string>>().notNull(),
     displayOrder: integer("display_order").notNull().default(0),
     active: boolean("active").notNull().default(true),
   },
   (t) => [
-    unique("menu_sections_tenant_id_key").on(t.tenantId, t.id),
-    unique("menu_sections_tenant_menu_id_key").on(t.tenantId, t.menuId, t.id),
+    // The target of menu_items_section_fk: an offer's section belongs to the offer's own menu.
+    unique("menu_sections_menu_id_key").on(t.menuId, t.id),
     foreignKey({
-      columns: [t.tenantId],
-      foreignColumns: [tenants.id],
-      name: "menu_sections_tenant_fk",
-    }).onDelete("restrict"),
-    foreignKey({
-      columns: [t.tenantId, t.menuId],
-      foreignColumns: [catalogues.tenantId, catalogues.id],
+      columns: [t.menuId],
+      foreignColumns: [catalogues.id],
       name: "menu_sections_menu_fk",
     }).onDelete("cascade"),
-    index("menu_sections_menu_order_idx").on(t.tenantId, t.menuId, t.displayOrder),
+    index("menu_sections_menu_order_idx").on(t.menuId, t.displayOrder),
   ],
 );
 
@@ -70,7 +62,6 @@ export const menuItems = pgTable(
   "menu_items",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    tenantId: uuid("tenant_id").notNull(),
     menuId: uuid("menu_id").notNull(),
     productId: uuid("product_id").notNull(),
     sectionId: uuid("section_id").notNull(),
@@ -79,31 +70,26 @@ export const menuItems = pgTable(
     active: boolean("active").notNull().default(true),
   },
   (t) => [
-    unique("menu_items_tenant_id_key").on(t.tenantId, t.id),
-    unique("menu_items_tenant_product_id_key").on(t.tenantId, t.id, t.productId),
-    unique("menu_items_menu_product_key").on(t.tenantId, t.menuId, t.productId),
+    // The target of menu_item_variants_offer_fk: a published variant belongs to the offer's product.
+    unique("menu_items_id_product_key").on(t.id, t.productId),
+    unique("menu_items_menu_product_key").on(t.menuId, t.productId),
     foreignKey({
-      columns: [t.tenantId],
-      foreignColumns: [tenants.id],
-      name: "menu_items_tenant_fk",
-    }).onDelete("restrict"),
-    foreignKey({
-      columns: [t.tenantId, t.menuId],
-      foreignColumns: [catalogues.tenantId, catalogues.id],
+      columns: [t.menuId],
+      foreignColumns: [catalogues.id],
       name: "menu_items_menu_fk",
     }).onDelete("cascade"),
     foreignKey({
-      columns: [t.tenantId, t.productId],
-      foreignColumns: [products.tenantId, products.id],
+      columns: [t.productId],
+      foreignColumns: [products.id],
       name: "menu_items_product_fk",
     }).onDelete("restrict"),
     foreignKey({
-      columns: [t.tenantId, t.menuId, t.sectionId],
-      foreignColumns: [menuSections.tenantId, menuSections.menuId, menuSections.id],
+      columns: [t.menuId, t.sectionId],
+      foreignColumns: [menuSections.menuId, menuSections.id],
       name: "menu_items_section_fk",
     }).onDelete("restrict"),
     check("menu_items_gross_price_ck", sql`${t.grossPrice} >= 0`),
-    index("menu_items_menu_order_idx").on(t.tenantId, t.menuId, t.displayOrder),
+    index("menu_items_menu_order_idx").on(t.menuId, t.displayOrder),
   ],
 );
 
@@ -111,24 +97,23 @@ export const menuItems = pgTable(
 export const menuItemOptionGroups = pgTable(
   "menu_item_option_groups",
   {
-    tenantId: uuid("tenant_id").notNull(),
     menuItemId: uuid("menu_item_id").notNull(),
     groupId: uuid("group_id").notNull(),
     displayOrder: integer("display_order").notNull().default(0),
   },
   (t) => [
     primaryKey({
-      columns: [t.tenantId, t.menuItemId, t.groupId],
+      columns: [t.menuItemId, t.groupId],
       name: "menu_item_option_groups_pk",
     }),
     foreignKey({
-      columns: [t.tenantId, t.menuItemId],
-      foreignColumns: [menuItems.tenantId, menuItems.id],
+      columns: [t.menuItemId],
+      foreignColumns: [menuItems.id],
       name: "menu_item_option_groups_item_fk",
     }).onDelete("cascade"),
     foreignKey({
-      columns: [t.tenantId, t.groupId],
-      foreignColumns: [optionGroups.tenantId, optionGroups.id],
+      columns: [t.groupId],
+      foreignColumns: [optionGroups.id],
       name: "menu_item_option_groups_group_fk",
     }).onDelete("cascade"),
   ],
@@ -138,7 +123,6 @@ export const menuItemOptionGroups = pgTable(
 export const menuItemOptions = pgTable(
   "menu_item_options",
   {
-    tenantId: uuid("tenant_id").notNull(),
     menuItemId: uuid("menu_item_id").notNull(),
     groupId: uuid("group_id").notNull(),
     optionId: uuid("option_id").notNull(),
@@ -146,21 +130,17 @@ export const menuItemOptions = pgTable(
   },
   (t) => [
     primaryKey({
-      columns: [t.tenantId, t.menuItemId, t.optionId],
+      columns: [t.menuItemId, t.optionId],
       name: "menu_item_options_pk",
     }),
     foreignKey({
-      columns: [t.tenantId, t.menuItemId, t.groupId],
-      foreignColumns: [
-        menuItemOptionGroups.tenantId,
-        menuItemOptionGroups.menuItemId,
-        menuItemOptionGroups.groupId,
-      ],
+      columns: [t.menuItemId, t.groupId],
+      foreignColumns: [menuItemOptionGroups.menuItemId, menuItemOptionGroups.groupId],
       name: "menu_item_options_group_fk",
     }).onDelete("cascade"),
     foreignKey({
-      columns: [t.tenantId, t.optionId],
-      foreignColumns: [optionGroupItems.tenantId, optionGroupItems.id],
+      columns: [t.optionId],
+      foreignColumns: [optionGroupItems.id],
       name: "menu_item_options_option_fk",
     }).onDelete("cascade"),
   ],

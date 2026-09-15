@@ -22,14 +22,14 @@ async function venue(country: string, province: string, receipt: string) {
   return { tenantId, locationId, nodeId };
 }
 
-async function storedLanguages(tenantId: string) {
+async function storedLanguages() {
   return (
     await suite.db.execute<{ default_language: string; languages: string[] }>(sql`
-    select default_language, languages from content_languages where tenant_id = ${tenantId}`)
+    select default_language, languages from content_languages`)
   ).rows;
 }
 
-async function storedUnits(tenantId: string) {
+async function storedUnits() {
   return (
     await suite.db.execute<{
       seed_key: string;
@@ -38,8 +38,7 @@ async function storedUnits(tenantId: string) {
       precision: number;
       hardware_unit: string | null;
     }>(sql`
-      select seed_key, name, abbreviation, precision, hardware_unit from units
-      where tenant_id = ${tenantId} order by seed_key`)
+      select seed_key, name, abbreviation, precision, hardware_unit from units order by seed_key`)
   ).rows;
 }
 
@@ -63,9 +62,7 @@ describe("catalogue provisioning", () => {
     async (country, province, receipt, language, languages) => {
       const node = await venue(country, province, receipt);
       await suite.db.transaction((tx) => CATALOGUE_PROVISIONING.seed!.run(tx, node));
-      expect(await storedLanguages(node.tenantId)).toEqual([
-        { default_language: language, languages },
-      ]);
+      expect(await storedLanguages()).toEqual([{ default_language: language, languages }]);
       const location = await suite.db.execute<{ invoice_locales: string[] }>(sql`
       select invoice_locales from locations where tenant_id = ${node.tenantId} and id = ${node.locationId}`);
       expect(location.rows).toEqual([{ invoice_locales: [receipt] }]);
@@ -76,13 +73,11 @@ describe("catalogue provisioning", () => {
     const node = await venue("ES", "Madrid", "es-ES");
     const run = () => suite.db.transaction((tx) => CATALOGUE_PROVISIONING.seed!.run(tx, node));
     await expect(run()).resolves.toBe("initial menu ready");
-    await suite.db
-      .execute(sql`update content_languages set default_language = 'fr', languages = array['fr','de']
-      where tenant_id = ${node.tenantId}`);
+    await suite.db.execute(
+      sql`update content_languages set default_language = 'fr', languages = array['fr','de']`,
+    );
     await run();
-    expect(await storedLanguages(node.tenantId)).toEqual([
-      { default_language: "fr", languages: ["fr", "de"] },
-    ]);
+    expect(await storedLanguages()).toEqual([{ default_language: "fr", languages: ["fr", "de"] }]);
     const menus = await suite.db.execute<{ count: number }>(sql`
       select count(*)::int as count from location_catalogues where tenant_id = ${node.tenantId}`);
     expect(menus.rows).toEqual([{ count: 1 }]);
@@ -94,9 +89,9 @@ describe("catalogue provisioning", () => {
       suite.db.transaction((tx) => CATALOGUE_PROVISIONING.seed!.run(tx, { ...node, nodeId }));
     await run();
     await suite.db.transaction(async (tx) => {
-      expect(await getSeededUnit(tx, node.tenantId, "each")).toBeNull();
+      expect(await getSeededUnit(tx, "each")).toBeNull();
     });
-    expect(await storedUnits(node.tenantId)).toEqual([
+    expect(await storedUnits()).toEqual([
       {
         seed_key: "g",
         name: { en: "Gram", es: "Gramo", ca: "Gram", gl: "Gramo", eu: "Gramo" },
@@ -153,15 +148,15 @@ describe("catalogue provisioning", () => {
     ]);
     await suite.db.execute(sql`
       update units set name = '{"en":"piece","es":"pieza"}'::jsonb
-      where tenant_id = ${node.tenantId} and seed_key = 'g'`);
+      where seed_key = 'g'`);
     await suite.db.execute(sql`
-      delete from units where tenant_id = ${node.tenantId} and seed_key = 'mg'`);
+      delete from units where seed_key = 'mg'`);
     const otherNode = await seedNode(suite.db, node.tenantId, node.locationId);
     await run(otherNode);
-    expect((await storedUnits(node.tenantId)).find((unit) => unit.seed_key === "g")?.name).toEqual({
+    expect((await storedUnits()).find((unit) => unit.seed_key === "g")?.name).toEqual({
       en: "piece",
       es: "pieza",
     });
-    expect((await storedUnits(node.tenantId)).map((unit) => unit.seed_key)).not.toContain("mg");
+    expect((await storedUnits()).map((unit) => unit.seed_key)).not.toContain("mg");
   });
 });

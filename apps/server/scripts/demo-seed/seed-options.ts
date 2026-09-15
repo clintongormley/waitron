@@ -178,6 +178,6 @@ export async function seedOptions(
     if (menuItemId === undefined) {
       throw new Error(`seedOptions: no menu item for product '${productId}'`);
     }
-    await setMenuItemOptionGroups(tx, tenantId, menuItemId, menuGroups);
+    await setMenuItemOptionGroups(tx, menuItemId, menuGroups);
   }
 }

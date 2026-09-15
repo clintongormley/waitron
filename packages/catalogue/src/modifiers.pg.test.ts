@@ -79,14 +79,14 @@ it("saves complete definitions as app_user, preserving ids and order", async () 
     ],
   });
   await app(tenant, (tx) => updateModifier(tx, tenant, created.id, text, "en"));
-  expect(await app(tenant, (tx) => getModifier(tx, tenant, created.id))).toEqual({
+  expect(await app(tenant, (tx) => getModifier(tx, created.id))).toEqual({
     id: created.id,
     type: "text",
     name,
     available: true,
   });
-  await app(tenant, (tx) => deleteModifier(tx, tenant, created.id));
-  expect(await app(tenant, (tx) => listModifiers(tx, tenant))).toEqual([]);
+  await app(tenant, (tx) => deleteModifier(tx, created.id));
+  expect(await app(tenant, (tx) => listModifiers(tx))).toEqual([]);
 });
 
 it("reads a stored-inactive non-yes/no modifier as available", async () => {
@@ -107,7 +107,7 @@ it("reads a stored-inactive non-yes/no modifier as available", async () => {
   await suite.admin
     .insert(optionGroupItems)
     .values({ tenantId: tenant, id: randomUUID(), groupId, name: { en: "Oat" }, active: true });
-  const [modifier] = await app(tenant, (tx) => listModifiers(tx, tenant));
+  const [modifier] = await app(tenant, (tx) => listModifiers(tx));
   expect(modifier).toMatchObject({ id: groupId, type: "options", available: true });
 });
 
@@ -127,12 +127,12 @@ it("rolls back the whole save when a choice belongs to another modifier", async 
       ),
     ),
   ).rejects.toMatchObject({ code: "modifier.invalid" });
-  expect(await app(tenant, (tx) => listModifiers(tx, tenant))).toEqual([original]);
+  expect(await app(tenant, (tx) => listModifiers(tx))).toEqual([original]);
 });
 
 it("blocks a type change for attached definitions, but permits other edits", async () => {
   const tenant = await seedTenant(suite.admin);
-  await seedLegacySellingUnits(suite.admin, tenant);
+  await seedLegacySellingUnits(suite.admin);
   const definition = await app(tenant, (tx) => createModifier(tx, tenant, text, "en"));
   await app(tenant, async (tx) => {
     const catalogue = await createCatalogue(tx, brandTenantId(tenant), { name: "Menu" });
@@ -164,7 +164,7 @@ it("blocks a type change for attached definitions, but permits other edits", asy
 
 it("serializes deletion behind an attachment write, then cascades the committed attachment", async () => {
   const tenant = await seedTenant(suite.admin);
-  await seedLegacySellingUnits(suite.admin, tenant);
+  await seedLegacySellingUnits(suite.admin);
   const definition = await app(tenant, (tx) => createModifier(tx, tenant, text, "en"));
   const product = await app(tenant, async (tx) => {
     const catalogue = await createCatalogue(tx, brandTenantId(tenant), { name: "Menu" });
@@ -198,7 +198,7 @@ it("serializes deletion behind an attachment write, then cascades the committed 
     await attached;
     const deleting = withTransaction(deleter, async (tx) => {
       await asAppUser(tx);
-      await deleteModifier(tx, tenant, definition.id);
+      await deleteModifier(tx, definition.id);
     }).catch((error: unknown) => error);
     await expect
       .poll(
@@ -221,7 +221,7 @@ it("serializes deletion behind an attachment write, then cascades the committed 
     await writer.close();
     await deleter.close();
   }
-  expect(await app(tenant, (tx) => listModifiers(tx, tenant))).toEqual([]);
+  expect(await app(tenant, (tx) => listModifiers(tx))).toEqual([]);
   expect(await app(tenant, (tx) => tx.select().from(productOptionGroups))).toEqual([]);
 });
 
@@ -243,18 +243,18 @@ it("blocks a default-language change while a modifier name is untranslated", asy
     );
     const { listContentTranslationGaps, writeContentLanguages } =
       await import("./content-languages.js");
-    expect(await listContentTranslationGaps(tx, tenant, "fr")).toEqual([
+    expect(await listContentTranslationGaps(tx, "fr")).toEqual([
       { kind: "option_group", id: expect.any(String) },
     ]);
     await expect(
-      writeContentLanguages(tx, tenant, { defaultLanguage: "fr", languages: ["en", "fr"] }, "en"),
+      writeContentLanguages(tx, { defaultLanguage: "fr", languages: ["en", "fr"] }, "en"),
     ).rejects.toMatchObject({ code: "content.default_missing" });
   });
 });
 
 it("preserves inactive attachments when editing a product, but refuses a new attachment", async () => {
   const tenant = await seedTenant(suite.admin);
-  await seedLegacySellingUnits(suite.admin, tenant);
+  await seedLegacySellingUnits(suite.admin);
   // A modifier can no longer be turned off as a whole through the editor, so the inactive-group
   // state this attachment guard rejects is forced directly on the row.
   const definition = await app(tenant, (tx) =>
@@ -295,12 +295,12 @@ it("maps an old author's total cap into the canonical extras definition", async 
   await app(tenant, async (tx) => {
     const { createOptionGroup, updateOptionGroup } = await import("./operations.js");
     const group = await createOptionGroup(tx, brandTenantId(tenant), { name, maxSelect: 2 });
-    expect(await getModifier(tx, tenant, group.id)).toMatchObject({
+    expect(await getModifier(tx, group.id)).toMatchObject({
       type: "extras",
       maxTotalQuantity: 2,
     });
-    await updateOptionGroup(tx, brandTenantId(tenant), group.id, { maxSelect: 3 });
-    expect(await getModifier(tx, tenant, group.id)).toMatchObject({
+    await updateOptionGroup(tx, group.id, { maxSelect: 3 });
+    expect(await getModifier(tx, group.id)).toMatchObject({
       type: "extras",
       maxTotalQuantity: 3,
     });
@@ -309,11 +309,11 @@ it("maps an old author's total cap into the canonical extras definition", async 
 
 it("deletes a modifier attached to a product and published on a menu, cascading the links", async () => {
   const { tenantId } = await seedVenue(suite.admin);
-  await seedLegacySellingUnits(suite.admin, tenantId);
+  await seedLegacySellingUnits(suite.admin);
   const choice = { id: randomUUID(), name: { en: "Oat" }, available: true };
   const modifierId = await app(tenantId, async (tx) => {
     const menu = await createCatalogue(tx, tenantId, { name: "Menu" });
-    const section = await createMenuSection(tx, tenantId, {
+    const section = await createMenuSection(tx, {
       menuId: menu.id,
       name: { en: "Drinks" },
     });
@@ -325,7 +325,7 @@ it("deletes a modifier attached to a product and published on a menu, cascading 
       unitPrice: "2.00",
       vatClass: "reduced",
     });
-    const item = await createMenuItem(tx, tenantId, {
+    const item = await createMenuItem(tx, {
       menuId: menu.id,
       sectionId: section.id,
       productId: product.id,
@@ -338,13 +338,13 @@ it("deletes a modifier attached to a product and published on a menu, cascading 
       "en",
     );
     await setProductOptionGroups(tx, tenantId, product.id, [modifier.id]);
-    await setMenuItemOptionGroups(tx, tenantId, item.id, [
+    await setMenuItemOptionGroups(tx, item.id, [
       { groupId: modifier.id, options: [{ optionId: choice.id, priceDelta: "0" }] },
     ]);
     return modifier.id;
   });
-  await app(tenantId, (tx) => deleteModifier(tx, tenantId, modifierId));
-  await expect(app(tenantId, (tx) => getModifier(tx, tenantId, modifierId))).rejects.toMatchObject({
+  await app(tenantId, (tx) => deleteModifier(tx, modifierId));
+  await expect(app(tenantId, (tx) => getModifier(tx, modifierId))).rejects.toMatchObject({
     code: "modifier.not_found",
   });
   expect(
@@ -363,7 +363,7 @@ it("deletes a modifier attached to a product and published on a menu, cascading 
 
 it("refuses to delete a modifier an open working order uses", async () => {
   const { tenantId, tillId, nodeId } = await seedVenue(suite.admin);
-  await seedLegacySellingUnits(suite.admin, tenantId);
+  await seedLegacySellingUnits(suite.admin);
   const choice = { id: randomUUID(), name: { en: "Oat" }, available: true };
   const modifierId = await app(tenantId, async (tx) => {
     const menu = await createCatalogue(tx, tenantId, { name: "Menu" });
@@ -401,9 +401,7 @@ it("refuses to delete a modifier an open working order uses", async () => {
     });
     return modifier.id;
   });
-  await expect(
-    app(tenantId, (tx) => deleteModifier(tx, tenantId, modifierId)),
-  ).rejects.toMatchObject({
+  await expect(app(tenantId, (tx) => deleteModifier(tx, modifierId))).rejects.toMatchObject({
     code: "modifier.in_use",
     params: expect.objectContaining({ dependency: "order" }),
   });

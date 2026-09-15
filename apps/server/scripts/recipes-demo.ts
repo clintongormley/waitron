@@ -175,7 +175,7 @@ async function main(): Promise<void> {
       console.log(
         'Step 4 — updateProduct(bocadillo, { allergens: "may_contain nuts (shared slicer)" })',
       );
-      await updateProduct(tx, venue.tenantId, bocadillo.id, {
+      await updateProduct(tx, bocadillo.id, {
         allergens: { nuts: { presence: "may_contain", source: "shared slicer" } },
       });
       expect(await readPublished(tx, bocadillo.id), ["eggs", "gluten", "nuts"]);

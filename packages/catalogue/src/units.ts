@@ -79,17 +79,15 @@ function toSellableUnit(row: {
 
 export async function createUnit(
   tx: Transaction,
-  tenantId: string,
   input: CreateUnitInput,
   fallbackLanguage: string,
 ): Promise<Unit> {
-  await validateContentTranslations(tx, tenantId, input.name, fallbackLanguage);
-  await validateContentTranslations(tx, tenantId, input.abbreviation, fallbackLanguage);
+  await validateContentTranslations(tx, input.name, fallbackLanguage);
+  await validateContentTranslations(tx, input.abbreviation, fallbackLanguage);
   validateUnitPrecision(input.precision);
   const [row] = await tx
     .insert(units)
     .values({
-      tenantId,
       name: input.name,
       abbreviation: input.abbreviation,
       precision: input.precision,
@@ -98,8 +96,7 @@ export async function createUnit(
   return row!;
 }
 
-export async function listUnits(tx: Transaction, tenantId: string): Promise<Unit[]> {
-  void tenantId;
+export async function listUnits(tx: Transaction): Promise<Unit[]> {
   return tx
     .select(UNIT_COLUMNS)
     .from(units)
@@ -107,32 +104,24 @@ export async function listUnits(tx: Transaction, tenantId: string): Promise<Unit
     .orderBy(asc(units.id));
 }
 
-export async function getUnit(tx: Transaction, tenantId: string, unitId: string): Promise<Unit> {
-  void tenantId;
+export async function getUnit(tx: Transaction, unitId: string): Promise<Unit> {
   const [row] = await tx.select(UNIT_COLUMNS).from(units).where(eq(units.id, unitId));
   if (row === undefined) throw new AppError("unit.not_found", { unitId });
   return row;
 }
 
 /** Sale-facing read; the scale mapping is stored data and is never inferred from editable text. */
-export async function getSellableUnit(
-  tx: Transaction,
-  tenantId: string,
-  unitId: string,
-): Promise<SellableUnit> {
-  void tenantId;
+export async function getSellableUnit(tx: Transaction, unitId: string): Promise<SellableUnit> {
   const [row] = await tx.select(SELLABLE_UNIT_COLUMNS).from(units).where(eq(units.id, unitId));
   if (row === undefined) throw new AppError("unit.not_found", { unitId });
   return toSellableUnit(row);
 }
 
-/** Resolve a legacy product choice to the tenant's retained seed, never to a made-up identifier. */
+/** Resolve a legacy product choice to the retained seed unit, never to a made-up identifier. */
 export async function getSeededUnit(
   tx: Transaction,
-  tenantId: string,
   seedKey: "each" | "kg",
 ): Promise<SellableUnit | null> {
-  void tenantId;
   const [row] = await tx
     .select(SELLABLE_UNIT_COLUMNS)
     .from(units)
@@ -142,16 +131,15 @@ export async function getSeededUnit(
 
 export async function updateUnit(
   tx: Transaction,
-  tenantId: string,
   unitId: string,
   patch: UpdateUnitInput,
   fallbackLanguage: string,
 ): Promise<Unit> {
   if (patch.name !== undefined) {
-    await validateContentTranslations(tx, tenantId, patch.name, fallbackLanguage);
+    await validateContentTranslations(tx, patch.name, fallbackLanguage);
   }
   if (patch.abbreviation !== undefined) {
-    await validateContentTranslations(tx, tenantId, patch.abbreviation, fallbackLanguage);
+    await validateContentTranslations(tx, patch.abbreviation, fallbackLanguage);
   }
   if (patch.precision !== undefined) validateUnitPrecision(patch.precision);
   if (
@@ -159,7 +147,7 @@ export async function updateUnit(
     patch.precision === undefined &&
     patch.abbreviation === undefined
   ) {
-    return getUnit(tx, tenantId, unitId);
+    return getUnit(tx, unitId);
   }
   const [row] = await tx
     .update(units)
@@ -172,7 +160,6 @@ export async function updateUnit(
 
 export async function assignProductUnit(
   tx: Transaction,
-  tenantId: string,
   productId: string,
   unitId: string,
 ): Promise<void> {
@@ -187,13 +174,10 @@ export async function assignProductUnit(
     .from(products)
     .where(eq(products.id, productId));
   if (product === undefined) throw new AppError("product.not_found", { productId });
-  await tx
-    .insert(productUnits)
-    .values({ tenantId, productId, unitId })
-    .onConflictDoUpdate({
-      target: [productUnits.tenantId, productUnits.productId],
-      set: { unitId },
-    });
+  await tx.insert(productUnits).values({ productId, unitId }).onConflictDoUpdate({
+    target: productUnits.productId,
+    set: { unitId },
+  });
 }
 
 /** Move the listed products onto the target unit, in ONE statement scoped to the products still on
@@ -207,12 +191,10 @@ export async function assignProductUnit(
  * to `'each'`, so the listed products become Each (no unit) with the no-unit ⟺ each invariant held. */
 export async function reassignProductsToUnit(
   tx: Transaction,
-  tenantId: string,
   sourceUnitId: string,
   productIds: readonly string[],
   targetUnitId: string | null,
 ): Promise<void> {
-  void tenantId;
   const scope = and(
     eq(productUnits.unitId, sourceUnitId),
     inArray(productUnits.productId, productIds),
@@ -248,10 +230,8 @@ export async function reassignProductsToUnit(
  * unit for the same product — the editor needs the real "no unit" so the form can preselect Each. */
 export async function readProductUnitId(
   tx: Transaction,
-  tenantId: string,
   productId: string,
 ): Promise<string | null> {
-  void tenantId;
   const [row] = await tx
     .select({ productId: products.id, unitId: productUnits.unitId })
     .from(products)
@@ -262,24 +242,15 @@ export async function readProductUnitId(
 }
 
 /** Remove a product's unit assignment (it then reads as Each). A no-op when there is no row. */
-export async function clearProductUnit(
-  tx: Transaction,
-  tenantId: string,
-  productId: string,
-): Promise<void> {
-  await tx
-    .delete(productUnits)
-    .where(and(eq(productUnits.tenantId, tenantId), eq(productUnits.productId, productId)));
+export async function clearProductUnit(tx: Transaction, productId: string): Promise<void> {
+  await tx.delete(productUnits).where(eq(productUnits.productId, productId));
 }
 
-/** The products that assign this unit, each with its availability, ordered stably by product id.
- * With one tenant per database every row is this tenant's. */
+/** The products that assign this unit, each with its availability, ordered stably by product id. */
 export async function productsUsingUnit(
   tx: Transaction,
-  tenantId: string,
   unitId: string,
 ): Promise<ProductUsingUnit[]> {
-  void tenantId;
   return tx
     .select({ id: products.id, name: products.name, available: products.active })
     .from(productUnits)
@@ -288,14 +259,14 @@ export async function productsUsingUnit(
     .orderBy(asc(products.id));
 }
 
-export async function deleteUnit(tx: Transaction, tenantId: string, unitId: string): Promise<void> {
+export async function deleteUnit(tx: Transaction, unitId: string): Promise<void> {
   const [locked] = await tx
     .select({ id: units.id })
     .from(units)
     .where(eq(units.id, unitId))
     .for("update");
   if (locked === undefined) throw new AppError("unit.not_found", { unitId });
-  const references = await productsUsingUnit(tx, tenantId, unitId);
+  const references = await productsUsingUnit(tx, unitId);
   if (references.length > 0) {
     throw new AppError("unit.in_use", { products: references });
   }

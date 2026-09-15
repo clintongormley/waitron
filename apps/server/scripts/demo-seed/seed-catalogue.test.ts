@@ -83,7 +83,7 @@ describe("seedCatalogues", () => {
       const out = await seedCatalogues(tx, brandTenantId(tenantId), { locationId, locale: LOCALE });
       const menus = await listAccessibleCatalogues(tx, locationId);
       const { products } = await listAvailableProducts(tx, locationId);
-      const contentLanguages = await readContentLanguages(tx, brandTenantId(tenantId), LOCALE);
+      const contentLanguages = await readContentLanguages(tx, LOCALE);
       // Read back the two stations and one category's route per menu, as app_user, to prove routing.
       const { rows: stations } = await tx.execute<{ name: string; is_default: boolean }>(sql`
         select name, is_default from kitchen_stations where location_id = ${locationId}`);
@@ -113,9 +113,9 @@ describe("seedCatalogues", () => {
           array_agg(distinct mv.unit_price::text order by mv.unit_price::text) as menu_variant_prices
         from products p
         join categories c on c.id = p.category_id and c.tenant_id = p.tenant_id
-        join product_categories pc on pc.product_id = p.id and pc.tenant_id = p.tenant_id
-        join product_variants pv on pv.product_id = p.id and pv.tenant_id = p.tenant_id
-        join menu_item_variants mv on mv.product_id = p.id and mv.variant_id = pv.id and mv.tenant_id = p.tenant_id
+        join product_categories pc on pc.product_id = p.id
+        join product_variants pv on pv.product_id = p.id
+        join menu_item_variants mv on mv.product_id = p.id and mv.variant_id = pv.id
         where p.name = 'Café'
         group by p.id, c.name`);
       // The demo exists to show WHICH name each screen reads, so it has to seed products whose three
@@ -145,8 +145,8 @@ describe("seedCatalogues", () => {
         abbreviation: Record<string, string>;
       }>(sql`
         select u.precision, u.name, u.abbreviation from units u
-        join product_units pu on pu.unit_id = u.id and pu.tenant_id = u.tenant_id
-        join products p on p.id = pu.product_id and p.tenant_id = pu.tenant_id
+        join product_units pu on pu.unit_id = u.id
+        join products p on p.id = pu.product_id
         where p.name = 'Mixed salad'`);
       return {
         out,

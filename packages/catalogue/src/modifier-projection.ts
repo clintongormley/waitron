@@ -30,13 +30,12 @@ function projectModifier(modifier: Modifier, prices?: Map<string, string>): Modi
 
 export async function readProductModifiers(
   tx: Transaction,
-  tenantId: string,
   productIds: string[],
 ): Promise<Map<string, Modifier[]>> {
   const result = new Map<string, Modifier[]>();
   if (productIds.length === 0) return result;
   const definitions = new Map(
-    (await listModifiers(tx, tenantId)).map((modifier) => [modifier.id, modifier]),
+    (await listModifiers(tx)).map((modifier) => [modifier.id, modifier]),
   );
   const attachments = await tx
     .select({ productId: productOptionGroups.productId, modifierId: productOptionGroups.groupId })
@@ -55,13 +54,12 @@ export async function readProductModifiers(
 
 export async function readMenuModifiers(
   tx: Transaction,
-  tenantId: string,
   menuItemIds: string[],
 ): Promise<Map<string, Modifier[]>> {
   const result = new Map<string, Modifier[]>();
   if (menuItemIds.length === 0) return result;
   const definitions = new Map(
-    (await listModifiers(tx, tenantId)).map((modifier) => [modifier.id, modifier]),
+    (await listModifiers(tx)).map((modifier) => [modifier.id, modifier]),
   );
   const publications = await tx
     .select({
