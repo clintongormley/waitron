@@ -149,15 +149,68 @@ describe("fiscalSubmissionSource", () => {
     });
   });
 
-  it("scopes to the tenant", async () => {
+  // Exactly at each threshold, because the source compares with `>=`: a mutation to `>` would still
+  // pass the 3h/5h/25h cases but must fail here — 4h is the warning boundary, 24h the error boundary.
+  it("treats exactly 4 hours as a warning and exactly 24 hours as an error", async () => {
+    const warn = await seedIdentity(pg.db);
+    await seedWaiting(pg.db, warn, hoursAgo(4), "pendiente");
+    await withTenant(pg.db, warn.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const [a] = await fiscalSubmissionSource.read({
+        tx,
+        tenantId: warn.tenantId as never,
+        now: NOW,
+      });
+      expect(a).toMatchObject({
+        code: "fiscal.submission_delayed",
+        severity: "warning",
+        params: { count: 1, hours: 4 },
+      });
+    });
+
+    const err = await seedIdentity(pg.db);
+    await seedWaiting(pg.db, err, hoursAgo(24), "pendiente");
+    await withTenant(pg.db, err.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const [a] = await fiscalSubmissionSource.read({
+        tx,
+        tenantId: err.tenantId as never,
+        now: NOW,
+      });
+      expect(a).toMatchObject({
+        code: "fiscal.submission_delayed",
+        severity: "error",
+        params: { count: 1, hours: 24 },
+      });
+    });
+  });
+
+  // Partition, not mere absence: both tenants hold waiting rows, so dropping a tenant predicate would
+  // inflate the queried tenant's `count` (and leak the other's detenido row) rather than read empty.
+  it("counts only the queried tenant's rows when both tenants have data", async () => {
     const other = await seedIdentity(pg.db);
     await seedWaiting(pg.db, other, hoursAgo(25), "pendiente");
+    await seedWaiting(pg.db, other, hoursAgo(25), "enviando");
+    await seedWaiting(pg.db, other, hoursAgo(25), "detenido");
+
     const mine = await seedIdentity(pg.db);
+    await seedWaiting(pg.db, mine, hoursAgo(25), "pendiente");
+    await seedWaiting(pg.db, mine, hoursAgo(25), "enviando");
+
     await withTenant(pg.db, mine.tenantId, async (tx) => {
       await asAppUser(tx);
-      expect(
-        await fiscalSubmissionSource.read({ tx, tenantId: mine.tenantId as never, now: NOW }),
-      ).toEqual([]);
+      const alerts = await fiscalSubmissionSource.read({
+        tx,
+        tenantId: mine.tenantId as never,
+        now: NOW,
+      });
+      // Only mine's two waiting rows, never the other tenant's three.
+      expect(alerts.find((a) => a.code === "fiscal.submission_delayed")).toMatchObject({
+        severity: "error",
+        params: { count: 2 },
+      });
+      // The other tenant's detenido row must not surface here.
+      expect(alerts.find((a) => a.code === "fiscal.submission_stopped")).toBeUndefined();
     });
   });
 });

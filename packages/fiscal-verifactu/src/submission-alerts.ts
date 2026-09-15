@@ -25,7 +25,15 @@ export const fiscalSubmissionSource: AlertSource = {
       .select({ oldest: min(registrosFacturacion.fechaHoraHusoGenRegistro), n: count() })
       .from(envios)
       .innerJoin(registrosFacturacion, eq(registrosFacturacion.id, envios.registroId))
-      .where(and(eq(envios.tenantId, tenantId), inArray(envios.estado, ["pendiente", "enviando"])));
+      // Both tables scope to the tenant themselves: the join is a by-id read, and one tenant per
+      // database is not the query's isolation boundary (CLAUDE.md §3).
+      .where(
+        and(
+          eq(envios.tenantId, tenantId),
+          eq(registrosFacturacion.tenantId, tenantId),
+          inArray(envios.estado, ["pendiente", "enviando"]),
+        ),
+      );
     if (waiting?.oldest) {
       const ageMs = now.getTime() - new Date(waiting.oldest).getTime();
       if (ageMs >= SUBMISSION_DELAYED_WARN_MS) {
@@ -43,7 +51,14 @@ export const fiscalSubmissionSource: AlertSource = {
       .select({ n: count(), oldest: min(registrosFacturacion.fechaHoraHusoGenRegistro) })
       .from(envios)
       .innerJoin(registrosFacturacion, eq(registrosFacturacion.id, envios.registroId))
-      .where(and(eq(envios.tenantId, tenantId), eq(envios.estado, "detenido")));
+      // Both tables scope to the tenant, as above.
+      .where(
+        and(
+          eq(envios.tenantId, tenantId),
+          eq(registrosFacturacion.tenantId, tenantId),
+          eq(envios.estado, "detenido"),
+        ),
+      );
     if (stopped && Number(stopped.n) > 0) {
       // count > 0 means the innerJoin matched a registro, and fechaHoraHusoGenRegistro is notNull,
       // so `oldest` is always present here — no `: null` arm (it would be an uncovered branch, and
