@@ -49,9 +49,10 @@ that list only surfaces today when a delete is blocked.
   `packages/db/src/schema/sales.ts:229`, `orders.ts:180`; a grep of `packages/fiscal*`
   and `packages/verifactu` finds unit only in DB-privilege expectations, never on a
   registro row.)
-- **No new display handling on the sale path.** Receipts, kitchen tickets and the till
-  basket/expo already treat a missing unit as null-safe, and the till already renders an
-  "each"/"kg" fallback (`apps/till/src/widgets/product-name.ts:15-33`). The only new
+- **No new display handling on the sale path.** Because the display/pricing reads
+  synthesise an Each unit (see Design §1), `Product.unit`/`AvailableProduct.unit` stay
+  non-null and receipts, kitchen tickets, the till basket/expo and the offer builder are
+  unchanged — a no-unit product reads exactly as an `each`-unit product did. The only new
   label is the dashboard product form's **Each** option.
 
 The one cross-package contract that DOES change (`readProductUnitId` return type,
@@ -61,11 +62,34 @@ The one cross-package contract that DOES change (`readProductUnitId` return type
 
 ### 1. Domain — `@waitron/catalogue`
 
+**The two reads are deliberately different.** A product's unit is read in two ways, and
+"no unit" means different things to each:
+
+- The **editor** read (`readProductEditor` → `readProductUnitId`) returns **`null`** for a
+  product with no `product_units` row, so the form shows the **Each** option selected.
+- The **display / pricing** read (`toProduct`, `toAvailableProduct`, and the offer read —
+  all three funnel through the private `sellableUnit()` helper,
+  `packages/catalogue/src/operations.ts:415`) returns a **synthetic Each unit** for a
+  product with no row, so `Product.unit` and `AvailableProduct.unit` stay **non-null** and
+  every downstream consumer (the till menu/offer builder at
+  `apps/server/src/working-order.ts:211-212`, receipts, kitchen tickets, venue-service) is
+  unchanged. This is why the change has no sale-path or receipt impact: a no-unit product
+  reads exactly as an `each`-unit product did before.
+
+Concretely:
+
 - `readProductUnitId` (`packages/catalogue/src/units.ts:215`) currently throws
   `unit.not_found` when a product has no `product_units` row. It returns **`null`**
   instead. Its only production caller is `readProductEditor`
   (`packages/catalogue/src/product-editor.ts:56`); `ProductEditorValue.unitId` becomes
   `string | null`.
+- `sellableUnit()` currently throws `unit.not_found` when the joined unit columns are null
+  (`operations.ts:432`). It returns a shared **`EACH_UNIT`** synthetic instead — a
+  `SellableUnit` with `id: ""`, `precision: 0`, `hardwareUnit: null`, and the "Each" name /
+  "ea"/"ud" abbreviation the removed seed used. `EACH_UNIT` is exported from catalogue so
+  there is one source of truth. Nothing persists a unit id on a sale/order line (lines
+  snapshot only the nullable `unit_name`/`unit_precision` — `orders.ts:180`,
+  `sales.ts:229`), so a synthetic `id: ""` never reaches a foreign key.
 - Add a **clear-unit** operation, `clearProductUnit(tx, tenant, productId)`, that deletes
   a product's `product_units` row (there is no way to remove a unit today —
   `assignProductUnit` only upserts). The write path calls it when the chosen unit is null;
