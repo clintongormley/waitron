@@ -309,11 +309,7 @@ What it left open:
   instead of leaving the stack trace to decode
   (`apps/server/src/dev-migration-hint.ts`, `WAITRON_ENV=dev` only); the mechanism and the limits of
   what that line can claim are in [the workflow guide](developers/workflow-guide.md). The underlying
-  trap is unchanged: **a populated development database still has to be reset by hand.** It has
-  already recurred — #342's `packages/venue-service/drizzle/0005_unit_snapshots.sql` and `0006`
-  add three `NOT NULL` columns to `working_line_contexts`, so any dev database holding an open
-  order line fails the same way. That table was empty when this was written, which is the only
-  reason it did not bite immediately.
+  trap is unchanged: **a populated development database still has to be reset by hand.**
 - **Category authoring serialises per tenant, and nobody has measured what that costs.** Hierarchy
   edits, membership replacement and category deletion all take the same one lock per tenant, which is
   the design's deliberate choice and is what makes the races safe. The review confirmed the specific
@@ -524,8 +520,8 @@ What it left open:
   be ticked and moved onto another unit in one go, and deletes the unit once none are left
   (`apps/dashboard/src/screens/units-screen.ts`). That work also found the table recording a product's
   unit had only a unique constraint, so Postgres refused the reassignment's UPDATE on a published
-  table with `55000` — `packages/catalogue/drizzle/0010_product_units_primary_key.sql` gives it a
-  primary key. The design doc's older deletion paragraph is marked superseded rather than rewritten.
+  table with `55000` — the fix gave it a primary key, now created by
+  `packages/catalogue/drizzle/0000_catalogue_baseline.sql`. The design doc's older deletion paragraph is marked superseded rather than rewritten.
   LANDED #350 (2026-09-13).
 - **Nothing checks that a table shared by replication has a primary key.** #350 found
   `product_units` publishing its rows with only a unique constraint, which makes Postgres refuse every
@@ -533,16 +529,8 @@ What it left open:
   `CLAUDE.md` §3 now states the rule and says outright that no guard enforces it. Nobody has checked
   whether any other published table has the same shape. **Next action:** a root guard beside
   `scripts/classification-complete.test.ts` that migrates every set and fails on any published table
-  without a primary key — proven by deleting `0010_product_units_primary_key.sql` and watching it fail.
-- **Its migrations cannot run over a populated development database, and nothing here said so.**
-  `packages/venue-service/drizzle/0005_unit_snapshots.sql` and `0006_unit_snapshot_identity.sql` add
-  three `NOT NULL` columns to `working_line_contexts` with no default — the same shape as
-  `0020_category_names`, which killed a dev boot on 2026-09-13 (#340's row above). Any development or
-  preproduction database holding an open order line fails the same way, with `23502`. It has not bitten
-  yet only because that table was empty when #343 checked it (`select count(*)` → 0); the first open
-  order on the till changes that. **Next action:** none beyond knowing it — the remedy is the ordinary
-  `wa-wt reset demo`, and since #343 the boot names that remedy itself instead of leaving a driver
-  stack trace to decode.
+  without a primary key — proven by removing `product_units`' primary key from
+  `packages/catalogue/drizzle/0000_catalogue_baseline.sql` and watching it fail.
 
 **The integrated product editor — LANDED #345 (2026-09-13), and the overhaul is complete.** The
 dashboard now has one Products list and one editor, replacing the old combined catalogue screen. A

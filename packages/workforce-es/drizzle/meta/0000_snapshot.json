@@ -1,5 +1,5 @@
 {
-  "id": "630bb9e3-2ec9-41b7-b99f-9cf9b880d77a",
+  "id": "b91289db-746a-4ade-91ab-f93492f02621",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -14,12 +14,6 @@
           "primaryKey": true,
           "notNull": true,
           "default": "gen_random_uuid()"
-        },
-        "tenant_id": {
-          "name": "tenant_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
         },
         "location_id": {
           "name": "location_id",
@@ -150,37 +144,8 @@
           "default": "now()"
         }
       },
-      "indexes": {
-        "convenio_config_tenant_id_idx": {
-          "name": "convenio_config_tenant_id_idx",
-          "columns": [
-            {
-              "expression": "tenant_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
+      "indexes": {},
       "foreignKeys": {
-        "convenio_config_tenant_fk": {
-          "name": "convenio_config_tenant_fk",
-          "tableFrom": "convenio_config",
-          "tableTo": "tenants",
-          "columnsFrom": [
-            "tenant_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        },
         "convenio_config_location_fk": {
           "name": "convenio_config_location_fk",
           "tableFrom": "convenio_config",
@@ -197,11 +162,10 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "convenio_config_tenant_location_uq": {
-          "name": "convenio_config_tenant_location_uq",
+        "convenio_config_location_uq": {
+          "name": "convenio_config_location_uq",
           "nullsNotDistinct": false,
           "columns": [
-            "tenant_id",
             "location_id"
           ]
         }

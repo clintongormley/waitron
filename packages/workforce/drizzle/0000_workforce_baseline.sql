@@ -6,7 +6,6 @@ CREATE TYPE "public"."workforce_correction_status" AS ENUM('requested', 'approve
 CREATE TYPE "public"."workforce_entry_kind" AS ENUM('in', 'out', 'break_start', 'break_end', 'correction');--> statement-breakpoint
 CREATE TABLE "absences" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"tenant_id" uuid NOT NULL,
 	"person_id" uuid NOT NULL,
 	"absence_kind" "absence_kind" NOT NULL,
 	"starts_on" date NOT NULL,
@@ -21,7 +20,6 @@ CREATE TABLE "absences" (
 --> statement-breakpoint
 CREATE TABLE "availability" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"tenant_id" uuid NOT NULL,
 	"person_id" uuid NOT NULL,
 	"weekday" smallint NOT NULL,
 	"available_from_minute" integer NOT NULL,
@@ -38,7 +36,6 @@ CREATE TABLE "availability" (
 --> statement-breakpoint
 CREATE TABLE "employments" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"tenant_id" uuid NOT NULL,
 	"person_id" uuid NOT NULL,
 	"contracted_minutes_per_week" integer NOT NULL,
 	"contract_type" text NOT NULL,
@@ -52,7 +49,6 @@ CREATE TABLE "employments" (
 --> statement-breakpoint
 CREATE TABLE "roster_versions" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"tenant_id" uuid NOT NULL,
 	"location_id" uuid NOT NULL,
 	"period_start" date NOT NULL,
 	"period_end" date NOT NULL,
@@ -66,7 +62,6 @@ CREATE TABLE "roster_versions" (
 --> statement-breakpoint
 CREATE TABLE "shift_swaps" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"tenant_id" uuid NOT NULL,
 	"requested_by_person_id" uuid NOT NULL,
 	"from_shift_id" uuid NOT NULL,
 	"to_person_id" uuid NOT NULL,
@@ -79,7 +74,6 @@ CREATE TABLE "shift_swaps" (
 --> statement-breakpoint
 CREATE TABLE "shift_templates" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"tenant_id" uuid NOT NULL,
 	"location_id" uuid NOT NULL,
 	"label" text NOT NULL,
 	"weekday" smallint NOT NULL,
@@ -95,7 +89,6 @@ CREATE TABLE "shift_templates" (
 --> statement-breakpoint
 CREATE TABLE "shifts" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"tenant_id" uuid NOT NULL,
 	"person_id" uuid NOT NULL,
 	"location_id" uuid NOT NULL,
 	"starts_at" timestamp with time zone NOT NULL,
@@ -112,7 +105,6 @@ CREATE TABLE "shifts" (
 --> statement-breakpoint
 CREATE TABLE "time_entries" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"tenant_id" uuid NOT NULL,
 	"person_id" uuid NOT NULL,
 	"location_id" uuid NOT NULL,
 	"node_id" uuid NOT NULL,
@@ -144,7 +136,6 @@ CREATE TABLE "time_entries" (
 );
 --> statement-breakpoint
 CREATE TABLE "workforce_chains" (
-	"tenant_id" uuid NOT NULL,
 	"node_id" uuid NOT NULL,
 	"location_id" uuid NOT NULL,
 	"sequence_no" integer DEFAULT 0 NOT NULL,
@@ -152,34 +143,26 @@ CREATE TABLE "workforce_chains" (
 	"last_entry_hash" text,
 	"last_recorded_at" timestamp with time zone,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "workforce_chains_tenant_id_node_id_location_id_pk" PRIMARY KEY("tenant_id","node_id","location_id"),
+	CONSTRAINT "workforce_chains_node_id_location_id_pk" PRIMARY KEY("node_id","location_id"),
 	CONSTRAINT "workforce_chains_pointer_ck" CHECK (("workforce_chains"."last_entry_id" is null) = ("workforce_chains"."last_entry_hash" is null)
           and ("workforce_chains"."last_entry_id" is null) = ("workforce_chains"."last_recorded_at" is null))
 );
 --> statement-breakpoint
-ALTER TABLE "absences" ADD CONSTRAINT "absences_tenant_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "absences" ADD CONSTRAINT "absences_person_fk" FOREIGN KEY ("person_id") REFERENCES "public"."persons"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "absences" ADD CONSTRAINT "absences_decided_by_person_fk" FOREIGN KEY ("decided_by_person_id") REFERENCES "public"."persons"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "availability" ADD CONSTRAINT "availability_tenant_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "availability" ADD CONSTRAINT "availability_person_fk" FOREIGN KEY ("person_id") REFERENCES "public"."persons"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "employments" ADD CONSTRAINT "employments_tenant_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "employments" ADD CONSTRAINT "employments_person_fk" FOREIGN KEY ("person_id") REFERENCES "public"."persons"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "roster_versions" ADD CONSTRAINT "roster_versions_tenant_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "roster_versions" ADD CONSTRAINT "roster_versions_location_fk" FOREIGN KEY ("location_id") REFERENCES "public"."locations"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "roster_versions" ADD CONSTRAINT "roster_versions_published_by_person_fk" FOREIGN KEY ("published_by_person_id") REFERENCES "public"."persons"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "shift_swaps" ADD CONSTRAINT "shift_swaps_tenant_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "shift_swaps" ADD CONSTRAINT "shift_swaps_requested_by_person_fk" FOREIGN KEY ("requested_by_person_id") REFERENCES "public"."persons"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "shift_swaps" ADD CONSTRAINT "shift_swaps_to_person_fk" FOREIGN KEY ("to_person_id") REFERENCES "public"."persons"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "shift_swaps" ADD CONSTRAINT "shift_swaps_from_shift_fk" FOREIGN KEY ("from_shift_id") REFERENCES "public"."shifts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "shift_swaps" ADD CONSTRAINT "shift_swaps_to_shift_fk" FOREIGN KEY ("to_shift_id") REFERENCES "public"."shifts"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "shift_swaps" ADD CONSTRAINT "shift_swaps_decided_by_person_fk" FOREIGN KEY ("decided_by_person_id") REFERENCES "public"."persons"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "shift_templates" ADD CONSTRAINT "shift_templates_tenant_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "shift_templates" ADD CONSTRAINT "shift_templates_location_fk" FOREIGN KEY ("location_id") REFERENCES "public"."locations"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "shifts" ADD CONSTRAINT "shifts_tenant_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "shifts" ADD CONSTRAINT "shifts_person_fk" FOREIGN KEY ("person_id") REFERENCES "public"."persons"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "shifts" ADD CONSTRAINT "shifts_location_fk" FOREIGN KEY ("location_id") REFERENCES "public"."locations"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "shifts" ADD CONSTRAINT "shifts_roster_version_fk" FOREIGN KEY ("roster_version_id") REFERENCES "public"."roster_versions"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "time_entries" ADD CONSTRAINT "time_entries_tenant_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "time_entries" ADD CONSTRAINT "time_entries_person_fk" FOREIGN KEY ("person_id") REFERENCES "public"."persons"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "time_entries" ADD CONSTRAINT "time_entries_location_fk" FOREIGN KEY ("location_id") REFERENCES "public"."locations"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "time_entries" ADD CONSTRAINT "time_entries_captured_by_till_fk" FOREIGN KEY ("captured_by_till_id") REFERENCES "public"."tills"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
@@ -187,27 +170,18 @@ ALTER TABLE "time_entries" ADD CONSTRAINT "time_entries_recorded_by_person_fk" F
 ALTER TABLE "time_entries" ADD CONSTRAINT "time_entries_node_fk" FOREIGN KEY ("node_id") REFERENCES "public"."nodes"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "time_entries" ADD CONSTRAINT "time_entries_corrects_entry_fk" FOREIGN KEY ("corrects_entry_id") REFERENCES "public"."time_entries"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "time_entries" ADD CONSTRAINT "time_entries_correction_actor_fk" FOREIGN KEY ("correction_actor_id") REFERENCES "public"."persons"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "workforce_chains" ADD CONSTRAINT "workforce_chains_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "workforce_chains" ADD CONSTRAINT "workforce_chains_node_id_nodes_id_fk" FOREIGN KEY ("node_id") REFERENCES "public"."nodes"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "workforce_chains" ADD CONSTRAINT "workforce_chains_location_id_locations_id_fk" FOREIGN KEY ("location_id") REFERENCES "public"."locations"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "workforce_chains" ADD CONSTRAINT "workforce_chains_last_entry_id_time_entries_id_fk" FOREIGN KEY ("last_entry_id") REFERENCES "public"."time_entries"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-CREATE INDEX "absences_tenant_id_idx" ON "absences" USING btree ("tenant_id");--> statement-breakpoint
-CREATE INDEX "absences_tenant_person_idx" ON "absences" USING btree ("tenant_id","person_id","starts_on");--> statement-breakpoint
-CREATE INDEX "availability_tenant_id_idx" ON "availability" USING btree ("tenant_id");--> statement-breakpoint
-CREATE INDEX "availability_tenant_person_idx" ON "availability" USING btree ("tenant_id","person_id");--> statement-breakpoint
-CREATE INDEX "employments_tenant_id_idx" ON "employments" USING btree ("tenant_id");--> statement-breakpoint
-CREATE INDEX "employments_tenant_person_idx" ON "employments" USING btree ("tenant_id","person_id");--> statement-breakpoint
-CREATE INDEX "roster_versions_tenant_id_idx" ON "roster_versions" USING btree ("tenant_id");--> statement-breakpoint
-CREATE INDEX "roster_versions_tenant_location_idx" ON "roster_versions" USING btree ("tenant_id","location_id");--> statement-breakpoint
-CREATE UNIQUE INDEX "roster_versions_published_period_uq" ON "roster_versions" USING btree ("tenant_id","location_id","period_start","period_end") WHERE "roster_versions"."status" = 'published';--> statement-breakpoint
-CREATE INDEX "shift_swaps_tenant_id_idx" ON "shift_swaps" USING btree ("tenant_id");--> statement-breakpoint
-CREATE INDEX "shift_swaps_tenant_from_shift_idx" ON "shift_swaps" USING btree ("tenant_id","from_shift_id");--> statement-breakpoint
-CREATE INDEX "shift_templates_tenant_id_idx" ON "shift_templates" USING btree ("tenant_id");--> statement-breakpoint
-CREATE INDEX "shift_templates_tenant_location_idx" ON "shift_templates" USING btree ("tenant_id","location_id");--> statement-breakpoint
-CREATE INDEX "shifts_tenant_id_idx" ON "shifts" USING btree ("tenant_id");--> statement-breakpoint
-CREATE INDEX "shifts_tenant_person_starts_idx" ON "shifts" USING btree ("tenant_id","person_id","starts_at");--> statement-breakpoint
+CREATE INDEX "absences_person_idx" ON "absences" USING btree ("person_id","starts_on");--> statement-breakpoint
+CREATE INDEX "availability_person_idx" ON "availability" USING btree ("person_id");--> statement-breakpoint
+CREATE INDEX "employments_person_idx" ON "employments" USING btree ("person_id");--> statement-breakpoint
+CREATE INDEX "roster_versions_location_idx" ON "roster_versions" USING btree ("location_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "roster_versions_published_period_uq" ON "roster_versions" USING btree ("location_id","period_start","period_end") WHERE "roster_versions"."status" = 'published';--> statement-breakpoint
+CREATE INDEX "shift_swaps_from_shift_idx" ON "shift_swaps" USING btree ("from_shift_id");--> statement-breakpoint
+CREATE INDEX "shift_templates_location_idx" ON "shift_templates" USING btree ("location_id");--> statement-breakpoint
+CREATE INDEX "shifts_person_starts_idx" ON "shifts" USING btree ("person_id","starts_at");--> statement-breakpoint
 CREATE INDEX "shifts_roster_version_idx" ON "shifts" USING btree ("roster_version_id");--> statement-breakpoint
-CREATE INDEX "time_entries_tenant_id_idx" ON "time_entries" USING btree ("tenant_id");--> statement-breakpoint
-CREATE INDEX "time_entries_tenant_person_event_idx" ON "time_entries" USING btree ("tenant_id","person_id","event_at");--> statement-breakpoint
+CREATE INDEX "time_entries_person_event_idx" ON "time_entries" USING btree ("person_id","event_at");--> statement-breakpoint
 CREATE INDEX "time_entries_corrects_entry_idx" ON "time_entries" USING btree ("corrects_entry_id");--> statement-breakpoint
-CREATE UNIQUE INDEX "time_entries_chain_position_uq" ON "time_entries" USING btree ("tenant_id","node_id","location_id","sequence_no");
+CREATE UNIQUE INDEX "time_entries_chain_position_uq" ON "time_entries" USING btree ("node_id","location_id","sequence_no");

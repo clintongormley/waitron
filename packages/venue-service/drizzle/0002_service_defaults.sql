@@ -1,2 +1,0 @@
-ALTER TABLE "departments" ADD COLUMN "is_default" boolean DEFAULT false NOT NULL;--> statement-breakpoint
-ALTER TABLE "zone_service_policies" ADD COLUMN "is_counter_default" boolean DEFAULT false NOT NULL;

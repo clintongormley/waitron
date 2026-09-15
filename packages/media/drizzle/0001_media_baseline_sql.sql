@@ -1,3 +1,10 @@
+-- Custom SQL migration file, put your code below! --
+REVOKE ALL ON "media_images", "media_image_data" FROM app_user;
+--> statement-breakpoint
+GRANT SELECT, INSERT, UPDATE, DELETE ON "media_images" TO app_user;
+--> statement-breakpoint
+GRANT SELECT, INSERT ON "media_image_data" TO app_user;
+--> statement-breakpoint
 CREATE FUNCTION media_text_config(language text) RETURNS regconfig
 LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE AS $$
   SELECT CASE split_part(language, '-', 1)
@@ -95,3 +102,11 @@ END
 $$;
 --> statement-breakpoint
 CREATE INDEX media_images_search_idx ON media_images USING gin (public.media_search_vector(names, alt_text, labels));
+--> statement-breakpoint
+-- Products and category details reference an image by filename, which media_images_filename_key
+-- makes unique.
+ALTER TABLE "products" ADD CONSTRAINT "products_media_image_fk"
+  FOREIGN KEY ("image") REFERENCES "media_images" ("filename") ON DELETE RESTRICT;
+--> statement-breakpoint
+ALTER TABLE "category_details" ADD CONSTRAINT "category_details_media_image_fk"
+  FOREIGN KEY ("image") REFERENCES "media_images" ("filename") ON DELETE RESTRICT;

@@ -1,3 +1,0 @@
--- category_details_media_image_fk is created in 0006_drop_tenant_id_sql.sql, after
--- media_images_filename_key (0005) makes a filename unique on its own. The catalogue set, which
--- migrates before this one, has already removed category_details.tenant_id.

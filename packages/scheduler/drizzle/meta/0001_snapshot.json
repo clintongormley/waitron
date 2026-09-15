@@ -1,6 +1,6 @@
 {
-  "id": "5ff6bbb8-0044-4089-80dc-7f7dc0d186f6",
-  "prevId": "842ce443-770a-4cff-a6b8-43cfd900c0ed",
+  "id": "dc5d3742-7aaa-47f0-9dfc-d20c238552e4",
+  "prevId": "30d736bd-3b71-470f-bbb6-ab48006f3c65",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -14,12 +14,6 @@
           "primaryKey": true,
           "notNull": true,
           "default": "gen_random_uuid()"
-        },
-        "tenant_id": {
-          "name": "tenant_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
         },
         "duty": {
           "name": "duty",
@@ -109,12 +103,6 @@
           "name": "scheduled_runs_key",
           "columns": [
             {
-              "expression": "tenant_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
               "expression": "duty",
               "isExpression": false,
               "asc": true,
@@ -139,21 +127,7 @@
           "concurrently": false
         }
       },
-      "foreignKeys": {
-        "scheduled_runs_tenant_fk": {
-          "name": "scheduled_runs_tenant_fk",
-          "tableFrom": "scheduled_runs",
-          "columnsFrom": [
-            "tenant_id"
-          ],
-          "tableTo": "tenants",
-          "columnsTo": [
-            "id"
-          ],
-          "onUpdate": "no action",
-          "onDelete": "restrict"
-        }
-      },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},

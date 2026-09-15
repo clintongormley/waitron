@@ -200,7 +200,7 @@ updates`. Reproduced on a real PostgreSQL server on 2026-09-13 — `create table
 unique (a, b)); create publication p for table t; insert; update` gives the error above, and the same
 sequence with `primary key (a, b)` instead reports `UPDATE 1`. Cost: `product_units` shipped with only
 a unique `(tenant_id, product_id)`, so creating a product worked and changing its unit answered 500;
-`packages/catalogue/drizzle/0010_product_units_primary_key.sql` promotes that pair to the primary key.
+the table now carries a primary key, created by `packages/catalogue/drizzle/0000_catalogue_baseline.sql`.
 No guard covers this: the defect passed every existing test because no test published the table
 (`packages/catalogue/src/units.pg.test.ts` now creates the publication to reproduce it), and a
 per-table check would have to read each module's `_CLASSIFICATION` list against its schema file's

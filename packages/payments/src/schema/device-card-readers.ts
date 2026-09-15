@@ -6,7 +6,7 @@ import { cardReaders } from "./card-readers.js";
  * A device's DEFAULT card reader — a mutable mapping, not a ledger: at most one row per device
  * (PK `device_id`), replaced or removed as the manager re-points a device's reader.
  * Classified `state` (manager configuration, copied to a standby, never drained back); the grant
- * idiom in 0006_device_card_readers_sql.sql includes DELETE for that reason, unlike `card_readers`
+ * idiom in 0001_payments_baseline_sql.sql includes DELETE for that reason, unlike `card_readers`
  * itself.
  */
 export const deviceCardReaders = pgTable(

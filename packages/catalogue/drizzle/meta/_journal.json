@@ -5,106 +5,15 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1788989805285,
-      "tag": "0000_menu_offers",
+      "when": 1789497917321,
+      "tag": "0000_catalogue_baseline",
       "breakpoints": true
     },
     {
       "idx": 1,
       "version": "7",
-      "when": 1788989841861,
-      "tag": "0001_menu_offers_grants",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1789236224021,
-      "tag": "0002_content_languages",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1789236230181,
-      "tag": "0003_content_languages_grants",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "7",
-      "when": 1789247493703,
-      "tag": "0004_category_memberships",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "7",
-      "when": 1789247494278,
-      "tag": "0005_category_grants",
-      "breakpoints": true
-    },
-    {
-      "idx": 6,
-      "version": "7",
-      "when": 1789288782582,
-      "tag": "0006_product_units",
-      "breakpoints": true
-    },
-    {
-      "idx": 7,
-      "version": "7",
-      "when": 1789288783131,
-      "tag": "0007_product_units_grants",
-      "breakpoints": true
-    },
-    {
-      "idx": 8,
-      "version": "7",
-      "when": 1789291673375,
-      "tag": "0008_product_variants",
-      "breakpoints": true
-    },
-    {
-      "idx": 9,
-      "version": "7",
-      "when": 1789291683976,
-      "tag": "0009_product_variants_grants",
-      "breakpoints": true
-    },
-    {
-      "idx": 10,
-      "version": "7",
-      "when": 1789323924885,
-      "tag": "0010_product_units_primary_key",
-      "breakpoints": true
-    },
-    {
-      "idx": 11,
-      "version": "7",
-      "when": 1789346217002,
-      "tag": "0011_category_colour",
-      "breakpoints": true
-    },
-    {
-      "idx": 12,
-      "version": "7",
-      "when": 1789412647544,
-      "tag": "0012_milky_donald_blake",
-      "breakpoints": true
-    },
-    {
-      "idx": 13,
-      "version": "7",
-      "when": 1789452400171,
-      "tag": "0013_unit_abbreviation",
-      "breakpoints": true
-    },
-    {
-      "idx": 14,
-      "version": "7",
-      "when": 1789493944645,
-      "tag": "0014_variant_names_image",
+      "when": 1789497917842,
+      "tag": "0001_catalogue_baseline_sql",
       "breakpoints": true
     }
   ]

@@ -162,13 +162,13 @@ state classification.
 Hierarchy edits, membership replacements and category deletion take the same transaction lock.
 Deletion also locks the core category row against a concurrent preparation-route insert.
 The media set adds the image foreign key (`category_details_media_image_fk`, created in media's
-`0006_drop_tenant_id_sql`); attaching an image locks its row against deletion.
+`0001_media_baseline_sql`); attaching an image locks its row against deletion.
 Configuration transfer places media rows before category image references and preserves membership
 and primary choice. Category parent references target existing core identities, so metadata rows can
 be restored in any order after those identities.
 
-The generated migrations are core `0020_category_names`, catalogue `0004_category_memberships`
-and `0005_category_grants`, and media `0003_category_images`. The core migration drops and recreates
+The migrations are core `0020_category_names`, and the catalogue and media baselines
+(`0000_catalogue_baseline`, `0001_catalogue_baseline_sql`, `0001_media_baseline_sql`). The core migration drops and recreates
 the name column; it does not translate or backfill existing text. Follow the existing preproduction
 reset workflow for a populated database. Do not apply it to a populated shared development database
 as an incidental part of running tests. No shared development database was reset for this build.

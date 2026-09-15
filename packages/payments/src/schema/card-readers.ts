@@ -4,8 +4,8 @@ import { boolean, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-
  * One row per physical card reader the venue owns (SumUp/Stripe). Manager configuration, not a
  * money movement — classified `state` (copied to a standby, never drained back). A reader is
  * DISABLED via UPDATE (`active=false`, `disabled_at` set), never DELETEd, so historical payments can
- * still resolve the reader's name; the grant idiom in 0004_card_readers_sql.sql withholds DELETE
- * for that reason.
+ * still resolve the reader's name; the grant idiom in 0001_payments_baseline_sql.sql withholds
+ * DELETE for that reason.
  */
 export const cardReaders = pgTable(
   "card_readers",

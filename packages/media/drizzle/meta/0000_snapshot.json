@@ -1,5 +1,5 @@
 {
-  "id": "1c49a502-b42b-47ae-b91f-9fb3059c628f",
+  "id": "eaf52f6e-44c1-4f29-9876-d0a24acec36e",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -8,12 +8,6 @@
       "name": "media_image_data",
       "schema": "",
       "columns": {
-        "tenant_id": {
-          "name": "tenant_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
         "image_id": {
           "name": "image_id",
           "type": "uuid",
@@ -34,11 +28,9 @@
           "tableFrom": "media_image_data",
           "tableTo": "media_images",
           "columnsFrom": [
-            "tenant_id",
             "image_id"
           ],
           "columnsTo": [
-            "tenant_id",
             "id"
           ],
           "onDelete": "cascade",
@@ -46,10 +38,9 @@
         }
       },
       "compositePrimaryKeys": {
-        "media_image_data_tenant_id_image_id_pk": {
-          "name": "media_image_data_tenant_id_image_id_pk",
+        "media_image_data_image_id_pk": {
+          "name": "media_image_data_image_id_pk",
           "columns": [
-            "tenant_id",
             "image_id"
           ]
         }
@@ -69,12 +60,6 @@
           "primaryKey": true,
           "notNull": true,
           "default": "gen_random_uuid()"
-        },
-        "tenant_id": {
-          "name": "tenant_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
         },
         "filename": {
           "name": "filename",
@@ -117,15 +102,9 @@
         }
       },
       "indexes": {
-        "media_images_tenant_date_idx": {
-          "name": "media_images_tenant_date_idx",
+        "media_images_date_idx": {
+          "name": "media_images_date_idx",
           "columns": [
-            {
-              "expression": "tenant_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
             {
               "expression": "created_at",
               "isExpression": false,
@@ -145,37 +124,14 @@
           "with": {}
         }
       },
-      "foreignKeys": {
-        "media_images_tenant_id_tenants_id_fk": {
-          "name": "media_images_tenant_id_tenants_id_fk",
-          "tableFrom": "media_images",
-          "tableTo": "tenants",
-          "columnsFrom": [
-            "tenant_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "media_images_tenant_filename_key": {
-          "name": "media_images_tenant_filename_key",
+        "media_images_filename_key": {
+          "name": "media_images_filename_key",
           "nullsNotDistinct": false,
           "columns": [
-            "tenant_id",
             "filename"
-          ]
-        },
-        "media_images_tenant_id_key": {
-          "name": "media_images_tenant_id_key",
-          "nullsNotDistinct": false,
-          "columns": [
-            "tenant_id",
-            "id"
           ]
         }
       },

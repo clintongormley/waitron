@@ -5,22 +5,15 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1788789422182,
+      "when": 1789497912246,
       "tag": "0000_workforce_baseline",
       "breakpoints": true
     },
     {
       "idx": 1,
       "version": "7",
-      "when": 1788789430883,
+      "when": 1789497912858,
       "tag": "0001_workforce_baseline_sql",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1789487006446,
-      "tag": "0002_drop_tenant_id",
       "breakpoints": true
     }
   ]

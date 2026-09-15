@@ -6,8 +6,8 @@ import { cardReaders } from "./card-readers.js";
 
 // Real Postgres, not PGlite: this suite doubles as the grant check (CLAUDE.md §4). It writes under
 // `app_user`'s grants (`asAppUser` inside the transaction), so a missing SELECT/INSERT/UPDATE grant
-// from 0004_card_readers_sql.sql fails here, whereas PGlite connects as a superuser holding every
-// grant and would pass regardless. A clone of the `core_payments` template (CORE + PAYMENTS).
+// from 0001_payments_baseline_sql.sql fails here, whereas PGlite connects as a superuser holding
+// every grant and would pass regardless. A clone of the `core_payments` template (CORE + PAYMENTS).
 const postgres = useTemplateDb({ template: "core_payments" });
 
 describe("card_readers", () => {

@@ -10,7 +10,7 @@ import { deviceCardReaders } from "./device-card-readers.js";
 
 // Real Postgres, not PGlite: this suite doubles as the grant check (CLAUDE.md §4), writing under
 // app_user's grants (`asAppUser`) so a missing SELECT/INSERT/UPDATE/DELETE grant from
-// 0006_device_card_readers_sql.sql fails here. A clone of the `core_payments` template (CORE + PAYMENTS).
+// 0001_payments_baseline_sql.sql fails here. A clone of the `core_payments` template (CORE + PAYMENTS).
 const postgres = useTemplateDb({ template: "core_payments" });
 
 interface Seeded {
