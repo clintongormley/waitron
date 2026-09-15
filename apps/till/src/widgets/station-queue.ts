@@ -892,8 +892,7 @@ export class TillStationQueue extends LitElement {
       ${modifiers.map(
         (modifier, i) =>
           html`<span class="modifier"
-            >+
-            ${snapshotDescriptionFor(modifier.descriptions, "")}${extraNutrition(
+            >${`+ ${snapshotDescriptionFor(modifier.descriptions, "")}`}${extraNutrition(
               modifier,
               `item-modifier-allergens-${item.id}-${i}`,
               `item-modifier-diet-${item.id}-${i}`,
