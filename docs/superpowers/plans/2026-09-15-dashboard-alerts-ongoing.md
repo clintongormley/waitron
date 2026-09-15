@@ -51,7 +51,7 @@
 3. **Awaiting-certificate needs no `tx`.** `AwaitingCertStatus` (`apps/server/src/pass.ts:88-90`) is a one-field live cell (`{ current: boolean }`) already built at `apps/server/src/boot.ts:1552` and fed to the fiscal pass. The awaiting-cert source captures it and returns the alert when `current` is true; it queries nothing.
 4. **The backup failed-attempt signal is in-memory, cleared by the next success, empty after a restart.** The sweep records each destination's last outcome in a shared holder shaped like `AwaitingCertStatus`; the source reads it. After a restart the holder is empty, so `backup.destination_failed` is silent until the next failed sweep — the `backup.destination_overdue` check (which reads stored artifacts, not the holder) still covers a destination that has genuinely gone stale. This matches spec *The checks → Backups*.
 5. **The ongoing-code guard reads source text.** Like `scripts/alert-codes.test.ts`, `scripts/ongoing-alert-codes.test.ts` hand-lists the source files and regexes the code literals, then checks each has English and Spanish wording. **It therefore cannot see a code assembled at runtime** — every code this branch adds is a plain string literal, and the guard's own comment says so. It checks wording only; an ongoing code's area comes from its source object, not a prefix claim, so there is no "unclaimed" check for ongoing codes.
-6. **Printing code prefix.** The spec names `printing.agent_silent` and `printing.jobs_waiting`; the printing package's existing siblings are `printer.*`, `agent.*`, `print_job.*` (`packages/printing/src/errors.ts:18-43`) and the spec also says "follow the siblings' singular domain prefixes." Task 6 greps the siblings and registers the codes in `packages/printing/src/errors.ts` under whichever prefix the grep supports, defaulting to the spec's `printing.` names and recording the choice in the commit. The source's `area` stays `printing` regardless of the code prefix.
+6. **Printing code names — decided: `agent.silent` and `printer.jobs_waiting`.** The spec's *checks* section writes `printing.agent_silent`/`printing.jobs_waiting`, but the spec's own body also says "codes follow the siblings' singular domain prefixes … the exact names are checked against siblings again when the plan is written" — it deferred the spelling to now. The printing package has no `printing.*` code; its families are `printer.*`, `agent.*`, `print_job.*` (`packages/printing/src/errors.ts:18-43`). So the sibling-consistent, spec-mandated names are **`agent.silent`** (a print agent went silent — joins the `agent.*` family) and **`printer.jobs_waiting`** (jobs waiting at a printer — the alert is per-printer, keyed by printer id, with `params.printer`). Codes are never renamed once shipped (CLAUDE.md §3), so this is fixed here, not left to the implementer. The source's `area` stays `printing` (area is a UI grouping, independent of the code prefix). Flag the deviation from the *checks* section's provisional names for owner sign-off at land.
 7. **The 60-second ongoing refresh already exists.** `listAlerts` has no special `refreshMs` case, so it polls on the shared 60 000 ms default and also re-reads on any `incidents` change (`apps/dashboard/src/api/live-queries.ts`). Branch 2 adds no refresh wiring; Task 10 verifies it.
 
 ---
@@ -101,6 +101,8 @@ it("reports one source_unavailable per area when two sources in it throw", async
 ```
 
 Keep the existing claim-prefix dedup test — that dedup does **not** relax.
+
+`readOpenAlerts(tx, deps, held)` always runs `listOpenIncidents(tx, tenantId)` and each source in its own `tx.transaction(...)` savepoint, so the merge/throw tests need a real PGlite `tx` (with an `incidents` table and a tenant) and a full `AlertReadDeps` (`{ registry, tenantId, now, log }`). Check whether `alerts.test.ts` already has a `depsFor`/db helper (`grep -n "AlertReadDeps\|usePglite\|readOpenAlerts" apps/server/src/alerts.test.ts`); if not, build the deps and DB the way the branch-1 read tests do — do not assume a helper that isn't there. The pure `not.toThrow` registry test needs no DB.
 
 - [ ] **Step 3: Run the tests to verify they fail.**
 Run: `pnpm --filter @waitron/server test -- alerts.test.ts`
@@ -377,15 +379,7 @@ export function backupAlertSource(deps: {
 
 - [ ] **Step 7: Record the sweep outcome.** In `apps/server/src/backup-sweep.ts`, add a `deps.outcomes?: BackupOutcomeHolder` (import the type from `alert-sources.ts`) and, in the `Promise.allSettled` per-destination handler, call `recordBackupOutcome(deps.outcomes, destinationId, ok, now.toISOString())` on both the success and failure legs. Write a focused test in `backup-sweep.test.ts` asserting a failed destination lands in `outcomes.failed` and a subsequent success clears it. (Follow the file's existing `runOnce` test setup; if the sweep test owns no holder yet, pass a fresh `{ failed: new Map() }`.)
 
-- [ ] **Step 8: Wire boot.** In `apps/server/src/boot.ts`, near the existing `createAlertRegistry` call (around `:2043-2055`): create one shared `const backupOutcomes = { failed: new Map() };`, pass it into the backup sweep wiring, build a 1-minute cache `const backupCache = createTtlCache<BackupStatus>({ ttlMs: 60_000, now });`, and build the source:
-```ts
-const backupSource = backupAlertSource({
-  listStatus: () => backupCache.get("status", () => readBackupStatus(backupBackends, backupStaleAfterMs, now())),
-  outcomes: backupOutcomes,
-  now,
-});
-```
-Locate the existing boot bindings for the backup backends and `staleAfterMs` first (`grep -n "readBackupStatus\|loadBackupConfig\|staleAfterMs\|backup" apps/server/src/boot.ts`); reuse them, do not re-load config. Add `backupSource` to the `sources` array (see Task 7's final boot shape).
+- [ ] **Step 8: Wire boot (backup outcomes + sweep only).** In `apps/server/src/boot.ts`: create `const backupOutcomes: BackupOutcomeHolder = { failed: new Map() };` early, and thread it into the backup sweep wiring (find it: `grep -n "backup-sweep\|runOnce\|onStored\|sweep" apps/server/src/boot.ts`, ~`:2660`) so the sweep records each outcome. Do **not** read backup status via `readBackupStatus` here — boot already owns a `backupSupervisor` (`:2162`) whose `.status()` returns `{ backupStatus }`, and boot already reuses it (`:2238`, `readBackup: () => backupSupervisor.status().then((s) => s.backupStatus)`). The backup source object is assembled in Task 7's final `sources` block (see its **Ordering** note), because it must be built after `backupSupervisor` exists — the branch-1 `createAlertRegistry` call at `:2044-2055` runs ~110 lines before the supervisor. This step only creates and threads `backupOutcomes`.
 
 - [ ] **Step 9: Run the source tests, the sweep test, and typecheck.**
 Run: `pnpm --filter @waitron/server test -- alert-sources.test.ts backup-sweep.test.ts && pnpm --filter @waitron/server typecheck`
@@ -520,12 +514,15 @@ export const fiscalSubmissionSource: AlertSource = {
       .innerJoin(registrosFacturacion, eq(registrosFacturacion.id, envios.registroId))
       .where(and(eq(envios.tenantId, tenantId), eq(envios.estado, "detenido")));
     if (stopped && Number(stopped.n) > 0) {
+      // count > 0 means the innerJoin matched a registro, and fechaHoraHusoGenRegistro is notNull,
+      // so `oldest` is always present here — no `: null` arm (it would be an uncovered branch, and
+      // fiscal-verifactu holds the 98% branch bar).
       alerts.push({
         key: "fiscal.submission_stopped",
         code: "fiscal.submission_stopped",
         params: { count: Number(stopped.n) },
         severity: "error",
-        since: stopped.oldest ? new Date(stopped.oldest).toISOString() : null,
+        since: new Date(stopped.oldest as string).toISOString(),
       });
     }
     return alerts;
@@ -670,7 +667,7 @@ area with the module submission source."
 - Consumes: `printAgents` (`packages/db/src/schema/print-agents.ts`: `active`, `lastSeenAt`, `name`, `tenantId`), `printJobs` (`packages/db/src/schema/print-jobs.ts`: `printerId`, `kind` `'document'|'drawer'`, `status` `queued|printing|done|failed`, `attempts`, `createdAt`, `tenantId`), the `printers` table (`active`, `name`), `MAX_DELIVERY_ATTEMPTS` (`packages/printing/src/runtime.ts:33`).
 - Produces: `export function printingAlertSource(): AlertSource;` (area `printing`, permission `printer.manage`, screen `printers`). Constants `AGENT_SILENT_MS = 5*60*1000`, `JOBS_WAITING_MS = 2*60*1000`.
 
-- [ ] **Step 1: Confirm schema + prefix.** Read the two schema files and `runtime.ts:33/168-177`. Then `grep -n '"printer\.\|"agent\.\|"print_job\.\|"printing\.' packages/printing/src/errors.ts` and decide the prefix per Ruling 6; record it in the commit.
+- [ ] **Step 1: Confirm schema.** Read the two schema files and `runtime.ts:33/168-177`. The code names are already decided (Ruling 6: `agent.silent`, `printer.jobs_waiting`) — `grep -n '"agent\.\|"printer\.' packages/printing/src/errors.ts` only to confirm both families exist and find the insertion point. Confirm `printAgents`/`printJobs`/`printers` are exported from `@waitron/db` (`grep -n "printAgents\|printJobs\|printers" packages/db/src/index.ts`) and whether `MAX_DELIVERY_ATTEMPTS` is exported from `@waitron/printing`.
 
 - [ ] **Step 2: Write the failing tests (PGlite).**
 ```ts
@@ -683,7 +680,7 @@ Write these as concrete cases mirroring Task 4's structure: seed rows via the pr
 
 - [ ] **Step 3: Run to verify they fail.** `pnpm --filter @waitron/server test -- alert-sources.test.ts` → FAIL.
 
-- [ ] **Step 4: Implement.**
+- [ ] **Step 4: Implement.** Import `printAgents`, `printJobs`, `printers` from `@waitron/db` (not the printing package), `MAX_DELIVERY_ATTEMPTS` from `@waitron/printing` (or inline it with a pointer to `runtime.ts:33` if it is not exported), and the drizzle operators.
 ```ts
 export const AGENT_SILENT_MS = 5 * 60 * 1000;
 export const JOBS_WAITING_MS = 2 * 60 * 1000;
@@ -694,18 +691,21 @@ export function printingAlertSource(): AlertSource {
     permission: "printer.manage",
     async read({ tx, tenantId, now }): Promise<readonly OngoingAlert[]> {
       const alerts: OngoingAlert[] = [];
-      const silentBefore = new Date(now.getTime() - AGENT_SILENT_MS);
+      // lastSeenAt and createdAt are drizzle mode:"string" columns, so compare against ISO strings,
+      // never a Date object (that would not typecheck).
+      const silentBefore = new Date(now.getTime() - AGENT_SILENT_MS).toISOString();
       const agents = await tx.select({ name: printAgents.name, seen: printAgents.lastSeenAt })
         .from(printAgents)
         .where(and(eq(printAgents.tenantId, tenantId), eq(printAgents.active, true),
                    lt(printAgents.lastSeenAt, silentBefore)));
       for (const a of agents) {
-        alerts.push({ key: `printing.agent_silent:${a.name}`, code: "printing.agent_silent",
+        // the lt filter excludes a null last_seen_at, so a.seen is a real timestamp here.
+        alerts.push({ key: `agent.silent:${a.name}`, code: "agent.silent",
           params: { agent: a.name }, severity: "warning",
-          since: a.seen ? new Date(a.seen).toISOString() : null, screen: "printers" });
+          since: new Date(a.seen as string).toISOString(), screen: "printers" });
       }
-      // jobs_waiting: per active printer, document jobs stuck > 2 min or failed at the attempt ceiling.
-      const stuckBefore = new Date(now.getTime() - JOBS_WAITING_MS);
+      // per active printer: document jobs stuck > 2 min, or failed at the delivery-attempt ceiling.
+      const stuckBefore = new Date(now.getTime() - JOBS_WAITING_MS).toISOString();
       const rows = await tx.select({
           printer: printers.name, id: printers.id,
           n: count(), oldest: min(printJobs.createdAt) })
@@ -720,31 +720,31 @@ export function printingAlertSource(): AlertSource {
           )))
         .groupBy(printers.id, printers.name);
       for (const r of rows) {
-        if (Number(r.n) === 0) continue;
-        alerts.push({ key: `printing.jobs_waiting:${r.id}`, code: "printing.jobs_waiting",
+        // a group only forms when at least one job matched, so oldest is non-null.
+        alerts.push({ key: `printer.jobs_waiting:${r.id}`, code: "printer.jobs_waiting",
           params: { printer: r.printer, count: Number(r.n) }, severity: "error",
-          since: r.oldest ? new Date(r.oldest).toISOString() : null, screen: "printers" });
+          since: new Date(r.oldest as string).toISOString(), screen: "printers" });
       }
       return alerts;
     },
   };
 }
 ```
-(Import `printers` from the printing package's schema barrel; confirm its export name and the `printerId` join column against `runtime.ts:168-171`. Read `.toSQL()` once to confirm the tenant predicate and the base-table join.)
+Read `.toSQL()` once to confirm the tenant predicate is present and the join is on the base table (CLAUDE.md §3, the base-vs-join and correlated-subquery traps). Confirm the `printerId` join column against `runtime.ts:168-171`.
 
-- [ ] **Step 5: Register the codes** in `packages/printing/src/errors.ts` (prefix per Ruling 6; example with the spec's names):
+- [ ] **Step 5: Register the codes** in `packages/printing/src/errors.ts` (into the existing `agent.*` and `printer.*` families — Ruling 6):
 ```ts
-"printing.agent_silent": { agent: string };
-"printing.jobs_waiting": { printer: string; count: number };
+"agent.silent": { agent: string };
+"printer.jobs_waiting": { printer: string; count: number };
 ```
 
 - [ ] **Step 6: Wording** in `apps/dashboard/src/i18n/alert-messages.ts`:
 ```ts
-"printing.agent_silent": {
+"agent.silent": {
   en: "Print agent “{agent}” has gone quiet — it has not checked in for several minutes. Printing may be affected.",
   es: "El agente de impresión «{agent}» está en silencio: lleva varios minutos sin dar señales. La impresión puede verse afectada.",
 },
-"printing.jobs_waiting": {
+"printer.jobs_waiting": {
   en: "{count} print job(s) are stuck at “{printer}”. Check the printer on the Printers page.",
   es: "{count} trabajo(s) de impresión atascado(s) en «{printer}». Revisa la impresora en la página de Impresoras.",
 },
@@ -813,8 +813,10 @@ export function batteryAlertSource(deps: {
       const alerts: OngoingAlert[] = [];
       for (const r of readers) {
         const percent = await deps.cache.get(r.id, async () => {
+          // cardProviderById THROWS on an unknown provider id (it never returns undefined), so a
+          // misconfigured reader collapses this whole source to alert.source_unavailable:card_reader
+          // — the spec's source-level failure model. That is acceptable; do not add a dead null-check.
           const seat = cardProviderById(deps.providers, r.provider);
-          if (!seat) return null;
           const status = await seat.readers.status(deps.runtimeDeps(tenantId), r.ref);
           return status.batteryPercent ?? null;
         });
@@ -858,7 +860,16 @@ registry: createAlertRegistry({
   sources: [...enabledAlertSources(setsToMigrate), ...serverAlertSources],
 }),
 ```
-Locate the existing boot bindings the battery source needs (`grep -n "cardProvider\|providers\|ring\b" apps/server/src/boot.ts`) and build `cardRuntimeDeps(tenantId)` from them exactly as `payments-api.ts` builds its `runtimeDeps` (db, ring, tenantId, fetch). Reuse `awaitingFiscalCert` (`:1552`) and the `backupSource`/`backupOutcomes` from Task 3. Do not construct a second copy of any of these.
+**Ordering (important).** The branch-1 `createAlertRegistry` + `mountAlertsApi` block currently sits at ~`boot.ts:2044-2055`, ~110 lines **before** `backupSupervisor` is built (`:2162`) and reloaded (`:2181`). The backup source's `listStatus` closes over `backupSupervisor`, so move the whole `createAlertRegistry`/`mountAlertsApi` block to just after the supervisor is built and reloaded (~`:2181-2238`), beside the other management-api route mounts — route mounts are order-independent among themselves, but keep it before any catch-all/404 handler. Create `const backupOutcomes` early (Task 3, Step 8) so the sweep wiring (~`:2660`) can fill it. Build the backup source inside the moved block:
+```ts
+const backupCache = createTtlCache<BackupStatus>({ ttlMs: 60_000, now });
+const backupSource = backupAlertSource({
+  listStatus: () => backupCache.get("status", () => backupSupervisor.status().then((s) => s.backupStatus)),
+  outcomes: backupOutcomes,
+  now,
+});
+```
+Locate the card-provider bindings (`grep -n "cardProvider\|providers\|ring\b" apps/server/src/boot.ts`) and build `cardRuntimeDeps(tenantId)` exactly as `apps/server/src/payments-api.ts` builds its `runtimeDeps` (db, ring, tenantId, fetch). Reuse `awaitingFiscalCert` (`:1552`); do not construct a second copy of any binding.
 
 - [ ] **Step 8: Run tests + typecheck + the server package suite (this is the integration point).**
 Run: `pnpm --filter @waitron/server test -- alert-sources.test.ts && pnpm --filter @waitron/server typecheck`
@@ -973,7 +984,7 @@ git commit -s -m "Test ongoing alerts through the routes: permission filtering, 
 **Files:**
 - Modify: `docs/backlog.md` (mark A5 branch 2), the ledger `docs/handoffs/2026-09-15-dashboard-alerts-ongoing.md`, and `docs/developers/design-system.md` only if a new note is genuinely needed (badges/toasts already landed in branch 1).
 
-- [ ] **Step 1: Verify the 60-second refresh and the panel rendering are already in place.** Read `apps/dashboard/src/api/live-queries.ts` (confirm `listAlerts` polls on the 60 000 ms default) and the panel/screen (`apps/dashboard/src/screens/alerts-screen.ts`, the bell/panel component) to confirm an `ongoing` alert renders "Go to …" using its `screen` field and hides it when the session lacks that screen's permission. If "Go to" for ongoing alerts was not built in branch 1, add it here with a browser-mode test; otherwise assert it with a case that feeds a stub ongoing alert.
+- [ ] **Step 1: Verify the 60-second refresh, and pin the ongoing "Go to" behaviour with a browser test (unconditionally).** Read `apps/dashboard/src/api/live-queries.ts` and confirm `listAlerts` polls on the 60 000 ms default (Ruling 7). Then — because branch 2 produces the **first** real `ongoing` alerts (branch 1 shipped only `event` alerts) — add a browser-mode test (not gated on "if branch 1 didn't build it") in the panel/screen suite that feeds a stub `ongoing` alert and asserts: (a) with the alert's `screen` permission held, the panel/screen renders a "Go to …" control targeting that screen; (b) without that permission, no "Go to" is shown. If the branch-1 panel/screen already renders this, the test still belongs here as the first end-to-end proof; if it does not, implement the rendering here too.
 
 - [ ] **Step 2: Look at it (CLAUDE.md §4).** Start the dev stack from this worktree (`wa-wt demo waitron-feat-dashboard-alerts-ongoing`), seed at least one condition per source (a disabled backup is free; a `detenido` envío; a silent agent; a low reader via the fake provider), and open the bell, panel and Alerts screen **in both themes and at phone width**. Confirm each ongoing alert shows real wording (not the generic sentence with a raw code) and the correct "Go to" target or none. Capture a screenshot of the panel with a mix of ongoing alerts.
 
@@ -1000,7 +1011,7 @@ ongoing check in both themes and at phone width."
 
 - **Spec coverage.** Backups (Task 3), fiscal submission (Task 4), awaiting-cert (Task 5), printing (Task 6), battery (Task 7) — the five ongoing checks. Wording for every code (Tasks 3–7) and a guard (Task 8). Permission filtering, a failing source, passive poll, two-tenant probe (Task 9). Caching 5 min / 1 min (Tasks 2, 3, 7). Look-at-it in both themes (Task 10). The 60 s refresh is pre-existing (Ruling 7, verified Task 10).
 - **Open question for the reviewer (Ruling 1).** Relaxing `createAlertRegistry`'s area-dedup is a branch-1 change. The alternative — giving awaiting-cert a distinct area — deviates from the spec's area grouping. Confirm the relax is preferred, and that deduping the failure synthetic per area is the right visible behaviour.
-- **Prefix decision (Ruling 6).** `printing.*` is a new prefix beside `printer.*`/`agent.*`/`print_job.*`. Confirm the grep supports the spec's `printing.` names rather than `agent.silent`/`print_job.waiting`.
+- **Prefix decision (Ruling 6) — resolved to `agent.silent` / `printer.jobs_waiting`** (sibling-consistent, per the spec's own "follow the siblings' singular domain prefixes"). Deviates from the *checks* section's provisional `printing.*` spelling; confirm at owner sign-off, since codes are never renamed once shipped.
 - **Grant reliance (Ruling 2).** The fiscal submission source reads `registros_facturacion`/`envios` as `app_user`. If a future migration narrows those grants, Task 4's source turns into `alert.source_unavailable` — the two-tenant/route tests would catch a total failure but not a silent narrowing; the PGlite grant test (`asAppUser`) is the guard.
 - **`since` choices.** `submission_stopped` uses the oldest `detenido` record's generated time; `awaiting_certificate` and `backup.disabled` carry no `since` (nothing meaningful); `battery_low` carries none (percent is the signal). Flag if the panel needs a `since` on any of these.
 - **Coverage placement.** `alert-sources.ts` lives in `apps/server`, tested from `apps/server`; `submission-alerts.ts` in `packages/fiscal-verifactu`, tested there. Neither needs a root-project home. The new root guard (Task 8) reads text only.
