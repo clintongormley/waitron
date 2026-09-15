@@ -466,6 +466,21 @@ never stored.)
 [Design](superpowers/specs/2026-09-14-units-screen-and-abbreviation-design.md),
 [plan](superpowers/plans/2026-09-14-units-screen-and-abbreviation.md).
 
+**Update (2026-09-15) — a product's unit is optional, and a unit lists its products — LANDED #375.**
+A product no longer needs a unit: leaving the editor's unit on **Each** stores no unit at all, and
+the seeded `each` unit was dropped, so a venue seeds only the five weight/volume units and Each is
+the implicit default. On the units screen, clicking a unit's row opens the products that use it, and
+the bulk-reassign target now includes **Each (no unit)**, which empties a unit so it can be deleted.
+Reassigning a weight product to Each also flips its stored `pricing_unit` to `each` — the two were
+out of step, a bug the run-it review caught against a real database.
+[Design](superpowers/specs/2026-09-15-optional-product-unit-design.md),
+[plan](superpowers/plans/2026-09-15-optional-product-unit.md). Left open (small, unowned): the
+Spanish label for reassigning to Each reads "Unidad (sin unidad)" ("Unit (without unit)") — owner's
+call whether to reword (e.g. "Cada uno"); `createProduct` and `updateProduct` still duplicate the
+legacy-`pricingUnit` fallback, so a shared helper would keep the two from drifting; and the synthetic
+`EACH_UNIT` id lives as a literal in both `packages/catalogue/src/units.ts` and the till's
+`product-name.ts` with nothing pinning them equal.
+
 What it left open:
 
 - **Units still has no written contract, but the reason to write one has passed.** Categories and
