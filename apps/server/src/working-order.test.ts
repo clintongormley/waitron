@@ -32,6 +32,7 @@ import {
   replaceProductCategories,
   setMenuItemOptionGroups,
   updateCategory,
+  EACH_UNIT,
 } from "@waitron/catalogue";
 import * as catalogue from "@waitron/catalogue";
 import {
@@ -932,7 +933,7 @@ describe("getHeldOrder", () => {
   });
 
   it("returns the parked offer's identity and snapshots after its live product changes", async () => {
-    const { cfg, zoneId, cafeId, premiumCafeOfferId, eachUnitId } = await setupVenue();
+    const { cfg, zoneId, cafeId, premiumCafeOfferId } = await setupVenue();
     const id = randomUUID();
     await parkOrder({ db }, cfg, {
       id,
@@ -960,11 +961,13 @@ describe("getHeldOrder", () => {
           productId: cafeId,
           menuItemId: premiumCafeOfferId,
           descriptions: { [LOCALE]: "Café" },
+          // The café is priced by the each (no unit), so its snapshot resolves to the synthetic
+          // Each unit — frozen at park time, unaffected by the live product's switch to weight above.
           unit: {
-            id: eachUnitId,
-            name: { en: "each" },
-            precision: 0,
-            hardwareUnit: null,
+            id: EACH_UNIT.id,
+            name: EACH_UNIT.name,
+            precision: EACH_UNIT.precision,
+            hardwareUnit: EACH_UNIT.hardwareUnit,
           },
           unitPrice: "3.25",
           vatClass: "general",
