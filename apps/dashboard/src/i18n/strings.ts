@@ -1753,7 +1753,7 @@ export const es: Record<StringKey, string> = {
   "units.delete_unit": "Eliminar unidad",
   "units.change_unit": "Cambiar unidad",
   "units.change_unit_placeholder": "Mover selección a…",
-  "units.change_unit_each": "Unidad (sin unidad)",
+  "units.change_unit_each": "Por unidad",
   "units.view_products": "Ver productos",
   "units.select_all": "Seleccionar todos los productos",
   "units.select_product": "Seleccionar producto",
