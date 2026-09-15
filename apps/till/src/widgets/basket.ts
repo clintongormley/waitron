@@ -300,7 +300,10 @@ export class TillBasket extends LitElement {
     optionGroupItemId: string,
   ):
     | {
-        addAllergens: Record<string, { presence: "contains" | "may_contain"; source?: string }> | null;
+        addAllergens: Record<
+          string,
+          { presence: "contains" | "may_contain"; source?: string }
+        > | null;
         suitableFor: string[];
       }
     | undefined {
@@ -308,7 +311,10 @@ export class TillBasket extends LitElement {
       .flatMap((group) => group.items)
       .find((candidate) => candidate.id === optionGroupItemId);
     if (fromGroups !== undefined)
-      return { addAllergens: fromGroups.addAllergens ?? null, suitableFor: fromGroups.suitableFor ?? [] };
+      return {
+        addAllergens: fromGroups.addAllergens ?? null,
+        suitableFor: fromGroups.suitableFor ?? [],
+      };
     const fromModifiers = (line.product.modifiers ?? [])
       .flatMap((modifier) =>
         modifier.type === "extras" || modifier.type === "options" ? modifier.choices : [],

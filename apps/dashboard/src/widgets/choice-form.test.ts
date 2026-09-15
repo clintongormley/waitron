@@ -33,10 +33,7 @@ async function change(el: ChoiceForm, name: string, value: string | boolean) {
  * form only ever sees the widget's `wt-change`, never the inner comboboxes. `dietary` is a plain
  * string list here so a test can pass an arbitrary label without importing the union.
  */
-async function drivePicker(
-  el: ChoiceForm,
-  value: { allergens: string[]; dietary: string[] },
-) {
+async function drivePicker(el: ChoiceForm, value: { allergens: string[]; dietary: string[] }) {
   el.shadowRoot!.querySelector("dashboard-allergen-dietary-picker")!.dispatchEvent(
     new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
   );

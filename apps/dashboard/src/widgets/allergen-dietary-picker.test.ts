@@ -47,7 +47,10 @@ function trackChanges(el: AllergenDietaryPicker): AllergenDietaryValue[] {
 
 describe("allergen-dietary-picker", () => {
   it("renders one allergen list and four dietary checkboxes, no remove-allergens control", async () => {
-    const { el } = await mountWidget<AllergenDietaryPicker>("dashboard-allergen-dietary-picker", {});
+    const { el } = await mountWidget<AllergenDietaryPicker>(
+      "dashboard-allergen-dietary-picker",
+      {},
+    );
     expect(el.shadowRoot!.querySelector('[data-test="remove-allergens"]')).toBeNull();
     expect(el.shadowRoot!.querySelector('[data-test="add-allergens"]')).toBeNull();
     expect(el.shadowRoot!.querySelector('[data-test="allergens"]')).not.toBeNull();
@@ -57,7 +60,10 @@ describe("allergen-dietary-picker", () => {
   });
 
   it("gives each dietary checkbox a semantic name and a visible label", async () => {
-    const { el } = await mountWidget<AllergenDietaryPicker>("dashboard-allergen-dietary-picker", {});
+    const { el } = await mountWidget<AllergenDietaryPicker>(
+      "dashboard-allergen-dietary-picker",
+      {},
+    );
     const boxes = [
       ...el.shadowRoot!.querySelectorAll<HTMLInputElement>(
         '[data-test="dietary"] input[type="checkbox"]',

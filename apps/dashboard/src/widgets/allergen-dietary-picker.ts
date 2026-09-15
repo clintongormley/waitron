@@ -87,7 +87,10 @@ export class AllergenDietaryPicker extends LitElement {
     if (input.checked) chosen.add(input.value as DietarySuitability);
     else chosen.delete(input.value as DietarySuitability);
     // Keep the canonical DIETARY_SUITABILITY order so the emitted list is deterministic.
-    this.#emit({ ...this.value, dietary: DIETARY_SUITABILITY.filter((label) => chosen.has(label)) });
+    this.#emit({
+      ...this.value,
+      dietary: DIETARY_SUITABILITY.filter((label) => chosen.has(label)),
+    });
   }
 
   override render() {
@@ -104,16 +107,17 @@ export class AllergenDietaryPicker extends LitElement {
       <fieldset data-test="dietary">
         <legend>${t("modifiers.invalidates_dietary")}</legend>
         ${DIETARY_SUITABILITY.map(
-          (label) => html`<label class="diet"
-            ><input
-              type="checkbox"
-              name=${`diet-${label}`}
-              value=${label}
-              ?disabled=${this.busy}
-              .checked=${this.value.dietary.includes(label)}
-              @change=${(e: Event) => this.#onDietary(e)}
-            /><span>${t(`editor.diet.${label}`)}</span></label
-          >`,
+          (label) =>
+            html`<label class="diet"
+              ><input
+                type="checkbox"
+                name=${`diet-${label}`}
+                value=${label}
+                ?disabled=${this.busy}
+                .checked=${this.value.dietary.includes(label)}
+                @change=${(e: Event) => this.#onDietary(e)}
+              /><span>${t(`editor.diet.${label}`)}</span></label
+            >`,
         )}
       </fieldset>
     `;

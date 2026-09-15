@@ -452,9 +452,9 @@ describe("till-basket", () => {
       { optionGroupItemId: "opt-bacon", name: { es: "Bacon" }, priceDelta: "1.00" },
     ]);
     const { el } = await mountWidget<TillBasket>("till-basket", { store });
-    expect(
-      el.shadowRoot!.querySelector(`[data-test="option-allergens-0"]`)!.textContent,
-    ).toContain(allergenName("milk", currentLocale()));
+    expect(el.shadowRoot!.querySelector(`[data-test="option-allergens-0"]`)!.textContent).toContain(
+      allergenName("milk", currentLocale()),
+    );
     expect(
       el.shadowRoot!.querySelector(`[data-test="option-diet-0"] [data-diet='kosher']`),
     ).not.toBeNull();
