@@ -50,10 +50,8 @@ import {
   workingOrders,
   workingOrderStatus,
 } from "@waitron/db";
-import type { AllergenMap, Database, Doneness, Transaction } from "@waitron/db";
+import type { Database, Doneness, Transaction } from "@waitron/db";
 import {
-  deriveAsServedAllergens,
-  applyDietaryEffects,
   expandDietaryDeclarations,
   listProductVariantsForProducts,
   listAvailableProducts,
@@ -68,7 +66,6 @@ import {
 import type {
   BasketItemWithOptions,
   AvailableProduct,
-  DietaryEffect,
   DietaryLabel,
   DietProfile,
   LockedLine,
@@ -3781,23 +3778,17 @@ export interface StationQueueItem {
   /** The dish's selected options (ordering modifiers), in selection (`line_no`) order — the KDS UI
    *  renders them as indented sub-text under this item. Empty for a plain dish. */
   modifiers: QueueModifier[];
-  /** The AS-SERVED allergen profile (modifier↔allergen, Task 8) — the parent product's published
-   *  allergens folded with its selected options' overlays (Cautious: a `remove` strips a code, an `add`
-   *  merges one). `pending` is true when the dish's own allergens are unreviewed (a null base), so the
-   *  KDS shows the plate as unverified. Display-only — never a fiscal value. Defaults to
-   *  `{ allergens: {}, pending: true }` when the parent line is absent from the read (belt-and-braces).
-   *  The fold's `removed` rides as the sibling {@link removed} field, not nested here. */
+  /** The dish's OWN allergen profile (modifier↔allergen) — the parent product's published allergens,
+   *  with no modifier contribution. `pending` is true when the dish's own allergens are unreviewed (a
+   *  null base), so the KDS shows the plate as unverified. Display-only — never a fiscal value. Defaults
+   *  to `{ allergens: {}, pending: true }` when the parent line is absent from the read (belt-and-braces).
+   *  Each extra's own allergens are shown separately, not combined here. */
   asServed: { allergens: ProductAllergens; pending: boolean };
-  /** The AS-SERVED diet profile — the product's direct suitability declarations after every selected
-   *  food-changing choice's reviewed invalidations. An unreviewed effect withholds all positive claims.
+  /** The dish's OWN diet profile — its recipe-derived declarations, with no modifier contribution.
    *  Display-only; defaults to
    *  `{ vegan: "unknown", vegetarian: "unknown", contains: [] }` when the parent line is absent from
    *  the read (belt-and-braces, parity with {@link asServed}'s `{ allergens: {}, pending: true }`). */
   asServedDiet?: DietProfile;
-  /** The base allergen codes the selected options SUBTRACTED (present in the product but not in
-   *  {@link asServed}) — the "swap made this safe" chip. Empty for a pending base (a remove cannot
-   *  subtract from an unknown base) or when nothing was removed. */
-  removed: string[];
   /** The item's course (KDS-2 §3d/§5a), or `null` for a line with no course — the client groups the
    *  queue by this and renders a per-course header in `displayOrder`. */
   course: StationQueueCourse | null;
@@ -3865,9 +3856,9 @@ export interface StationQueueGroup {
  * real-Postgres's job (working-order.pg.test.ts), the CLAUDE.md §4 split.
  */
 /**
- * Read modifier descriptions and allergen overlays for the supplied parent lines,
- * then their base product allergens. Both reads have explicit tenant predicates.
- * An empty parent list skips the reads; a missing base leaves allergens pending.
+ * Read modifier descriptions for the supplied parent lines, then each parent product's OWN allergens
+ * and diet. Both reads have explicit tenant predicates. An empty parent list skips the reads; a missing
+ * base leaves allergens pending. No modifier fold — each dish shows its own recipe-derived figures.
  */
 async function readQueueSubItems(
   tx: Transaction,
@@ -3879,7 +3870,6 @@ async function readQueueSubItems(
     string,
     {
       asServed: { allergens: ProductAllergens; pending: boolean };
-      removed: string[];
       asServedDiet: DietProfile;
     }
   >;
@@ -3889,23 +3879,18 @@ async function readQueueSubItems(
     string,
     {
       asServed: { allergens: ProductAllergens; pending: boolean };
-      removed: string[];
       asServedDiet: DietProfile;
     }
   >();
   if (parentLineIds.length === 0) return { modifiersByParent, asServedByParent };
 
-  // ONE child read: the modifier descriptions AND the allergen overlay, both from the child modifier
-  // lines (LEFT join on the nullable `option_group_item_id`), in `line_no` (selection) order. Builds the
-  // modifiers map and the per-parent overlay list in a single pass — the overlay rides the same join
-  // rather than needing a second child read.
+  // ONE child read: the modifier descriptions from the child modifier lines (LEFT join on the nullable
+  // `option_group_item_id`), in `line_no` (selection) order — the indented sub-text the KDS renders
+  // under each dish. No allergen/diet overlay is read: each dish shows its OWN figures, not a fold.
   const childRows = await tx
     .select({
       parentLineId: workingOrderLines.parentLineId,
       descriptions: workingOrderLines.descriptions,
-      addAllergens: optionGroupItems.addAllergens,
-      removeAllergens: optionGroupItems.removeAllergens,
-      dietaryEffect: optionGroupItems.dietaryEffect,
     })
     .from(workingOrderLines)
     .leftJoin(
@@ -3922,31 +3907,19 @@ async function readQueueSubItems(
       ),
     )
     .orderBy(workingOrderLines.lineNo);
-  const overlaysByParent = new Map<
-    string,
-    { add: AllergenMap | null; remove: string[] | null }[]
-  >();
-  // A null effect means the selected choice has not been reviewed; it withholds positive suitability.
-  const dietaryEffectsByParent = new Map<string, (DietaryEffect | null)[]>();
   for (const child of childRows) {
     // `parentLineId` is non-null on every row (the `inArray` matched it).
     const mods = modifiersByParent.get(child.parentLineId!) ?? [];
     mods.push({ descriptions: child.descriptions });
     modifiersByParent.set(child.parentLineId!, mods);
-    const overlays = overlaysByParent.get(child.parentLineId!) ?? [];
-    overlays.push({ add: child.addAllergens ?? null, remove: child.removeAllergens ?? null });
-    overlaysByParent.set(child.parentLineId!, overlays);
-    const effects = dietaryEffectsByParent.get(child.parentLineId!) ?? [];
-    effects.push(child.dietaryEffect as DietaryEffect | null);
-    dietaryEffectsByParent.set(child.parentLineId!, effects);
   }
 
-  // Base allergens per parent line — the PARENT line's product (LEFT join: a null/pending base is
-  // allowed and yields `pending: true`). Fold each parent's base with its options' overlays.
+  // Each parent line's OWN allergens and diet — the PARENT line's product (LEFT join: a null base is
+  // allowed and yields `pending: true`). No modifier contribution: each dish shows its own
+  // recipe-derived figures, and each extra's own list is shown separately.
   const parents = await tx
     .select({
       lineId: workingOrderLines.id,
-      modifierSnapshots: workingOrderLines.modifierSnapshots,
       allergens: products.allergens,
       dietaryDeclarations: products.dietaryDeclarations,
     })
@@ -3958,49 +3931,9 @@ async function readQueueSubItems(
     .where(
       and(eq(workingOrderLines.tenantId, tenantId), inArray(workingOrderLines.id, parentLineIds)),
     );
-  // Nonprice options have no child price row. Their saved choice ids join the same tenant-scoped
-  // effect definitions as extras, so the as-served fold sees both selection modes.
-  const choiceIds = parents.flatMap((parent) =>
-    parent.modifierSnapshots.flatMap((snapshot) =>
-      snapshot.type === "options" ? [snapshot.choiceId] : [],
-    ),
-  );
-  const choices =
-    choiceIds.length === 0
-      ? []
-      : await tx
-          .select({
-            id: optionGroupItems.id,
-            addAllergens: optionGroupItems.addAllergens,
-            removeAllergens: optionGroupItems.removeAllergens,
-            dietaryEffect: optionGroupItems.dietaryEffect,
-          })
-          .from(optionGroupItems)
-          .where(
-            and(eq(optionGroupItems.tenantId, tenantId), inArray(optionGroupItems.id, choiceIds)),
-          );
-  const choiceById = new Map(choices.map((choice) => [choice.id, choice]));
-  for (const parent of parents) {
-    for (const snapshot of parent.modifierSnapshots) {
-      if (snapshot.type !== "options") continue;
-      const choice = choiceById.get(snapshot.choiceId);
-      if (choice === undefined) continue;
-      const overlays = overlaysByParent.get(parent.lineId) ?? [];
-      overlays.push({ add: choice.addAllergens, remove: choice.removeAllergens });
-      overlaysByParent.set(parent.lineId, overlays);
-      const effects = dietaryEffectsByParent.get(parent.lineId) ?? [];
-      effects.push(choice.dietaryEffect as DietaryEffect | null);
-      dietaryEffectsByParent.set(parent.lineId, effects);
-    }
-  }
   for (const p of parents) {
-    const base = (p.allergens ?? null) as ProductAllergens | null;
-    const asServed = deriveAsServedAllergens(base, overlaysByParent.get(p.lineId) ?? []);
-    const declarations = applyDietaryEffects(
-      p.dietaryDeclarations as DietaryLabel[],
-      dietaryEffectsByParent.get(p.lineId) ?? [],
-    );
-    const expanded = expandDietaryDeclarations(declarations);
+    const allergens = (p.allergens ?? {}) as ProductAllergens;
+    const expanded = expandDietaryDeclarations(p.dietaryDeclarations as DietaryLabel[]);
     const asServedDiet: DietProfile = {
       vegan: expanded.includes("vegan") ? "yes" : "unknown",
       vegetarian: expanded.includes("vegetarian") ? "yes" : "unknown",
@@ -4008,11 +3941,8 @@ async function readQueueSubItems(
       ...(expanded.includes("halal") ? { halal: "yes" as const } : {}),
       ...(expanded.includes("kosher") ? { kosher: "yes" as const } : {}),
     };
-    // Project only `{ allergens, pending }` onto the wire — `removed` rides as a sibling top-level field
-    // (the client reads that one), so the nested copy would be dead weight.
     asServedByParent.set(p.lineId, {
-      asServed: { allergens: asServed.allergens, pending: asServed.pending },
-      removed: asServed.removed,
+      asServed: { allergens, pending: p.allergens == null },
       asServedDiet,
     });
   }
@@ -4120,9 +4050,9 @@ export async function listStationQueue(
     // fired together with an identical `queued_at` — render in a stable line order within the group.
     .orderBy(ticketItems.queuedAt, workingOrderLines.lineNo);
 
-  // The selected options AND the as-served allergen profile (Task 8) of every queued dish, keyed by the
-  // parent line ids just returned — attached below as each item's `modifiers` sub-text and
-  // `asServed`/`removed`. One child read + one base read, no N+1.
+  // The selected options AND each dish's OWN allergen/diet profile of every queued dish, keyed by the
+  // parent line ids just returned — attached below as each item's `modifiers` sub-text and `asServed`.
+  // One child read + one base read, no N+1.
   const { modifiersByParent, asServedByParent } = await readQueueSubItems(
     tx,
     cfg.tenantId,
@@ -4163,23 +4093,22 @@ export async function listStationQueue(
       unitName: row.unitName,
       unitPrecision: row.unitPrecision,
       modifiers: modifiersByParent.get(row.workingOrderLineId) ?? [],
-      // The as-served allergen profile (Task 8) — a safe default `{ allergens: {}, pending: true }`
-      // when the parent line is somehow absent from the read (belt-and-braces; every queued line is
-      // present in practice).
+      // The dish's OWN allergen profile — a safe default `{ allergens: {}, pending: true }` when the
+      // parent line is somehow absent from the read (belt-and-braces; every queued line is present in
+      // practice).
       asServed: asServedByParent.get(row.workingOrderLineId)?.asServed ?? {
         allergens: {},
         pending: true,
       },
-      // The as-served diet profile (Task 5). An UNREVIEWED dish already reads "unknown" from the fold
-      // (a null derivation folds as empty-but-PENDING, the cautious posture), so this "unknown" default
-      // is only the belt-and-braces case where the parent line is absent from the read entirely — and
-      // it agrees with the fold, parity with `asServed`'s `{ allergens: {}, pending: true }` default.
+      // The dish's OWN diet profile. An UNREVIEWED dish already reads "unknown" from its own derivation
+      // (a null derivation is empty-but-PENDING, the cautious posture), so this "unknown" default is only
+      // the belt-and-braces case where the parent line is absent from the read entirely — parity with
+      // `asServed`'s `{ allergens: {}, pending: true }` default.
       asServedDiet: asServedByParent.get(row.workingOrderLineId)?.asServedDiet ?? {
         vegan: "unknown",
         vegetarian: "unknown",
         contains: [],
       },
-      removed: asServedByParent.get(row.workingOrderLineId)?.removed ?? [],
       // A non-null `course_id` always matches a `kitchen_courses` row (the FK guarantees it), so when
       // `courseId` is present its name/order are too; a null course serialises `course: null`.
       course:
@@ -4228,19 +4157,16 @@ export interface ExpoItem {
    *  them as sub-text under this item. Each is the child modifier line's snapshotted `descriptions` map
    *  (localised client-side, as `name` is). Empty for a plain dish. */
   modifiers: QueueModifier[];
-  /** The AS-SERVED allergen profile (modifier↔allergen, Task 8) — the same fold `StationQueueItem`
-   *  carries: the parent product's published allergens minus the options' removes plus their adds,
-   *  `pending` when the dish's base is unreviewed. Display-only; defaults to `{ allergens: {}, pending:
-   *  true }` when the parent line is absent from the read. The fold's `removed` rides as the sibling
-   *  {@link removed} field, not nested here. */
+  /** The dish's OWN allergen profile — the same product-own figure `StationQueueItem` carries: the
+   *  parent product's published allergens, with no modifier contribution, `pending` when the dish's base
+   *  is unreviewed. Display-only; defaults to `{ allergens: {}, pending: true }` when the parent line is
+   *  absent from the read. */
   asServed: { allergens: ProductAllergens; pending: boolean };
-  /** The AS-SERVED diet profile — the same direct-declaration and reviewed-invalidation fold
-   *  {@link StationQueueItem.asServedDiet} carries. Display-only; defaults to a
+  /** The dish's OWN diet profile — the same product-own figure {@link StationQueueItem.asServedDiet}
+   *  carries. Display-only; defaults to a
    *  derived-empty `{ vegan: "unknown", vegetarian: "unknown", contains: [] }` when the parent line is
    *  absent from the read. */
   asServedDiet?: DietProfile;
-  /** The base allergen codes the selected options SUBTRACTED — see {@link StationQueueItem.removed}. */
-  removed: string[];
   /** `ticket_items.queued_at` (KDS order-timing alerts, design §3/§6/§11) — the expo spans stations, so
    *  UNLIKE `StationQueueGroup.thresholds` this rides PER ITEM (Controller Ruling A): the client's
    *  `TickingClock` re-derives {@link band} from this plus {@link thresholds} between refreshes. */
@@ -4455,9 +4381,9 @@ export async function listExpoQueue(
   // orders come out oldest-first and each order's courses in display_order. A null course_id collapses
   // to one "no course" bucket per order. `fired`/`away` start true and flip false on the first item
   // that lacks the stamp — i.e. true only when EVERY item of the course carries it.
-  // The selected options AND the as-served allergen profile (Task 8) of every fired dish line, keyed on
-  // the parent line ids — attached below as each expo item's `modifiers` sub-text and `asServed`/
-  // `removed`. One child read + one base read, no N+1.
+  // The selected options AND each dish's OWN allergen/diet profile of every fired dish line, keyed on
+  // the parent line ids — attached below as each expo item's `modifiers` sub-text and `asServed`.
+  // One child read + one base read, no N+1.
   const { modifiersByParent, asServedByParent } = await readQueueSubItems(
     tx,
     cfg.tenantId,
@@ -4523,19 +4449,18 @@ export async function listExpoQueue(
       note: row.note,
       doneness: row.doneness,
       modifiers: modifiersByParent.get(row.lineId) ?? [],
-      // Task 8 — the same as-served profile the station read attaches, safe-defaulted identically.
+      // The dish's OWN allergen profile the station read attaches, safe-defaulted identically.
       asServed: asServedByParent.get(row.lineId)?.asServed ?? {
         allergens: {},
         pending: true,
       },
-      // Task 5 — the same as-served diet profile the station read attaches (an unreviewed dish reads
-      // "unknown" from the fold's pending default), safe-defaulted identically for the absent-parent case.
+      // The dish's OWN diet profile the station read attaches (an unreviewed dish reads "unknown" from
+      // its own pending derivation), safe-defaulted identically for the absent-parent case.
       asServedDiet: asServedByParent.get(row.lineId)?.asServedDiet ?? {
         vegan: "unknown",
         vegetarian: "unknown",
         contains: [],
       },
-      removed: asServedByParent.get(row.lineId)?.removed ?? [],
       queuedAt: row.queuedAt,
       thresholds,
       band,

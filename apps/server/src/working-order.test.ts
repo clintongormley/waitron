@@ -2338,16 +2338,16 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
     });
   });
 
-  // Task 8 (modifier↔allergen) — the KDS station/expo reads attach the AS-SERVED allergen profile per
-  // fired dish line: the parent product's published allergens folded with its selected options'
-  // overlays (Cautious — a `remove` strips a code, an `add` merges one), plus `removed` (the base
-  // codes the options subtracted) for the "swap made this safe" chip. Display-only; no fiscal path.
-  it("attaches an as-served profile with the removed allergen dropped", async () => {
+  // Modifier↔allergen — the KDS station/expo reads attach each fired dish line's OWN allergen profile:
+  // the parent product's published allergens, with no modifier contribution. Each extra's own list is
+  // shown separately. Display-only; no fiscal path.
+  it("attaches the dish's own allergens, ignoring a gluten-removing option", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTenant(db, cfg.tenantId, async (tx) => {
       await asAppUser(tx);
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
-      // A gluten burger with a gluten-free-bun swap: base `{gluten: contains}`, the option removes it.
+      // A gluten burger with a gluten-free-bun swap: base `{gluten: contains}`. The option's remove is no
+      // longer folded in — the dish shows its OWN gluten.
       const burger = await createProduct(tx, cfg.tenantId, {
         catalogueId,
         categoryId: null,
@@ -2379,15 +2379,13 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
       const item = queue
         .flatMap((g) => g.items)
         .find((i) => i.workingOrderLineId === parentLineId)!;
-      expect(item.asServed.allergens).toEqual({});
+      expect(item.asServed.allergens).toEqual({ gluten: { presence: "contains" } });
       expect(item.asServed.pending).toBe(false);
-      expect(item.removed).toEqual(["gluten"]);
 
       // The expo read attaches the same profile to its item.
       const expoItem = (await listExpoQueue(tx, cfg))[0]!.courses[0]!.items[0]!;
-      expect(expoItem.asServed.allergens).toEqual({});
+      expect(expoItem.asServed.allergens).toEqual({ gluten: { presence: "contains" } });
       expect(expoItem.asServed.pending).toBe(false);
-      expect(expoItem.removed).toEqual(["gluten"]);
     });
   });
 
@@ -2406,7 +2404,6 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
       const item = (await listStationQueue(tx, cfg, cocina.id))[0]!.items[0]!;
       expect(item.asServed.pending).toBe(true);
       expect(item.asServed.allergens).toEqual({});
-      expect(item.removed).toEqual([]);
     });
   });
 
@@ -2425,19 +2422,17 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
       expect(item.modifiers).toEqual([]);
       expect(item.asServed.pending).toBe(true);
       expect(item.asServed.allergens).toEqual({});
-      expect(item.removed).toEqual([]);
       // The expo read attaches the same pending profile to its item.
       const expoItem = (await listExpoQueue(tx, cfg))[0]!.courses[0]!.items[0]!;
       expect(expoItem.modifiers).toEqual([]);
       expect(expoItem.asServed.pending).toBe(true);
       expect(expoItem.asServed.allergens).toEqual({});
-      expect(expoItem.removed).toEqual([]);
     });
   });
 
-  // An option that ADDS an allergen merges it into the served profile (over-declaring is the safe
-  // direction), leaving the reviewed base non-pending and `removed` empty.
-  it("attaches an added allergen from the option overlay", async () => {
+  // An option that ADDS an allergen no longer merges it into the dish's profile — the dish shows its OWN
+  // allergens, and the option's added allergen is shown separately (later task).
+  it("attaches the dish's own allergens, ignoring an added allergen from an option", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTenant(db, cfg.tenantId, async (tx) => {
       await asAppUser(tx);
@@ -2458,16 +2453,12 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
         { productId: dish.id, quantity: "1", options: [{ optionGroupItemId: nuts }] },
       ]);
       const item = (await listStationQueue(tx, cfg, cocina.id))[0]!.items[0]!;
-      expect(item.asServed.allergens).toEqual({
-        gluten: { presence: "contains" },
-        nuts: { presence: "contains" },
-      });
+      expect(item.asServed.allergens).toEqual({ gluten: { presence: "contains" } });
       expect(item.asServed.pending).toBe(false);
-      expect(item.removed).toEqual([]);
     });
   });
 
-  it("preserves a direct vegan declaration through a reviewed neutral option", async () => {
+  it("shows the dish's own vegan declaration when an option is selected", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTenant(db, cfg.tenantId, async (tx) => {
       await asAppUser(tx);
@@ -2511,7 +2502,9 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
     });
   });
 
-  it("withholds direct vegan and vegetarian claims when a selected option invalidates no-meat", async () => {
+  // A selected option that invalidates no-meat used to withhold the dish's vegan/vegetarian claims. The
+  // fold is gone: the dish keeps its OWN declared claims, and the option's meat is shown separately.
+  it("keeps the dish's own vegan/vegetarian claims regardless of a selected invalidating option", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTenant(db, cfg.tenantId, async (tx) => {
       await asAppUser(tx);
@@ -2534,14 +2527,14 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
 
       const stationItem = (await listStationQueue(tx, cfg, cocina.id))[0]!.items[0]!;
       expect(stationItem.asServedDiet).toEqual({
-        vegan: "unknown",
-        vegetarian: "unknown",
+        vegan: "yes",
+        vegetarian: "yes",
         contains: [],
       });
       const expoItem = (await listExpoQueue(tx, cfg))[0]!.courses[0]!.items[0]!;
       expect(expoItem.asServedDiet).toEqual({
-        vegan: "unknown",
-        vegetarian: "unknown",
+        vegan: "yes",
+        vegetarian: "yes",
         contains: [],
       });
     });
@@ -4669,7 +4662,10 @@ describe("priceOrderLines course-override validation (KDS-2 A1)", () => {
   });
 });
 
-it("applies nonprice option dietary effects to station and expo snapshots", async () => {
+// A nonprice option (oat, removing milk) is selected on a dish that declares milk + vegan. The fold is
+// gone: the station/expo snapshots show the DISH's OWN milk allergen and its OWN vegan declaration, and
+// the option is shown separately (later task).
+it("shows the dish's own allergens and diet for a nonprice option selection (no fold)", async () => {
   const { cfg, catalogueId } = await setupVenue();
   await withTenant(db, cfg.tenantId, async (tx) => {
     await asAppUser(tx);
@@ -4704,22 +4700,16 @@ it("applies nonprice option dietary effects to station and expo snapshots", asyn
       .update(workingOrderLines)
       .set({ modifierSnapshots })
       .where(eq(workingOrderLines.workingOrderId, orderId));
+    const own = { allergens: { milk: { presence: "contains" } }, pending: false };
+    const ownDiet = { vegan: "yes", vegetarian: "yes", contains: [] };
     const queue = await listStationQueue(tx, cfg, station.id);
-    expect(queue[0]!.items[0]!.asServed).toEqual({ allergens: {}, pending: false });
+    expect(queue[0]!.items[0]!.asServed).toEqual(own);
     expect(queue[0]!.items[0]!.modifierSnapshots).toEqual(modifierSnapshots);
-    expect(queue[0]!.items[0]!.asServedDiet).toEqual({
-      vegan: "yes",
-      vegetarian: "yes",
-      contains: [],
-    });
+    expect(queue[0]!.items[0]!.asServedDiet).toEqual(ownDiet);
     const expo = await listExpoQueue(tx, cfg);
-    expect(expo[0]!.courses[0]!.items[0]!.asServed).toEqual({ allergens: {}, pending: false });
+    expect(expo[0]!.courses[0]!.items[0]!.asServed).toEqual(own);
     expect(expo[0]!.courses[0]!.items[0]!.modifierSnapshots).toEqual(modifierSnapshots);
-    expect(expo[0]!.courses[0]!.items[0]!.asServedDiet).toEqual({
-      vegan: "yes",
-      vegetarian: "yes",
-      contains: [],
-    });
+    expect(expo[0]!.courses[0]!.items[0]!.asServedDiet).toEqual(ownDiet);
   });
 });
 

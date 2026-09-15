@@ -1506,18 +1506,15 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
             // Just fired — nowhere near the default station's 5-minute warm threshold.
             queuedAt: expect.any(String),
             band: "fresh",
-            // Modifier↔allergen: this dish carries no options and its allergens are unreviewed, so the
-            // as-served fold is an empty set flagged pending — the KDS surfaces "not reviewed" for it
-            // (the Cautious policy: a modifier-less unreviewed dish still warns the kitchen). `removed`
-            // is empty (nothing was stripped from an unknown base).
+            // Modifier↔allergen: this dish's OWN allergens are unreviewed, so the profile is an empty set
+            // flagged pending — the KDS surfaces "not reviewed" for it (the Cautious policy: a
+            // modifier-less unreviewed dish still warns the kitchen).
             asServed: { allergens: {}, pending: true },
-            // Task 5 — the as-served DIET twin. This dish carries no recipe (null `diet_derivation`),
-            // which folds as "no recipe": empty origins but PENDING (the same default
-            // `republishProductDiet` uses at product level), so an option-less unreviewed dish reads
-            // vegan/vegetarian "unknown" — the CAUTIOUS posture, matching the allergen `pending` above
-            // and the product's own published diet. An unreviewed plate asserts no positive diet claim.
+            // The as-served DIET twin. This dish carries no recipe (null `diet_derivation`), which reads as
+            // "no recipe": empty origins but PENDING (the same default `republishProductDiet` uses at
+            // product level), so an unreviewed dish reads vegan/vegetarian "unknown" — the CAUTIOUS
+            // posture, matching the allergen `pending` above. An unreviewed plate asserts no positive claim.
             asServedDiet: { vegan: "unknown", vegetarian: "unknown", contains: [] },
-            removed: [],
           },
         ],
       },

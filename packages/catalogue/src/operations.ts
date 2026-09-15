@@ -242,14 +242,14 @@ export interface ResolvedOptionItem {
   maxQuantity: number;
   /** The per-option allergen OVERLAY (Task 4). `addAllergens`: codes this option contributes
    * ("extra cheese" → milk), null when it adds nothing; `removeAllergens`: codes it strips
-   * ("gluten-free bun" → gluten), null when it removes nothing. A later task merges these onto the
-   * dish's published allergens to compute the as-served profile. */
+   * ("gluten-free bun" → gluten), null when it removes nothing. A later task shows the option's OWN
+   * allergens beside the dish (the dish and its extras are no longer combined into one figure). */
   addAllergens: ProductAllergens | null;
   removeAllergens: string[] | null;
-  /** The per-option ORIGIN overlay (Task 4), the diet twin of the allergen overlay. `addOrigins`:
+  /** The per-option ORIGIN overlay, the diet twin of the allergen overlay. `addOrigins`:
    * origins this option introduces ("add bacon" → ["meat"]), null when it adds nothing;
-   * `removeOrigins`: origins it removes ("no cheese" → ["dairy"]), null when it removes nothing. Task 5
-   * folds these into the dish's as-served diet (`deriveAsServedDiet`). */
+   * `removeOrigins`: origins it removes ("no cheese" → ["dairy"]), null when it removes nothing. A later
+   * task shows the option's OWN diet beside the dish. */
   addOrigins: string[] | null;
   removeOrigins: string[] | null;
   dietaryEffect?: { invalidates: string[] } | null;

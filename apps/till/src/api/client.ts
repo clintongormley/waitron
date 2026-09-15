@@ -230,8 +230,9 @@ export interface VatBreakdownEntry {
  * The dietary shapes (dietary-classification, Task 6), LOCAL redefinitions of catalogue's `dietary.ts`
  * types — deliberately NOT imported from `@waitron/catalogue`, the same bundle-decoupling rationale as
  * every other type in this file (see the file header). They are structurally identical to the shared
- * shapes, so a value the deep-imported `deriveAsServedDiet` returns/accepts is assignable across the
- * boundary. `DietaryOrigin` is the ingredient-origin taxonomy (`plant`, `meat`, …); `ContainsTag` is
+ * shapes, so a value the deep-imported product-level derivation (`deriveDietProfile`/`overlayDietProfile`)
+ * returns/accepts is assignable across the boundary. `DietaryOrigin` is the ingredient-origin taxonomy
+ * (`plant`, `meat`, …); `ContainsTag` is
  * the meat/fish subset the "no-meat"/"no-fish" filters read; `DietLabel` is a cautious tri-state
  * (`"unknown"` when the base recipe is unreviewed — never a positive claim).
  */
@@ -289,26 +290,24 @@ export interface TillOptionItem {
    */
   maxQuantity: number;
   /**
-   * The option's per-item allergen OVERLAY (modifier↔allergen, Task 4), carried so the basket can
-   * compute each dish line's AS-SERVED profile CLIENT-side (`deriveAsServedAllergens`), the same way
-   * it prices lines client-side — no server round trip. `addAllergens`: the codes this option
-   * CONTRIBUTES ("extra cheese" → milk), keyed by allergen code, null when it adds nothing.
-   * `removeAllergens`: the codes it STRIPS from the dish's declared set ("gluten-free bun" → gluten),
-   * null when it strips nothing. A LOCAL redefinition of catalogue's `ResolvedOptionItem` overlay,
-   * deliberately NOT imported from `@waitron/catalogue` — same bundle-decoupling rationale as every
-   * other type in this file. `GET /api/products` sends both (a straight passthrough of catalogue's
-   * `listAvailableProducts`, which projects them onto each item).
+   * The option's per-item allergen OVERLAY (modifier↔allergen), carried so the extra's OWN allergens can
+   * be shown beside the dish (added in a later task — the dish and its extras are no longer combined into
+   * one figure). `addAllergens`: the codes this option CONTRIBUTES ("extra cheese" → milk), keyed by
+   * allergen code, null when it adds nothing. `removeAllergens`: the codes it STRIPS from the dish's
+   * declared set ("gluten-free bun" → gluten), null when it strips nothing. A LOCAL redefinition of
+   * catalogue's `ResolvedOptionItem` overlay, deliberately NOT imported from `@waitron/catalogue` — same
+   * bundle-decoupling rationale as every other type in this file. `GET /api/products` sends both (a
+   * straight passthrough of catalogue's `listAvailableProducts`, which projects them onto each item).
    */
   addAllergens: Record<string, { presence: "contains" | "may_contain"; source?: string }> | null;
   removeAllergens: string[] | null;
   /**
-   * The option's per-item ORIGIN overlay (dietary-classification, Task 6) — the diet twin of
-   * `addAllergens`/`removeAllergens`, carried so the basket can compute each dish line's AS-SERVED diet
-   * CLIENT-side (`deriveAsServedDiet`) exactly as it does the as-served allergens. `addOrigins`: the
-   * ingredient origins this option CONTRIBUTES ("add bacon" → `["meat"]`), null when it adds nothing.
-   * `removeOrigins`: the origins it STRIPS ("no cheese" → `["dairy"]`), null when it strips nothing.
-   * Carried as `string[]` (the wire shape from catalogue's `listAvailableProducts`); `asServedDiet`
-   * narrows to the origin union at the fold boundary, as the server's `deriveAsServedDiet` call does.
+   * The option's per-item ORIGIN overlay (dietary-classification) — the diet twin of
+   * `addAllergens`/`removeAllergens`, carried so the extra's OWN diet can be shown beside the dish (added
+   * in a later task). `addOrigins`: the ingredient origins this option CONTRIBUTES ("add bacon" →
+   * `["meat"]`), null when it adds nothing. `removeOrigins`: the origins it STRIPS ("no cheese" →
+   * `["dairy"]`), null when it strips nothing. Carried as `string[]` (the wire shape from catalogue's
+   * `listAvailableProducts`).
    */
   addOrigins: string[] | null;
   removeOrigins: string[] | null;
@@ -833,13 +832,12 @@ export interface QueueModifier {
 }
 
 /**
- * The AS-SERVED allergen profile of a queue/expo item (modifier↔allergen, Task 8/9) — the parent
- * product's published allergens folded with its selected options' overlays (Cautious: a `remove` strips
- * a code, an `add` merges one), computed SERVER-side and attached to each read. `allergens` is keyed by
+ * The dish's OWN allergen profile of a queue/expo item — the parent product's published allergens, with
+ * no modifier contribution, computed SERVER-side and attached to each read. `allergens` is keyed by
  * allergen code (`presence` = contains/may-contain strength, `source` names the specific substance when
  * known); `pending` is true when the dish's OWN allergens are unreviewed (a null base), so the KDS shows
- * the plate as unverified. Display-only — never a fiscal value. A LOCAL mirror of catalogue's / the
- * server's `AsServedAllergens`, NOT imported — same bundle-decoupling rationale as every type in this file.
+ * the plate as unverified. Display-only — never a fiscal value. A LOCAL mirror of the server's
+ * `asServed` shape, NOT imported — same bundle-decoupling rationale as every type in this file.
  */
 export interface AsServedAllergens {
   allergens: Record<string, { presence: "contains" | "may_contain"; source?: string }>;
@@ -873,23 +871,16 @@ export interface StationQueueItem {
    *  plain-dish fixture, treated identically to an empty array — a modifier-free item renders exactly
    *  as before. */
   modifiers?: QueueModifier[];
-  /** The dish's AS-SERVED allergen profile (modifier↔allergen, Task 8/9) — the parent's published
-   *  allergens folded with its selected options' overlays; the KDS renders its codes as "contains" chips
-   *  and shows a "not reviewed" note when {@link AsServedAllergens.pending}. Optional/absent on an older
-   *  payload or a pre-Task-8 fixture, treated as "no profile attached" (nothing rendered) — a plain dish
-   *  reads exactly as before. */
+  /** The dish's OWN allergen profile — the parent's published allergens, with no modifier contribution;
+   *  the KDS renders its codes as "contains" chips and shows a "not reviewed" note when
+   *  {@link AsServedAllergens.pending}. Optional/absent on an older payload or a plain-dish fixture,
+   *  treated as "no profile attached" (nothing rendered) — a plain dish reads exactly as before. */
   asServed?: AsServedAllergens;
-  /** The dish's AS-SERVED diet profile (dietary-classification, Task 5) — the diet twin of
-   *  {@link asServed}: the recipe-derived origins folded with the options' overlays, the staff override
-   *  re-applied. The KDS renders vegan/vegetarian/halal/kosher badges + contains chips beside the
-   *  allergen chips, and a neutral "not reviewed" note while `vegan === "unknown"` (pending). Optional/
-   *  absent (⇒ nothing rendered) on an older payload or a pre-diet fixture. */
+  /** The dish's OWN diet profile — the diet twin of {@link asServed}: its recipe-derived declarations,
+   *  with no modifier contribution. The KDS renders vegan/vegetarian/halal/kosher badges + contains chips
+   *  beside the allergen chips, and a neutral "not reviewed" note while `vegan === "unknown"` (pending).
+   *  Optional/absent (⇒ nothing rendered) on an older payload or a pre-diet fixture. */
   asServedDiet?: DietProfile;
-  /** The base allergen codes the selected options SUBTRACTED (present in the product but not in
-   *  {@link asServed}) — the KDS renders each as a struck "NO <allergen>" callout, the allergen name
-   *  localised like the "contains" chips ("gluten-free bun" removed gluten). Optional/absent (⇒ empty)
-   *  on an older payload, like {@link asServed}. */
-  removed?: string[];
   /** The item's course (KDS-2 §3d/§5a), or `null` for a line with no course — the display groups the
    *  queue by this and renders a per-course header in `displayOrder`. A LOCAL mirror of the server's
    *  `StationQueueCourse` (`apps/server/src/working-order.ts`), NOT imported (the bundle rule). */
@@ -1071,18 +1062,15 @@ export interface ExpoItem {
    *  display renders. Optional/absent on an older payload or a plain-dish fixture, treated identically
    *  to an empty array — a modifier-free item renders exactly as before. */
   modifiers?: QueueModifier[];
-  /** The dish's AS-SERVED allergen profile (modifier↔allergen, Task 8/9) — the same fold
-   *  {@link StationQueueItem.asServed} carries; the pass renders its codes as "contains" chips and a
-   *  "not reviewed" note when {@link AsServedAllergens.pending}. Optional/absent (⇒ nothing rendered) on
-   *  an older payload or a plain-dish fixture. */
+  /** The dish's OWN allergen profile — the same product-own figure {@link StationQueueItem.asServed}
+   *  carries; the pass renders its codes as "contains" chips and a "not reviewed" note when
+   *  {@link AsServedAllergens.pending}. Optional/absent (⇒ nothing rendered) on an older payload or a
+   *  plain-dish fixture. */
   asServed?: AsServedAllergens;
-  /** The dish's AS-SERVED diet profile (dietary-classification, Task 5) — the same fold
-   *  {@link StationQueueItem.asServedDiet} carries; the pass renders diet badges + contains chips and a
-   *  neutral "not reviewed" note when pending. Optional/absent (⇒ nothing rendered). */
+  /** The dish's OWN diet profile — the same product-own figure {@link StationQueueItem.asServedDiet}
+   *  carries; the pass renders diet badges + contains chips and a neutral "not reviewed" note when
+   *  pending. Optional/absent (⇒ nothing rendered). */
   asServedDiet?: DietProfile;
-  /** The base allergen codes the selected options SUBTRACTED — see {@link StationQueueItem.removed};
-   *  the pass renders each as a struck, localised "NO <allergen>" callout. Optional/absent (⇒ empty). */
-  removed?: string[];
   /**
    * This item's own `ticket_items.queued_at` (KDS order-timing alerts, design §3/§6/§11), ISO —
    * UNLIKE {@link StationQueueGroup.thresholds} this rides PER ITEM: a single expo order's items can

@@ -37,11 +37,6 @@ export interface DietProfile {
   halal?: "yes" | "no";
   kosher?: "yes" | "no";
 }
-export interface OptionOriginOverlay {
-  add: DietaryOrigin[] | null;
-  remove: DietaryOrigin[] | null;
-}
-
 const ORIGINS = new Set<string>(DIETARY_ORIGINS);
 const CONTAINS = new Set<string>(CONTAINS_TAGS);
 // The origins compatible with each diet. vegan = plant only; vegetarian also allows the non-slaughter
@@ -129,56 +124,6 @@ export function overlayDietProfile(
   };
   if (override.halal !== undefined) out.halal = override.halal;
   if (override.kosher !== undefined) out.kosher = override.kosher;
-  return out;
-}
-
-/** As-served: recompute the DERIVED profile from (base origins − removed) ∪ added, carry base
- * `pending`, then re-apply the product override (override wins for the BASE label, same as product
- * level) — but CAP a forced-positive vegan/vegetarian that a selected option has invalidated.
- *
- * SEMANTICS (what actually ships, after the final-review fix):
- *  - The override wins for the base: an owner may force vegan/vegetarian to `yes` over an
- *    uncategorised or unfavourable derivation (a trusted-supplier claim) — a base-only forced
- *    positive with no diet-incompatible add still stands.
- *  - An option ADD can only ever DOWNGRADE that forced positive, never uphold it: if the result is
- *    vegan:"yes" while an added origin is not vegan-ok (only `plant` is), vegan drops to "no"; same
- *    for vegetarian against `plant/dairy/egg/honey`. Without this cap a forced vegan:"yes" plus an
- *    `add:["meat"]` option publishes vegan:"yes" on a plate whose `contains` is ["meat"] — the exact
- *    false positive this feature exists to prevent.
- *  - A REMOVE never UPGRADES: base `pending` carries through untouched, so a remove over a pending
- *    base leaves labels "unknown"; you cannot manufacture a false vegan by removing an origin.
- *  - halal/kosher forced values are LEFT UNCHANGED by options. There is no origin→halal/kosher
- *    signal (they turn on certification and slaughter method, not on which origins are present), so
- *    an option add carries no information about them and the owner's forced value stands.
- *
- * SAFETY (inverted from allergens): for allergens the safe direction is over-declaring (add wins);
- * for diet SUITABILITY the danger is a positive that survives an incompatible plate. The cap only
- * ever downgrades, so it is monotonic in the safe direction. Removal is coarse (set-level),
- * identical to the allergen remove. The cap belongs only here, in the as-served path — product-level
- * publish (`overlayDietProfile`) must still let the owner force a base label unconditionally. */
-export function deriveAsServedDiet(
-  d: DietDerivation,
-  override: DietOverride | null,
-  overlays: readonly OptionOriginOverlay[],
-): DietProfile {
-  const origins = new Set<DietaryOrigin>(d.origins);
-  // Collect the origins added by the selected options while applying them, so the cap below can reason
-  // about them without a second walk of `overlays`.
-  const added = new Set<DietaryOrigin>();
-  for (const o of overlays) for (const code of o.remove ?? []) origins.delete(code);
-  for (const o of overlays)
-    for (const code of o.add ?? []) {
-      origins.add(code);
-      added.add(code);
-    }
-  const derived = deriveDietProfile({ origins: [...origins].sort(), pending: d.pending });
-  const out = overlayDietProfile(derived, override);
-  // Cap: an ADD can only downgrade a forced-positive vegan/vegetarian (never uphold it). If a forced
-  // positive survives beside an incompatible add, downgrade it to "no". halal/kosher are deliberately
-  // untouched (no origin signal, per the doc above).
-  if (out.vegan === "yes" && [...added].some((code) => !VEGAN_OK.has(code))) out.vegan = "no";
-  if (out.vegetarian === "yes" && [...added].some((code) => !VEGETARIAN_OK.has(code)))
-    out.vegetarian = "no";
   return out;
 }
 

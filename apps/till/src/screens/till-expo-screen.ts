@@ -291,10 +291,9 @@ export class TillExpoScreen extends LitElement {
         color: var(--wt-color-text-muted);
       }
 
-      /* The item's AS-SERVED allergen profile (modifier↔allergen, Task 9), indented beneath the dish +
-         modifiers — localised "contains" chips, struck localised "NO <allergen name>" removal callouts
-         (e.g. "NO Cereals containing gluten" / "SIN Leche"), and a pending note. A flex-wrap row so
-         chips + callouts flow; mirrors the per-station display's identical row. */
+      /* The dish's OWN allergen profile (modifier↔allergen), indented beneath the dish + modifiers —
+         localised "contains" chips and a pending note. A flex-wrap row so the chips flow; mirrors the
+         per-station display's identical row. */
       .item-allergens {
         display: flex;
         flex-wrap: wrap;
@@ -314,16 +313,6 @@ export class TillExpoScreen extends LitElement {
         padding: 0 var(--wt-space-2);
         border: 1px solid var(--wt-color-border);
         border-radius: var(--wt-radius-full, 999px);
-      }
-
-      /* A REMOVED base allergen — a struck "NO <allergen>" callout (e.g. "SIN Leche"). Colour is NEVER
-         the only signal: the "NO"/"SIN" text AND the strike-through both mark it, so it reads on a
-         monochrome display and passes the contrast sweep (danger-as-text on the surface, the same
-         pairing .item-forgotten-flag ships). The allergen is localised via allergenName, like the chips. */
-      .allergen-removed {
-        font-weight: var(--wt-font-weight-bold);
-        color: var(--wt-color-danger);
-        text-decoration: line-through;
       }
 
       /* The pending note earns emphasis — the expediter must NOT read an unreviewed dish as
@@ -659,22 +648,19 @@ export class TillExpoScreen extends LitElement {
   }
 
   /**
-   * The item's AS-SERVED allergen profile (modifier↔allergen, Task 9), indented beneath the dish + its
-   * modifiers — the SAME rendering the per-station display uses: the folded {@link ExpoItem.asServed}
-   * codes as localised "contains" chips (`allergenName`, never a hardcoded EU-14 list), each
-   * {@link ExpoItem.removed} base code as a struck **"NO &lt;allergen&gt;"** callout — the allergen
-   * localised the SAME way as the chips (`allergenName`), never a raw English code — and a "not reviewed"
-   * warning whenever the fold is `pending` (the dish's own allergens unreviewed — the Cautious policy).
-   * Colour is NEVER the only signal (house a11y rule): the removal carries its "NO" text + strike-through,
-   * the chips their names, the warning its text/weight. `nothing` when there is nothing to say — no
-   * profile attached, nothing removed, not pending — so a plain dish renders identically to before.
+   * The item's OWN allergen profile (modifier↔allergen), indented beneath the dish + its modifiers —
+   * the SAME rendering the per-station display uses: the dish's OWN {@link ExpoItem.asServed} codes as
+   * localised "contains" chips (`allergenName`, never a hardcoded EU-14 list), and a "not reviewed"
+   * warning whenever the profile is `pending` (the dish's own allergens unreviewed — the Cautious
+   * policy). Colour is NEVER the only signal (house a11y rule): the chips carry their names, the warning
+   * its text/weight. `nothing` when there is nothing to say — no profile attached, not pending — so a
+   * plain dish renders identically to before. Each extra's own allergens are shown separately.
    */
   #allergens(item: ExpoItem): TemplateResult | typeof nothing {
     const asServed = item.asServed;
-    const removed = item.removed ?? [];
     const codes = asServed ? Object.keys(asServed.allergens).sort() : [];
     const pending = asServed?.pending ?? false;
-    if (codes.length === 0 && removed.length === 0 && !pending) return nothing;
+    if (codes.length === 0 && !pending) return nothing;
     const locale = currentLocale();
     return html`<span class="item-allergens" data-item-allergens=${item.id}>
       ${
@@ -684,14 +670,6 @@ export class TillExpoScreen extends LitElement {
               )}`
           : nothing
       }
-      ${[...removed]
-        .sort()
-        .map(
-          (code) =>
-            html`<span class="allergen-removed" data-removed=${code}
-              >${t("allergens.without")} ${allergenName(code, locale)}</span
-            >`,
-        )}
       ${
         pending
           ? html`<span class="allergen-pending">${t("allergens.not_reviewed")}</span>`

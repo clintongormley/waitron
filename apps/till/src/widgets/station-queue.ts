@@ -253,10 +253,9 @@ export class TillStationQueue extends LitElement {
         color: var(--wt-color-text-muted);
       }
 
-      /* The dish's AS-SERVED allergen profile (modifier↔allergen, Task 9), indented beneath the dish +
-         modifiers: localised "contains" chips, struck localised "NO <allergen name>" removal callouts
-         (e.g. "NO Cereals containing gluten" / "SIN Leche"), and a pending note. A flex-wrap row
-         (chips + callouts flow), the same indent as the modifiers list. */
+      /* The dish's OWN allergen profile (modifier↔allergen), indented beneath the dish + modifiers:
+         localised "contains" chips and a pending note. A flex-wrap row (chips flow), the same indent as
+         the modifiers list. */
       .line-allergens {
         display: flex;
         flex-wrap: wrap;
@@ -276,17 +275,6 @@ export class TillStationQueue extends LitElement {
         padding: 0 var(--wt-space-2);
         border: 1px solid var(--wt-color-border);
         border-radius: var(--wt-radius-full, 999px);
-      }
-
-      /* A REMOVED base allergen — a struck "NO <allergen>" callout (e.g. "SIN Leche"). Colour is NEVER
-         the only signal: the "NO"/"SIN" text AND the strike-through both mark it, so it reads on a
-         monochrome display and passes the contrast sweep (danger-as-text on the surface, the same
-         pairing the expo forgotten-flag ships). The allergen is localised via allergenName, exactly
-         like the chips — never a raw English code beside a localised chip on a Spanish kitchen surface. */
-      .allergen-removed {
-        font-weight: var(--wt-font-weight-bold);
-        color: var(--wt-color-danger);
-        text-decoration: line-through;
       }
 
       /* The pending note earns emphasis — a cook must NOT read an unreviewed dish as allergen-free (the
@@ -844,23 +832,20 @@ export class TillStationQueue extends LitElement {
   }
 
   /**
-   * The dish's AS-SERVED allergen profile (modifier↔allergen, Task 9), indented beneath the dish + its
-   * modifiers: the folded {@link StationQueueItem.asServed} codes as localised "contains" chips
-   * (`allergenName`, never a hardcoded EU-14 list), each {@link StationQueueItem.removed} base code as a
-   * struck **"NO &lt;allergen&gt;"** callout (a swap made the plate safe of it) — the allergen localised
-   * the SAME way as the chips (`allergenName`), never a raw English code — and a "not reviewed" warning
-   * whenever the fold is `pending` (the dish's own allergens unreviewed — the Cautious policy, since a
-   * cook must never read an unverified plate as allergen-free). Colour is NEVER the only signal (house
-   * a11y rule, the order-timing bands' convention): the removal carries its "NO" text + strike-through,
-   * the chips their names, the warning its text/weight. `nothing` when there is nothing to say — no
-   * profile attached, nothing removed, not pending — so a plain dish renders exactly as before this task.
+   * The dish's OWN allergen profile (modifier↔allergen), indented beneath the dish + its modifiers: the
+   * dish's OWN {@link StationQueueItem.asServed} codes as localised "contains" chips (`allergenName`,
+   * never a hardcoded EU-14 list), and a "not reviewed" warning whenever the profile is `pending` (the
+   * dish's own allergens unreviewed — the Cautious policy, since a cook must never read an unverified
+   * plate as allergen-free). Colour is NEVER the only signal (house a11y rule, the order-timing bands'
+   * convention): the chips carry their names, the warning its text/weight. `nothing` when there is
+   * nothing to say — no profile attached, not pending — so a plain dish renders exactly as before this
+   * task. Each extra's own allergens are shown separately.
    */
   #allergens(item: StationQueueItem): TemplateResult | typeof nothing {
     const asServed = item.asServed;
-    const removed = item.removed ?? [];
     const codes = asServed ? Object.keys(asServed.allergens).sort() : [];
     const pending = asServed?.pending ?? false;
-    if (codes.length === 0 && removed.length === 0 && !pending) return nothing;
+    if (codes.length === 0 && !pending) return nothing;
     const locale = currentLocale();
     return html`<span class="line-allergens" data-item-allergens=${item.id}>
       ${
@@ -870,14 +855,6 @@ export class TillStationQueue extends LitElement {
               )}`
           : nothing
       }
-      ${[...removed]
-        .sort()
-        .map(
-          (code) =>
-            html`<span class="allergen-removed" data-removed=${code}
-              >${t("allergens.without")} ${allergenName(code, locale)}</span
-            >`,
-        )}
       ${
         pending
           ? html`<span class="allergen-pending">${t("allergens.not_reviewed")}</span>`

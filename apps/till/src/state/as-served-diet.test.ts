@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { asServedDiet, asServedAllergens, asServedDietaryDeclarations } from "./as-served.js";
+import { asServedDiet, asServedAllergens } from "./as-served.js";
 import type { OrderLine } from "./working-order.js";
 import type { DietDerivation, DietOverride, TillOptionItem, TillProduct } from "../api/client.js";
 
-/** A minimal option item carrying only the fields `asServedDiet` reads (id + the origin overlays). */
+/** A minimal option item carrying only the fields a line selection reads (id + the origin overlays). */
 function item(
   id: string,
   overlay: { addOrigins?: string[] | null; removeOrigins?: string[] | null },
@@ -43,7 +43,8 @@ function product(
   };
 }
 
-/** Rung-up line: the product plus the selected option ids (each resolved back to its overlay by id). */
+/** Rung-up line: the product plus the selected option ids. Selections no longer change the line's
+ *  diet/allergens — each dish shows its OWN figures — so these tests pin exactly that. */
 function line(prod: TillProduct, ...selectedItemIds: string[]): OrderLine {
   return {
     product: prod,
@@ -60,8 +61,10 @@ function line(prod: TillProduct, ...selectedItemIds: string[]): OrderLine {
   };
 }
 
-describe("asServedDiet", () => {
-  it("uses direct product declarations and selected direct invalidations", () => {
+describe("asServedDiet — the dish's own diet, no modifier fold", () => {
+  it("shows the dish's own direct declarations, ignoring a selected invalidating extra", () => {
+    // The dish declares vegan + halal; a selected bacon extra (which used to invalidate no_meat/halal)
+    // must NOT change the DISH's own declared claims — its own meat is shown separately (Task 4).
     const prod = product(null, []);
     prod.dietaryDeclarations = ["vegan", "halal"];
     prod.modifiers = [
@@ -83,66 +86,32 @@ describe("asServedDiet", () => {
       },
     ];
     delete prod.optionGroups;
-    expect(asServedDiet(line(prod))).toMatchObject({
-      vegan: "yes",
-      vegetarian: "yes",
-      halal: "yes",
-    });
-    expect(asServedDiet(line(prod, "bacon"))).toMatchObject({
-      vegan: "unknown",
-      vegetarian: "unknown",
-    });
-    expect(asServedDiet(line(prod, "bacon")).halal).toBeUndefined();
+    const own = { vegan: "yes", vegetarian: "yes", halal: "yes" };
+    expect(asServedDiet(line(prod))).toMatchObject(own);
+    expect(asServedDiet(line(prod, "bacon"))).toMatchObject(own);
   });
-  it("keeps the dish's declared labels when a selected choice has a null dietary effect", () => {
-    // A dish declared vegan; a selected choice whose dietaryEffect is null means "no effect",
-    // so it must leave the declared claim intact rather than withhold it.
-    const prod = product(null, []);
-    prod.dietaryDeclarations = ["vegan"];
-    prod.modifiers = [
-      {
-        id: "extras",
-        name: { en: "Extras" },
-        type: "extras",
-        available: true,
-        required: false,
-        maxTotalQuantity: null,
-        choices: [
-          {
-            ...item("bacon", {}),
-            dietaryEffect: null,
-            available: true,
-            preselected: false,
-          },
-        ],
-      },
-    ];
-    delete prod.optionGroups;
-    expect(asServedDietaryDeclarations(line(prod, "bacon"))).toContain("vegan");
-    expect(asServedDiet(line(prod, "bacon")).vegan).toBe("yes");
-  });
-  it("a 'no cheese' option flips a {plant,dairy} line to vegan as-served", () => {
-    // Base: plant + dairy, reviewed (not pending) ⇒ vegetarian but NOT vegan.
+
+  it("shows the dish's own derived diet, ignoring a no-cheese extra", () => {
+    // Base plant + dairy, reviewed ⇒ vegetarian but NOT vegan. A no-cheese extra used to flip it vegan;
+    // now the dish shows its own diet and the extra changes nothing.
     const prod = product({ origins: ["plant", "dairy"], pending: false }, [
       item("no-cheese", { removeOrigins: ["dairy"] }),
     ]);
-    expect(asServedDiet(line(prod)).vegan).toBe("no"); // no option: still has dairy
-    const asServed = asServedDiet(line(prod, "no-cheese"));
-    expect(asServed.vegan).toBe("yes");
-    expect(asServed.vegetarian).toBe("yes");
+    expect(asServedDiet(line(prod)).vegan).toBe("no");
+    expect(asServedDiet(line(prod, "no-cheese")).vegan).toBe("no");
   });
 
-  it("an add-meat option downgrades a vegan line to not-vegetarian", () => {
+  it("shows the dish's own vegan diet, ignoring an add-meat extra", () => {
     const prod = product({ origins: ["plant"], pending: false }, [
       item("add-bacon", { addOrigins: ["meat"] }),
     ]);
     const asServed = asServedDiet(line(prod, "add-bacon"));
-    expect(asServed.vegan).toBe("no");
-    expect(asServed.vegetarian).toBe("no");
-    expect(asServed.contains).toEqual(["meat"]);
+    expect(asServed.vegan).toBe("yes");
+    expect(asServed.vegetarian).toBe("yes");
+    expect(asServed.contains).toEqual([]);
   });
 
-  it("a remove over a PENDING base leaves labels unknown (never manufactures a false vegan)", () => {
+  it("a pending derivation reads unknown (never a positive claim), extra or no extra", () => {
     const prod = product({ origins: ["plant", "dairy"], pending: true }, [
       item("no-cheese", { removeOrigins: ["dairy"] }),
     ]);
@@ -151,23 +120,14 @@ describe("asServedDiet", () => {
     expect(asServed.vegetarian).toBe("unknown");
   });
 
-  it("a null derivation folds as an unreviewed dish (pending) → labels unknown", () => {
+  it("a null derivation reads unknown (an unreviewed dish)", () => {
     const prod = product(null, []);
     const asServed = asServedDiet(line(prod));
     expect(asServed.vegan).toBe("unknown");
     expect(asServed.vegetarian).toBe("unknown");
   });
 
-  it("a stale selection (option id not on the product) contributes an empty overlay, no throw", () => {
-    const prod = product({ origins: ["plant", "dairy"], pending: false }, [
-      item("no-cheese", { removeOrigins: ["dairy"] }),
-    ]);
-    // "ghost" is not among the product's items — it must be ignored, not throw.
-    const asServed = asServedDiet(line(prod, "ghost"));
-    expect(asServed.vegan).toBe("no"); // dairy still present; no overlay applied
-  });
-
-  it("re-applies the staff override over the as-served derivation", () => {
+  it("re-applies the staff override to the dish's own derivation", () => {
     // Base plant-only (would be vegan), but the owner forces vegan:"no" and sets halal.
     const prod = product({ origins: ["plant"], pending: false }, [], {
       vegan: "no",
@@ -178,20 +138,20 @@ describe("asServedDiet", () => {
     expect(asServed.halal).toBe("yes");
   });
 
-  it("a forced-vegan product + an add-meat option reads as-served vegan:'no' (cap, end-to-end)", () => {
-    // Owner forced vegan:"yes" on the product, but the diner adds bacon. The as-served line must NOT
-    // publish vegan:"yes" over a plate that now contains meat — the false positive the cap prevents.
+  it("a forced-vegan dish reads its own vegan:'yes'; a selected add-meat extra does not change it", () => {
+    // The owner forces vegan:"yes" on the DISH. The extra's meat is shown separately (Task 4), so the
+    // dish's own diet stays vegan:"yes" — the fold that used to cap this is gone.
     const prod = product({ origins: ["plant"], pending: false }, [
       item("add-bacon", { addOrigins: ["meat"] }),
     ]);
     prod.dietOverride = { vegan: "yes" };
-    expect(asServedDiet(line(prod)).vegan).toBe("yes"); // no option selected → owner override stands
+    expect(asServedDiet(line(prod)).vegan).toBe("yes");
     const asServed = asServedDiet(line(prod, "add-bacon"));
-    expect(asServed.vegan).toBe("no");
-    expect(asServed.contains).toContain("meat");
+    expect(asServed.vegan).toBe("yes");
+    expect(asServed.contains).toEqual([]);
   });
 
-  it("a line with no optionGroups at all still derives (absent groups fold as no overlays)", () => {
+  it("a line with no optionGroups at all still derives the dish's own diet", () => {
     const prod: TillProduct = {
       id: "dish",
       descriptions: { en: "dish" },
@@ -206,7 +166,32 @@ describe("asServedDiet", () => {
   });
 });
 
-it("canonical extras preserve allergen and dietary effects without the legacy group projection", () => {
+it("shows the dish's own allergens, ignoring a selected extra that used to add one", () => {
+  const prod = product({ origins: ["plant"], pending: false }, []);
+  prod.allergens = { gluten: { presence: "contains" } };
+  prod.modifiers = [
+    {
+      id: "extras",
+      name: { en: "Extras" },
+      type: "extras",
+      available: true,
+      required: false,
+      maxTotalQuantity: null,
+      choices: [
+        {
+          ...item("cheese", {}),
+          addAllergens: { milk: { presence: "contains" } },
+          available: true,
+          preselected: false,
+        },
+      ],
+    },
+  ];
+  delete prod.optionGroups;
+  expect(Object.keys(asServedAllergens(line(prod, "cheese")).allergens).sort()).toEqual(["gluten"]);
+});
+
+it("the dish's own allergens and diet ignore a canonical extras selection", () => {
   const prod = product({ origins: ["plant"], pending: false }, []);
   prod.allergens = {};
   prod.modifiers = [
@@ -229,13 +214,15 @@ it("canonical extras preserve allergen and dietary effects without the legacy gr
   ];
   delete prod.optionGroups;
   const selected = line(prod, "bacon");
-  expect(asServedDiet(selected).vegan).toBe("no");
-  expect(asServedDiet(selected).contains).toEqual(["meat"]);
-  expect(asServedAllergens(selected).allergens).toEqual({ milk: { presence: "contains" } });
+  // The dish is plant-only and reviewed-with-no-allergens; the selected bacon extra's meat and milk are
+  // shown separately (Task 4), never folded into the dish's own figures.
+  expect(asServedDiet(selected).vegan).toBe("yes");
+  expect(asServedDiet(selected).contains).toEqual([]);
+  expect(asServedAllergens(selected).allergens).toEqual({});
 });
 
 it.each(["submitted", "saved"] as const)(
-  "canonical nonprice option %s selections apply their allergen and dietary effects",
+  "the dish's own allergens and diet ignore a canonical nonprice option (%s)",
   (source) => {
     const prod = product({ origins: ["plant", "dairy"], pending: false }, []);
     prod.allergens = { milk: { presence: "contains" } };
@@ -277,11 +264,13 @@ it.each(["submitted", "saved"] as const)(
             ],
           }),
     };
+    // The oat option used to strip milk/dairy from the fold; now the dish keeps its OWN milk allergen and
+    // its OWN {plant,dairy} diet (vegetarian, not vegan), and the option is shown separately (Task 4).
     expect(asServedAllergens(selected)).toEqual({
-      allergens: {},
+      allergens: { milk: { presence: "contains" } },
       pending: false,
-      removed: ["milk"],
+      removed: [],
     });
-    expect(asServedDiet(selected)).toEqual({ vegan: "yes", vegetarian: "yes", contains: [] });
+    expect(asServedDiet(selected)).toEqual({ vegan: "no", vegetarian: "yes", contains: [] });
   },
 );

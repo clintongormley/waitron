@@ -281,12 +281,11 @@ describe("till-basket", () => {
     expect(el.shadowRoot!.querySelectorAll(".option")).toHaveLength(0);
   });
 
-  // ── As-served allergens (modifier↔allergen, Task 7) ──────────────────────────────────────────
-  // The basket computes each line's AS-SERVED allergen profile CLIENT-side — the dish's declared
-  // allergens folded with its selected options' overlays (`deriveAsServedAllergens`, the shared
-  // catalogue leaf) — the same way it already computes display prices without a server round trip.
+  // ── As-served allergens (modifier↔allergen) ──────────────────────────────────────────────────
+  // The basket shows each line's OWN allergen profile CLIENT-side — the dish's declared allergens, with
+  // no modifier contribution. Each extra's own allergens are shown separately (Task 4).
 
-  it("shows the as-served allergen set for a dish with a gluten-removing modifier — gluten gone, no pending note", async () => {
+  it("shows the dish's OWN allergens, ignoring a gluten-removing extra", async () => {
     const glutenFreeBun: TillOptionItem = {
       id: "opt-1",
       name: { es: "Pan sin gluten" },
@@ -323,14 +322,14 @@ describe("till-basket", () => {
 
     const asServed = el.shadowRoot!.querySelector(`[data-test="line-allergens-0"]`);
     expect(asServed).not.toBeNull();
-    // The modifier strips the base gluten → the as-served set names no gluten (the label "Cereales
-    // con gluten"/"Cereals containing gluten" both contain the word, so its absence proves the strip).
-    expect(asServed!.textContent).not.toMatch(/gluten/i);
+    // The extra no longer strips the dish's gluten — the dish shows its OWN gluten (the label "Cereales
+    // con gluten"/"Cereals containing gluten" both contain the word, so its presence proves it stayed).
+    expect(asServed!.textContent).toMatch(/gluten/i);
     // The base was reviewed, so nothing is pending: no "not fully reviewed" note.
     expect(asServed!.textContent).not.toMatch(/review|pendiente/i);
   });
 
-  it("marks the as-served set 'not fully reviewed' when the dish's own allergens are unreviewed (Cautious)", async () => {
+  it("marks the row 'not fully reviewed' for an unreviewed dish, ignoring an add-milk extra (Cautious)", async () => {
     const extraCheese: TillOptionItem = {
       id: "opt-cheese",
       name: { es: "Extra queso" },
@@ -367,8 +366,9 @@ describe("till-basket", () => {
 
     const asServed = el.shadowRoot!.querySelector(`[data-test="line-allergens-0"]`);
     expect(asServed).not.toBeNull();
-    // Unreviewed base → the always-safe ADD still shows (milk), and the waiter sees the note.
-    expect(asServed!.textContent).toMatch(/milk|leche/i);
+    // Unreviewed base → the waiter sees the "not reviewed" note. The extra's milk is NOT folded in — it
+    // is shown separately (Task 4) — so the dish's own row names no milk.
+    expect(asServed!.textContent).not.toMatch(/milk|leche/i);
     expect(asServed!.textContent).toMatch(/review|pendiente/i);
   });
 
@@ -396,10 +396,9 @@ describe("till-basket", () => {
     expect(el.shadowRoot!.querySelector(`[data-test="line-allergens-0"]`)).toBeNull();
   });
 
-  // A STALE selection — an `optionGroupItemId` absent from the product's option groups (`itemById.get`
-  // misses) — must degrade to an EMPTY overlay rather than throwing (`as-served.ts`). The row still
-  // renders from the reviewed base; the phantom option folds as no add/no remove.
-  it("degrades a stale option selection to no overlay without throwing", async () => {
+  // A selection whose option carries an add-milk overlay must NOT change the dish's own allergen row —
+  // the dish shows its OWN reviewed gluten, and the option's milk is shown separately (Task 4).
+  it("shows the dish's own allergens with a selected option, no fold", async () => {
     const realCheese: TillOptionItem = {
       id: "opt-real",
       name: { es: "Extra queso" },
@@ -439,16 +438,17 @@ describe("till-basket", () => {
 
     const asServed = el.shadowRoot!.querySelector(`[data-test="line-allergens-0"]`);
     expect(asServed).not.toBeNull();
-    // Base gluten survives; the phantom option added nothing (no milk) and removed nothing, and no throw.
+    // The dish's own gluten shows; the selected option's milk is NOT folded in (shown separately).
     expect(asServed!.textContent).toMatch(/gluten/i);
     expect(asServed!.textContent).not.toMatch(/milk|leche/i);
     expect(asServed!.textContent).not.toMatch(/review|pendiente/i);
   });
 
-  // ── As-served diet & contains badges (dietary-classification, Task 7) ────────────────────────
-  // The basket computes each line's AS-SERVED DIET profile CLIENT-side (`asServedDiet`, the diet twin
-  // of `asServedAllergens`) and renders vegan/vegetarian/halal/kosher badges + contains chips beside
-  // the allergen chips — with a NEUTRAL "not reviewed" note (never a positive claim) when pending.
+  // ── As-served diet & contains badges (dietary-classification) ────────────────────────────────
+  // The basket shows each line's OWN DIET profile CLIENT-side (`asServedDiet`, the diet twin of
+  // `asServedAllergens`) — the dish's recipe-derived diet, no modifier contribution — and renders
+  // vegan/vegetarian/halal/kosher badges + contains chips beside the allergen chips, with a NEUTRAL
+  // "not reviewed" note (never a positive claim) when pending.
 
   it("shows a vegan badge for a plant-only reviewed dish", async () => {
     const salad: TillProduct = {
@@ -517,7 +517,7 @@ describe("till-basket", () => {
     expect(el.shadowRoot!.querySelector(`[data-test="line-diet-0"]`)).toBeNull();
   });
 
-  it("re-derives the as-served diet from a meat-adding modifier (contains meat)", async () => {
+  it("shows the dish's OWN diet, ignoring a meat-adding extra", async () => {
     const addBacon: TillOptionItem = {
       id: "opt-bacon",
       name: { es: "Beicon" },
@@ -553,9 +553,10 @@ describe("till-basket", () => {
 
     const diet = el.shadowRoot!.querySelector(`[data-test="line-diet-0"]`);
     expect(diet).not.toBeNull();
-    // Adding a meat origin drops vegan and adds the contains-meat chip.
-    expect(diet!.querySelector("[data-diet-contains='meat']")).not.toBeNull();
-    expect(diet!.querySelector("[data-diet='vegan']")).toBeNull();
+    // The dish is plant-only: it keeps its vegan badge and shows no contains-meat chip — the extra's
+    // meat is shown separately (Task 4), never folded into the dish's own diet.
+    expect(diet!.querySelector("[data-diet='vegan']")).not.toBeNull();
+    expect(diet!.querySelector("[data-diet-contains='meat']")).toBeNull();
   });
 
   it("shows halal + kosher badges from a staff override", async () => {
