@@ -82,9 +82,9 @@ brainstorm → spec → plan → PR; fiscal-adjacent ones take owner sign-off at
    run; the box and sale path worked.
 
 2. **Somewhere for things that went wrong to show up** (A5) — designed 2026-09-14; the `till.configure`
-   split it depended on has LANDED (#363). Branch 1, the alerts framework and recorded incidents, is
-   BUILT on `feat/dashboard-alerts-events` and awaiting merge: it shows recorded incidents such as a
-   rejected filing or a payment drift in the dashboard's bell and Alerts screen. Branch 2, the ongoing
+   split it depended on has LANDED (#363). Branch 1, the alerts framework and recorded incidents, has
+   LANDED (#368): it shows recorded incidents such as a rejected filing or a payment drift in the
+   dashboard's bell and Alerts screen. Branch 2, the ongoing
    checks, is next; until it lands, a stalled print agent and a failed or stale backup stay
    invisible. Items that wait on this surface point back to A5 (A6's low reader battery, B2's "backups
    off or stale" reminder).
@@ -904,8 +904,8 @@ one bell, panel and Alerts screen for recorded incidents and live checks (backup
 printing, reader battery). Build order: (0) split `till.configure` into permissions named for what
 they guard — **LANDED #363** (2026-09-14), adds `layout.configure` / `venue.configure` /
 `system.manage` with no access change, and the alerts work uses `system.manage` for backup alerts; (1)
-the alerts framework and recorded incidents — **BUILT** on `feat/dashboard-alerts-events`
-(2026-09-14), awaiting merge: the bell, its panel, the Alerts screen with Open and Handled tabs, the
+the alerts framework and recorded incidents — **LANDED #368**
+(2026-09-15): the bell, its panel, the Alerts screen with Open and Handled tabs, the
 pop-up for new alerts, and wording for every recorded incident code; (2) the ongoing checks — NEXT.
 The questions below are answered there; the notes stay as the origin of the item.
 
@@ -929,9 +929,9 @@ What branch 1 surfaced, each checked by a whole-repo grep on 2026-09-14:
 
 Two halves, one branch each (owner decision 2026-09-12).
 
-- **A reader for `incidents`.** (Branch 1, built and awaiting merge, adds one: `listOpenIncidents`
-  and `listHandledIncidents`, read by `apps/server/src/alerts.ts`. What follows describes `main`
-  without it.)
+- **A reader for `incidents`.** (Branch 1, LANDED #368, added one: `listOpenIncidents` and
+  `listHandledIncidents`, read by `apps/server/src/alerts.ts`. What follows describes `main` before
+  it.)
   `openIncidents` is the only read and nothing calls it, while the
   fiscal drain (AEAT rejections), the payments reconciler (drift), the Stripe device provider and the
   card provider pool all write. Design questions: its own screen or part of diagnostics; who may see
@@ -1841,8 +1841,8 @@ and a classification entry — never an enum, CLAUDE.md §2); names (built-ins a
 
 ### Incidents are written by several things and displayed by nothing (A5)
 
-_2026-09-14: branch 1 of the dashboard alerts, built on `feat/dashboard-alerts-events` and awaiting
-merge, adds the reader this paragraph asks for; the paragraph describes `main` without it._
+_2026-09-15: branch 1 of the dashboard alerts LANDED (#368) and added the reader this paragraph asks
+for; the paragraph describes `main` before it._
 
 `openIncidents` (`packages/core/src/incidents.ts`) is the only function that reads the `incidents`
 table, and nothing calls it — a whole-repo search outside tests finds only its definition and the
