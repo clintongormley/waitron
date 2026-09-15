@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  awaitingCertAlertSource,
   backupAlertSource,
   type BackupOutcomeHolder,
   recordBackupOutcome,
@@ -65,5 +66,20 @@ describe("backupAlertSource", () => {
     recordBackupOutcome(outcomes, "local", true, NOW.toISOString());
     alerts = await src(status, outcomes).read(ctx);
     expect(alerts).toEqual([]);
+  });
+});
+
+describe("awaitingCertAlertSource", () => {
+  it("is silent while the certificate is present", async () => {
+    expect(await awaitingCertAlertSource({ current: false }).read(ctx)).toEqual([]);
+  });
+
+  it("raises fiscal.awaiting_certificate while waiting", async () => {
+    const [a] = await awaitingCertAlertSource({ current: true }).read(ctx);
+    expect(a).toMatchObject({
+      key: "fiscal.awaiting_certificate",
+      code: "fiscal.awaiting_certificate",
+      severity: "error",
+    });
   });
 });
