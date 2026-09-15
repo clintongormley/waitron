@@ -569,6 +569,41 @@ What it left open:
   defect. **Next action:** add a polite live region to the choices table naming the moved choice and
   its new position, and cover it with a test that reads the region's text after a key press.
 
+**Modifiers screen rebuilt — LANDED #370 (2026-09-15).** The `/manage/modifiers` page now uses the
+same shape as the rebuilt Categories screen: one full-width search box with a **Type** filter, a
+table that remembers your last sort and filter for the browser tab and first sorts by name A–Z, and
+an **Add modifier** button in the header instead of a round plus. Clicking a modifier's name opens a
+read-only details panel with **Edit** and **Close**, showing allergen and dietary information only
+for the choices that actually set it. The whole-modifier **Available** switch is gone for Text,
+Extras and Options — those are turned on or off per choice, or by detaching the modifier from the
+product — and only **Yes/no** keeps a modifier-wide switch; to match that, availability is now read
+consistently so a stored, disabled Extras/Options modifier can no longer block a sale. Deleting a
+modifier now shows the products and menu items it affects, then detaches it from them and deletes it,
+refusing only while an open order still uses it — the Categories delete flow. Migration `0012` makes
+that possible by flipping two menu foreign keys (`menu_item_option_groups.group_fk` and
+`menu_item_options.option_fk`) to cascade; a real-Postgres test proves both flips were needed because
+Postgres checks the second immediately. In the choice editor, allergens and dietary preferences are
+now picked with the shared dashboard multi-select (the new `allergen-dietary-picker` widget), and the
+"contains" vs "may contain" selector and the "reviewed" toggle are removed **for modifier choices**: a
+choice that adds an allergen records it as *contains*, and a choice with no dietary labels chosen
+simply has no dietary effect. Nothing on the till or in the product editor changes beyond what the
+shared shape requires.
+[Design](superpowers/specs/2026-09-14-modifiers-overhaul-design.md),
+[plan](superpowers/plans/2026-09-14-modifiers-overhaul.md).
+
+What it left open:
+
+- **The read-only details panel is built inline in the screen (~130 lines).** Every other modal in
+  this area is its own widget, so this is the odd one out. **Next action:** extract it into a
+  `dashboard-modifier-details` widget, the way choice editing became `dashboard-choice-form`.
+- **Removing "contains / may contain" and the "reviewed" toggle stopped at modifier choices.** This
+  branch built the shared `allergen-dietary-picker` widget and adopted it for choices only. Products,
+  ingredients and the till still carry the old contains/may-contain distinction and the reviewed
+  toggle. **Next action:** a separate change adopts the same widget there and decides what the removed
+  distinction means for a product's own claims and for what the till withholds — it is not a
+  mechanical copy, because a product declaring "may contain" is a real statement in a way a modifier
+  choice's was not.
+
 ### A1. Checking a fiscal record before it is written — LANDED #331 (2026-09-12)
 
 `packages/verifactu/src/validate.ts` holds AEAT's rules and no production file called it, confirmed by
