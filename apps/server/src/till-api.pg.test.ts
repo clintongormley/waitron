@@ -188,14 +188,13 @@ async function setupVenue(): Promise<{
     const bebidas = await createCategory(tx, cfg.tenantId, { name: { [LOCALE]: "Bebidas" } });
     const seededUnits = await tx.execute<{ id: string; seed_key: string }>(sql`
       select id, seed_key from units
-      where tenant_id = ${cfg.tenantId} and seed_key in ('each', 'kg')`);
-    const unitId = (seedKey: "each" | "kg") =>
-      seededUnits.rows.find((unit) => unit.seed_key === seedKey)!.id;
+      where tenant_id = ${cfg.tenantId} and seed_key = 'kg'`);
+    const kgId = seededUnits.rows.find((unit) => unit.seed_key === "kg")!.id;
     const jamon = await createProduct(tx, cfg.tenantId, {
       catalogueId: cat.id,
       categoryId: comida.id,
       descriptions: { es: "Jamón cortado" },
-      unitId: unitId("kg"),
+      unitId: kgId,
       unitPrice: "24.90",
       vatClass: "reduced",
     });
@@ -203,7 +202,7 @@ async function setupVenue(): Promise<{
       catalogueId: cat.id,
       categoryId: bebidas.id,
       descriptions: { es: "Agua mineral" },
-      unitId: unitId("each"),
+      unitId: null, // Each (no unit) — the seeded "each" unit no longer exists.
       unitPrice: "1.50",
       vatClass: "general",
     });
