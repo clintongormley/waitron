@@ -14,17 +14,14 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-spinner.js";
 import "../widgets/modifier-form.js";
-import type {
-  DashboardApi,
-  Modifier,
-  ModifierChoice,
-  ModifierDependants,
-  ModifierInput,
-} from "../api/client.js";
+import type { DashboardApi, Modifier, ModifierDependants, ModifierInput } from "../api/client.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import { currentLocale, t } from "../i18n/t.js";
-import { allergenName, vatClassName } from "../i18n/domain.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
+
+/** A product or menu item that uses a modifier, as `modifierDependants` returns it. Both the
+ * row-click usage modal and the delete confirmation list these. */
+type Dependant = { id: string; name: Record<string, string> };
 
 @customElement("dashboard-modifiers-screen")
 export class ModifiersScreen extends LitElement {
@@ -65,8 +62,12 @@ export class ModifiersScreen extends LitElement {
   /** The preview fetch failed. Distinct from `dependants === null` (still loading) and from a
    * loaded object whose lists are empty and orders is 0 (genuinely nothing depends on this). */
   @state() private dependantsError = false;
-  // The modifier whose read-only details modal is open, or null when it is closed.
-  @state() private detailing: Modifier | null = null;
+  // The modifier whose "products that use this" modal is open, or null when it is closed.
+  @state() private viewing: Modifier | null = null;
+  @state() private usage: ModifierDependants | null = null;
+  /** The usage fetch failed. Distinct from `usage === null` (still loading) and from a loaded
+   * object whose lists are empty (nothing uses this modifier yet). */
+  @state() private usageError = false;
   readonly #queries = new DashboardQueries(
     this,
     () => this.api,
@@ -111,8 +112,31 @@ export class ModifiersScreen extends LitElement {
     this.fieldErrors = {};
     this.open = true;
   }
-  #openDetails(modifier: Modifier): void {
-    this.detailing = modifier;
+  #viewGeneration = 0;
+  #openProducts(modifier: Modifier): void {
+    this.usage = null;
+    this.usageError = false;
+    this.viewing = modifier;
+    const generation = ++this.#viewGeneration;
+    void this.#loadUsage(modifier.id, generation);
+  }
+  #closeProducts(): void {
+    this.viewing = null;
+    this.usage = null;
+    this.usageError = false;
+    this.#viewGeneration++;
+  }
+  /** Feeds the usage modal opened from a row click. `generation` guards a reopened modal against a
+   * stale response the same way `#loadDependants` does: only a response whose generation still
+   * matches the current open is applied. A failed fetch gets its own state rather than an empty
+   * stand-in, which would read as "nothing uses this". */
+  async #loadUsage(id: string, generation: number): Promise<void> {
+    try {
+      const usage = await this.api.getModifierDependants(id);
+      if (generation === this.#viewGeneration) this.usage = usage;
+    } catch {
+      if (generation === this.#viewGeneration) this.usageError = true;
+    }
   }
   #deleteGeneration = 0;
   #openDelete(modifier: Modifier): void {
@@ -212,11 +236,73 @@ export class ModifiersScreen extends LitElement {
   #name(modifier: Modifier): string {
     return resolveEnabledContentText(modifier.name, currentLocale(), currentContentLanguages());
   }
-  #choiceName(choice: ModifierChoice): string {
-    return resolveEnabledContentText(choice.name, currentLocale(), currentContentLanguages());
-  }
-  #depName(entry: { name: Record<string, string> }): string {
+  #depName(entry: Dependant): string {
     return resolveEnabledContentText(entry.name, currentLocale(), currentContentLanguages());
+  }
+  /** The single Name column behind every dependant table (the usage modal and the delete preview),
+   * searching and sorting on the translated name so a product is found by what it is called. */
+  #dependantColumns(): DataTableColumn<Dependant>[] {
+    return [
+      {
+        key: "name",
+        label: t("modifiers.name"),
+        cell: (entry) => this.#depName(entry),
+        searchValue: (entry) => this.#depName(entry),
+        sortValue: (entry) => this.#depName(entry),
+      },
+    ];
+  }
+  /** A read-only table of the products or menu items that use a modifier — shared by the usage
+   * modal (row click) and the delete confirmation's cascade preview, so both match the categories
+   * screen's product tables. */
+  #dependantsTable(
+    testId: string,
+    label: string,
+    viewKey: string,
+    emptyMessage: string,
+    rows: Dependant[],
+  ) {
+    return html`<wt-data-table
+      data-test=${testId}
+      aria-label=${label}
+      searchable
+      searchLabel=${t("modifiers.search_products")}
+      noMatchesMessage=${t("modifiers.products_no_matches")}
+      viewKey=${viewKey}
+      .rows=${rows}
+      .columns=${this.#dependantColumns()}
+      .rowKey=${(entry: Dependant) => entry.id}
+      .emptyMessage=${emptyMessage}
+    ></wt-data-table>`;
+  }
+  /** The usage modal's body: a spinner until `#loadUsage` resolves, then the products that use the
+   * modifier and — when there are any — the menu items too. A failed fetch says so instead, because
+   * an empty products table would read as "nothing uses this". */
+  #renderUsage() {
+    if (this.usageError)
+      return html`<p class="error" data-test="usage-error" role="alert">
+        ${t("modifiers.usage_error")}
+      </p>`;
+    const usage = this.usage;
+    if (!usage) return html`<wt-spinner></wt-spinner>`;
+    return html`${this.#dependantsTable(
+      "modifier-products",
+      t("modifiers.products_modal"),
+      "waitron.modifiers.usage.products.table",
+      t("modifiers.no_products"),
+      usage.products,
+    )}${
+      usage.menus.length > 0
+        ? html`<p id="usage-menus-label">${t("modifiers.menus")}</p>
+            ${this.#dependantsTable(
+              "modifier-usage-menus",
+              t("modifiers.menus"),
+              "waitron.modifiers.usage.menus.table",
+              t("modifiers.no_menus"),
+              usage.menus,
+            )}`
+        : nothing
+    }`;
   }
   /** The single red warning at the top of the delete confirmation: one paragraph naming every
    * cascade consequence, space-joined from the sentences that apply. Only called when there IS
@@ -238,7 +324,7 @@ export class ModifiersScreen extends LitElement {
     return parts.join(" ");
   }
   /** The delete confirmation's preview: a spinner until `#loadDependants` resolves, then the red
-   * warning naming every cascade consequence above the affected-products and affected-menus lists
+   * warning naming every cascade consequence above the affected-products and affected-menus tables
    * (each shown only when non-empty), and — when an open order still uses the modifier — a block
    * saying why the delete is refused. With nothing depending on the modifier there is no warning,
    * just the buttons. A failed fetch says so instead, because silence here would read as "nothing
@@ -259,17 +345,23 @@ export class ModifiersScreen extends LitElement {
         : nothing
     }${
       dependants.products.length > 0
-        ? html`<p id="affected-products-label">${t("modifiers.affected_products")}</p>
-            <ul data-test="modifier-delete-products" aria-labelledby="affected-products-label">
-              ${dependants.products.map((entry) => html`<li>${this.#depName(entry)}</li>`)}
-            </ul>`
+        ? this.#dependantsTable(
+            "modifier-delete-products",
+            t("modifiers.affected_products"),
+            "waitron.modifiers.delete.products.table",
+            t("modifiers.no_products"),
+            dependants.products,
+          )
         : nothing
     }${
       dependants.menus.length > 0
-        ? html`<p id="affected-menus-label">${t("modifiers.affected_menus")}</p>
-            <ul data-test="modifier-delete-menus" aria-labelledby="affected-menus-label">
-              ${dependants.menus.map((entry) => html`<li>${this.#depName(entry)}</li>`)}
-            </ul>`
+        ? this.#dependantsTable(
+            "modifier-delete-menus",
+            t("modifiers.affected_menus"),
+            "waitron.modifiers.delete.menus.table",
+            t("modifiers.no_menus"),
+            dependants.menus,
+          )
         : nothing
     }${
       dependants.orders > 0
@@ -278,119 +370,6 @@ export class ModifiersScreen extends LitElement {
           </p>`
         : nothing
     }`;
-  }
-  // The allergen and dietary effect lines for one choice, each shown only when the choice sets it —
-  // the owner wants this information present only when a choice actually carries it.
-  #choiceSummary(choice: ModifierChoice) {
-    const adds = Object.keys(choice.addAllergens ?? {});
-    const diet = choice.suitableFor ?? [];
-    return html`${
-      adds.length
-        ? html`<div>
-            ${t("modifiers.adds_allergens")}: ${adds.map((code) => allergenName(code)).join(", ")}
-          </div>`
-        : nothing
-    }${
-      diet.length
-        ? html`<div>
-            ${t("modifiers.dietary_removed")}:
-            ${diet.map((label) => t(`editor.diet.${label}` as "editor.diet.vegan")).join(", ")}
-          </div>`
-        : nothing
-    }`;
-  }
-  // The read-only names of a modifier across the enabled content languages: the resolved default name
-  // as a heading, then any other enabled language that carries its own name.
-  #detailsNames(modifier: Modifier) {
-    const { defaultLanguage, languages } = currentContentLanguages();
-    const others = languages.filter(
-      (language) => language !== defaultLanguage && modifier.name[language],
-    );
-    return html`<p><strong>${this.#name(modifier)}</strong></p>
-      ${others.map(
-        (language) => html`<p>${language.toUpperCase()}: ${modifier.name[language]}</p>`,
-      )}`;
-  }
-  #choicesTable(modifier: Modifier & { type: "extras" | "options" }) {
-    const extras = modifier.type === "extras";
-    return html`<table>
-      <thead>
-        <tr>
-          <th scope="col">${t("modifiers.name")}</th>
-          ${
-            extras
-              ? html`<th scope="col">${t("modifiers.price")}</th>
-                  <th scope="col">${t("modifiers.vat")}</th>`
-              : nothing
-          }
-          <th scope="col">${t("modifiers.available")}</th>
-          <th scope="col">${extras ? t("modifiers.preselected") : t("modifiers.default")}</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${modifier.choices.map((choice) => {
-          const preset = extras
-            ? "preselected" in choice && choice.preselected
-            : modifier.defaultChoiceId === choice.id;
-          return html`<tr data-test=${`choice-row-${choice.id}`}>
-            <td>
-              <div>${this.#choiceName(choice)}</div>
-              <div data-test=${`summary-${choice.id}`}>${this.#choiceSummary(choice)}</div>
-            </td>
-            ${
-              extras
-                ? html`<td>${"priceDelta" in choice ? choice.priceDelta : ""}</td>
-                    <td>
-                      ${
-                        "vatClass" in choice && choice.vatClass
-                          ? vatClassName(choice.vatClass)
-                          : t("modifiers.inherit_vat")
-                      }
-                    </td>`
-                : nothing
-            }
-            <td>${choice.available ? t("modifiers.available") : t("modifiers.unavailable")}</td>
-            <td>${preset ? t("modifiers.yes") : nothing}</td>
-          </tr>`;
-        })}
-      </tbody>
-    </table>`;
-  }
-  #detailsBody(modifier: Modifier) {
-    return html`${this.#detailsNames(modifier)}
-      <p>${t("modifiers.type")}: ${t(`modifiers.${modifier.type}`)}</p>
-      ${modifier.type === "text" ? html`<p>${t("modifiers.text_help")}</p>` : nothing}
-      ${
-        modifier.type === "extras"
-          ? html`<p>
-                ${t("modifiers.required")}:
-                ${modifier.required ? t("modifiers.yes") : t("modifiers.no")}
-              </p>
-              <p>
-                ${t("modifiers.max_total")}:
-                ${
-                  modifier.maxTotalQuantity === null
-                    ? t("modifiers.unlimited")
-                    : String(modifier.maxTotalQuantity)
-                }
-              </p>
-              ${this.#choicesTable(modifier)}`
-          : nothing
-      }
-      ${
-        modifier.type === "options"
-          ? html`<p>
-                ${t("modifiers.default_choice")}:
-                ${(() => {
-                  const chosen = modifier.choices.find(
-                    (choice) => choice.id === modifier.defaultChoiceId,
-                  );
-                  return chosen ? this.#choiceName(chosen) : t("modifiers.no_default");
-                })()}
-              </p>
-              ${this.#choicesTable(modifier)}`
-          : nothing
-      }`;
   }
   override render() {
     const columns: DataTableColumn<Modifier>[] = [
@@ -403,7 +382,7 @@ export class ModifiersScreen extends LitElement {
           html`<wt-button
             variant="ghost"
             data-test=${`open-${modifier.id}`}
-            @click=${() => this.#openDetails(modifier)}
+            @click=${() => this.#openProducts(modifier)}
             >${this.#name(modifier)}</wt-button
           >`,
       },
@@ -537,31 +516,22 @@ export class ModifiersScreen extends LitElement {
         ></wt-modal
       >
       <wt-modal
-        data-test="details-modal"
-        .open=${this.detailing !== null}
-        heading=${t("modifiers.details")}
-        @wt-close=${() => {
-          this.detailing = null;
+        data-test="products-modal"
+        .open=${this.viewing !== null}
+        heading=${
+          this.viewing ? `${this.#name(this.viewing)} · ${t("modifiers.products_modal")}` : ""
+        }
+        @wt-close=${(event: Event) => {
+          event.stopPropagation();
+          this.#closeProducts();
         }}
-        >${this.detailing ? this.#detailsBody(this.detailing) : nothing}<wt-form-actions
-          slot="footer"
+        >${this.viewing ? this.#renderUsage() : nothing}<wt-form-actions slot="footer"
           ><wt-button
             slot="cancel"
-            data-test="details-close"
+            data-test="close-products"
             variant="secondary"
-            @click=${() => {
-              this.detailing = null;
-            }}
+            @click=${() => this.#closeProducts()}
             >${t("action.close")}</wt-button
-          ><wt-button
-            data-test="details-edit"
-            variant="primary"
-            @click=${() => {
-              const modifier = this.detailing;
-              this.detailing = null;
-              if (modifier) this.#edit(modifier);
-            }}
-            >${t("action.edit")}</wt-button
           ></wt-form-actions
         ></wt-modal
       >`;

@@ -5,7 +5,6 @@ import { ModifiersScreen } from "./modifiers-screen.js";
 import type { DashboardApi, Modifier, ModifierDependants } from "../api/client.js";
 import type { ModifierForm } from "../widgets/modifier-form.js";
 import { t } from "../i18n/t.js";
-import { allergenName } from "../i18n/domain.js";
 import { codeMessage } from "../i18n/codes.js";
 afterEach(cleanupWidgets);
 // The deep-link tests below rewrite the address bar; restore it so later tests read a clean URL.
@@ -94,6 +93,42 @@ it("has no modifier-level Available column", async () => {
     columns: { key: string }[];
   };
   expect(table.columns.map((c) => c.key)).toEqual(["name", "type", "choices", "actions"]);
+});
+it("shows the number of choices for an extras or options modifier", async () => {
+  const extras: Modifier = {
+    id: "x",
+    type: "extras",
+    name: { es: "Toppings" },
+    available: true,
+    required: false,
+    maxTotalQuantity: null,
+    choices: [
+      {
+        id: "c1",
+        name: { es: "Queso" },
+        available: true,
+        priceDelta: "1.50",
+        maxQuantity: 1,
+        preselected: false,
+        vatClass: null,
+        suitableFor: [],
+      },
+      {
+        id: "c2",
+        name: { es: "Jamón" },
+        available: true,
+        priceDelta: "2.00",
+        maxQuantity: 1,
+        preselected: false,
+        vatClass: null,
+        suitableFor: [],
+      },
+    ],
+  };
+  const el = await mount(api({ listModifiers: vi.fn().mockResolvedValue([extras]) }));
+  const table = el.shadowRoot!.querySelector("wt-data-table")!;
+  await table.updateComplete;
+  await vi.waitFor(() => expect(table.shadowRoot!.textContent).toContain("2"));
 });
 it("keeps failed saves in the form and closes after successful writes even if reload fails", async () => {
   const client = api({
@@ -210,12 +245,12 @@ it("lists the affected products and menu items and enables delete", async () => 
   expect(warning.textContent).toContain(
     t("modifiers.delete_warning_menus").replace("{count}", "1"),
   );
-  expect(dialog.querySelector('[data-test="modifier-delete-products"]')!.textContent).toContain(
-    "Café",
-  );
-  expect(dialog.querySelector('[data-test="modifier-delete-menus"]')!.textContent).toContain(
-    "Desayuno",
-  );
+  // The affected products and menu items now render in a wt-data-table (matching the categories
+  // delete dialog), so their names live in the table's shadow root, not the host's light DOM.
+  const deleteProducts = dialog.querySelector('[data-test="modifier-delete-products"]')!;
+  const deleteMenus = dialog.querySelector('[data-test="modifier-delete-menus"]')!;
+  await vi.waitFor(() => expect(deleteProducts.shadowRoot!.textContent).toContain("Café"));
+  await vi.waitFor(() => expect(deleteMenus.shadowRoot!.textContent).toContain("Desayuno"));
   expect(dialog.querySelector('[data-test="orders-block"]')).toBeNull();
   expect(confirmDelete(el).disabled).toBe(false);
 });
@@ -459,75 +494,84 @@ it("lists a field's server error once in the summary and shows it beside that fi
     (form.shadowRoot!.querySelector('[name="name-es"]') as unknown as { error: string }).error,
   ).toBe(message);
 });
-const extrasModifier: Modifier = {
-  id: "x",
-  type: "extras",
-  name: { es: "Toppings" },
-  available: true,
-  required: false,
-  maxTotalQuantity: null,
-  choices: [
-    {
-      id: "c1",
-      name: { es: "Cheese" },
-      available: true,
-      priceDelta: "1.50",
-      maxQuantity: 1,
-      preselected: false,
-      vatClass: null,
-      addAllergens: { gluten: { presence: "contains" } },
-      suitableFor: ["vegan"],
-    },
-    {
-      id: "c2",
-      name: { es: "Ham" },
-      available: true,
-      priceDelta: "2.00",
-      maxQuantity: 1,
-      preselected: false,
-      vatClass: null,
-      suitableFor: [],
-    },
-  ],
-};
-async function openDetails(el: ModifiersScreen, modifier: Modifier) {
+// Clicking a modifier's name opens a read-only "products that use this modifier" modal, listing the
+// products and menu items the shared `modifierDependants` query returns — mirroring the categories
+// screen's products modal. These replace the old read-only details modal (removed with its
+// choice-summary panel).
+async function openProducts(el: ModifiersScreen, modifier: Modifier) {
   const table = el.shadowRoot!.querySelector("wt-data-table")!;
   await table.updateComplete;
   table.shadowRoot!.querySelector<HTMLElement>(`[data-test="open-${modifier.id}"]`)!.click();
   await el.updateComplete;
-  return el.shadowRoot!.querySelector('[data-test="details-modal"]')! as unknown as HTMLElement & {
+  return el.shadowRoot!.querySelector(
+    'wt-modal[data-test="products-modal"]',
+  )! as unknown as HTMLElement & {
     open: boolean;
   };
 }
-it("opens a modifier's details from its name and hands off to Edit", async () => {
-  const el = await mount(api({ listModifiers: vi.fn().mockResolvedValue([extrasModifier]) }));
-  const modal = await openDetails(el, extrasModifier);
+it("opens a products modal when a modifier row is clicked", async () => {
+  const client = api({
+    getModifierDependants: vi.fn().mockResolvedValue({
+      products: [{ id: "p1", name: { es: "Hamburguesa" } }],
+      menus: [],
+      orders: 0,
+    }),
+  });
+  const el = await mount(client);
+  const modal = await openProducts(el, modifier);
   expect(modal.open).toBe(true);
-  expect(modal.textContent).toContain("Cheese");
-  el.shadowRoot!.querySelector<HTMLElement>('[data-test="details-edit"]')!.click();
+  expect(client.getModifierDependants).toHaveBeenCalledWith("m");
+  const products = el.shadowRoot!.querySelector('[data-test="modifier-products"]')!;
+  expect(products).not.toBeNull();
+  await vi.waitFor(() => expect(products.shadowRoot!.textContent).toContain("Hamburguesa"));
+});
+it("lists the menu items using a modifier in the products modal", async () => {
+  const client = api({
+    getModifierDependants: vi.fn().mockResolvedValue({
+      products: [{ id: "p1", name: { es: "Hamburguesa" } }],
+      menus: [{ id: "mn1", name: { es: "Menú del día" } }],
+      orders: 0,
+    }),
+  });
+  const el = await mount(client);
+  await openProducts(el, modifier);
+  const menus = el.shadowRoot!.querySelector('[data-test="modifier-usage-menus"]')!;
+  await vi.waitFor(() => expect(menus.shadowRoot!.textContent).toContain("Menú del día"));
+});
+it("shows a spinner then Close in the products modal, and closes it", async () => {
+  let resolve!: (value: ModifierDependants) => void;
+  const client = api({
+    getModifierDependants: vi
+      .fn()
+      .mockReturnValue(new Promise<ModifierDependants>((r) => (resolve = r))),
+  });
+  const el = await mount(client);
+  const modal = await openProducts(el, modifier);
+  expect(modal.querySelector("wt-spinner")).not.toBeNull();
+  resolve({ products: [], menus: [], orders: 0 });
+  await vi.waitFor(() => expect(modal.querySelector("wt-spinner")).toBeNull());
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="close-products"]')!.click();
   await el.updateComplete;
   expect(modal.open).toBe(false);
-  expect(el.shadowRoot!.querySelector<ModifierForm>("dashboard-modifier-form")!.open).toBe(true);
 });
-it("dismisses the details modal with Close", async () => {
-  const el = await mount(api({ listModifiers: vi.fn().mockResolvedValue([extrasModifier]) }));
-  const modal = await openDetails(el, extrasModifier);
+it("says the products modal preview failed", async () => {
+  const client = api({
+    getModifierDependants: vi.fn().mockRejectedValue(new Error("offline")),
+  });
+  const el = await mount(client);
+  const modal = await openProducts(el, modifier);
+  await vi.waitFor(() => expect(modal.querySelector('[data-test="usage-error"]')).not.toBeNull());
+  expect(modal.querySelector('[data-test="usage-error"]')!.textContent).toContain(
+    t("modifiers.usage_error"),
+  );
+});
+it("dismisses the products modal when it closes itself", async () => {
+  const el = await mount();
+  const modal = await openProducts(el, modifier);
   expect(modal.open).toBe(true);
-  el.shadowRoot!.querySelector<HTMLElement>('[data-test="details-close"]')!.click();
+  modal.dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
   await el.updateComplete;
   expect(modal.open).toBe(false);
-});
-it("shows a choice's allergen and dietary summary only when present", async () => {
-  const el = await mount(api({ listModifiers: vi.fn().mockResolvedValue([extrasModifier]) }));
-  await openDetails(el, extrasModifier);
-  const first = el.shadowRoot!.querySelector('[data-test="summary-c1"]')!;
-  expect(first.textContent).toContain(t("modifiers.adds_allergens"));
-  expect(first.textContent).toContain(allergenName("gluten"));
-  expect(first.textContent).toContain(t("modifiers.dietary_removed"));
-  expect(first.textContent).toContain(t("editor.diet.vegan"));
-  const second = el.shadowRoot!.querySelector('[data-test="summary-c2"]')!;
-  expect(second.textContent!.trim()).toBe("");
-  expect(second.querySelector("div")).toBeNull();
 });
 // A `?modifier=<id>` deep link opens that modifier's editor once, then clears the param so a refresh
 // does not reopen it — mirroring the categories screen's `?category=<id>` behaviour.
@@ -544,12 +588,4 @@ it("ignores an unknown ?modifier=<id> deep link without opening the editor", asy
   const el = await mount();
   await el.updateComplete;
   expect(el.shadowRoot!.querySelector<ModifierForm>("dashboard-modifier-form")!.open).toBe(false);
-});
-it("clears the details modal when the dialog dismisses itself", async () => {
-  const el = await mount(api({ listModifiers: vi.fn().mockResolvedValue([extrasModifier]) }));
-  const modal = await openDetails(el, extrasModifier);
-  expect(modal.open).toBe(true);
-  modal.dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
-  await el.updateComplete;
-  expect(modal.open).toBe(false);
 });
