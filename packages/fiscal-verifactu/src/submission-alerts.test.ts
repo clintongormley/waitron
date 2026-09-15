@@ -11,25 +11,28 @@ import { fiscalSubmissionSource } from "./submission-alerts.js";
 // `registros_facturacion` and `envios`) rather than the fixture owner's wider privileges.
 const pg = usePgliteDb({ migrations: TEST_MIGRATIONS });
 
+// `AlertSource.read` (`@waitron/module`) still takes a tenant id and this source ignores it; it goes
+// when `apps/server`, its last supplier, is converted.
+const INERT_TENANT_ID = "00000000-0000-4000-8000-000000000001";
+
 const NOW = new Date("2026-09-15T12:00:00Z");
 const hoursAgo = (h: number): Date => new Date(NOW.getTime() - h * 3_600_000);
 
 interface Identity {
-  tenantId: string;
   tillId: string;
   nodeId: string;
   sifId: string;
   nif: string;
 }
 
-// Each test mints its own tenant/SIF identity; the suite empties every data table after each test,
+// Each test mints its own node/SIF identity; the suite empties every data table after each test,
 // so one test's rows never reach another's read.
 async function seedIdentity(db: Database): Promise<Identity> {
-  const { tenantId, tillId, nodeId } = await seedTenantWithSif(db);
+  const { tillId, nodeId } = await seedTenantWithSif(db);
   const { rows } = await db.execute<{ id: string; nif: string }>(sql`
-    select id, nif from registro_sif where tenant_id = ${tenantId} and node_id = ${nodeId}
+    select id, nif from registro_sif where node_id = ${nodeId}
   `);
-  return { tenantId, tillId, nodeId, sifId: rows[0]!.id, nif: rows[0]!.nif };
+  return { tillId, nodeId, sifId: rows[0]!.id, nif: rows[0]!.nif };
 }
 
 // Distinct per row: `secuencia`, `num_serie_factura` and the sale's `invoice_number` are all unique
@@ -54,11 +57,11 @@ async function seedRegistro(db: Database, id: Identity, genTime: Date): Promise<
   const huella = String(s).padStart(64, "0");
   const registro = await db.execute<{ id: string }>(sql`
     insert into registros_facturacion (
-      tenant_id, till_id, node_id, sif_id, sale_id, secuencia, tipo_registro,
+      till_id, node_id, sif_id, sale_id, secuencia, tipo_registro,
       id_emisor_factura, num_serie_factura, fecha_expedicion_factura, nombre_razon_emisor,
       primer_registro, sistema_informatico,
       fecha_hora_huso_gen_registro, offset_minutos, tipo_huella, huella
-    ) values (${id.tenantId}, ${id.tillId}, ${id.nodeId}, ${id.sifId}, ${sale.rows[0]!.id}, ${s}, 'alta',
+    ) values (${id.tillId}, ${id.nodeId}, ${id.sifId}, ${sale.rows[0]!.id}, ${s}, 'alta',
       ${id.nif}, ${"W" + String(s) + "/1"}, '2026-07-20', 'Waitron SL',
       true, '{}'::jsonb,
       ${genTime.toISOString()}, 60, '01', ${huella}
@@ -77,8 +80,8 @@ async function seedWaiting(
 ): Promise<void> {
   const registroId = await seedRegistro(db, id, genTime);
   await db.execute(sql`
-    insert into envios (registro_id, tenant_id, estado)
-    values (${registroId}, ${id.tenantId}, ${estado})
+    insert into envios (registro_id, estado)
+    values (${registroId}, ${estado})
   `);
 }
 
@@ -89,7 +92,7 @@ describe("fiscalSubmissionSource", () => {
     await withTransaction(pg.db, async (tx) => {
       await asAppUser(tx);
       expect(
-        await fiscalSubmissionSource.read({ tx, tenantId: id.tenantId as never, now: NOW }),
+        await fiscalSubmissionSource.read({ tx, tenantId: INERT_TENANT_ID as never, now: NOW }),
       ).toEqual([]);
     });
   });
@@ -101,7 +104,7 @@ describe("fiscalSubmissionSource", () => {
       await asAppUser(tx);
       const [a] = await fiscalSubmissionSource.read({
         tx,
-        tenantId: id.tenantId as never,
+        tenantId: INERT_TENANT_ID as never,
         now: NOW,
       });
       expect(a).toMatchObject({
@@ -117,7 +120,7 @@ describe("fiscalSubmissionSource", () => {
       await asAppUser(tx);
       const [a] = await fiscalSubmissionSource.read({
         tx,
-        tenantId: id.tenantId as never,
+        tenantId: INERT_TENANT_ID as never,
         now: NOW,
       });
       expect(a).toMatchObject({
@@ -136,7 +139,7 @@ describe("fiscalSubmissionSource", () => {
       await asAppUser(tx);
       const alerts = await fiscalSubmissionSource.read({
         tx,
-        tenantId: id.tenantId as never,
+        tenantId: INERT_TENANT_ID as never,
         now: NOW,
       });
       const stopped = alerts.find((a) => a.code === "fiscal.submission_stopped");
@@ -157,7 +160,7 @@ describe("fiscalSubmissionSource", () => {
       await asAppUser(tx);
       const [a] = await fiscalSubmissionSource.read({
         tx,
-        tenantId: warn.tenantId as never,
+        tenantId: INERT_TENANT_ID as never,
         now: NOW,
       });
       expect(a).toMatchObject({
@@ -173,7 +176,7 @@ describe("fiscalSubmissionSource", () => {
       await asAppUser(tx);
       const [a] = await fiscalSubmissionSource.read({
         tx,
-        tenantId: warn.tenantId as never,
+        tenantId: INERT_TENANT_ID as never,
         now: NOW,
       });
       expect(a).toMatchObject({

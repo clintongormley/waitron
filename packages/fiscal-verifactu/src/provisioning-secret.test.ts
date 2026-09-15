@@ -2,7 +2,6 @@ import { randomBytes } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
 import {
   CREDENTIALS_MIGRATIONS,
   getCredential,
@@ -13,9 +12,14 @@ import { hasCode, isAppError } from "@waitron/shared";
 import { sealAeatSecret, validateAeatCert, type AeatCert } from "./provisioning-secret.js";
 
 // PGlite, not real Postgres: this suite exercises the SHAPE validator and the seal ROUND-TRIP (write
-// then read back the three fields), never RLS DENIAL as the deployment role — so the lighter target
-// applies (CLAUDE.md §4). `seedTenant` inserts the FK target row and `withTransaction` sets `app.tenant_id`
-// exactly as production does; the same pattern this package's `aeat-transport.test.ts` seals under.
+// then read back the three fields), never a privilege as the deployment role — so the lighter target
+// applies (CLAUDE.md §4). Nothing here needs a taxpayer row: `tenant_credentials` is keyed by
+// `purpose` alone and references no other table, and `withTransaction` only opens a transaction —
+// it sets no session variable (`packages/db/src/tenancy.test.ts` asserts that). `sealAeatSecret`
+// still TAKES a tenant id because the slot seat it fills does; it reads it nowhere, so the constant
+// below is a placeholder, not a row.
+const tenant = "00000000-0000-4000-8000-000000000001";
+
 const suite = usePgliteDb({
   migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS],
   timeoutMs: 120_000,
@@ -42,7 +46,6 @@ function aeatCert(overrides: Partial<AeatCert> = {}): AeatCert {
 describe("sealAeatSecret", () => {
   it("seals the cert into fiscal.aeat and reads back the three fields intact", async () => {
     const ring = testRing();
-    const tenant = await seedTenant(suite.db);
     const cert = aeatCert({ certKind: "representante" });
 
     await sealAeatSecret({ db: suite.db, ring }, tenant, cert);
@@ -59,7 +62,6 @@ describe("sealAeatSecret", () => {
 
   it("refuses a certKind outside {sello, representante} and seals nothing", async () => {
     const ring = testRing();
-    const tenant = await seedTenant(suite.db);
     // `bogus` is a non-empty string, so `putCredential`'s own `validatePayload` would ACCEPT it —
     // only this module's certKind guard rejects it (the deletion-proof for that guard).
     const cert = aeatCert({ certKind: "bogus" as AeatCert["certKind"] });
@@ -93,7 +95,6 @@ describe("sealAeatSecret", () => {
     { label: "a malformed base64 length", pfxBase64: "QQ" },
   ])("refuses a pfxBase64 that is $label and seals nothing", async ({ pfxBase64 }) => {
     const ring = testRing();
-    const tenant = await seedTenant(suite.db);
     const cert = aeatCert({ pfxBase64 });
 
     const error = await sealAeatSecret({ db: suite.db, ring }, tenant, cert).catch(
@@ -112,7 +113,6 @@ describe("sealAeatSecret", () => {
 
   it("accepts a short, canonically-padded base64 pfxBase64 (the tightened regex does not over-reject)", async () => {
     const ring = testRing();
-    const tenant = await seedTenant(suite.db);
     // "aGVsbG8=" is `Buffer.from("hello").toString("base64")` — a real 5-byte payload whose base64
     // carries a 3-char padded tail (`bG8=`), the branch a length-only check would never reach. The
     // seal must accept it, proving the length/padding-enforcing regex rejects no genuine encoding.
@@ -128,7 +128,6 @@ describe("sealAeatSecret", () => {
 
   it("refuses a non-object raw blob naming aeatCert and seals nothing", async () => {
     const ring = testRing();
-    const tenant = await seedTenant(suite.db);
 
     const error = await sealAeatSecret({ db: suite.db, ring }, tenant, "not-an-object").catch(
       (e: unknown) => e,

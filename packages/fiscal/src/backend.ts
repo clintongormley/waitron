@@ -7,7 +7,7 @@
 // from the file that documents the codes it throws — even though, unlike that file, nothing in
 // backend.ts itself throws (it is types only; ./testing/fake-backend.ts does the throwing).
 import "./errors.js";
-import type { Decimal, NodeId, SaleId, SeriesId, TenantId, TillId } from "@waitron/shared";
+import type { Decimal, NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
 
 /**
@@ -54,7 +54,6 @@ export interface Counterparty {
  * on text that is locale-dependent and snapshotted per venue.
  */
 export interface SaleForFiscalRecord {
-  tenantId: TenantId;
   /** Where the sale rang — an informational snapshot on the immutable fiscal record. Kept beside
    * `nodeId` (node-id rekey, 2026-08-03): the chain/SIF are keyed by node, the till is where it
    * rang. */
@@ -118,18 +117,18 @@ export interface IntegrityReport {
 
 /**
  * The outcome of one `drain(now)` pass. `nextDueAt` is the only field a scheduler needs — when to
- * invoke `drain` again. `null` means nothing pending, but only when `skipped` is ALSO empty: a
- * tenant recorded in `skipped` was abandoned mid-pass with nothing scheduled for it (no gate, no
- * backoff row), so `nextDueAt` is never `null` while `skipped` is non-empty — an implementation
- * must fold in `now` plus its own configured skip-retry interval in that case rather than report
- * `null`, so a host sleeping on this field wakes up again rather than sleeping forever past a
- * tenant's art. 16.4 hour. That interval is the implementation's to choose and name — this package
+ * invoke `drain` again. `null` means nothing pending, but only when `skipped` is ALSO empty: a pass
+ * recorded in `skipped` was abandoned mid-way with nothing scheduled for it (no gate, no backoff
+ * row), so `nextDueAt` is never `null` while `skipped` is non-empty — an implementation must fold
+ * in `now` plus its own configured skip-retry interval in that case rather than report `null`, so a
+ * host sleeping on this field wakes up again rather than sleeping forever past art. 16.4's hour.
+ * That interval is the implementation's to choose and name — this package
  * neither defines nor depends on one. `now` alone is not enough either: a skip is frequently not
  * transient (a certificate nobody has provisioned answers the same way every pass), and a host
  * that wakes on `now` pins its loop at its MIN_TICK floor indefinitely. FOLD, never assign: the
- * reported instant is that interval, or anything EARLIER a successful tenant computed this same
- * pass — never the interval unconditionally — so a broken tenant's retry can never delay a healthy
- * tenant's own earlier gate. Mirrors `TickResult.nextDueAt` in `@waitron/scheduler`
+ * reported instant is that interval, or anything EARLIER the same pass computed — never the
+ * interval unconditionally, so an abandoned batch's retry can never delay an earlier gate the pass
+ * had already computed. Mirrors `TickResult.nextDueAt` in `@waitron/scheduler`
  * in spirit, not exactly: `runDue` (`packages/scheduler/src/run.ts`) folds its own skip time the
  * identical way, but ONLY when `deferred` is zero — a tick with `deferred > 0` reports `now`
  * outright instead, discarding that fold entirely, because capped-but-runnable work takes priority
@@ -141,11 +140,11 @@ export interface IntegrityReport {
 export interface DrainResult {
   nextDueAt: Date | null;
   /**
-   * How many tenants this pass found DUE WORK for and attempted — every tenant the sweep enumerated,
-   * whether it submitted, deferred to a gate, or landed in `skipped`. Zero means a no-work pass: the
-   * drain touched no tenant and therefore read no certificate. The awaiting-fiscal-certificate flag
-   * (`apps/server/src/pass.ts`) keys off this — a no-work pass must not clear it, since a pass that
-   * exercised no cert is no evidence the cert has arrived.
+   * Whether this pass found due work and attempted it — 1 if it did, whether it submitted, deferred
+   * to a gate, or landed in `skipped`; 0 for a no-work pass, which read no certificate. One database
+   * files for one taxpayer, so the only values are 0 and 1; it stays a COUNT because the
+   * awaiting-fiscal-certificate flag (`apps/server/src/pass.ts`) keys off `> 0` — a no-work pass
+   * must not clear it, since a pass that exercised no cert is no evidence the cert has arrived.
    */
   tenantsWithWork: number;
   batchesSent: number;
@@ -154,13 +153,13 @@ export interface DrainResult {
   recordsHalted: number; // records rejected or otherwise stopped
   incidentsRaised: number;
   /**
-   * A tenant this pass abandoned before submitting anything for it — its transport could not be
-   * built, or its sweep threw. Mirrors `TickResult.skipped` in `@waitron/scheduler`, and for the
-   * same reason: a per-tenant failure has no ledger row of its own to carry it, so reporting it
-   * here is the alternative to swallowing it. NEVER silent — a tenant with due fiscal work that
-   * this pass could not submit is an unmet legal obligation.
+   * A pass that abandoned the work it found — its transport could not be built, or its sweep threw.
+   * Mirrors `TickResult.skipped` in `@waitron/scheduler`, and for the same reason: a failure like
+   * this has no ledger row of its own to carry it, so reporting it here is the alternative to
+   * swallowing it. NEVER silent — due fiscal work this pass could not submit is an unmet legal
+   * obligation. At most one entry: one database files for one taxpayer.
    */
-  skipped: { tenantId: TenantId; errorCode: string }[];
+  skipped: { errorCode: string }[];
 }
 
 /**
@@ -244,11 +243,7 @@ export interface FiscalBackend {
    * `backend` field of every `NodeRegistration`/`FiscalRecordRef` it returns carries. */
   readonly id: string;
 
-  registerNode(
-    tx: Transaction,
-    nodeId: NodeId,
-    params: { tenantId: TenantId },
-  ): Promise<NodeRegistration>;
+  registerNode(tx: Transaction, nodeId: NodeId): Promise<NodeRegistration>;
 
   /**
    * Takes a transaction handle. This is a deliberate leak: atomicity between the sale and the
@@ -335,20 +330,19 @@ export interface FiscalBackend {
 
   /**
    * Whatever this backend must check about what it has already recorded, before recording
-   * anything more. `tenantId` is passed explicitly — the caller already holds
-   * it, so the backend need not re-derive it. `nodeId` because the
-   * chain being verified is per-node (node-id rekey, 2026-08-03). The caller records the report and
+   * anything more. `nodeId` because the chain being verified is per-node (node-id rekey,
+   * 2026-08-03). The caller records the report and
    * surfaces it to staff; it must NEVER branch on `ok` to abandon the sale. No fiscal condition
    * blocks a sale (spec §4), and a backend whose regime has nothing to check answers
    * `{ ok: true, checked: 0, issues: [] }`.
    */
-  checkIntegrity(tx: Transaction, tenantId: TenantId, nodeId: NodeId): Promise<IntegrityReport>;
+  checkIntegrity(tx: Transaction, nodeId: NodeId): Promise<IntegrityReport>;
 
   /**
    * How many records this node has not yet had confirmed. The UI reads this, never the module's
-   * own tables. Takes `tenantId` and NO transaction: the unsent-count read happens outside any
-   * sale transaction, so the backend opens its own transaction and receives the tenant id
-   * explicitly. `nodeId` because the chain is per-node (node-id rekey, 2026-08-03).
+   * own tables. Takes NO transaction: the unsent-count read happens outside any sale transaction,
+   * so the backend opens its own. `nodeId` because the chain is per-node (node-id rekey,
+   * 2026-08-03).
    */
-  pendingCount(tenantId: TenantId, nodeId: NodeId): Promise<number>;
+  pendingCount(nodeId: NodeId): Promise<number>;
 }

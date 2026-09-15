@@ -1,12 +1,12 @@
 import { sql } from "drizzle-orm";
 import { check, integer, pgTable, primaryKey, text, timestamp, uuid } from "drizzle-orm/pg-core";
-import { nodes, tenants } from "@waitron/db";
+import { nodes } from "@waitron/db";
 import { registrosFacturacion } from "./registros.js";
 
 /**
- * The chain head — MUTABLE, unlike everything it points at. One row per (tenant, node), row-locked
- * with FOR UPDATE during append (node-id rekey, 2026-08-03: the chain owner moved from till to
- * node — the SIF is the node, #33).
+ * The chain head — MUTABLE, unlike everything it points at. One row per node, row-locked with
+ * FOR UPDATE during append (node-id rekey, 2026-08-03: the chain owner moved from till to node —
+ * the SIF is the node, #33).
  *
  * The predecessor's serie/número/fecha are deliberately NOT denormalised here. Building the
  * four-part Encadenamiento pointer costs one join to `ultimo_registro_id` under a lock we are
@@ -17,9 +17,6 @@ import { registrosFacturacion } from "./registros.js";
 export const cadenas = pgTable(
   "cadenas",
   {
-    tenantId: uuid("tenant_id")
-      .notNull()
-      .references(() => tenants.id),
     // The node that owns this chain (node-id rekey, 2026-08-03: was `till_id`). Plain one-argument
     // FK.
     nodeId: uuid("node_id")
@@ -44,7 +41,7 @@ export const cadenas = pgTable(
   // function's closing bracket itself reported as a separately uncovered line.
   /* v8 ignore start */
   (t) => [
-    primaryKey({ columns: [t.tenantId, t.nodeId] }),
+    primaryKey({ columns: [t.nodeId] }),
     // Both null (a fresh or re-registered chain) or neither. A half-set pointer would make
     // PrimerRegistro ambiguous, and PrimerRegistro must follow from local state unambiguously.
     check("cadenas_puntero_ck", sql`(${t.ultimoRegistroId} is null) = (${t.ultimaHuella} is null)`),

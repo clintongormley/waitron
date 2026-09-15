@@ -1,37 +1,35 @@
 import type { RecordSaleInput } from "@waitron/core";
 import type { TrustedClock } from "@waitron/fiscal";
-import type { NodeId, SeriesId, TenantId, TillId } from "@waitron/shared";
+import { tenantId as brandTenantId } from "@waitron/shared";
+import type { NodeId, SeriesId, TillId } from "@waitron/shared";
 import { createFakeAeat } from "@waitron/verifactu/src/testing/fake-aeat.js";
 import type { VerifactuClient } from "@waitron/verifactu";
 
 const BASE = new Date("2026-03-01T13:05:00+01:00");
+
+/** See `saleInput` below: an inert value for a core input field nothing reads any more. */
+const INERT_TENANT_ID = brandTenantId("00000000-0000-4000-8000-000000000001");
 
 /**
  * `VerifactuBackendOptions.resolveClient` (Task 5) is required by the constructor, and is read by
  * both `drain` and `reconcile` (`drain.test.ts`, `acks.test.ts`, `drain.concurrency.test.ts`, and
  * others across this package all call `backend.drain`/`backend.reconcile`). A single module-scope
  * fake AEAT transport, shared across every `new VerifactuBackend(...)` site in this package via
- * `staticResolver` below, is therefore enough for the tests that never care which tenant's
- * transport they got — nothing in THOSE tests submits anything distinguishable per tenant, so
- * which fake instance answers is irrelevant, and minting a fresh `createFakeAeat()` per test would
- * be decoration with no consumer. Deep import mirrors this package's own `FakeFiscalBackend`
+ * `staticResolver` below, is therefore enough: nothing in those tests submits anything
+ * distinguishable, so which fake instance answers is irrelevant, and minting a fresh
+ * `createFakeAeat()` per test would be decoration with no consumer. Deep import mirrors this package's own `FakeFiscalBackend`
  * convention (`@waitron/fiscal/src/testing/fake-backend.js`, imported by `packages/core`'s tests):
  * `@waitron/verifactu` exports no test doubles from its own package surface either.
  */
 export const fakeClient: VerifactuClient = createFakeAeat().client();
 
 /**
- * A `resolveClient` that ignores its `tenantId` argument and always returns `client` — the shape
- * every `VerifactuBackend` in this package's suites must supply SOME `resolveClient` to satisfy
- * (Task 5 made the field required), for a test that never cares which tenant's transport it got,
- * for the reason `fakeClient` above documents. Do NOT reach for this in a test that DOES care which
- * tenant asked — one asserting per-tenant isolation, or that a different (or throwing) client
- * answers depending on `tenantId` — write a bespoke resolver instead, the way
- * `drain.tenancy.test.ts`'s `recordingResolver` does.
+ * A `resolveClient` that always returns `client` — the shape every `VerifactuBackend` in this
+ * package's suites must supply SOME `resolveClient` to satisfy (Task 5 made the field required),
+ * for the reason `fakeClient` above documents. Do NOT reach for this in a test that cares WHEN the
+ * transport is resolved, or that needs a throwing one — write a bespoke resolver instead.
  */
-export function staticResolver(
-  client: VerifactuClient,
-): (tenantId: TenantId) => Promise<VerifactuClient> {
+export function staticResolver(client: VerifactuClient): () => Promise<VerifactuClient> {
   return () => Promise.resolve(client);
 }
 
@@ -62,15 +60,17 @@ export const steadyClock: TrustedClock = {
  */
 export function saleInput(
   params: {
-    tenantId: TenantId;
     tillId: TillId;
     nodeId: NodeId;
     seriesId: SeriesId;
   } & Partial<RecordSaleInput>,
 ): RecordSaleInput {
-  const { tenantId, tillId, nodeId, seriesId, ...overrides } = params;
+  const { tillId, nodeId, seriesId, ...overrides } = params;
   return {
-    tenantId,
+    // `RecordSaleInput.tenantId` (`@waitron/core`) still declares a tenant id and nothing reads it:
+    // the only remaining use is the `sale.series_not_found` error's params. It goes when
+    // `apps/server`, its last supplier, is converted — until then this fixed value stands in.
+    tenantId: INERT_TENANT_ID,
     tillId,
     nodeId,
     seriesId,

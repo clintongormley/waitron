@@ -12,7 +12,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { nodes, sales, tenants, tills } from "@waitron/db";
+import { nodes, sales, tills } from "@waitron/db";
 import { registroSif } from "./sif.js";
 
 /**
@@ -23,9 +23,6 @@ export const registrosFacturacion = pgTable(
   "registros_facturacion",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    tenantId: uuid("tenant_id")
-      .notNull()
-      .references(() => tenants.id),
     // The till the sale rang at — an informational SNAPSHOT on this immutable record (node-id
     // rekey, 2026-08-03: `till_id` deliberately STAYS here, NOT NULL, while the chain/uniqueness key
     // moved to `node_id` below). `reconcile.ts`/`drain.ts` read it directly; it is never read for
@@ -148,19 +145,18 @@ export const registrosFacturacion = pgTable(
     // because of this constraint. Keyed on `node_id` (node-id rekey, 2026-08-03: the chain is
     // per-node, so two tills of one node share one sequence), re-proven on the node key in
     // chain.node-rekey.concurrency.test.ts.
-    uniqueIndex("registros_tenant_node_secuencia_uq").on(t.tenantId, t.nodeId, t.secuencia),
+    uniqueIndex("registros_tenant_node_secuencia_uq").on(t.nodeId, t.secuencia),
     // AEAT record identity is IDEmisorFactura + NumSerieFactura + FechaExpedicionFactura, and a
     // duplicate returns error 3000. `tipo_registro` joins the key because an alta and its
     // anulación legitimately share the triple.
     uniqueIndex("registros_identidad_uq").on(
-      t.tenantId,
       t.idEmisorFactura,
       t.numSerieFactura,
       t.fechaExpedicionFactura,
       t.tipoRegistro,
     ),
-    index("registros_sale_idx").on(t.tenantId, t.saleId),
-    index("registros_node_secuencia_idx").on(t.tenantId, t.nodeId, t.secuencia),
+    index("registros_sale_idx").on(t.saleId),
+    index("registros_node_secuencia_idx").on(t.nodeId, t.secuencia),
     check("registros_tipo_registro_ck", sql`${t.tipoRegistro} in ('alta', 'anulacion')`),
     check("registros_tipo_huella_ck", sql`${t.tipoHuella} = '01'`),
     check("registros_huella_ck", sql`${t.huella} ~ '^[0-9A-F]{64}$'`),

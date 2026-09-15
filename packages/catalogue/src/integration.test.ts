@@ -96,7 +96,7 @@ describe("catalogue → priceBasket → recordSale (end-to-end)", () => {
 
     const { saleId } = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
-      await backend.registerNode(tx, nodeId, { tenantId });
+      await backend.registerNode(tx, nodeId);
 
       // Seed a catalogue: one weight-priced product ("sliced ham") in a "Food" category. English
       // strings only — this is a generic package under the english-only guard.

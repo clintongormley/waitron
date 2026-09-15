@@ -28,8 +28,8 @@ const pg = usePgliteDb({ migrations: TEST_MIGRATIONS });
  * Real per-test isolation, deliberately NOT drain.test.ts's shared-and-accumulating convention:
  * `envios`/`incidents` carry no append-only trigger (unlike `registros_facturacion`, which blocks
  * TRUNCATE — src/testing/seed.ts's own note), so truncating them before each test leaves the
- * drainer's own global `tenantsWithWork` sweep with nothing but THIS test's freshly-seeded rows to
- * find, and every incident-count assertion sees only this test's own incidents. The orphaned
+ * drainer's own due-work sweep with nothing but THIS test's freshly-seeded rows to find, and every
+ * incident-count assertion sees only this test's own incidents. The orphaned
  * `registros_facturacion` rows a prior test leaves behind are harmless: `reconcile` reaches a
  * record only through its `envios` join, so a registro with no `envios` row is never in scope.
  */
@@ -73,10 +73,10 @@ async function incidentsFor(): Promise<
 
 /** The committed `envios.estado` per registro — used to prove reconcile now CORRECTS state toward
  * the authority (plan 3b Task 5), on top of the classification the cases above already assert. */
-async function estadosFor(tenantId: string): Promise<Map<string, string>> {
+async function estadosFor(): Promise<Map<string, string>> {
   const { rows } = await withTransaction(pg.db, (tx) =>
     tx.execute<{ registro_id: string; estado: string }>(
-      sql`select registro_id, estado from envios where tenant_id = ${tenantId}`,
+      sql`select registro_id, estado from envios`,
     ),
   );
   return new Map(rows.map((r) => [r.registro_id, r.estado]));
@@ -84,11 +84,9 @@ async function estadosFor(tenantId: string): Promise<Map<string, string>> {
 
 /** The committed `acks.state` per registro — used to prove the ack↔estado invariant still holds
  * after a drift correction (the acks row must agree with whatever `envios.estado` converged to). */
-async function ackStatesFor(tenantId: string): Promise<Map<string, string>> {
+async function ackStatesFor(): Promise<Map<string, string>> {
   const { rows } = await withTransaction(pg.db, (tx) =>
-    tx.execute<{ registro_id: string; state: string }>(
-      sql`select registro_id, state from acks where tenant_id = ${tenantId}`,
-    ),
+    tx.execute<{ registro_id: string; state: string }>(sql`select registro_id, state from acks`),
   );
   return new Map(rows.map((r) => [r.registro_id, r.state]));
 }
@@ -96,13 +94,10 @@ async function ackStatesFor(tenantId: string): Promise<Map<string, string>> {
 /** The committed `envios.reconciled_resubmit_at` marker for one registro — the `noTrace`
  * remediation lifecycle's own state: null until a first `noTrace` detection stamps it, set while
  * the remediation is outstanding, and cleared again once AEAT has a trace of the record. */
-async function reconciledResubmitAtFor(
-  tenantId: string,
-  registroId: string,
-): Promise<string | null> {
+async function reconciledResubmitAtFor(registroId: string): Promise<string | null> {
   const { rows } = await withTransaction(pg.db, (tx) =>
     tx.execute<{ reconciled_resubmit_at: string | null }>(
-      sql`select reconciled_resubmit_at from envios where tenant_id = ${tenantId} and registro_id = ${registroId}`,
+      sql`select reconciled_resubmit_at from envios where registro_id = ${registroId}`,
     ),
   );
   return rows[0]?.reconciled_resubmit_at ?? null;
@@ -114,11 +109,7 @@ async function reconciledResubmitAtFor(
  * Looked up post-hoc by `sale_id` rather than threaded through the caller: unlike
  * `seedPendingEnvios`'s fixture, a `recordSale`-created alta's identity is assigned by the write
  * path itself (series/invoice-number allocation), not chosen by the test. */
-async function altaIdentityFor(
-  tenantId: string,
-  saleId: string,
-): Promise<{ id: string; facturaKey: string }> {
-  void tenantId;
+async function altaIdentityFor(saleId: string): Promise<{ id: string; facturaKey: string }> {
   const { rows } = await withTransaction(pg.db, (tx) =>
     tx.execute<{ id: string; id_emisor_factura: string; num_serie_factura: string; fecha: string }>(
       sql`
@@ -140,13 +131,13 @@ async function altaIdentityFor(
 /** Whether a sibling anulación registro (same `sale_id`) exists for the given alta — the local
  * mirror of `reconcile.ts`'s own `hasSiblingAnulacion`, used here only to confirm the fixture set
  * up the state the reconcile test actually means to exercise. */
-async function hasAnulacion(tenantId: string, altaRegistroId: string): Promise<boolean> {
+async function hasAnulacion(altaRegistroId: string): Promise<boolean> {
   const { rows } = await withTransaction(pg.db, (tx) =>
     tx.execute<{ sale_id: string }>(sql`
       select r2.sale_id from registros_facturacion r1
       join registros_facturacion r2
-        on r2.sale_id = r1.sale_id and r2.tenant_id = r1.tenant_id and r2.tipo_registro = 'anulacion'
-      where r1.id = ${altaRegistroId} and r1.tenant_id = ${tenantId}
+        on r2.sale_id = r1.sale_id and r2.tipo_registro = 'anulacion'
+      where r1.id = ${altaRegistroId}
     `),
   );
   return rows.length > 0;
@@ -159,11 +150,7 @@ describe("reconcile — the three audit cases", () => {
     const resolveClient = staticResolver(aeat.client());
     await storeAllAtAeat(resolveClient);
 
-    const result = await reconcile(
-      reconcileDeps(resolveClient, seeded.clock),
-      seeded.tenantId,
-      PERIOD,
-    );
+    const result = await reconcile(reconcileDeps(resolveClient, seeded.clock), PERIOD);
 
     expect(result.checked).toBe(3);
     expect(result.lostAck).toEqual([]);
@@ -180,15 +167,9 @@ describe("reconcile — the three audit cases", () => {
     await storeAllAtAeat(resolveClient); // AEAT now holds all three as Correcta
 
     // Our acknowledgement was lost: our side reads pendiente though AEAT already holds them.
-    await withTransaction(pg.db, (tx) =>
-      tx.execute(sql`update envios set estado = 'pendiente' where tenant_id = ${seeded.tenantId}`),
-    );
+    await withTransaction(pg.db, (tx) => tx.execute(sql`update envios set estado = 'pendiente'`));
 
-    const result = await reconcile(
-      reconcileDeps(resolveClient, seeded.clock),
-      seeded.tenantId,
-      PERIOD,
-    );
+    const result = await reconcile(reconcileDeps(resolveClient, seeded.clock), PERIOD);
 
     expect(result.checked).toBe(3);
     expect([...result.lostAck.map((m) => m.recordId)].sort()).toEqual(
@@ -205,7 +186,7 @@ describe("reconcile — the three audit cases", () => {
 
     // Task 5: reconcile ALSO corrects the local estado toward the authority (Correcta → aceptado).
     // The audit above still reports the mismatch; this proves the correction is applied too.
-    const estados = await estadosFor(seeded.tenantId);
+    const estados = await estadosFor();
     expect([...estados.values()]).toEqual(["aceptado", "aceptado", "aceptado"]);
   });
 
@@ -220,11 +201,7 @@ describe("reconcile — the three audit cases", () => {
     await storeAllAtAeat(resolveClient); // aceptado at us, stored at AEAT
     aeat.forget(seeded.facturaKeys[0]!); // AEAT loses all trace of it
 
-    const result = await reconcile(
-      reconcileDeps(resolveClient, seeded.clock),
-      seeded.tenantId,
-      PERIOD,
-    );
+    const result = await reconcile(reconcileDeps(resolveClient, seeded.clock), PERIOD);
 
     expect(result.checked).toBe(1);
     // The audit finding is still reported, from the PRE-remediation snapshot.
@@ -241,13 +218,13 @@ describe("reconcile — the three audit cases", () => {
     expect(await incidentsFor()).toHaveLength(0);
 
     // Remediated: reset to pendiente so the drainer re-submits it, and the marker is stamped.
-    const estados = await estadosFor(seeded.tenantId);
+    const estados = await estadosFor();
     expect(estados.get(seeded.registroIds[0]!)).toBe("pendiente");
-    const marker = await reconciledResubmitAtFor(seeded.tenantId, seeded.registroIds[0]!);
+    const marker = await reconciledResubmitAtFor(seeded.registroIds[0]!);
     expect(marker).not.toBeNull();
 
     // The acks invariant: a `pendiente` row carries NO ack.
-    const acks = await ackStatesFor(seeded.tenantId);
+    const acks = await ackStatesFor();
     expect(acks.has(seeded.registroIds[0]!)).toBe(false);
   });
 
@@ -266,11 +243,7 @@ describe("reconcile — the three audit cases", () => {
       ),
     );
 
-    const first = await reconcile(
-      reconcileDeps(resolveClient, seeded.clock),
-      seeded.tenantId,
-      PERIOD,
-    );
+    const first = await reconcile(reconcileDeps(resolveClient, seeded.clock), PERIOD);
 
     expect(first.checked).toBe(1);
     expect(first.noTrace).toHaveLength(1);
@@ -289,16 +262,12 @@ describe("reconcile — the three audit cases", () => {
 
     // NOT reset again — estado stays exactly as it was (still `aceptado`, since this record was
     // never actually remediated, only marked as if it had been).
-    const estados = await estadosFor(seeded.tenantId);
+    const estados = await estadosFor();
     expect(estados.get(seeded.registroIds[0]!)).toBe("aceptado");
 
     // Sweep 2 re-detects the SAME persistent noTrace — still classified, still escalated, but must
     // NOT insert a second incident row (recordIncidentOnce dedup).
-    const second = await reconcile(
-      reconcileDeps(resolveClient, seeded.clock),
-      seeded.tenantId,
-      PERIOD,
-    );
+    const second = await reconcile(reconcileDeps(resolveClient, seeded.clock), PERIOD);
     expect(second.noTrace).toHaveLength(1);
     expect(second.incidentsRaised).toBe(0); // deduped — no NEW incident counted this sweep
 
@@ -317,14 +286,14 @@ describe("reconcile — the three audit cases", () => {
     await storeAllAtAeat(resolveClient); // aceptado at us, with an `accepted` ack, stored at AEAT
     aeat.forget(seeded.facturaKeys[0]!); // AEAT loses all trace of it
 
-    expect((await ackStatesFor(seeded.tenantId)).size).toBe(1); // the pre-reset accepted ack
+    expect((await ackStatesFor()).size).toBe(1); // the pre-reset accepted ack
 
-    await reconcile(reconcileDeps(resolveClient, seeded.clock), seeded.tenantId, PERIOD); // first detection — remediates silently
+    await reconcile(reconcileDeps(resolveClient, seeded.clock), PERIOD); // first detection — remediates silently
 
-    const estados = await estadosFor(seeded.tenantId);
+    const estados = await estadosFor();
     expect(estados.get(seeded.registroIds[0]!)).toBe("pendiente");
 
-    const acks = await ackStatesFor(seeded.tenantId);
+    const acks = await ackStatesFor();
     expect(acks.has(seeded.registroIds[0]!)).toBe(false); // no ack at all for the pendiente row
   });
 
@@ -341,18 +310,14 @@ describe("reconcile — the three audit cases", () => {
       ),
     );
 
-    const result = await reconcile(
-      reconcileDeps(resolveClient, seeded.clock),
-      seeded.tenantId,
-      PERIOD,
-    );
+    const result = await reconcile(reconcileDeps(resolveClient, seeded.clock), PERIOD);
 
     expect(result.noTrace).toEqual([]);
     expect(result.drift).toEqual([]);
     expect(result.incidentsRaised).toBe(0);
     expect(await incidentsFor()).toHaveLength(0);
 
-    const marker = await reconciledResubmitAtFor(seeded.tenantId, seeded.registroIds[0]!);
+    const marker = await reconciledResubmitAtFor(seeded.registroIds[0]!);
     expect(marker).toBeNull();
   });
 
@@ -363,11 +328,7 @@ describe("reconcile — the three audit cases", () => {
     await storeAllAtAeat(resolveClient);
     aeat.setConsultaState(seeded.facturaKeys[0]!, "AceptadaConErrores");
 
-    const result = await reconcile(
-      reconcileDeps(resolveClient, seeded.clock),
-      seeded.tenantId,
-      PERIOD,
-    );
+    const result = await reconcile(reconcileDeps(resolveClient, seeded.clock), PERIOD);
 
     expect(result.checked).toBe(1);
     expect(result.drift).toHaveLength(1);
@@ -387,7 +348,7 @@ describe("reconcile — the three audit cases", () => {
 
     // Task 5: AceptadaConErrores drift is corrected toward the authority (→ aceptado_con_errores),
     // on top of the warning incident above.
-    const estados = await estadosFor(seeded.tenantId);
+    const estados = await estadosFor();
     expect(estados.get(seeded.registroIds[0]!)).toBe("aceptado_con_errores");
   });
 
@@ -403,11 +364,7 @@ describe("reconcile — the three audit cases", () => {
     await storeAllAtAeat(resolveClient);
     aeat.setConsultaState(seeded.facturaKeys[0]!, "Anulada");
 
-    const result = await reconcile(
-      reconcileDeps(resolveClient, seeded.clock),
-      seeded.tenantId,
-      PERIOD,
-    );
+    const result = await reconcile(reconcileDeps(resolveClient, seeded.clock), PERIOD);
 
     expect(result.checked).toBe(1);
     expect(result.drift).toHaveLength(1);
@@ -427,7 +384,7 @@ describe("reconcile — the three audit cases", () => {
 
     // Task 5: Anulada has no clean local estado, so reconcile does NOT correct — it stays aceptado
     // (incident-only, exactly as Task 4 left it). The `correct` no-op branch must bite here.
-    const estados = await estadosFor(seeded.tenantId);
+    const estados = await estadosFor();
     expect(estados.get(seeded.registroIds[0]!)).toBe("aceptado");
   });
 
@@ -449,14 +406,14 @@ describe("reconcile — the three audit cases", () => {
     // fixed instant (write-path-fixtures.ts) is 2026-03-01, not this file's usual July, so this
     // test reconciles a LOCAL March period, not the shared `PERIOD` constant.
     const period = { year: "2026", month: "03" };
-    const { tenantId, tillId, nodeId, seriesId } = await seedTenantWithSif(pg.db);
+    const { tillId, nodeId, seriesId } = await seedTenantWithSif(pg.db);
     // recordVoid now requires `sale.void`: seed a manager and open its session to authorize the void.
     const { rows: mgr } = await pg.db.execute<{ id: string }>(
-      sql`insert into persons (tenant_id, display_name, pin_hash, role)
-          values (${tenantId}, 'P', ${hashPin("1234")}, 'manager') returning id`,
+      sql`insert into persons (display_name, pin_hash, role)
+          values ('P', ${hashPin("1234")}, 'manager') returning id`,
     );
     const voidSession = await withTransaction(pg.db, (tx) =>
-      loginWithPin(tx, { tenantId, tillId, personId: mgr[0]!.id, pin: "1234" }),
+      loginWithPin(tx, { tillId, personId: mgr[0]!.id, pin: "1234" }),
     );
     const aeat = createFakeAeat({ serverNow: SERVER_NOW });
     const resolveClient = staticResolver(aeat.client());
@@ -469,7 +426,7 @@ describe("reconcile — the three audit cases", () => {
 
     const sale = await withTransaction(pg.db, async (tx) => {
       await asAppUser(tx);
-      return recordSale(tx, backend, saleInput({ tenantId, tillId, nodeId, seriesId }));
+      return recordSale(tx, backend, saleInput({ tillId, nodeId, seriesId }));
     });
     // `recordSale`'s own envío row takes `proximo_intento_en`'s column DEFAULT (real wall-clock
     // `now()` at insert), NOT this file's simulated `DRAIN_AT` — `seedPendingEnvios`'s fixture stamps
@@ -478,13 +435,11 @@ describe("reconcile — the three audit cases", () => {
     // Copilot review point — clock skew / slow CI could otherwise flake a `Date.now()`-based due time).
     await withTransaction(pg.db, async (tx) => {
       await asAppUser(tx);
-      await tx.execute(
-        sql`update envios set proximo_intento_en = ${DRAIN_AT.toISOString()} where tenant_id = ${tenantId}`,
-      );
+      await tx.execute(sql`update envios set proximo_intento_en = ${DRAIN_AT.toISOString()}`);
     });
     await drain(drainDeps(resolveClient), DRAIN_AT); // alta: local aceptado, AEAT Correcta
 
-    const alta = await altaIdentityFor(tenantId, sale.saleId);
+    const alta = await altaIdentityFor(sale.saleId);
     await withTransaction(pg.db, async (tx) => {
       await asAppUser(tx);
       await recordVoid(tx, backend, sale.saleId, "staff error", { sessionId: voidSession.id });
@@ -492,12 +447,12 @@ describe("reconcile — the three audit cases", () => {
     // The void appends a sibling anulación registro (same sale_id) with its own pendiente envío —
     // present in this period too (it carries the annulled invoice's own expedition date), but never
     // submitted to AEAT here, so it stays an ordinary in-flight row, not a mismatch.
-    expect(await hasAnulacion(tenantId, alta.id)).toBe(true);
+    expect(await hasAnulacion(alta.id)).toBe(true);
 
     // AEAT now reports the alta itself Anulada — the expected authority state post-void.
     aeat.setConsultaState(alta.facturaKey, "Anulada");
 
-    const result = await reconcile(reconcileDeps(resolveClient, steadyClock), tenantId, period);
+    const result = await reconcile(reconcileDeps(resolveClient, steadyClock), period);
 
     expect(result.checked).toBe(2); // the alta's envío + the anulación's own pendiente envío
     expect(result.drift).toEqual([]); // agreement — the alta is NOT flagged
@@ -507,7 +462,7 @@ describe("reconcile — the three audit cases", () => {
     expect(await incidentsFor()).toHaveLength(0);
 
     // No correction either — the alta's envío stays exactly as the drainer left it.
-    const estados = await estadosFor(tenantId);
+    const estados = await estadosFor();
     expect(estados.get(alta.id)).toBe("aceptado");
   });
 
@@ -521,22 +476,14 @@ describe("reconcile — the three audit cases", () => {
     await storeAllAtAeat(resolveClient);
     aeat.setConsultaState(seeded.facturaKeys[0]!, "Anulada"); // no local anulación at all
 
-    const first = await reconcile(
-      reconcileDeps(resolveClient, seeded.clock),
-      seeded.tenantId,
-      PERIOD,
-    );
+    const first = await reconcile(reconcileDeps(resolveClient, seeded.clock), PERIOD);
     expect(first.drift).toHaveLength(1);
     expect(first.incidentsRaised).toBe(1);
     expect(await incidentsFor()).toHaveLength(1);
 
     // Sweep 2 re-detects the SAME persistent Anulada — still classified as drift (there is no
     // converged state to agree with), but must NOT insert a second incident row.
-    const second = await reconcile(
-      reconcileDeps(resolveClient, seeded.clock),
-      seeded.tenantId,
-      PERIOD,
-    );
+    const second = await reconcile(reconcileDeps(resolveClient, seeded.clock), PERIOD);
     expect(second.drift).toHaveLength(1);
     expect(second.incidentsRaised).toBe(0); // deduped — no NEW incident counted this sweep
 
@@ -560,11 +507,7 @@ describe("reconcile — the three audit cases", () => {
 
     // Sweep 1: genuine aceptado → AceptadaConErrores divergence — classifies as drift, raises the
     // warning incident, and corrects local estado toward the authority.
-    const first = await reconcile(
-      reconcileDeps(resolveClient, seeded.clock),
-      seeded.tenantId,
-      PERIOD,
-    );
+    const first = await reconcile(reconcileDeps(resolveClient, seeded.clock), PERIOD);
     expect(first.drift).toHaveLength(1);
     expect(first.drift[0]).toEqual({
       recordId: seeded.registroIds[0],
@@ -573,32 +516,28 @@ describe("reconcile — the three audit cases", () => {
     });
     expect(first.incidentsRaised).toBe(1);
     expect(await incidentsFor()).toHaveLength(1);
-    await expect(estadosFor(seeded.tenantId)).resolves.toEqual(
+    await expect(estadosFor()).resolves.toEqual(
       new Map([[seeded.registroIds[0]!, "aceptado_con_errores"]]),
     );
 
     // Sweep 2: local is now aceptado_con_errores, AEAT still reports AceptadaConErrores — the SAME
     // state, which is agreement, not a fresh divergence. The fix must classify this as a clean
     // match: no drift entry, no new incident, no re-correction.
-    const second = await reconcile(
-      reconcileDeps(resolveClient, seeded.clock),
-      seeded.tenantId,
-      PERIOD,
-    );
+    const second = await reconcile(reconcileDeps(resolveClient, seeded.clock), PERIOD);
     expect(second.drift).toEqual([]);
     expect(second.incidentsRaised).toBe(0);
 
-    // (a) exactly ONE incident for the tenant total — not a fresh one every sweep.
+    // (a) exactly ONE incident in total — not a fresh one every sweep.
     const incidents = await incidentsFor();
     expect(incidents).toHaveLength(1);
     expect(incidents[0]?.code).toBe("fiscal.reconcile_drift_errores");
 
     // (b) estado converged to aceptado_con_errores and stays there.
-    const estados = await estadosFor(seeded.tenantId);
+    const estados = await estadosFor();
     expect(estados.get(seeded.registroIds[0]!)).toBe("aceptado_con_errores");
 
     // (c) the acks row still satisfies the ack↔estado invariant for the converged state.
-    const ackStates = await ackStatesFor(seeded.tenantId);
+    const ackStates = await ackStatesFor();
     expect(ackStates.get(seeded.registroIds[0]!)).toBe("accepted_with_errors");
   });
 
@@ -617,11 +556,7 @@ describe("reconcile — the three audit cases", () => {
     // Isolate reconcile's own incidents from the drainer's `fiscal.aceptado_con_errores` warning.
     await pg.db.execute(sql`truncate table incidents`);
 
-    const result = await reconcile(
-      reconcileDeps(resolveClient, seeded.clock),
-      seeded.tenantId,
-      PERIOD,
-    );
+    const result = await reconcile(reconcileDeps(resolveClient, seeded.clock), PERIOD);
 
     expect(result.checked).toBe(1);
     expect(result.drift).toEqual([]);
@@ -631,7 +566,7 @@ describe("reconcile — the three audit cases", () => {
     expect(await incidentsFor()).toHaveLength(0);
 
     // No correction needed — it was already a clean match.
-    const estados = await estadosFor(seeded.tenantId);
+    const estados = await estadosFor();
     expect(estados.get(seeded.registroIds[0]!)).toBe("aceptado_con_errores");
   });
 });
@@ -656,11 +591,7 @@ describe("reconcile — paging", () => {
     await drain(drainDeps(resolveClient), DRAIN_AT); // all 5 stored at AEAT as Correcta, ours aceptado
     consultarCalls = 0;
 
-    const result = await reconcile(
-      reconcileDeps(resolveClient, seeded.clock),
-      seeded.tenantId,
-      PERIOD,
-    );
+    const result = await reconcile(reconcileDeps(resolveClient, seeded.clock), PERIOD);
 
     expect(result.checked).toBe(5);
     // The teeth: if paging stopped after page 1, records 3-5 would be aceptado locally but absent
@@ -680,11 +611,7 @@ describe("reconcile — in-flight tolerance and non-cases", () => {
     const resolveClient = staticResolver(aeat.client());
     // Deliberately DO NOT drain: our record is pendiente and AEAT holds nothing for this NIF —
     // exactly the mid-submission / later-page case §4.3 forbids calling noTrace.
-    const result = await reconcile(
-      reconcileDeps(resolveClient, seeded.clock),
-      seeded.tenantId,
-      PERIOD,
-    );
+    const result = await reconcile(reconcileDeps(resolveClient, seeded.clock), PERIOD);
 
     expect(result.checked).toBe(1);
     expect(result.noTrace).toEqual([]);
@@ -701,15 +628,9 @@ describe("reconcile — in-flight tolerance and non-cases", () => {
     await storeAllAtAeat(resolveClient);
     // A record we already know AEAT refused: not stored there, and our side reads rechazado.
     aeat.forget(seeded.facturaKeys[0]!);
-    await withTransaction(pg.db, (tx) =>
-      tx.execute(sql`update envios set estado = 'rechazado' where tenant_id = ${seeded.tenantId}`),
-    );
+    await withTransaction(pg.db, (tx) => tx.execute(sql`update envios set estado = 'rechazado'`));
 
-    const result = await reconcile(
-      reconcileDeps(resolveClient, seeded.clock),
-      seeded.tenantId,
-      PERIOD,
-    );
+    const result = await reconcile(reconcileDeps(resolveClient, seeded.clock), PERIOD);
 
     expect(result.checked).toBe(1);
     // Absent from AEAT, yet NOT noTrace: noTrace is asserted only for a record we believe accepted.
@@ -734,11 +655,7 @@ describe("reconcile — in-flight tolerance and non-cases", () => {
         { RegistroAlta: foreignAlta(seeded.nif, seeded.legalName) },
       ]);
 
-    const result = await reconcile(
-      reconcileDeps(resolveClient, seeded.clock),
-      seeded.tenantId,
-      PERIOD,
-    );
+    const result = await reconcile(reconcileDeps(resolveClient, seeded.clock), PERIOD);
 
     // The foreign record is skipped, never keyed; our own record still matches cleanly.
     expect(result.checked).toBe(1); // only OUR envios row is in scope
@@ -749,14 +666,14 @@ describe("reconcile — in-flight tolerance and non-cases", () => {
   });
 
   it("no records for the period → checked 0, and never contacts AEAT", async () => {
-    const { tenantId } = await seedTenantWithSif(pg.db); // a tenant with a till/SIF but no envios
+    await seedTenantWithSif(pg.db); // a venue with a till/SIF but no envios
     const throwing: VerifactuClient = {
       submit: () => Promise.reject(new Error("reconcile must not submit")),
       consultar: () => Promise.reject(new Error("reconcile must not consult an empty period")),
     };
     const resolveClient = staticResolver(throwing);
 
-    const result = await reconcile(reconcileDeps(resolveClient, steadyClock), tenantId, PERIOD);
+    const result = await reconcile(reconcileDeps(resolveClient, steadyClock), PERIOD);
 
     expect(result).toEqual({
       year: "2026",
@@ -781,7 +698,7 @@ describe("reconcile — period normalization", () => {
     const resolveClient = staticResolver(aeat.client());
     await storeAllAtAeat(resolveClient); // all three: local aceptado, AEAT Correcta — a clean match
 
-    const result = await reconcile(reconcileDeps(resolveClient, seeded.clock), seeded.tenantId, {
+    const result = await reconcile(reconcileDeps(resolveClient, seeded.clock), {
       year: "2026",
       month: "7",
     });
@@ -819,7 +736,6 @@ describe("reconcile — malformed consulta paging", () => {
     await expect(
       reconcile(
         { db: pg.db, resolveClient: staticResolver(malformed), clock: seeded.clock },
-        seeded.tenantId,
         PERIOD,
       ),
     ).rejects.toThrow(/ClavePaginacion/);
@@ -829,14 +745,14 @@ describe("reconcile — malformed consulta paging", () => {
 describe("reconcile — lazy client resolution", () => {
   it("a zero-row period never resolves a client, even one that would throw", async () => {
     // The regression this test guards: `reconcile` used to resolve the client BEFORE checking
-    // whether the period held any records at all, so a tenant with nothing to reconcile — a clean
+    // whether the period held any records at all, so a period with nothing to reconcile — a clean
     // `checked: 0` no-op that contacts AEAT for nothing — was turned into a hard failure whenever
-    // that tenant's credential happened to be missing or unusable. `resolveClient` below rejects
+    // the venue's credential happened to be missing or unusable. `resolveClient` below rejects
     // with a distinctive, unmistakable message (never a client that merely COULD have been asked and
     // happened to succeed) so this test fails loudly if the fix regresses, and asserts the resolver
     // was never even called — a test that only checked the returned result would still pass if the
     // resolver were called and happened to succeed.
-    const { tenantId } = await seedTenantWithSif(pg.db); // a tenant with a till/SIF but no envios
+    await seedTenantWithSif(pg.db); // a venue with a till/SIF but no envios
     let calls = 0;
     const resolveClient = (): Promise<VerifactuClient> => {
       calls += 1;
@@ -847,11 +763,7 @@ describe("reconcile — lazy client resolution", () => {
       return Promise.reject(new Error("resolveClient must not be called for a zero-row period"));
     };
 
-    const result = await reconcile(
-      { db: pg.db, resolveClient, clock: steadyClock },
-      tenantId,
-      PERIOD,
-    );
+    const result = await reconcile({ db: pg.db, resolveClient, clock: steadyClock }, PERIOD);
 
     expect(result).toEqual({
       year: "2026",

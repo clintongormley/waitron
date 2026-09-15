@@ -1,7 +1,11 @@
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createPgliteDb, runMigrations, withTransaction } from "@waitron/db";
-import { isAppError, locationId as brandLocationId } from "@waitron/shared";
+import {
+  isAppError,
+  locationId as brandLocationId,
+  tenantId as brandTenantId,
+} from "@waitron/shared";
 import type { ProvisionedNode } from "@waitron/module";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { TENANT_A, seedSoldRegistro, seedTenants } from "../test/fixtures.js";
@@ -14,8 +18,13 @@ import { verifyChain } from "./verify.js";
 
 let db: Awaited<ReturnType<typeof createPgliteDb>>;
 
+// `ProvisionedNode` (`@waitron/module`) still declares a `tenantId` and nothing in this package
+// reads one; it goes when `packages/provisioning`, its last supplier, is converted. This fixed
+// value stands in until then.
+const INERT_TENANT_ID = brandTenantId("00000000-0000-4000-8000-000000000001");
+
 const NODE: ProvisionedNode = {
-  tenantId: TENANT_A.id,
+  tenantId: INERT_TENANT_ID,
   locationId: brandLocationId(TENANT_A.locationId),
   nodeId: TENANT_A.nodeId,
 };
@@ -26,7 +35,7 @@ const FLOOR = installationFloor(NOW);
 /** A live node: registered SIF + `FA` (standard, next_number 5) and `RE` (rectificative). */
 async function seedLiveNode(): Promise<SifRegistration> {
   const sif = await withTransaction(db, (tx) =>
-    registerSif(tx, { ...SIF, tenantId: TENANT_A.id, nodeId: TENANT_A.nodeId }),
+    registerSif(tx, { ...SIF, nodeId: TENANT_A.nodeId }),
   );
   await db.execute(sql`
     insert into invoice_series (node_id, code, purpose, next_number) values (${TENANT_A.nodeId}, 'FA', 'standard', 5),
@@ -73,7 +82,6 @@ describe("restoreFiscal", () => {
   it("revokes the live SIF, mints a floored number, resets the chain head, keeps the ledger, returns disjoint series", async () => {
     const first = await seedLiveNode();
     await seedSoldRegistro(db, {
-      tenantId: TENANT_A.id,
       tillId: TENANT_A.tillId,
       nodeId: TENANT_A.nodeId,
       sifId: first.id,
@@ -84,7 +92,7 @@ describe("restoreFiscal", () => {
 
     const outcome = await withTransaction(db, (tx) => restoreFiscal(tx, NODE, NOW));
 
-    const fresh = await withTransaction(db, (tx) => currentSif(tx, TENANT_A.id, TENANT_A.nodeId));
+    const fresh = await withTransaction(db, (tx) => currentSif(tx, TENANT_A.nodeId));
     expect(fresh.id).not.toBe(first.id);
     expect(fresh.numeroInstalacion).toBeGreaterThanOrEqual(FLOOR);
     expect(fresh.numeroInstalacion).toBeGreaterThan(first.numeroInstalacion);
@@ -92,9 +100,7 @@ describe("restoreFiscal", () => {
       sql`select revocado_en from registro_sif where id = ${first.id}`,
     );
     expect(old[0]?.revocado_en).not.toBeNull();
-    expect(
-      await withTransaction(db, (tx) => esPrimerRegistro(tx, TENANT_A.id, TENANT_A.nodeId)),
-    ).toBe(true);
+    expect(await withTransaction(db, (tx) => esPrimerRegistro(tx, TENANT_A.nodeId))).toBe(true);
     const { rows: head } = await db.execute<{ secuencia: number }>(
       sql`select secuencia from cadenas where node_id = ${TENANT_A.nodeId}`,
     );
@@ -122,7 +128,7 @@ describe("restoreFiscal", () => {
     await seedLiveNode();
     const counterAtBackup = await counterOf();
     const later = await withTransaction(db, (tx) =>
-      registerSif(tx, { ...SIF, tenantId: TENANT_A.id, nodeId: TENANT_A.nodeId }),
+      registerSif(tx, { ...SIF, nodeId: TENANT_A.nodeId }),
     );
     await db.execute(sql`delete from registro_sif where id = ${later.id}`);
     await db.execute(
@@ -134,7 +140,7 @@ describe("restoreFiscal", () => {
 
     await withTransaction(db, (tx) => restoreFiscal(tx, NODE, NOW));
 
-    const fresh = await withTransaction(db, (tx) => currentSif(tx, TENANT_A.id, TENANT_A.nodeId));
+    const fresh = await withTransaction(db, (tx) => currentSif(tx, TENANT_A.nodeId));
     // Control (run it once): delete `raiseInstallationFloor` from restoreFiscal → this mints 2 → red.
     expect(fresh.numeroInstalacion).not.toBe(later.numeroInstalacion);
     expect(fresh.numeroInstalacion).toBeGreaterThan(later.numeroInstalacion);
@@ -150,7 +156,7 @@ describe("restoreFiscal", () => {
 
     await withTransaction(db, (tx) => restoreFiscal(tx, NODE, NOW));
 
-    const fresh = await withTransaction(db, (tx) => currentSif(tx, TENANT_A.id, TENANT_A.nodeId));
+    const fresh = await withTransaction(db, (tx) => currentSif(tx, TENANT_A.nodeId));
     expect(fresh.numeroInstalacion).toBe(nextNumber);
     expect(await counterOf()).toBe(nextNumber + 1);
   });
@@ -159,7 +165,7 @@ describe("restoreFiscal", () => {
     await seedLiveNode();
     await db.execute(sql`delete from contadores_instalacion`);
     await withTransaction(db, (tx) => restoreFiscal(tx, NODE, NOW));
-    const fresh = await withTransaction(db, (tx) => currentSif(tx, TENANT_A.id, TENANT_A.nodeId));
+    const fresh = await withTransaction(db, (tx) => currentSif(tx, TENANT_A.nodeId));
     expect(fresh.numeroInstalacion).toBe(FLOOR);
   });
 
@@ -184,7 +190,7 @@ describe("restoreFiscal", () => {
       sql`update invoice_series set code = ${`FA-${first.numeroInstalacion}`} where code = 'FA'`,
     );
     const outcome = await withTransaction(db, (tx) => restoreFiscal(tx, NODE, NOW));
-    const fresh = await withTransaction(db, (tx) => currentSif(tx, TENANT_A.id, TENANT_A.nodeId));
+    const fresh = await withTransaction(db, (tx) => currentSif(tx, TENANT_A.nodeId));
     expect(outcome.series).toEqual([
       { code: `FA-${fresh.numeroInstalacion}`, purpose: "standard" },
     ]);
@@ -213,21 +219,21 @@ describe("restoreFiscal", () => {
       sql`select location_id from nodes where id = ${till.nodeId}`,
     );
     const node: ProvisionedNode = {
-      tenantId: till.tenantId,
+      tenantId: INERT_TENANT_ID,
       locationId: brandLocationId(rows[0]!.location_id),
       nodeId: till.nodeId,
     };
     const sale1 = await seedSale(db, till, 1);
     const before = await db.transaction((tx) =>
-      appendToChain(tx, till.tenantId, till.nodeId, altaFor(till.tillId, sale1, 1, 1)),
+      appendToChain(tx, till.nodeId, altaFor(till.tillId, sale1, 1, 1)),
     );
 
     await withTransaction(db, (tx) => restoreFiscal(tx, node, NOW));
-    const fresh = await withTransaction(db, (tx) => currentSif(tx, till.tenantId, till.nodeId));
+    const fresh = await withTransaction(db, (tx) => currentSif(tx, till.nodeId));
 
     const sale2 = await seedSale(db, till, 2);
     const after = await db.transaction((tx) =>
-      appendToChain(tx, till.tenantId, till.nodeId, altaFor(till.tillId, sale2, 2, 2)),
+      appendToChain(tx, till.nodeId, altaFor(till.tillId, sale2, 2, 2)),
     );
     const { rows: rec } = await db.execute<{
       primer_registro: boolean;
@@ -238,7 +244,7 @@ describe("restoreFiscal", () => {
     );
     expect(rec[0]).toEqual({ primer_registro: true, anterior_huella: null, sif_id: fresh.id });
     expect(after.secuencia).toBe(before.secuencia + 1); // the sequence is ours and continues
-    const report = await withTransaction(db, (tx) => verifyChain(tx, till.tenantId, till.nodeId));
+    const report = await withTransaction(db, (tx) => verifyChain(tx, till.nodeId));
     expect(report).toMatchObject({ ok: true, issues: [] });
   });
 
@@ -246,7 +252,7 @@ describe("restoreFiscal", () => {
     await seedLiveNode();
     const before = installationFloor(new Date());
     await withTransaction(db, (tx) => FISCAL_RESTORE(tx, NODE));
-    const fresh = await withTransaction(db, (tx) => currentSif(tx, TENANT_A.id, TENANT_A.nodeId));
+    const fresh = await withTransaction(db, (tx) => currentSif(tx, TENANT_A.nodeId));
     expect(fresh.numeroInstalacion).toBeGreaterThanOrEqual(before);
   });
 });

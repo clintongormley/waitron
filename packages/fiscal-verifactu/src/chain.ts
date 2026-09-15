@@ -7,7 +7,7 @@ import "./errors.js";
 import { eq } from "drizzle-orm";
 import { recordIncident } from "@waitron/core";
 import { AppError } from "@waitron/shared";
-import type { NodeId, SaleId, TenantId, TillId } from "@waitron/shared";
+import type { NodeId, SaleId, TillId } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
 import type { AltaInput, AnulacionInput, Encadenamiento } from "@waitron/verifactu";
 import { buildAltaRecord, buildAnulacionRecord, validate } from "@waitron/verifactu";
@@ -104,10 +104,8 @@ export function isUniqueViolation(error: unknown): boolean {
 
 async function selectHeadForUpdate(
   tx: Transaction,
-  tenantId: TenantId,
   nodeId: NodeId,
 ): Promise<ChainHead | undefined> {
-  void tenantId;
   const [row] = await tx
     .select({
       secuencia: cadenas.secuencia,
@@ -137,20 +135,16 @@ async function selectHeadForUpdate(
  * That ordering is why this is two statements rather than a single `... returning` that would
  * return nothing for a conflicting row and leave the caller with no head to act on.
  */
-export async function lockChainHead(
-  tx: Transaction,
-  tenantId: TenantId,
-  nodeId: NodeId,
-): Promise<ChainHead> {
-  const existing = await selectHeadForUpdate(tx, tenantId, nodeId);
+export async function lockChainHead(tx: Transaction, nodeId: NodeId): Promise<ChainHead> {
+  const existing = await selectHeadForUpdate(tx, nodeId);
   if (existing !== undefined) return existing;
 
   await tx
     .insert(cadenas)
-    .values({ tenantId, nodeId })
-    .onConflictDoNothing({ target: [cadenas.tenantId, cadenas.nodeId] });
+    .values({ nodeId })
+    .onConflictDoNothing({ target: [cadenas.nodeId] });
 
-  const created = await selectHeadForUpdate(tx, tenantId, nodeId);
+  const created = await selectHeadForUpdate(tx, nodeId);
   /* v8 ignore start */
   if (created === undefined) {
     // Unreachable in practice: the insert above either commits a fresh row or a concurrent
@@ -158,7 +152,7 @@ export async function lockChainHead(
     // whichever row exists. Left in rather than asserted away because a NOT NULL narrowing here
     // is cheaper than a `!` that would hide a real defect behind a TypeError instead of an
     // AppError if this invariant were ever wrong.
-    throw new AppError("chain.append_contention", { tenantId, nodeId, attempts: 0 });
+    throw new AppError("chain.append_contention", { nodeId, attempts: 0 });
   }
   /* v8 ignore stop */
   return created;
@@ -166,12 +160,11 @@ export async function lockChainHead(
 
 async function attemptAppend(
   tx: Transaction,
-  tenantId: TenantId,
   nodeId: NodeId,
   registro: PendingRegistro,
   sif?: SifRegistration,
 ): Promise<{ id: string; secuencia: number; huella: string }> {
-  const head = await lockChainHead(tx, tenantId, nodeId);
+  const head = await lockChainHead(tx, nodeId);
   // Chain identity is sif_id, resolved independently of `secuencia` — the two must never be
   // conflated (spec's own finding: secuencia is OUR outbox ordering aid, sif_id is which SIF
   // identity actually generated the record, and neither is derived from the other or from the
@@ -179,14 +172,12 @@ async function attemptAppend(
   //
   // A caller that already fetched the SIF (recordSale/recordVoid) threads it in to avoid a second
   // currentSif round trip. It is stable across the append retry loop — SIF identity does not change
-  // mid-append — so it is reused on every attempt. Guarded because a sif for a different (tenant,
-  // node) would silently mis-attribute the record's sif_id: a programming error, so a plain Error.
-  if (sif !== undefined && (sif.tenantId !== tenantId || sif.nodeId !== nodeId)) {
-    throw new Error(
-      `appendToChain: supplied SIF is for (${sif.tenantId}, ${sif.nodeId}), not (${tenantId}, ${nodeId})`,
-    );
+  // mid-append — so it is reused on every attempt. Guarded because a sif for a different node would
+  // silently mis-attribute the record's sif_id: a programming error, so a plain Error.
+  if (sif !== undefined && sif.nodeId !== nodeId) {
+    throw new Error(`appendToChain: supplied SIF is for node ${sif.nodeId}, not ${nodeId}`);
   }
-  const resolvedSif = sif ?? (await currentSif(tx, tenantId, nodeId));
+  const resolvedSif = sif ?? (await currentSif(tx, nodeId));
   const secuencia = head.secuencia + 1;
 
   let encadenamiento: Encadenamiento;
@@ -209,7 +200,7 @@ async function attemptAppend(
       // Unreachable while `cadenas.ultimo_registro_id` only ever points at a row this same
       // package wrote: the FK to registros_facturacion(id) and that table's own immutability
       // (no DELETE, no UPDATE — Task 12) together guarantee a non-null pointer always resolves.
-      throw new AppError("chain.append_contention", { tenantId, nodeId, attempts: 0 });
+      throw new AppError("chain.append_contention", { nodeId, attempts: 0 });
     }
     /* v8 ignore stop */
     encadenamiento = { RegistroAnterior: pointerTo(previous) };
@@ -240,7 +231,6 @@ async function attemptAppend(
   }
 
   const row = toRegistroRow(record, {
-    tenantId,
     tillId: registro.tillId,
     nodeId,
     sifId: resolvedSif.id,
@@ -277,7 +267,6 @@ async function attemptAppend(
   const warnings = issues.filter((issue) => issue.severity === "warning");
   if (warnings.length > 0) {
     await recordIncident(tx, {
-      tenantId,
       tillId: registro.tillId,
       saleId: registro.saleId,
       error: new AppError("fiscal.record_totals_disagree", {
@@ -300,7 +289,7 @@ async function attemptAppend(
 }
 
 /**
- * Appends one record to the (tenant, node) chain, in the caller's transaction.
+ * Appends one record to the node's chain, in the caller's transaction.
  *
  * Each attempt runs inside a nested `tx.transaction()`, which Drizzle emits as
  * SAVEPOINT / RELEASE / ROLLBACK TO SAVEPOINT. That is not decoration: in Postgres a unique
@@ -322,23 +311,16 @@ async function attemptAppend(
  */
 export async function appendToChain(
   tx: Transaction,
-  tenantId: TenantId,
   nodeId: NodeId,
   registro: PendingRegistro,
   sif?: SifRegistration,
 ): Promise<{ id: string; secuencia: number; huella: string }> {
   for (let attempt = 1; attempt <= MAX_APPEND_ATTEMPTS; attempt++) {
     try {
-      return await tx.transaction((nested) =>
-        attemptAppend(nested, tenantId, nodeId, registro, sif),
-      );
+      return await tx.transaction((nested) => attemptAppend(nested, nodeId, registro, sif));
     } catch (error) {
       if (!isUniqueViolation(error)) throw error;
     }
   }
-  throw new AppError("chain.append_contention", {
-    tenantId,
-    nodeId,
-    attempts: MAX_APPEND_ATTEMPTS,
-  });
+  throw new AppError("chain.append_contention", { nodeId, attempts: MAX_APPEND_ATTEMPTS });
 }

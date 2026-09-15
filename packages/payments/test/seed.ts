@@ -109,7 +109,7 @@ export async function seedForSale(
     insert into invoice_series (node_id, code) values (${seeded.nodeId}, 'A') returning id`);
   const seriesId = series.rows[0].id;
   await db.transaction(async (tx) => {
-    await backend.registerNode(tx, brandNodeId(seeded.nodeId), { tenantId: seeded.tenantId });
+    await backend.registerNode(tx, brandNodeId(seeded.nodeId));
   });
   return { ...seeded, seriesId };
 }

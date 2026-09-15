@@ -5,7 +5,7 @@ import { recordSale } from "@waitron/core";
 import { asAppUser, sales, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { decimal, saleId as brandSaleId } from "@waitron/shared";
-import type { NodeId, SeriesId, TenantId, TillId } from "@waitron/shared";
+import type { NodeId, SeriesId, TillId } from "@waitron/shared";
 import { appendToChain } from "./chain.js";
 import { VerifactuBackend } from "./backend.js";
 import { registrosFacturacion } from "./schema/registros.js";
@@ -17,7 +17,6 @@ import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/writ
 // code before the insert. Nothing tested depends on grants being enforced or on two writers
 // racing, which are the two properties PGlite cannot show.
 let backend: VerifactuBackend;
-let tenantId: TenantId;
 let tillId: TillId;
 let nodeId: NodeId;
 let seriesId: SeriesId;
@@ -25,7 +24,7 @@ let seriesId: SeriesId;
 const pg = usePgliteDb({ migrations: TEST_MIGRATIONS });
 
 beforeEach(async () => {
-  ({ tenantId, tillId, nodeId, seriesId } = await seedTenantWithSif(pg.db));
+  ({ tillId, nodeId, seriesId } = await seedTenantWithSif(pg.db));
   backend = new VerifactuBackend({
     deploymentEnvironment: "production",
     clock: steadyClock,
@@ -44,7 +43,7 @@ async function useSeriesCode(code: string): Promise<void> {
 function sell() {
   return withTransaction(pg.db, async (tx) => {
     await asAppUser(tx);
-    return recordSale(tx, backend, saleInput({ tenantId, tillId, nodeId, seriesId }));
+    return recordSale(tx, backend, saleInput({ tillId, nodeId, seriesId }));
   });
 }
 
@@ -72,7 +71,7 @@ describe("a record AEAT could not accept never enters the chain", () => {
     // And the chain head must not have advanced: a refused record leaves the node exactly where it
     // was, so the next legitimate sale is still the chain's first record.
     const heads = await pg.db.execute<{ secuencia: number }>(
-      sql`select secuencia from cadenas where tenant_id = ${tenantId} and node_id = ${nodeId}`,
+      sql`select secuencia from cadenas where node_id = ${nodeId}`,
     );
     expect(heads.rows[0]?.secuencia ?? 0).toBe(0);
   });
@@ -101,7 +100,7 @@ describe("a record AEAT could not accept never enters the chain", () => {
     };
 
     await expect(
-      withTransaction(pg.db, (tx) => appendToChain(tx, tenantId, nodeId, registro)),
+      withTransaction(pg.db, (tx) => appendToChain(tx, nodeId, registro)),
     ).rejects.toMatchObject({
       code: "fiscal.record_invalid",
       params: { fields: ["NumSerieFacturaAnulada"] },
@@ -127,7 +126,7 @@ describe("a record whose totals disagree with themselves is written, filed and f
    * case needs is the DERIVED one, which cannot disagree with itself. */
   function mismatchedSale() {
     return {
-      ...saleInput({ tenantId, tillId, nodeId, seriesId }),
+      ...saleInput({ tillId, nodeId, seriesId }),
       total: decimal("9999.00"),
       settlement: { kind: "deferred" } as const,
     };
@@ -184,7 +183,7 @@ describe("a recipient's name is checked as closely as the issuer's", () => {
    * calling the backend directly — the same bypass `backend.test.ts`'s own F1 cases use. The sale
    * row is inserted on the SAME `withTransaction` transaction, which is what makes the "nothing was
    * written" assertions below meaningful: a refusal rolls back both or neither. */
-  // `sales_pkey` is global while the tenant is fresh each `beforeEach`, so each case mints its own
+  // `sales_pkey` is global while the node is fresh each `beforeEach`, so each case mints its own
   // id and invoice number — a shared literal would make a case that EXPECTS the write to succeed
   // depend on its siblings having rolled theirs back.
   let sequence = 0;
@@ -211,7 +210,6 @@ describe("a recipient's name is checked as closely as the issuer's", () => {
         fiscalState: "recorded",
       });
       await backend.recordSale(tx, {
-        tenantId,
         tillId,
         nodeId,
         saleId: brandSaleId(saleId),
@@ -252,7 +250,7 @@ describe("a recipient's name is checked as closely as the issuer's", () => {
     expect(soldRows).toEqual([]);
 
     const heads = await pg.db.execute<{ secuencia: number }>(
-      sql`select secuencia from cadenas where tenant_id = ${tenantId} and node_id = ${nodeId}`,
+      sql`select secuencia from cadenas where node_id = ${nodeId}`,
     );
     expect(heads.rows[0]?.secuencia ?? 0).toBe(0);
   });

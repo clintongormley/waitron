@@ -29,7 +29,6 @@ export type RegistroRowInsert = typeof registrosFacturacion.$inferInsert;
 export type Entorno = "production" | "preproduction";
 
 export interface RegistroRowContext {
-  tenantId: string;
   /** The till the sale rang at — an informational SNAPSHOT column on the immutable record (node-id
    * rekey, 2026-08-03: `till_id` stays as a snapshot while `nodeId` below is the chain key).
    * Travels on the `PendingRegistro` (a fact about the sale), NOT an `appendToChain` parameter. */
@@ -120,7 +119,6 @@ export function toRegistroRow(
 ): RegistroRowInsert {
   const anterior = record.Encadenamiento.RegistroAnterior;
   const common = {
-    tenantId: ctx.tenantId,
     tillId: ctx.tillId,
     nodeId: ctx.nodeId,
     sifId: ctx.sifId,
@@ -245,7 +243,6 @@ export function pointerTo(row: {
  */
 export type RegistroRow = {
   id: string;
-  tenant_id: string;
   till_id: string;
   node_id: string;
   sif_id: string;

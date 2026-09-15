@@ -66,20 +66,16 @@ type AckRow = {
   delivered_at: string | null;
 };
 
-async function acksFor(tenantId: string): Promise<AckRow[]> {
+async function acksFor(): Promise<AckRow[]> {
   const { rows } = await withTransaction(pg.db, (tx) =>
-    tx.execute<AckRow>(
-      sql`select registro_id, state, csv, submitted_at, delivered_at from acks where tenant_id = ${tenantId}`,
-    ),
+    tx.execute<AckRow>(sql`select registro_id, state, csv, submitted_at, delivered_at from acks`),
   );
   return rows;
 }
 
 async function envioFor(
-  tenantId: string,
   registroId: string,
 ): Promise<{ estado: string; csv: string | null; enviado_en: string | null }> {
-  void tenantId;
   const { rows } = await withTransaction(pg.db, (tx) =>
     tx.execute<{ estado: string; csv: string | null; enviado_en: string | null }>(
       sql`select estado, csv, enviado_en from envios where registro_id = ${registroId}`,
@@ -96,10 +92,10 @@ describe("acks — production atomicity (drainer + reconcile)", () => {
 
     await drain(drainDeps(resolveClient), DRAIN_AT);
 
-    const env = await envioFor(seeded.tenantId, seeded.registroIds[0]!);
+    const env = await envioFor(seeded.registroIds[0]!);
     expect(env.estado).toBe("aceptado");
 
-    const acks = await acksFor(seeded.tenantId);
+    const acks = await acksFor();
     expect(acks).toHaveLength(1);
     expect(acks[0]!.registro_id).toBe(seeded.registroIds[0]);
     // The ack agrees with the committed envios row it reflects.
@@ -121,16 +117,12 @@ describe("acks — production atomicity (drainer + reconcile)", () => {
     // reads `pendiente`, has no CSV, was never claimed (`enviado_en` null), and carries no ack.
     await withTransaction(pg.db, (tx) =>
       tx.execute(
-        sql`update envios set estado = 'pendiente', confirmado_en = null, csv = null, enviado_en = null where tenant_id = ${seeded.tenantId}`,
+        sql`update envios set estado = 'pendiente', confirmado_en = null, csv = null, enviado_en = null `,
       ),
     );
     await pg.db.execute(sql`truncate table acks`);
 
-    const result = await reconcile(
-      reconcileDeps(resolveClient, seeded.clock),
-      seeded.tenantId,
-      PERIOD,
-    );
+    const result = await reconcile(reconcileDeps(resolveClient, seeded.clock), PERIOD);
 
     // The audit still REPORTS the mismatch (localState read from the pre-correction snapshot).
     expect(result.lostAck.map((m) => m.recordId)).toEqual([seeded.registroIds[0]]);
@@ -138,11 +130,11 @@ describe("acks — production atomicity (drainer + reconcile)", () => {
     expect(result.lostAck[0]!.reportedState).toBe("Correcta");
 
     // AND it corrected the estado…
-    const env = await envioFor(seeded.tenantId, seeded.registroIds[0]!);
+    const env = await envioFor(seeded.registroIds[0]!);
     expect(env.estado).toBe("aceptado");
 
     // …atomically with a fresh ack derived from that committed estado.
-    const acks = await acksFor(seeded.tenantId);
+    const acks = await acksFor();
     expect(acks).toHaveLength(1);
     expect(acks[0]!.state).toBe("accepted");
     // consulta can never return the CSV, so a reconcile ack's csv is null.
@@ -167,14 +159,13 @@ describe("acks — production atomicity (drainer + reconcile)", () => {
       ),
     );
     await pg.db.execute(sql`delete from acks where registro_id = ${seeded.registroIds[0]}`);
-    await reconcile(reconcileDeps(resolveClient, seeded.clock), seeded.tenantId, PERIOD);
+    await reconcile(reconcileDeps(resolveClient, seeded.clock), PERIOD);
 
     // The load-bearing invariant: for EVERY acked row, acks.state === ackStateOf(envios.estado).
     const { rows } = await withTransaction(pg.db, (tx) =>
       tx.execute<{ state: string; estado: string }>(sql`
         select a.state, e.estado
         from acks a join envios e on e.registro_id = a.registro_id
-        where a.tenant_id = ${seeded.tenantId}
       `),
     );
     expect(rows).toHaveLength(2); // record 0 (reconcile ack) + record 1 (drainer ack)
@@ -189,30 +180,20 @@ describe("acks — production atomicity (drainer + reconcile)", () => {
     const resolveClient = staticResolver(aeat.client());
     await drain(drainDeps(resolveClient), DRAIN_AT);
     await withTransaction(pg.db, (tx) =>
-      tx.execute(
-        sql`update envios set estado = 'pendiente', confirmado_en = null, csv = null where tenant_id = ${seeded.tenantId}`,
-      ),
+      tx.execute(sql`update envios set estado = 'pendiente', confirmado_en = null, csv = null `),
     );
     await pg.db.execute(sql`truncate table acks`);
 
-    const first = await reconcile(
-      reconcileDeps(resolveClient, seeded.clock),
-      seeded.tenantId,
-      PERIOD,
-    );
+    const first = await reconcile(reconcileDeps(resolveClient, seeded.clock), PERIOD);
     expect(first.lostAck).toHaveLength(1); // corrected on the first pass
 
-    const second = await reconcile(
-      reconcileDeps(resolveClient, seeded.clock),
-      seeded.tenantId,
-      PERIOD,
-    );
+    const second = await reconcile(reconcileDeps(resolveClient, seeded.clock), PERIOD);
     expect(second.lostAck).toEqual([]); // now a clean match — nothing to re-classify
     expect(second.drift).toEqual([]);
     expect(second.noTrace).toEqual([]);
 
     // The ack upsert deduped: exactly one row, still undelivered.
-    const acks = await acksFor(seeded.tenantId);
+    const acks = await acksFor();
     expect(acks).toHaveLength(1);
     expect(acks[0]!.state).toBe("accepted");
   });
@@ -225,16 +206,16 @@ describe("acks — durable transport (pendingAcks / markDelivered)", () => {
     const resolveClient = staticResolver(aeat.client());
     await drain(drainDeps(resolveClient), DRAIN_AT); // two accepted records → two acks
 
-    const before = await pendingAcks(pg.db, seeded.tenantId);
+    const before = await pendingAcks(pg.db);
     expect(before).toHaveLength(2);
     expect(before.map((a) => a.recordId).sort()).toEqual([...seeded.registroIds].sort());
     expect(before.every((a) => a.state === "accepted")).toBe(true);
     expect(before.every((a) => a.csv !== null)).toBe(true);
     expect(before.every((a) => a.submittedAt instanceof Date)).toBe(true);
 
-    await markDelivered(pg.db, seeded.tenantId, seeded.registroIds[0]!);
+    await markDelivered(pg.db, seeded.registroIds[0]!);
 
-    const after = await pendingAcks(pg.db, seeded.tenantId);
+    const after = await pendingAcks(pg.db);
     expect(after.map((a) => a.recordId)).toEqual([seeded.registroIds[1]]);
   });
 
@@ -243,7 +224,7 @@ describe("acks — durable transport (pendingAcks / markDelivered)", () => {
     // no ack is produced. Mirrors the projection's cert-expired case one layer down.
     const seeded = await seedPendingEnvios(pg.db, { count: 1 });
     await withTransaction(pg.db, (tx) => writeAck(tx, seeded.registroIds[0]!, DRAIN_AT));
-    expect(await acksFor(seeded.tenantId)).toHaveLength(0);
+    expect(await acksFor()).toHaveLength(0);
   });
 
   it("deleteAck removes a record's ack row, and is a no-op when there is none", async () => {
@@ -252,14 +233,14 @@ describe("acks — durable transport (pendingAcks / markDelivered)", () => {
     const resolveClient = staticResolver(aeat.client());
     await drain(drainDeps(resolveClient), DRAIN_AT); // writes an `accepted` ack
 
-    expect(await acksFor(seeded.tenantId)).toHaveLength(1);
+    expect(await acksFor()).toHaveLength(1);
 
     await withTransaction(pg.db, (tx) => deleteAck(tx, seeded.registroIds[0]!));
-    expect(await acksFor(seeded.tenantId)).toHaveLength(0);
+    expect(await acksFor()).toHaveLength(0);
 
     // Idempotent: deleting an already-absent ack does not throw.
     await withTransaction(pg.db, (tx) => deleteAck(tx, seeded.registroIds[0]!));
-    expect(await acksFor(seeded.tenantId)).toHaveLength(0);
+    expect(await acksFor()).toHaveLength(0);
   });
 });
 

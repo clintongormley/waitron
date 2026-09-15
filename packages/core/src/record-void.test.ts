@@ -71,8 +71,8 @@ beforeEach(async () => {
  * display name distinct because this fixture creates several live people in one tenant. */
 async function seedPerson(role: "staff" | "supervisor" | "manager" | "admin"): Promise<string> {
   const { rows } = await suite.db.execute<{ id: string }>(
-    sql`insert into persons (tenant_id, display_name, pin_hash, role)
-        values (${tenantId}, ${`P ${role}`}, ${hashPin("1234")}, ${role}) returning id`,
+    sql`insert into persons (display_name, pin_hash, role)
+        values (${`P ${role}`}, ${hashPin("1234")}, ${role}) returning id`,
   );
   return rows[0]!.id;
 }
@@ -80,7 +80,7 @@ async function seedPerson(role: "staff" | "supervisor" | "manager" | "admin"): P
 /** Opens a shift session for `personId` at this tenant's till and returns its id. */
 async function openSession(personId: string): Promise<string> {
   const session = await withTransaction(suite.db, (tx) =>
-    loginWithPin(tx, { tenantId, tillId, personId, pin: "1234" }),
+    loginWithPin(tx, { tillId, personId, pin: "1234" }),
   );
   return session.id;
 }
@@ -155,7 +155,7 @@ function saleInput(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
 async function sell(backend: FiscalBackend, overrides: Partial<RecordSaleInput> = {}) {
   return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
-    await backend.registerNode(tx, nodeId, { tenantId });
+    await backend.registerNode(tx, nodeId);
     return recordSale(tx, backend, saleInput(overrides));
   });
 }
@@ -190,14 +190,14 @@ async function countRows(table: string): Promise<number> {
 function wrapBackend(fake: FakeFiscalBackend, overrides: Partial<FiscalBackend>): FiscalBackend {
   return {
     id: fake.id,
-    registerNode: (tx, node, params) => fake.registerNode(tx, node, params),
+    registerNode: (tx, node) => fake.registerNode(tx, node),
     recordSale: (tx, sale) => fake.recordSale(tx, sale),
     filedReceiptFor: (tx, saleId) => fake.filedReceiptFor(tx, saleId),
     recordVoid: (tx, id, reason) => fake.recordVoid(tx, id, reason),
     recordCorrection: (tx, sale, correction) => fake.recordCorrection(tx, sale, correction),
     recordSubstitution: (tx, sale, substitution) => fake.recordSubstitution(tx, sale, substitution),
-    checkIntegrity: (tx, tenant, node) => fake.checkIntegrity(tx, tenant, node),
-    pendingCount: (tenant, node) => fake.pendingCount(tenant, node),
+    checkIntegrity: (tx, node) => fake.checkIntegrity(tx, node),
+    pendingCount: (node) => fake.pendingCount(node),
     ...overrides,
   };
 }
@@ -386,49 +386,6 @@ describe("recordVoid — authorization", () => {
     expect(await countRows("sale_voids")).toBe(0);
   });
 
-  it("fails loud, and NOT as sale.not_found, when the database holds sales but no taxpayer row", async () => {
-    // `recordVoid` reads the one `tenants` row for the taxpayer the fiscal chain still keys on.
-    // Nothing enforces that the row exists any more — the foreign keys onto `tenants` were dropped
-    // with the tenant columns — so an empty table is reachable by a corrupt or half-provisioned
-    // database. It must fail as a plain Error naming that state: `sale.not_found` would be a lie
-    // (the sale was found two statements earlier) and there is nothing an operator can do about it.
-    //
-    // A hand-built transaction stub, not a real `delete from tenants`: identity's `persons.tenant_id`
-    // foreign key still points at that row (its own set is converted later), so a real database
-    // cannot be emptied while a session exists — and the session is what `authorize` needs to reach
-    // this line at all. The stub answers the sale lookup (`.from().where()`) and authorize's join
-    // (`.from().innerJoin().where()`) with a real-looking row, and the taxpayer read
-    // (`.from().limit()`) with NO row, which is the only condition under test.
-    const row = [{ tillId, nodeId, personId: "operator", role: "manager" }];
-    const fakeTx = {
-      select: () => ({
-        from: () => ({
-          where: () => Promise.resolve(row),
-          limit: () => Promise.resolve([]),
-          innerJoin: () => ({ where: () => Promise.resolve(row) }),
-        }),
-      }),
-      insert: () => {
-        throw new Error("no write may be reached: the taxpayer read fails first");
-      },
-    } as unknown as Transaction;
-
-    const backend = {
-      id: "fake",
-      checkIntegrity: () => {
-        throw new Error("checkIntegrity must not be reached without a taxpayer");
-      },
-    } as unknown as FiscalBackend;
-
-    const error = await captureError(() =>
-      recordVoid(fakeTx, backend, "00000000-0000-4000-8000-000000000001" as SaleId, "Wrong table", {
-        sessionId: managerSessionId,
-      }),
-    );
-    expect(error).not.toBeInstanceOf(AppError);
-    expect((error as Error).message).toContain("tenants is empty");
-  });
-
   it("returns sale.not_found before the gate — a missing sale never leaks an authz error", async () => {
     // Ordering: `authorize` runs AFTER the sale-exists lookup, so a missing sale is
     // still `sale.not_found` and never `authorization.not_permitted`, even under a staff session that
@@ -464,14 +421,11 @@ describe("recordVoid — error propagation", () => {
     // exposes both. One row carrying every field either path reads (plus a `manager` role that holds
     // `sale.void`) lets authorize pass on the operator path so control reaches the failing insert
     // this test is actually about.
-    // The stub's `from()` also answers `limit()`, which is how recordVoid reads the one `tenants`
-    // row for the taxpayer it hands to checkIntegrity and the incident.
-    const row = [{ id: tenantId, tenantId, tillId, nodeId, personId: "operator", role: "manager" }];
+    const row = [{ tillId, nodeId, personId: "operator", role: "manager" }];
     const fakeTx = {
       select: () => ({
         from: () => ({
           where: () => Promise.resolve(row),
-          limit: () => Promise.resolve(row),
           innerJoin: () => ({ where: () => Promise.resolve(row) }),
         }),
       }),
@@ -501,10 +455,10 @@ describe("recordVoid — error propagation", () => {
         throw new Error("not used by this test");
       },
       checkIntegrity: async () => ({ ok: true, checked: 0, issues: [] }),
-      // Both params are part of FiscalBackend's real signature; this override never reads
-      // either, mirroring fake-backend.ts's identical `_reason` convention.
+      // The node id is part of FiscalBackend's real signature; this override never reads it,
+      // mirroring fake-backend.ts's identical `_reason` convention.
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      pendingCount: (_tenant, _node) => {
+      pendingCount: (_node) => {
         throw new Error("not used by this test");
       },
     };
@@ -604,9 +558,9 @@ describe("recordVoid — no fiscal condition blocks a void", () => {
     const observed: string[] = [];
     const fake = new FakeFiscalBackend(suite.db);
     const backend = wrapBackend(fake, {
-      async checkIntegrity(tx, tenant, node) {
+      async checkIntegrity(tx, node) {
         observed.push("checkIntegrity");
-        return fake.checkIntegrity(tx, tenant, node);
+        return fake.checkIntegrity(tx, node);
       },
       async recordVoid(tx, id, reason) {
         observed.push("recordVoid");

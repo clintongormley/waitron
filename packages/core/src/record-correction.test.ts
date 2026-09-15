@@ -75,8 +75,8 @@ beforeEach(async () => {
  * display name distinct because this fixture creates several live people in one tenant. */
 async function seedPerson(role: "staff" | "supervisor" | "manager" | "admin"): Promise<string> {
   const { rows } = await suite.db.execute<{ id: string }>(
-    sql`insert into persons (tenant_id, display_name, pin_hash, role)
-        values (${tenantId}, ${`P ${role}`}, ${hashPin("1234")}, ${role}) returning id`,
+    sql`insert into persons (display_name, pin_hash, role)
+        values (${`P ${role}`}, ${hashPin("1234")}, ${role}) returning id`,
   );
   return rows[0]!.id;
 }
@@ -84,7 +84,7 @@ async function seedPerson(role: "staff" | "supervisor" | "manager" | "admin"): P
 /** Opens a shift session for `personId` at this tenant's till and returns its id. */
 async function openSession(personId: string): Promise<string> {
   const session = await withTransaction(suite.db, (tx) =>
-    loginWithPin(tx, { tenantId, tillId, personId, pin: "1234" }),
+    loginWithPin(tx, { tillId, personId, pin: "1234" }),
   );
   return session.id;
 }
@@ -200,7 +200,7 @@ function correctionInput(
 async function sell(backend: FiscalBackend, overrides: Partial<RecordSaleInput> = {}) {
   return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
-    await backend.registerNode(tx, nodeId, { tenantId });
+    await backend.registerNode(tx, nodeId);
     return recordSale(tx, backend, saleInput(overrides));
   });
 }

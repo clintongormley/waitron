@@ -27,7 +27,7 @@ export function deriveReservedSeriesCodes(
 
 /**
  * The base of a code: `code` with every trailing `-<digits>` group whose digits are an installation
- * number this tenant has registered (any node, live or revoked) removed. `FA-7` from a promoted standby
+ * number this venue has registered (any node, live or revoked) removed. `FA-7` from a promoted standby
  * and `FA-210441234` from an earlier restore both give `FA`; a human's `FA-2026` stays unless 2026 was
  * an installation number. Keeps every derived code to ONE suffix however many restores or
  * reservations a lineage goes through.
@@ -42,14 +42,14 @@ export function stripOwnSuffixes(code: string, registered: ReadonlySet<number>):
 }
 
 /**
- * A node's live series, ordered by original code and stripped of the tenant's own suffixes:
+ * A node's live series, ordered by original code and stripped of the venue's own suffixes:
  * Same-purpose duplicates collapse; if a stripped base is claimed by another purpose, keep the
  * original code as the base. Preserves first-seen order; retired series remain history.
  * Throws `series.code_too_long` after disambiguation if the base cannot carry a suffix within the cap.
  */
 export async function liveSeriesBases(
   tx: Transaction,
-  node: { tenantId: string; nodeId: string },
+  node: { nodeId: string },
 ): Promise<{ code: string; purpose: string }[]> {
   const live = await tx
     .select({ code: invoiceSeries.code, purpose: invoiceSeries.purpose })

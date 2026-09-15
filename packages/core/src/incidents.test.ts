@@ -163,7 +163,7 @@ function failingChain(): FakeFiscalBackend {
 async function sell(backend: FiscalBackend, overrides: Partial<RecordSaleInput> = {}) {
   return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
-    await backend.registerNode(tx, nodeId, { tenantId });
+    await backend.registerNode(tx, nodeId);
     return recordSale(tx, backend, input(overrides));
   });
 }
@@ -284,7 +284,7 @@ describe("incidents — chain verification failure", () => {
     await expect(
       withTransaction(suite.db, async (tx) => {
         await asAppUser(tx);
-        await backend.registerNode(tx, nodeId, { tenantId });
+        await backend.registerNode(tx, nodeId);
         await recordSale(tx, backend, input());
         throw new Error("simulated crash before commit");
       }),

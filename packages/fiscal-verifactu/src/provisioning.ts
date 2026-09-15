@@ -1,6 +1,5 @@
-import { eq } from "drizzle-orm";
 import { tenants, type Transaction } from "@waitron/db";
-import type { ModuleProvisioning, ProvisionedNode, StandbyReservation } from "@waitron/module";
+import type { ModuleProvisioning, StandbyReservation } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 // Side-effect only: registers this package's `sif.*` codes on the shared registry. See ./errors.ts.
 import "./errors.js";
@@ -18,20 +17,19 @@ import { deriveReservedSeriesCodes, liveSeriesBases } from "./reserved-series.js
  * there, `IdSistemaInformatico` on every registro the node files. */
 export const WAITRON_ID_SISTEMA = "W1";
 
-/** The obligado's NIF: `tenants.tax_id` for an ES tenant. Read here, never an argument — an
- * operator-supplied NIF would file a real tenant's sales under someone else's. */
-async function obligadoNif(tx: Transaction, node: ProvisionedNode): Promise<string> {
-  const [row] = await tx
-    .select({ taxId: tenants.taxId })
-    .from(tenants)
-    .where(eq(tenants.id, node.tenantId));
-  /* v8 ignore start */
+/** The obligado's NIF: the `tax_id` of the one taxpayer row. Read here, never an argument — an
+ * operator-supplied NIF would file a real venue's sales under someone else's.
+ *
+ * An empty `tenants` table is a database with no taxpayer at all. Provisioning writes that row
+ * before it seeds any module, and no foreign key enforces it any more (they went with the tenant
+ * columns), so this is reachable only by a corrupt or half-provisioned database: a plain `Error`
+ * naming that state, not a domain code, for the same reason `readStandardSeriesIdTx`
+ * (`@waitron/db`) uses one. */
+async function obligadoNif(tx: Transaction): Promise<string> {
+  const [row] = await tx.select({ taxId: tenants.taxId }).from(tenants).limit(1);
   if (row === undefined) {
-    // Unreachable through the runners: the node row FKs the tenant, and both runners check the node
-    // exists before seeding.
-    throw new Error(`fiscal seed: tenant ${node.tenantId} has no row`);
+    throw new Error("fiscal seed: tenants is empty, so there is no taxpayer to file under");
   }
-  /* v8 ignore stop */
   return row.taxId;
 }
 
@@ -91,9 +89,8 @@ export const FISCAL_PROVISIONING: ModuleProvisioning = {
     summary: "register the node as a Veri*Factu SIF and start its chain",
     async run(tx, node) {
       const sif = await registerSif(tx, {
-        tenantId: node.tenantId,
         nodeId: node.nodeId,
-        nif: await obligadoNif(tx, node),
+        nif: await obligadoNif(tx),
         idSistemaInformatico: WAITRON_ID_SISTEMA,
       });
       return `SIF ${sif.id} (installation ${sif.numeroInstalacion})`;
@@ -101,7 +98,7 @@ export const FISCAL_PROVISIONING: ModuleProvisioning = {
   },
   standby: {
     async reserve(tx, primary): Promise<StandbyReservation> {
-      const primarySif = await currentSif(tx, primary.tenantId, primary.nodeId);
+      const primarySif = await currentSif(tx, primary.nodeId);
       const bases = await liveSeriesBases(tx, primary);
       const numeroInstalacion = await reserveInstallationNumber(tx, {
         nif: primarySif.nif,
@@ -117,7 +114,6 @@ export const FISCAL_PROVISIONING: ModuleProvisioning = {
     async establish(tx, standby, state) {
       const reserved = parseReservedState(state);
       await writeReservedSif(tx, {
-        tenantId: standby.tenantId,
         nodeId: standby.nodeId,
         nif: reserved.nif,
         idSistemaInformatico: reserved.idSistemaInformatico,

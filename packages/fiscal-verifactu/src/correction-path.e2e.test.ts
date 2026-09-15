@@ -25,11 +25,11 @@ let backend: VerifactuBackend;
 let till: SeededTill;
 // A SECOND series, `purpose = 'rectificative'`, for the corrective sales — a rectificativa draws
 // its number from its own series (RD 1619/2012 art. 6.1.a), and `sales` is unique on
-// (tenant, series, invoice_number), so the corrective cannot reuse the original's series+number.
+// (series_id, invoice_number), so the corrective cannot reuse the original's series+number.
 let rectificativeSeriesId: string;
 
 beforeEach(async () => {
-  // Each call mints a fresh tenant (and NIF), so tests never collide on the append-only,
+  // Each call mints a fresh node (and NIF), so tests never collide on the append-only,
   // TRUNCATE-blocking `registros_facturacion` — the same reseed-without-truncate reasoning
   // `chain.concurrency.test.ts` documents.
   till = await seedTill(suite.admin, "A");
@@ -51,7 +51,6 @@ beforeEach(async () => {
 /** The corrective's OWN data — a rectificativa por diferencias with negative lines and total. */
 function correctiveSaleFor(saleId: string, invoiceNumber: number): SaleForFiscalRecord {
   return {
-    tenantId: till.tenantId,
     tillId: till.tillId,
     nodeId: till.nodeId,
     saleId: brandSaleId(saleId),
@@ -74,7 +73,6 @@ function correctiveSaleFor(saleId: string, invoiceNumber: number): SaleForFiscal
  * NumSerieFactura "A/1". */
 function originalSaleFor(saleId: string, invoiceNumber: number): SaleForFiscalRecord {
   return {
-    tenantId: till.tenantId,
     tillId: till.tillId,
     nodeId: till.nodeId,
     saleId: brandSaleId(saleId),

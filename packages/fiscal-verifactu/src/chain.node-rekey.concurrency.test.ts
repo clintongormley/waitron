@@ -28,7 +28,7 @@ const WRITERS = 20;
 const suite = useTemplateDb({ template: "manifest" });
 
 // No truncate-and-reseed: registros_facturacion's append-only trigger blocks even a CASCADEd
-// TRUNCATE from `tenants`. `seedTill` mints a FRESH tenant (and nif, and node) per call, so each
+// TRUNCATE from `tenants`. `seedTill` mints a FRESH node (and nif) per call, so each
 // test's rows are new and independent of whatever a previous test committed.
 let node: SeededTill;
 
@@ -46,12 +46,7 @@ describe("appendToChain under real contention, keyed by node", () => {
       const results = await Promise.all(
         dbs.map((db, i) =>
           db.transaction((tx) =>
-            appendToChain(
-              tx,
-              node.tenantId,
-              node.nodeId,
-              altaFor(node.tillId, sales[i]!, i + 1, i),
-            ),
+            appendToChain(tx, node.nodeId, altaFor(node.tillId, sales[i]!, i + 1, i)),
           ),
         ),
       );
@@ -93,7 +88,7 @@ describe("appendToChain under real contention, keyed by node", () => {
       sec += 1;
       const saleId = await seedSale(suite.admin, till, sec);
       await suite.admin.transaction((tx) =>
-        appendToChain(tx, node.tenantId, node.nodeId, altaFor(till.tillId, saleId, sec, sec)),
+        appendToChain(tx, node.nodeId, altaFor(till.tillId, saleId, sec, sec)),
       );
     }
 
@@ -109,16 +104,15 @@ describe("appendToChain under real contention, keyed by node", () => {
 });
 
 describe("currentSif resolves per node", () => {
-  // Property 4 (design §9.4): two nodes under one tenant resolve to distinct SIFs / distinct chains.
-  it("gives two nodes of one tenant distinct SIF identities and distinct chains", async () => {
+  // Property 4 (design §9.4): two nodes of one taxpayer resolve to distinct SIFs / distinct chains.
+  it("gives two nodes of one taxpayer distinct SIF identities and distinct chains", async () => {
     const nodeA = node;
-    // A second, independently seeded node (fresh tenant is fine — the point is distinct SIFs; but to
-    // stress "under one tenant" we add a sibling node to nodeA's tenant).
-    const sibling = await addSiblingNode(nodeA);
+    // A second node under nodeA's OWN location and NIF, so the two genuinely share one obligado.
+    const sibling = await addSiblingNode();
 
     const [sifA, sifB] = await suite.admin.transaction(async (tx) => [
-      await currentSif(tx, nodeA.tenantId, nodeA.nodeId),
-      await currentSif(tx, nodeA.tenantId, sibling),
+      await currentSif(tx, nodeA.nodeId),
+      await currentSif(tx, sibling),
     ]);
     expect(sifA.nodeId).toBe(nodeA.nodeId);
     expect(sifB.nodeId).toBe(sibling);
@@ -129,20 +123,19 @@ describe("currentSif resolves per node", () => {
     // And distinct chains: an append on nodeA leaves the sibling's chain untouched.
     const saleId = await seedSale(suite.admin, nodeA, 1);
     await suite.admin.transaction((tx) =>
-      appendToChain(tx, nodeA.tenantId, nodeA.nodeId, altaFor(nodeA.tillId, saleId, 1, 1)),
+      appendToChain(tx, nodeA.nodeId, altaFor(nodeA.tillId, saleId, 1, 1)),
     );
     const counts = await suite.admin.execute<{ node_id: string; count: number }>(sql`
-      select node_id, count(*)::int as count from registros_facturacion
-      where tenant_id = ${nodeA.tenantId} group by node_id
+      select node_id, count(*)::int as count from registros_facturacion group by node_id
     `);
     const byNode = new Map(counts.rows.map((r) => [r.node_id, r.count]));
     expect(byNode.get(nodeA.nodeId)).toBe(1);
     expect(byNode.get(sibling)).toBeUndefined();
   });
 
-  // Registers a second node under an existing fixture's tenant and gives it a live SIF, returning
+  // Registers a second node beside an existing fixture's and gives it a live SIF, returning
   // its node id. Its own fresh location keeps it a distinct node under the same obligado.
-  async function addSiblingNode(seed: SeededTill): Promise<NodeId> {
+  async function addSiblingNode(): Promise<NodeId> {
     return suite.admin.transaction(async (tx) => {
       const loc = await tx.execute<{ id: string }>(sql`
         insert into locations (name, invoice_locales, operation_description) values ('Sala sib', array['es'], 'Venta en establecimiento') returning id
@@ -155,10 +148,9 @@ describe("currentSif resolves per node", () => {
       // via registerSif, so the installation number is minted from the real (NIF, IdSIF) counter
       // rather than hand-picked, and the sibling's cadenas head is seeded the way production does it.
       const nifRow = await tx.execute<{ tax_id: string }>(sql`
-        select tax_id from tenants where id = ${seed.tenantId}
+        select tax_id from tenants limit 1
       `);
       await registerSif(tx, {
-        tenantId: seed.tenantId,
         nodeId: sibling,
         nif: nifRow.rows[0]!.tax_id,
         idSistemaInformatico: TEST_SISTEMA.IdSistemaInformatico,
@@ -182,7 +174,7 @@ describe("the series↔node guard (record-sale)", () => {
   }
 
   it("rejects a sale whose node does not own the series", async () => {
-    const other = await seedTill(suite.admin, "OTH"); // a DIFFERENT node (and tenant)
+    const other = await seedTill(suite.admin, "OTH"); // a DIFFERENT node
     const backend = backendFor();
     const error = await captureError(() =>
       withTransaction(suite.admin, async (tx) => {
@@ -192,7 +184,6 @@ describe("the series↔node guard (record-sale)", () => {
           tx,
           backend,
           saleInput({
-            tenantId: node.tenantId,
             tillId: node.tillId,
             nodeId: other.nodeId,
             seriesId: brandSeriesId(node.seriesId),
@@ -211,7 +202,6 @@ describe("the series↔node guard (record-sale)", () => {
         tx,
         backend,
         saleInput({
-          tenantId: node.tenantId,
           tillId: node.tillId,
           nodeId: node.nodeId,
           seriesId: brandSeriesId(node.seriesId),
@@ -229,11 +219,11 @@ describe("the series↔node guard (record-sale)", () => {
 describe("node references and app-role appends", () => {
   // Property 5 (design §9.3): the app role can append node-keyed rows under withTransaction; the
   // (node_id) FK on `sales` blocks a node reference that names no node.
-  it("lets the app role append under its own tenant context", async () => {
+  it("lets the app role append", async () => {
     const saleId = await seedSale(suite.admin, node, 1);
     const appended = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
-      return appendToChain(tx, node.tenantId, node.nodeId, altaFor(node.tillId, saleId, 1, 1));
+      return appendToChain(tx, node.nodeId, altaFor(node.tillId, saleId, 1, 1));
     });
     expect(appended.secuencia).toBe(1);
   });

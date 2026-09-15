@@ -4,10 +4,10 @@
 // (index.ts). Mirrors ./record-sale.ts's identical convention.
 import "./errors.js";
 import { eq } from "drizzle-orm";
-import { isUniqueViolation, saleVoids, sales, tenants } from "@waitron/db";
+import { isUniqueViolation, saleVoids, sales } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
-import type { NodeId, SaleId, TenantId, TillId } from "@waitron/shared";
+import type { NodeId, SaleId, TillId } from "@waitron/shared";
 import type { FiscalBackend, FiscalRecordRef } from "@waitron/fiscal";
 import { authorize, type AuthzInput } from "@waitron/identity";
 import { recordIncident } from "./incidents.js";
@@ -68,25 +68,7 @@ export async function recordVoid(
   // No clock-degradation incident here: unlike `recordSale`, `recordVoid` takes no `TrustedClock`
   // at all (its own `new Date()` a few lines down is not a `TrustedReading`), so there is no
   // `.warning` to forward.
-  // The taxpayer, read from the one `tenants` row. `sales` used to carry it and no longer does,
-  // while the fiscal module's own chain tables still key on it, so this is where the value comes
-  // from until those tables are converted too. Every sibling in this package takes it as an input;
-  // only this path had nowhere else to read it.
-  //
-  // An empty `tenants` table here is a database that holds sales but no taxpayer — provisioning's
-  // `ensure-tenant` writes that row before anything can sell, and no foreign key enforces it any
-  // more, so this is reachable only by a corrupt or half-provisioned database. A plain `Error`, not
-  // a domain code, for the same reason `readStandardSeriesIdTx` (`@waitron/db`) uses one: it is a
-  // programming-level invariant, not a condition an operator can act on. It must NOT reuse
-  // `sale.not_found` — the sale was found forty lines above, and that code would send whoever reads
-  // it looking for the wrong thing.
-  const [taxpayer] = await tx.select({ id: tenants.id }).from(tenants).limit(1);
-  if (taxpayer === undefined) {
-    throw new Error("tenants is empty: a database holding sales must hold its taxpayer row");
-  }
-  const tenantId = taxpayer.id as TenantId;
-
-  const verification = await backend.checkIntegrity(tx, tenantId, sale.nodeId as NodeId);
+  const verification = await backend.checkIntegrity(tx, sale.nodeId as NodeId);
   // ONE incident aggregating all of this call's issues, never one per issue — the table-wide
   // `incidents_open_dedup` index holds at most one open incident per (till, code, sale), so
   // one row per issue (all sharing this sale + `chain.verification_failed`) would collapse to a
@@ -120,7 +102,6 @@ export async function recordVoid(
 
   for (const incident of pending) {
     await recordIncident(tx, {
-      tenantId,
       tillId: sale.tillId as TillId,
       saleId,
       detectedAt: now,

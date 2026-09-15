@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
-import type { NodeId, SaleId, TenantId } from "@waitron/shared";
+import type { NodeId, SaleId } from "@waitron/shared";
 import type { Database, Transaction } from "@waitron/db";
 import type {
   FiscalBackend,
@@ -64,7 +64,6 @@ export class FakeFiscalBackend implements FiscalBackend {
     await db.execute(sql`
       create table if not exists fake_node_registrations (
         node_id text primary key,
-        tenant_id text not null,
         registration_id text not null,
         registered_at timestamptz not null default now()
       );
@@ -72,7 +71,6 @@ export class FakeFiscalBackend implements FiscalBackend {
     await db.execute(sql`
       create table if not exists fake_fiscal_records (
         record_id text primary key,
-        tenant_id text not null,
         node_id text not null,
         sale_id text not null,
         sequence integer not null,
@@ -123,15 +121,11 @@ export class FakeFiscalBackend implements FiscalBackend {
     await db.execute(sql`truncate fake_fiscal_records, fake_node_registrations`);
   }
 
-  async registerNode(
-    tx: Transaction,
-    nodeId: NodeId,
-    params: { tenantId: string },
-  ): Promise<NodeRegistration> {
+  async registerNode(tx: Transaction, nodeId: NodeId): Promise<NodeRegistration> {
     const registrationId = nextId();
     await tx.execute(sql`
-      insert into fake_node_registrations (node_id, tenant_id, registration_id)
-      values (${nodeId}, ${params.tenantId}, ${registrationId})
+      insert into fake_node_registrations (node_id, registration_id)
+      values (${nodeId}, ${registrationId})
       on conflict (node_id) do update set registration_id = excluded.registration_id
     `);
     return { backend: this.id, nodeId, registrationId, registeredAt: new Date() };
@@ -143,7 +137,6 @@ export class FakeFiscalBackend implements FiscalBackend {
       throw new AppError("shared.invalid_decimal", { value: String(sale.total) });
     }
     return this.append(tx, {
-      tenantId: sale.tenantId,
       nodeId: sale.nodeId,
       saleId: sale.saleId,
       kind: "sale",
@@ -195,12 +188,11 @@ export class FakeFiscalBackend implements FiscalBackend {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars -- see comment above
   async recordVoid(tx: Transaction, saleId: SaleId, _reason: string): Promise<FiscalRecordRef> {
     const rows = await tx.execute<{
-      tenant_id: string;
       node_id: string;
       invoice_number: number;
       total: string;
     }>(sql`
-      select tenant_id, node_id, invoice_number, total
+      select node_id, invoice_number, total
       from fake_fiscal_records
       where sale_id = ${saleId} and kind = 'sale'
       limit 1
@@ -210,7 +202,6 @@ export class FakeFiscalBackend implements FiscalBackend {
       throw new AppError("fiscal.sale_not_recorded", { saleId });
     }
     return this.append(tx, {
-      tenantId: original.tenant_id,
       nodeId: original.node_id,
       saleId,
       kind: "void",
@@ -242,7 +233,6 @@ export class FakeFiscalBackend implements FiscalBackend {
     // shape recordSale uses. The real backend validates none of this beyond what appendToChain
     // does, so neither does the fake.
     return this.append(tx, {
-      tenantId: sale.tenantId,
       nodeId: sale.nodeId,
       saleId: sale.saleId,
       kind: "correction",
@@ -280,7 +270,6 @@ export class FakeFiscalBackend implements FiscalBackend {
     // positive total), so it is appended from `sale`, not from the replaced records' columns. The
     // replaced 'sale' records are only read above, never rewritten — nothing here annuls them.
     return this.append(tx, {
-      tenantId: sale.tenantId,
       nodeId: sale.nodeId,
       saleId: sale.saleId,
       kind: "substitution",
@@ -291,12 +280,7 @@ export class FakeFiscalBackend implements FiscalBackend {
     });
   }
 
-  async checkIntegrity(
-    tx: Transaction,
-    tenantId: TenantId,
-    nodeId: NodeId,
-  ): Promise<IntegrityReport> {
-    void tenantId;
+  async checkIntegrity(tx: Transaction, nodeId: NodeId): Promise<IntegrityReport> {
     const rows = await tx.execute<{ count: string }>(sql`
       select count(*)::text as count from fake_fiscal_records
       where node_id = ${nodeId}
@@ -306,8 +290,7 @@ export class FakeFiscalBackend implements FiscalBackend {
     return { ok: issues.length === 0, checked, issues };
   }
 
-  async pendingCount(tenantId: TenantId, nodeId: NodeId): Promise<number> {
-    void tenantId;
+  async pendingCount(nodeId: NodeId): Promise<number> {
     const rows = await this.db.execute<{ count: string }>(sql`
       select count(*)::text as count
       from fake_fiscal_records
@@ -359,7 +342,6 @@ export class FakeFiscalBackend implements FiscalBackend {
   private async append(
     tx: Transaction,
     entry: {
-      tenantId: string;
       nodeId: string;
       saleId: string;
       kind: "sale" | "void" | "correction" | "substitution";
@@ -391,10 +373,10 @@ export class FakeFiscalBackend implements FiscalBackend {
     // positions without a constraint would let a core test interleave two writes and still pass.
     await tx.execute(sql`
       insert into fake_fiscal_records
-        (record_id, tenant_id, node_id, sale_id, sequence, kind, invoice_number, total, state,
+        (record_id, node_id, sale_id, sequence, kind, invoice_number, total, state,
          vat_breakdown)
       values
-        (${recordId}, ${entry.tenantId}, ${entry.nodeId}, ${entry.saleId}, ${sequence},
+        (${recordId}, ${entry.nodeId}, ${entry.saleId}, ${sequence},
          ${entry.kind}, ${entry.invoiceNumber}, ${entry.total}, 'pending', ${vatBreakdown}::jsonb)
     `);
     return {

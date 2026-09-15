@@ -3,7 +3,6 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { recordSale, recordVoid } from "@waitron/core";
 import { createFakeAeat } from "@waitron/verifactu/src/testing/fake-aeat.js";
-import type { TenantId } from "@waitron/shared";
 import type { RegistroAlta, VerifactuClient } from "@waitron/verifactu";
 import { asAppUser, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
@@ -36,6 +35,17 @@ const drainDeps = (resolveClient: DrainDeps["resolveClient"]): DrainDeps => ({
   environment: "production",
 });
 
+/**
+ * The `envios` rows of ONE seeded fixture's own chain, by that fixture's node. This file shares one
+ * PGlite database across every describe block, and `seedPendingEnvios` mints a fresh NODE per call,
+ * so scoping a read or a cleanup to the seeded node is what keeps a test's assertions about its own
+ * rows rather than about everything any earlier test left behind. (It scoped by tenant until the
+ * tenant column went; the node is the chain's owner and gives the same scope.) A query that already
+ * joins `registros_facturacion` filters on `r.node_id` directly instead.
+ */
+const ownChain = (seeded: { nodeId: string }) =>
+  sql`registro_id in (select id from registros_facturacion where node_id = ${seeded.nodeId})`;
+
 describe("drain — happy path", () => {
   let seeded: SeededDrain;
   let aeat: ReturnType<typeof createFakeAeat>;
@@ -43,7 +53,7 @@ describe("drain — happy path", () => {
 
   beforeEach(async () => {
     aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
-    seeded = await seedPendingEnvios(pg.db, { count: 3 }); // 3 pending altas on one till/tenant
+    seeded = await seedPendingEnvios(pg.db, { count: 3 }); // 3 pending altas on one till/node
     deps = drainDeps(staticResolver(aeat.client()));
   });
 
@@ -90,14 +100,14 @@ describe("drain — happy path", () => {
  */
 describe("drain — happy path, an anulación row", () => {
   it("submits a voided sale's anulación through the same accept-and-persist path as an alta", async () => {
-    const { tenantId, tillId, nodeId, seriesId } = await seedTenantWithSif(pg.db);
+    const { tillId, nodeId, seriesId } = await seedTenantWithSif(pg.db);
     // recordVoid now requires `sale.void`: seed a manager and open its session to authorize the void.
     const { rows: mgr } = await pg.db.execute<{ id: string }>(
-      sql`insert into persons (tenant_id, display_name, pin_hash, role)
-          values (${tenantId}, 'P', ${hashPin("1234")}, 'manager') returning id`,
+      sql`insert into persons (display_name, pin_hash, role)
+          values ('P', ${hashPin("1234")}, 'manager') returning id`,
     );
     const voidSession = await withTransaction(pg.db, (tx) =>
-      loginWithPin(tx, { tenantId, tillId, personId: mgr[0]!.id, pin: "1234" }),
+      loginWithPin(tx, { tillId, personId: mgr[0]!.id, pin: "1234" }),
     );
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
     const backend = new VerifactuBackend({
@@ -109,7 +119,7 @@ describe("drain — happy path, an anulación row", () => {
 
     const sale = await withTransaction(pg.db, async (tx) => {
       await asAppUser(tx);
-      return recordSale(tx, backend, saleInput({ tenantId, tillId, nodeId, seriesId }));
+      return recordSale(tx, backend, saleInput({ tillId, nodeId, seriesId }));
     });
     await withTransaction(pg.db, async (tx) => {
       await asAppUser(tx);
@@ -126,10 +136,10 @@ describe("drain — happy path, an anulación row", () => {
     expect(result.recordsSubmitted).toBe(2);
     expect(result.recordsAccepted).toBe(2);
 
-    // Restrict the read to this case's tenant because the database is shared across cases.
+    // Restrict the read to this case's own chain because the database is shared across cases.
     const rows = await withTransaction(pg.db, (tx) =>
       tx.execute<{ estado: string; csv: string | null }>(sql`
-        select estado, csv from envios where tenant_id = ${tenantId}
+        select estado, csv from envios where ${ownChain({ nodeId })}
       `),
     );
     expect(rows.rows).toHaveLength(2);
@@ -139,11 +149,11 @@ describe("drain — happy path, an anulación row", () => {
 });
 
 /**
- * Its own describe, with a beforeEach that seeds NOTHING beyond `aeat`: `drain()`'s own
- * top-level `tenantsWithWork` sweep (./drain.ts) is global across the WHOLE shared `pg.db`, not
- * scoped to whichever caller invokes it — so if this describe's beforeEach seeded its own
- * always-pending tenant (the "happy path" describe's convention), a self-built batching tenant
- * here would have its `result.batchesSent` count polluted by that OTHER tenant's own envío too.
+ * Its own describe, with a beforeEach that seeds NOTHING beyond `aeat`: `drain()` claims every due
+ * row in the WHOLE shared `pg.db`, not just the ones the caller seeded — so if this describe's
+ * beforeEach seeded its own always-pending backlog (the "happy path" describe's convention), a
+ * self-built batching backlog here would have its `result.batchesSent` count polluted by that other
+ * backlog's envío too.
  * Every other describe in this file either fully drains whatever it seeds before its `it` returns,
  * OR deletes the `envios` rows it seeded (the "deployment-environment guard" describe below, whose
  * whole point is rows no backend in this file can ever fully drain, in a `finally`; the "flow
@@ -196,7 +206,7 @@ describe("drain — batching (the >cap split)", () => {
 
     const pending = await withTransaction(pg.db, (tx) =>
       tx.execute<{ count: string }>(sql`
-      select count(*)::text as count from envios where tenant_id = ${seeded.tenantId} and estado = 'pendiente'
+      select count(*)::text as count from envios where ${ownChain(seeded)} and estado = 'pendiente'
     `),
     );
     expect(Number(pending.rows[0].count)).toBe(1);
@@ -215,33 +225,37 @@ describe("drain — flow control (envio_flujo)", () => {
 
   beforeEach(async () => {
     aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
-    seeded = await seedPendingEnvios(pg.db, { count: 3 }); // 3 pending altas on one till/tenant
+    seeded = await seedPendingEnvios(pg.db, { count: 3 }); // 3 pending altas on one till/node
     deps = drainDeps(staticResolver(aeat.client()));
   });
 
   // Delete this describe's own seeded rows after every test — the same "deletes what it seeded in a
   // finally" hygiene the "deployment-environment guard" describe below applies, and the invariant
   // the "batching (the >cap split)" describe's header depends on: no test may leave `envios` rows
-  // the file-global `drain()` sweep would pick up. The "defers a tenant behind a still-open gate"
+  // the file-global `drain()` sweep would pick up. The "defers the pass behind a still-open gate"
   // test below LEAVES 3 rows `pendiente` behind a CLOSED gate — harmless while the drain cap was
   // hardcoded at 1000 (a 3-row backlog is `< 1000`, so the sweep defers it), but the ">cap split"
   // and starvation tests now inject a small cap (`maxRegistrosPorEnvio: 3`), under which those same
   // 3 leaked rows are `>= cap` and the global sweep SENDS them — inflating those tests' global
   // result counters. Cleaning up here removes the leak at its source rather than tuning each cap
-  // around it. Deleting `envios` (not the tenant/registro) mirrors the env-guard describe's own
-  // `delete from envios where tenant_id` pattern; the two draining tests above leave nothing
-  // pending, so this is a no-op for them.
+  // around it. Deleting `envios` (not the registro) mirrors the env-guard describe's own
+  // `delete from envios where …` pattern; the two draining tests above leave nothing pending, so
+  // this is a no-op for them.
+  //
+  // `envio_flujo` goes too, and must: it holds ONE row for the whole database, so a case that
+  // leaves a closed gate behind would defer the NEXT case's drain before it claimed anything.
   afterEach(async () => {
-    await pg.db.execute(sql`delete from envios where tenant_id = ${seeded.tenantId}`);
+    await pg.db.execute(sql`delete from envios where ${ownChain(seeded)}`);
+    await pg.db.execute(sql`delete from envio_flujo`);
   });
 
   it("persists the server's TiempoEsperaEnvio into envio_flujo and sets nextDueAt when a partial batch remains for next time", async () => {
-    // 3 records → one envío that drains the whole backlog; the tenant's NEXT envío waits t.
+    // 3 records → one envío that drains the whole backlog; the NEXT envío waits t.
     const result = await drain(deps, new Date("2026-07-21T00:01:00Z"));
-    // Each case seeds a fresh tenant; select that tenant's flow-control row.
+    // One flow-control row per database; this describe clears it between cases (afterEach).
     const flujo = await withTransaction(pg.db, (tx) =>
       tx.execute<{ proximo_envio_en: string; tiempo_espera_seg: number }>(
-        sql`select proximo_envio_en, tiempo_espera_seg from envio_flujo where tenant_id = ${seeded.tenantId}`,
+        sql`select proximo_envio_en, tiempo_espera_seg from envio_flujo`,
       ),
     );
     expect(flujo.rows[0]?.tiempo_espera_seg).toBeGreaterThan(0);
@@ -256,31 +270,27 @@ describe("drain — flow control (envio_flujo)", () => {
     });
     const deps2 = drainDeps(staticResolver(big.client()));
     await drain(deps2, new Date("2026-07-21T00:01:00Z"));
-    // Earlier cases may retain flow-control rows for other tenants in this shared database.
     const flujo = await withTransaction(pg.db, (tx) =>
-      tx.execute<{ tiempo_espera_seg: number }>(
-        sql`select tiempo_espera_seg from envio_flujo where tenant_id = ${seeded.tenantId}`,
-      ),
+      tx.execute<{ tiempo_espera_seg: number }>(sql`select tiempo_espera_seg from envio_flujo`),
     );
     expect(flujo.rows[0]?.tiempo_espera_seg).toBe(9999); // fake clamps its initial t to ≤9999 per the schema
   });
 
   /**
    * The "otherwise" half of the race (spec §7.2, art. 16.4): fewer than 1000 due AND the gate has
-   * not yet elapsed defers the WHOLE tenant — nothing is claimed, nothing is sent, and the
+   * not yet elapsed defers the WHOLE pass — nothing is claimed, nothing is sent, and the
    * existing `envio_flujo` row (simulating an earlier pass this test does not itself drive) is
    * read back rather than treated as absent. Proven by pre-seeding `envio_flujo` directly:
    * building this scenario by actually draining once and then racing a second `drain()` call
-   * before the gate opens would need a SECOND, distinct pending backlog for the SAME tenant, which
-   * none of this file's fixtures produce without duplicating `insertPendingAlta`'s own chain-
-   * consistent insert — pre-seeding the flow row is the direct, minimal way to put the tenant in
-   * "just sent, gate still closed" state.
+   * before the gate opens would need a SECOND, distinct pending backlog, which none of this file's
+   * fixtures produce without duplicating `insertPendingAlta`'s own chain-consistent insert —
+   * pre-seeding the flow row is the direct, minimal way to reach "just sent, gate still closed".
    */
-  it("defers a tenant behind a still-open gate, claiming nothing and leaving its backlog pending", async () => {
+  it("defers the pass behind a still-open gate, claiming nothing and leaving its backlog pending", async () => {
     const proximoEnvioEn = new Date("2026-07-21T00:05:00Z"); // still in the future relative to `now` below
     await pg.db.execute(sql`
-      insert into envio_flujo (tenant_id, proximo_envio_en, tiempo_espera_seg)
-      values (${seeded.tenantId}, ${proximoEnvioEn.toISOString()}, 60)
+      insert into envio_flujo (id, proximo_envio_en, tiempo_espera_seg)
+      values (1, ${proximoEnvioEn.toISOString()}, 60)
     `);
 
     const now = new Date("2026-07-21T00:01:00Z"); // before proximoEnvioEn — the gate is still closed
@@ -290,11 +300,9 @@ describe("drain — flow control (envio_flujo)", () => {
     expect(result.recordsSubmitted).toBe(0);
     expect(result.nextDueAt).toEqual(proximoEnvioEn);
 
-    // Select only this case's tenant.
+    // Select only this case's own chain.
     const rows = await withTransaction(pg.db, (tx) =>
-      tx.execute<{ estado: string }>(
-        sql`select estado from envios where tenant_id = ${seeded.tenantId}`,
-      ),
+      tx.execute<{ estado: string }>(sql`select estado from envios where ${ownChain(seeded)}`),
     );
     expect(rows.rows).toHaveLength(3);
     expect(rows.rows.every((r) => r.estado === "pendiente")).toBe(true);
@@ -307,11 +315,11 @@ describe("drain — flow control (envio_flujo)", () => {
  * is what leaves a real, committed `enviando` row behind for a LATER drain() to find, rather than
  * an in-flight uncommitted claim that simply vanishes with the crashed process.
  *
- * Every update/select below filters explicitly by `tenant_id`, unlike the brief's own inline
- * sample — this file's shared `pg.db` accumulates rows from every earlier describe block (the
- * established convention throughout this file, e.g. the "flow control" describe's own comments),
- * and an unscoped `update envios set ...` with no WHERE at all would silently rewrite every row
- * any other test in this file has ever left behind.
+ * Every update/select below filters explicitly by the seeded fixture's own chain (`ownChain`),
+ * unlike the brief's own inline sample — this file's shared `pg.db` accumulates rows from every
+ * earlier describe block (the established convention throughout this file, e.g. the "flow control"
+ * describe's own comments), and an unscoped `update envios set ...` with no WHERE at all would
+ * silently rewrite every row any other test in this file has ever left behind.
  */
 describe("drain — stale claim recovery", () => {
   it("recovers a stale enviando row back to pendiente with incidencia set, then resubmits it this same pass", async () => {
@@ -323,7 +331,7 @@ describe("drain — stale claim recovery", () => {
     await withTransaction(pg.db, (tx) =>
       tx.execute(sql`
         update envios set estado = 'enviando', enviado_en = ${new Date("2026-07-20T00:00:00Z").toISOString()}
-        where tenant_id = ${seeded.tenantId}
+        where ${ownChain(seeded)}
       `),
     );
     const deps = drainDeps(staticResolver(aeat.client()));
@@ -331,7 +339,7 @@ describe("drain — stale claim recovery", () => {
 
     const rows = await withTransaction(pg.db, (tx) =>
       tx.execute<{ estado: string; incidencia: boolean }>(sql`
-        select estado, incidencia from envios where tenant_id = ${seeded.tenantId}
+        select estado, incidencia from envios where ${ownChain(seeded)}
       `),
     );
     // Recovered (-> pendiente) then re-claimed and resubmitted in this SAME pass, since nothing
@@ -351,7 +359,7 @@ describe("drain — stale claim recovery", () => {
     await withTransaction(pg.db, (tx) =>
       tx.execute(sql`
         update envios set estado = 'enviando', enviado_en = ${new Date(now.getTime() - 60_000).toISOString()}
-        where tenant_id = ${seeded.tenantId}
+        where ${ownChain(seeded)}
       `),
     );
     const deps = drainDeps(staticResolver(aeat.client()));
@@ -360,7 +368,7 @@ describe("drain — stale claim recovery", () => {
     expect(result.recordsSubmitted).toBe(0); // untouched — not stale, so not reclaimed
     const rows = await withTransaction(pg.db, (tx) =>
       tx.execute<{ estado: string; incidencia: boolean }>(sql`
-        select estado, incidencia from envios where tenant_id = ${seeded.tenantId}
+        select estado, incidencia from envios where ${ownChain(seeded)}
       `),
     );
     expect(rows.rows[0]?.estado).toBe("enviando");
@@ -390,7 +398,7 @@ describe("drain — retry backoff on a transient submit failure", () => {
         proximo_intento_en: string;
       }>(sql`
         select estado, intentos, incidencia, proximo_intento_en from envios
-        where tenant_id = ${seeded.tenantId}
+        where ${ownChain(seeded)}
       `),
     );
     // Claimed (intentos incremented to 1 at claim), then the submit threw — backed off to
@@ -423,7 +431,7 @@ describe("drain — per-record resolution: rejection, halting, incidents", () =>
     const rows = await withTransaction(pg.db, (tx) =>
       tx.execute<{ secuencia: number; estado: string; incidencia: boolean }>(sql`
         select r.secuencia, e.estado, e.incidencia from envios e join registros_facturacion r on r.id = e.registro_id
-        where e.tenant_id = ${seeded.tenantId}
+        where r.node_id = ${seeded.nodeId}
         order by r.secuencia
       `),
     );
@@ -455,7 +463,7 @@ describe("drain — per-record resolution: rejection, halting, incidents", () =>
 
     const rows = await withTransaction(pg.db, (tx) =>
       tx.execute<{ estado: string; csv: string | null }>(
-        sql`select estado, csv from envios where tenant_id = ${seeded.tenantId}`,
+        sql`select estado, csv from envios where ${ownChain(seeded)}`,
       ),
     );
     expect(rows.rows[0]?.estado).toBe("aceptado_con_errores");
@@ -473,17 +481,17 @@ describe("drain — per-record resolution: rejection, halting, incidents", () =>
 
   it("sets Incidencia on a record enqueued while its chain has an open detenido incident, and never submits it", async () => {
     // `tiempoEsperaInicial: 5`, not this suite's usual default (60s): `drain()`'s own
-    // `tenantsWithWork` sweep (./drain.ts) is global across the WHOLE shared `pg.db` (this file's own
-    // repeated note, e.g. the "batching" describe above) — confirmed live while implementing this
-    // task: the "retry backoff on a transient submit failure" describe (above) deliberately leaves
-    // its OWN tenant `pendiente`, due again at exactly `2026-07-21T00:02:00Z` (its one row's
+    // claim is global across the WHOLE shared `pg.db` (this file's own repeated note, e.g. the
+    // "batching" describe above) — confirmed live while implementing this task: the "retry backoff
+    // on a transient submit failure" describe (above) deliberately leaves its OWN rows
+    // `pendiente`, due again at exactly `2026-07-21T00:02:00Z` (its one row's
     // `proximo_intento_en`, backed off by `backoffMs(1)` = 60s past that test's own `now` of
     // `00:01:00Z`). The default 60s gate would put THIS test's second drain at that exact instant
     // too, and the OTHER test's leftover row — gate-less (no envio_flujo row of its own), so
     // immediately claimable — would be silently swept up and submitted by THIS test's own
     // `backend.drain()` call, inflating `second.recordsSubmitted`/`recordsAccepted` by one record
     // that has nothing to do with this test. A short, test-local `tiempoEsperaInicial` opens this
-    // tenant's OWN gate well before that shared instant, decoupling the two.
+    // test's OWN gate well before that shared instant, decoupling the two.
     const aeat = createFakeAeat({
       serverNow: new Date("2026-07-21T00:00:00Z"),
       tiempoEsperaInicial: 5,
@@ -507,7 +515,7 @@ describe("drain — per-record resolution: rejection, halting, incidents", () =>
     const row4 = await withTransaction(pg.db, (tx) =>
       tx.execute<{ estado: string; incidencia: boolean }>(sql`
         select e.estado, e.incidencia from envios e join registros_facturacion r on r.id = e.registro_id
-        where e.tenant_id = ${seeded.tenantId} and r.secuencia = 4
+        where r.node_id = ${seeded.nodeId} and r.secuencia = 4
       `),
     );
     expect(row4.rows[0]?.estado).toBe("detenido");
@@ -623,15 +631,13 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
     await withTransaction(pg.db, (tx) =>
       tx.execute(sql`
         update envios set estado = 'pendiente', proximo_intento_en = ${new Date("2026-07-21T00:01:00Z").toISOString()}
-        where tenant_id = ${seeded.tenantId}
+        where ${ownChain(seeded)}
       `),
     );
     const result = await drain(deps, new Date("2026-07-21T00:01:30Z")); // gate opens 00:01:05Z
 
     const rows = await withTransaction(pg.db, (tx) =>
-      tx.execute<{ estado: string }>(
-        sql`select estado from envios where tenant_id = ${seeded.tenantId}`,
-      ),
+      tx.execute<{ estado: string }>(sql`select estado from envios where ${ownChain(seeded)}`),
     );
     expect(rows.rows[0]?.estado).toBe("aceptado"); // despite the outer Incorrecto on the 3000 line
     expect(result.recordsAccepted).toBe(1);
@@ -665,7 +671,7 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
     await withTransaction(pg.db, (tx) =>
       tx.execute(sql`
         update envios set estado = 'pendiente', proximo_intento_en = ${new Date("2026-07-21T00:01:00Z").toISOString()}
-        where tenant_id = ${seeded.tenantId}
+        where ${ownChain(seeded)}
       `),
     );
     const result = await drain(deps, new Date("2026-07-21T00:01:30Z")); // resubmit both -> 3000 each
@@ -673,7 +679,7 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
     const rows = await withTransaction(pg.db, (tx) =>
       tx.execute<{ secuencia: number; estado: string; incidencia: boolean }>(sql`
         select r.secuencia, e.estado, e.incidencia from envios e join registros_facturacion r on r.id = e.registro_id
-        where e.tenant_id = ${seeded.tenantId} order by r.secuencia
+        where r.node_id = ${seeded.nodeId} order by r.secuencia
       `),
     );
     expect(rows.rows.map((r) => r.estado)).toEqual(["detenido", "detenido"]);
@@ -705,14 +711,14 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
     await withTransaction(pg.db, (tx) =>
       tx.execute(sql`
         update envios set estado = 'pendiente', proximo_intento_en = ${new Date("2026-07-21T00:01:00Z").toISOString()}
-        where tenant_id = ${seeded.tenantId}
+        where ${ownChain(seeded)}
       `),
     );
     const result = await drain(deps, new Date("2026-07-21T00:01:30Z"));
 
     const rows = await withTransaction(pg.db, (tx) =>
       tx.execute<{ estado: string; incidencia: boolean }>(
-        sql`select estado, incidencia from envios where tenant_id = ${seeded.tenantId}`,
+        sql`select estado, incidencia from envios where ${ownChain(seeded)}`,
       ),
     );
     expect(rows.rows[0]?.estado).toBe("aceptado"); // routeB's consulta found AEAT's huella == ours
@@ -791,7 +797,7 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
     const rows = await withTransaction(pg.db, (tx) =>
       tx.execute<{ secuencia: number; estado: string; incidencia: boolean }>(sql`
         select r.secuencia, e.estado, e.incidencia from envios e join registros_facturacion r on r.id = e.registro_id
-        where e.tenant_id = ${seeded.tenantId} order by r.secuencia
+        where r.node_id = ${seeded.nodeId} order by r.secuencia
       `),
     );
     expect(rows.rows.map((r) => r.estado)).toEqual(["detenido", "detenido"]);
@@ -827,8 +833,8 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
  * successor must leave BOTH a `rejected` ack for the rejected record AND a `halted` ack for the
  * successor, with the ack↔estado invariant holding for every acked row.
  *
- * Scoped to its own freshly-seeded tenant (`seedPendingEnvios` mints one per call) and asserted
- * strictly `where tenant_id = …`, so the shared-`pg.db`/global-sweep convention this file otherwise
+ * Scoped to its own freshly-seeded chain (`seedPendingEnvios` mints a node per call) and asserted
+ * strictly through `ownChain`, so the shared-`pg.db`/global-sweep convention this file otherwise
  * carries cannot pollute these acks assertions.
  */
 describe("drain — halted records get a halted ack (the bulk chain-halt paths)", () => {
@@ -844,7 +850,7 @@ describe("drain — halted records get a halted ack (the bulk chain-halt paths)"
       tx.execute<{ registro_id: string; secuencia: number; estado: string }>(sql`
         select e.registro_id, r.secuencia, e.estado from envios e
         join registros_facturacion r on r.id = e.registro_id
-        where e.tenant_id = ${seeded.tenantId}
+        where r.node_id = ${seeded.nodeId}
         order by r.secuencia
       `),
     );
@@ -852,7 +858,7 @@ describe("drain — halted records get a halted ack (the bulk chain-halt paths)"
 
     const acks = await withTransaction(pg.db, (tx) =>
       tx.execute<{ registro_id: string; state: string }>(
-        sql`select registro_id, state from acks where tenant_id = ${seeded.tenantId}`,
+        sql`select registro_id, state from acks where ${ownChain(seeded)}`,
       ),
     );
     const ackState = new Map(acks.rows.map((a) => [a.registro_id, a.state]));
@@ -912,9 +918,7 @@ describe("drain — the deployment-environment guard", () => {
       expect(result.incidentsRaised).toBe(1);
 
       const envio = await withTransaction(pg.db, (tx) =>
-        tx.execute<{ estado: string }>(
-          sql`select estado from envios where tenant_id = ${seeded.tenantId}`,
-        ),
+        tx.execute<{ estado: string }>(sql`select estado from envios where ${ownChain(seeded)}`),
       );
       // Left pendiente, not failed: fixing the host's configuration and restarting must be enough.
       expect(envio.rows[0]!.estado).toBe("pendiente");
@@ -944,7 +948,7 @@ describe("drain — the deployment-environment guard", () => {
       // leaves work behind (its header comment, corrected in this same fix round). Deleting the
       // `envios` row (not the tenant/registro — `envios_tenants_with_work` reads only this table)
       // is `boot.test.ts`'s own established pattern for the identical need.
-      await pg.db.execute(sql`delete from envios where tenant_id = ${seeded.tenantId}`);
+      await pg.db.execute(sql`delete from envios where ${ownChain(seeded)}`);
     }
   });
 
@@ -958,9 +962,7 @@ describe("drain — the deployment-environment guard", () => {
       expect(result.recordsSubmitted).toBe(0);
 
       const envio = await withTransaction(pg.db, (tx) =>
-        tx.execute<{ estado: string }>(
-          sql`select estado from envios where tenant_id = ${seeded.tenantId}`,
-        ),
+        tx.execute<{ estado: string }>(sql`select estado from envios where ${ownChain(seeded)}`),
       );
       expect(envio.rows[0]!.estado).toBe("pendiente");
 
@@ -980,7 +982,7 @@ describe("drain — the deployment-environment guard", () => {
         hostEnvironment: "production",
       });
     } finally {
-      await pg.db.execute(sql`delete from envios where tenant_id = ${seeded.tenantId}`);
+      await pg.db.execute(sql`delete from envios where ${ownChain(seeded)}`);
     }
   });
 
@@ -998,7 +1000,7 @@ describe("drain — the deployment-environment guard", () => {
       // same reason `seedPendingEnvios`-seeding describes elsewhere in this file scope their own
       // tenant: harmless once accepted, but consistent, and immune to a future edit changing what
       // this test seeds without remembering to add cleanup.
-      await pg.db.execute(sql`delete from envios where tenant_id = ${seeded.tenantId}`);
+      await pg.db.execute(sql`delete from envios where ${ownChain(seeded)}`);
     }
   });
 
@@ -1019,7 +1021,7 @@ describe("drain — the deployment-environment guard", () => {
     // (not the whole `seeded` object) escapes into `finally` — TypeScript does not narrow a `let`
     // across the closures `withTransaction`'s own callbacks below create, so keeping `seeded` itself
     // `const` and scoped to the try body sidesteps that rather than sprinkling `!` assertions.
-    let cleanupTenantId: TenantId | undefined;
+    let cleanupNodeId: string | undefined;
     try {
       // secuencia 1 is refused (no entorno). `registros_facturacion` is append-only (immutable
       // triggers block ANY update — this file's own Route B tests rely on the identical fact), so
@@ -1028,7 +1030,7 @@ describe("drain — the deployment-environment guard", () => {
       // mutating rows `seedPendingEnvios` already inserted. Same chain either way:
       // `appendPendingAlta` extends `seeded`'s own `sif_id`.
       const seeded = await seedPendingEnvios(pg.db, { count: 1, entorno: null });
-      cleanupTenantId = seeded.tenantId;
+      cleanupNodeId = seeded.nodeId;
       await appendPendingAlta(pg.db, seeded, 2);
       await appendPendingAlta(pg.db, seeded, 3);
 
@@ -1045,7 +1047,7 @@ describe("drain — the deployment-environment guard", () => {
         tx.execute<{ secuencia: number; estado: string; intentos: number }>(sql`
           select r.secuencia, e.estado, e.intentos from envios e
           join registros_facturacion r on r.id = e.registro_id
-          where e.tenant_id = ${seeded.tenantId}
+          where r.node_id = ${seeded.nodeId}
           order by r.secuencia
         `),
       );
@@ -1075,10 +1077,10 @@ describe("drain — the deployment-environment guard", () => {
       const stored = aeat.stored();
       expect(stored.some((s) => s.key.startsWith(`${seeded.nif}|`))).toBe(false);
     } finally {
-      // Guarded: `cleanupTenantId` is still `undefined` if `seedPendingEnvios` itself threw before
+      // Guarded: `cleanupNodeId` is still `undefined` if `seedPendingEnvios` itself threw before
       // ever assigning it.
-      if (cleanupTenantId !== undefined) {
-        await pg.db.execute(sql`delete from envios where tenant_id = ${cleanupTenantId}`);
+      if (cleanupNodeId !== undefined) {
+        await pg.db.execute(sql`delete from envios where ${ownChain({ nodeId: cleanupNodeId })}`);
       }
     }
   }, 20_000);
@@ -1105,12 +1107,12 @@ describe("drain — the deployment-environment guard", () => {
     // permanently-`pendiente` rows into this shared `pg.db` with no `finally` covering them. Only the
     // tenant id crosses into `finally` — same "avoid narrowing through a closure" reasoning as the
     // chain-halt test above.
-    let cleanupTenantId: TenantId | undefined;
+    let cleanupNodeId: string | undefined;
     try {
       // 3 refused rows (entorno null → `fiscal.environment_unknown`) exactly fill the injected
       // limit-3 claim window, so the healthy row below sorts strictly beyond it.
       const seeded = await seedPendingEnvios(pg.db, { count: 3, entorno: null });
-      cleanupTenantId = seeded.tenantId;
+      cleanupNodeId = seeded.nodeId;
       const healthy = await seedIndependentChain(pg.db, seeded, {
         sifId: "ffffffff-ffff-ffff-ffff-ffffffffffff",
         secuencia: 1,
@@ -1146,7 +1148,7 @@ describe("drain — the deployment-environment guard", () => {
       const refused = await withTransaction(pg.db, (tx) =>
         tx.execute<{ count: string }>(sql`
             select count(*)::text as count from envios
-            where tenant_id = ${seeded.tenantId} and estado = 'pendiente'
+            where ${ownChain(seeded)} and estado = 'pendiente'
           `),
       );
       expect(Number(refused.rows[0]!.count)).toBe(3);
@@ -1157,10 +1159,12 @@ describe("drain — the deployment-environment guard", () => {
       expect(inc.rows).toHaveLength(1);
       expect(inc.rows[0]?.code).toBe("fiscal.environment_unknown");
     } finally {
-      // Guarded: `cleanupTenantId` is still `undefined` if `seedPendingEnvios` itself threw before
-      // `seedIndependentChain` (which reuses that same tenant) ever ran.
-      if (cleanupTenantId !== undefined) {
-        await pg.db.execute(sql`delete from envios where tenant_id = ${cleanupTenantId}`);
+      // Guarded: `cleanupNodeId` is still `undefined` if `seedPendingEnvios` itself threw before
+      // `seedIndependentChain` (which adds a chain beside it) ever ran. That second chain's rows
+      // are deleted with the unscoped sweep below, which this describe's own cap injection needs.
+      if (cleanupNodeId !== undefined) {
+        await pg.db.execute(sql`delete from envios where ${ownChain({ nodeId: cleanupNodeId })}`);
+        await pg.db.execute(sql`delete from envios where estado = 'aceptado'`);
       }
     }
   });
@@ -1210,26 +1214,26 @@ describe("drain — maxRegistrosPorEnvio validation", () => {
     // Both a valid cap and the omitted default pass the guard and return a well-formed DrainResult
     // that drains this test's own seeded row. End-to-end cap SEMANTICS are proven by the batching
     // and starvation tests above; here the point is only that the guard lets valid inputs through.
-    let capTenant: TenantId | undefined;
-    let defaultTenant: TenantId | undefined;
+    let capNode: string | undefined;
+    let defaultNode: string | undefined;
     try {
-      capTenant = (await seedPendingEnvios(pg.db, { count: 1 })).tenantId;
+      capNode = (await seedPendingEnvios(pg.db, { count: 1 })).nodeId;
       const withCap = await drain(depsWith(3), NOW);
       expect(withCap.recordsSubmitted).toBeGreaterThanOrEqual(1);
 
-      // The first drain wrote the flow-control gate, and the gate row is the database's one row (one
-      // tenant per database), so the second drain would wait out that gate. Clear it so the omitted
-      // default is exercised on an ungated pass.
+      // The first drain wrote the flow-control gate, and the gate row is the database's one row, so
+      // the second drain would wait out that gate. Clear it so the omitted default is exercised on
+      // an ungated pass.
       await pg.db.execute(sql`delete from envio_flujo`);
-      defaultTenant = (await seedPendingEnvios(pg.db, { count: 1 })).tenantId;
+      defaultNode = (await seedPendingEnvios(pg.db, { count: 1 })).nodeId;
       const omitted = await drain(depsWith(), NOW);
       expect(omitted.recordsSubmitted).toBeGreaterThanOrEqual(1);
     } finally {
-      if (capTenant !== undefined) {
-        await pg.db.execute(sql`delete from envios where tenant_id = ${capTenant}`);
+      if (capNode !== undefined) {
+        await pg.db.execute(sql`delete from envios where ${ownChain({ nodeId: capNode })}`);
       }
-      if (defaultTenant !== undefined) {
-        await pg.db.execute(sql`delete from envios where tenant_id = ${defaultTenant}`);
+      if (defaultNode !== undefined) {
+        await pg.db.execute(sql`delete from envios where ${ownChain({ nodeId: defaultNode })}`);
       }
     }
   });

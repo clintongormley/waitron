@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decimal, nodeId, saleId, seriesId, tenantId, tillId } from "@waitron/shared";
+import { decimal, nodeId, saleId, seriesId, tillId } from "@waitron/shared";
 import type { FiscalBackend, SaleForFiscalRecord } from "@waitron/fiscal";
 import { NoneBackend } from "./backend.js";
 
@@ -13,14 +13,12 @@ const make = (): FiscalBackend => new NoneBackend();
 // backend never uses it.
 const tx = {} as never;
 
-const TENANT = tenantId("3f2504e0-4f89-41d3-9a0c-0305e82c3301");
 const TILL = tillId("6ba7b810-9dad-11d1-80b4-00c04fd430c8");
 const NODE = nodeId("7ba7b810-9dad-11d1-80b4-00c04fd430c1");
 const SALE = saleId("11111111-2222-3333-4444-555555555555");
 
 function sampleSale(): SaleForFiscalRecord {
   return {
-    tenantId: TENANT,
     tillId: TILL,
     nodeId: NODE,
     saleId: SALE,
@@ -81,15 +79,15 @@ describe("NoneBackend records nothing", () => {
   });
 
   it("registerNode returns an empty registration for the node", async () => {
-    const reg = await make().registerNode(tx, NODE, { tenantId: TENANT });
+    const reg = await make().registerNode(tx, NODE);
     expect(reg).toMatchObject({ backend: "none", nodeId: NODE, registrationId: "" });
     expect(reg.registeredAt).toBeInstanceOf(Date);
   });
 
   it("pendingCount is 0, checkIntegrity is checked:0, filedReceiptFor is undefined", async () => {
     const b = make();
-    expect(await b.pendingCount(TENANT, NODE)).toBe(0);
-    expect(await b.checkIntegrity(tx, TENANT, NODE)).toEqual({
+    expect(await b.pendingCount(NODE)).toBe(0);
+    expect(await b.checkIntegrity(tx, NODE)).toEqual({
       ok: true,
       checked: 0,
       issues: [],

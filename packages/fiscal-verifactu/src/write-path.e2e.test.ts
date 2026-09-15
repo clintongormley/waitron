@@ -10,7 +10,7 @@ import type { RegistroAlta } from "@waitron/verifactu";
 import { asAppUser, incidents, saleLines, sales, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { tillId as brandTillId } from "@waitron/shared";
-import type { NodeId, SeriesId, TenantId, TillId } from "@waitron/shared";
+import type { NodeId, SeriesId, TillId } from "@waitron/shared";
 import { VerifactuBackend } from "./backend.js";
 import { fromRegistroRow } from "./registro-row.js";
 import type { RegistroRow } from "./registro-row.js";
@@ -21,7 +21,6 @@ import { seedTenantWithSif } from "../test/fixtures.js";
 import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 
 let backend: VerifactuBackend;
-let tenantId: TenantId;
 let tillId: TillId;
 let nodeId: NodeId;
 let seriesId: SeriesId;
@@ -43,9 +42,9 @@ let seriesId: SeriesId;
 const pg = usePgliteDb({ migrations: TEST_MIGRATIONS });
 
 beforeEach(async () => {
-  ({ tenantId, tillId, nodeId, seriesId } = await seedTenantWithSif(pg.db));
+  ({ tillId, nodeId, seriesId } = await seedTenantWithSif(pg.db));
   // **Deviation from the brief.** The brief constructed `new VerifactuBackend({ clock:
-  // steadyClock })`. The real constructor also requires `db`: `pendingCount(tenantId, nodeId)` is the one
+  // steadyClock })`. The real constructor also requires `db`: `pendingCount(nodeId)` is the one
   // `FiscalBackend` method with no `tx` parameter at all, so it cannot participate in a caller's
   // transaction and needs its own connection to query against (`backend.ts`'s own doc comment on
   // `VerifactuBackendOptions.db`).
@@ -60,7 +59,7 @@ beforeEach(async () => {
 async function sell(overrides: Record<string, unknown> = {}) {
   return withTransaction(pg.db, async (tx) => {
     await asAppUser(tx);
-    return recordSale(tx, backend, saleInput({ tenantId, tillId, nodeId, seriesId, ...overrides }));
+    return recordSale(tx, backend, saleInput({ tillId, nodeId, seriesId, ...overrides }));
   });
 }
 
@@ -96,7 +95,7 @@ describe("the write path against the real Veri*Factu backend", () => {
     // all reads whichever row happens to be first in the WHOLE table — harmless in the brief's
     // own implied fresh-database-per-test world, but this suite shares one PGlite instance
     // across every test in the file (booting a fresh WASM PostgreSQL per test would be far
-    // slower) and reseeds a new tenant per test rather than truncating, so an earlier test's row
+    // slower) and reseeds a new node per test rather than truncating, so an earlier test's row
     // would otherwise be read here instead of this test's own. Scoped by `saleId`.
     const { saleId } = await sell();
     const [row] = await pg.db
@@ -216,7 +215,7 @@ describe("the write path against the real Veri*Factu backend", () => {
     await expect(
       withTransaction(pg.db, async (tx) => {
         await asAppUser(tx);
-        await recordSale(tx, backend, saleInput({ tenantId, tillId, nodeId, seriesId }));
+        await recordSale(tx, backend, saleInput({ tillId, nodeId, seriesId }));
         throw new Error("simulated crash after the fiscal write");
       }),
     ).rejects.toThrow("simulated crash");
@@ -288,11 +287,11 @@ describe("parent_line_id is not part of the huella", () => {
   // Two sales built from IDENTICAL input, differing ONLY in whether one child line names a parent,
   // must therefore produce the same huella. Getting two BYTE-IDENTICAL huellas is the hard part:
   // two COMMITTED altas under one obligado can never share a NumSerieFactura (registros_identidad_uq
-  // on tenant + IDEmisorFactura + NumSerieFactura + fecha + tipo), and NumSerieFactura is itself a
+  // on IDEmisorFactura + NumSerieFactura + fecha + tipo), and NumSerieFactura is itself a
   // huella input; two under different obligados differ by NIF, also a huella input. So each sale is
   // recorded, its stored huella read back INSIDE its transaction, and the transaction then ROLLED
   // BACK — which reverts `invoice_series.next_number` and the `cadenas` head, so the next sale
-  // re-allocates the identical `A/1` against the same still-empty chain, same tenant, same NIF,
+  // re-allocates the identical `A/1` against the same still-empty chain, same NIF,
   // same fixed clock. Every huella input is then equal across the two except the one under test:
   // one child line's parentLineNo, which stays in `sale_lines` and never travels to the backend.
   const ROLLBACK = new Error("rollback: huella captured");
@@ -305,7 +304,6 @@ describe("parent_line_id is not part of the huella", () => {
         tx,
         backend,
         saleInput({
-          tenantId,
           tillId,
           nodeId,
           seriesId,
@@ -435,7 +433,7 @@ describe("line note/doneness are not part of the huella", () => {
       const { saleId } = await recordSale(
         tx,
         backend,
-        saleInput({ tenantId, tillId, nodeId, seriesId, lines: linesWith(note, doneness) }),
+        saleInput({ tillId, nodeId, seriesId, lines: linesWith(note, doneness) }),
       );
       const { rows } = await tx.execute<{ huella: string }>(
         sql`select huella from registros_facturacion where sale_id = ${saleId}`,
@@ -498,7 +496,7 @@ describe("till_id is inert to the huella and the chain (SP-A.2 §16.4(b))", () =
       const { saleId } = await recordSale(
         tx,
         backend,
-        saleInput({ tenantId, tillId: till, nodeId, seriesId }),
+        saleInput({ tillId: till, nodeId, seriesId }),
       );
       const { rows } = await tx.execute<RecordSnapshot>(
         sql`select huella, anterior_huella, secuencia, entorno, node_id, till_id
@@ -517,7 +515,7 @@ describe("till_id is inert to the huella and the chain (SP-A.2 §16.4(b))", () =
   }
 
   it("files the same huella and chain position for two tills that differ only by id", async () => {
-    // A SECOND till Y in the SAME tenant and location as the seeded till X — the two register ids a
+    // A SECOND till Y in the SAME location as the seeded till X — the two register ids a
     // re-homed device would ring against. Inserted on `pg.db` directly (PGlite is a superuser, and this
     // is fixture setup, not the code under test) so it persists across both rolled-back sales.
     const { rows: locRows } = await pg.db.execute<{ location_id: string }>(

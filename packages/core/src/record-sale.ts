@@ -199,10 +199,10 @@ export async function recordSale(
   }
 
   // Steps 1 and 2, one call and deliberately so. A real backend's `checkIntegrity` takes the
-  // (tenant, node) chain-head row lock as its own first statement and holds it until commit, so
+  // node's chain-head row lock as its own first statement and holds it until commit, so
   // art. 7.i verification runs against exactly the state this transaction is about to extend
   // rather than a snapshot another writer may already have moved past.
-  const verification = await backend.checkIntegrity(tx, input.tenantId, input.nodeId);
+  const verification = await backend.checkIntegrity(tx, input.nodeId);
   // Nothing branches on `verification.ok`. A failed check records an incident (below, once
   // `saleId` exists) and the sale is chained anyway — no fiscal condition may block a sale. If a
   // later change adds `if (!verification.ok) throw ...` here, it has implemented the one
@@ -389,7 +389,6 @@ export async function recordSale(
   // the fiscal record, advancing whatever internal chain the regime keeps, and inserting its own
   // pending-submission row all happen behind this one call, on this transaction.
   const fiscal = await backend.recordSale(tx, {
-    tenantId: input.tenantId,
     tillId: input.tillId,
     nodeId: input.nodeId,
     saleId,

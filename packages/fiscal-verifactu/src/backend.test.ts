@@ -2,10 +2,11 @@ import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { recordSale } from "@waitron/core";
-import { asAppUser, sales, withTransaction } from "@waitron/db";
+import { asAppUser, captureError, sales, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import type { SaleForFiscalRecord, TrustedClock } from "@waitron/fiscal";
-import type { NodeId, SeriesId, TenantId, TillId } from "@waitron/shared";
+import { AppError } from "@waitron/shared";
+import type { NodeId, SeriesId, TillId } from "@waitron/shared";
 import {
   MONEY_SCALE,
   decimal,
@@ -31,7 +32,6 @@ import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/writ
  */
 
 let backend: VerifactuBackend;
-let tenantId: TenantId;
 let tillId: TillId;
 let nodeId: NodeId;
 let seriesId: SeriesId;
@@ -39,7 +39,7 @@ let seriesId: SeriesId;
 const pg = usePgliteDb({ migrations: TEST_MIGRATIONS });
 
 beforeEach(async () => {
-  ({ tenantId, tillId, nodeId, seriesId } = await seedTenantWithSif(pg.db));
+  ({ tillId, nodeId, seriesId } = await seedTenantWithSif(pg.db));
   backend = new VerifactuBackend({
     deploymentEnvironment: "production",
     clock: steadyClock,
@@ -51,7 +51,7 @@ beforeEach(async () => {
 async function sell() {
   return withTransaction(pg.db, async (tx) => {
     await asAppUser(tx);
-    return recordSale(tx, backend, saleInput({ tenantId, tillId, nodeId, seriesId }));
+    return recordSale(tx, backend, saleInput({ tillId, nodeId, seriesId }));
   });
 }
 
@@ -69,7 +69,6 @@ describe("zero-rate sales", () => {
         tx,
         backend,
         saleInput({
-          tenantId,
           tillId,
           nodeId,
           seriesId,
@@ -123,9 +122,7 @@ describe("zero-rate sales", () => {
 
 describe("registerNode", () => {
   it("reports the node's live SIF registration", async () => {
-    const registration = await withTransaction(pg.db, (tx) =>
-      backend.registerNode(tx, nodeId, { tenantId }),
-    );
+    const registration = await withTransaction(pg.db, (tx) => backend.registerNode(tx, nodeId));
     expect(registration.backend).toBe("verifactu");
     expect(registration.nodeId).toBe(nodeId);
     expect(registration.registrationId).toContain("WT");
@@ -137,8 +134,27 @@ describe("registerNode", () => {
     // does not exist or once had a SIF that was later revoked.
     const neverProvisioned = brandNodeId("00000000-0000-4000-8000-000000000000");
     await expect(
-      withTransaction(pg.db, (tx) => backend.registerNode(tx, neverProvisioned, { tenantId })),
+      withTransaction(pg.db, (tx) => backend.registerNode(tx, neverProvisioned)),
     ).rejects.toMatchObject({ code: "sif.not_registered" });
+  });
+});
+
+describe("the taxpayer every record is filed as", () => {
+  it("refuses to file when the tenants table is empty, loudly and without a domain code", async () => {
+    // Every record carries `NombreRazonEmisor`, read from the one taxpayer row at filing time. With
+    // the tenant columns gone, no foreign key holds that row in place any more, so an empty table is
+    // reachable by a corrupt or half-provisioned database — and filing a record under a blank or
+    // guessed issuer name is unrepairable (CLAUDE.md §5). It must fail, and as a plain `Error`: no
+    // `AppError` code, because there is nothing an operator can do at a till about it.
+    await pg.db.execute(sql`delete from tenants`);
+    const error = await captureError(() =>
+      withTransaction(pg.db, async (tx) => {
+        await asAppUser(tx);
+        return recordSale(tx, backend, saleInput({ tillId, nodeId, seriesId }));
+      }),
+    );
+    expect(error).not.toBeInstanceOf(AppError);
+    expect((error as Error).message).toContain("tenants is empty");
   });
 });
 
@@ -257,7 +273,6 @@ describe("recordCorrection — refusals", () => {
    * the call type-correct. */
   function correctiveSale(): SaleForFiscalRecord {
     return {
-      tenantId,
       tillId,
       nodeId,
       saleId: brandSaleId("33333333-3333-4333-8333-333333333333"),
@@ -311,7 +326,6 @@ describe("recordCorrection — refusals", () => {
         fiscalState: "recorded",
       });
       await backend.recordSale(tx, {
-        tenantId,
         tillId,
         nodeId,
         saleId: original,
@@ -352,7 +366,6 @@ describe("recordSubstitution — refusals", () => {
    * well-formed value keeps the call type-correct. */
   function substitutionSale(overrides: Partial<SaleForFiscalRecord> = {}): SaleForFiscalRecord {
     return {
-      tenantId,
       tillId,
       nodeId,
       saleId: brandSaleId("55555555-5555-4555-8555-555555555555"),
@@ -389,7 +402,7 @@ describe("recordSubstitution — refusals", () => {
     // than assumes. Build a real F1 alta directly (core only ever issues F2), then try to substitute
     // it — the same setup `recordCorrection`'s own F1 refusal uses.
     // A distinct id from the `recordCorrection` F1 refusal test above: this PGlite db is shared
-    // across the file and the tenant is fresh each `beforeEach`, but `sales_pkey` is global, so a
+    // across the file and the node is fresh each `beforeEach`, but `sales_pkey` is global, so a
     // reused literal id would collide with that sibling test's row.
     const original = brandSaleId("66666666-6666-4666-8666-666666666666");
     await withTransaction(pg.db, async (tx) => {
@@ -411,7 +424,6 @@ describe("recordSubstitution — refusals", () => {
         fiscalState: "recorded",
       });
       await backend.recordSale(tx, {
-        tenantId,
         tillId,
         nodeId,
         saleId: original,
@@ -506,7 +518,6 @@ describe("recordSale — invoice type selection", () => {
         fiscalState: "recorded",
       });
       await backend.recordSale(tx, {
-        tenantId,
         tillId,
         nodeId,
         saleId: freshSaleId,
@@ -554,7 +565,6 @@ describe("recordSale — invoice type selection", () => {
         fiscalState: "recorded",
       });
       await backend.recordSale(tx, {
-        tenantId,
         tillId,
         nodeId,
         saleId: brandSaleId(saleId),
@@ -619,17 +629,13 @@ describe("recordSale — invoice type selection", () => {
 
 describe("checkIntegrity", () => {
   it("reports nothing checked on a node that has never sold", async () => {
-    const report = await withTransaction(pg.db, (tx) =>
-      backend.checkIntegrity(tx, tenantId, nodeId),
-    );
+    const report = await withTransaction(pg.db, (tx) => backend.checkIntegrity(tx, nodeId));
     expect(report).toEqual({ ok: true, checked: 0, issues: [] });
   });
 
   it("verifies against the chain the same node actually has after a sale", async () => {
     await sell();
-    const report = await withTransaction(pg.db, (tx) =>
-      backend.checkIntegrity(tx, tenantId, nodeId),
-    );
+    const report = await withTransaction(pg.db, (tx) => backend.checkIntegrity(tx, nodeId));
     expect(report.ok).toBe(true);
   });
 });
@@ -637,19 +643,19 @@ describe("checkIntegrity", () => {
 describe("pendingCount", () => {
   it("counts the pending envios row a sale just created", async () => {
     await sell();
-    expect(await backend.pendingCount(tenantId, nodeId)).toBe(1);
+    expect(await backend.pendingCount(nodeId)).toBe(1);
   });
 
   it("does not count another node's pending records", async () => {
     await sell();
     const other = await seedTenantWithSif(pg.db);
-    expect(await backend.pendingCount(other.tenantId, other.nodeId)).toBe(0);
+    expect(await backend.pendingCount(other.nodeId)).toBe(0);
   });
 
   it("drops once the sidecar row is no longer pendiente", async () => {
     await sell();
-    await pg.db.execute(sql`update envios set estado = 'aceptado' where tenant_id = ${tenantId}`);
-    expect(await backend.pendingCount(tenantId, nodeId)).toBe(0);
+    await pg.db.execute(sql`update envios set estado = 'aceptado'`);
+    expect(await backend.pendingCount(nodeId)).toBe(0);
   });
 });
 
@@ -659,24 +665,24 @@ describe("pendingCount", () => {
  * working-order.pg.test.ts and till-api.pg.test.ts suites exercise replay through the backend.
  */
 describe("filedReceiptFor", () => {
-  it("returns the filed issuer after the tenant identity changes", async () => {
+  it("returns the filed issuer after the taxpayer's own identity changes", async () => {
     // PGlite covers this read-back: the assertion concerns persisted values, not privileges or concurrency.
     const { saleId } = await sell();
     const original = await pg.db.execute<{ legal_name: string; tax_id: string }>(
-      sql`select legal_name, tax_id from tenants where id = ${tenantId}`,
+      sql`select legal_name, tax_id from tenants limit 1`,
     );
     const issuer = { legalName: original.rows[0]!.legal_name, taxId: original.rows[0]!.tax_id };
     await pg.db.execute(
-      sql`update tenants set legal_name = 'New venue identity', tax_id = ${"changed-" + tenantId} where id = ${tenantId}`,
+      sql`update tenants set legal_name = 'New venue identity', tax_id = 'changed-tax-id'`,
     );
     const filed = await withTransaction(pg.db, (tx) => backend.filedReceiptFor(tx, saleId));
     expect(filed).toHaveProperty("issuer", issuer);
     const current = await pg.db.execute<{ legal_name: string; tax_id: string }>(
-      sql`select legal_name, tax_id from tenants where id = ${tenantId}`,
+      sql`select legal_name, tax_id from tenants limit 1`,
     );
     expect(current.rows[0]).toEqual({
       legal_name: "New venue identity",
-      tax_id: "changed-" + tenantId,
+      tax_id: "changed-tax-id",
     });
   });
 
@@ -713,7 +719,6 @@ describe("filedReceiptFor", () => {
         fiscalState: "recorded",
       });
       return backend.recordSale(tx, {
-        tenantId,
         tillId,
         nodeId,
         saleId: freshSaleId,

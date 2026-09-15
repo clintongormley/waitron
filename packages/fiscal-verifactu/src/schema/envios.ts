@@ -9,7 +9,6 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
-import { tenants } from "@waitron/db";
 import { registrosFacturacion } from "./registros.js";
 
 /**
@@ -35,9 +34,6 @@ export const envios = pgTable(
     registroId: uuid("registro_id")
       .primaryKey()
       .references(() => registrosFacturacion.id),
-    tenantId: uuid("tenant_id")
-      .notNull()
-      .references(() => tenants.id),
     estado: text("estado").notNull().default("pendiente"),
     intentos: integer("intentos").notNull().default(0),
     // Persisted, never an in-memory timer. This is what makes art. 16.4's hourly duty survive a
@@ -67,8 +63,8 @@ export const envios = pgTable(
   // own closing bracket outside the range left it separately reported as uncovered.
   /* v8 ignore start */
   (t) => [
-    // The drainer's access path: batched per obligado tributario, oldest due first.
-    index("envios_drenaje_idx").on(t.tenantId, t.estado, t.proximoIntentoEn),
+    // The drainer's access path: oldest due first.
+    index("envios_drenaje_idx").on(t.estado, t.proximoIntentoEn),
     check(
       "envios_estado_ck",
       sql`${t.estado} in ('pendiente', 'enviando', 'aceptado', 'aceptado_con_errores', 'rechazado', 'detenido')`,

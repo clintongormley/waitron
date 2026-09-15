@@ -1,10 +1,9 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { AppError, decimal, nodeId, saleId, seriesId, tenantId, tillId } from "@waitron/shared";
+import { AppError, decimal, nodeId, saleId, seriesId, tillId } from "@waitron/shared";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import type { SaleForFiscalRecord } from "../backend.js";
 import { FakeFiscalBackend } from "./fake-backend.js";
 
-const TENANT = tenantId("3f2504e0-4f89-41d3-9a0c-0305e82c3301");
 // The fake keys its bookkeeping on NODE (node-id rekey, 2026-08-03: the SIF is the node). `till_id`
 // stays a required snapshot field on `SaleForFiscalRecord`, which this fake ignores — a fixed dummy
 // till satisfies the type without affecting any keying.
@@ -16,7 +15,6 @@ let backend: FakeFiscalBackend;
 
 function saleOn(node: typeof NODE_A, invoiceNumber: number): SaleForFiscalRecord {
   return {
-    tenantId: TENANT,
     tillId: SNAPSHOT_TILL,
     nodeId: node,
     saleId: saleId(`11111111-2222-3333-4444-${String(invoiceNumber).padStart(12, "0")}`),
@@ -44,7 +42,7 @@ beforeEach(async () => {
 describe("registration", () => {
   it("records a registration and returns an opaque registration id", () => {
     return suite.db.transaction(async (tx) => {
-      const registration = await backend.registerNode(tx, NODE_A, { tenantId: TENANT });
+      const registration = await backend.registerNode(tx, NODE_A);
       expect(registration.nodeId).toBe(NODE_A);
       expect(registration.registrationId).toMatch(/^fake-/);
     });
@@ -70,9 +68,7 @@ describe("registration", () => {
 });
 
 describe("recordSale", () => {
-  beforeEach(() =>
-    suite.db.transaction((tx) => backend.registerNode(tx, NODE_A, { tenantId: TENANT })),
-  );
+  beforeEach(() => suite.db.transaction((tx) => backend.registerNode(tx, NODE_A)));
 
   it("returns a ref naming the backend and the record", async () => {
     const ref = await suite.db.transaction((tx) => backend.recordSale(tx, saleOn(NODE_A, 1)));
@@ -104,7 +100,7 @@ describe("recordSale", () => {
   });
 
   it("numbers nodes independently of each other", async () => {
-    await suite.db.transaction((tx) => backend.registerNode(tx, NODE_B, { tenantId: TENANT }));
+    await suite.db.transaction((tx) => backend.registerNode(tx, NODE_B));
     await suite.db.transaction((tx) => backend.recordSale(tx, saleOn(NODE_A, 1)));
     await suite.db.transaction((tx) => backend.recordSale(tx, saleOn(NODE_B, 1)));
     expect((await backend.recordsFor(NODE_A)).map((r) => r.sequence)).toEqual([1]);
@@ -128,28 +124,26 @@ describe("recordSale", () => {
 });
 
 describe("checkIntegrity", () => {
-  beforeEach(() =>
-    suite.db.transaction((tx) => backend.registerNode(tx, NODE_A, { tenantId: TENANT })),
-  );
+  beforeEach(() => suite.db.transaction((tx) => backend.registerNode(tx, NODE_A)));
 
   it("reports how many records it checked, not merely that it is happy", async () => {
     await suite.db.transaction((tx) => backend.recordSale(tx, saleOn(NODE_A, 1)));
     await suite.db.transaction((tx) => backend.recordSale(tx, saleOn(NODE_A, 2)));
-    const report = await suite.db.transaction((tx) => backend.checkIntegrity(tx, TENANT, NODE_A));
+    const report = await suite.db.transaction((tx) => backend.checkIntegrity(tx, NODE_A));
     expect(report).toEqual({ ok: true, checked: 2, issues: [] });
   });
 
   it("reports zero checked on a node with no records, without complaining", async () => {
     // The start-of-chain case in generic clothing: nothing recorded is a normal state, not a
     // failure. A backend for a regime with nothing to check answers exactly this shape.
-    const report = await suite.db.transaction((tx) => backend.checkIntegrity(tx, TENANT, NODE_A));
+    const report = await suite.db.transaction((tx) => backend.checkIntegrity(tx, NODE_A));
     expect(report).toEqual({ ok: true, checked: 0, issues: [] });
   });
 
   it("surfaces an injected issue", async () => {
     await suite.db.transaction((tx) => backend.recordSale(tx, saleOn(NODE_A, 1)));
     backend.breakIntegrity(NODE_A, { code: "fake.tampered", params: { sequence: 1 } });
-    const report = await suite.db.transaction((tx) => backend.checkIntegrity(tx, TENANT, NODE_A));
+    const report = await suite.db.transaction((tx) => backend.checkIntegrity(tx, NODE_A));
     expect(report.ok).toBe(false);
     expect(report.issues).toEqual([{ code: "fake.tampered", params: { sequence: 1 } }]);
   });
@@ -169,21 +163,17 @@ describe("checkIntegrity", () => {
     await suite.db.transaction((tx) => backend.recordSale(tx, saleOn(NODE_A, 1)));
     backend.breakIntegrity(NODE_A, { code: "fake.tampered", params: { sequence: 1 } });
     backend.restoreIntegrity(NODE_A);
-    expect(
-      (await suite.db.transaction((tx) => backend.checkIntegrity(tx, TENANT, NODE_A))).ok,
-    ).toBe(true);
+    expect((await suite.db.transaction((tx) => backend.checkIntegrity(tx, NODE_A))).ok).toBe(true);
   });
 });
 
 describe("pendingCount", () => {
-  beforeEach(() =>
-    suite.db.transaction((tx) => backend.registerNode(tx, NODE_A, { tenantId: TENANT })),
-  );
+  beforeEach(() => suite.db.transaction((tx) => backend.registerNode(tx, NODE_A)));
 
   it("counts records that have not been acknowledged", async () => {
     await suite.db.transaction((tx) => backend.recordSale(tx, saleOn(NODE_A, 1)));
     await suite.db.transaction((tx) => backend.recordSale(tx, saleOn(NODE_A, 2)));
-    expect(await backend.pendingCount(TENANT, NODE_A)).toBe(2);
+    expect(await backend.pendingCount(NODE_A)).toBe(2);
   });
 
   it("drops when a record is acknowledged, so it is not a constant", async () => {
@@ -192,24 +182,22 @@ describe("pendingCount", () => {
     const ref = await suite.db.transaction((tx) => backend.recordSale(tx, saleOn(NODE_A, 1)));
     await suite.db.transaction((tx) => backend.recordSale(tx, saleOn(NODE_A, 2)));
     await backend.acknowledge(ref.recordId);
-    expect(await backend.pendingCount(TENANT, NODE_A)).toBe(1);
+    expect(await backend.pendingCount(NODE_A)).toBe(1);
   });
 
   it("is scoped to one node", async () => {
-    await suite.db.transaction((tx) => backend.registerNode(tx, NODE_B, { tenantId: TENANT }));
+    await suite.db.transaction((tx) => backend.registerNode(tx, NODE_B));
     await suite.db.transaction((tx) => backend.recordSale(tx, saleOn(NODE_A, 1)));
-    expect(await backend.pendingCount(TENANT, NODE_B)).toBe(0);
+    expect(await backend.pendingCount(NODE_B)).toBe(0);
   });
 
   it("is zero for a node that has never recorded anything", async () => {
-    expect(await backend.pendingCount(TENANT, NODE_A)).toBe(0);
+    expect(await backend.pendingCount(NODE_A)).toBe(0);
   });
 });
 
 describe("recordVoid", () => {
-  beforeEach(() =>
-    suite.db.transaction((tx) => backend.registerNode(tx, NODE_A, { tenantId: TENANT })),
-  );
+  beforeEach(() => suite.db.transaction((tx) => backend.registerNode(tx, NODE_A)));
 
   it("refuses to void a sale that was never recorded", async () => {
     const unknown = saleId("00000000-0000-0000-0000-000000000000");
@@ -237,9 +225,7 @@ describe("recordVoid", () => {
 });
 
 describe("recordCorrection", () => {
-  beforeEach(() =>
-    suite.db.transaction((tx) => backend.registerNode(tx, NODE_A, { tenantId: TENANT })),
-  );
+  beforeEach(() => suite.db.transaction((tx) => backend.registerNode(tx, NODE_A)));
 
   it("refuses to correct a sale that was never recorded", async () => {
     // Mirrors recordVoid's precondition: a correction references a prior sale (spec §4), and there
@@ -304,9 +290,7 @@ describe("recordCorrection", () => {
 });
 
 describe("recordSubstitution", () => {
-  beforeEach(() =>
-    suite.db.transaction((tx) => backend.registerNode(tx, NODE_A, { tenantId: TENANT })),
-  );
+  beforeEach(() => suite.db.transaction((tx) => backend.registerNode(tx, NODE_A)));
 
   it("refuses to substitute a sale that was never recorded", async () => {
     // Mirrors recordCorrection's precondition, extended to the N:1 fan-out: a substitution replaces
@@ -378,9 +362,7 @@ describe("recordSubstitution", () => {
 });
 
 describe("filedReceiptFor", () => {
-  beforeEach(() =>
-    suite.db.transaction((tx) => backend.registerNode(tx, NODE_A, { tenantId: TENANT })),
-  );
+  beforeEach(() => suite.db.transaction((tx) => backend.registerNode(tx, NODE_A)));
 
   it("returns the sale's stored breakdown and a stable verification url", async () => {
     // The replay read-back (Counter POS 7b, Task 14): a lost-response retry reprints the ticket from

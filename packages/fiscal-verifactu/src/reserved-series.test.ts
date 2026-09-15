@@ -45,7 +45,7 @@ describe("liveSeriesBases", () => {
 
   it("keeps one base per (code, purpose) pair in first-seen order", async () => {
     await withTransaction(suite.db, async (tx) => {
-      const node = { tenantId: TENANT_A.id, nodeId: TENANT_A.nodeId };
+      const node = { nodeId: TENANT_A.nodeId };
       const identity = { ...node, nif: "89890001K", idSistemaInformatico: "WT" };
       await registerSif(tx, identity);
       const registered = await registerSif(tx, identity);
@@ -76,7 +76,7 @@ describe("liveSeriesBases across purposes", () => {
 
   it("keeps FA standard and FA-1 rectificative distinct when installation 1 is registered", async () => {
     await withTransaction(suite.db, async (tx) => {
-      const node = { tenantId: TENANT_A.id, nodeId: TENANT_A.nodeId };
+      const node = { nodeId: TENANT_A.nodeId };
       const sif = await registerSif(tx, { ...node, nif: "89890001K", idSistemaInformatico: "WT" });
       expect(sif.numeroInstalacion).toBe(1);
       await tx.execute(sql`

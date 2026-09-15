@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
-import type { NodeId, TenantId } from "@waitron/shared";
+import type { NodeId } from "@waitron/shared";
 import type { IntegrityIssue, IntegrityReport } from "@waitron/fiscal";
 import { computeHuella, verifyHuella } from "@waitron/verifactu";
 import { lockChainHead } from "./chain.js";
@@ -40,17 +40,13 @@ import { fromRegistroRow, type RegistroRow } from "./registro-row.js";
  * `checked: 1`/`2`. A verifier that reported `ok: false` on that genesis record would raise an
  * incident on the first record of every node's chain.
  */
-export async function verifyChain(
-  tx: Transaction,
-  tenantId: TenantId,
-  nodeId: NodeId,
-): Promise<IntegrityReport> {
+export async function verifyChain(tx: Transaction, nodeId: NodeId): Promise<IntegrityReport> {
   // Under the same lock, in the same transaction, as the append that follows. Verifying a
   // predecessor another writer is concurrently replacing verifies nothing; re-acquiring the lock
   // inside appendToChain afterwards is free (chain.ts's own doc comment on lockChainHead).
-  await lockChainHead(tx, tenantId, nodeId);
+  await lockChainHead(tx, nodeId);
 
-  // (tenant_id, node_id, secuencia) is already uniquely indexed (node-id rekey, 2026-08-03's
+  // (node_id, secuencia) is already uniquely indexed (node-id rekey, 2026-08-03's
   // registros_tenant_node_secuencia_uq) — this is the same index, no new one. Ordered by chain
   // POSITION, never by invoice number: AEAT's own sample chains invoice 12345 to predecessor
   // invoice 44, so sorting on num_serie_factura would compare the wrong pair and report a failure

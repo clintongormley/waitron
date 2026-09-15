@@ -1,5 +1,12 @@
 # schema-equivalence.sh — how to read a non-empty diff
 
+> 2026-09-15: the fiscal seam function named below, `envios_tenants_with_work`, no longer exists.
+> The branch that dropped `tenant_id` from every table replaced it with `envios_work_due`, which
+> answers whether any envío is due rather than which tenants have work. This file and the script's
+> own seam lists describe the tree as it stood when they were written; a `--gate-new` run against a
+> checkout after that branch reports the old name missing from the NEW dump, which is the rename,
+> not a lost grant.
+
 `scripts/schema-equivalence.sh <OLD_ROOT> <NEW_ROOT> <OUT_DIR> [--gate-new]` applies every migration
 set of each checkout to its own `postgres:18-alpine` container as `waitron_migrator` (a
 non-superuser owner, the shape the provisioner produces), takes `pg_dump --schema-only --no-owner` of

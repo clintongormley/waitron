@@ -58,7 +58,7 @@ export async function restoreFiscal(
 ): Promise<RestoreOutcome> {
   let live: SifRegistration;
   try {
-    live = await currentSif(tx, node.tenantId, node.nodeId);
+    live = await currentSif(tx, node.nodeId);
   } catch (err) {
     if (isAppError(err) && err.code === "sif.not_registered") {
       return {
@@ -74,7 +74,6 @@ export async function restoreFiscal(
     floor: installationFloor(now),
   });
   const fresh = await registerSif(tx, {
-    tenantId: node.tenantId,
     nodeId: node.nodeId,
     nif: live.nif,
     idSistemaInformatico: live.idSistemaInformatico,

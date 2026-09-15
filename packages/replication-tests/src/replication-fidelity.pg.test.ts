@@ -176,12 +176,7 @@ describe("native-replication fiscal fidelity — cases 1–3 (shared cluster, sp
   it("Case 1 — a registro and its chain head land byte-identical", async () => {
     const saleId = await seedSale(nodeA.ownerDb, seed, 1);
     const appended = await nodeA.ownerDb.transaction((tx) =>
-      appendToChain(
-        tx,
-        seed.tenantId,
-        seed.nodeId,
-        altaFor(seed.tillId, saleId, 1, 1, "preproduction"),
-      ),
+      appendToChain(tx, seed.nodeId, altaFor(seed.tillId, saleId, 1, 1, "preproduction")),
     );
 
     // The streamed registro arrives on B.
@@ -195,7 +190,7 @@ describe("native-replication fiscal fidelity — cases 1–3 (shared cluster, sp
     expect(aRegMd5).toBeDefined();
 
     // The chain head (cadenas) too — poll until B's head reflects the append, then compare.
-    const headPred = sql`tenant_id = ${seed.tenantId} and node_id = ${seed.nodeId}`;
+    const headPred = sql`node_id = ${seed.nodeId}`;
     await expect
       .poll(
         async () =>
@@ -216,12 +211,7 @@ describe("native-replication fiscal fidelity — cases 1–3 (shared cluster, sp
   it("Case 2 — a replicated UPDATE is refused by ENABLE ALWAYS, proven by deletion (prototype (c2))", async () => {
     const saleId = await seedSale(nodeA.ownerDb, seed, 2);
     const appended = await nodeA.ownerDb.transaction((tx) =>
-      appendToChain(
-        tx,
-        seed.tenantId,
-        seed.nodeId,
-        altaFor(seed.tillId, saleId, 2, 2, "preproduction"),
-      ),
+      appendToChain(tx, seed.nodeId, altaFor(seed.tillId, saleId, 2, 2, "preproduction")),
     );
     await expect.poll(() => registroCount(nodeB, appended.id), { timeout: 30_000 }).toBe(1);
     const original = await importeTotal(nodeB, appended.id);
@@ -273,12 +263,7 @@ describe("native-replication fiscal fidelity — cases 1–3 (shared cluster, sp
     );
     const saleId = await seedSale(nodeA.ownerDb, seed, 3);
     const appended = await nodeA.ownerDb.transaction((tx) =>
-      appendToChain(
-        tx,
-        seed.tenantId,
-        seed.nodeId,
-        altaFor(seed.tillId, saleId, 3, 3, "preproduction"),
-      ),
+      appendToChain(tx, seed.nodeId, altaFor(seed.tillId, saleId, 3, 3, "preproduction")),
     );
 
     // B's apply stalls on the missing replicated column: error count rises, the row is ABSENT on B.
@@ -387,12 +372,7 @@ describe("native-replication fiscal fidelity — Case 4 WAL overflow + re-adopt 
     const seed = await seedTill(nodeA.ownerDb);
     const saleId = await seedSale(nodeA.ownerDb, seed, 1);
     const appended = await nodeA.ownerDb.transaction((tx) =>
-      appendToChain(
-        tx,
-        seed.tenantId,
-        seed.nodeId,
-        altaFor(seed.tillId, saleId, 1, 1, "preproduction"),
-      ),
+      appendToChain(tx, seed.nodeId, altaFor(seed.tillId, saleId, 1, 1, "preproduction")),
     );
     await expect.poll(() => registroCount(nodeB, appended.id), { timeout: 30_000 }).toBe(1);
 

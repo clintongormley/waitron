@@ -20,7 +20,7 @@ const suite = useTemplateDb({ template: "manifest" });
 let till: SeededTill;
 
 beforeEach(async () => {
-  // Each call mints a fresh tenant (and NIF), so tests never collide on the append-only,
+  // Each call mints a fresh node (and NIF), so tests never collide on the append-only,
   // TRUNCATE-blocking `registros_facturacion` — the same reseed-without-truncate reasoning
   // `correction-path.e2e.test.ts` documents.
   till = await seedTill(suite.admin, "A");
@@ -68,7 +68,6 @@ function f3CanjeRecord(): RegistroAlta {
 async function storeF3AsAppUser(record: RegistroAlta): Promise<string> {
   const saleId = await seedSale(suite.admin, till, 1);
   const row = toRegistroRow(record, {
-    tenantId: till.tenantId,
     tillId: till.tillId,
     nodeId: till.nodeId,
     sifId: till.sifId,

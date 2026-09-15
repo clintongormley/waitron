@@ -24,7 +24,7 @@ const suite = useTemplateDb({ template: "manifest" });
 let backend: VerifactuBackend;
 let till: SeededTill;
 // A SECOND series for the F3 canje invoices. The F3 draws its own number, and `sales` is unique on
-// (tenant, series, invoice_number), so an F3 cannot reuse a ticket's series+number. `purpose` is
+// (series_id, invoice_number), so an F3 cannot reuse a ticket's series+number. `purpose` is
 // 'standard' rather than a bespoke 'substitution' value: the invoice_series CHECK admits only
 // 'standard'/'rectificative' today, and giving F3 its own purpose is a core/Slice-4 decision (plan
 // §5.3) the BACKEND does not enforce — it derives NumSerieFactura from `seriesCode`/`invoiceNumber`,
@@ -38,7 +38,7 @@ const RECIPIENT: Counterparty = {
 };
 
 beforeEach(async () => {
-  // Each call mints a fresh tenant (and NIF), so tests never collide on the append-only,
+  // Each call mints a fresh node (and NIF), so tests never collide on the append-only,
   // TRUNCATE-blocking `registros_facturacion` — the same reseed-without-truncate reasoning
   // `correction-path.e2e.test.ts` documents.
   till = await seedTill(suite.admin, "A");
@@ -65,7 +65,6 @@ function substitutionSaleFor(
   overrides: Partial<SaleForFiscalRecord> = {},
 ): SaleForFiscalRecord {
   return {
-    tenantId: till.tenantId,
     tillId: till.tillId,
     nodeId: till.nodeId,
     saleId: brandSaleId(saleId),
@@ -88,7 +87,6 @@ function substitutionSaleFor(
  * positive totals. `seriesCode` "A" → NumSerieFactura "A/<n>". */
 function ticketSaleFor(saleId: string, invoiceNumber: number): SaleForFiscalRecord {
   return {
-    tenantId: till.tenantId,
     tillId: till.tillId,
     nodeId: till.nodeId,
     saleId: brandSaleId(saleId),

@@ -206,7 +206,7 @@ export async function recordSubstitution(
   // anyway. The table-wide `incidents_open_dedup` index holds at most one open incident per
   // (till, code, sale), so emitting one row per issue would collapse to a single row and drop every
   // issue after the first; `params.issues` carries them all. Mirrors `./record-sale.ts`.
-  const verification = await backend.checkIntegrity(tx, input.tenantId, input.nodeId);
+  const verification = await backend.checkIntegrity(tx, input.nodeId);
   const pending: Array<{ error: AppError; severity: IncidentSeverity }> = [];
   if (verification.issues.length > 0) {
     pending.push({
@@ -341,7 +341,6 @@ export async function recordSubstitution(
   const fiscal = await backend.recordSubstitution(
     tx,
     {
-      tenantId: input.tenantId,
       tillId: input.tillId,
       nodeId: input.nodeId,
       saleId,

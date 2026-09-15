@@ -37,8 +37,8 @@ const suite = useTemplateDb({ template: "manifest" });
 // No truncate-and-reseed here: registros_facturacion's append-only trigger
 // (registros_facturacion_block_truncate) fires on a CASCADEd TRUNCATE from `tenants` too, and
 // blocks it unconditionally — verified live, the immutable table cannot be wiped even by its own
-// owner without first disabling that trigger. seedTill mints a FRESH tenant (and therefore a fresh
-// nif, and a fresh node) on every call instead, so each test's rows are simply new and independent
+// owner without first disabling that trigger. seedTill mints a FRESH node (and therefore a fresh
+// nif) on every call instead, so each test's rows are simply new and independent
 // of whatever a previous test already committed; nothing here ever needs the previous run's rows gone.
 beforeEach(async () => {
   node = await seedTill(suite.admin, "A");
@@ -71,12 +71,7 @@ describe("appendToChain under real contention", () => {
       const results = await Promise.all(
         dbs.map((db, i) =>
           db.transaction((tx) =>
-            appendToChain(
-              tx,
-              node.tenantId,
-              node.nodeId,
-              altaFor(node.tillId, sales[i]!, i + 1, i),
-            ),
+            appendToChain(tx, node.nodeId, altaFor(node.tillId, sales[i]!, i + 1, i)),
           ),
         ),
       );
@@ -100,12 +95,7 @@ describe("appendToChain under real contention", () => {
       await Promise.all(
         dbs.map((db, i) =>
           db.transaction((tx) =>
-            appendToChain(
-              tx,
-              node.tenantId,
-              node.nodeId,
-              altaFor(node.tillId, sales[i]!, i + 1, i),
-            ),
+            appendToChain(tx, node.nodeId, altaFor(node.tillId, sales[i]!, i + 1, i)),
           ),
         ),
       );
@@ -127,12 +117,7 @@ describe("appendToChain under real contention", () => {
       await Promise.all(
         dbs.map((db, i) =>
           db.transaction((tx) =>
-            appendToChain(
-              tx,
-              node.tenantId,
-              node.nodeId,
-              altaFor(node.tillId, sales[i]!, i + 1, i),
-            ),
+            appendToChain(tx, node.nodeId, altaFor(node.tillId, sales[i]!, i + 1, i)),
           ),
         ),
       );
@@ -166,7 +151,7 @@ describe("appendToChain under real contention", () => {
     try {
       const saleId = await seedSale(suite.admin, node, 1);
       await suite.admin.transaction((tx) =>
-        appendToChain(tx, node.tenantId, node.nodeId, altaFor(node.tillId, saleId, 1, 1)),
+        appendToChain(tx, node.nodeId, altaFor(node.tillId, saleId, 1, 1)),
       );
 
       const held = new Promise<void>((resolve) => (release = resolve));
@@ -188,7 +173,7 @@ describe("appendToChain under real contention", () => {
       const error = await captureError(() =>
         waiter.transaction(async (tx) => {
           await tx.execute(sql`set local lock_timeout = '250ms'`);
-          return appendToChain(tx, node.tenantId, node.nodeId, altaFor(node.tillId, second, 2, 2));
+          return appendToChain(tx, node.nodeId, altaFor(node.tillId, second, 2, 2));
         }),
       );
       // captureError + pgErrorCode, not `.rejects.toMatchObject({ code: "55P03" })` — the same
@@ -205,8 +190,8 @@ describe("appendToChain under real contention", () => {
   });
 
   it("does not block an appender on a different node", async () => {
-    // Per-tenant and per-node parallelism is the reason the lock is on a row rather than an
-    // advisory key: a busy node must never stall a quiet one.
+    // Per-node parallelism is the reason the lock is on a row rather than an advisory key: a busy
+    // node must never stall a quiet one.
     const holder = await suite.pg.connect();
     const writer = await suite.pg.connect();
     let release: () => void = () => {};
@@ -214,7 +199,7 @@ describe("appendToChain under real contention", () => {
     try {
       const first = await seedSale(suite.admin, node, 1);
       await suite.admin.transaction((tx) =>
-        appendToChain(tx, node.tenantId, node.nodeId, altaFor(node.tillId, first, 1, 1)),
+        appendToChain(tx, node.nodeId, altaFor(node.tillId, first, 1, 1)),
       );
 
       const held = new Promise<void>((resolve) => (release = resolve));
@@ -230,15 +215,13 @@ describe("appendToChain under real contention", () => {
       });
       await acquired;
 
-      const elsewhere = await seedSale(suite.admin, other, 1);
+      // Invoice number 2, not 1: `registros_identidad_uq` is (emisor, num_serie, fecha, tipo) and
+      // one database files for one obligado, so the two nodes cannot both issue "A/1". The subject
+      // here is the LOCK, and node B taking its own chain's lock while node A's is held.
+      const elsewhere = await seedSale(suite.admin, other, 2);
       const result = await writer.transaction(async (tx) => {
         await tx.execute(sql`set local lock_timeout = '250ms'`);
-        return appendToChain(
-          tx,
-          other.tenantId,
-          other.nodeId,
-          altaFor(other.tillId, elsewhere, 1, 1),
-        );
+        return appendToChain(tx, other.nodeId, altaFor(other.tillId, elsewhere, 2, 2));
       });
       expect(result.secuencia).toBe(1);
     } finally {
@@ -272,7 +255,6 @@ describe("registerSif's installation-number counter under real contention", () =
         dbs.map((db, i) =>
           db.transaction((tx) =>
             registerSif(tx, {
-              tenantId: fixture.tenantId,
               nodeId: fixture.nodeIds[i]!,
               nif: fixture.nif,
               idSistemaInformatico: TEST_SISTEMA.IdSistemaInformatico,

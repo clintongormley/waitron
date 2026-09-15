@@ -4,7 +4,6 @@ import { CORE_MIGRATIONS, captureError, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { CREDENTIALS_MIGRATIONS, loadKeyRing, putCredential } from "@waitron/credentials";
 import { isAppError } from "@waitron/shared";
-import type { TenantId } from "@waitron/shared";
 import type { Cabecera, EnvioRegistro } from "@waitron/verifactu";
 import {
   aeatClientResolver,
@@ -20,7 +19,6 @@ import {
   type MtlsMaterial,
   type MtlsServer,
 } from "@waitron/server-kit/testing/mtls.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
 
 const KEY_ENV = {
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 7).toString("base64"),
@@ -52,8 +50,7 @@ afterAll(async () => {
   if (server !== undefined) await server.close();
 });
 
-async function provision(certKind: string): Promise<TenantId> {
-  const tenantId = await seedTenant(suite.db);
+async function provision(certKind: string): Promise<void> {
   await withTransaction(suite.db, (tx) =>
     putCredential(tx, ring, {
       purpose: "fiscal.aeat",
@@ -64,7 +61,6 @@ async function provision(certKind: string): Promise<TenantId> {
       },
     }),
   );
-  return tenantId;
 }
 
 describe("aeatEndpointFor", () => {
@@ -80,24 +76,23 @@ describe("aeatEndpointFor", () => {
 
 describe("readCertMaterial", () => {
   it("decodes the PFX and the kind", async () => {
-    const tenantId = await provision("sello");
-    const read = await readCertMaterial(suite.db, ring, tenantId);
+    await provision("sello");
+    const read = await readCertMaterial(suite.db, ring);
     expect(read.certKind).toBe("sello");
     expect(read.passphrase).toBe(material.clientPassphrase);
     expect(read.pfx.equals(material.clientPfx)).toBe(true);
   });
 
   it("rejects a certKind that is not one of the two kinds", async () => {
-    const tenantId = await provision("wildcard");
-    const error = await captureError(() => readCertMaterial(suite.db, ring, tenantId));
+    await provision("wildcard");
+    const error = await captureError(() => readCertMaterial(suite.db, ring));
     expect(isAppError(error) && error.code).toBe("server.credential_unusable");
     expect(isAppError(error) && error.params).toMatchObject({ field: "certKind" });
   });
 
-  it("fails with credentials.missing when the tenant has no fiscal credential at all", async () => {
-    const tenantId = await seedTenant(suite.db);
-    const error = await captureError(() => readCertMaterial(suite.db, ring, tenantId));
-    // The vault's own code, not ours: absence is the vault's fact to report, and drain's per-tenant
+  it("fails with credentials.missing when the venue has no fiscal credential at all", async () => {
+    const error = await captureError(() => readCertMaterial(suite.db, ring));
+    // The vault's own code, not ours: absence is the vault's fact to report, and drain's
     // containment records whichever code arrives.
     expect(isAppError(error) && error.code).toBe("credentials.missing");
   });
@@ -113,7 +108,7 @@ describe("certMaterialFrom", () => {
   it("fails loudly on a payload sealed before certKind existed, rather than guessing a host", () => {
     // Spec §5.1: reads validate nothing, so a row sealed under the old two-field list decrypts to a
     // payload whose certKind is undefined. Defaulting would send a sello certificate to the
-    // non-sello host and fail every submission for that tenant with nothing explaining why.
+    // non-sello host and fail every submission with nothing explaining why.
     expect(() => certMaterialFrom({ pfxBase64: "AAA=", passphrase: "p" }, REF)).toThrow(
       /server.credential_unusable/,
     );
@@ -162,13 +157,13 @@ describe("certMaterialFrom", () => {
 
 describe("the resolved client over a real client-certificate handshake", () => {
   it("presents the vaulted certificate to a server that requires one", async () => {
-    const tenantId = await provision("representante");
-    // Captured rather than discarded: `aeatClientResolver` reads `certKind` off THIS tenant's own
+    await provision("representante");
+    // Captured rather than discarded: `aeatClientResolver` reads `certKind` off the venue's own
     // vaulted material and is supposed to hand it to `endpointFor` unchanged. A zero-argument
     // `() => server.origin` stub would still make every other assertion in this test pass even if
     // the implementation hardcoded a kind or forwarded the wrong field — the seam between "the
-    // provisioned certKind" and "the endpoint it selects" is the one thing a two-tenant deployment
-    // actually depends on, so it is the one thing this test must not let through unobserved.
+    // provisioned certKind" and "the endpoint it selects" is what decides which AEAT host every
+    // submission reaches, so it is the one thing this test must not let through unobserved.
     let seenCertKind: CertKind | undefined;
     const resolver = aeatClientResolver({
       db: suite.db,
@@ -179,7 +174,7 @@ describe("the resolved client over a real client-certificate handshake", () => {
       },
       fetchFor: (m) => mtlsFetch(m, material.caPem),
     });
-    const client = await resolver.resolve(tenantId);
+    const client = await resolver.resolve();
 
     // `submit` posts, and the local server answers with a body `parseRespuestaSuministro` will
     // reject. The assertion is the HANDSHAKE: the server only answers at all if the client
@@ -206,14 +201,14 @@ describe("the resolved client over a real client-certificate handshake", () => {
     // (see the task report). So the omitted `ca` argument does not leave this connection unverified;
     // it relies on what the vaulted material itself already carries, which is this suite's own
     // fixture and a realistic PFX shape, not a gap in the test.
-    const tenantId = await provision("representante");
+    await provision("representante");
     const resolver = aeatClientResolver({
       db: suite.db,
       ring,
       endpointFor: () => server.origin,
       fetchFor: (m) => mtlsFetch(m),
     });
-    const client = await resolver.resolve(tenantId);
+    const client = await resolver.resolve();
     await captureError(() => client.submit(anyCabecera(), [anyRegistro()]));
     expect(server.sawClientCn()).toBe(material.clientCn);
   });
@@ -253,12 +248,11 @@ describe("the resolved client over a real client-certificate handshake", () => {
 });
 
 describe("aeatClientResolver lifetime", () => {
-  // One tenant per database: `resolve` appends a transport to the close list on EVERY call and
-  // dedups on nothing, so the count of transports to release tracks resolve CALLS, not tenants.
-  // Two transports are built by resolving this node's single tenant twice with its real vaulted
-  // credential; the vault holds one `fiscal.aeat` credential per database.
+  // `resolve` appends a transport to the close list on EVERY call and dedups on nothing, so the
+  // count of transports to release tracks resolve CALLS. Two transports are built by resolving
+  // twice against the one vaulted `fiscal.aeat` credential this database holds.
   it("closes one transport per client it resolved", async () => {
-    const tenant = await provision("sello");
+    await provision("sello");
     const closed: string[] = [];
     const resolver = aeatClientResolver({
       db: suite.db,
@@ -273,8 +267,8 @@ describe("aeatClientResolver lifetime", () => {
       }),
     });
 
-    await resolver.resolve(tenant);
-    await resolver.resolve(tenant);
+    await resolver.resolve();
+    await resolver.resolve();
     await resolver.closeAll();
 
     expect(closed).toHaveLength(2);
@@ -285,9 +279,8 @@ describe("aeatClientResolver lifetime", () => {
   // finding it was cleaning up after. Every transport is still attempted, and the failure is
   // logged rather than silently dropped.
   it("does not throw when a transport's close fails, and still closes the rest", async () => {
-    // One tenant per database, two transports built by resolving it twice (see the count test
-    // above for why a second tenant cannot share this database now).
-    const tenant = await provision("sello");
+    // Two transports, built by resolving twice (see the count test above).
+    await provision("sello");
     const closed: string[] = [];
     const logged: Array<[string, string, Record<string, unknown> | undefined]> = [];
     let n = 0;
@@ -309,21 +302,16 @@ describe("aeatClientResolver lifetime", () => {
       (level, event, fields) => logged.push([level, event, fields]),
     );
 
-    await resolver.resolve(tenant);
-    await resolver.resolve(tenant);
+    await resolver.resolve();
+    await resolver.resolve();
 
     await expect(resolver.closeAll()).resolves.toBeUndefined();
     expect(closed).toEqual(["ok"]);
-    // The one call attributable to the failing transport, not the one that closed cleanly —
-    // carrying the tenant recorded on that transport's `open` entry (the one resolved first, whose
-    // close() is the one `n === 1` catches) and a message that survives `codeOf`'s "unknown"
-    // flattening of a plain socket-layer `Error`.
+    // The one call attributable to the failing transport, not the one that closed cleanly (the one
+    // resolved first, whose close() is the one `n === 1` catches), carrying a message that survives
+    // `codeOf`'s "unknown" flattening of a plain socket-layer `Error`.
     expect(logged).toEqual([
-      [
-        "warn",
-        "transport.close_failed",
-        { tenantId: tenant, errorCode: "unknown", message: "socket already gone" },
-      ],
+      ["warn", "transport.close_failed", { errorCode: "unknown", message: "socket already gone" }],
     ]);
   });
 
@@ -331,7 +319,7 @@ describe("aeatClientResolver lifetime", () => {
   // (`Promise<void>`) makes no promise about what it rejects with, so `message: error instanceof
   // Error ? error.message : String(error)` above has a real, not merely defensive, second branch.
   it("stringifies a close failure that rejects with something other than an Error", async () => {
-    const tenantA = await provision("sello");
+    await provision("sello");
     const logged: Array<[string, string, Record<string, unknown> | undefined]> = [];
     const resolver = aeatClientResolver(
       {
@@ -346,14 +334,14 @@ describe("aeatClientResolver lifetime", () => {
       (level, event, fields) => logged.push([level, event, fields]),
     );
 
-    await resolver.resolve(tenantA);
+    await resolver.resolve();
 
     await expect(resolver.closeAll()).resolves.toBeUndefined();
     expect(logged).toEqual([
       [
         "warn",
         "transport.close_failed",
-        { tenantId: tenantA, errorCode: "unknown", message: "socket gone, no Error wrapper" },
+        { errorCode: "unknown", message: "socket gone, no Error wrapper" },
       ],
     ]);
   });
@@ -368,9 +356,8 @@ describe("aeatClientResolver lifetime", () => {
   // one even though `open.splice(0)` had already emptied the list. `Promise.resolve().then(...)`
   // wraps the call so a throw becomes a rejection like any other, caught by the same `.catch`.
   it("does not throw when a transport's close throws SYNCHRONOUSLY, and still closes the one after it", async () => {
-    // One tenant per database, two transports built by resolving it twice (see the count test
-    // above for why a second tenant cannot share this database now).
-    const tenant = await provision("sello");
+    // Two transports, built by resolving twice (see the count test above).
+    await provision("sello");
     const closed: string[] = [];
     const logged: Array<[string, string, Record<string, unknown> | undefined]> = [];
     let n = 0;
@@ -395,8 +382,8 @@ describe("aeatClientResolver lifetime", () => {
       (level, event, fields) => logged.push([level, event, fields]),
     );
 
-    await resolver.resolve(tenant);
-    await resolver.resolve(tenant);
+    await resolver.resolve();
+    await resolver.resolve();
 
     await expect(resolver.closeAll()).resolves.toBeUndefined();
     // The transport queued AFTER the one whose close() threw synchronously still closed — proof
@@ -406,7 +393,7 @@ describe("aeatClientResolver lifetime", () => {
       [
         "warn",
         "transport.close_failed",
-        { tenantId: tenant, errorCode: "unknown", message: "socket exploded synchronously" },
+        { errorCode: "unknown", message: "socket exploded synchronously" },
       ],
     ]);
   });
@@ -417,9 +404,8 @@ describe("aeatClientResolver lifetime", () => {
   // does not surface at all — it REPLACES the sweep's own result or error. Without the inner guard
   // this test throws "logger is down" out of `closeAll`, and the second transport is never closed.
   it("does not throw when the LOGGER fails while reporting a close failure", async () => {
-    // One tenant per database, two transports built by resolving it twice (see the count test
-    // above for why a second tenant cannot share this database now).
-    const tenant = await provision("sello");
+    // Two transports, built by resolving twice (see the count test above).
+    await provision("sello");
     const closed: string[] = [];
     let n = 0;
     const resolver = aeatClientResolver(
@@ -442,8 +428,8 @@ describe("aeatClientResolver lifetime", () => {
       },
     );
 
-    await resolver.resolve(tenant);
-    await resolver.resolve(tenant);
+    await resolver.resolve();
+    await resolver.resolve();
 
     await expect(resolver.closeAll()).resolves.toBeUndefined();
     // The transport AFTER the failing one still got released — the loop was not abandoned.

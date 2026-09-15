@@ -3,10 +3,9 @@ import type { Database, Transaction } from "@waitron/db";
 import {
   nodeId as brandNodeId,
   saleId as brandSaleId,
-  tenantId,
   tillId as brandTillId,
 } from "@waitron/shared";
-import type { NodeId, SaleId, TenantId, TillId } from "@waitron/shared";
+import type { NodeId, SaleId, TillId } from "@waitron/shared";
 import type { AltaInput, AnulacionInput, SistemaInformatico } from "@waitron/verifactu";
 import { registerSif } from "../registro-sif.js";
 import type { PendingRegistro } from "../chain.js";
@@ -32,7 +31,6 @@ export const TEST_SISTEMA: SistemaInformatico = {
  * that till is the informational snapshot stamped onto `sales.till_id`/`registros_facturacion.till_id`.
  */
 export interface SeededTill {
-  tenantId: TenantId;
   /** Where a sale rings (still NOT NULL on `sales`/`registros_facturacion` — the snapshot). */
   tillId: TillId;
   /** The SIF/chain/series owner (node-id rekey, 2026-08-03). Every chain op keys on this. */
@@ -42,33 +40,37 @@ export interface SeededTill {
 }
 
 // Module-scope, not per-call: every test file that imports seedTill shares this counter across its
-// WHOLE run, which is exactly what makes each call's nif collision-free against
-// tenants_country_tax_id_key — including across the many beforeEach calls a concurrency suite fires.
+// WHOLE run, which is exactly what makes each call's nif collision-free in `registro_sif`'s
+// (nif, id_sistema_informatico, numero_instalacion) unique — including across the many beforeEach
+// calls a concurrency suite fires.
 let nifSequence = 0;
 
 /**
- * A fresh, plausible-looking NIF, unique for the lifetime of the test process. `tenants.tax_id`
- * carries no format CHECK (packages/db/src/schema/tenants.ts), so nothing validates the checksum
- * digit — this exists purely to dodge `tenants_country_tax_id_key`, never to look up a real obligado.
+ * A fresh, plausible-looking NIF, unique for the lifetime of the test process. Nothing validates the
+ * checksum digit — this exists purely to keep each fixture's SIF identity distinct, never to look up
+ * a real obligado.
  */
 function freshNif(): string {
   nifSequence += 1;
   return `${String(10_000_000 + nifSequence).padStart(8, "0")}K`;
 }
 
-async function insertTenant(tx: Transaction, nif: string): Promise<TenantId> {
-  const { rows } = await tx.execute<{ id: string }>(sql`
-    insert into tenants (country, tax_id, legal_name) values ('ES', ${nif}, ${"Waitron SL"}) returning id
+/**
+ * Makes sure the one taxpayer row exists, and leaves it alone if it does: every fixture in this file
+ * shares it, because one database files for one taxpayer. `VerifactuBackend` reads `legal_name` off
+ * it for `NombreRazonEmisor`, and the fiscal module's provisioning reads `tax_id`; the NIF each
+ * fixture registers its SIF under is passed explicitly instead, so a second row is never needed to
+ * get a second NIF.
+ */
+async function ensureTaxpayer(tx: Transaction, nif: string): Promise<void> {
+  await tx.execute(sql`
+    insert into tenants (country, tax_id, legal_name)
+    select 'ES', ${nif}, ${"Waitron SL"} where not exists (select 1 from tenants)
   `);
-  const row = rows[0];
-  if (row === undefined) throw new Error("seedTill: tenant insert returned no row");
-  return tenantId(row.id);
 }
 
-/** Inserts one location under an EXISTING tenant and returns its id — the FK a node and a till both
- * need. */
-async function insertLocation(tx: Transaction, tenant: TenantId, label: string): Promise<string> {
-  void tenant;
+/** Inserts one location and returns its id — the FK a node and a till both need. */
+async function insertLocation(tx: Transaction, label: string): Promise<string> {
   const location = await tx.execute<{ id: string }>(sql`
     insert into locations (name, invoice_locales, operation_description) values (${"Sala " + label}, array['es'], ${"Venta en establecimiento"})
     returning id
@@ -78,15 +80,9 @@ async function insertLocation(tx: Transaction, tenant: TenantId, label: string):
   return locationRow.id;
 }
 
-/** Inserts one node under an EXISTING tenant+location and returns its id — the SIF/chain/series
- * owner (node-id rekey, 2026-08-03). */
-async function insertNode(
-  tx: Transaction,
-  tenant: TenantId,
-  location: string,
-  label: string,
-): Promise<NodeId> {
-  void tenant;
+/** Inserts one node under an existing location and returns its id — the SIF/chain/series owner
+ * (node-id rekey, 2026-08-03). */
+async function insertNode(tx: Transaction, location: string, label: string): Promise<NodeId> {
   const node = await tx.execute<{ id: string }>(sql`
     insert into nodes (location_id, name) values (${location}, ${"Node " + label})
     returning id
@@ -96,14 +92,8 @@ async function insertNode(
   return brandNodeId(nodeRow.id);
 }
 
-/** Inserts one till under an EXISTING tenant+location and returns its id — where a sale rings. */
-async function insertTill(
-  tx: Transaction,
-  tenant: TenantId,
-  location: string,
-  label: string,
-): Promise<TillId> {
-  void tenant;
+/** Inserts one till under an existing location and returns its id — where a sale rings. */
+async function insertTill(tx: Transaction, location: string, label: string): Promise<TillId> {
   const till = await tx.execute<{ id: string }>(sql`
     insert into tills (location_id, name) values (${location}, ${"Till " + label})
     returning id
@@ -113,18 +103,13 @@ async function insertTill(
   return brandTillId(tillRow.id);
 }
 
-/** Adds one node (+ location + till + a node-keyed series + a live SIF registration) under an
- * EXISTING tenant. The series and SIF are keyed on the NODE (node-id rekey, 2026-08-03); the till
- * is the sale-ringing snapshot. */
-async function addTill(
-  tx: Transaction,
-  tenant: TenantId,
-  nif: string,
-  label: string,
-): Promise<SeededTill> {
-  const location = await insertLocation(tx, tenant, label);
-  const node = await insertNode(tx, tenant, location, label);
-  const tillId = await insertTill(tx, tenant, location, label);
+/** Adds one node (+ location + till + a node-keyed series + a live SIF registration). The series
+ * and SIF are keyed on the NODE (node-id rekey, 2026-08-03); the till is the sale-ringing
+ * snapshot. */
+async function addTill(tx: Transaction, nif: string, label: string): Promise<SeededTill> {
+  const location = await insertLocation(tx, label);
+  const node = await insertNode(tx, location, label);
+  const tillId = await insertTill(tx, location, label);
 
   const series = await tx.execute<{ id: string }>(sql`
     insert into invoice_series (node_id, code, purpose, next_number) values (${node}, ${"G" + label}, ${"standard"}, 1)
@@ -134,32 +119,34 @@ async function addTill(
   if (seriesRow === undefined) throw new Error("seedTill: series insert returned no row");
 
   const sif = await registerSif(tx, {
-    tenantId: tenant,
     nodeId: node,
     nif,
     idSistemaInformatico: TEST_SISTEMA.IdSistemaInformatico,
   });
 
-  return { tenantId: tenant, tillId, nodeId: node, seriesId: seriesRow.id, sifId: sif.id };
+  return { tillId, nodeId: node, seriesId: seriesRow.id, sifId: sif.id };
 }
 
 /**
- * Inserts tenant → location → node → till → node-keyed series and registers a live Veri*Factu SIF
- * identity for the node, returning every id `appendToChain` needs. Each call gets its OWN fresh
- * tenant (and therefore its own NIF, via `freshNif()`) — this is what lets
+ * Inserts location → node → till → node-keyed series and registers a live Veri*Factu SIF identity
+ * for the node, returning every id `appendToChain` needs, and makes sure the one taxpayer row
+ * exists. Each call gets its OWN fresh NIF (via `freshNif()`) and its own node — this is what lets
  * `chain.concurrency.test.ts`'s `beforeEach` reseed on every test without truncating (and therefore
  * without ever touching `registros_facturacion`'s append-only, TRUNCATE-blocking trigger — see that
  * file's own note).
  */
 export async function seedTill(db: Database, label = "A"): Promise<SeededTill> {
   const nif = freshNif();
-  return db.transaction(async (tx) => addTill(tx, await insertTenant(tx, nif), nif, label));
+  return db.transaction(async (tx) => {
+    await ensureTaxpayer(tx, nif);
+    return addTill(tx, nif, label);
+  });
 }
 
 /**
  * Adds a SECOND till (+ its own node-keyed series) under the SAME node of an ALREADY-seeded fixture,
- * returning a `SeededTill` that shares the original's `tenantId`/`nodeId`/`sifId` but carries the NEW
- * till and NEW series. For the "two tills, one node → one chain" property (node-id rekey,
+ * returning a `SeededTill` that shares the original's `nodeId`/`sifId` but carries the NEW till and
+ * NEW series. For the "two tills, one node → one chain" property (node-id rekey,
  * 2026-08-03): a sale rung at either till appends to the one per-node chain. A second series is
  * created so each till can draw its own numbers, but both series belong to the SAME node — the chain
  * is the node's.
@@ -177,7 +164,7 @@ export async function addTillToNode(
       `)
     ).rows;
     if (locationRow === undefined) throw new Error("addTillToNode: node not found");
-    const tillId = await insertTill(tx, seed.tenantId, locationRow.location_id, label);
+    const tillId = await insertTill(tx, locationRow.location_id, label);
     const series = await tx.execute<{ id: string }>(sql`
       insert into invoice_series (node_id, code, purpose, next_number) values (${seed.nodeId}, ${"G" + label}, ${"standard"}, 1)
       returning id
@@ -185,7 +172,6 @@ export async function addTillToNode(
     const seriesRow = series.rows[0];
     if (seriesRow === undefined) throw new Error("addTillToNode: series insert returned no row");
     return {
-      tenantId: seed.tenantId,
       tillId,
       nodeId: seed.nodeId,
       seriesId: seriesRow.id,
@@ -194,22 +180,21 @@ export async function addTillToNode(
   });
 }
 
-/** Inserts one location + node under an EXISTING tenant, deliberately WITHOUT registering a SIF —
- * the counterpart to addTill above, for callers that need to fire registerSif THEMSELVES afterwards.
+/** Inserts one location + node, deliberately WITHOUT registering a SIF — the counterpart to addTill
+ * above, for callers that need to fire registerSif THEMSELVES afterwards.
  * See seedNodesForSifContention's doc comment for why this split exists. */
-async function addBareNode(tx: Transaction, tenant: TenantId, label: string): Promise<NodeId> {
-  const location = await insertLocation(tx, tenant, label);
-  return insertNode(tx, tenant, location, label);
+async function addBareNode(tx: Transaction, label: string): Promise<NodeId> {
+  const location = await insertLocation(tx, label);
+  return insertNode(tx, location, label);
 }
 
 export interface SifContentionFixture {
-  tenantId: TenantId;
   nif: string;
   nodeIds: NodeId[];
 }
 
 /**
- * `count` DISTINCT nodes under ONE fresh tenant — therefore one shared NIF — with NO SIF
+ * `count` DISTINCT nodes sharing ONE NIF — with NO SIF
  * registration yet. Exists for exactly one test (chain.concurrency.test.ts's retargeted Task 13
  * counter-contention suite): proving `contadores_instalacion`'s (NIF, IdSistemaInformatico)
  * allocator holds when many DIFFERENT nodes of one obligado race it concurrently (node-id rekey,
@@ -221,7 +206,7 @@ export interface SifContentionFixture {
  * the test can fire every registerSif call itself, concurrently, as the thing under test.
  *
  * One SIF-registration per node, not several against one node: `registerSif` also revokes any
- * existing live registration for that (tenant, node) before minting a new one (two separate
+ * existing live registration for that node before minting a new one (two separate
  * statements, not one atomic step), which races a DIFFERENT, out-of-scope hazard — concurrent
  * RE-registration of the SAME node from multiple processes — that this fixture is not testing.
  * registerSif's own doc comment (./registro-sif.ts) frames re-registration as a rare, sequential,
@@ -234,12 +219,12 @@ export async function seedNodesForSifContention(
 ): Promise<SifContentionFixture> {
   const nif = freshNif();
   return db.transaction(async (tx) => {
-    const tenant = await insertTenant(tx, nif);
+    await ensureTaxpayer(tx, nif);
     const nodeIds: NodeId[] = [];
     for (let i = 0; i < count; i++) {
-      nodeIds.push(await addBareNode(tx, tenant, `N${i}`));
+      nodeIds.push(await addBareNode(tx, `N${i}`));
     }
-    return { tenantId: tenant, nif, nodeIds };
+    return { nif, nodeIds };
   });
 }
 

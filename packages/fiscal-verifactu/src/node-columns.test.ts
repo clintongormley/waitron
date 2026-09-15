@@ -1,7 +1,7 @@
 import { captureError, pgErrorCode } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode } from "@waitron/db/testing/seed.js";
-import { locationId as brandLocationId } from "@waitron/shared";
+import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
@@ -33,11 +33,15 @@ function nextSecuencia(): number {
   return secuenciaSeq;
 }
 
+// `seedNode` (`@waitron/db`) still takes a tenant id and ignores it; it goes when `apps/server`,
+// its last supplier, is converted.
+const INERT_TENANT_ID = brandTenantId("00000000-0000-4000-8000-000000000001");
+
 const BOGUS_NODE = "99999999-9999-4999-8999-999999999999";
 
 /** A fresh node under TENANT_A's seeded tenant/location. */
 async function seedNodeForA(): Promise<string> {
-  return seedNode(pg.db, TENANT_A.id, brandLocationId(TENANT_A.locationId));
+  return seedNode(pg.db, INERT_TENANT_ID, brandLocationId(TENANT_A.locationId));
 }
 
 /** The `is_nullable` rows for a table's node_id column — `[{ is_nullable: "NO" }]` after the rekey. */
@@ -61,21 +65,20 @@ describe("registro_sif.node_id", () => {
 });
 
 describe("cadenas.node_id", () => {
-  it("is NOT NULL and is the (tenant, node) chain key", async () => {
+  it("is NOT NULL and is the chain key", async () => {
     expect(await nodeIdNullability("cadenas")).toEqual([{ is_nullable: "NO" }]);
     const node = await seedNodeForA();
     // A fresh chain head for this node (seedTenantTillSif seeds no cadenas row). ultimo_registro_id
     // and ultima_huella stay null — both-null satisfies cadenas_puntero_ck. No till_id column any more.
     const inserted = await pg.db.execute<{ node_id: string | null }>(
-      sql`insert into cadenas (tenant_id, node_id)
-           values (${TENANT_A.id}, ${node}) returning node_id`,
+      sql`insert into cadenas (node_id) values (${node}) returning node_id`,
     );
     expect(inserted.rows[0]?.node_id).toBe(node);
   });
 
   it("rejects a null node_id (the chain key is required)", async () => {
     const error = await captureError(() =>
-      pg.db.execute(sql`insert into cadenas (tenant_id) values (${TENANT_A.id})`),
+      pg.db.execute(sql`insert into cadenas (node_id) values (null)`),
     );
     // 23502 not_null_violation.
     expect(pgErrorCode(error)).toBe("23502");
@@ -89,11 +92,11 @@ describe("registros_facturacion.node_id", () => {
     const secuencia = nextSecuencia();
     const { rows } = await pg.db.execute<{ node_id: string | null }>(sql`
       insert into registros_facturacion (
-        tenant_id, till_id, node_id, sif_id, sale_id, secuencia, tipo_registro,
+        till_id, node_id, sif_id, sale_id, secuencia, tipo_registro,
         id_emisor_factura, num_serie_factura, fecha_expedicion_factura, nombre_razon_emisor,
         primer_registro, sistema_informatico,
         fecha_hora_huso_gen_registro, offset_minutos, tipo_huella, huella
-      ) values (${TENANT_A.id}, ${TENANT_A.tillId}, ${nodeId}, ${TENANT_A.sifId}, ${TENANT_A.saleId},
+      ) values (${TENANT_A.tillId}, ${nodeId}, ${TENANT_A.sifId}, ${TENANT_A.saleId},
         ${secuencia}, 'alta',
         '89890001K', ${"R/" + String(secuencia)}, '2026-07-20', 'Waitron SL',
         true, '{}'::jsonb,

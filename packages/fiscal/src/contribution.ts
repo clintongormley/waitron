@@ -50,7 +50,7 @@ export interface FiscalContribution {
    * AEAT signing certificate; absent for a regime that files nothing). The host holds the opaque
    * blob and the vault ring but does not know the regime's shape, so it reaches the regime through
    * this seat: `required` decides whether the environment demands the secret, `validate` refuses a
-   * malformed one WITHOUT any write, and `seal` writes it under the tenant's transaction. */
+   * malformed one WITHOUT any write, and `seal` writes it in its own transaction. */
   readonly provisioningSecret?: {
     /** Whether a provision in `environment` must carry the secret (Veri*Factu: production only). */
     required(environment: DeploymentEnvironment): boolean;
@@ -58,8 +58,11 @@ export interface FiscalContribution {
      * field, and writing NOTHING. Run BEFORE `provisionVenue` mints the unrepairable SIF/hash chain
      * (CLAUDE.md §5) so a malformed secret is refused with nothing stamped or minted. */
     validate(raw: unknown): void;
-    /** Seal the (validated) secret into the tenant's vault under `withTransaction`. Runs AFTER the tenant
-     * is minted — the vault row FK-restricts to it — and re-validates as defense-in-depth. */
+    /** Seal the (validated) secret into the venue's vault under `withTransaction`, re-validating as
+     * defence in depth. Runs after the taxpayer row is written, though nothing in the schema ties
+     * the vault row to it: `tenant_credentials` is keyed by `purpose` alone and references no other
+     * table. `tenantId` is passed and read by no implementation; it goes when `packages/provisioning`,
+     * its last supplier, is converted. */
     seal(deps: { db: Database; ring: KeyRing }, tenantId: string, raw: unknown): Promise<void>;
   };
   /** The operator-typed venue fields this regime puts on the wire verbatim. The host collects them

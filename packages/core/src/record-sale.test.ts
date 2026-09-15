@@ -164,7 +164,7 @@ async function run(backend: FiscalBackend, overrides: Partial<RecordSaleInput> =
     // write-path test would prove the code runs, not that the application role is permitted to
     // run it.
     await asAppUser(tx);
-    await backend.registerNode(tx, nodeId, { tenantId });
+    await backend.registerNode(tx, nodeId);
     return recordSale(tx, backend, input(overrides));
   });
 }
@@ -209,14 +209,14 @@ async function rows<T extends Record<string, unknown>>(
 function wrapBackend(fake: FakeFiscalBackend, overrides: Partial<FiscalBackend>): FiscalBackend {
   return {
     id: fake.id,
-    registerNode: (tx, node, params) => fake.registerNode(tx, node, params),
+    registerNode: (tx, node) => fake.registerNode(tx, node),
     recordSale: (tx, sale) => fake.recordSale(tx, sale),
     filedReceiptFor: (tx, saleId) => fake.filedReceiptFor(tx, saleId),
     recordVoid: (tx, saleId, reason) => fake.recordVoid(tx, saleId, reason),
     recordCorrection: (tx, sale, correction) => fake.recordCorrection(tx, sale, correction),
     recordSubstitution: (tx, sale, substitution) => fake.recordSubstitution(tx, sale, substitution),
-    checkIntegrity: (tx, tenant, node) => fake.checkIntegrity(tx, tenant, node),
-    pendingCount: (tenant, node) => fake.pendingCount(tenant, node),
+    checkIntegrity: (tx, node) => fake.checkIntegrity(tx, node),
+    pendingCount: (node) => fake.pendingCount(node),
     ...overrides,
   };
 }
@@ -443,7 +443,7 @@ describe("recordSale — the order of operations", () => {
     const observed: number[] = [];
     const fake = new FakeFiscalBackend(suite.db);
     const backend = wrapBackend(fake, {
-      async checkIntegrity(tx, tenant, node) {
+      async checkIntegrity(tx, node) {
         // Read the counter from inside the verification call. If allocation had already run,
         // next_number would read 2 here. Observing only "both happened" would not discriminate
         // which came first — this is the one observation that does.
@@ -452,7 +452,7 @@ describe("recordSale — the order of operations", () => {
           .from(invoiceSeries)
           .where(eq(invoiceSeries.id, seriesId));
         observed.push(row?.n ?? -1);
-        return fake.checkIntegrity(tx, tenant, node);
+        return fake.checkIntegrity(tx, node);
       },
     });
     await run(backend);
@@ -665,7 +665,7 @@ describe("recordSale — settlement modes", () => {
     // Path A — immediate, on the beforeEach venue.
     const a = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
-      await backend.registerNode(tx, nodeId, { tenantId });
+      await backend.registerNode(tx, nodeId);
       return recordSale(
         tx,
         backend,
@@ -677,7 +677,7 @@ describe("recordSale — settlement modes", () => {
     const other = await seedTenant(suite.db);
     const b = await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
-      await backend.registerNode(tx, other.nodeId, { tenantId: other.tenantId });
+      await backend.registerNode(tx, other.nodeId);
       return recordSale(
         tx,
         backend,

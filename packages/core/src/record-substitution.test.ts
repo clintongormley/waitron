@@ -54,11 +54,11 @@ beforeEach(async () => {
   // Seed a manager (holds `sale.void`) as the superuser owner and open its session — the precondition
   // void below needs an authorizer, exactly as the record-void suite arranges.
   const { rows } = await suite.db.execute<{ id: string }>(
-    sql`insert into persons (tenant_id, display_name, pin_hash, role)
-        values (${tenantId}, 'P', ${hashPin("1234")}, 'manager') returning id`,
+    sql`insert into persons (display_name, pin_hash, role)
+        values ('P', ${hashPin("1234")}, 'manager') returning id`,
   );
   const session = await withTransaction(suite.db, (tx) =>
-    loginWithPin(tx, { tenantId, tillId, personId: rows[0]!.id, pin: "1234" }),
+    loginWithPin(tx, { tillId, personId: rows[0]!.id, pin: "1234" }),
   );
   voidSessionId = session.id;
 });
@@ -176,7 +176,7 @@ function substitutionInput(
 async function sellTicket(backend: FiscalBackend, overrides: Partial<RecordSaleInput> = {}) {
   return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
-    await backend.registerNode(tx, nodeId, { tenantId });
+    await backend.registerNode(tx, nodeId);
     return recordSale(tx, backend, saleInput(overrides));
   });
 }

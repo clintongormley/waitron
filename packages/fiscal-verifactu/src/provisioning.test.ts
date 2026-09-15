@@ -1,7 +1,11 @@
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createPgliteDb, runMigrations, withTransaction } from "@waitron/db";
-import { isAppError, locationId as brandLocationId } from "@waitron/shared";
+import { captureError, createPgliteDb, runMigrations, withTransaction } from "@waitron/db";
+import {
+  isAppError,
+  locationId as brandLocationId,
+  tenantId as brandTenantId,
+} from "@waitron/shared";
 import type { ProvisionedNode } from "@waitron/module";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { TENANT_A, seedTenants } from "../test/fixtures.js";
@@ -10,8 +14,13 @@ import { ID_SISTEMA_MAX_LENGTH, currentSif, registerSif } from "./registro-sif.j
 
 let db: Awaited<ReturnType<typeof createPgliteDb>>;
 
+// `ProvisionedNode` (`@waitron/module`) still declares a `tenantId` and nothing in this package
+// reads one; it goes when `packages/provisioning`, its last supplier, is converted. This fixed
+// value stands in until then.
+const INERT_TENANT_ID = brandTenantId("00000000-0000-4000-8000-000000000001");
+
 const NODE: ProvisionedNode = {
-  tenantId: TENANT_A.id,
+  tenantId: INERT_TENANT_ID,
   locationId: brandLocationId(TENANT_A.locationId),
   nodeId: TENANT_A.nodeId,
 };
@@ -48,9 +57,9 @@ describe("FISCAL_PROVISIONING.seed", () => {
     expect(seed.summary).toMatch(/SIF/);
   });
 
-  it("registers the node as a SIF under the tenant's own tax id and the product's software id", async () => {
+  it("registers the node as a SIF under the taxpayer's own tax id and the product's software id", async () => {
     const report = await withTransaction(db, (tx) => seed.run(tx, NODE));
-    const sif = await withTransaction(db, (tx) => currentSif(tx, TENANT_A.id, TENANT_A.nodeId));
+    const sif = await withTransaction(db, (tx) => currentSif(tx, TENANT_A.nodeId));
     expect(sif.nif).toBe("89890001K"); // seedTenants' tax_id for TENANT_A, never an argument
     expect(sif.idSistemaInformatico).toBe(WAITRON_ID_SISTEMA);
     expect(sif.numeroInstalacion).toBe(1);
@@ -58,10 +67,22 @@ describe("FISCAL_PROVISIONING.seed", () => {
     expect(report).toContain("installation 1");
   });
 
+  it("refuses to seed a database with no taxpayer row, loudly and without a domain code", async () => {
+    // The NIF every registro is filed under comes from the one taxpayer row, never from an
+    // argument. Nothing in the schema holds that row in place any more — the foreign keys onto
+    // `tenants` went with the tenant columns — so an empty table is reachable by a corrupt or
+    // half-provisioned database, and minting a SIF under a guessed NIF is unrepairable
+    // (CLAUDE.md §5). It must fail, and as a plain `Error`: no operator action fixes it.
+    await db.execute(sql`delete from tenants`);
+    const error = await captureError(() => withTransaction(db, (tx) => seed.run(tx, NODE)));
+    expect(isAppError(error)).toBe(false);
+    expect((error as Error).message).toContain("tenants is empty");
+  });
+
   it("re-seeding an existing node mints a fresh installation number and a new chain", async () => {
     await withTransaction(db, (tx) => seed.run(tx, NODE));
     await withTransaction(db, (tx) => seed.run(tx, NODE));
-    const sif = await withTransaction(db, (tx) => currentSif(tx, TENANT_A.id, TENANT_A.nodeId));
+    const sif = await withTransaction(db, (tx) => currentSif(tx, TENANT_A.nodeId));
     expect(sif.numeroInstalacion).toBe(2);
     const head = await db.execute<{ h: string | null }>(
       sql`select ultima_huella as h from cadenas where node_id = ${TENANT_A.nodeId}`,
@@ -83,7 +104,6 @@ describe("FISCAL_PROVISIONING.standby", () => {
     await db.execute(sql`delete from invoice_series where node_id = ${TENANT_A.nodeId}`);
     const primarySif = await withTransaction(db, (tx) =>
       registerSif(tx, {
-        tenantId: TENANT_A.id,
         nodeId: TENANT_A.nodeId,
         nif: "89890001K",
         idSistemaInformatico: WAITRON_ID_SISTEMA,
@@ -113,7 +133,7 @@ describe("FISCAL_PROVISIONING.standby", () => {
   it("establishes the reserved SIF on the standby's own node with the reserved number", async () => {
     const r = await withTransaction(db, (tx) => standby.reserve(tx, NODE));
     await withTransaction(db, (tx) => standby.establish(tx, NODE_2, r.state));
-    const sif = await withTransaction(db, (tx) => currentSif(tx, TENANT_A.id, TENANT_A.nodeId2));
+    const sif = await withTransaction(db, (tx) => currentSif(tx, TENANT_A.nodeId2));
     expect(sif.numeroInstalacion).toBe(2);
     expect(sif.nif).toBe("89890001K");
   });

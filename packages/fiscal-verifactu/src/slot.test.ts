@@ -41,8 +41,8 @@ describe("FISCAL_SLOT", () => {
 });
 
 // The runtime submission seat: the host injects the vault ring, deployment identity and cadence, and
-// the regime owns the transport it builds inside the pass. A pass with no due work builds no per-tenant
-// transport (resolveClient is called lazily, only for tenants with work) and returns the empty result.
+// the regime owns the transport it builds inside the pass. A pass with no due work builds no
+// transport at all (resolveClient is called lazily, only when there is work) and returns the empty result.
 describe("FISCAL_SLOT.drain", () => {
   const pg = usePgliteDb({ migrations: TEST_MIGRATIONS });
   const ring = loadKeyRing({
@@ -98,7 +98,7 @@ describe("FISCAL_SLOT.provisioningSecret", () => {
     );
   });
 
-  it("seal writes the cert into the tenant's fiscal.aeat vault", async () => {
+  it("seal writes the cert into the venue's fiscal.aeat vault", async () => {
     const tenant = await seedTenant(pg.db);
     await secret.seal({ db: pg.db, ring }, tenant, goodCert);
     const readBack = await withTransaction(pg.db, (tx) =>

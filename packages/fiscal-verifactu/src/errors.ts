@@ -54,7 +54,7 @@ declare module "@waitron/shared" {
      * string stands (design note above and CLAUDE.md §3); the two declarations carry identical params
      * so TypeScript's declaration merging accepts both when `apps/server` compiles them together.
      */
-    "server.credential_unusable": { tenantId: string; purpose: string; field: string };
+    "server.credential_unusable": { purpose: string; field: string };
 
     /**
      * The provision-time secret validator/sealer (`./provisioning-secret.ts`, relocated here in the
@@ -85,7 +85,7 @@ declare module "@waitron/shared" {
      * rekey, 2026-08-03: the SIF is the node, #33). The concrete encoding of "a node cannot be
      * provisioned offline" (spec's stated limitation): a caller that reaches here gets a structured,
      * translatable refusal rather than a locally invented installation number. See ./registro-sif.ts. */
-    "sif.not_registered": { tenantId: string; nodeId: string };
+    "sif.not_registered": { nodeId: string };
 
     /** `IdSistemaInformatico` is empty or longer than AEAT's two-character cap
      * (`packages/verifactu`'s `ID_SISTEMA_LENGTH`). Thrown by `assertUsableIdSistema`
@@ -134,7 +134,7 @@ declare module "@waitron/shared" {
      * would reach a till screen as untranslatable prose (Global Constraint, spec §9) for exactly the
      * failure a human most needs explained in their own language.
      */
-    "chain.append_contention": { tenantId: string; nodeId: string; attempts: number };
+    "chain.append_contention": { nodeId: string; attempts: number };
 
     /**
      * `attemptAppend` (./chain.ts) refused a record that `@waitron/verifactu`'s `validate` reports
@@ -436,7 +436,7 @@ declare module "@waitron/shared" {
     /**
      * The dashboard's awaiting-certificate ongoing check (`apps/server/src/alert-sources.ts`), not
      * this package's own source: it reads the in-memory cell the fiscal pass flips
-     * (`AwaitingCertStatus`, `apps/server/src/pass.ts`) when a drain skips a tenant for a missing
+     * (`AwaitingCertStatus`, `apps/server/src/pass.ts`) when a drain skips a pass for a missing
      * AEAT certificate. Registered here anyway, matching `fiscal.submission_delayed`'s reasoning
      * above: the code names the fiscal domain concept, not the package that raises it. No params —
      * the alert is a plain on/off fact, unlike the counted submission codes.

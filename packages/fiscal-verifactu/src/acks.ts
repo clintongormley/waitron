@@ -69,10 +69,9 @@ export async function writeAck(tx: Transaction, registroId: string, now: Date): 
   if (state === null) return; // non-terminal estado — no ack yet
 
   await tx.execute(sql`
-    insert into acks (registro_id, tenant_id, submitted_at, csv, state, delivered_at)
+    insert into acks (registro_id, submitted_at, csv, state, delivered_at)
     select
       e.registro_id,
-      e.tenant_id,
       coalesce(e.enviado_en, ${now.toISOString()}::timestamptz),
       e.csv,
       ${state},
@@ -95,9 +94,8 @@ export async function deleteAck(tx: Transaction, registroId: string): Promise<vo
   await tx.execute(sql`delete from acks where registro_id = ${registroId}`);
 }
 
-/** Every undelivered ack for the requested tenant, oldest submission first. */
-export async function pendingAcks(db: Database, tenantId: string): Promise<Ack[]> {
-  void tenantId;
+/** Every undelivered ack, oldest submission first. */
+export async function pendingAcks(db: Database): Promise<Ack[]> {
   return withTransaction(db, async (tx) => {
     const { rows } = await tx.execute<{
       registro_id: string;
@@ -120,12 +118,7 @@ export async function pendingAcks(db: Database, tenantId: string): Promise<Ack[]
 }
 
 /** Marks one ack delivered, so `pendingAcks` stops returning it. Runs inside `withTransaction`. */
-export async function markDelivered(
-  db: Database,
-  tenantId: string,
-  recordId: string,
-): Promise<void> {
-  void tenantId;
+export async function markDelivered(db: Database, recordId: string): Promise<void> {
   await withTransaction(db, (tx) =>
     tx.execute(sql`update acks set delivered_at = now() where registro_id = ${recordId}`),
   );
