@@ -1,7 +1,13 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { expect, it } from "vitest";
-import { asAppUser, optionGroups, withTenant, type Database, type Transaction } from "@waitron/db";
+import {
+  asAppUser,
+  optionGroups,
+  withTransaction,
+  type Database,
+  type Transaction,
+} from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import type { TenantId } from "@waitron/shared";
 import { seedLegacySellingUnits, seedVenue } from "../test/fixtures.js";
@@ -27,7 +33,8 @@ function app<T>(
   tenantId: TenantId,
   action: (tx: Transaction) => Promise<T>,
 ): Promise<T> {
-  return withTenant(db, tenantId, async (tx) => {
+  void tenantId;
+  return withTransaction(db, async (tx) => {
     await asAppUser(tx);
     return action(tx);
   });
@@ -78,13 +85,11 @@ it("cascades an option_groups delete through the published menu link rows", asyn
   const linksBefore = await suite.admin
     .select()
     .from(menuItemOptionGroups)
-    .where(
-      and(eq(menuItemOptionGroups.tenantId, tenantId), eq(menuItemOptionGroups.groupId, groupId)),
-    );
+    .where(eq(menuItemOptionGroups.groupId, groupId));
   const optionsBefore = await suite.admin
     .select()
     .from(menuItemOptions)
-    .where(and(eq(menuItemOptions.tenantId, tenantId), eq(menuItemOptions.optionId, optionId)));
+    .where(eq(menuItemOptions.optionId, optionId));
   expect(linksBefore).toHaveLength(1);
   expect(optionsBefore).toHaveLength(1);
 
@@ -100,17 +105,15 @@ it("cascades an option_groups delete through the published menu link rows", asyn
   const groupsAfter = await suite.admin
     .select()
     .from(optionGroups)
-    .where(and(eq(optionGroups.tenantId, tenantId), eq(optionGroups.id, groupId)));
+    .where(eq(optionGroups.id, groupId));
   const linksByGroup = await suite.admin
     .select()
     .from(menuItemOptionGroups)
-    .where(
-      and(eq(menuItemOptionGroups.tenantId, tenantId), eq(menuItemOptionGroups.groupId, groupId)),
-    );
+    .where(eq(menuItemOptionGroups.groupId, groupId));
   const optionsAfter = await suite.admin
     .select()
     .from(menuItemOptions)
-    .where(and(eq(menuItemOptions.tenantId, tenantId), eq(menuItemOptions.optionId, optionId)));
+    .where(eq(menuItemOptions.optionId, optionId));
 
   expect(groupsAfter).toEqual([]);
   expect(linksByGroup).toEqual([]);

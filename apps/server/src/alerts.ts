@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { inArray } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { listHandledIncidents, listOpenIncidents, type TenantIncident } from "@waitron/core";
 import { persons } from "@waitron/identity";
@@ -147,7 +147,7 @@ export async function readHandledAlerts(
     const rows = await tx
       .select({ id: persons.id, displayName: persons.displayName })
       .from(persons)
-      .where(and(eq(persons.tenantId, deps.tenantId), inArray(persons.id, ids)));
+      .where(inArray(persons.id, ids));
     for (const row of rows) names.set(row.id, row.displayName);
   }
   return visible.map(({ incident, claim }) => ({

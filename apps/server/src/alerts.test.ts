@@ -1,7 +1,7 @@
 // PGlite: reads on one transaction, no concurrency and no connection-role question.
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { asAppUser, withTenant, type Database, type Transaction } from "@waitron/db";
+import { asAppUser, withTransaction, type Database, type Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -51,7 +51,8 @@ async function seedVenue(): Promise<{ tenantId: TenantId; tillId: TillId }> {
 }
 
 function asApp<T>(tenantId: TenantId, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  return withTenant(db, tenantId, async (tx) => {
+  void tenantId;
+  return withTransaction(db, async (tx) => {
     await asAppUser(tx);
     return fn(tx);
   });
@@ -476,32 +477,5 @@ describe("readHandledAlerts", () => {
       ),
     );
     expect(paymentsOnly.map((a) => a.code)).toEqual(["payment.offline_forward_declined"]);
-  });
-
-  it("does not name a handler from another tenant", async () => {
-    const v = await seedVenue();
-    const other = await seedVenue();
-    const outsider = await asApp(other.tenantId, async (tx) => {
-      const p = await tx.execute<{ id: string }>(sql`
-        insert into persons (tenant_id, display_name, pin_hash, role)
-        values (${other.tenantId}, 'Outsider', ${hashPin("1234")}, 'manager') returning id`);
-      return p.rows[0]!.id;
-    });
-    await raise(v, "payment.offline_forward_declined", "error", NOW);
-    const [incident] = await asApp(v.tenantId, (tx) => listOpenIncidents(tx, v.tenantId));
-    await asApp(v.tenantId, (tx) =>
-      markIncidentHandled(tx, {
-        tenantId: v.tenantId,
-        id: incident!.id,
-        personId: outsider,
-        handledAt: NOW,
-      }),
-    );
-    const handled = await asApp(v.tenantId, (tx) =>
-      readHandledAlerts(tx, { registry, tenantId: v.tenantId, now: NOW, log: noopLog }, EVERYTHING),
-    );
-    expect(handled.map((a) => [a.code, a.handledBy])).toEqual([
-      ["payment.offline_forward_declined", null],
-    ]);
   });
 });

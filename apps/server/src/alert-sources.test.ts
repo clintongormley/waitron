@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, CORE_MIGRATIONS, type Database, withTenant } from "@waitron/db";
+import { asAppUser, CORE_MIGRATIONS, type Database, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import type { AlertSource } from "@waitron/module";
@@ -161,9 +161,9 @@ async function seedJob(t: {
             ${t.kind ?? "document"}, ${t.status ?? "queued"}, ${t.attempts ?? 0}, ${t.createdAt})`);
 }
 
-/** Run the source as the app role in the tenant's own transaction, exactly as the registry does. */
+/** Run the source as the app role in one transaction, exactly as the registry does. */
 async function readAlerts(tenantId: TenantId, now = NOW) {
-  return withTenant(suite.db, tenantId, async (tx) => {
+  return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     return printingAlertSource().read({ tx, tenantId, now });
   });
@@ -303,44 +303,6 @@ describe("printingAlertSource — printer.jobs_waiting", () => {
   });
 });
 
-// The composite FK (tenant_id, printer_id) → printers(tenant_id, id) makes a cross-tenant print_jobs
-// row uninsertable, so this proves partition — the two per-table predicates and that FK together — but
-// cannot exercise each tenant predicate independently, which is what the FK is there to make redundant.
-describe("printingAlertSource — tenant scoping", () => {
-  it("reads only its own tenant's silent agents and waiting jobs", async () => {
-    const other = await seedTenant(suite.db);
-    const otherLocation = await seedLocation(other);
-    await seedAgent({
-      tenantId: other,
-      locationId: otherLocation,
-      name: "Foreign",
-      lastSeenAt: minsAgo(30),
-    });
-    const otherPrinter = await seedPrinter({
-      tenantId: other,
-      locationId: otherLocation,
-      name: "Foreign",
-    });
-    await seedJob({
-      tenantId: other,
-      locationId: otherLocation,
-      printerId: otherPrinter,
-      createdAt: minsAgo(30),
-    });
-
-    // The other tenant's rows exist and would fire for their own tenant (control)…
-    expect((await readAlerts(other)).map((a) => a.code).sort()).toEqual([
-      "agent.silent",
-      "printer.jobs_waiting",
-    ]);
-
-    // …but a different tenant, with nothing of its own, sees none of them.
-    const mine = await seedTenant(suite.db);
-    await seedLocation(mine);
-    expect(await readAlerts(mine)).toEqual([]);
-  });
-});
-
 // The battery source reads `card_readers` (a payments-module table) and calls the card-provider seat,
 // so this suite migrates the payments set on top of core and runs as the app role, like the printing
 // block. The provider is a stub — no SumUp server — so a `batteryPercent` is whatever the test sets.
@@ -397,7 +359,7 @@ const stubRuntimeDeps =
   (tenantId: TenantId): CardProviderRuntimeDeps => ({ db, ring: {} as never, tenantId });
 
 async function readBattery(source: AlertSource, tenantId: TenantId, now = NOW) {
-  return withTenant(batterySuite.db, tenantId, async (tx) => {
+  return withTransaction(batterySuite.db, async (tx) => {
     await asAppUser(tx);
     return source.read({ tx, tenantId, now });
   });
@@ -468,24 +430,6 @@ describe("batteryAlertSource", () => {
     clock = new Date(NOW.getTime() + 6 * 60_000);
     await readBattery(source, tenantId, clock);
     expect(calls.n).toBe(2);
-  });
-
-  it("raises nothing for another tenant's low reader", async () => {
-    const other = await seedTenant(batterySuite.db);
-    await seedReader({ tenantId: other, providerRef: "pOther", name: "Foreign" });
-    const calls = { n: 0 };
-    const source = batteryAlertSource({
-      providers: [stubProvider({ battery: () => 5, calls })],
-      runtimeDeps: stubRuntimeDeps(batterySuite.db),
-      cache: createTtlCache<number | null>({ ttlMs: 5 * 60_000, now: () => NOW }),
-    });
-
-    // The other tenant's low reader fires for its own tenant (control)…
-    expect((await readBattery(source, other)).map((a) => a.code)).toEqual(["reader.battery_low"]);
-
-    // …but a fresh tenant with no readers of its own sees none of it.
-    const mine = await seedTenant(batterySuite.db);
-    expect(await readBattery(source, mine)).toEqual([]);
   });
 
   it("ignores a deactivated low reader", async () => {

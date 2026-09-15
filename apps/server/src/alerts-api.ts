@@ -1,5 +1,5 @@
 import type { Context, Hono } from "hono";
-import { asAppUser, withTenant, type Database, type Transaction } from "@waitron/db";
+import { asAppUser, withTransaction, type Database, type Transaction } from "@waitron/db";
 import { findIncident, markIncidentHandled } from "@waitron/core";
 import { permissionsForRole, resolveManagementSession } from "@waitron/identity";
 import { createErrorBoundary, requireManagementSession, type Logger } from "@waitron/server-kit";
@@ -30,8 +30,7 @@ const STATUS = {
 
 /**
  * The dashboard alerts: open alerts, recently handled ones, and marking an incident handled. Each
- * request opens one transaction as the app role. A session from another tenant holds no permissions
- * here, so it sees nothing and can handle nothing.
+ * request opens one transaction as the app role.
  */
 export function mountAlertsApi(app: Hono, deps: AlertsApiDeps, log: Logger): void {
   const run = createErrorBoundary(STATUS, "alerts.failed");
@@ -42,12 +41,10 @@ export function mountAlertsApi(app: Hono, deps: AlertsApiDeps, log: Logger): voi
     fn: (tx: Transaction, session: { personId: string; held: ReadonlySet<string> }) => Promise<T>,
   ): Promise<T> => {
     const sessionId = requireManagementSession(c);
-    return withTenant(deps.db, deps.cfg.tenantId, async (tx) => {
+    return withTransaction(deps.db, async (tx) => {
       await asAppUser(tx);
       const session = await resolveManagementSession(tx, sessionId);
-      const held = new Set(
-        session.tenantId === deps.cfg.tenantId ? permissionsForRole(session.role) : [],
-      );
+      const held = new Set(permissionsForRole(session.role));
       return fn(tx, { personId: session.personId, held });
     });
   };

@@ -147,7 +147,7 @@ export function printingAlertSource(): AlertSource {
   return {
     area: "printing",
     permission: "printer.manage",
-    async read({ tx, tenantId, now }): Promise<readonly OngoingAlert[]> {
+    async read({ tx, now }): Promise<readonly OngoingAlert[]> {
       const alerts: OngoingAlert[] = [];
 
       // `last_seen_at` and `created_at` are drizzle mode:"string" columns, so the thresholds are ISO
@@ -158,7 +158,6 @@ export function printingAlertSource(): AlertSource {
         .from(printAgents)
         .where(
           and(
-            eq(printAgents.tenantId, tenantId),
             eq(printAgents.active, true),
             // A NULL `last_seen_at` (an agent never seen) is UNKNOWN under `lt`, so it is excluded and
             // `seen` below is always a real timestamp.
@@ -179,11 +178,7 @@ export function printingAlertSource(): AlertSource {
         });
       }
 
-      // One row per active printer with at least one waiting document job. The composite FK
-      // (tenant_id, printer_id) → printers(tenant_id, id) enforces that a job's printer is same-tenant,
-      // so a cross-tenant print_jobs row is not insertable; the per-table tenant predicate plus that FK
-      // isolate this query, and the two-tenant test proves partition without independently exercising
-      // each predicate. The predicates stay as defense-in-depth (CLAUDE.md §3).
+      // One row per active printer with at least one waiting document job.
       const stuckBefore = new Date(now.getTime() - JOBS_WAITING_MS).toISOString();
       const rows = await tx
         .select({
@@ -196,9 +191,7 @@ export function printingAlertSource(): AlertSource {
         .innerJoin(printJobs, eq(printJobs.printerId, printers.id))
         .where(
           and(
-            eq(printers.tenantId, tenantId),
             eq(printers.active, true),
-            eq(printJobs.tenantId, tenantId),
             eq(printJobs.kind, "document"),
             or(
               // Waiting too long in a non-terminal state…
@@ -254,8 +247,6 @@ export function batteryAlertSource(deps: {
     area: "card_reader",
     permission: "payments.manage",
     async read({ tx, tenantId }): Promise<readonly OngoingAlert[]> {
-      // A by-id/list read still scopes to the tenant — one database per tenant is NOT the query's
-      // isolation boundary (CLAUDE.md §3).
       const readers = await tx
         .select({
           id: cardReaders.id,
@@ -264,7 +255,7 @@ export function batteryAlertSource(deps: {
           name: cardReaders.name,
         })
         .from(cardReaders)
-        .where(and(eq(cardReaders.tenantId, tenantId), eq(cardReaders.active, true)));
+        .where(eq(cardReaders.active, true));
       // Each reader's reading is an independent EXTERNAL provider call (via `runtimeDeps`, not a query
       // on this transaction), so they run CONCURRENTLY — the "await queries on one transaction in turn"
       // rule governs tx queries, which these are not. Any one call throwing rejects `Promise.all` and

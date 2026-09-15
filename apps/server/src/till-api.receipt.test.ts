@@ -958,7 +958,7 @@ describe("payment slip persisted capture facts", () => {
   it("lays the payment slip out for the till printer's paper width and character set", async () => {
     const { cfg, each, operatorId } = await setupVenue();
     const printerId = await makePrinter(cfg);
-    await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       await updatePrinter(tx, printCfg(cfg), printerId, {
         paperWidth: "58mm",

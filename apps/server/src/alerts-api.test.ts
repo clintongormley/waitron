@@ -3,7 +3,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { asAppUser, withTenant, type Database } from "@waitron/db";
+import { asAppUser, withTransaction, type Database } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -78,7 +78,7 @@ async function seedVenue(): Promise<Venue> {
     insert into tills (tenant_id, location_id, name)
     values (${tenantId}, ${location.rows[0]!.id}, 'Caja 1') returning id`);
   const cookie = (role: string, name: string) =>
-    withTenant(db, tenantId, async (tx) => {
+    withTransaction(db, async (tx) => {
       await asAppUser(tx);
       const p = await tx.execute<{ id: string }>(sql`
         insert into persons (tenant_id, display_name, pin_hash, role)
@@ -100,7 +100,7 @@ async function raise(
   code: string,
   severity: "warning" | "error" = "error",
 ): Promise<string> {
-  return withTenant(db, v.tenantId, async (tx) => {
+  return withTransaction(db, async (tx) => {
     await asAppUser(tx);
     await recordIncident(tx, {
       tenantId: v.tenantId,
@@ -175,42 +175,6 @@ describe("alert routes", () => {
     const res = await get(appFor(v), "/management-api/alerts", v.supervisor);
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ visible: false, alerts: [] });
-  });
-
-  it("answers not visible and empty to another tenant's manager", async () => {
-    const a = await seedVenue();
-    const b = await seedVenue();
-    await raise(a, "payment.offline_forward_declined");
-    const res = await get(appFor(a), "/management-api/alerts", b.manager);
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ visible: false, alerts: [] });
-  });
-
-  it("answers not visible and empty to another tenant's manager asking for handled alerts", async () => {
-    const a = await seedVenue();
-    const b = await seedVenue();
-    const id = await raise(a, "payment.offline_forward_declined");
-    const app = appFor(a);
-    expect(
-      (await post(app, `/management-api/alerts/incidents/${id}/handled`, a.manager)).status,
-    ).toBe(204);
-    const res = await get(app, "/management-api/alerts/handled", b.manager);
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ visible: false, alerts: [] });
-  });
-
-  it("refuses another tenant's manager to handle this tenant's incident, leaving it open", async () => {
-    const a = await seedVenue();
-    const b = await seedVenue();
-    const id = await raise(a, "payment.offline_forward_declined");
-    const res = await post(appFor(a), `/management-api/alerts/incidents/${id}/handled`, b.manager);
-    expect(res.status).toBe(404);
-    expect(((await res.json()) as { error: { code: string } }).error.code).toBe("alert.not_found");
-    const stillOpen = await withTenant(db, a.tenantId, async (tx) => {
-      await asAppUser(tx);
-      return listOpenIncidents(tx, a.tenantId);
-    });
-    expect(stillOpen.map((i) => i.id)).toEqual([id]);
   });
 
   it("marks an incident handled; it moves from open to handled with who and when", async () => {
@@ -334,23 +298,16 @@ describe("alert routes", () => {
     expect(((await res.json()) as { error: { code: string } }).error.code).toBe("alert.not_found");
   });
 
-  it("answers alert.not_found for an unknown, a malformed, and another tenant's id", async () => {
+  it("answers alert.not_found for an unknown and a malformed id", async () => {
     const a = await seedVenue();
-    const b = await seedVenue();
-    const theirs = await raise(b, "payment.offline_forward_declined");
     const app = appFor(a);
-    for (const id of ["00000000-0000-4000-8000-000000000000", "not-a-uuid", theirs]) {
+    for (const id of ["00000000-0000-4000-8000-000000000000", "not-a-uuid"]) {
       const res = await post(app, `/management-api/alerts/incidents/${id}/handled`, a.manager);
       expect(res.status).toBe(404);
       expect(((await res.json()) as { error: { code: string } }).error.code).toBe(
         "alert.not_found",
       );
     }
-    const stillOpen = await withTenant(db, b.tenantId, async (tx) => {
-      await asAppUser(tx);
-      return listOpenIncidents(tx, b.tenantId);
-    });
-    expect(stillOpen.map((i) => i.id)).toEqual([theirs]);
   });
 });
 
@@ -386,7 +343,7 @@ const cardRuntimeDeps = (tenantId: TenantId): CardProviderRuntimeDeps => ({
 /**
  * The four server-owned ongoing sources, wired as boot does, so a route test exercises the real
  * registry composition. By default the two in-memory sources are quiet (backup configured with no
- * destinations, certificate present) and only the two tenant-scoped DB sources — printing and
+ * destinations, certificate present) and only the two DB sources — printing and
  * card-reader battery — can fire; flip `backupDisabled`/`awaitingCert` to make those two fire too.
  */
 function ongoingRegistry(opts: { backupDisabled?: boolean; awaitingCert?: boolean } = {}) {
@@ -516,7 +473,7 @@ describe("ongoing alert sources through the route", () => {
       sql`update management_sessions set last_seen_at = now() - interval '10 minutes' where id = ${sid}`,
     );
     const expiryOf = () =>
-      withTenant(db, v.tenantId, (tx) => resolveManagementSession(tx, sid, { touch: false }));
+      withTransaction(db, (tx) => resolveManagementSession(tx, sid, { touch: false }));
     const before = (await expiryOf()).expiresAt;
 
     // The live poll verifies the session but does not slide its idle window.
@@ -526,33 +483,5 @@ describe("ongoing alert sources through the route", () => {
     // Control: the same GET without the live header counts as human activity and slides it forward.
     expect((await get(app, "/management-api/alerts", v.manager)).status).toBe(200);
     expect(Date.parse((await expiryOf()).expiresAt)).toBeGreaterThan(Date.parse(before));
-  });
-
-  it("scopes ongoing sources to the route's tenant: tenant A's session sees none of tenant B's ongoing alerts", async () => {
-    // While `tenant_id` still exists, every source carries its own tenant predicate (CLAUDE.md §3: one
-    // database per tenant is NOT the query's isolation boundary). If tenant_id is dropped
-    // (docs/superpowers/specs/2026-09-14-drop-tenant-id-design.md), this case retires with it.
-    const a = await seedVenue();
-    const b = await seedVenue();
-    await seedLowReader(b.tenantId);
-    await seedStuckPrintJob(b.tenantId);
-
-    // Control: through tenant B's own route the seeded rows fire on both DB sources…
-    const bAreas = (
-      (await (
-        await get(appFor(b, ongoingRegistry()), "/management-api/alerts", b.manager)
-      ).json()) as {
-        alerts: { area: string }[];
-      }
-    ).alerts
-      .map((alert) => alert.area)
-      .sort();
-    expect(bAreas).toEqual(["card_reader", "printing"]);
-
-    // …but tenant A's route, with nothing of its own, sees none of tenant B's ongoing alerts.
-    const aBody = (await (
-      await get(appFor(a, ongoingRegistry()), "/management-api/alerts", a.manager)
-    ).json()) as { alerts: unknown[] };
-    expect(aBody.alerts).toEqual([]);
   });
 });

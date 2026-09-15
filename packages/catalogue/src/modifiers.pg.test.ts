@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { expect, it } from "vitest";
-import { and, eq, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import {
   asAppUser,
   optionGroups,
@@ -222,11 +222,7 @@ it("serializes deletion behind an attachment write, then cascades the committed 
     await deleter.close();
   }
   expect(await app(tenant, (tx) => listModifiers(tx, tenant))).toEqual([]);
-  expect(
-    await app(tenant, (tx) =>
-      tx.select().from(productOptionGroups).where(eq(productOptionGroups.tenantId, tenant)),
-    ),
-  ).toEqual([]);
+  expect(await app(tenant, (tx) => tx.select().from(productOptionGroups))).toEqual([]);
 });
 
 it("blocks a default-language change while a modifier name is untranslated", async () => {
@@ -356,21 +352,11 @@ it("deletes a modifier attached to a product and published on a menu, cascading 
       products: await tx
         .select()
         .from(productOptionGroups)
-        .where(
-          and(
-            eq(productOptionGroups.tenantId, tenantId),
-            eq(productOptionGroups.groupId, modifierId),
-          ),
-        ),
+        .where(eq(productOptionGroups.groupId, modifierId)),
       menus: await tx
         .select()
         .from(menuItemOptionGroups)
-        .where(
-          and(
-            eq(menuItemOptionGroups.tenantId, tenantId),
-            eq(menuItemOptionGroups.groupId, modifierId),
-          ),
-        ),
+        .where(eq(menuItemOptionGroups.groupId, modifierId)),
     })),
   ).toEqual({ products: [], menus: [] });
 });

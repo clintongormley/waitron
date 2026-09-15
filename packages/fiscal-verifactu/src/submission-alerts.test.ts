@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { asAppUser, withTenant, type Database } from "@waitron/db";
+import { asAppUser, withTransaction, type Database } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
@@ -22,9 +22,8 @@ interface Identity {
   nif: string;
 }
 
-// Each test mints its own tenant/SIF identity; the source scopes by tenant, so one test's rows are
-// invisible to another reading a different tenant — the same shared-`pg.db` isolation convention the
-// rest of this package's PGlite suites use.
+// Each test mints its own tenant/SIF identity; the suite empties every data table after each test,
+// so one test's rows never reach another's read.
 async function seedIdentity(db: Database): Promise<Identity> {
   const { tenantId, tillId, nodeId } = await seedTenantWithSif(db);
   const { rows } = await db.execute<{ id: string; nif: string }>(sql`
@@ -75,23 +74,8 @@ async function seedRegistro(db: Database, id: Identity, genTime: Date): Promise<
   return registro.rows[0]!.id;
 }
 
-/** Insert one `envios` sidecar in `estado`, owned by `envioTenantId`, pointing at `registroId`. The
- * FK on `registro_id` is single-column (to `registros_facturacion.id`), so `envioTenantId` need not
- * match the registro's tenant — which is what lets the cross-tenant fixtures below exist. */
-async function seedEnvio(
-  db: Database,
-  registroId: string,
-  envioTenantId: string,
-  estado: string,
-): Promise<void> {
-  await db.execute(sql`
-    insert into envios (registro_id, tenant_id, estado)
-    values (${registroId}, ${envioTenantId}, ${estado})
-  `);
-}
-
-/** One `registros_facturacion` row generated at `genTime`, plus its 1:1 same-tenant `envios` sidecar
- * in `estado` — the two rows the source joins. */
+/** One `registros_facturacion` row generated at `genTime`, plus its 1:1 `envios` sidecar in
+ * `estado` — the two rows the source joins. */
 async function seedWaiting(
   db: Database,
   id: Identity,
@@ -99,14 +83,17 @@ async function seedWaiting(
   estado: string,
 ): Promise<void> {
   const registroId = await seedRegistro(db, id, genTime);
-  await seedEnvio(db, registroId, id.tenantId, estado);
+  await db.execute(sql`
+    insert into envios (registro_id, tenant_id, estado)
+    values (${registroId}, ${id.tenantId}, ${estado})
+  `);
 }
 
 describe("fiscalSubmissionSource", () => {
   it("is silent when the oldest waiting record is 3 hours old", async () => {
     const id = await seedIdentity(pg.db);
     await seedWaiting(pg.db, id, hoursAgo(3), "pendiente");
-    await withTenant(pg.db, id.tenantId, async (tx) => {
+    await withTransaction(pg.db, async (tx) => {
       await asAppUser(tx);
       expect(
         await fiscalSubmissionSource.read({ tx, tenantId: id.tenantId as never, now: NOW }),
@@ -117,7 +104,7 @@ describe("fiscalSubmissionSource", () => {
   it("warns at 5 hours and errors at 25 hours, with count and hours", async () => {
     const id = await seedIdentity(pg.db);
     await seedWaiting(pg.db, id, hoursAgo(5), "enviando");
-    await withTenant(pg.db, id.tenantId, async (tx) => {
+    await withTransaction(pg.db, async (tx) => {
       await asAppUser(tx);
       const [a] = await fiscalSubmissionSource.read({
         tx,
@@ -133,7 +120,7 @@ describe("fiscalSubmissionSource", () => {
     });
 
     await seedWaiting(pg.db, id, hoursAgo(25), "pendiente");
-    await withTenant(pg.db, id.tenantId, async (tx) => {
+    await withTransaction(pg.db, async (tx) => {
       await asAppUser(tx);
       const [a] = await fiscalSubmissionSource.read({
         tx,
@@ -152,7 +139,7 @@ describe("fiscalSubmissionSource", () => {
   it("errors on a detenido record", async () => {
     const id = await seedIdentity(pg.db);
     await seedWaiting(pg.db, id, hoursAgo(1), "detenido");
-    await withTenant(pg.db, id.tenantId, async (tx) => {
+    await withTransaction(pg.db, async (tx) => {
       await asAppUser(tx);
       const alerts = await fiscalSubmissionSource.read({
         tx,
@@ -173,7 +160,7 @@ describe("fiscalSubmissionSource", () => {
   it("treats exactly 4 hours as a warning and exactly 24 hours as an error", async () => {
     const warn = await seedIdentity(pg.db);
     await seedWaiting(pg.db, warn, hoursAgo(4), "pendiente");
-    await withTenant(pg.db, warn.tenantId, async (tx) => {
+    await withTransaction(pg.db, async (tx) => {
       await asAppUser(tx);
       const [a] = await fiscalSubmissionSource.read({
         tx,
@@ -187,89 +174,20 @@ describe("fiscalSubmissionSource", () => {
       });
     });
 
-    const err = await seedIdentity(pg.db);
-    await seedWaiting(pg.db, err, hoursAgo(24), "pendiente");
-    await withTenant(pg.db, err.tenantId, async (tx) => {
+    // A second, older record: the oldest is now exactly 24 hours, so the alert becomes an error.
+    await seedWaiting(pg.db, warn, hoursAgo(24), "pendiente");
+    await withTransaction(pg.db, async (tx) => {
       await asAppUser(tx);
       const [a] = await fiscalSubmissionSource.read({
         tx,
-        tenantId: err.tenantId as never,
+        tenantId: warn.tenantId as never,
         now: NOW,
       });
       expect(a).toMatchObject({
         code: "fiscal.submission_delayed",
         severity: "error",
-        params: { count: 1, hours: 24 },
+        params: { count: 2, hours: 24 },
       });
-    });
-  });
-
-  // Partition, not mere absence: both tenants hold waiting rows, so dropping a tenant predicate would
-  // inflate the queried tenant's `count` (and leak the other's detenido row) rather than read empty.
-  it("counts only the queried tenant's rows when both tenants have data", async () => {
-    const other = await seedIdentity(pg.db);
-    await seedWaiting(pg.db, other, hoursAgo(25), "pendiente");
-    await seedWaiting(pg.db, other, hoursAgo(25), "enviando");
-    await seedWaiting(pg.db, other, hoursAgo(25), "detenido");
-
-    const mine = await seedIdentity(pg.db);
-    await seedWaiting(pg.db, mine, hoursAgo(25), "pendiente");
-    await seedWaiting(pg.db, mine, hoursAgo(25), "enviando");
-
-    await withTenant(pg.db, mine.tenantId, async (tx) => {
-      await asAppUser(tx);
-      const alerts = await fiscalSubmissionSource.read({
-        tx,
-        tenantId: mine.tenantId as never,
-        now: NOW,
-      });
-      // Only mine's two waiting rows, never the other tenant's three.
-      expect(alerts.find((a) => a.code === "fiscal.submission_delayed")).toMatchObject({
-        severity: "error",
-        params: { count: 2 },
-      });
-      // The other tenant's detenido row must not surface here.
-      expect(alerts.find((a) => a.code === "fiscal.submission_stopped")).toBeUndefined();
-    });
-  });
-
-  // The join predicate is a single-column FK (`envios.registro_id → registros_facturacion.id`) with no
-  // tenant column, so the database PERMITS an `envios` row whose tenant differs from its registro's.
-  // Both tenant predicates are therefore independently load-bearing: `envios.tenantId` against a row
-  // whose registro is ours but whose envío is another tenant's, and `registrosFacturacion.tenantId`
-  // against a row whose envío is ours but whose registro is another tenant's.
-  it("excludes rows whose envío and registro belong to different tenants", async () => {
-    const a = await seedIdentity(pg.db);
-    const b = await seedIdentity(pg.db);
-
-    // A's own waiting row — envío and registro both A. Only this may be counted.
-    await seedWaiting(pg.db, a, hoursAgo(25), "pendiente");
-
-    // Cross-tenant #1: registro is A's, envío is B's. Without `eq(envios.tenantId, A)` the query would
-    // join this registro (A's) and count B's envío — inflating A's count and moving `since` to 30h.
-    const registroOfA = await seedRegistro(pg.db, a, hoursAgo(30));
-    await seedEnvio(pg.db, registroOfA, b.tenantId, "pendiente");
-
-    // Cross-tenant #2: envío is A's, registro is B's. Without `eq(registrosFacturacion.tenantId, A)`
-    // the query would match A's envío and join B's registro — inflating A's count and moving `since`
-    // to 40h.
-    const registroOfB = await seedRegistro(pg.db, b, hoursAgo(40));
-    await seedEnvio(pg.db, registroOfB, a.tenantId, "pendiente");
-
-    await withTenant(pg.db, a.tenantId, async (tx) => {
-      await asAppUser(tx);
-      const alerts = await fiscalSubmissionSource.read({
-        tx,
-        tenantId: a.tenantId as never,
-        now: NOW,
-      });
-      // Only A's own row: count 1, and `since`/`hours` from its 25h age — neither cross-tenant row.
-      expect(alerts.find((al) => al.code === "fiscal.submission_delayed")).toMatchObject({
-        severity: "error",
-        params: { count: 1, hours: 25 },
-        since: hoursAgo(25).toISOString(),
-      });
-      expect(alerts.find((al) => al.code === "fiscal.submission_stopped")).toBeUndefined();
     });
   });
 });

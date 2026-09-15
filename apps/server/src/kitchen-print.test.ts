@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import net from "node:net";
-import { and, eq, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   asAppUser,
@@ -577,9 +577,7 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
           stationId: ticketItems.stationId,
         })
         .from(ticketItems)
-        .where(
-          and(eq(ticketItems.tenantId, cfg.tenantId), eq(ticketItems.workingOrderId, orderId)),
-        );
+        .where(eq(ticketItems.workingOrderId, orderId));
       const before = new Set((await printJobsFor(tx)).map((job) => job.id));
       await enqueueCorrectionSlips(tx, cfg, orderId, fired, "VOID");
       const slips = (await printJobsFor(tx)).filter((job) => !before.has(job.id));

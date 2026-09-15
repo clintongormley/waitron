@@ -172,10 +172,11 @@ export async function listOpenIncidents(
   tx: Transaction,
   tenantId: TenantId,
 ): Promise<TenantIncident[]> {
+  void tenantId;
   const rows = await tx
     .select(tenantIncidentColumns)
     .from(incidents)
-    .where(and(eq(incidents.tenantId, tenantId), isNull(incidents.acknowledgedAt)))
+    .where(isNull(incidents.acknowledgedAt))
     .orderBy(desc(incidents.detectedAt), desc(incidents.id));
   return rows.map(toTenantIncident);
 }
@@ -186,29 +187,23 @@ export async function listHandledIncidents(
   tenantId: TenantId,
   handledSince: Date,
 ): Promise<TenantIncident[]> {
+  void tenantId;
   const rows = await tx
     .select(tenantIncidentColumns)
     .from(incidents)
-    .where(
-      and(
-        eq(incidents.tenantId, tenantId),
-        gte(incidents.acknowledgedAt, handledSince.toISOString()),
-      ),
-    )
+    .where(gte(incidents.acknowledgedAt, handledSince.toISOString()))
     .orderBy(desc(incidents.acknowledgedAt), desc(incidents.id));
   return rows.map(toTenantIncident);
 }
 
-/** One incident by id, scoped to the tenant: another tenant's id reads as absent. */
+/** One incident by id, or `null` when no incident has that id. */
 export async function findIncident(
   tx: Transaction,
   tenantId: TenantId,
   id: string,
 ): Promise<TenantIncident | null> {
-  const [row] = await tx
-    .select(tenantIncidentColumns)
-    .from(incidents)
-    .where(and(eq(incidents.tenantId, tenantId), eq(incidents.id, id)));
+  void tenantId;
+  const [row] = await tx.select(tenantIncidentColumns).from(incidents).where(eq(incidents.id, id));
   return row === undefined ? null : toTenantIncident(row);
 }
 
@@ -224,11 +219,5 @@ export async function markIncidentHandled(
   await tx
     .update(incidents)
     .set({ acknowledgedAt: input.handledAt.toISOString(), acknowledgedBy: input.personId })
-    .where(
-      and(
-        eq(incidents.tenantId, input.tenantId),
-        eq(incidents.id, input.id),
-        isNull(incidents.acknowledgedAt),
-      ),
-    );
+    .where(and(eq(incidents.id, input.id), isNull(incidents.acknowledgedAt)));
 }

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { expect, it } from "vitest";
 import {
   asAppUser,
-  withTenant,
+  withTransaction,
   workingOrders,
   workingOrderLines,
   type Transaction,
@@ -22,7 +22,8 @@ import { seedLegacySellingUnits, seedVenue } from "../test/fixtures.js";
 // The read runs the same grants as the delete it previews, so it needs the real app_user session.
 const suite = useTemplateDb({ template: "core" });
 async function app<T>(tenantId: string, action: (tx: Transaction) => Promise<T>) {
-  return withTenant(suite.admin, tenantId, async (tx) => {
+  void tenantId;
+  return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     return action(tx);
   });
@@ -109,17 +110,4 @@ it("reports products, menus and the open-order count a delete would touch", asyn
   expect(dependants.menus.map((m) => m.id)).toContain(seeded.itemQ.id);
   expect(dependants.menus.map((m) => m.name)).toContain("Tea");
   expect(dependants.orders).toBe(1);
-});
-
-it("404s a modifier of another tenant", async () => {
-  const { tenantId } = await seedVenue(suite.admin);
-  const { tenantId: otherTenantId } = await seedVenue(suite.admin);
-  const choice = { id: randomUUID(), name: { en: "Oat" }, available: true };
-  const modifierId = await app(tenantId, async (tx) => {
-    const modifier = await createModifier(tx, tenantId, optionsGroup(choice), "en");
-    return modifier.id;
-  });
-  await expect(
-    app(otherTenantId, (tx) => modifierDependants(tx, otherTenantId, modifierId)),
-  ).rejects.toMatchObject({ code: "modifier.not_found" });
 });

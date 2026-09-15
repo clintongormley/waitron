@@ -424,7 +424,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
   it("lays the automatic receipt out for the till printer's paper width and character set", async () => {
     const { cfg, each } = await setupVenue();
     const printerId = await makePrinter(cfg);
-    await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       await updatePrinter(tx, printCfg(cfg), printerId, {
         paperWidth: "58mm",

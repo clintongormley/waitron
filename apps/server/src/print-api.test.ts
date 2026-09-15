@@ -1426,28 +1426,9 @@ describe("mountPrintApi — management: recent jobs", () => {
     expect(await widePreview.json()).toMatchObject({ columns: 42, dpi: 180 });
   });
 
-  it("refuses to preview another tenant's print job by id", async () => {
+  it("answers print_job.not_found when previewing an unknown print job id", async () => {
     const app = mountApp();
-    // A real job that exists — but under a DIFFERENT tenant. A globally-unique id is not the
-    // isolation boundary (CLAUDE.md §3): tenant A's manager must get print_job.not_found, never
-    // tenant B's bytes.
-    const foreignTenant = await seedTenant(suite.db);
-    const foreignLocation = randomUUID();
-    const foreignPrinter = randomUUID();
-    const foreignJob = randomUUID();
-    await suite.db.execute(
-      sql`insert into locations (id, tenant_id, name, invoice_locales, operation_description)
-        values (${foreignLocation}, ${foreignTenant}, 'Other', array['es-ES'], 'Other')`,
-    );
-    await suite.db.execute(
-      sql`insert into printers (id, tenant_id, location_id, name, transport, host)
-        values (${foreignPrinter}, ${foreignTenant}, ${foreignLocation}, 'Other', 'network_tcp', 'other.local')`,
-    );
-    await suite.db.execute(
-      sql`insert into print_jobs (id, tenant_id, location_id, printer_id, payload)
-        values (${foreignJob}, ${foreignTenant}, ${foreignLocation}, ${foreignPrinter}, decode('01','hex'))`,
-    );
-    const preview = await send(app, "GET", `/management-api/print-jobs/${foreignJob}/preview`, {
+    const preview = await send(app, "GET", `/management-api/print-jobs/${randomUUID()}/preview`, {
       cookie: managerCookie,
     });
     expect(preview.status).toBe(404);

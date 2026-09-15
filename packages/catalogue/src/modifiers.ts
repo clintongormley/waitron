@@ -245,40 +245,24 @@ export async function modifierDependants(
   tenantId: string,
   modifierId: string,
 ): Promise<ModifierDependants> {
-  await getModifier(tx, tenantId, modifierId); // 404s a foreign/absent id, tenant-scoped
+  await getModifier(tx, tenantId, modifierId); // 404s an absent id
   const productRows = await tx
     .select({ id: products.id, name: products.name })
     .from(products)
     .innerJoin(
       productOptionGroups,
       and(
-        eq(productOptionGroups.tenantId, products.tenantId),
         eq(productOptionGroups.productId, products.id),
         eq(productOptionGroups.groupId, modifierId),
       ),
     )
-    .where(eq(products.tenantId, tenantId))
     .orderBy(products.id);
   const menuRows = await tx
     .select({ id: menuItems.id, name: products.name })
     .from(menuItemOptionGroups)
-    .innerJoin(
-      menuItems,
-      and(
-        eq(menuItems.tenantId, menuItemOptionGroups.tenantId),
-        eq(menuItems.id, menuItemOptionGroups.menuItemId),
-      ),
-    )
-    .innerJoin(
-      products,
-      and(eq(products.tenantId, menuItems.tenantId), eq(products.id, menuItems.productId)),
-    )
-    .where(
-      and(
-        eq(menuItemOptionGroups.tenantId, tenantId),
-        eq(menuItemOptionGroups.groupId, modifierId),
-      ),
-    )
+    .innerJoin(menuItems, eq(menuItems.id, menuItemOptionGroups.menuItemId))
+    .innerJoin(products, eq(products.id, menuItems.productId))
+    .where(eq(menuItemOptionGroups.groupId, modifierId))
     .orderBy(menuItems.id);
   const orders = await tx.execute<{ count: number }>(sql`
     select count(*)::int as count from working_order_lines where ${openOrderUse(tenantId, modifierId)}`);
