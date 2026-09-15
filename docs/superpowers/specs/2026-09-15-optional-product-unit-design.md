@@ -85,11 +85,22 @@ Concretely:
   `string | null`.
 - `sellableUnit()` currently throws `unit.not_found` when the joined unit columns are null
   (`operations.ts:432`). It returns a shared **`EACH_UNIT`** synthetic instead — a
-  `SellableUnit` with `id: ""`, `precision: 0`, `hardwareUnit: null`, and the "Each" name /
-  "ea"/"ud" abbreviation the removed seed used. `EACH_UNIT` is exported from catalogue so
-  there is one source of truth. Nothing persists a unit id on a sale/order line (lines
-  snapshot only the nullable `unit_name`/`unit_precision` — `orders.ts:180`,
-  `sales.ts:229`), so a synthetic `id: ""` never reaches a foreign key.
+  `SellableUnit` with `precision: 0`, `hardwareUnit: null`, the "Each" name / "ea"/"ud"
+  abbreviation the removed seed used, and a **sentinel UUID** id
+  `00000000-0000-0000-0000-000000000001`. `EACH_UNIT` is exported from catalogue so there
+  is one source of truth.
+- **Why a sentinel UUID, not `""`:** the sale/order line tables snapshot only the nullable
+  `unit_name`/`unit_precision` and carry no unit id (`orders.ts:180`, `sales.ts:229`), but
+  the intermediate `working_line_contexts` table **does** — `unit_id uuid NOT NULL`
+  (`packages/venue-service/src/schema/service.ts:278`), written from `offer.unit.id` on the
+  live order path (`packages/venue-service/src/operations.ts:870`, reached via
+  `apps/server/src/working-order.ts`). It has no foreign key to `units`, so an id that names
+  no `units` row is fine there — but it must be a valid UUID, so `""` would fail insertion
+  on the first sale of an Each product. The sentinel matches the till's own "each" fallback
+  id (`apps/till/src/widgets/product-name.ts:28`), so server and till agree. Nothing ever
+  looks the sentinel up as a real unit (the editor path returns `null`, not the sentinel;
+  the write path only assigns real units), and it never reaches `product_units` (whose FK
+  to `units` is `onDelete restrict`).
 - Add a **clear-unit** operation, `clearProductUnit(tx, tenant, productId)`, that deletes
   a product's `product_units` row (there is no way to remove a unit today —
   `assignProductUnit` only upserts). The write path calls it when the chosen unit is null;
@@ -110,8 +121,9 @@ Concretely:
   unit. Extend it to accept a **null target**, which deletes the products' `product_units`
   rows (making them Each) rather than pointing them at another unit.
 - The reassign route `POST /management-api/units/:id/products/reassign`
-  (`apps/server/src/units-api.ts:89`) accepts a null/absent `unitId` in its body to mean
-  "reassign to Each"; it still returns `productsUsingUnit` for the source afterwards.
+  (`apps/server/src/units-api.ts:89`) accepts an explicit null `unitId` in its body to mean
+  "reassign to Each" (an absent `unitId` still 400s — the dashboard client always sends the
+  key explicitly); it still returns `productsUsingUnit` for the source afterwards.
 
 ### 3. Units screen — click a row to see its products
 

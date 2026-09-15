@@ -35,6 +35,7 @@ A product with no stored unit must read (for display/pricing) as a synthetic "Ea
 - Modify: `packages/catalogue/src/units.ts` (add exports)
 - Modify: `packages/catalogue/src/operations.ts:415-433` (`sellableUnit`) and its 3 call sites (`:392`, `:1019`, `:1768`)
 - Test: `packages/catalogue/src/operations.test.ts` (or `units.test.ts` — put it beside the existing product-read tests)
+- Test (cross-package sale-path proof): `packages/venue-service/src/operations.test.ts`
 
 **Interfaces:**
 - Produces: `EACH_UNIT_ID` (`""`), `EACH_UNIT: SellableUnit` — exported from `@waitron/catalogue` via `units.ts`. Consumed by Task 3 and the display reads.
@@ -52,13 +53,29 @@ it("reads a product with no unit as the synthetic Each unit", async () => {
   const productId = await insertBareProduct(tx, tenantId, { pricingUnit: "each" });
   const [product] = await listProducts(tx, tenantId);
   expect(product.unit).toEqual(EACH_UNIT);
-  expect(product.unit.id).toBe("");
+  expect(product.unit.id).toBe("00000000-0000-0000-0000-000000000001");
   expect(product.unit.hardwareUnit).toBeNull();
   expect(product.pricingUnit).toBe("each");
 });
 ```
 
 (Use the suite's existing product-insert helper; if it always assigns a unit, insert the `products` row directly with drizzle and skip `assignProductUnit`.)
+
+- [ ] **Step 1b: Write the sale-path proof test** (the reviewer's required proof that the sentinel id survives the live order path — `working_line_contexts.unit_id` is `uuid NOT NULL`).
+
+Add a venue-service test (beside the existing `recordWorkingLineContexts` tests, `packages/venue-service/src/operations.test.ts`) that adds a NO-UNIT product to a working order and asserts the line context row is written without error:
+
+```ts
+it("records a working line context for a product with no unit (Each)", async () => {
+  // seed a product with NO product_units row, then drive the offer/menu read + recordWorkingLineContexts
+  // exactly as the existing line-context tests do:
+  await expect(recordWorkingLineContexts(tx, tenantId, /* the no-unit offer line(s) */)).resolves.not.toThrow();
+  const [ctx] = await tx.select({ unitId: workingLineContexts.unitId }).from(workingLineContexts) /* …scoped… */;
+  expect(ctx!.unitId).toBe("00000000-0000-0000-0000-000000000001"); // the sentinel, not "" (which a uuid column rejects)
+});
+```
+
+Run it and watch it fail with `id: ""` (uuid rejection) BEFORE Step 3 sets the sentinel, to prove the test exercises the real column. This test lives in venue-service, so it is committed with Task 1 as the cross-package guard for the sentinel decision.
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -71,9 +88,14 @@ Expected: FAIL — today `sellableUnit()` throws `unit.not_found` when the join 
 // packages/catalogue/src/units.ts — near the SellableUnit interface
 /** The unit a product reads as when it has NO stored unit. It is NEVER written to the units table or a
  * product_units row (a no-unit product simply has no row); `sellableUnit()` returns it for the null
- * join so Product/AvailableProduct.unit stay non-null and the sale/receipt paths are unchanged. Its id
- * is "" — no sale/order line stores a unit id (lines snapshot only unit_name/unit_precision). */
-export const EACH_UNIT_ID = "";
+ * join so Product/AvailableProduct.unit stay non-null and the sale/receipt paths are unchanged.
+ *
+ * Its id is a SENTINEL UUID, not "": the live order path writes `offer.unit.id` into
+ * `working_line_contexts.unit_id` (`uuid NOT NULL`, no FK — venue-service schema/service.ts:278,
+ * operations.ts:870), so the id must be a valid UUID. This matches the till's own "each" fallback id
+ * (apps/till/src/widgets/product-name.ts:28) so server and till agree. Nothing looks it up as a real
+ * unit and it never reaches product_units. */
+export const EACH_UNIT_ID = "00000000-0000-0000-0000-000000000001";
 export const EACH_UNIT: SellableUnit = {
   id: EACH_UNIT_ID,
   name: { en: "Each", es: "Unidad", ca: "Unitat", gl: "Unidade", eu: "Unitatea" },
@@ -118,12 +140,14 @@ Expected: PASS. Fix any existing test that asserted a unitless product read thro
 - [ ] **Step 6: Commit**
 
 ```bash
-git add packages/catalogue/src/units.ts packages/catalogue/src/operations.ts packages/catalogue/src/operations.test.ts
+git add packages/catalogue/src/units.ts packages/catalogue/src/operations.ts packages/catalogue/src/operations.test.ts packages/venue-service/src/operations.test.ts
 git commit -s -m "A product with no stored unit reads as a synthetic Each unit
 
-sellableUnit() now returns a shared EACH_UNIT for the null-unit join
-instead of throwing, so Product/AvailableProduct.unit stay non-null and
-the till, offer and receipt paths are unchanged for a no-unit product."
+sellableUnit() now returns a shared EACH_UNIT (with a sentinel UUID id)
+for the null-unit join instead of throwing, so Product/AvailableProduct.unit
+stay non-null and the till, offer and receipt paths are unchanged for a
+no-unit product. A venue-service test proves the sentinel id survives the
+working_line_contexts (uuid NOT NULL) write on the live order path."
 ```
 
 ---
@@ -642,21 +666,15 @@ it("does not activate the row when an in-cell control is clicked", async () => {
   expect(clicked).toEqual([]); // the row was not activated by the Edit click
 });
 
-it("paints the clickable row hover from a token", async () => {
-  // render with rowClick set; assert the .clickable:hover / :focus-within rule uses a --wt-* token
-  // (mirror the existing token-painting assertions in this file).
+it("paints the focused clickable row from a token", async () => {
+  // render with rowClick set, focus the .row-activate button, and assert the row cell's
+  // background resolves to the --wt-color-surface-raised token value (via :focus-within).
+  // Assert :focus-within, NOT :hover — getComputedStyle cannot force a hover state.
+  // Mirror the existing token-painting assertions in this file for how they read the value.
 });
 ```
 
-```ts
-// wt-data-table.a11y.test.ts — add a rowClick variant to the existing both-themes sweep
-it("has no axe violations with clickable rows (both themes)", async () => {
-  for (const theme of ["light", "dark"] as const) {
-    const el = await renderTable({ theme, rowClick: () => {}, rowClickLabel: (r) => `Open ${r.name}` });
-    expect(await axe(el)).toHaveNoViolations();
-  }
-});
-```
+For the a11y test, follow this file's ACTUAL structure — it uses `describe.each(["light","dark"])` (`wt-data-table.a11y.test.ts:12`), not a `for` loop or a `renderTable` helper. Add a clickable-rows case inside that existing per-theme block, rendering the table with `.rowClick`/`.rowClickLabel` set and asserting `axe` finds no violations (the same shape as the sibling cases).
 
 - [ ] **Step 2: Run to verify they fail** — `pnpm --filter @waitron/ui test src/components/wt-data-table.test.ts` → FAIL (no `.row-activate`).
 
@@ -694,7 +712,7 @@ The mouse-anywhere behaviour and the "don't hijack in-cell controls" behaviour c
 ```css
 tr.clickable { position: relative; }
 tr.clickable:hover td,
-tr.clickable:focus-within td { background: var(--wt-color-surface-hover); cursor: pointer; }
+tr.clickable:focus-within td { background: var(--wt-color-surface-raised); cursor: pointer; }
 /* The stretched activator covers the whole row for mouse users; it is a real focusable button for
    keyboard/AT (labelled by rowClickLabel). It sits at the base layer… */
 .row-activate {
@@ -702,13 +720,16 @@ tr.clickable:focus-within td { background: var(--wt-color-surface-hover); cursor
   margin: 0; padding: 0; border: 0; background: transparent; cursor: pointer;
   z-index: 0;
 }
-.row-activate:focus-visible { outline: var(--wt-focus-ring); outline-offset: calc(-1 * var(--wt-space-1)); }
+.row-activate:focus-visible { outline: var(--wt-focus-ring); outline-offset: var(--wt-focus-offset); }
 /* …and every other interactive control in a clickable row sits ABOVE it, so a click on the
    Edit/Delete menu or the selection checkbox never activates the row. */
 tr.clickable td :is(button, a, input, select, label, wt-row-actions):not(.row-activate) { position: relative; z-index: 1; }
 ```
 
-Use the real token names present in this package (grep `--wt-color-surface-hover` / `--wt-focus-ring`; if the exact names differ, use the sibling hover/focus tokens the table already uses — do not invent tokens or the `no-hardcoded-chrome` guard will still pass but the design-system rule is broken; confirm names before committing).
+These are the tokens this file already uses (verified): the existing row hover is
+`background: var(--wt-color-surface-raised)` (`wt-data-table.ts:77-78`), and the focus
+convention is `outline: var(--wt-focus-ring); outline-offset: var(--wt-focus-offset)`
+(`:42-43`, `:94-95`). Do not invent tokens.
 
 - [ ] **Step 6: Run to verify they pass** — `pnpm --filter @waitron/ui test src/components/wt-data-table.test.ts src/components/wt-data-table.a11y.test.ts` → PASS.
 
