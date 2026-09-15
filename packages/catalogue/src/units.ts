@@ -29,6 +29,24 @@ export interface SellableUnit extends Unit {
   hardwareUnit: "kg" | "g" | "mg" | null;
 }
 
+/** The unit a product reads as when it has NO stored unit. It is NEVER written to the units table or a
+ * product_units row (a no-unit product simply has no row); `sellableUnit()` returns it for the null
+ * join so Product/AvailableProduct.unit stay non-null and the sale/receipt paths are unchanged.
+ *
+ * Its id is a SENTINEL UUID, not "": the live order path writes `offer.unit.id` into
+ * `working_line_contexts.unit_id` (`uuid NOT NULL`, no FK — venue-service schema/service.ts:278,
+ * operations.ts:870), so the id must be a valid UUID. This matches the till's own "each" fallback id
+ * (apps/till/src/widgets/product-name.ts:28) so server and till agree. Nothing looks it up as a real
+ * unit and it never reaches product_units. */
+export const EACH_UNIT_ID = "00000000-0000-0000-0000-000000000001";
+export const EACH_UNIT: SellableUnit = {
+  id: EACH_UNIT_ID,
+  name: { en: "Each", es: "Unidad", ca: "Unitat", gl: "Unidade", eu: "Unitatea" },
+  abbreviation: { en: "ea", es: "ud", ca: "u", gl: "u", eu: "u" },
+  precision: 0,
+  hardwareUnit: null,
+};
+
 export interface CreateUnitInput {
   name: Record<string, string>;
   precision: number;

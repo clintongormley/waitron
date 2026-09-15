@@ -51,7 +51,7 @@ import {
 } from "./operations.js";
 import { AppError } from "@waitron/shared";
 import type { AvailableProduct } from "./operations.js";
-import { createUnit } from "./units.js";
+import { createUnit, EACH_UNIT } from "./units.js";
 import { seedCatalogueFixture, seedVenue, useCatalogueDb } from "../test/fixtures.js";
 
 // Query behaviour runs on PGlite; each case starts with empty authoring tables.
@@ -437,6 +437,31 @@ describe("catalogue operations", () => {
       expect(seenHam.vatClass).toBe("reduced");
       expect(seenHam.descriptions).toEqual({ en: "sliced ham" });
       expect(seenHam.active).toBe(true);
+    });
+  });
+
+  it("reads a product with no unit as the synthetic Each unit", async () => {
+    await asTenant(async (tx) => {
+      const cat = await createCatalogue(tx, tenantId, { name: "Deli" });
+      // Create a normal product, then remove its product_units row so the read exercises the
+      // null-join branch of a product that has no stored unit at all.
+      const product = await createProduct(tx, tenantId, {
+        catalogueId: cat.id,
+        categoryId: null,
+        descriptions: { en: "loose sweets" },
+        pricingUnit: "each",
+        unitPrice: "0.00",
+        vatClass: "general",
+      });
+      await tx.execute(
+        sql`delete from product_units where tenant_id = ${tenantId} and product_id = ${product.id}`,
+      );
+      const [seen] = await listProducts(tx, tenantId, cat.id);
+      // toEqual(EACH_UNIT) asserts the whole synthetic unit, hardwareUnit: null included.
+      expect(seen!.unit).toEqual(EACH_UNIT);
+      expect(seen!.unit.id).toBe("00000000-0000-0000-0000-000000000001");
+      expect(seen!.unitId).toBe("00000000-0000-0000-0000-000000000001");
+      expect(seen!.pricingUnit).toBe("each");
     });
   });
 

@@ -50,6 +50,7 @@ import { menuItemVariants, productVariants } from "./schema/variants.js";
 import type { ProductVariant } from "./variants.js";
 import {
   assignProductUnit,
+  EACH_UNIT,
   getSeededUnit,
   getSellableUnit,
   type SellableUnit,
@@ -389,14 +390,7 @@ function toProduct(
   variants: ProductVariant[] = [],
 ): Product {
   const { unitName, unitAbbreviation, unitPrecision, hardwareUnit, ...product } = row;
-  const unit = sellableUnit(
-    row.unitId,
-    unitName,
-    unitPrecision,
-    row.pricingUnit,
-    hardwareUnit,
-    unitAbbreviation,
-  );
+  const unit = sellableUnit(row.unitId, unitName, unitPrecision, hardwareUnit, unitAbbreviation);
   return {
     ...product,
     categoryIds,
@@ -416,7 +410,6 @@ function sellableUnit(
   id: string | null,
   name: Record<string, string> | null,
   precision: number | null,
-  legacy: string,
   hardwareUnit: string | null | undefined,
   abbreviation: Record<string, string> | null,
 ): SellableUnit {
@@ -429,7 +422,8 @@ function sellableUnit(
       hardwareUnit: hardwareUnit as SellableUnit["hardwareUnit"],
     };
   }
-  throw new AppError("unit.not_found", { unitId: id ?? legacy });
+  // A product with no stored unit reads as Each (never stored).
+  return EACH_UNIT;
 }
 
 function legacyPricingUnit(unit: SellableUnit): PricingUnit {
@@ -1020,7 +1014,6 @@ export async function listMenuOffers(
       row.unitId,
       row.unitName,
       row.unitPrecision,
-      row.pricingUnit,
       row.hardwareUnit,
       row.unitAbbreviation,
     ),
@@ -1769,7 +1762,6 @@ export async function listAvailableProducts(
       row.unitId,
       row.unitName,
       row.unitPrecision,
-      row.pricingUnit,
       row.hardwareUnit,
       row.unitAbbreviation,
     ),
