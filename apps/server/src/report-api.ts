@@ -114,10 +114,11 @@ export async function resolveVenueClock(
   tenantId: TenantId,
   nodeId: string,
 ): Promise<{ timeZone: string; dayCutover: string }> {
+  void tenantId;
   const { rows } = await tx.execute<{ time_zone: string; day_cutover: string }>(sql`
     select l.time_zone, l.day_cutover
-    from nodes n join locations l on l.tenant_id = n.tenant_id and l.id = n.location_id
-    where n.id = ${nodeId} and n.tenant_id = ${tenantId}
+    from nodes n join locations l on l.id = n.location_id
+    where n.id = ${nodeId}
   `);
   const row = rows[0];
   /* v8 ignore start */
@@ -141,12 +142,13 @@ async function countOpenTables(
   tenantId: TenantId,
   nodeId: NodeId,
 ): Promise<{ open: number; total: number }> {
+  void tenantId;
   const { rows } = await tx.execute<{ total: string; open: string }>(sql`
     select count(*)::text as total,
            count(*) filter (where dt.tab_id is not null)::text as open
     from dining_tables dt
-    join nodes n on n.tenant_id = dt.tenant_id and n.location_id = dt.location_id
-    where dt.tenant_id = ${tenantId} and n.id = ${nodeId} and dt.active = true
+    join nodes n on n.location_id = dt.location_id
+    where n.id = ${nodeId} and dt.active = true
   `);
   return { open: Number(rows[0]!.open), total: Number(rows[0]!.total) };
 }

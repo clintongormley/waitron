@@ -153,8 +153,9 @@ export function businessDayRangeClause(column: SQL, input: PeriodVatInput): SQL 
  * is narrowed to that shape (the daily-close/counts callers still satisfy it structurally).
  */
 export function activeSalesClause(input: { tenantId: TenantId }): SQL {
-  return sql`not exists (select 1 from sale_voids sv where sv.sale_id = s.id and sv.tenant_id = ${input.tenantId})
-      and not exists (select 1 from sale_substitutions sub where sub.substitution_sale_id = s.id and sub.tenant_id = ${input.tenantId})`;
+  void input;
+  return sql`not exists (select 1 from sale_voids sv where sv.sale_id = s.id)
+      and not exists (select 1 from sale_substitutions sub where sub.substitution_sale_id = s.id)`;
 }
 
 /**

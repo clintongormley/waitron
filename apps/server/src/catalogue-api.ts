@@ -421,7 +421,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
   ): Promise<void> => {
     const result = await tx.execute(sql`
       select 1 from ${sql.identifier(table)}
-      where tenant_id = ${tenantId} and id = ${id}
+      where id = ${id}
       ${groupId === undefined ? sql`` : sql`and group_id = ${groupId}`}
     `);
     if (result.rows.length === 0) {

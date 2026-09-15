@@ -1229,6 +1229,10 @@ describe("drain — maxRegistrosPorEnvio validation", () => {
       const withCap = await drain(depsWith(3), NOW);
       expect(withCap.recordsSubmitted).toBeGreaterThanOrEqual(1);
 
+      // The first drain wrote the flow-control gate, and the gate row is the database's one row (one
+      // tenant per database), so the second drain would wait out that gate. Clear it so the omitted
+      // default is exercised on an ungated pass.
+      await pg.db.execute(sql`delete from envio_flujo`);
       defaultTenant = (await seedPendingEnvios(pg.db, { count: 1 })).tenantId;
       const omitted = await drain(depsWith(), NOW);
       expect(omitted.recordsSubmitted).toBeGreaterThanOrEqual(1);

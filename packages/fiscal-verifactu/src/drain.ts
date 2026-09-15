@@ -408,8 +408,9 @@ async function readFlujo(
   tx: Transaction,
   tenantId: string,
 ): Promise<{ proximoEnvioEn: Date | null; tiempoEsperaSeg: number }> {
+  void tenantId;
   const rows = await tx.execute<{ proximo_envio_en: string; tiempo_espera_seg: number }>(sql`
-    select proximo_envio_en, tiempo_espera_seg from envio_flujo where tenant_id = ${tenantId}
+    select proximo_envio_en, tiempo_espera_seg from envio_flujo
   `);
   const row = rows.rows[0];
   return row
@@ -420,9 +421,10 @@ async function readFlujo(
 /** How many of this tenant's rows are due right now — the SAME predicate `claimBatch` re-runs a
  * moment later, so it can also be used to decide whether more work remains after a chunk. */
 async function countDue(tx: Transaction, tenantId: string, now: Date): Promise<number> {
+  void tenantId;
   const rows = await tx.execute<{ count: string }>(sql`
     select count(*)::text as count from envios
-    where tenant_id = ${tenantId} and estado = 'pendiente' and proximo_intento_en <= ${now.toISOString()}
+    where estado = 'pendiente' and proximo_intento_en <= ${now.toISOString()}
   `);
   return Number(rows.rows[0]!.count);
 }
@@ -473,10 +475,11 @@ function bumpNextDue(result: DrainResult, at: Date | null): void {
  * scope note, `drain.test.ts`, and the Task 8 brief).
  */
 async function recoverStaleClaims(tx: Transaction, tenantId: string, now: Date): Promise<void> {
+  void tenantId;
   const cutoff = new Date(now.getTime() - RECUPERACION_ENVIANDO_MS).toISOString();
   await tx.execute(sql`
     update envios set estado = 'pendiente', incidencia = true, proximo_intento_en = ${now.toISOString()}
-    where tenant_id = ${tenantId} and estado = 'enviando' and enviado_en < ${cutoff}
+    where estado = 'enviando' and enviado_en < ${cutoff}
   `);
 }
 
@@ -579,11 +582,12 @@ async function claimBatch(
   blockedSifIds: Set<string>,
   maxPorEnvio: number,
 ): Promise<{ sendable: DueRow[]; rawCount: number }> {
+  void tenantId;
   const alreadyBlocked = blockedSifIds.size > 0 ? [...blockedSifIds] : null;
   const rows = await tx.execute<DueRow>(sql`
     select r.*, e.intentos from envios e
     join registros_facturacion r on r.id = e.registro_id
-    where e.tenant_id = ${tenantId} and e.estado = 'pendiente' and e.proximo_intento_en <= ${now.toISOString()}
+    where e.estado = 'pendiente' and e.proximo_intento_en <= ${now.toISOString()}
       ${alreadyBlocked === null ? sql`` : sql`and r.sif_id not in ${alreadyBlocked}`}
     order by r.sif_id, r.secuencia
     limit ${maxPorEnvio}

@@ -282,8 +282,9 @@ export async function updateImage(
 }
 
 export async function listImageLabels(tx: Transaction, tenantId: string): Promise<string[]> {
+  void tenantId;
   const result = await tx.execute<{ label: string }>(sql`
-    select distinct unnest(labels) as label from media_images where tenant_id = ${tenantId} order by label
+    select distinct unnest(labels) as label from media_images order by label
   `);
   return result.rows.map((row) => row.label);
 }
@@ -372,8 +373,7 @@ export async function listImages(
   const effectiveSort = sort === "relevance" && !query ? "date" : sort;
   const vector = sql`media_search_vector(m.names, m.alt_text, m.labels)`;
   const search = sql`media_search_query(${query})`;
-  const where = sql`m.tenant_id = ${tenantId}
-    and ${query ? sql`${vector} @@ ${search}` : sql`true`}
+  const where = sql`${query ? sql`${vector} @@ ${search}` : sql`true`}
     and ${label ? sql`exists (select 1 from unnest(m.labels) as label where lower(label) = ${label})` : sql`true`}`;
   const rank = query ? sql`ts_rank_cd(${vector}, ${search})` : sql`0`;
   const nameMatch = query
@@ -392,7 +392,7 @@ export async function listImages(
   const result = await tx.execute<ImageRecord & Record<string, unknown>>(sql`
     select m.id, m.filename, m.names, m.alt_text as "altText", m.labels,
       m.created_at as "createdAt", m.updated_at as "updatedAt",
-      ((select count(*)::int from products p where p.tenant_id = m.tenant_id and p.image = m.filename) + (select count(*)::int from product_variants v where v.tenant_id = m.tenant_id and v.image = m.filename) + (select count(*)::int from category_details c where c.tenant_id = m.tenant_id and c.image = m.filename)) as "usageCount"
+      ((select count(*)::int from products p where p.image = m.filename) + (select count(*)::int from product_variants v where v.image = m.filename) + (select count(*)::int from category_details c where c.image = m.filename)) as "usageCount"
     from media_images m where ${where} order by ${order}, m.id asc limit ${limit} offset ${offset}
   `);
   return { images: result.rows, total: count.rows[0]!.total };

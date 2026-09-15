@@ -239,11 +239,12 @@ describe("setAbsenceStatus", () => {
 
 describe("listPendingAbsences", () => {
   it("returns only requested absences for the tenant, ordered by created_at", async () => {
-    // A FRESH tenant, isolated from the sibling suites above: the shared PGlite DB persists across the
-    // file, and the `createAbsence` tests leave several `requested` absences on the module-level
-    // `tenantId`. Querying its own tenant keeps the ordered assertion below order-independent
-    // (CLAUDE.md §4) — mirrors listPendingSwaps' fresh-tenant isolation in shift-swaps.test.ts.
-    const listTenant = await seedTenant(suite.db);
+    // The shared PGlite DB persists across the file, and the `createAbsence` tests leave several
+    // `requested` absences behind. The queue reads every absence in the database (one tenant per
+    // database), so clear the earlier tests' absences to keep the ordered assertion below
+    // order-independent (CLAUDE.md §4) — mirrors listPendingSwaps in shift-swaps.test.ts.
+    await suite.db.execute(sql`delete from absences`);
+    const listTenant = tenantId;
     const p = await seedPerson(suite.db, listTenant, `la-${crypto.randomUUID()}`);
     // TWO requested absences seeded OUT OF created_at ORDER: the FIRST-inserted (the holiday) carries
     // the LATER timestamp, the SECOND-inserted (the sick_leave) the EARLIER one, so insertion order and

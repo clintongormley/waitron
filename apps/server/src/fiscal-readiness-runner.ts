@@ -93,7 +93,7 @@ export async function submitFiscalReadiness(args: {
       await secret.seal({ db, ring: args.ring }, venue.tenantId, args.secret);
 
     const existing = await db.execute<{ count: number }>(sql`
-      select count(*)::int as count from sales where tenant_id = ${venue.tenantId}
+      select count(*)::int as count from sales
     `);
     if (existing.rows[0]!.count === 0) {
       const now = (args.now ?? (() => new Date()))();

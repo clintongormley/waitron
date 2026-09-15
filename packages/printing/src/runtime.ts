@@ -154,6 +154,7 @@ export async function claimPrintJobs(
   agentId: string,
   ctx: { locationId: string; visibleKeys: string[] },
 ): Promise<ClaimedJob[]> {
+  void cfg;
   // A usb/bluetooth printer is eligible only when its `local_key` is one the agent currently SEES. An
   // EMPTY visible set must match nothing: `in ()` degenerates (the drain.ts hazard, runtime.ts's
   // `id in ${ids}` guard below), so guard it with `false`. `local_key in ${array}` is the
@@ -165,9 +166,8 @@ export async function claimPrintJobs(
       : sql`false`;
   const picked = await tx.execute<{ id: string }>(sql`
     select j.id from print_jobs j
-    join printers p on p.tenant_id = j.tenant_id and p.id = j.printer_id
-    where j.tenant_id = ${cfg.tenantId}
-      and p.active = true
+    join printers p on p.id = j.printer_id
+    where p.active = true
       and ( (p.transport = 'network_tcp' and p.location_id = ${ctx.locationId}) or ${usbBt} )
       and (
         j.status = 'queued'
@@ -195,8 +195,7 @@ export async function claimPrintJobs(
   const claimed = await tx.execute<ClaimedJob>(sql`
     update print_jobs set status = 'printing', claimed_at = now(), claimed_by = ${agentId}
     from printers p
-    where print_jobs.tenant_id = p.tenant_id
-      and print_jobs.printer_id = p.id
+    where print_jobs.printer_id = p.id
       and print_jobs.id in ${ids}
     returning print_jobs.id, print_jobs.printer_id, print_jobs.payload,
               p.transport, p.host, p.port, p.local_key
@@ -241,6 +240,7 @@ export async function reportPrintJob(
   cfg: { tenantId: string },
   input: { agentId: string; jobId: string; outcome: JobOutcome },
 ): Promise<{ updated: boolean }> {
+  void cfg;
   const { agentId, jobId, outcome } = input;
   // Only the SET clause differs by outcome; the WHERE — the tenant predicate, the `status = 'printing'`
   // idempotency guard and the `claimed_by` claimer-scope — is IDENTICAL for both, so it is written
@@ -252,8 +252,7 @@ export async function reportPrintJob(
       : sql`status = 'failed', last_error = ${outcome.error}, attempts = print_jobs.attempts + 1`;
   const result = await tx.execute<{ id: string }>(sql`
     update print_jobs set ${setClause}
-    where print_jobs.tenant_id = ${cfg.tenantId}
-      and print_jobs.id = ${jobId}
+    where print_jobs.id = ${jobId}
       and print_jobs.status = 'printing'
       and print_jobs.claimed_by = ${agentId}
     returning print_jobs.id`);

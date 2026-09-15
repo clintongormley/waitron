@@ -293,6 +293,7 @@ async function rowsForPeriod(
   tenantId: string,
   period: { year: string; month: string },
 ): Promise<PeriodRow[]> {
+  void tenantId;
   const { rows } = await tx.execute<PeriodRow>(sql`
     select
       r.id, r.tenant_id, r.till_id, r.sale_id,
@@ -300,10 +301,8 @@ async function rowsForPeriod(
       r.id_emisor_factura, r.nombre_razon_emisor, r.num_serie_factura,
       to_char(r.fecha_expedicion_factura, 'DD-MM-YYYY') as fecha_expedicion_factura
     from envios e
-    -- Match both ids so the joined registro belongs to the selected tenant.
-    join registros_facturacion r on r.id = e.registro_id and r.tenant_id = e.tenant_id
-    where e.tenant_id = ${tenantId}
-      and to_char(r.fecha_expedicion_factura, 'YYYY') = ${period.year}
+    join registros_facturacion r on r.id = e.registro_id
+    where to_char(r.fecha_expedicion_factura, 'YYYY') = ${period.year}
       and to_char(r.fecha_expedicion_factura, 'MM') = ${period.month}
   `);
   return rows;
@@ -386,7 +385,7 @@ async function correct(
   if (target === undefined) return; // Anulada / no clean local estado — incident-only.
   await tx.execute(sql`
     update envios set estado = ${target}, confirmado_en = ${now.toISOString()}
-    where registro_id = ${row.id} and tenant_id = ${row.tenant_id}
+    where registro_id = ${row.id}
   `);
   await writeAck(tx, row.id, now);
 }
@@ -406,7 +405,7 @@ async function remediateNoTrace(tx: Transaction, row: PeriodRow, now: Date): Pro
       mensaje_error = null,
       proximo_intento_en = ${now.toISOString()},
       reconciled_resubmit_at = ${now.toISOString()}
-    where registro_id = ${row.id} and tenant_id = ${row.tenant_id}
+    where registro_id = ${row.id}
   `);
   await deleteAck(tx, row.id);
 }
@@ -418,7 +417,7 @@ async function remediateNoTrace(tx: Transaction, row: PeriodRow, now: Date): Pro
 async function clearReconciledMarker(tx: Transaction, row: PeriodRow): Promise<void> {
   await tx.execute(sql`
     update envios set reconciled_resubmit_at = null
-    where registro_id = ${row.id} and tenant_id = ${row.tenant_id}
+    where registro_id = ${row.id}
   `);
 }
 
@@ -460,7 +459,7 @@ async function raise(
 async function hasSiblingAnulacion(tx: Transaction, row: PeriodRow): Promise<boolean> {
   const { rows } = await tx.execute<{ one: number }>(sql`
     select 1 as one from registros_facturacion
-    where sale_id = ${row.sale_id} and tenant_id = ${row.tenant_id} and tipo_registro = 'anulacion'
+    where sale_id = ${row.sale_id} and tipo_registro = 'anulacion'
     limit 1
   `);
   return rows.length > 0;

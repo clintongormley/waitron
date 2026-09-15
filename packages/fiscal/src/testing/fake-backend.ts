@@ -296,9 +296,10 @@ export class FakeFiscalBackend implements FiscalBackend {
     tenantId: TenantId,
     nodeId: NodeId,
   ): Promise<IntegrityReport> {
+    void tenantId;
     const rows = await tx.execute<{ count: string }>(sql`
       select count(*)::text as count from fake_fiscal_records
-      where tenant_id = ${tenantId} and node_id = ${nodeId}
+      where node_id = ${nodeId}
     `);
     const checked = Number(rows.rows[0].count);
     const issues = this.injectedIssues.get(nodeId) ?? [];
@@ -306,10 +307,11 @@ export class FakeFiscalBackend implements FiscalBackend {
   }
 
   async pendingCount(tenantId: TenantId, nodeId: NodeId): Promise<number> {
+    void tenantId;
     const rows = await this.db.execute<{ count: string }>(sql`
       select count(*)::text as count
       from fake_fiscal_records
-      where tenant_id = ${tenantId} and node_id = ${nodeId} and state = 'pending'
+      where node_id = ${nodeId} and state = 'pending'
     `);
     return Number(rows.rows[0].count);
   }

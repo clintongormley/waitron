@@ -363,11 +363,12 @@ describe("decideSwap", () => {
 
 describe("listPendingSwaps", () => {
   it("returns only accepted swaps for the tenant, ordered by created_at", async () => {
-    // A FRESH tenant, isolated from the sibling suites above: the shared PGlite DB persists across
-    // the file, and `acceptSwap`'s "moving the swap to accepted" test leaves an `accepted` swap on
-    // the module-level `tenantId` — order-independent per CLAUDE.md §4, so this queries its own tenant.
-    const listTenant = await seedTenant(suite.db);
-    const listLocation = await seedLocation(suite.db, listTenant);
+    // The shared PGlite DB persists across the file, and `acceptSwap`'s "moving the swap to accepted"
+    // test leaves an `accepted` swap behind. The queue reads every swap in the database (one tenant per
+    // database), so clear the earlier tests' swaps to keep this order-independent (CLAUDE.md §4).
+    await suite.db.execute(sql`delete from shift_swaps`);
+    const listTenant = tenantId;
+    const listLocation = locationId;
     const requester = await seedPerson(suite.db, listTenant, `lr-${crypto.randomUUID()}`);
     const toPerson = await seedPerson(suite.db, listTenant, `lt-${crypto.randomUUID()}`);
     const s1 = await insertDraftShift(suite.db, {

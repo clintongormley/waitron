@@ -64,8 +64,7 @@ export async function computeInputVat(
       sum(round(v.tax * p.deductible_proportion / 100, 2))::numeric(12, 2)::text as tax
     from purchase_invoice_vat v
     join purchase_invoices p on p.id = v.purchase_invoice_id
-    where p.tenant_id = ${input.tenantId}
-      and p.regime = 'general'
+    where p.regime = 'general'
       and ${dateFilter}
     group by (v.rate)::numeric(5, 2)::text, v.kind
   `);

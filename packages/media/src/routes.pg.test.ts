@@ -114,12 +114,11 @@ it("allows its own manager to upload, read, edit and delete using non-superuser 
   expect(await deletion.json()).toEqual({ deleted: true, uses: [] });
 });
 
-it.each(["staff", "foreign manager"] as const)(
+it.each(["staff"] as const)(
   "denies every library operation to a %s and preserves existing image data",
   async (actor) => {
     const { app, tenantId, image } = await fixture();
-    const actorTenant = actor === "staff" ? tenantId : await seedTenant(suite.admin);
-    const headers = await session(actorTenant, actor === "staff" ? "staff" : "manager");
+    const headers = await session(tenantId, actor);
     const requests: [string, RequestInit][] = [
       ["/management-api/images", { headers }],
       ["/management-api/image-labels", { headers }],

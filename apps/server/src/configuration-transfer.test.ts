@@ -31,7 +31,11 @@ import {
   type ConfigurationBundle,
 } from "./configuration-transfer.js";
 
+// TWO databases: a transfer exports from a prepared venue's database and imports into a fresh
+// production database, and each holds one tenant. `suite` holds the source venue, `targetSuite` the
+// target the bundle is imported into.
 const suite = usePgliteDb({ migrations: migrationOptionsFor(manifestSets(), null) });
+const targetSuite = usePgliteDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 
 function venue(taxId: string): VenueRequest {
   return {
@@ -344,7 +348,7 @@ describe("configuration transfer database path", () => {
     expect(transferred.tables.print_agents![0]).not.toHaveProperty("host");
 
     const target = await applyVenue(planVenue(venue("B87654321"), ALL_MODULES), {
-      db: suite.db,
+      db: targetSuite.db,
       modules: ALL_MODULES,
       beforeCommit: async (tx, result) => {
         await importConfigurationTables(
@@ -356,7 +360,7 @@ describe("configuration transfer database path", () => {
         );
       },
     });
-    await withTransaction(suite.db, async (tx) => {
+    await withTransaction(targetSuite.db, async (tx) => {
       const [metadata] = transferred.tables.media_images!;
       const bytes = await readImageBytes(tx, target.tenantId, metadata!.filename as string);
       expect(bytes?.bytes).toEqual(new Uint8Array([0xff, 0xd8, 0xff, 1]));
@@ -390,14 +394,17 @@ describe("configuration transfer database path", () => {
         },
       ]);
     });
-    const imported = await suite.db.execute<{
+    const sourceSales = await suite.db.execute<{ count: number }>(
+      sql`select count(*)::int as count from sales where tenant_id = ${source.tenantId}`,
+    );
+    expect(sourceSales.rows[0]!.count).toBe(1);
+    const imported = await targetSuite.db.execute<{
       products: number;
       staff: number;
       suspended_admins: number;
       secret_hits: number;
       status: string;
       target_sales: number;
-      source_sales: number;
       inactive_agents: number;
       inactive_printers: number;
       source_agent_secrets: number;
@@ -420,7 +427,6 @@ describe("configuration transfer database path", () => {
           and (pin_hash = 'source-pin-secret' or password_hash = 'source-password-secret')) as secret_hits,
         (select status from persons where tenant_id = ${target.tenantId} and role = 'manager') as status,
         (select count(*)::int from sales where tenant_id = ${target.tenantId}) as target_sales,
-        (select count(*)::int from sales where tenant_id = ${source.tenantId}) as source_sales,
         (select count(*)::int from print_agents
           where tenant_id = ${target.tenantId} and not active) as inactive_agents,
         (select count(*)::int from printers
@@ -445,7 +451,6 @@ describe("configuration transfer database path", () => {
       secret_hits: 0,
       status: "suspended",
       target_sales: 0,
-      source_sales: 1,
       inactive_agents: 1,
       inactive_printers: 1,
       source_agent_secrets: 0,
@@ -460,7 +465,7 @@ describe("configuration transfer database path", () => {
       target_bookings: 0,
     });
 
-    const printerSettings = await suite.db.execute<{
+    const printerSettings = await targetSuite.db.execute<{
       paper_width: string;
       resolution: string;
       character_set: string;
@@ -472,10 +477,10 @@ describe("configuration transfer database path", () => {
     ]);
 
     const fiscal = ALL_MODULES.find((module) => module.fiscal?.id === "verifactu")!.fiscal!;
-    await withTransaction(suite.db, (tx) =>
+    await withTransaction(targetSuite.db, (tx) =>
       recordSale(
         tx,
-        fiscal.makeBackend({ db: suite.db, clock: systemClock(), environment: "production" }),
+        fiscal.makeBackend({ db: targetSuite.db, clock: systemClock(), environment: "production" }),
         {
           tenantId: tenantId(target.tenantId),
           tillId: tillId(target.tillId),
@@ -510,7 +515,7 @@ describe("configuration transfer database path", () => {
         },
       ),
     );
-    const firstLive = await suite.db.execute<{
+    const firstLive = await targetSuite.db.execute<{
       invoice_number: number;
       first_record: boolean;
       previous_hash: string | null;
@@ -610,21 +615,20 @@ it("transfers every modifier type, remaps default choice ids and preserves menu 
   expect(transferred.tables.option_groups).toHaveLength(3);
   expect(transferred.tables.option_group_items).toHaveLength(2);
   const target = await applyVenue(planVenue(venue("B44332211"), ALL_MODULES), {
-    db: suite.db,
+    db: targetSuite.db,
     modules: ALL_MODULES,
     beforeCommit: (tx, result) =>
       importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
   });
-  await withTransaction(suite.db, async (tx) => {
+  await withTransaction(targetSuite.db, async (tx) => {
     await asAppUser(tx);
-    // Source and target venues share this one test database, and listModifiers no longer scopes by
-    // tenant (drop-tenant-id), so it returns both venues' modifiers. The imported set is the three
-    // whose ids the import remapped away from the source's — their presence is the round-trip proof.
-    const sourceIds = new Set(original.definitions.map((definition) => definition.id));
-    const definitions = (await listModifiers(tx, target.tenantId)).filter(
-      (definition) => !sourceIds.has(definition.id),
-    );
+    const definitions = await listModifiers(tx, target.tenantId);
     expect(definitions).toHaveLength(3);
+    expect(
+      definitions.every((definition) =>
+        original.definitions.every((source) => source.id !== definition.id),
+      ),
+    ).toBe(true);
     const options = definitions.find((definition) => definition.type === "options")!;
     if (options.type !== "options") throw new Error("missing options modifier");
     expect(options.defaultChoiceId).toBe(options.choices[0]!.id);

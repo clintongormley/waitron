@@ -42,9 +42,8 @@ export async function aggregateVatByRate(
       sum((b->>'tax')::numeric(12, 2))::numeric(12, 2)::text as tax
     from sales s
     cross join lateral jsonb_array_elements(s.vat_breakdown) as b
-    where s.tenant_id = ${scope.tenantId}
+    where ${scope.dateFilter}
       ${nodeClause}
-      and ${scope.dateFilter}
       and ${activeSalesClause({ tenantId: scope.tenantId })}
     group by (b->>'rate')::numeric(5, 2)::text
   `);

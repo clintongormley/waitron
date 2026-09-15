@@ -63,8 +63,7 @@ export async function computeOverdueOrders(
       // never this query's `.from()` base), so this is immune to CLAUDE.md §3's bare-column trap.
       tableLabel: sql<string | null>`(
         select dt.label from dining_tables dt
-        where dt.tenant_id = ${workingOrders.tenantId}
-          and (dt.tab_id = ${workingOrders.id} or ${workingOrders.deliveryTableId} = dt.id)
+        where (dt.tab_id = ${workingOrders.id} or ${workingOrders.deliveryTableId} = dt.id)
         order by (dt.tab_id = ${workingOrders.id}) desc nulls last, dt.id
         limit 1)`,
     })

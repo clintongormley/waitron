@@ -212,7 +212,7 @@ export async function seedSoldRegistro(
   await db.execute(sql`
     update cadenas
     set secuencia = ${params.secuencia}, ultimo_registro_id = ${registroId}, ultima_huella = ${params.huella}
-    where tenant_id = ${params.tenantId} and node_id = ${params.nodeId}
+    where node_id = ${params.nodeId}
   `);
 }
 

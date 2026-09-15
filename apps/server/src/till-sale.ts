@@ -767,11 +767,12 @@ async function readOutstandingSaleForOrder(
   tenantId: TenantId,
   workingOrderId: string,
 ): Promise<{ saleId: SaleId; amountDue: Decimal } | undefined> {
+  void tenantId;
   const [row] = await tx
     .select({
       id: sales.id,
       total: sales.total,
-      corrections: sql<string>`coalesce((select sum(c.total) from sales c where c.corrects_sale_id = ${sales}.id and c.tenant_id = ${tenantId}), 0)::numeric(12, 2)::text`,
+      corrections: sql<string>`coalesce((select sum(c.total) from sales c where c.corrects_sale_id = ${sales}.id), 0)::numeric(12, 2)::text`,
     })
     .from(sales)
     .where(eq(sales.workingOrderId, workingOrderId));

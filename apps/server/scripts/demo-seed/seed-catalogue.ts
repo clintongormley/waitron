@@ -63,7 +63,7 @@ async function resolveStationIds(
   }
   await tx.execute(sql`
     update kitchen_stations set name = 'Kitchen'
-    where tenant_id = ${tenantId} and id = ${kitchen}`);
+    where id = ${kitchen}`);
   // Seed scripts have no management session, so insert the non-default station directly.
   const { rows: barra } = await tx.execute<{ id: string }>(sql`
     insert into kitchen_stations (tenant_id, location_id, name, display_order, is_default, active)
@@ -119,7 +119,7 @@ export async function seedCatalogues(
 
   const { rows: provisionedMenus } = await tx.execute<{ id: string }>(sql`
     select default_menu_id as id from zone_service_policies
-    where tenant_id = ${tenantId} and location_id = ${locationId} and is_counter_default
+    where location_id = ${locationId} and is_counter_default
       and default_menu_id is not null
     limit 1`);
 
@@ -131,7 +131,7 @@ export async function seedCatalogues(
     if (existingMenuId !== undefined) {
       await tx.execute(sql`
         update catalogues set name = ${data.name[locale]}
-        where tenant_id = ${tenantId} and id = ${existingMenuId}`);
+        where id = ${existingMenuId}`);
     }
     for (const [categoryIndex, cat] of data.categories.entries()) {
       const category = await createCategory(tx, tenantId, { name: cat.name });

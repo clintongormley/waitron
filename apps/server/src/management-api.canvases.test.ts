@@ -49,8 +49,16 @@ function phoneCanvas(title: string): CanvasDef {
   return { ...base, tabs: [{ ...base.tabs[0]!, title }, ...base.tabs.slice(1)] };
 }
 
+/** The suite's one venue. The clone holds one tenant (one tenant per database) and is not reset between
+ *  tests, so both groups share the venue provisioned on first use rather than provisioning another. */
+let provisioned: Promise<{ tenantId: string }> | undefined;
+function setupTenant(): Promise<{ tenantId: string }> {
+  provisioned ??= provisionTenant();
+  return provisioned;
+}
+
 /** Provision a venue as owner and seed the people and sessions this route fixture needs. */
-async function setupTenant(): Promise<{ tenantId: string }> {
+async function provisionTenant(): Promise<{ tenantId: string }> {
   const venue = await applyVenue(
     planVenue(
       {

@@ -777,12 +777,13 @@ export class VerifactuBackend implements FiscalBackend {
    * transaction (unlike `filedReceiptFor` and `checkIntegrity`, which are handed one).
    */
   async pendingCount(tenantId: TenantId, nodeId: NodeId): Promise<number> {
+    void tenantId;
     return withTransaction(this.db, async (tx) => {
       const rows = await tx.execute<{ count: string }>(sql`
         select count(*)::text as count
         from envios e
         join registros_facturacion r on r.id = e.registro_id
-        where r.node_id = ${nodeId} and e.tenant_id = ${tenantId} and e.estado = 'pendiente'
+        where r.node_id = ${nodeId} and e.estado = 'pendiente'
       `);
       return Number(rows.rows[0]!.count);
     });

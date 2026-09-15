@@ -99,7 +99,7 @@ export async function requestSwap(tx: Transaction, input: RequestSwapInput): Pro
 export async function acceptSwap(tx: Transaction, input: AcceptSwapInput): Promise<void> {
   const { rows } = await tx.execute<{ to_person_id: string }>(sql`
     select to_person_id from shift_swaps
-    where tenant_id = ${input.tenantId} and id = ${input.swapId}
+    where id = ${input.swapId}
     limit 1`);
   const swap = rows[0];
   if (swap === undefined) {
@@ -113,7 +113,7 @@ export async function acceptSwap(tx: Transaction, input: AcceptSwapInput): Promi
   }
   const { rows: accepted } = await tx.execute<{ id: string }>(sql`
     update shift_swaps set status = 'accepted'
-    where tenant_id = ${input.tenantId} and id = ${input.swapId} and status = 'requested'
+    where id = ${input.swapId} and status = 'requested'
     returning id`);
   if (accepted.length === 0) {
     throw new AppError("swap.not_acceptable", { tenantId: input.tenantId, swapId: input.swapId });
@@ -150,14 +150,14 @@ export async function decideSwap(tx: Transaction, input: DecideSwapInput): Promi
     set status = ${input.decision},
         decided_by_person_id = ${input.decidedByPersonId},
         decided_at = now()
-    where tenant_id = ${input.tenantId} and id = ${input.swapId} and status = 'accepted'
+    where id = ${input.swapId} and status = 'accepted'
     returning id`);
   if (decided.length > 0) return;
   // No row matched: the swap is absent, or present but not `accepted`. One extra read on this cold
   // path disambiguates which error to raise.
   const { rows } = await tx.execute<{ status: ShiftSwapStatus }>(sql`
     select status from shift_swaps
-    where tenant_id = ${input.tenantId} and id = ${input.swapId}
+    where id = ${input.swapId}
     limit 1`);
   if (rows[0] === undefined) {
     throw new AppError("swap.not_found", { tenantId: input.tenantId, swapId: input.swapId });
@@ -188,6 +188,7 @@ export async function listPendingSwaps(
   tx: Transaction,
   input: { tenantId: string },
 ): Promise<PendingSwapRow[]> {
+  void input;
   const { rows } = await tx.execute<{
     id: string;
     requested_by_person_id: string;
@@ -200,7 +201,7 @@ export async function listPendingSwaps(
     select id, requested_by_person_id, from_shift_id, to_person_id, to_shift_id, status,
       to_char(created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as created_at
     from shift_swaps
-    where tenant_id = ${input.tenantId} and status = 'accepted'
+    where status = 'accepted'
     order by shift_swaps.created_at`);
   return rows.map((r) => ({
     id: r.id,
@@ -220,9 +221,10 @@ async function shiftOwner(
   tenantId: string,
   shiftId: string,
 ): Promise<string | undefined> {
+  void tenantId;
   const { rows } = await tx.execute<{ person_id: string }>(sql`
     select person_id from shifts
-    where tenant_id = ${tenantId} and id = ${shiftId}
+    where id = ${shiftId}
     limit 1`);
   return rows[0]?.person_id;
 }

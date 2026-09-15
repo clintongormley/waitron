@@ -97,6 +97,7 @@ export async function deleteAck(tx: Transaction, registroId: string): Promise<vo
 
 /** Every undelivered ack for the requested tenant, oldest submission first. */
 export async function pendingAcks(db: Database, tenantId: string): Promise<Ack[]> {
+  void tenantId;
   return withTransaction(db, async (tx) => {
     const { rows } = await tx.execute<{
       registro_id: string;
@@ -106,7 +107,7 @@ export async function pendingAcks(db: Database, tenantId: string): Promise<Ack[]
     }>(sql`
       select registro_id, submitted_at, csv, state
       from acks
-      where tenant_id = ${tenantId} and delivered_at is null
+      where delivered_at is null
       order by submitted_at, registro_id
     `);
     return rows.map((r) => ({
@@ -124,10 +125,9 @@ export async function markDelivered(
   tenantId: string,
   recordId: string,
 ): Promise<void> {
+  void tenantId;
   await withTransaction(db, (tx) =>
-    tx.execute(
-      sql`update acks set delivered_at = now() where tenant_id = ${tenantId} and registro_id = ${recordId}`,
-    ),
+    tx.execute(sql`update acks set delivered_at = now() where registro_id = ${recordId}`),
   );
 }
 

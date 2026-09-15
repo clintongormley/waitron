@@ -60,7 +60,7 @@ export async function createAbsence(tx: Transaction, input: CreateAbsenceInput):
   }
   const { rows: conflicts } = await tx.execute<{ one: number }>(sql`
     select 1 as one from absences
-    where tenant_id = ${input.tenantId} and person_id = ${input.personId}
+    where person_id = ${input.personId}
       and starts_on <= ${input.endsOn} and ${input.startsOn} <= ends_on
     limit 1`);
   if (conflicts.length > 0) {
@@ -94,7 +94,7 @@ export async function setAbsenceStatus(
     set status = ${input.status},
         decided_by_person_id = ${input.decidedByPersonId},
         decided_at = now()
-    where tenant_id = ${input.tenantId} and id = ${input.absenceId}
+    where id = ${input.absenceId}
     returning id`);
   if (rows.length === 0) {
     throw new AppError("absence.not_found", {
@@ -126,6 +126,7 @@ export async function listPendingAbsences(
   tx: Transaction,
   input: { tenantId: string },
 ): Promise<PendingAbsenceRow[]> {
+  void input;
   const { rows } = await tx.execute<{
     id: string;
     person_id: string;
@@ -139,7 +140,7 @@ export async function listPendingAbsences(
     select id, person_id, absence_kind, starts_on::text as starts_on, ends_on::text as ends_on, status, note,
       to_char(created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as created_at
     from absences
-    where tenant_id = ${input.tenantId} and status = 'requested'
+    where status = 'requested'
     order by absences.created_at`);
   return rows.map((r) => ({
     id: r.id,

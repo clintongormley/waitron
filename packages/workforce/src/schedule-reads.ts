@@ -91,7 +91,7 @@ export async function listShiftsForPerson(
       to_char(ends_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as ends_at,
       ends_offset_minutes, role, roster_version_id
     from shifts
-    where tenant_id = ${input.tenantId} and person_id = ${input.personId}
+    where person_id = ${input.personId}
       and (starts_at at time zone 'UTC' + starts_offset_minutes * interval '1 minute')::date >= ${input.from}::date
       and (starts_at at time zone 'UTC' + starts_offset_minutes * interval '1 minute')::date < ${input.to}::date
     order by starts_at`);
@@ -133,8 +133,7 @@ export async function listSwapsForPerson(
       to_char(created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as created_at,
       case when requested_by_person_id = ${input.personId} then 'requested_by_me' else 'offered_to_me' end as direction
     from shift_swaps
-    where tenant_id = ${input.tenantId}
-      and (requested_by_person_id = ${input.personId} or to_person_id = ${input.personId})
+    where (requested_by_person_id = ${input.personId} or to_person_id = ${input.personId})
     order by created_at desc`);
   return rows.map((r) => ({
     id: r.id,
@@ -170,7 +169,7 @@ export async function listAbsencesForPerson(
     select id, person_id, absence_kind, starts_on::text as starts_on, ends_on::text as ends_on, status, note,
       to_char(created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as created_at
     from absences
-    where tenant_id = ${input.tenantId} and person_id = ${input.personId}
+    where person_id = ${input.personId}
     order by starts_on desc`);
   return rows.map((r) => ({
     id: r.id,

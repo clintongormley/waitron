@@ -29,7 +29,7 @@ export async function settleSale(tx: Transaction, input: SettleSaleInput): Promi
     .select({
       tillId: sales.tillId,
       total: sales.total,
-      corrections: sql<string>`coalesce((select sum(c.total) from sales c where c.corrects_sale_id = ${sales}.id and c.tenant_id = ${input.tenantId}), 0)::numeric(12, 2)::text`,
+      corrections: sql<string>`coalesce((select sum(c.total) from sales c where c.corrects_sale_id = ${sales}.id), 0)::numeric(12, 2)::text`,
     })
     .from(sales)
     .where(eq(sales.id, input.saleId));

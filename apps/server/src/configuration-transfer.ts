@@ -127,7 +127,7 @@ export async function applyPreparedLocation(
       receipt_print_mode = ${location.receiptPrintMode},
       drawer_open_policy = ${location.drawerOpenPolicy},
       catalogue_id = ${location.catalogueId}
-    where tenant_id = ${target.tenantId} and id = ${target.locationId}
+    where id = ${target.locationId}
   `);
 }
 
@@ -187,13 +187,13 @@ export async function exportConfigurationTables(
   tenantId: string,
   modules: readonly WaitronModule[],
 ): Promise<{ tables: ConfigurationBundle["tables"]; reconnect: string[] }> {
+  void tenantId;
   const tables: ConfigurationBundle["tables"] = {};
   const reconnect: string[] = [];
   for (const declaration of declarations(modules)) {
     const result = await db.execute<{ row: Record<string, unknown> }>(sql`
       select to_jsonb(t) as row
       from ${sql.identifier(declaration.name)} t
-      where t.tenant_id = ${tenantId}
     `);
     if (result.rows.length > MAX_ROWS_PER_TABLE) {
       throw new AppError("setup.request_invalid", { field: `table:${declaration.name}` });
@@ -384,18 +384,18 @@ export async function importConfigurationTables(
   // remapped source default is restored by applyPreparedLocation after the rows are inserted.
   await tx.execute(sql`
     update locations set catalogue_id = null
-    where tenant_id = ${target.tenantId} and id = ${target.locationId}
+    where id = ${target.locationId}
   `);
 
   for (const [declaration] of [...checked].reverse()) {
     if (declaration.name === "persons") {
       await tx.execute(sql`
         delete from ${sql.identifier(declaration.name)}
-        where tenant_id = ${target.tenantId} and role <> 'admin'
+        where role <> 'admin'
       `);
     } else {
       await tx.execute(sql`
-        delete from ${sql.identifier(declaration.name)} where tenant_id = ${target.tenantId}
+        delete from ${sql.identifier(declaration.name)}
       `);
     }
   }

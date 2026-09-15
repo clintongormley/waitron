@@ -30,10 +30,7 @@ export async function seedMedia(
     const { rows } = await tx.execute<{
       name: string;
       customer_name: Record<string, string> | null;
-    }>(
-      sql`select name, customer_name from products
-          where tenant_id = ${tenantId} and id = ${productId}`,
-    );
+    }>(sql`select name, customer_name from products where id = ${productId}`);
     const product = rows[0];
     if (product === undefined)
       throw new Error("demo-seed: image product does not belong to this venue");
@@ -55,8 +52,6 @@ export async function seedMedia(
       { bytes, names, altText: names, labels: [] },
       { maxUploadBytes: 5 * 1024 * 1024 },
     );
-    await tx.execute(
-      sql`update products set image = ${image.filename} where tenant_id = ${tenantId} and id = ${productId}`,
-    );
+    await tx.execute(sql`update products set image = ${image.filename} where id = ${productId}`);
   }
 }

@@ -57,7 +57,7 @@ export async function verifyChain(
   // on an intact chain.
   const { rows } = await tx.execute<RegistroRow>(sql`
     select * from registros_facturacion
-    where tenant_id = ${tenantId} and node_id = ${nodeId}
+    where node_id = ${nodeId}
     order by secuencia desc
     limit 2
   `);

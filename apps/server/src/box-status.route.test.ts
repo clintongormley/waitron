@@ -36,8 +36,16 @@ function nextNif(): string {
   return `${String(72_000_000 + nifCounter).padStart(8, "0")}K`;
 }
 
+/** The suite's one venue. The clone holds one tenant (one tenant per database) and is not reset between
+ *  tests, so every group shares the venue provisioned on first use rather than provisioning another. */
+let provisioned: Promise<{ tenantId: string; nodeId: string; managerId: string }> | undefined;
+function setupTenant(): Promise<{ tenantId: string; nodeId: string; managerId: string }> {
+  provisioned ??= provisionTenant();
+  return provisioned;
+}
+
 /** Provision a venue as owner and seed the people and sessions this route fixture needs. */
-async function setupTenant(): Promise<{ tenantId: string; nodeId: string; managerId: string }> {
+async function provisionTenant(): Promise<{ tenantId: string; nodeId: string; managerId: string }> {
   const venue = await applyVenue(
     planVenue(
       {

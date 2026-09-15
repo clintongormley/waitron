@@ -358,6 +358,7 @@ export class WorkforceBackend {
     locationId: string,
     period: Period,
   ): Promise<PlannedShift[]> {
+    void tenantId;
     const { rows } = await tx.execute<{
       id: string;
       person_id: string;
@@ -373,8 +374,8 @@ export class WorkforceBackend {
         s.ends_offset_minutes
       from shifts s
       join roster_versions rv
-        on rv.id = s.roster_version_id and rv.tenant_id = s.tenant_id and rv.status = 'published'
-      where s.tenant_id = ${tenantId} and s.location_id = ${locationId}
+        on rv.id = s.roster_version_id and rv.status = 'published'
+      where s.location_id = ${locationId}
         and (s.starts_at at time zone 'UTC' + s.starts_offset_minutes * interval '1 minute')::date >= ${period.start}::date
         and (s.starts_at at time zone 'UTC' + s.starts_offset_minutes * interval '1 minute')::date < ${period.end}::date`);
     return rows.map((r) => ({
@@ -542,8 +543,9 @@ export class WorkforceBackend {
    * FK locks), but at the cost of a hashed key space and a lock nobody reading the row can see.
    */
   private async lockPerson(tx: Transaction, tenantId: string, personId: string): Promise<void> {
+    void tenantId;
     await tx.execute(sql`
-      select id from persons where tenant_id = ${tenantId} and id = ${personId} for no key update`);
+      select id from persons where id = ${personId} for no key update`);
   }
 
   /**
@@ -562,7 +564,7 @@ export class WorkforceBackend {
     const period = weekStartOf(input.period);
     const existing = await tx.execute<{ id: string }>(sql`
       select id from roster_versions
-      where tenant_id = ${input.tenantId} and location_id = ${input.locationId}
+      where location_id = ${input.locationId}
         and period_start = ${period} and status = 'draft'
       limit 1`);
     if (existing.rows.length > 0) {
@@ -599,7 +601,7 @@ export class WorkforceBackend {
         to_char(published_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as published_at,
         published_by_person_id
       from roster_versions
-      where tenant_id = ${input.tenantId} and location_id = ${input.locationId}
+      where location_id = ${input.locationId}
         and period_start = ${period} and status in ('draft', 'published')
       order by case when status = 'draft' then 0 else 1 end
       limit 1`);
@@ -622,7 +624,7 @@ export class WorkforceBackend {
         to_char(published_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as published_at,
         published_by_person_id
       from roster_versions
-      where tenant_id = ${input.tenantId} and id = ${input.versionId}
+      where id = ${input.versionId}
       limit 1`);
     const row = rows[0];
     if (row === undefined) {
@@ -640,6 +642,7 @@ export class WorkforceBackend {
     tenantId: string,
     versionId: string,
   ): Promise<ShiftRow[]> {
+    void tenantId;
     const { rows } = await tx.execute<ShiftDbRow>(sql`
       select id, person_id, location_id,
         to_char(starts_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as starts_at,
@@ -647,7 +650,7 @@ export class WorkforceBackend {
         to_char(ends_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as ends_at,
         ends_offset_minutes, role, roster_version_id
       from shifts
-      where tenant_id = ${tenantId} and roster_version_id = ${versionId}
+      where roster_version_id = ${versionId}
       order by starts_at`);
     return rows.map(mapShift);
   }
@@ -697,15 +700,13 @@ export class WorkforceBackend {
         ends_at = ${endsAt},
         ends_offset_minutes = ${input.endsOffsetMinutes ?? shift.endsOffsetMinutes},
         role = ${input.role === undefined ? shift.role : input.role}
-      where tenant_id = ${input.tenantId} and id = ${input.shiftId}`);
+      where id = ${input.shiftId}`);
   }
 
   /** Deletes a shift on a DRAFT version. Same guards as `updateShift`. */
   async removeShift(tx: Transaction, input: { tenantId: string; shiftId: string }): Promise<void> {
     await this.shiftForWrite(tx, input.tenantId, input.shiftId);
-    await tx.execute(
-      sql`delete from shifts where tenant_id = ${input.tenantId} and id = ${input.shiftId}`,
-    );
+    await tx.execute(sql`delete from shifts where id = ${input.shiftId}`);
   }
 
   /** Reads a shift + its version's status, throwing `shift.not_found` (no such shift) or
@@ -723,8 +724,8 @@ export class WorkforceBackend {
         to_char(s.ends_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as ends_at,
         s.ends_offset_minutes, s.role, s.roster_version_id, rv.status as version_status
       from shifts s
-      left join roster_versions rv on rv.id = s.roster_version_id and rv.tenant_id = ${tenantId}
-      where s.tenant_id = ${tenantId} and s.id = ${shiftId}
+      left join roster_versions rv on rv.id = s.roster_version_id
+      where s.id = ${shiftId}
       limit 1`);
     const row = rows[0];
     if (row === undefined) throw new AppError("shift.not_found", { tenantId, shiftId });
@@ -774,7 +775,7 @@ export class WorkforceBackend {
         update roster_versions
         set status = 'published', published_at = now(),
             published_by_person_id = ${input.publishedByPersonId ?? null}
-        where tenant_id = ${input.tenantId} and id = ${input.versionId}`);
+        where id = ${input.versionId}`);
     } catch (error) {
       // The partial-index backstop firing: a concurrent publish of a DIFFERENT draft for this same
       // (location, period) committed after `supersedePriorPublished` took its lock snapshot, so its
@@ -796,8 +797,7 @@ export class WorkforceBackend {
       update shifts s
       set roster_version_id = rv.id
       from roster_versions rv
-      where rv.id = ${input.versionId} and rv.tenant_id = ${input.tenantId}
-        and s.tenant_id = ${input.tenantId}
+      where rv.id = ${input.versionId}
         and s.location_id = rv.location_id
         and s.roster_version_id is null
         and (s.starts_at at time zone 'UTC' + s.starts_offset_minutes * interval '1 minute')::date
@@ -820,6 +820,7 @@ export class WorkforceBackend {
     tenantId: string,
     versionId: string,
   ): Promise<PlannedShift[]> {
+    void tenantId;
     const { rows } = await tx.execute<{
       id: string;
       person_id: string;
@@ -834,7 +835,7 @@ export class WorkforceBackend {
         to_char(ends_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as ends_at,
         ends_offset_minutes
       from shifts
-      where tenant_id = ${tenantId} and roster_version_id = ${versionId}`);
+      where roster_version_id = ${versionId}`);
     return rows.map((r) => ({
       shiftId: r.id,
       personId: r.person_id,
@@ -859,7 +860,7 @@ export class WorkforceBackend {
   ): Promise<string> {
     const { rows } = await tx.execute<{ status: string }>(sql`
       select status from roster_versions
-      where tenant_id = ${tenantId} and id = ${versionId}
+      where id = ${versionId}
       limit 1
       for update`);
     const version = rows[0];
@@ -896,12 +897,12 @@ export class WorkforceBackend {
     tenantId: string,
     versionId: string,
   ): Promise<void> {
+    void tenantId;
     const { rows } = await tx.execute<{ id: string }>(sql`
       select prior.id
       from roster_versions prior
-      join roster_versions target on target.id = ${versionId} and target.tenant_id = ${tenantId}
-      where prior.tenant_id = ${tenantId}
-        and prior.location_id = target.location_id
+      join roster_versions target on target.id = ${versionId}
+      where prior.location_id = target.location_id
         and prior.period_start = target.period_start
         and prior.period_end = target.period_end
         and prior.status = 'published'
@@ -912,8 +913,7 @@ export class WorkforceBackend {
       update roster_versions prior
       set status = 'superseded'
       from roster_versions target
-      where target.id = ${versionId} and target.tenant_id = ${tenantId}
-        and prior.tenant_id = ${tenantId}
+      where target.id = ${versionId}
         and prior.location_id = target.location_id
         and prior.period_start = target.period_start
         and prior.period_end = target.period_end
@@ -929,9 +929,10 @@ export class WorkforceBackend {
     tenantId: string,
     personId: string,
   ): Promise<ShiftState> {
+    void tenantId;
     const { rows } = await tx.execute<{ entry_kind: LiveEntryKind }>(sql`
       select entry_kind from time_entries
-      where tenant_id = ${tenantId} and person_id = ${personId} and entry_kind <> 'correction'
+      where person_id = ${personId} and entry_kind <> 'correction'
       order by event_at desc, recorded_at desc, node_id desc, sequence_no desc
       limit 1`);
     const last = rows[0];
@@ -968,7 +969,7 @@ export class WorkforceBackend {
   ): Promise<{ personId: string; locationId: string }> {
     const { rows } = await tx.execute<{ person_id: string; location_id: string }>(sql`
       select person_id, location_id from time_entries
-      where tenant_id = ${tenantId} and id = ${entryId}
+      where id = ${entryId}
       limit 1`);
     const entry = rows[0];
     if (entry === undefined) {
@@ -1004,7 +1005,7 @@ export class WorkforceBackend {
         to_char(event_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as event_at,
         event_offset_minutes, correction_reason
       from time_entries
-      where tenant_id = ${tenantId} and id = ${correctionId} and entry_kind = 'correction'
+      where id = ${correctionId} and entry_kind = 'correction'
       limit 1`);
     const row = rows[0];
     if (row === undefined) {
@@ -1029,9 +1030,10 @@ export class WorkforceBackend {
     tenantId: string,
     targetEntryId: string,
   ): Promise<boolean> {
+    void tenantId;
     const { rows } = await tx.execute<{ one: number }>(sql`
       select 1 as one from time_entries
-      where tenant_id = ${tenantId} and corrects_entry_id = ${targetEntryId}
+      where corrects_entry_id = ${targetEntryId}
         and entry_kind = 'correction' and correction_status = 'approved'
       limit 1`);
     return rows.length > 0;
@@ -1043,8 +1045,9 @@ export class WorkforceBackend {
     tenantId: string,
     personId: string,
   ): Promise<string | undefined> {
+    void tenantId;
     const { rows } = await tx.execute<{ role: string }>(sql`
-      select role from persons where tenant_id = ${tenantId} and id = ${personId} limit 1`);
+      select role from persons where id = ${personId} limit 1`);
     return rows[0]?.role;
   }
 
@@ -1100,7 +1103,7 @@ export class WorkforceBackend {
   ): Promise<number> {
     const { rows } = await tx.execute<{ contracted: number }>(sql`
       select contracted_minutes_per_week as contracted from employments
-      where tenant_id = ${tenantId} and person_id = ${personId}
+      where person_id = ${personId}
       order by start_date desc
       limit 1`);
     const employment = rows[0];

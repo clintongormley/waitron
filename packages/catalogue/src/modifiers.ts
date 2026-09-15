@@ -93,18 +93,19 @@ export async function getModifier(
 /** Predicate matching a working_order_lines row that still uses this modifier — by saved snapshot or
  * by a chosen choice. Shared by the delete refusal and the dashboard's order count so the two never
  * drift; keep them reading the identical predicate. */
-const openOrderUse = (tenantId: string, modifierId: string) => sql`
-    tenant_id = ${tenantId} and (
+const openOrderUse = (modifierId: string) => sql`
+    (
       modifier_snapshots @> ${JSON.stringify([{ modifierId }])}::jsonb
       or option_group_item_id in (
-        select id from option_group_items where tenant_id = ${tenantId} and group_id = ${modifierId}
+        select id from option_group_items where group_id = ${modifierId}
       )
     )`;
 
 async function assertUnused(tx: Transaction, tenantId: string, modifierId: string): Promise<void> {
+  void tenantId;
   const result = await tx.execute<{ dependency: string }>(sql`
-    select 'product' as dependency from product_option_groups where tenant_id = ${tenantId} and group_id = ${modifierId}
-    union all select 'menu' as dependency from menu_item_option_groups where tenant_id = ${tenantId} and group_id = ${modifierId}
+    select 'product' as dependency from product_option_groups where group_id = ${modifierId}
+    union all select 'menu' as dependency from menu_item_option_groups where group_id = ${modifierId}
     limit 1
   `);
   if (result.rows[0])
@@ -150,9 +151,8 @@ async function writeChoices(
   const retained = new Set(choices.map((choice) => choice.id));
   for (const item of old) {
     if (retained.has(item.id)) continue;
-    const usage =
-      await tx.execute(sql`select 1 from menu_item_options where tenant_id = ${tenantId} and option_id = ${item.id}
-      union all select 1 from working_order_lines where tenant_id = ${tenantId} and (option_group_item_id = ${item.id} or modifier_snapshots @> ${JSON.stringify([{ type: "options", choiceId: item.id }])}::jsonb) limit 1`);
+    const usage = await tx.execute(sql`select 1 from menu_item_options where option_id = ${item.id}
+      union all select 1 from working_order_lines where (option_group_item_id = ${item.id} or modifier_snapshots @> ${JSON.stringify([{ type: "options", choiceId: item.id }])}::jsonb) limit 1`);
     if (usage.rows.length)
       throw new AppError("modifier.in_use", { modifierId, dependency: "choice" });
     await tx.delete(optionGroupItems).where(eq(optionGroupItems.id, item.id));
@@ -225,7 +225,7 @@ export async function deleteModifier(
   // is different: its line still references this modifier — by saved snapshot or chosen item — and
   // deleting would orphan a live, un-settled basket line, so a live reference refuses the delete.
   const open = await tx.execute<{ one: number }>(sql`
-    select 1 as one from working_order_lines where ${openOrderUse(tenantId, modifierId)} limit 1`);
+    select 1 as one from working_order_lines where ${openOrderUse(modifierId)} limit 1`);
   if (open.rows[0]) throw new AppError("modifier.in_use", { modifierId, dependency: "order" });
   await tx.delete(optionGroups).where(eq(optionGroups.id, modifierId));
 }
@@ -265,7 +265,7 @@ export async function modifierDependants(
     .where(eq(menuItemOptionGroups.groupId, modifierId))
     .orderBy(menuItems.id);
   const orders = await tx.execute<{ count: number }>(sql`
-    select count(*)::int as count from working_order_lines where ${openOrderUse(tenantId, modifierId)}`);
+    select count(*)::int as count from working_order_lines where ${openOrderUse(modifierId)}`);
   return {
     products: productRows,
     menus: menuRows,

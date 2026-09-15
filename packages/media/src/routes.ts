@@ -70,9 +70,7 @@ export const MEDIA_ROUTES: ModuleRoutes = {
           managementSessionId: sessionId,
           permission: "image.manage",
         });
-        const member = await tx.execute(
-          sql`select 1 from persons where tenant_id=${tenantId} and id=${auth.authorizedBy}`,
-        );
+        const member = await tx.execute(sql`select 1 from persons where id=${auth.authorizedBy}`);
         if (member.rows.length === 0)
           throw new AppError("authorization.not_permitted", { permission: "image.manage" });
         return fn(tx);

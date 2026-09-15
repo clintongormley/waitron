@@ -272,8 +272,7 @@ async function readOrderHeader(
       orderNumber: workingOrders.orderNumber,
       tableLabel: sql<string | null>`(
         select dt.label from dining_tables dt
-        where dt.tenant_id = working_orders.tenant_id
-          and dt.location_id = ${cfg.locationId}
+        where dt.location_id = ${cfg.locationId}
           and (dt.tab_id = working_orders.id or working_orders.delivery_table_id = dt.id)
         order by (dt.tab_id = working_orders.id) desc nulls last, dt.id
         limit 1)`,

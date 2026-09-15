@@ -108,7 +108,7 @@ export async function applyVenue(
             select ${tenantId}, ${action.displayName}, ${action.firstNames}, ${action.lastNames},
                    ${action.locale}, ${action.pinHash}, ${action.passwordHash}, ${action.email}, 'admin'
             where not exists (
-              select 1 from persons where tenant_id = ${tenantId} and role = 'admin')`);
+              select 1 from persons where role = 'admin')`);
           break;
         case "seed-device-profiles":
           // Non-fiscal. Seed the tenant's starter device profiles under an admin management session —
@@ -139,7 +139,7 @@ export async function applyVenue(
             select id, name, invoice_locales, operation_description, fiscal_territory,
                    address_line1, address_line2, postal_code, city, province, time_zone,
                    day_cutover::text
-            from locations where tenant_id = ${tenantId} order by id`);
+            from locations order by id`);
           if (existing.rows.length > 1) {
             throw new AppError("provisioning.second_venue", {});
           }
@@ -206,7 +206,7 @@ export async function applyVenue(
           if (reusingVenue) {
             const existing = await tx.execute<{ id: string; name: string }>(sql`
               select id, name from tills
-              where tenant_id = ${tenantId} and location_id = ${locationId}
+              where location_id = ${locationId}
               order by id limit 1`);
             if (existing.rows[0] === undefined || existing.rows[0].name !== action.name) {
               throw new AppError("provisioning.second_venue", {});
@@ -230,7 +230,7 @@ export async function applyVenue(
               tax_module: string;
             }>(sql`
               select id, name, filing_module, tax_module from nodes
-              where tenant_id = ${tenantId} and location_id = ${locationId}
+              where location_id = ${locationId}
               order by id limit 1`);
             if (
               existing.rows[0] === undefined ||
@@ -273,7 +273,7 @@ export async function applyVenue(
           if (reusingVenue) {
             const existing = await tx.execute<{ id: string }>(sql`
               select id from invoice_series
-              where tenant_id = ${tenantId} and node_id = ${nodeId}
+              where node_id = ${nodeId}
                 and code = ${action.code} and purpose = ${action.purpose}`);
             if (existing.rows[0] === undefined) {
               throw new AppError("provisioning.second_venue", {});
@@ -342,7 +342,7 @@ async function seedDeviceProfiles(
   // one ran seed-device-profiles before seed-admin — a plan-integrity bug, refused like the ordering
   // guards in the apply loop. Raw SQL, like the other lookups here (no @waitron/identity persons import).
   const admin = await tx.execute<{ id: string }>(
-    sql`select id from persons where tenant_id = ${tenantId} and role = 'admin' limit 1`,
+    sql`select id from persons where role = 'admin' limit 1`,
   );
   const personId = admin.rows[0]?.id;
   if (personId === undefined) {

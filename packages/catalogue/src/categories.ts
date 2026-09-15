@@ -82,6 +82,7 @@ async function validateImage(
   tenantId: string,
   filename: string | null,
 ): Promise<void> {
+  void tenantId;
   if (filename === null) return;
   const media = await tx.execute<{ present: boolean }>(
     sql`select to_regclass('public.media_images') is not null as present`,
@@ -89,7 +90,7 @@ async function validateImage(
   if (!media.rows[0]!.present) throw new AppError("category.image_not_found", {});
   // The media module owns the FK; KEY SHARE holds the reference through a concurrent deletion.
   const image = await tx.execute(
-    sql`select 1 from media_images where tenant_id = ${tenantId} and filename = ${filename} for key share`,
+    sql`select 1 from media_images where filename = ${filename} for key share`,
   );
   if (!image.rows.length) throw new AppError("category.image_not_found", {});
 }
@@ -184,9 +185,7 @@ export async function deleteCategory(tx: Transaction, tenantId: string, id: stri
     .where(eq(categoryDetails.parentId, id));
   // 4. drop preparation routes for this category, if the (optional) venue table exists.
   if (await preparationRoutesPresent(tx))
-    await tx.execute(
-      sql`delete from preparation_routes where tenant_id = ${tenantId} and category_id = ${id}`,
-    );
+    await tx.execute(sql`delete from preparation_routes where category_id = ${id}`);
   // 5. the category row (category_details cascades via its FK)
   await tx.delete(categories).where(eq(categories.id, id));
 }
@@ -227,9 +226,9 @@ export async function categoryDependants(
              case when pr.no_preparation then null else ks.name end as station,
              fz.name as zone
       from preparation_routes pr
-      left join kitchen_stations ks on ks.tenant_id = pr.tenant_id and ks.id = pr.station_id
-      left join floor_zones fz on fz.tenant_id = pr.tenant_id and fz.id = pr.zone_id
-      where pr.tenant_id = ${tenantId} and pr.category_id = ${id}
+      left join kitchen_stations ks on ks.id = pr.station_id
+      left join floor_zones fz on fz.id = pr.zone_id
+      where pr.category_id = ${id}
       order by pr.id`,
     );
     routes.push(...routeRows.rows);

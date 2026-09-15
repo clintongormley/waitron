@@ -150,23 +150,17 @@ export async function runBreakGlassReset(deps: {
           return 1;
         }
 
+        await tx.execute(sql`delete from webauthn_credentials where person_id=${targetId}`);
+        await tx.execute(sql`delete from recovery_codes where person_id=${targetId}`);
+        await tx.execute(sql`delete from totp_enrollments where person_id=${targetId}`);
         await tx.execute(
-          sql`delete from webauthn_credentials where tenant_id=${tenantId} and person_id=${targetId}`,
+          sql`update management_account_actions set used_at=now() where person_id=${targetId} and used_at is null`,
         );
         await tx.execute(
-          sql`delete from recovery_codes where tenant_id=${tenantId} and person_id=${targetId}`,
+          sql`update management_sessions set ended_at=now() where person_id=${targetId} and ended_at is null`,
         );
         await tx.execute(
-          sql`delete from totp_enrollments where tenant_id=${tenantId} and person_id=${targetId}`,
-        );
-        await tx.execute(
-          sql`update management_account_actions set used_at=now() where tenant_id=${tenantId} and person_id=${targetId} and used_at is null`,
-        );
-        await tx.execute(
-          sql`update management_sessions set ended_at=now() where tenant_id=${tenantId} and person_id=${targetId} and ended_at is null`,
-        );
-        await tx.execute(
-          sql`update sessions set ended_at=now() where tenant_id=${tenantId} and person_id=${targetId} and ended_at is null`,
+          sql`update sessions set ended_at=now() where person_id=${targetId} and ended_at is null`,
         );
 
         const resets = resetPin ? "password, pin" : "password";

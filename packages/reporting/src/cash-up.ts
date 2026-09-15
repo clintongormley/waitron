@@ -31,10 +31,9 @@ export async function computeCashUp(tx: Transaction, input: DailyCloseInput): Pr
       sum(t.amount)::numeric(12, 2)::text as amount,
       sum(t.tip_amount)::numeric(12, 2)::text as tip
     from tenders t
-    join sales s on s.id = t.sale_id and s.tenant_id = ${input.tenantId}
-    where t.tenant_id = ${input.tenantId}
+    join sales s on s.id = t.sale_id
+    where ${businessDayClause(sql`t.settled_at`, input)}
       ${nodeScopeClause(input.nodeId)}
-      and ${businessDayClause(sql`t.settled_at`, input)}
     group by s.till_id, t.method
     -- ::text so byMethod is alphabetical (card, cash, other, ...). Ordering the tender_method ENUM
     -- directly sorts by its DECLARED order (cash, card, voucher, ...), which is arbitrary here.

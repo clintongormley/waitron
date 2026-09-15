@@ -20,19 +20,17 @@ export async function computeCloseCounts(
       count(*) filter (where s.corrects_sale_id is null)::int as sales,
       count(*) filter (where s.corrects_sale_id is not null)::int as corrections
     from sales s
-    where s.tenant_id = ${input.tenantId}
+    where ${businessDayClause(sql`s.issued_at`, input)}
       ${nodeScopeClause(input.nodeId)}
-      and ${businessDayClause(sql`s.issued_at`, input)}
       and ${activeSalesClause(input)}
   `);
 
   const voided = await tx.execute<{ voids: number }>(sql`
     select count(*)::int as voids
     from sale_voids sv
-    join sales s on s.id = sv.sale_id and s.tenant_id = ${input.tenantId}
-    where sv.tenant_id = ${input.tenantId}
+    join sales s on s.id = sv.sale_id
+    where ${businessDayClause(sql`sv.voided_at`, input)}
       ${nodeScopeClause(input.nodeId)}
-      and ${businessDayClause(sql`sv.voided_at`, input)}
   `);
 
   return {

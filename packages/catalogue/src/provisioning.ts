@@ -42,7 +42,7 @@ export const CATALOGUE_PROVISIONING: ModuleProvisioning = {
       }>(sql`
         select l.catalogue_id, l.province, t.country from locations l
         join tenants t on t.id = l.tenant_id
-        where l.tenant_id = ${node.tenantId} and l.id = ${node.locationId}`);
+        where l.id = ${node.locationId}`);
       const country = location.rows[0]?.country;
       // Hard-coded for Spain, and wrong for a Spanish venue outside Catalonia: the deli writes its
       // menu in Spanish, Catalan and English, and nothing in setup asks which languages a venue
@@ -97,7 +97,7 @@ export const CATALOGUE_PROVISIONING: ModuleProvisioning = {
         catalogueId = created.rows[0]!.id;
         await tx.execute(sql`
           update locations set catalogue_id = ${catalogueId}
-          where tenant_id = ${node.tenantId} and id = ${node.locationId}`);
+          where id = ${node.locationId}`);
       }
       await tx.execute(sql`
         insert into location_catalogues (tenant_id, location_id, catalogue_id)

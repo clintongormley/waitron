@@ -4279,8 +4279,7 @@ export async function listExpoQueue(
       // a table it delivers to — and PostgreSQL could then return either label across calls).
       tableLabel: sql<string | null>`(
         select dt.label from dining_tables dt
-        where dt.tenant_id = ${workingOrders.tenantId}
-          and dt.location_id = ${loc}
+        where dt.location_id = ${loc}
           and (dt.tab_id = ${workingOrders.id} or ${workingOrders.deliveryTableId} = dt.id)
         order by (dt.tab_id = ${workingOrders.id}) desc nulls last, dt.id
         limit 1)`,
@@ -4310,8 +4309,7 @@ export async function listExpoQueue(
         // `away` roll-up can be formed; the screen hides fully-away courses.
         sql`exists (
           select 1 from ${ticketItems} tix
-          where tix.tenant_id = ${workingOrders.tenantId}
-            and tix.working_order_id = ${workingOrders.id}
+          where tix.working_order_id = ${workingOrders.id}
             and tix.away_at is null)`,
       ),
     )
@@ -4580,29 +4578,29 @@ export async function listTablesWithState(
              ) filter (where wol.served_at is null and ti.id is not null) as unserved_lines
       from working_orders wo
       left join working_order_lines wol
-        on wol.working_order_id = wo.id and wol.tenant_id = wo.tenant_id
+        on wol.working_order_id = wo.id
       left join ticket_items ti
-        on ti.working_order_line_id = wol.id and ti.tenant_id = wol.tenant_id
+        on ti.working_order_line_id = wol.id
       -- The unserved line's OWN station thresholds, for the json_agg above. LEFT (not INNER): a row
       -- with no ticket item (ti null) must survive so line_count/tab_total/the other aggregates above
       -- are unaffected by this join — such a row is excluded from unserved_lines by the FILTER instead.
       left join kitchen_stations ks
-        on ks.tenant_id = ti.tenant_id and ks.id = ti.station_id
-      where wo.tenant_id = dt.tenant_id and wo.id = dt.tab_id and wo.status = 'open'
+        on ks.id = ti.station_id
+      where wo.id = dt.tab_id and wo.status = 'open'
       group by wo.id
     ) tab on true
     left join lateral (
       select count(*)::int as pending
       from working_orders d
-      where d.tenant_id = dt.tenant_id and d.delivery_table_id = dt.id
+      where d.delivery_table_id = dt.id
         and d.status <> 'abandoned' and d.collected_at is null
         and exists (
           select 1 from ticket_items ti
-          where ti.tenant_id = d.tenant_id and ti.working_order_id = d.id
+          where ti.working_order_id = d.id
         )
     ) del on true
     left join table_service_statuses tss
-      on tss.tenant_id = dt.tenant_id and tss.id = dt.status_id
+      on tss.id = dt.status_id
     where dt.location_id = ${loc} and dt.active = true
     order by dt.label
   `);

@@ -81,10 +81,9 @@ export async function recoverProvisionedVenue(
     tx.execute<{ locationId: string; tillId: string; nodeId: string }>(sql`
       select l.id as "locationId", t.id as "tillId", n.id as "nodeId"
       from locations l
-      join tills t on t.tenant_id = l.tenant_id and t.location_id = l.id
-      join nodes n on n.tenant_id = l.tenant_id and n.location_id = l.id
-      where l.tenant_id = ${tenantId}
-        and l.name = ${req.venue.location.name}
+      join tills t on t.location_id = l.id
+      join nodes n on n.location_id = l.id
+      where l.name = ${req.venue.location.name}
         and l.fiscal_territory = ${req.venue.location.fiscalTerritory}
         and t.name = ${req.venue.tillName}
         and n.name = ${req.venue.location.name}`),
@@ -97,7 +96,7 @@ export async function recoverProvisionedVenue(
     tx.execute<{ id: string; purpose: string; code: string }>(sql`
       select id, purpose, code
       from invoice_series
-      where tenant_id = ${tenantId} and node_id = ${row.nodeId}`),
+      where node_id = ${row.nodeId}`),
   );
   const standard = series.rows.find(
     (item) => item.purpose === "standard" && item.code === req.venue.seriesCode,

@@ -56,10 +56,9 @@ export async function computeTopSellers(
       sum(sl.quantity)::numeric(12, 3)::text as quantity,
       sum(sl.line_total)::numeric(12, 2)::text as total
     from sale_lines sl
-    join sales s on s.tenant_id = sl.tenant_id and s.id = sl.sale_id
-    where s.tenant_id = ${input.tenantId}
+    join sales s on s.id = sl.sale_id
+    where ${businessDayRangeClause(sql`s.issued_at`, input)}
       ${nodeClause}
-      and ${businessDayRangeClause(sql`s.issued_at`, input)}
       and ${activeSalesClause({ tenantId: input.tenantId })}
     group by sl.name, sl.variant_name
     order by sum(sl.quantity) desc, sl.name asc, sl.variant_name asc

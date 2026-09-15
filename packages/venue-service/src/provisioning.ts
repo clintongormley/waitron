@@ -11,21 +11,18 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
         select ${node.tenantId}, ${node.locationId}, 'Venue', 'Venue', 'prepay', true
         where not exists (
           select 1 from departments
-          where tenant_id = ${node.tenantId}
-            and location_id = ${node.locationId}
+          where location_id = ${node.locationId}
             and is_default)`);
       const department = await tx.execute<{ id: string }>(sql`
         select id from departments
-        where tenant_id = ${node.tenantId}
-          and location_id = ${node.locationId}
+        where location_id = ${node.locationId}
           and is_default
         limit 1`);
       const departmentId = department.rows[0]!.id;
 
       const existing = await tx.execute<{ zone_id: string }>(sql`
         select zone_id from zone_service_policies
-        where tenant_id = ${node.tenantId}
-          and location_id = ${node.locationId}
+        where location_id = ${node.locationId}
           and is_counter_default
         limit 1`);
       if (existing.rows.length === 0) {
@@ -45,13 +42,12 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
       }
       const policy = await tx.execute<{ zone_id: string }>(sql`
         select zone_id from zone_service_policies
-        where tenant_id = ${node.tenantId}
-          and location_id = ${node.locationId}
+        where location_id = ${node.locationId}
           and is_counter_default
         limit 1`);
       const menu = await tx.execute<{ catalogue_id: string | null }>(sql`
         select catalogue_id from locations
-        where tenant_id = ${node.tenantId} and id = ${node.locationId}`);
+        where id = ${node.locationId}`);
       const zoneId = policy.rows[0]!.zone_id;
       const menuId = menu.rows[0]!.catalogue_id;
       if (menuId !== null) {
@@ -61,7 +57,7 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
           on conflict (tenant_id, zone_id, menu_id) do nothing`);
         await tx.execute(sql`
           update zone_service_policies set default_menu_id = ${menuId}
-          where tenant_id = ${node.tenantId} and zone_id = ${zoneId}
+          where zone_id = ${zoneId}
             and default_menu_id is null`);
       }
       return "default department and counter zone ready";
