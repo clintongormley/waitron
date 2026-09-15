@@ -140,8 +140,7 @@ export async function recordCorrection(
 
   // Step 2. The corrective series, and the purpose guard that IS the §5 separation. A correction
   // must draw from a `purpose='rectificative'` series; an ordinary sale must not (the mirror guard
-  // lives in `./record-sale.ts`). The explicit tenant predicate mirrors `recordSale` and is
-  // applied to the series lookup.
+  // lives in `./record-sale.ts`). The series lookup is by id alone, as in `recordSale`.
   const [series] = await tx
     .select({
       code: invoiceSeries.code,
@@ -298,7 +297,7 @@ export async function recordCorrection(
   if (location === undefined) {
     // Structurally unreachable given the schema: `tills.location_id` is a NOT NULL foreign key, so
     // a till that exists joins to exactly one location. Reaching here means the till does not exist
-    // or the tenant predicate excluded it — a caller programming error, not a fiscal condition.
+    // — a caller programming error, not a fiscal condition.
     throw new Error(`recordCorrection: no location found for till ${input.tillId}`);
   }
   /* v8 ignore stop */

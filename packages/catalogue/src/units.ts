@@ -273,7 +273,7 @@ export async function clearProductUnit(
 }
 
 /** The products that assign this unit, each with its availability, ordered stably by product id.
- * Tenant-scoped on both tables (one tenant per database is not the query's isolation boundary). */
+ * With one tenant per database every row is this tenant's. */
 export async function productsUsingUnit(
   tx: Transaction,
   tenantId: string,

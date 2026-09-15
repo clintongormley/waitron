@@ -163,7 +163,7 @@ export async function updateCategory(
 }
 export async function deleteCategory(tx: Transaction, tenantId: string, id: string): Promise<void> {
   await lockCategories(tx, tenantId);
-  const category = await readCategory(tx, tenantId, id); // 404s a foreign/absent id, tenant-scoped
+  const category = await readCategory(tx, tenantId, id); // 404s an absent id
   // Lock the identity: route inserts hold its FK's KEY SHARE lock.
   await tx
     .select({ id: categories.id })
@@ -202,7 +202,7 @@ export async function categoryDependants(
   tenantId: string,
   id: string,
 ): Promise<CategoryDependants> {
-  const category = await readCategory(tx, tenantId, id); // 404s a foreign/absent id, tenant-scoped
+  const category = await readCategory(tx, tenantId, id); // 404s an absent id
   const productRows = await tx
     .select({ id: products.id, name: products.name, primary: products.categoryId })
     .from(products)
@@ -315,13 +315,13 @@ export async function addProductsToCategory(
   productIds: string[],
 ): Promise<void> {
   await lockCategories(tx, tenantId);
-  await readCategory(tx, tenantId, categoryId); // 404s a foreign/absent category, tenant-scoped
+  await readCategory(tx, tenantId, categoryId); // 404s an absent category
   // A coerced non-array, or a malformed id reaching a uuid column, would otherwise surface as a
   // TypeError or a 22P02 — neither of which a route can serve as anything but a 500.
   if (!Array.isArray(productIds) || productIds.some((id) => !isUuid(id)))
     throw new AppError("category.membership_invalid", {});
   if (productIds.length === 0) return;
-  // Resolve the whole selection in one tenant-scoped read, so an unknown, foreign or repeated id is
+  // Resolve the whole selection in one read, so an unknown or repeated id is
   // refused before anything is written rather than part-way through a loop: a repeat leaves the
   // count short exactly as an absent id does.
   const found = await tx

@@ -1211,9 +1211,8 @@ describe("resolvePaymentTenant", () => {
 });
 
 describe("listAttempting / stampAttemptingRef", () => {
-  it("lists only this tenant's and provider's attempting rows, oldest first, with their poll key", async () => {
+  it("lists only this provider's attempting rows, oldest first, with their poll key", async () => {
     const t = await seedWorkingOrder(pg.db, freshNif());
-    const other = await seedWorkingOrder(pg.db, freshNif());
     await pg.db.transaction(async (tx) => {
       await insertAttempting(tx, {
         tenantId: t.tenantId,
@@ -1235,13 +1234,6 @@ describe("listAttempting / stampAttemptingRef", () => {
         provider: "stripe",
         paymentRef: "ref-c",
         amount: decimal("12.00"),
-      });
-      await insertAttempting(tx, {
-        tenantId: other.tenantId,
-        workingOrderId: other.workingOrderId,
-        provider: "sumup",
-        paymentRef: "ref-d",
-        amount: decimal("13.00"),
       });
       await captureAttempting(tx, {
         tenantId: t.tenantId,

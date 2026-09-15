@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, createPgliteDb, withTransaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { AppError, tenantId as brandTenantId } from "@waitron/shared";
@@ -13,6 +13,7 @@ import "@waitron/payments";
 import { SCHEDULER_MIGRATIONS } from "./migrations.js";
 import { DEFAULTS, dayPeriod } from "./derive.js";
 import { claimGap, readSnapshot, reclaimStale } from "./store.js";
+import * as store from "./store.js";
 import { runDue, type SchedulerDeps } from "./run.js";
 import { FakeDuty, throwingDuty } from "./testing/fake-duty.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -31,6 +32,25 @@ const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS, SCHEDULER_MIGRATIONS] 
 beforeEach(async () => {
   tenantId = await seedTenant(suite.db);
 });
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+// Force ONE duty's snapshot read to throw, leaving every other duty's read untouched. This is the
+// single-tenant way to drive a (tenant, duty) pair into `TickResult.skipped`: a skip is any pair
+// whose processing throws in runDue's outer try, and the snapshot read is the earliest such point
+// — precisely the infrastructure read failure that `skipped` documents. It replaces the former
+// phantom-tenant device (a second, non-existent tenant whose gap claim hit the tenants FK), which
+// stopped producing a skip once reads were no longer tenant-scoped: the phantom pair now reads the
+// real tenant's rows and, finding its period already claimed, derives nothing to claim and throws
+// nothing.
+function failSnapshotFor(dutyName: string): void {
+  const real = store.readSnapshot;
+  vi.spyOn(store, "readSnapshot").mockImplementation((tx, params) =>
+    params.duty === dutyName ? Promise.reject(new Error("snapshot read failed")) : real(tx, params),
+  );
+}
 
 function deps(
   duties: SchedulerDeps["duties"],
@@ -209,15 +229,20 @@ describe("runDue", () => {
   // overwrote `nextDueAt` unconditionally, which was safe only because the value written was
   // `now` — always earlier than any real future answer. A value in the FUTURE can mask a
   // successful pair's genuinely earlier one, so the skip time is folded as a MINIMUM.
+  //
+  // One tenant, two duties: one runs and fails (writing a backoff), the other's snapshot read is
+  // forced to throw so its pair lands in `skipped`. See `failSnapshotFor` for why this replaces
+  // the former two-tenant phantom device.
   it("prefers a successful pair's earlier backoff over the skip-retry interval", async () => {
     // 1s, so the backoff this failing duty writes lands well inside the 5-minute skip interval.
     // The DEFAULT backoff (15 minutes) is longer than the skip interval, so this test cannot be
     // written without the override — and without it the assertion would pass for the wrong reason.
-    const failing = throwingDuty("test.duty", new Error("boom"));
-    const missing = brandTenantId(randomUUID());
+    const failing = throwingDuty("duty.fail", new Error("boom"));
+    const skipper = new FakeDuty("duty.skip");
+    failSnapshotFor("duty.skip");
     const result = await runDue(
-      deps([failing], { backoffBaseMs: 1_000 }),
-      [tenantId, missing],
+      deps([failing, skipper], { backoffBaseMs: 1_000 }),
+      [tenantId],
       NOW,
     );
 
@@ -230,9 +255,10 @@ describe("runDue", () => {
     // The default 15-minute backoff is LATER than the 5-minute skip interval, so the skip wins.
     // Same shape as the test above with one knob changed — that is the point: the fold is a min,
     // not a preference for either side.
-    const failing = throwingDuty("test.duty", new Error("boom"));
-    const missing = brandTenantId(randomUUID());
-    const result = await runDue(deps([failing]), [tenantId, missing], NOW);
+    const failing = throwingDuty("duty.fail", new Error("boom"));
+    const skipper = new FakeDuty("duty.skip");
+    failSnapshotFor("duty.skip");
+    const result = await runDue(deps([failing, skipper]), [tenantId], NOW);
 
     expect(result.skipped).toHaveLength(1);
     expect(result.nextDueAt).toEqual(AFTER_SKIP_RETRY);
@@ -242,13 +268,14 @@ describe("runDue", () => {
   // draining the backlog fast is the intent — a skip present alongside it must not slow that down.
   it("still reports `now` when work was deferred, even with a skip present", async () => {
     const duty = new FakeDuty();
-    const missing = brandTenantId(randomUUID());
+    const skipper = new FakeDuty("duty.skip");
     // A duty that has never run has only ONE day due — the most recent complete period, per
     // "runs the most recent complete period for a duty that has never run" — so `maxPeriodsPerTick:
     // 1` alone could not defer anything. Sweeping once at 2026-07-23 records 2026-07-22 as the
     // floor, so at NOW there are two gaps (07-23, 07-24) for the cap to actually bite on.
     await runDue(deps([duty]), [tenantId], new Date("2026-07-23T04:00:00Z"));
-    const result = await runDue(deps([duty], { maxPeriodsPerTick: 1 }), [tenantId, missing], NOW);
+    failSnapshotFor("duty.skip");
+    const result = await runDue(deps([duty, skipper], { maxPeriodsPerTick: 1 }), [tenantId], NOW);
 
     expect(result.deferred).toBeGreaterThan(0);
     expect(result.skipped).toHaveLength(1);
@@ -266,28 +293,14 @@ describe("runDue", () => {
     expect(duty.calls).toEqual([]);
   });
 
-  it("isolates one tenant's failure from another's", async () => {
-    const other = await seedTenant(suite.db);
-    const duty = new FakeDuty("test.duty", (call) =>
-      call.tenantId === tenantId
-        ? Promise.reject(new Error("boom"))
-        : Promise.resolve({ summary: { ok: true } }),
-    );
-    const result = await runDue(deps([duty]), [tenantId, other], NOW);
-
-    expect(result.ran).toHaveLength(2);
-    expect(result.ran.map((r) => r.outcome).sort()).toEqual(["failed", "succeeded"]);
-  });
-
-  it("runs every duty for every tenant", async () => {
+  it("runs every duty for the tenant", async () => {
     const one = new FakeDuty("duty.one");
     const two = new FakeDuty("duty.two");
-    const other = await seedTenant(suite.db);
-    const result = await runDue(deps([one, two]), [tenantId, other], NOW);
+    const result = await runDue(deps([one, two]), [tenantId], NOW);
 
-    expect(result.ran).toHaveLength(4);
-    expect(one.calls).toHaveLength(2);
-    expect(two.calls).toHaveLength(2);
+    expect(result.ran).toHaveLength(2);
+    expect(one.calls).toHaveLength(1);
+    expect(two.calls).toHaveLength(1);
   });
 
   // Pins the interface-change resolution for Task 5: `completeRun` now reports (via its boolean

@@ -4,7 +4,7 @@ import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId, tenantId as brandTenantId } from "@waitron/shared";
 import { sql } from "drizzle-orm";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { insertTimeEntry, seedLocation, seedPerson } from "../test/fixtures.js";
 
 // REAL Postgres, not PGlite: the append-only floor lives in the app role's PRIVILEGE set, and
@@ -17,7 +17,14 @@ const suite = useTemplateDb({ template: "core_identity_workforce" });
 
 let ctx: { tenantId: string; nodeId: string; personId: string; locationId: string };
 
-beforeAll(async () => {
+// Reseed PER TEST, not once: `useTemplateDb` defaults `resetPerTest: true`, so the shared reset
+// TRUNCATEs every data table (cascade) after each `it`, wiping the tenant/node/person these rows
+// reference. A one-shot `beforeAll` fixture would leave `ctx` pointing at rows that no longer exist,
+// so the second test's `insertTimeEntry` would fail the composite FK (23503) before ever reaching
+// the privilege/trigger floor it asserts. Reseeding after each reset keeps every test against a
+// database holding exactly its own tenant's row. Each `seedTenant` mints a fresh NIF, so the
+// reseeds never collide on `tenants_country_tax_id_key`.
+beforeEach(async () => {
   const tenantId = await seedTenant(suite.admin);
   const locationId = await seedLocation(suite.admin, tenantId);
   const nodeId = await seedNode(suite.admin, brandTenantId(tenantId), brandLocationId(locationId));

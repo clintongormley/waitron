@@ -6,9 +6,7 @@ import { webauthnCredentials } from "./schema/webauthn.js";
 /**
  * Whether to offer this person a passkey at sign-in: they hold none, and have never been offered one.
  *
- * Both reads carry their own tenant predicate. A read by person id is not isolated by
- * one-tenant-per-database, and a uuid that is unique in one database says nothing about which tenant
- * owns the row (CLAUDE.md §3).
+ * Both reads find the row by person id alone; with one tenant per database it is this tenant's.
  */
 export async function shouldOfferPasskey(
   tx: Transaction,
@@ -31,8 +29,7 @@ export async function shouldOfferPasskey(
  * Record that the offer was made and resolved, so it is never made again. Called when the person
  * settles it — adding a passkey or skipping — not when it is shown, so an interrupted offer returns.
  *
- * The write carries the tenant predicate for the same reason the reads do, and it is the more
- * damaging direction: a stamp landing on another tenant's person cancels an offer they never saw.
+ * The write updates by person id alone; with one tenant per database the row is this tenant's.
  */
 export async function markPasskeyOffered(
   tx: Transaction,

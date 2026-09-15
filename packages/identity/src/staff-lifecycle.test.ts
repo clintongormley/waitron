@@ -3,7 +3,7 @@ import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { IDENTITY_MIGRATIONS } from "./migrations.js";
 import {
   clearPersonPin,
@@ -19,12 +19,16 @@ import { loginManager } from "./manager-login.js";
 import { codeOf, openManagementSession, seedPerson, seedTill } from "../test/fixtures.js";
 
 let tenantId: string;
+// Reset per test (the default) and re-seed the one tenant in beforeEach. This suite used to keep the
+// data across tests (resetPerTest:false) with the tenant seeded once — but the last-admin guard now
+// counts admins WITHOUT a tenant filter (one tenant per database), so admins created by earlier tests
+// in the shared database would be counted too and the "only active admin" test could never see a
+// single admin. A per-test reset keeps each test's tenant the only one in the database.
 const suite = usePgliteDb({
-  resetPerTest: false,
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
-  setup: async (db) => {
-    tenantId = await seedTenant(db);
-  },
+});
+beforeEach(async () => {
+  tenantId = await seedTenant(suite.db);
 });
 
 function run<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {

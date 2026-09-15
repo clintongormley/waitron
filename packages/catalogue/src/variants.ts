@@ -70,7 +70,7 @@ export async function listProductVariants(
   return (await listProductVariantsForProducts(tx, tenantId, [productId])).get(productId) ?? [];
 }
 
-/** Read variants for several products in one tenant-scoped query. */
+/** Read variants for several products in one query. */
 export async function listProductVariantsForProducts(
   tx: Transaction,
   tenantId: TenantId,

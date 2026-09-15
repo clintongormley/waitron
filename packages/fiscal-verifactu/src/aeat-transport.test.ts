@@ -254,9 +254,13 @@ describe("the resolved client over a real client-certificate handshake", () => {
 });
 
 describe("aeatClientResolver lifetime", () => {
-  it("closes one transport per tenant it built", async () => {
-    const tenantA = await provision("sello");
-    const tenantB = await provision("representante");
+  // One tenant per database: `resolve` appends a transport to the close list on EVERY call and
+  // dedups on nothing, so the count of transports to release tracks resolve CALLS, not tenants.
+  // Two transports are built by resolving this node's single tenant twice with its real vaulted
+  // credential — a second tenant's sealed row in the same database would be returned by the
+  // now-unscoped credential read and fail its per-tenant AAD check on decrypt.
+  it("closes one transport per client it resolved", async () => {
+    const tenant = await provision("sello");
     const closed: string[] = [];
     const resolver = aeatClientResolver({
       db: suite.db,
@@ -271,8 +275,8 @@ describe("aeatClientResolver lifetime", () => {
       }),
     });
 
-    await resolver.resolve(tenantA);
-    await resolver.resolve(tenantB);
+    await resolver.resolve(tenant);
+    await resolver.resolve(tenant);
     await resolver.closeAll();
 
     expect(closed).toHaveLength(2);
@@ -283,8 +287,9 @@ describe("aeatClientResolver lifetime", () => {
   // finding it was cleaning up after. Every transport is still attempted, and the failure is
   // logged rather than silently dropped.
   it("does not throw when a transport's close fails, and still closes the rest", async () => {
-    const tenantA = await provision("sello");
-    const tenantB = await provision("representante");
+    // One tenant per database, two transports built by resolving it twice (see the count test
+    // above for why a second tenant cannot share this database now).
+    const tenant = await provision("sello");
     const closed: string[] = [];
     const logged: Array<[string, string, Record<string, unknown> | undefined]> = [];
     let n = 0;
@@ -306,19 +311,20 @@ describe("aeatClientResolver lifetime", () => {
       (level, event, fields) => logged.push([level, event, fields]),
     );
 
-    await resolver.resolve(tenantA);
-    await resolver.resolve(tenantB);
+    await resolver.resolve(tenant);
+    await resolver.resolve(tenant);
 
     await expect(resolver.closeAll()).resolves.toBeUndefined();
     expect(closed).toEqual(["ok"]);
     // The one call attributable to the failing transport, not the one that closed cleanly —
-    // carrying WHICH tenant (tenantA, resolved first, so its close() is the one `n === 1` catches)
-    // and a message that survives `codeOf`'s "unknown" flattening of a plain socket-layer `Error`.
+    // carrying the tenant recorded on that transport's `open` entry (the one resolved first, whose
+    // close() is the one `n === 1` catches) and a message that survives `codeOf`'s "unknown"
+    // flattening of a plain socket-layer `Error`.
     expect(logged).toEqual([
       [
         "warn",
         "transport.close_failed",
-        { tenantId: tenantA, errorCode: "unknown", message: "socket already gone" },
+        { tenantId: tenant, errorCode: "unknown", message: "socket already gone" },
       ],
     ]);
   });
@@ -364,8 +370,9 @@ describe("aeatClientResolver lifetime", () => {
   // one even though `open.splice(0)` had already emptied the list. `Promise.resolve().then(...)`
   // wraps the call so a throw becomes a rejection like any other, caught by the same `.catch`.
   it("does not throw when a transport's close throws SYNCHRONOUSLY, and still closes the one after it", async () => {
-    const tenantA = await provision("sello");
-    const tenantB = await provision("representante");
+    // One tenant per database, two transports built by resolving it twice (see the count test
+    // above for why a second tenant cannot share this database now).
+    const tenant = await provision("sello");
     const closed: string[] = [];
     const logged: Array<[string, string, Record<string, unknown> | undefined]> = [];
     let n = 0;
@@ -390,8 +397,8 @@ describe("aeatClientResolver lifetime", () => {
       (level, event, fields) => logged.push([level, event, fields]),
     );
 
-    await resolver.resolve(tenantA);
-    await resolver.resolve(tenantB);
+    await resolver.resolve(tenant);
+    await resolver.resolve(tenant);
 
     await expect(resolver.closeAll()).resolves.toBeUndefined();
     // The transport queued AFTER the one whose close() threw synchronously still closed — proof
@@ -401,7 +408,7 @@ describe("aeatClientResolver lifetime", () => {
       [
         "warn",
         "transport.close_failed",
-        { tenantId: tenantA, errorCode: "unknown", message: "socket exploded synchronously" },
+        { tenantId: tenant, errorCode: "unknown", message: "socket exploded synchronously" },
       ],
     ]);
   });
@@ -410,10 +417,11 @@ describe("aeatClientResolver lifetime", () => {
   // `loop.ts`'s and `pass.ts`'s equivalents are not: those sit in ordinary catch blocks, where a
   // throwing `Logger` surfaces as itself. This one runs inside `boot.ts`'s `finally`, where a throw
   // does not surface at all — it REPLACES the sweep's own result or error. Without the inner guard
-  // this test throws "logger is down" out of `closeAll`, and `tenantB`'s transport is never closed.
+  // this test throws "logger is down" out of `closeAll`, and the second transport is never closed.
   it("does not throw when the LOGGER fails while reporting a close failure", async () => {
-    const tenantA = await provision("sello");
-    const tenantB = await provision("representante");
+    // One tenant per database, two transports built by resolving it twice (see the count test
+    // above for why a second tenant cannot share this database now).
+    const tenant = await provision("sello");
     const closed: string[] = [];
     let n = 0;
     const resolver = aeatClientResolver(
@@ -436,8 +444,8 @@ describe("aeatClientResolver lifetime", () => {
       },
     );
 
-    await resolver.resolve(tenantA);
-    await resolver.resolve(tenantB);
+    await resolver.resolve(tenant);
+    await resolver.resolve(tenant);
 
     await expect(resolver.closeAll()).resolves.toBeUndefined();
     // The transport AFTER the failing one still got released — the loop was not abandoned.

@@ -67,7 +67,7 @@ export function translateWriteError(err: unknown): never {
   throw err;
 }
 
-/** All of the current tenant's canvases. The tenant predicate scopes the read. */
+/** All canvases; with one tenant per database they are all this tenant's. */
 export async function listCanvases(
   tx: Transaction,
   tenantId: string,
@@ -129,7 +129,7 @@ export async function createCanvas(
 
 /**
  * Replace a canvas's name + definition in place. Manager/admin only (`layout.configure`). An absent id
- * (or another tenant's row, excluded by the tenant predicate) throws `canvas.not_found` — the by-id config-CRUD idiom the
+ * throws `canvas.not_found` — the by-id config-CRUD idiom the
  * direct siblings on this same management surface use (`updateZone`/`updateTable`/`updateStatus` in
  * `apps/server/src/tables.ts`), read back via `.returning({ id })` so a PUT that matched zero rows is
  * a 404, never a masked "saved" 204 (e.g. a PUT to a canvas another session just deleted). A name
@@ -166,8 +166,8 @@ export async function updateCanvas(
 }
 
 /**
- * Delete a canvas. Manager/admin only (`layout.configure`). No definition to validate. An absent id (or
- * another tenant's row, excluded by the tenant predicate) throws `canvas.not_found`, read back via `.returning({ id })` —
+ * Delete a canvas. Manager/admin only (`layout.configure`). No definition to validate. An absent id
+ * throws `canvas.not_found`, read back via `.returning({ id })` —
  * the same by-id config-CRUD idiom `deactivateZone`/`deactivateTable`/`deactivateStatus` (`tables.ts`)
  * use, so a DELETE that matched zero rows is a 404 rather than a silent success. A device profile still
  * referencing the canvas (the composite FK `device_profiles_canvas_fk`, ON DELETE RESTRICT) trips a

@@ -11,7 +11,13 @@ import { seedTenant } from "@waitron/db/testing/seed.js";
 const DUTY = "test.duty";
 const NOW = new Date("2026-07-25T04:00:00Z");
 
-const suite = useTemplateDb({ template: "core_scheduler" });
+// resetPerTest: false because this suite seeds ONE tenant in `beforeAll` and reads it across every
+// test; the default per-test truncation would empty `tenants` after the first test and leave the
+// rest inserting `scheduled_runs` against a tenant that no longer exists. Order-independence does
+// not need the reset here: each describe claims a DISTINCT period, so the accumulating rows never
+// collide on `scheduled_runs_key`, and every read below is scoped to the row id or period it just
+// wrote.
+const suite = useTemplateDb({ template: "core_scheduler", resetPerTest: false });
 
 /**
  * The two racing writers, plus a third connection used only to observe them — never to write.

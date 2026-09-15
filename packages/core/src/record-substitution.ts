@@ -163,8 +163,7 @@ export async function recordSubstitution(
   // (a `rectificative` one) numbers a different kind of document «en todo caso» (RD 1619/2012 art.
   // 6.1.a), and drawing an F3's number from it would corrupt a legally significant, unrepairable
   // series. The purpose guard is the mirror of the one `./record-correction.ts` applies from its
-  // side (which demands `rectificative`). The explicit tenant predicate mirrors `recordSale` and is
-  // applied to the series lookup.
+  // side (which demands `rectificative`). The series lookup is by id alone, as in `recordSale`.
   const [series] = await tx
     .select({
       code: invoiceSeries.code,
@@ -330,7 +329,7 @@ export async function recordSubstitution(
   if (location === undefined) {
     // Structurally unreachable given the schema: `tills.location_id` is a NOT NULL foreign key, so
     // a till that exists joins to exactly one location. Reaching here means the till does not exist
-    // or the tenant predicate excluded it — a caller programming error, not a fiscal condition.
+    // — a caller programming error, not a fiscal condition.
     throw new Error(`recordSubstitution: no location found for till ${input.tillId}`);
   }
   /* v8 ignore stop */

@@ -84,9 +84,8 @@ declare module "@waitron/shared" {
       card?: CardType;
       configKey?: string;
     };
-    // A GET-by-id on the management canvas surface named no canvas the tenant owns (an absent id, or
-    // another tenant's row excluded by the tenant predicate). No params: the caller-supplied id is not echoed (§1) — the
-    // management API answers 404 on the code alone.
+    // A GET-by-id on the management canvas surface named no stored canvas (an absent id). No params:
+    // the caller-supplied id is not echoed (§1) — the management API answers 404 on the code alone.
     "canvas.not_found": Record<string, never>;
     // A canvas create/update collided on the per-tenant `canvases_tenant_name_key` unique — a
     // duplicate name. `canvas-store.ts` translates the driver's 23505 into this so a duplicate returns
@@ -116,9 +115,9 @@ declare module "@waitron/shared" {
     "device_profile.invalid": {
       reason: "bad_capabilities" | "bad_canvas_ref" | "bad_inactivity_timeout";
     };
-    // A GET-by-id on the management device-profile surface named no profile the tenant owns (an absent
-    // id, or another tenant's row excluded by the tenant predicate). No params: the caller-supplied id is not echoed (§1) —
-    // the management API answers 404 on the code alone. Mirrors `canvas.not_found`.
+    // A GET-by-id on the management device-profile surface named no stored profile (an absent id). No
+    // params: the caller-supplied id is not echoed (§1) — the management API answers 404 on the code
+    // alone. Mirrors `canvas.not_found`.
     "device_profile.not_found": Record<string, never>;
     // A device-profile create/update collided on the per-tenant unique — a duplicate name. Translated
     // from the driver's 23505 so a duplicate returns a clean 409, never a raw 500. No params: the

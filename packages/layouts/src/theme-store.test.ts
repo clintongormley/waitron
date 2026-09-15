@@ -6,7 +6,7 @@ import { startManagementSession } from "@waitron/identity";
 import type { PersonRoleValue } from "@waitron/identity";
 import { isAppError } from "@waitron/shared";
 import { sql } from "drizzle-orm";
-import { beforeAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import type { ThemeOverride } from "./canvas.js";
 import { getTenantTheme, putTenantTheme } from "./theme-store.js";
 
@@ -50,20 +50,14 @@ async function rowCount(tenantId: string): Promise<number> {
 }
 
 describe("tenant theme store on real Postgres, as the app role", () => {
-  let managerTenant: string;
-  let managerSession: string;
-
-  beforeAll(async () => {
-    managerTenant = await seedTenant(suite.admin);
-    managerSession = await seedSession(managerTenant, "manager");
-  });
-
   it("returns undefined for a tenant that has never authored a theme", async () => {
     const fresh = await seedTenant(suite.admin);
     expect(await asApp(fresh, (tx) => getTenantTheme(tx, fresh))).toBeUndefined();
   });
 
   it("round-trips a manager-authored theme through put → get", async () => {
+    const managerTenant = await seedTenant(suite.admin);
+    const managerSession = await seedSession(managerTenant, "manager");
     const theme: ThemeOverride = { tokens: { "--wt-color-primary": "#ff0000" } };
     await asApp(managerTenant, (tx) =>
       putTenantTheme(tx, { managementSessionId: managerSession, tenantId: managerTenant, theme }),

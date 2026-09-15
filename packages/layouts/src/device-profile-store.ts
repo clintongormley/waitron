@@ -124,7 +124,7 @@ export function translateWriteError(err: unknown): never {
   throw err;
 }
 
-/** All of the current tenant's device profiles, ordered by name. The tenant predicate scopes the read. */
+/** All device profiles, ordered by name; with one tenant per database they are all this tenant's. */
 export async function listDeviceProfiles(
   tx: Transaction,
   tenantId: string,
@@ -198,7 +198,7 @@ export async function createDeviceProfile(
 
 /**
  * Replace a profile's name, canvas reference and capabilities in place, returning the stored row.
- * Manager/admin only (`layout.configure`). An absent id (or another tenant's row, excluded by the tenant predicate) throws
+ * Manager/admin only (`layout.configure`). An absent id throws
  * `device_profile.not_found` — the by-id config-CRUD idiom `updateCanvas` uses, read back via
  * `.returning({ id })` so a PUT that matched zero rows is a 404, never a masked "saved" 204. A name
  * collision throws `device_profile.name_taken`, a bad canvas reference `device_profile.invalid`
@@ -253,8 +253,8 @@ export async function updateDeviceProfile(
 }
 
 /**
- * Delete a device profile. Manager/admin only (`layout.configure`). An absent id (or another tenant's
- * row, excluded by the tenant predicate) throws `device_profile.not_found`, read back via `.returning({ id })` — the same
+ * Delete a device profile. Manager/admin only (`layout.configure`). An absent id throws
+ * `device_profile.not_found`, read back via `.returning({ id })` — the same
  * by-id config-CRUD idiom `deleteCanvas` uses, so a DELETE that matched zero rows is a 404 rather than
  * a silent success. A device still referencing the profile (the composite FK, ON DELETE RESTRICT)
  * trips a 23001 restrict_violation, which `translateWriteError`

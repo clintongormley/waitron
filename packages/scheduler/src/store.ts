@@ -52,7 +52,7 @@ const CLAIMED = {
  * OR non-terminal at any age, so a re-sweep chain older than the horizon stays claimable. The
  * below-horizon MISSING-day count would be an unbounded read, so it is aggregated in SQL instead.
  *
- * The explicit tenant predicate scopes the read to the requested tenant.
+ * The read scopes to the duty alone; with one tenant per database every row is this tenant's.
  */
 export async function readSnapshot(
   tx: Transaction,

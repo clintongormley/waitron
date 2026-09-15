@@ -414,7 +414,12 @@ describe("venue service management routes", () => {
         )
       ).status,
     ).toBe(404);
-    await send(fx.app, "DELETE", `/management-api/venue-service/routes/${own.id}`, fx.managerCookie);
+    await send(
+      fx.app,
+      "DELETE",
+      `/management-api/venue-service/routes/${own.id}`,
+      fx.managerCookie,
+    );
     expect(
       await (
         await send(other.app, "GET", "/management-api/venue-service", other.managerCookie)

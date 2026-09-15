@@ -6,7 +6,7 @@ import { startManagementSession } from "@waitron/identity";
 import type { PersonRoleValue } from "@waitron/identity";
 import { isAppError } from "@waitron/shared";
 import { sql } from "drizzle-orm";
-import { beforeAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { DEFAULT_RECEIPT } from "./defaults.js";
 import { getReceipt, putReceipt } from "./receipt-store.js";
 import type { ReceiptConfig } from "./types.js";
@@ -51,14 +51,6 @@ async function rowCount(tenantId: string): Promise<number> {
 }
 
 describe("tenant receipt store on real Postgres, as the app role", () => {
-  let managerTenant: string;
-  let managerSession: string;
-
-  beforeAll(async () => {
-    managerTenant = await seedTenant(suite.admin);
-    managerSession = await seedSession(managerTenant, "manager");
-  });
-
   it("returns DEFAULT_RECEIPT ({}) for a tenant that has never authored a receipt", async () => {
     // Unlike getTenantTheme (which returns undefined on absence), getReceipt returns the built-in
     // DEFAULT_RECEIPT so the till boot always has a trim to render around the mandated fiscal art.
@@ -67,6 +59,8 @@ describe("tenant receipt store on real Postgres, as the app role", () => {
   });
 
   it("round-trips a manager-authored receipt through put → get", async () => {
+    const managerTenant = await seedTenant(suite.admin);
+    const managerSession = await seedSession(managerTenant, "manager");
     const receipt: ReceiptConfig = { headerSubtitle: "Hola" };
     await asApp(managerTenant, (tx) =>
       putReceipt(tx, { managementSessionId: managerSession, tenantId: managerTenant, receipt }),

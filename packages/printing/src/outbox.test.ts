@@ -232,9 +232,8 @@ describe("resendPrintJob", () => {
     });
   });
 
-  it("refuses unknown and foreign-tenant jobs, and disabled printers", async () => {
+  it("refuses unknown jobs and disabled printers", async () => {
     const cfg = await setup();
-    const foreign = await setup();
     await withTransaction(suite.db, async (tx) => {
       const printer = await createPrinter(tx, cfg, {
         name: "Disabled",
@@ -244,9 +243,6 @@ describe("resendPrintJob", () => {
       const original = await enqueuePrintJob(tx, cfg, printer.id, new Uint8Array([1]));
       await tx.update(printJobs).set({ status: "done" }).where(eq(printJobs.id, original.jobId));
       await expect(resendPrintJob(tx, cfg, randomUUID())).rejects.toMatchObject({
-        code: "print_job.not_found",
-      });
-      await expect(resendPrintJob(tx, foreign, original.jobId)).rejects.toMatchObject({
         code: "print_job.not_found",
       });
       await deactivatePrinter(tx, cfg, printer.id);

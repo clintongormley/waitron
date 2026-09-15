@@ -111,8 +111,7 @@ declare module "@waitron/shared" {
       due: string;
       charged: string;
     };
-    /** Thrown by `recordSale` when `RecordSaleInput.seriesId` names no row in `invoice_series` —
-     * either it never existed, or the tenant predicate excluded it. */
+    /** Thrown by `recordSale` when `RecordSaleInput.seriesId` names no row in `invoice_series`. */
     "sale.series_not_found": { seriesId: string; tenantId: string };
     /** Thrown by `recordSale` when `RecordSaleInput.seriesId` names a real series, but one that
      * belongs to a DIFFERENT node than `RecordSaleInput.nodeId` (node-id rekey, 2026-08-03: a
