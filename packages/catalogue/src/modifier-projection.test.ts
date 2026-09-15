@@ -195,7 +195,7 @@ it("projects only published available choices, clears excluded defaults, and kee
             id: extraId,
             name: { en: "Shot" },
             available: true,
-            dietaryEffect: { invalidates: [] },
+            suitableFor: [],
             priceDelta: "0.75",
             maxQuantity: 3,
             preselected: true,

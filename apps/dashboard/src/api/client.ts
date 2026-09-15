@@ -192,6 +192,12 @@ export const DIETARY_LABELS = [
 ] as const;
 export type DietaryLabel = (typeof DIETARY_LABELS)[number];
 
+/** The POSITIVE per-choice dietary set a modifier choice declares itself "suitable for" — a
+ * browser-local copy of catalogue's `DIETARY_SUITABILITY` (NOT imported — the #70 bundle rule). Smaller
+ * than {@link DIETARY_LABELS} (the product-recipe set), which keeps `no_meat`/`no_fish`. */
+export const DIETARY_SUITABILITY = ["vegan", "vegetarian", "halal", "kosher"] as const;
+export type DietarySuitability = (typeof DIETARY_SUITABILITY)[number];
+
 /** The contains-tags a diet override may hand-assert / hand-strip — the strictly-smaller subset of
  * {@link DietaryOrigin} the derivation surfaces as `contains`. A LOCAL copy of `@waitron/catalogue`'s
  * `CONTAINS_TAGS` union (no runtime import — the #70 bundle rule). */
@@ -427,10 +433,11 @@ export interface OptionGroup {
   active: boolean;
 }
 
-/** Browser-local canonical modifier definition; choices retain existing dietary effects. */
+/** Browser-local canonical modifier definition; each choice states its own allergens and its positive
+ * dietary suitability (a subset of vegan/vegetarian/halal/kosher). */
 export interface ModifierEffects {
   addAllergens?: AllergenDeclaration;
-  dietaryEffect?: { invalidates: DietaryLabel[] } | null;
+  suitableFor?: string[] | null;
 }
 export interface ModifierChoice extends ModifierEffects {
   id: string;

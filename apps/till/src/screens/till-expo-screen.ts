@@ -8,7 +8,7 @@ import { currentLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import { allergenName } from "../i18n/allergen-names.js";
 import { donenessLabel } from "../i18n/doneness-label.js";
-import { dietBadgeStyles, dietBadges } from "../widgets/diet-badges.js";
+import { dietBadgeStyles, dietBadges, extraNutrition } from "../widgets/diet-badges.js";
 import { snapshotDescriptionFor, trimQuantity } from "../widgets/dish-format.js";
 import type { ExpoCourse, ExpoItem, ExpoOrder, TillApi } from "../api/client.js";
 import type { FireControlMode } from "../widgets/station-queue.js";
@@ -270,6 +270,21 @@ export class TillExpoScreen extends LitElement {
         padding-left: var(--wt-space-3);
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
+      }
+
+      /* Each selected extra's OWN allergens/diet (nutrition redesign, pass 1), flowing inline after the
+         extra's "+ name" — the extra's own list beside the dish's own, never a fold. */
+      .extra-nutrition,
+      .extra-allergens,
+      .extra-diet {
+        display: inline-flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--wt-space-1);
+      }
+
+      .extra-nutrition {
+        margin-left: var(--wt-space-1);
       }
 
       /* The per-line kitchen customisation (order-line customisation, Task 5), indented beneath the dish
@@ -688,9 +703,13 @@ export class TillExpoScreen extends LitElement {
     return html`<span class="item-modifiers">
       ${answers.map((answer) => html`<span class="modifier-answer">${answer}</span>`)}
       ${modifiers.map(
-        (modifier) =>
+        (modifier, i) =>
           html`<span class="modifier"
-            >+ ${snapshotDescriptionFor(modifier.descriptions, "")}</span
+            >+ ${snapshotDescriptionFor(modifier.descriptions, "")}${extraNutrition(
+              modifier,
+              `item-modifier-allergens-${item.id}-${i}`,
+              `item-modifier-diet-${item.id}-${i}`,
+            )}</span
           >`,
       )}
     </span>`;

@@ -20,7 +20,7 @@ const extra: Modifier = {
       priceDelta: "1.00",
       maxQuantity: 2,
       preselected: true,
-      dietaryEffect: { invalidates: ["halal"] },
+      suitableFor: ["halal"],
     },
     {
       id: "b",

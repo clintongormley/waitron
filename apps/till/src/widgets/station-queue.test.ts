@@ -3,6 +3,7 @@ import { setContentLanguages } from "@waitron/ui";
 import type { StationThresholds } from "@waitron/shared";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { allergenName } from "../i18n/allergen-names.js";
 import { TillStationQueue } from "./station-queue.js";
 import type { StationQueueGroup } from "../api/client.js";
 
@@ -277,6 +278,44 @@ describe("till-station-queue", () => {
         stationId: "st-1",
       });
       expect(el.shadowRoot!.querySelectorAll(".line-modifiers")).toHaveLength(0);
+    });
+
+    it("shows each extra's own allergens and diet on the line, distinct from the dish's own", async () => {
+      const withExtraNutrition: StationQueueGroup = {
+        ...withModifiers,
+        items: [
+          {
+            ...withModifiers.items[0]!,
+            // The DISH declares its own gluten; the EXTRA declares its own milk + halal.
+            asServed: { allergens: { gluten: { presence: "contains" } }, pending: false },
+            modifiers: [
+              {
+                descriptions: { "es-ES": "Bacon" },
+                addAllergens: { milk: { presence: "contains" } },
+                suitableFor: ["halal"],
+              },
+            ],
+          },
+        ],
+      };
+      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+        groups: [withExtraNutrition],
+        view: "rail",
+        stationId: "st-9",
+      });
+      const milkName = allergenName("milk", currentLocale());
+      const optAllergens = el.shadowRoot!.querySelector(
+        '[data-test="item-modifier-allergens-ti-9-0"]',
+      );
+      expect(optAllergens).not.toBeNull();
+      expect(optAllergens!.textContent).toContain(milkName);
+      const optDiet = el.shadowRoot!.querySelector('[data-test="item-modifier-diet-ti-9-0"]');
+      expect(optDiet).not.toBeNull();
+      expect(optDiet!.querySelector("[data-diet='halal']")).not.toBeNull();
+      // The dish's OWN allergen row shows its gluten, a node distinct from the extra's milk (no fold).
+      const dishAllergens = el.shadowRoot!.querySelector('[data-item-allergens="ti-9"]');
+      expect(dishAllergens!.textContent).toMatch(/gluten/i);
+      expect(dishAllergens!.textContent).not.toContain(milkName);
     });
   });
 

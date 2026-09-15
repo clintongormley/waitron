@@ -1519,11 +1519,11 @@ async function addOption(
   tenantId: TillConfig["tenantId"],
   productId: string,
   name: string,
-  // The option's OWN allergens and dietary effect. Omitted for a plain option (the modifier sub-item
-  // tests), so both columns stay null.
+  // The option's OWN allergens and positive dietary suitability. Omitted for a plain option (the modifier
+  // sub-item tests), so `add_allergens` stays null and `dietary_suitability` an empty list.
   overlay?: {
     add?: AllergenMap;
-    dietaryEffect?: { invalidates: string[] } | null;
+    suitableFor?: string[] | null;
   },
 ): Promise<string> {
   const [group] = await tx
@@ -1547,7 +1547,7 @@ async function addOption(
       vatClass: "reduced",
       sort: 0,
       addAllergens: overlay?.add ?? null,
-      dietaryEffect: overlay?.dietaryEffect ?? null,
+      dietarySuitability: overlay?.suitableFor ?? [],
     })
     .returning({ id: optionGroupItems.id });
   await tx.insert(productOptionGroups).values({
@@ -2260,17 +2260,19 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
       const [group] = await listStationQueue(tx, cfg, cocina.id);
       expect(group!.orderId).toBe(orderId);
       expect(group!.items).toHaveLength(1);
+      // Each option declared no allergens/diet, so its own list is empty (`addAllergens: null`,
+      // `suitableFor: []`) — the shape the KDS renders per extra beside the dish's own.
       expect(group!.items[0]!.modifiers).toEqual([
-        { descriptions: { [LOCALE]: "Grande" } },
-        { descriptions: { [LOCALE]: "Leche avena" } },
+        { descriptions: { [LOCALE]: "Grande" }, addAllergens: null, suitableFor: [] },
+        { descriptions: { [LOCALE]: "Leche avena" }, addAllergens: null, suitableFor: [] },
       ]);
 
       // The expo queue attaches the same modifier sub-items to its item.
       const expo = await listExpoQueue(tx, cfg);
       const expoItem = expo[0]!.courses[0]!.items[0]!;
       expect(expoItem.modifiers).toEqual([
-        { descriptions: { [LOCALE]: "Grande" } },
-        { descriptions: { [LOCALE]: "Leche avena" } },
+        { descriptions: { [LOCALE]: "Grande" }, addAllergens: null, suitableFor: [] },
+        { descriptions: { [LOCALE]: "Leche avena" }, addAllergens: null, suitableFor: [] },
       ]);
     });
   });
@@ -2469,7 +2471,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
         dietaryDeclarations: ["vegan"],
       });
       const dairyFree = await addOption(tx, cfg.tenantId, dish.id, "Sin lácteos", {
-        dietaryEffect: { invalidates: [] },
+        suitableFor: [],
       });
       const { id: orderId } = await placeOrderWith(tx, cfg, [
         { productId: dish.id, quantity: "1", options: [{ optionGroupItemId: dairyFree }] },
@@ -2515,7 +2517,8 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
         dietaryDeclarations: ["vegan"],
       });
       const bacon = await addOption(tx, cfg.tenantId, dish.id, "Con bacon", {
-        dietaryEffect: { invalidates: ["no_meat"] },
+        add: { milk: { presence: "contains" } },
+        suitableFor: ["halal"],
       });
       await placeOrderWith(tx, cfg, [
         { productId: dish.id, quantity: "1", options: [{ optionGroupItemId: bacon }] },
@@ -2527,11 +2530,21 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
         vegetarian: "yes",
         contains: [],
       });
+      // The dish is NOT folded, but the extra carries its OWN allergens/suitability on the KDS wire so the
+      // station display shows the extra's own list beside the dish's own.
+      expect(stationItem.modifiers[0]).toMatchObject({
+        addAllergens: { milk: { presence: "contains" } },
+        suitableFor: ["halal"],
+      });
       const expoItem = (await listExpoQueue(tx, cfg))[0]!.courses[0]!.items[0]!;
       expect(expoItem.asServedDiet).toEqual({
         vegan: "yes",
         vegetarian: "yes",
         contains: [],
+      });
+      expect(expoItem.modifiers[0]).toMatchObject({
+        addAllergens: { milk: { presence: "contains" } },
+        suitableFor: ["halal"],
       });
     });
   });
@@ -4677,7 +4690,7 @@ it("shows the dish's own allergens and diet for a nonprice option selection (no 
       dietaryDeclarations: ["vegan"],
     });
     const choiceId = await addOption(tx, cfg.tenantId, product.id, "Oat", {
-      dietaryEffect: { invalidates: [] },
+      suitableFor: [],
     });
     const { id: orderId } = await placeOrderWith(tx, cfg, [
       { productId: product.id, quantity: "1" },

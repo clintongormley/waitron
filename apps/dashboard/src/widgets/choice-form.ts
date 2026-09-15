@@ -84,7 +84,7 @@ export class ChoiceForm extends LitElement {
     this.effects = value
       ? {
           ...(value.addAllergens === undefined ? {} : { addAllergens: value.addAllergens }),
-          ...(value.dietaryEffect === undefined ? {} : { dietaryEffect: value.dietaryEffect }),
+          ...(value.suitableFor === undefined ? {} : { suitableFor: value.suitableFor }),
         }
       : {};
     this.errors = {};
@@ -123,9 +123,9 @@ export class ChoiceForm extends LitElement {
       name: nonBlankNames(this.name),
       available: this.available,
       ...this.effects,
-      // The client always sends an explicit dietary effect, never null or absent, so the record
-      // can never be mistaken for "not yet reviewed". The contract normalises anyway.
-      dietaryEffect: this.effects.dietaryEffect ?? { invalidates: [] },
+      // The client always sends an explicit suitability list (never null/absent); the contract
+      // normalises anyway. Positive: the labels the choice is suitable for.
+      suitableFor: this.effects.suitableFor ?? [],
       ...(this.kind === "extras"
         ? {
             priceDelta: this.priceDelta,
@@ -147,7 +147,7 @@ export class ChoiceForm extends LitElement {
     return {
       addAllergens: Object.keys(this.effects.addAllergens ?? {}),
       removeAllergens: [],
-      dietary: (this.effects.dietaryEffect?.invalidates ?? []) as DietaryLabel[],
+      dietary: (this.effects.suitableFor ?? []) as DietaryLabel[],
     };
   }
   #onPicker(event: CustomEvent<{ value: AllergenDietaryValue }>): void {
@@ -161,7 +161,7 @@ export class ChoiceForm extends LitElement {
             v.addAllergens.map((code) => [code, { presence: "contains" as const }]),
           )
         : {},
-      dietaryEffect: { invalidates: v.dietary },
+      suitableFor: v.dietary,
     });
   }
   #effects() {

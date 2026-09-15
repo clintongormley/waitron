@@ -132,12 +132,12 @@ it("authors allergen and dietary effects on an extras choice", async () => {
       priceDelta: "1.00",
       maxQuantity: 2,
       addAllergens: { milk: { presence: "contains", source: "queso" } },
-      dietaryEffect: { invalidates: ["halal"] },
+      suitableFor: ["halal"],
     },
   });
   const save = vi.fn();
   el.addEventListener("wt-choice-save", save);
-  // The shared picker seeds from the stored effects — milk added, halal invalidated, nothing removed.
+  // The shared picker seeds from the stored effects — milk added, suitable-for halal, nothing removed.
   expect(el.shadowRoot!.querySelector("dashboard-allergen-dietary-picker")!.value).toEqual({
     addAllergens: ["milk"],
     removeAllergens: [],
@@ -157,7 +157,7 @@ it("authors allergen and dietary effects on an extras choice", async () => {
     milk: { presence: "contains" },
     eggs: { presence: "contains" },
   });
-  expect(value.dietaryEffect).toEqual({ invalidates: ["halal", "vegan"] });
+  expect(value.suitableFor).toEqual(["halal", "vegan"]);
 });
 
 it("writes an added allergen as contains and a non-null dietary effect", async () => {
@@ -169,7 +169,7 @@ it("writes an added allergen as contains and a non-null dietary effect", async (
   await click(el, "choice-save");
   const value = (save.mock.calls[0]![0] as CustomEvent<{ value: ChoiceDraft }>).detail.value;
   expect(value.addAllergens).toEqual({ gluten: { presence: "contains" } });
-  expect(value.dietaryEffect).toEqual({ invalidates: ["vegan"] });
+  expect(value.suitableFor).toEqual(["vegan"]);
 });
 
 it("renders no presence select and no reviewed switch", async () => {
@@ -195,7 +195,7 @@ it("emits an options choice with only its shared fields", async () => {
     id: value.id,
     name: { es: "Uno" },
     available: false,
-    dietaryEffect: { invalidates: [] },
+    suitableFor: [],
   });
 });
 
@@ -217,7 +217,7 @@ it("authors allergen and dietary effects on an options choice", async () => {
     name: { es: "Uno" },
     available: true,
     addAllergens: { eggs: { presence: "contains" } },
-    dietaryEffect: { invalidates: ["vegan"] },
+    suitableFor: ["vegan"],
   });
   expect(value).not.toHaveProperty("priceDelta");
   expect(value).not.toHaveProperty("maxQuantity");

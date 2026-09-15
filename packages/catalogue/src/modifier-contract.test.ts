@@ -40,16 +40,23 @@ describe("modifier definition contract", () => {
       expect.objectContaining({ code: "modifier.invalid" }),
     );
   });
-  it("accepts direct dietary invalidations and rejects legacy origin authoring", () => {
+  it("accepts a positive dietary suitability list and rejects a retired label", () => {
     expect(
       parseModifierInput({
         type: "extras",
         name,
-        choices: [{ ...extra, dietaryEffect: { invalidates: ["no_meat", "halal"] } }],
+        choices: [{ ...extra, suitableFor: ["vegan", "halal"] }],
       }),
     ).toMatchObject({
-      choices: [{ dietaryEffect: { invalidates: ["no_meat", "halal"] } }],
+      choices: [{ suitableFor: ["vegan", "halal"] }],
     });
+    expect(() =>
+      parseModifierInput({
+        type: "extras",
+        name,
+        choices: [{ ...extra, suitableFor: ["no_meat"] }],
+      }),
+    ).toThrow(expect.objectContaining({ code: "diet.declaration_invalid" }));
     expect(() =>
       parseModifierInput({
         type: "extras",
@@ -76,7 +83,7 @@ describe("modifier definition contract", () => {
             id: choiceId,
             name,
             available: true,
-            dietaryEffect: { invalidates: [] },
+            suitableFor: [],
             priceDelta: "0.00",
             maxQuantity: 1,
             preselected: false,
@@ -90,7 +97,7 @@ describe("modifier definition contract", () => {
       type: "options",
       name,
       available: true,
-      choices: [{ id: choiceId, name, available: true, dietaryEffect: { invalidates: [] } }],
+      choices: [{ id: choiceId, name, available: true, suitableFor: [] }],
       defaultChoiceId: null,
     });
   });
@@ -545,9 +552,9 @@ describe("preselected extras", () => {
     expect(input.available).toBe(true);
   });
 
-  it("normalises an absent, null, or empty dietary effect on a choice to an empty invalidates list", () => {
+  it("normalises an absent, null, or empty suitability on a choice to an empty list", () => {
     const id = crypto.randomUUID();
-    const choiceOf = (dietaryEffect: unknown) =>
+    const choiceOf = (suitableFor: unknown) =>
       (
         parseModifierInput({
           type: "options",
@@ -558,13 +565,14 @@ describe("preselected extras", () => {
               id,
               name: { en: "Ketchup" },
               available: true,
-              ...(dietaryEffect === "absent" ? {} : { dietaryEffect }),
+              ...(suitableFor === "absent" ? {} : { suitableFor }),
             },
           ],
-        }) as { choices: { dietaryEffect?: { invalidates: string[] } | null }[] }
-      ).choices[0]!.dietaryEffect;
-    expect(choiceOf("absent")).toEqual({ invalidates: [] });
-    expect(choiceOf(null)).toEqual({ invalidates: [] });
-    expect(choiceOf({ invalidates: [] })).toEqual({ invalidates: [] });
+        }) as { choices: { suitableFor?: string[] | null }[] }
+      ).choices[0]!.suitableFor;
+    expect(choiceOf("absent")).toEqual([]);
+    expect(choiceOf(null)).toEqual([]);
+    expect(choiceOf([])).toEqual([]);
+    expect(choiceOf(["vegan", "kosher"])).toEqual(["vegan", "kosher"]);
   });
 });

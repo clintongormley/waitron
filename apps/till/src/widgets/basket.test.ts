@@ -4,6 +4,7 @@ import { formatMoney } from "../i18n/format.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { setContentLanguages } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { allergenName } from "../i18n/allergen-names.js";
 import { TillBasket } from "./basket.js";
 import type { TillOptionItem, TillProduct } from "../api/client.js";
 import type { SelectedLineOption } from "../state/working-order.js";
@@ -324,6 +325,139 @@ describe("till-basket", () => {
     expect(asServed!.textContent).toMatch(/gluten/i);
     // The base was reviewed, so nothing is pending: no "not fully reviewed" note.
     expect(asServed!.textContent).not.toMatch(/review|pendiente/i);
+  });
+
+  it("shows each selected extra's own allergens and diet, distinct from the dish's own", async () => {
+    const bacon: TillOptionItem = {
+      id: "opt-bacon",
+      name: { es: "Bacon" },
+      priceDelta: "1.00",
+      vatClass: null,
+      maxQuantity: 1,
+      addAllergens: { milk: { presence: "contains" } }, // the EXTRA's own allergen
+      suitableFor: ["halal"], // the EXTRA's own positive diet claim
+    };
+    const burger: TillProduct = {
+      ...cafe,
+      id: "burger",
+      descriptions: { es: "Hamburguesa" },
+      unitPrice: "10.00",
+      allergens: { gluten: { presence: "contains" } }, // the DISH's own allergen (not milk)
+      optionGroups: [
+        {
+          id: "grp",
+          name: { es: "Extras" },
+          minSelect: 0,
+          maxSelect: 1,
+          required: false,
+          items: [bacon],
+        },
+      ],
+    };
+    const store = new WorkingOrderStore();
+    store.addProduct(burger, "1", [
+      { optionGroupItemId: "opt-bacon", name: { es: "Bacon" }, priceDelta: "1.00" },
+    ]);
+    const { el } = await mountWidget<TillBasket>("till-basket", { store });
+    const milkName = allergenName("milk", currentLocale());
+
+    // The extra's OWN allergen node carries its milk, NOT the dish's gluten — a node distinct from the
+    // dish's own allergen row.
+    const optionAllergens = el.shadowRoot!.querySelector(`[data-test="option-allergens-0"]`);
+    expect(optionAllergens).not.toBeNull();
+    expect(optionAllergens!.textContent).toContain(milkName);
+    expect(optionAllergens!.textContent).not.toMatch(/gluten/i);
+
+    // The dish's OWN allergen row still shows gluten and NOT the extra's milk (no fold, distinct nodes).
+    const dishAllergens = el.shadowRoot!.querySelector(`[data-test="line-allergens-0"]`);
+    expect(dishAllergens!.textContent).toMatch(/gluten/i);
+    expect(dishAllergens!.textContent).not.toContain(milkName);
+
+    // The extra's OWN diet badge shows its positive suitability (halal).
+    const optionDiet = el.shadowRoot!.querySelector(`[data-test="option-diet-0"]`);
+    expect(optionDiet).not.toBeNull();
+    expect(optionDiet!.querySelector("[data-diet='halal']")).not.toBeNull();
+    expect(optionDiet!.textContent).toContain(t("diet.halal"));
+  });
+
+  it("renders no per-extra nutrition chrome for an extra that declares neither", async () => {
+    const plainBun: TillOptionItem = {
+      id: "opt-plain",
+      name: { es: "Pan normal" },
+      priceDelta: "0.00",
+      vatClass: null,
+      maxQuantity: 1,
+      addAllergens: null,
+    };
+    const burger: TillProduct = {
+      ...cafe,
+      id: "burger",
+      descriptions: { es: "Hamburguesa" },
+      unitPrice: "10.00",
+      allergens: { gluten: { presence: "contains" } },
+      optionGroups: [
+        {
+          id: "grp",
+          name: { es: "Pan" },
+          minSelect: 0,
+          maxSelect: 1,
+          required: false,
+          items: [plainBun],
+        },
+      ],
+    };
+    const store = new WorkingOrderStore();
+    store.addProduct(burger, "1", [
+      { optionGroupItemId: "opt-plain", name: { es: "Pan normal" }, priceDelta: "0.00" },
+    ]);
+    const { el } = await mountWidget<TillBasket>("till-basket", { store });
+    expect(el.shadowRoot!.querySelector(`[data-test="option-allergens-0"]`)).toBeNull();
+    expect(el.shadowRoot!.querySelector(`[data-test="option-diet-0"]`)).toBeNull();
+  });
+
+  it("resolves a selected extra's own nutrition from the product's modifiers (not just optionGroups)", async () => {
+    // A product whose extras come via `modifiers` (the newer system), NOT `optionGroups` — the basket
+    // must still find each selected extra's own list to show it.
+    const burger: TillProduct = {
+      ...cafe,
+      id: "burger",
+      descriptions: { es: "Hamburguesa" },
+      unitPrice: "10.00",
+      allergens: null,
+      modifiers: [
+        {
+          id: "mod-extras",
+          name: { es: "Extras" },
+          type: "extras",
+          available: true,
+          required: false,
+          maxTotalQuantity: null,
+          choices: [
+            {
+              id: "opt-bacon",
+              name: { es: "Bacon" },
+              priceDelta: "1.00",
+              maxQuantity: 1,
+              available: true,
+              preselected: false,
+              addAllergens: { milk: { presence: "contains" } },
+              suitableFor: ["kosher"],
+            },
+          ],
+        },
+      ],
+    };
+    const store = new WorkingOrderStore();
+    store.addProduct(burger, "1", [
+      { optionGroupItemId: "opt-bacon", name: { es: "Bacon" }, priceDelta: "1.00" },
+    ]);
+    const { el } = await mountWidget<TillBasket>("till-basket", { store });
+    expect(
+      el.shadowRoot!.querySelector(`[data-test="option-allergens-0"]`)!.textContent,
+    ).toContain(allergenName("milk", currentLocale()));
+    expect(
+      el.shadowRoot!.querySelector(`[data-test="option-diet-0"] [data-diet='kosher']`),
+    ).not.toBeNull();
   });
 
   it("marks the row 'not fully reviewed' for an unreviewed dish, ignoring an add-milk extra (Cautious)", async () => {

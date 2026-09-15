@@ -1,6 +1,6 @@
 import { AppError, isUuid } from "@waitron/shared";
 import { validateAllergens } from "./allergens.js";
-import { validateDietaryDeclarations } from "./dietary-declarations.js";
+import { validateDietarySuitability } from "./dietary-declarations.js";
 import type { VatClass } from "./pricing.js";
 import { MAX_MODIFIER_INTEGER, isModifierPrice } from "./modifier-limits.js";
 import "./errors.js";
@@ -56,18 +56,14 @@ function id(value: unknown, field: string): string {
   if (typeof value !== "string" || !isUuid(value)) invalid(field);
   return value;
 }
-const effectKeys = ["addAllergens", "dietaryEffect"];
+const effectKeys = ["addAllergens", "suitableFor"];
 function effects(row: Record<string, unknown>): ModifierEffects {
   const out: ModifierEffects = {};
   if (row.addAllergens !== undefined)
     out.addAllergens = row.addAllergens === null ? null : validateAllergens(row.addAllergens);
-  if (row.dietaryEffect === undefined || row.dietaryEffect === null) {
-    out.dietaryEffect = { invalidates: [] };
-  } else {
-    const effect = record(row.dietaryEffect, "dietaryEffect");
-    keys(effect, ["invalidates"], "dietaryEffect");
-    out.dietaryEffect = { invalidates: validateDietaryDeclarations(effect.invalidates) };
-  }
+  // A choice's positive suitability normalises absent/null to an empty list; a present list is
+  // validated against the four allowed labels (`diet.declaration_invalid` on anything else).
+  out.suitableFor = row.suitableFor == null ? [] : validateDietarySuitability(row.suitableFor);
   return out;
 }
 

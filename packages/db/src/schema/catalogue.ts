@@ -221,7 +221,9 @@ export const optionGroupItems = pgTable(
     maxQuantity: integer("max_quantity").notNull().default(1),
     preselected: boolean("preselected").notNull().default(false),
     addAllergens: jsonb("add_allergens").$type<AllergenMap>(),
-    dietaryEffect: jsonb("dietary_effect").$type<{ invalidates: string[] }>(),
+    // The choice's POSITIVE dietary suitability (a subset of vegan/vegetarian/halal/kosher). Replaces
+    // the retired negative `dietary_effect = { invalidates }`; shown per item, never folded.
+    dietarySuitability: jsonb("dietary_suitability").$type<string[]>(),
     sort: integer("sort").notNull().default(0),
     active: boolean("active").notNull().default(true),
   },

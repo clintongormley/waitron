@@ -298,7 +298,9 @@ export interface TillOptionItem {
    * straight passthrough of catalogue's `listAvailableProducts`, which projects it onto each item).
    */
   addAllergens: Record<string, { presence: "contains" | "may_contain"; source?: string }> | null;
-  dietaryEffect?: { invalidates: string[] } | null;
+  /** The option's OWN positive dietary suitability (a subset of vegan/vegetarian/halal/kosher), shown
+   *  beside the dish's own on the basket — never folded. */
+  suitableFor?: string[] | null;
 }
 
 /**
@@ -333,7 +335,7 @@ export type Modifier = { id: string; name: Record<string, string>; available: bo
       type: "options";
       defaultChoiceId: string | null;
       choices: (Pick<TillOptionItem, "id" | "name"> &
-        Partial<Pick<TillOptionItem, "addAllergens" | "dietaryEffect">> & {
+        Partial<Pick<TillOptionItem, "addAllergens" | "suitableFor">> & {
           available: boolean;
         })[];
     }
@@ -808,6 +810,12 @@ export interface Station {
  */
 export interface QueueModifier {
   descriptions: Record<string, string>;
+  /** The extra's OWN allergens, shown beside the dish's own on the KDS/expo — never folded. Absent/null
+   *  for a plain text answer or an option that declares none. */
+  addAllergens?: Record<string, { presence: "contains" | "may_contain"; source?: string }> | null;
+  /** The extra's OWN positive dietary suitability (a subset of vegan/vegetarian/halal/kosher), shown
+   *  beside the dish's own. Absent/empty when it declares none. */
+  suitableFor?: string[] | null;
 }
 
 /**

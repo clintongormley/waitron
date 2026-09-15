@@ -476,7 +476,7 @@ const extrasModifier: Modifier = {
       preselected: false,
       vatClass: null,
       addAllergens: { gluten: { presence: "contains" } },
-      dietaryEffect: { invalidates: ["vegan"] },
+      suitableFor: ["vegan"],
     },
     {
       id: "c2",
@@ -486,7 +486,7 @@ const extrasModifier: Modifier = {
       maxQuantity: 1,
       preselected: false,
       vatClass: null,
-      dietaryEffect: { invalidates: [] },
+      suitableFor: [],
     },
   ],
 };

@@ -58,7 +58,7 @@ export async function listModifiers(tx: Transaction, tenantId: string): Promise<
         name: item.name,
         available: item.active,
         ...(item.addAllergens === null ? {} : { addAllergens: item.addAllergens }),
-        dietaryEffect: item.dietaryEffect ?? { invalidates: [] },
+        suitableFor: item.dietarySuitability ?? [],
         ...(group.type === "extras"
           ? {
               priceDelta: item.priceDelta,
@@ -171,7 +171,7 @@ async function writeChoices(
       preselected: input.type === "extras" ? (choice as ExtraChoice).preselected : false,
       vatClass: input.type === "extras" ? ((choice as ExtraChoice).vatClass ?? null) : null,
       addAllergens: choice.addAllergens ?? null,
-      dietaryEffect: choice.dietaryEffect ?? null,
+      dietarySuitability: choice.suitableFor ?? [],
     };
     if (old.some((item) => item.id === choice.id)) {
       await tx

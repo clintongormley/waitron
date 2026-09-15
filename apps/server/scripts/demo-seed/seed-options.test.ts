@@ -134,7 +134,7 @@ describe("seedOptions", () => {
     if (toppings.type !== "extras") throw new Error("expected demo extras modifier");
     expect(toppings.choices[1]).toMatchObject({
       name: { en: "Marshmallows", es: "Nubes" },
-      dietaryEffect: { invalidates: ["no_meat"] },
+      suitableFor: ["vegetarian"],
     });
 
     // Steak: Extras (optional, 0..3) + Cooking (required, 1 of 3), in that order.

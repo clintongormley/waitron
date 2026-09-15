@@ -164,7 +164,7 @@ describe("catalogue operations", () => {
                   maxQuantity: 1,
                   vatClass: null,
                   addAllergens: null,
-                  dietaryEffect: null,
+                  suitableFor: null,
                 },
               ],
             },
@@ -189,7 +189,7 @@ describe("catalogue operations", () => {
                   maxQuantity: 1,
                   vatClass: null,
                   addAllergens: null,
-                  dietaryEffect: null,
+                  suitableFor: null,
                 },
               ],
             },
@@ -1024,7 +1024,7 @@ describe("catalogue operations", () => {
         // Inserted without an explicit cap → the NOT-NULL default 1 (per-option quantity).
         maxQuantity: 1,
         addAllergens: null,
-        dietaryEffect: null,
+        suitableFor: null,
       });
       expect(group.items[1]).toMatchObject({
         name: { en: "Bacon" },

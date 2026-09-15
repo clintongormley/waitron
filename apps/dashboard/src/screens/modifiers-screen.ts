@@ -283,7 +283,7 @@ export class ModifiersScreen extends LitElement {
   // the owner wants this information present only when a choice actually carries it.
   #choiceSummary(choice: ModifierChoice) {
     const adds = Object.keys(choice.addAllergens ?? {});
-    const diet = choice.dietaryEffect?.invalidates ?? [];
+    const diet = choice.suitableFor ?? [];
     return html`${
       adds.length
         ? html`<div>
@@ -294,7 +294,7 @@ export class ModifiersScreen extends LitElement {
       diet.length
         ? html`<div>
             ${t("modifiers.dietary_removed")}:
-            ${diet.map((label) => t(`editor.diet.${label}`)).join(", ")}
+            ${diet.map((label) => t(`editor.diet.${label}` as "editor.diet.vegan")).join(", ")}
           </div>`
         : nothing
     }`;

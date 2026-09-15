@@ -127,7 +127,7 @@ export interface MenuOfferOption {
   maxQuantity: number;
   vatClass: VatClass | null;
   addAllergens: ProductAllergens | null;
-  dietaryEffect?: { invalidates: string[] } | null;
+  suitableFor?: string[] | null;
 }
 
 export interface Product {
@@ -235,7 +235,9 @@ export interface ResolvedOptionItem {
    * milk), null when it declares none. Shown beside the dish's own allergens — the dish and its extras
    * are not combined into one figure. */
   addAllergens: ProductAllergens | null;
-  dietaryEffect?: { invalidates: string[] } | null;
+  /** The option's OWN positive dietary suitability (a subset of vegan/vegetarian/halal/kosher), shown
+   * beside the dish's own — never folded. */
+  suitableFor?: string[] | null;
 }
 
 /**
@@ -868,7 +870,7 @@ export async function listMenuOffers(
       maxQuantity: optionGroupItems.maxQuantity,
       vatClass: optionGroupItems.vatClass,
       addAllergens: optionGroupItems.addAllergens,
-      dietaryEffect: optionGroupItems.dietaryEffect,
+      suitableFor: optionGroupItems.dietarySuitability,
     })
     .from(menuItemOptionGroups)
     .innerJoin(
@@ -937,7 +939,7 @@ export async function listMenuOffers(
       maxQuantity: option.maxQuantity,
       vatClass: option.vatClass as VatClass | null,
       addAllergens: option.addAllergens as ProductAllergens | null,
-      dietaryEffect: option.dietaryEffect as { invalidates: string[] } | null,
+      suitableFor: option.suitableFor as string[] | null,
     });
   }
   const content = await readContentLanguages(tx, tenantId, FALLBACK_LOCALE);
@@ -1690,7 +1692,7 @@ export async function listAvailableProducts(
         vatClass: optionGroupItems.vatClass,
         maxQuantity: optionGroupItems.maxQuantity,
         addAllergens: optionGroupItems.addAllergens,
-        dietaryEffect: optionGroupItems.dietaryEffect,
+        suitableFor: optionGroupItems.dietarySuitability,
       })
       .from(productOptionGroups)
       .innerJoin(optionGroups, eq(optionGroups.id, productOptionGroups.groupId))
@@ -1738,7 +1740,7 @@ export async function listAvailableProducts(
           vatClass: r.vatClass as VatClass | null,
           maxQuantity: r.maxQuantity!,
           addAllergens: r.addAllergens as ProductAllergens | null,
-          dietaryEffect: r.dietaryEffect as { invalidates: string[] } | null,
+          suitableFor: r.suitableFor as string[] | null,
         });
       }
     }

@@ -233,7 +233,7 @@ async function priceOrderLines(
               option.vatClass as AvailableProduct["optionGroups"][number]["items"][number]["vatClass"],
             maxQuantity: option.maxQuantity,
             addAllergens: option.addAllergens,
-            dietaryEffect: option.dietaryEffect,
+            suitableFor: option.suitableFor,
           })),
         })),
       }))
@@ -3761,6 +3761,12 @@ export interface StationQueueCourse {
  *  its own ticket item; it rides here as sub-text beneath its parent dish. */
 export interface QueueModifier {
   descriptions: Record<string, string>;
+  /** The extra's OWN allergens (the child option's `add_allergens`), shown beside the dish's own on the
+   *  KDS/expo — never folded. Null for a plain text answer or an option that declares none. */
+  addAllergens?: ProductAllergens | null;
+  /** The extra's OWN positive dietary suitability (`dietary_suitability`), shown beside the dish's own.
+   *  Empty/null when it declares none. */
+  suitableFor?: string[] | null;
 }
 
 export interface StationQueueItem {
@@ -3883,11 +3889,14 @@ async function readQueueSubItems(
 
   // ONE child read: the modifier descriptions from the child modifier lines (LEFT join on the nullable
   // `option_group_item_id`), in `line_no` (selection) order — the indented sub-text the KDS renders
-  // under each dish. No allergen/diet overlay is read: each dish shows its OWN figures, not a fold.
+  // under each dish, plus each EXTRA's OWN allergens and dietary suitability (from the joined option),
+  // shown beside the dish's own. No fold: the dish's figures and each extra's are independent.
   const childRows = await tx
     .select({
       parentLineId: workingOrderLines.parentLineId,
       descriptions: workingOrderLines.descriptions,
+      addAllergens: optionGroupItems.addAllergens,
+      suitableFor: optionGroupItems.dietarySuitability,
     })
     .from(workingOrderLines)
     .leftJoin(
@@ -3907,7 +3916,11 @@ async function readQueueSubItems(
   for (const child of childRows) {
     // `parentLineId` is non-null on every row (the `inArray` matched it).
     const mods = modifiersByParent.get(child.parentLineId!) ?? [];
-    mods.push({ descriptions: child.descriptions });
+    mods.push({
+      descriptions: child.descriptions,
+      addAllergens: (child.addAllergens as ProductAllergens | null) ?? null,
+      suitableFor: child.suitableFor ?? [],
+    });
     modifiersByParent.set(child.parentLineId!, mods);
   }
 

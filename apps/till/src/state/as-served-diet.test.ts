@@ -73,7 +73,7 @@ describe("asServedDiet — the dish's own diet, no modifier fold", () => {
         choices: [
           {
             ...item("bacon"),
-            dietaryEffect: { invalidates: ["no_meat", "halal"] },
+            suitableFor: ["halal"],
             available: true,
             preselected: false,
           },

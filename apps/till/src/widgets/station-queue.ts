@@ -7,7 +7,7 @@ import { BAND_RANK, type TimingBand, classifyBand } from "@waitron/shared";
 import { currentLocale, t } from "../i18n/t.js";
 import { allergenName } from "../i18n/allergen-names.js";
 import { donenessLabel } from "../i18n/doneness-label.js";
-import { dietBadgeStyles, dietBadges } from "./diet-badges.js";
+import { dietBadgeStyles, dietBadges, extraNutrition } from "./diet-badges.js";
 import { snapshotDescriptionFor, trimQuantity } from "./dish-format.js";
 import type {
   StationQueueCourse,
@@ -230,6 +230,21 @@ export class TillStationQueue extends LitElement {
         padding-left: var(--wt-space-3);
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
+      }
+
+      /* Each selected extra's OWN allergens/diet (nutrition redesign, pass 1), flowing inline after the
+         extra's "+ name" — never a fold, just the extra's own list beside the dish's own rows below. */
+      .extra-nutrition,
+      .extra-allergens,
+      .extra-diet {
+        display: inline-flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--wt-space-1);
+      }
+
+      .extra-nutrition {
+        margin-left: var(--wt-space-1);
       }
 
       /* The per-line kitchen customisation (order-line customisation, Task 5), indented beneath the dish
@@ -875,9 +890,13 @@ export class TillStationQueue extends LitElement {
     return html`<span class="line-modifiers">
       ${answers.map((answer) => html`<span class="modifier-answer">${answer}</span>`)}
       ${modifiers.map(
-        (modifier) =>
+        (modifier, i) =>
           html`<span class="modifier"
-            >+ ${snapshotDescriptionFor(modifier.descriptions, "")}</span
+            >+ ${snapshotDescriptionFor(modifier.descriptions, "")}${extraNutrition(
+              modifier,
+              `item-modifier-allergens-${item.id}-${i}`,
+              `item-modifier-diet-${item.id}-${i}`,
+            )}</span
           >`,
       )}
     </span>`;

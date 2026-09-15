@@ -49,7 +49,7 @@ describe.each(["light", "dark"] as const)("modifiers screen (%s)", (theme) => {
               preselected: true,
               vatClass: null,
               addAllergens: { gluten: { presence: "contains" } },
-              dietaryEffect: { invalidates: ["vegan"] },
+              suitableFor: ["vegan"],
             },
           ],
         },

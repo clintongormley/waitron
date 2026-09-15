@@ -1,6 +1,69 @@
 import { type TemplateResult, css, html, nothing } from "lit";
-import { t } from "../i18n/t.js";
+import { currentLocale, t } from "../i18n/t.js";
+import { allergenName } from "../i18n/allergen-names.js";
 import type { DietProfile } from "../api/client.js";
+
+/** The four positive suitability labels a modifier choice may declare, mapped to their `diet.*` copy
+ * keys. A choice states suitability (never a recipe-derived preference), so this is deliberately the
+ * four-label set, not the six-label product set. */
+const SUITABILITY_KEYS = {
+  vegan: "diet.vegan",
+  vegetarian: "diet.vegetarian",
+  halal: "diet.halal",
+  kosher: "diet.kosher",
+} as const;
+
+/**
+ * A SELECTED EXTRA's OWN nutrition, shown beside the dish's own on the basket, the KDS station display
+ * and the expo/pass board — its own allergens as "contains" chips and its own positive dietary
+ * suitability as badges (nutrition redesign, pass 1). This is NOT a fold: the dish shows its figures and
+ * each extra shows its own, independently. Unlike {@link dietBadges} (the dish's recipe-derived profile),
+ * an extra's suitability is a DIRECT positive claim, so there is no pending/"not reviewed" state — an
+ * absent label is simply not shown. Returns `nothing` when the extra declares neither, so a plain extra
+ * adds no chrome. Text labels carry the meaning (colour is never the only signal — the house a11y rule).
+ * `allergensTest`/`dietTest` are echoed as each sub-span's `data-test` so a caller targets a specific
+ * extra; `locale` (optional) forces the copy language, else `currentLocale()` via `t`/`allergenName`.
+ */
+export function extraNutrition(
+  extra: {
+    addAllergens?: Record<string, { presence: "contains" | "may_contain"; source?: string }> | null;
+    suitableFor?: readonly string[] | null;
+  },
+  allergensTest: string,
+  dietTest: string,
+  locale?: string,
+): TemplateResult | typeof nothing {
+  const codes = Object.keys(extra.addAllergens ?? {}).sort();
+  const diets = (extra.suitableFor ?? []).filter(
+    (label): label is keyof typeof SUITABILITY_KEYS => label in SUITABILITY_KEYS,
+  );
+  if (codes.length === 0 && diets.length === 0) return nothing;
+  const loc = locale ?? currentLocale();
+  const tr = (key: Parameters<typeof t>[0]): string => t(key, loc);
+  return html`<span class="extra-nutrition">
+    ${
+      codes.length > 0
+        ? html`<span class="extra-allergens" data-test=${allergensTest}
+            >${codes.map(
+              (code) => html`<span class="allergen-chip">${allergenName(code, loc)}</span>`,
+            )}</span
+          >`
+        : nothing
+    }
+    ${
+      diets.length > 0
+        ? html`<span class="extra-diet" data-test=${dietTest}
+            >${diets.map(
+              (label) =>
+                html`<span class="diet-badge diet-${label}" data-diet=${label}
+                  >${tr(SUITABILITY_KEYS[label])}</span
+                >`,
+            )}</span
+          >`
+        : nothing
+    }
+  </span>`;
+}
 
 /**
  * The shared DIET & CONTAINS badge row (dietary-classification, Task 7) — rendered beside the
