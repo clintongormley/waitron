@@ -205,7 +205,8 @@ export async function assignProductUnit(
  * scan order is PostgreSQL's choice, not the caller's list order, which is what `units.pg.test.ts`
  * runs two opposite-order reassignments against. An id that is not currently on `sourceUnitId` —
  * an unknown id or another tenant's included — matches no row and is skipped, never an error. A
- * `null` target instead deletes those rows outright, so the listed products become Each (no unit). */
+ * `null` target instead deletes those rows and, in the same transaction, sets their `pricing_unit`
+ * to `'each'`, so the listed products become Each (no unit) with the no-unit ⟺ each invariant held. */
 export async function reassignProductsToUnit(
   tx: Transaction,
   tenantId: string,
@@ -219,7 +220,22 @@ export async function reassignProductsToUnit(
     inArray(productUnits.productId, productIds),
   );
   if (targetUnitId === null) {
-    // Reassign to Each: drop the rows for the listed products still on the source unit.
+    // Reassign to Each: the listed products still on the source unit lose their unit rows and, in the
+    // same transaction, return to each-priced so the no-unit ⟺ pricing_unit='each' invariant holds.
+    // The UPDATE runs BEFORE the DELETE so it can scope by the product_units rows still present, and
+    // the two are awaited in turn (pg queueing — CLAUDE.md §3).
+    await tx
+      .update(products)
+      .set({ pricingUnit: "each" })
+      .where(
+        and(
+          eq(products.tenantId, tenantId),
+          inArray(
+            products.id,
+            tx.select({ id: productUnits.productId }).from(productUnits).where(scope),
+          ),
+        ),
+      );
     await tx.delete(productUnits).where(scope);
     return;
   }

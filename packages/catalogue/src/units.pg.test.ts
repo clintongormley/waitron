@@ -410,3 +410,49 @@ it("reassigning to null clears the products' unit (they become Each)", async () 
   ).toHaveLength(0);
   expect(await app(suite.admin, tenantId, (tx) => readProductUnitId(tx, tenantId, p1))).toBeNull();
 });
+
+it("reassigning to null returns the products to each-priced and leaves products on other units alone", async () => {
+  const tenantId = await seedTenant(suite.admin);
+  const onSource = await product(tenantId);
+  const onOther = await product(tenantId);
+  const sourceUnit = await app(suite.admin, tenantId, (tx) =>
+    createUnit(tx, tenantId, { name: { en: "kg" }, precision: 3, abbreviation: { en: "u" } }, "en"),
+  );
+  const otherUnit = await app(suite.admin, tenantId, (tx) =>
+    createUnit(
+      tx,
+      tenantId,
+      { name: { en: "litre" }, precision: 2, abbreviation: { en: "u" } },
+      "en",
+    ),
+  );
+  // Put both products in the real "sold by weight" state: a unit row plus pricing_unit = 'weight'.
+  await app(suite.admin, tenantId, async (tx) => {
+    await assignProductUnit(tx, tenantId, onSource, sourceUnit.id);
+    await assignProductUnit(tx, tenantId, onOther, otherUnit.id);
+  });
+  await suite.admin.execute(sql`
+    update products set pricing_unit = 'weight'
+    where tenant_id = ${tenantId} and id in (${onSource}, ${onOther})`);
+
+  // onOther is in the list but on a different unit, so it stands in for a product already moved
+  // elsewhere: scoped by the source unit, it must be skipped by both the delete and the update.
+  await app(suite.admin, tenantId, (tx) =>
+    reassignProductsToUnit(tx, tenantId, sourceUnit.id, [onSource, onOther], null),
+  );
+
+  const pricing = await suite.admin.execute<{ id: string; pricing_unit: string }>(sql`
+    select id, pricing_unit from products
+    where tenant_id = ${tenantId} and id in (${onSource}, ${onOther})`);
+  const pricingById = Object.fromEntries(pricing.rows.map((r) => [r.id, r.pricing_unit]));
+  // The reassigned product loses its unit row AND returns to each-priced (the no-unit ⟺ each invariant).
+  expect(
+    await app(suite.admin, tenantId, (tx) => readProductUnitId(tx, tenantId, onSource)),
+  ).toBeNull();
+  expect(pricingById[onSource]).toBe("each");
+  // The product on another unit keeps both its unit row and its weight pricing.
+  expect(await app(suite.admin, tenantId, (tx) => readProductUnitId(tx, tenantId, onOther))).toBe(
+    otherUnit.id,
+  );
+  expect(pricingById[onOther]).toBe("weight");
+});
