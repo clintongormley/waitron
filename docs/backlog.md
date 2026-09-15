@@ -945,7 +945,9 @@ Two halves, one branch each (owner decision 2026-09-12).
   per-person inbox, `state` versus `local`, push versus poll. (Branch 1 settles these: a pop-up
   toast; handled state shared by the whole venue in the `incidents` table; incident changes pushed to
   the dashboard through the `incidents` change source, plus a one-minute refresh for the ongoing
-  checks. The pairing and ongoing-check consumers are not built.)
+  checks. The pairing consumer is not built; the ongoing-check consumers — a stalled agent, a stopped
+  fiscal outbox, a missing certificate, waiting print jobs, a low reader battery, and a failed or
+  stale backup — are built on `feat/dashboard-alerts-ongoing`, awaiting merge.)
 
 ### A6. Payments
 

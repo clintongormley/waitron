@@ -179,8 +179,11 @@ export function printingAlertSource(): AlertSource {
         });
       }
 
-      // One row per active printer with at least one waiting document job. Both tables carry their own
-      // tenant predicate — one database per tenant is NOT the query's isolation boundary (CLAUDE.md §3).
+      // One row per active printer with at least one waiting document job. The composite FK
+      // (tenant_id, printer_id) → printers(tenant_id, id) enforces that a job's printer is same-tenant,
+      // so a cross-tenant print_jobs row is not insertable; the per-table tenant predicate plus that FK
+      // isolate this query, and the two-tenant test proves partition without independently exercising
+      // each predicate. The predicates stay as defense-in-depth (CLAUDE.md §3).
       const stuckBefore = new Date(now.getTime() - JOBS_WAITING_MS).toISOString();
       const rows = await tx
         .select({
@@ -262,20 +265,30 @@ export function batteryAlertSource(deps: {
         })
         .from(cardReaders)
         .where(and(eq(cardReaders.tenantId, tenantId), eq(cardReaders.active, true)));
+      // Each reader's reading is an independent EXTERNAL provider call (via `runtimeDeps`, not a query
+      // on this transaction), so they run CONCURRENTLY — the "await queries on one transaction in turn"
+      // rule governs tx queries, which these are not. Any one call throwing rejects `Promise.all` and
+      // collapses the whole source to one `alert.source_unavailable:card_reader`, the same source-level
+      // failure model as the first throw would give when read sequentially.
+      const percents = await Promise.all(
+        readers.map((r) =>
+          deps.cache.get(r.id, async () => {
+            // `cardProviderById` THROWS `payment.provider_unknown` on an unrecognised provider id (it
+            // never returns undefined), and a seat whose `status` throws propagates out of `read` too.
+            // Either way the registry collapses this whole source to one
+            // `alert.source_unavailable:card_reader` — the spec's source-level failure model — so a
+            // misconfigured reader is surfaced as a broken check, not silently dropped. That is why
+            // there is no null-check here.
+            const seat = cardProviderById(deps.providers, r.provider);
+            const status = await seat.readers.status(deps.runtimeDeps(tenantId), r.ref);
+            return status.batteryPercent ?? null;
+          }),
+        ),
+      );
       const alerts: OngoingAlert[] = [];
-      for (const r of readers) {
-        const percent = await deps.cache.get(r.id, async () => {
-          // `cardProviderById` THROWS `payment.provider_unknown` on an unrecognised provider id (it
-          // never returns undefined), and a seat whose `status` throws propagates out of `read` too.
-          // Either way the registry collapses this whole source to one
-          // `alert.source_unavailable:card_reader` — the spec's source-level failure model — so a
-          // misconfigured reader is surfaced as a broken check, not silently dropped. That is why
-          // there is no null-check here.
-          const seat = cardProviderById(deps.providers, r.provider);
-          const status = await seat.readers.status(deps.runtimeDeps(tenantId), r.ref);
-          return status.batteryPercent ?? null;
-        });
-        if (percent === null || percent > BATTERY_WARN) continue;
+      readers.forEach((r, i) => {
+        const percent = percents[i]!;
+        if (percent === null || percent > BATTERY_WARN) return;
         alerts.push({
           key: `reader.battery_low:${r.id}`,
           code: "reader.battery_low",
@@ -284,7 +297,7 @@ export function batteryAlertSource(deps: {
           since: null,
           screen: "payments",
         });
-      }
+      });
       return alerts;
     },
   };

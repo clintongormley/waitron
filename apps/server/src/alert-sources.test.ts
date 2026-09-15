@@ -303,6 +303,9 @@ describe("printingAlertSource — printer.jobs_waiting", () => {
   });
 });
 
+// The composite FK (tenant_id, printer_id) → printers(tenant_id, id) makes a cross-tenant print_jobs
+// row uninsertable, so this proves partition — the two per-table predicates and that FK together — but
+// cannot exercise each tenant predicate independently, which is what the FK is there to make redundant.
 describe("printingAlertSource — tenant scoping", () => {
   it("reads only its own tenant's silent agents and waiting jobs", async () => {
     const other = await seedTenant(suite.db);

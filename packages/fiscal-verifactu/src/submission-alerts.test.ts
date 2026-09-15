@@ -37,14 +37,9 @@ async function seedIdentity(db: Database): Promise<Identity> {
 // per identity, so one monotonic counter keeps every seeded registro/envío collision-free.
 let seq = 0;
 
-/** One `registros_facturacion` row generated at `genTime`, plus its 1:1 `envios` sidecar in
- * `estado` — the two rows the source joins. Minimal columns, mirroring `seedSoldRegistro`. */
-async function seedWaiting(
-  db: Database,
-  id: Identity,
-  genTime: Date,
-  estado: string,
-): Promise<void> {
+/** One `registros_facturacion` row generated at `genTime`, returning its id. Minimal columns,
+ * mirroring `seedSoldRegistro`. */
+async function seedRegistro(db: Database, id: Identity, genTime: Date): Promise<string> {
   seq += 1;
   const s = seq;
   const series = await db.execute<{ id: string }>(sql`
@@ -77,10 +72,34 @@ async function seedWaiting(
       ${genTime.toISOString()}, 60, '01', ${huella}
     ) returning id
   `);
+  return registro.rows[0]!.id;
+}
+
+/** Insert one `envios` sidecar in `estado`, owned by `envioTenantId`, pointing at `registroId`. The
+ * FK on `registro_id` is single-column (to `registros_facturacion.id`), so `envioTenantId` need not
+ * match the registro's tenant — which is what lets the cross-tenant fixtures below exist. */
+async function seedEnvio(
+  db: Database,
+  registroId: string,
+  envioTenantId: string,
+  estado: string,
+): Promise<void> {
   await db.execute(sql`
     insert into envios (registro_id, tenant_id, estado)
-    values (${registro.rows[0]!.id}, ${id.tenantId}, ${estado})
+    values (${registroId}, ${envioTenantId}, ${estado})
   `);
+}
+
+/** One `registros_facturacion` row generated at `genTime`, plus its 1:1 same-tenant `envios` sidecar
+ * in `estado` — the two rows the source joins. */
+async function seedWaiting(
+  db: Database,
+  id: Identity,
+  genTime: Date,
+  estado: string,
+): Promise<void> {
+  const registroId = await seedRegistro(db, id, genTime);
+  await seedEnvio(db, registroId, id.tenantId, estado);
 }
 
 describe("fiscalSubmissionSource", () => {
@@ -211,6 +230,46 @@ describe("fiscalSubmissionSource", () => {
       });
       // The other tenant's detenido row must not surface here.
       expect(alerts.find((a) => a.code === "fiscal.submission_stopped")).toBeUndefined();
+    });
+  });
+
+  // The join predicate is a single-column FK (`envios.registro_id → registros_facturacion.id`) with no
+  // tenant column, so the database PERMITS an `envios` row whose tenant differs from its registro's.
+  // Both tenant predicates are therefore independently load-bearing: `envios.tenantId` against a row
+  // whose registro is ours but whose envío is another tenant's, and `registrosFacturacion.tenantId`
+  // against a row whose envío is ours but whose registro is another tenant's.
+  it("excludes rows whose envío and registro belong to different tenants", async () => {
+    const a = await seedIdentity(pg.db);
+    const b = await seedIdentity(pg.db);
+
+    // A's own waiting row — envío and registro both A. Only this may be counted.
+    await seedWaiting(pg.db, a, hoursAgo(25), "pendiente");
+
+    // Cross-tenant #1: registro is A's, envío is B's. Without `eq(envios.tenantId, A)` the query would
+    // join this registro (A's) and count B's envío — inflating A's count and moving `since` to 30h.
+    const registroOfA = await seedRegistro(pg.db, a, hoursAgo(30));
+    await seedEnvio(pg.db, registroOfA, b.tenantId, "pendiente");
+
+    // Cross-tenant #2: envío is A's, registro is B's. Without `eq(registrosFacturacion.tenantId, A)`
+    // the query would match A's envío and join B's registro — inflating A's count and moving `since`
+    // to 40h.
+    const registroOfB = await seedRegistro(pg.db, b, hoursAgo(40));
+    await seedEnvio(pg.db, registroOfB, a.tenantId, "pendiente");
+
+    await withTenant(pg.db, a.tenantId, async (tx) => {
+      await asAppUser(tx);
+      const alerts = await fiscalSubmissionSource.read({
+        tx,
+        tenantId: a.tenantId as never,
+        now: NOW,
+      });
+      // Only A's own row: count 1, and `since`/`hours` from its 25h age — neither cross-tenant row.
+      expect(alerts.find((al) => al.code === "fiscal.submission_delayed")).toMatchObject({
+        severity: "error",
+        params: { count: 1, hours: 25 },
+        since: hoursAgo(25).toISOString(),
+      });
+      expect(alerts.find((al) => al.code === "fiscal.submission_stopped")).toBeUndefined();
     });
   });
 });
