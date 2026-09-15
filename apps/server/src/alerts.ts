@@ -31,12 +31,7 @@ export function createAlertRegistry(parts: {
     if (seen.has(claim.prefix)) throw new Error(`two alert claims on the prefix "${claim.prefix}"`);
     seen.add(claim.prefix);
   }
-  // A failing source's alert is keyed by its area, and the dashboard tells alerts apart by key.
-  const areas = new Set<string>();
-  for (const source of parts.sources) {
-    if (areas.has(source.area)) throw new Error(`two alert sources in the area "${source.area}"`);
-    areas.add(source.area);
-  }
+  // Sources may share an area: one area can carry a module-owned and a server-owned source at once.
   return { claims: [...parts.claims], sources: [...parts.sources] };
 }
 
@@ -104,6 +99,8 @@ export async function readOpenAlerts(
     const claim = claimFor(deps.registry, incident.code);
     if (held.has(claim.permission)) alerts.push(eventAlert(incident, claim));
   }
+  // The synthetic is keyed by area, so two failed sources in one area would collide; show it once.
+  const failedAreas = new Set<string>();
   for (const source of deps.registry.sources) {
     if (!held.has(source.permission)) continue;
     try {
@@ -118,6 +115,8 @@ export async function readOpenAlerts(
         area: source.area,
         errorCode: codeOf(error),
       });
+      if (failedAreas.has(source.area)) continue;
+      failedAreas.add(source.area);
       alerts.push({
         key: `alert.source_unavailable:${source.area}`,
         kind: "ongoing",
