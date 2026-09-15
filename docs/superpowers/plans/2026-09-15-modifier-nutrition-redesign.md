@@ -23,6 +23,33 @@
 
 ---
 
+## Scope by symbol, not by file list (read before every task)
+
+The per-task **Files** lists below are a FLOOR, not a ceiling — an earlier fresh-context review found them under-scoped by roughly half. Each of these changes threads through many files, one of them a cross-package contract. So before you commit any task:
+
+1. Run the task's grep (below) and update **every** non-test hit. A missed hit is a compile break that violates the task's green-boundary promise.
+2. Re-grep the **tests** for the same symbol (`git grep -n "<symbol>" -- '**/*.test.ts'`) and update those too — including `*.a11y.test.ts`, `*.pg.test.ts`, and the drift/guard suites.
+3. Only then run the focused suites + typechecks named in the task.
+
+### Authoritative consumer inventory (grep-verified 2026-09-15, branch head)
+
+- **`yes-no`** (Task 1) — non-test: `packages/shared/src/modifiers.ts`, `packages/shared/src/modifier-snapshots.ts`, `packages/catalogue/src/modifier-contract.ts`, `packages/catalogue/src/modifier-projection.ts`, `packages/catalogue/src/modifiers.ts`, `packages/db/src/schema/catalogue.ts`, `apps/dashboard/src/api/client.ts`, `apps/dashboard/src/i18n/strings.ts` (86, 1339), `apps/dashboard/src/screens/modifiers-screen.ts` (372, 439), `apps/dashboard/src/widgets/modifier-form.ts` (39, 178, 367, 382-383, 580, 594), `apps/server/src/modifier-selection.ts` (20, 23, 59, 60), `apps/server/src/modifier-snapshot-labels.ts` (15), `apps/server/scripts/demo-seed/seed-options.ts` (158), `apps/till/src/api/client.ts` (360, 369, 378), `apps/till/src/widgets/modifier-picker.ts` (158, 473-476), `apps/till/src/widgets/modifier-snapshot.ts` (13).
+- **`isModifierOffered`** (Task 1) — `packages/shared/src/modifiers.ts` (def), `packages/catalogue/src/modifier-contract.ts` (1, 2, 209, 258), `packages/catalogue/src/modifier-projection.ts` (3, 40, 72). Removing it: the two `.filter(isModifierOffered)` calls become identity — delete the filter; the two contract guards drop the `isModifierOffered(...)` term (every modifier is offered).
+- **`removeAllergens` / `addOrigins` / `removeOrigins`** (Task 3) — non-test: `packages/shared/src/modifiers.ts`, `packages/db/src/schema/catalogue.ts`, `packages/catalogue/src/modifier-contract.ts`, `packages/catalogue/src/modifiers.ts`, **`packages/module/src/module.ts` (158-160, the cross-package module contract — a risk trigger)**, `apps/dashboard/src/api/client.ts` (431-437 AND 487, 538, 559), `apps/dashboard/src/screens/modifiers-screen.ts`, `apps/dashboard/src/widgets/allergen-dietary-picker.ts`, `apps/dashboard/src/widgets/choice-form.ts`, `apps/dashboard/src/widgets/modifier-form.ts` (374-375), `apps/dashboard/src/widgets/option-group-manager.ts` (352, 363, 500-539), `apps/server/src/catalogue-api.ts` (1245-1354), `apps/server/src/working-order.ts` (the 239-242 picker feed AND the 3900-4019 fold removed in Task 2), `apps/till/src/api/client.ts` (296-315, 353, 526-528), `apps/till/src/state/as-served.ts` (removed in Task 2), `apps/till/src/widgets/modifier-picker.ts` (230-232). **KEEP** `packages/catalogue/src/operations.ts` — its `removeAllergens`/`addOrigins`/`removeOrigins` are the PRODUCT manual overlay, a different feature.
+- **`dietaryEffect`** (Task 4) — non-test: `packages/shared/src/modifiers.ts`, `packages/db/src/schema/catalogue.ts`, `packages/catalogue/src/modifier-contract.ts`, `packages/catalogue/src/modifiers.ts`, `packages/module/src/module.ts` (161), `apps/dashboard/src/api/client.ts` (all four shapes), `apps/dashboard/src/screens/modifiers-screen.ts`, `apps/dashboard/src/widgets/choice-form.ts`, `apps/dashboard/src/widgets/modifier-form.ts`, `apps/server/src/working-order.ts` (242 + the fold), `apps/server/scripts/demo-seed/seed-options.ts` (105, 114, 123, 142, 148), `apps/till/src/api/client.ts` (315, 528), `apps/till/src/state/as-served.ts` (removed in Task 2). In `operations.ts`, verify each hit is a product-path/comment reference before touching it.
+
+### KEEP list (do NOT delete — live product-path or product-editor consumers)
+
+- `validateRemoveAllergens`, `assertAllergenOverlayDisjoint`, `validateOrigins` — used by `packages/catalogue/src/operations.ts` (1976, 1982, 2003). Tasks only remove the now-dead IMPORT of these from `modifier-contract.ts`; the functions and their tests stay.
+- `expandDietaryDeclarations` — used by `apps/dashboard/src/widgets/product-editor.ts:731` and the product path in `working-order.ts`. Keep it.
+- `deriveDietProfile`, `overlayDietProfile`, `republish`, `mergeAllergenMaps`, `DIETARY_LABELS` (6), `validateDietaryDeclarations` — the product's own derivation. Keep all.
+
+### Historical snapshot path — decision
+
+A modifier SELECTION is also stored as a frozen `modifier_snapshots` value (`packages/shared/src/modifier-snapshots.ts`, `apps/till/src/api/client.ts`, `apps/server/src/modifier-selection.ts`, `apps/server/src/modifier-snapshot-labels.ts`, `apps/till/src/widgets/modifier-snapshot.ts`). Because Waitron is pre-production (no data to preserve, §3), **drop the `{ type: "yes-no"; value: boolean }` arm from the snapshot unions and every switch over them too**, in Task 1 — do not keep a dead branch for snapshots that can no longer be produced.
+
+---
+
 ## Task 1: Remove the `yes-no` modifier type
 
 Removes the redundant fourth type end-to-end. Self-contained: every layer still compiles because dropping a union arm only deletes branches.
@@ -118,7 +145,7 @@ Removes the "as-served" fold on the waiter basket and the kitchen/expo projectio
 - Modify: `packages/catalogue/src/derivation.ts` (remove `deriveAsServedAllergens`, `OptionAllergenOverlay`, `AsServedAllergens` — 45-89; KEEP `mergeAllergenMaps`, `republish`, `RecipeDerivation`)
 - Modify: `packages/catalogue/src/dietary.ts` (remove `deriveAsServedDiet` + `OptionOriginOverlay`; KEEP `deriveDietProfile`, `overlayDietProfile`, `DietProfile` — verify line numbers by reading)
 - Modify: `packages/catalogue/src/dietary-declarations.ts` (remove `applyDietaryEffects` and — only if grep shows no remaining consumer — `expandDietaryDeclarations`; KEEP `DIETARY_LABELS`, `validateDietaryDeclarations` for the product path)
-- Test: `apps/till/src/state/as-served.test.ts` (or wherever the fold is tested), `apps/till/src/widgets/basket.test.ts`, `apps/server/src/working-order.test.ts`, `packages/catalogue/src/derivation.test.ts`, `packages/catalogue/src/dietary-declarations.test.ts`
+- Test: `apps/till/src/state/as-served-diet.test.ts` (the real filename; also any `as-served*` allergen test), `apps/till/src/widgets/basket.test.ts`, `apps/server/src/working-order.test.ts`, `packages/catalogue/src/derivation.test.ts`, `packages/catalogue/src/dietary-declarations.test.ts`
 
 **Interfaces:**
 - Produces: `asServedDiet(line)` and `asServedAllergens(line)` (kept names) now return the PRODUCT's own profile with no modifier contribution. The server projection `asServedByParent` carries the parent product's own `{ allergens, pending }` and `asServedDiet`, no fold.
@@ -148,8 +175,8 @@ Expected: FAIL — result includes `milk`.
 - [ ] **Step 3: Reduce the client helpers to product-own**
 
 In `apps/till/src/state/as-served.ts`: delete `selectedItems`, `asServedDietaryDeclarations`, and the overlay construction. Reimplement:
-- `asServedAllergens(line)` → return the dish's own published allergens as an `AsServedAllergens`-shaped value, i.e. `{ allergens: line.product.allergens ?? {}, pending: line.product.allergens == null, removed: [] }` (or inline a small local type — `AsServedAllergens` is being removed from catalogue).
-- `asServedDiet(line)` → the product's own `DietProfile`: keep the `dietaryDeclarations` branch (60-71) as-is (no modifier effects) and, for the derived branch, call the product-level derivation with NO overlays (`deriveDietProfile`/`overlayDietProfile`, or `deriveAsServedDiet(derivation, override, [])` if you keep that signature — but this task removes `deriveAsServedDiet`, so use the product-level functions).
+- `asServedAllergens(line)` → return the dish's own published allergens as an `AsServedAllergens`-shaped value, i.e. `{ allergens: line.product.allergens ?? {}, pending: line.product.allergens == null, removed: [] }` (inline a small local type — `AsServedAllergens` is being removed from catalogue).
+- `asServedDiet(line)` → the product's own `DietProfile`. The `dietaryDeclarations` branch currently (line 62) calls `asServedDietaryDeclarations(line)`, which this step DELETES — so rewire that branch to `expandDietaryDeclarations(line.product.dietaryDeclarations as DietaryLabel[])` (the dish's own declarations, no modifier effects), keeping the same "vegan/vegetarian ⇒ badge" mapping at 63-70. For the derived branch, call the product-level derivation with NO overlays (`deriveDietProfile` then `overlayDietProfile`); do NOT use `deriveAsServedDiet` — this task removes it. `expandDietaryDeclarations` is KEPT (see the KEEP list).
 
 Remove the now-unused imports (`deriveAsServedAllergens`, `deriveAsServedDiet`, `applyDietaryEffects`, `expandDietaryDeclarations`, overlay types).
 
@@ -159,7 +186,9 @@ In `apps/till/src/widgets/basket.ts`: `#allergenRow` and `#dietRow` keep calling
 
 - [ ] **Step 5: Reduce the server projection**
 
-In `apps/server/src/working-order.ts` (~3900-4019): delete the child `addAllergens`/`removeAllergens`/`dietaryEffect` selects and `overlaysByParent`/`dietaryEffectsByParent` accumulation (3906-3942, 3961-3995); compute each parent's own profile: `asServed` = `{ allergens: p.allergens ?? {}, pending: p.allergens == null }`, and `asServedDiet` from `p.dietaryDeclarations` alone (drop `applyDietaryEffects`; keep the `expanded.includes(...)` mapping but feed it the product's own declarations, expanded only if `expandDietaryDeclarations` is retained — otherwise inline the vegan⇒vegetarian widening or read the product's DietProfile). Keep `asServedByParent`'s shape so the wire and the KDS/expo consumers are unchanged.
+In `apps/server/src/working-order.ts` (~3900-4019): delete the child `addAllergens`/`removeAllergens`/`dietaryEffect` selects and `overlaysByParent`/`dietaryEffectsByParent` accumulation (3906-3942, 3961-3995); compute each parent's own profile: `asServed` = `{ allergens: p.allergens ?? {}, pending: p.allergens == null }`, and `asServedDiet` from `p.dietaryDeclarations` alone via `expandDietaryDeclarations` (KEPT) feeding the `expanded.includes(...)` mapping (drop `applyDietaryEffects`).
+
+Because the "removes" direction is gone, the fold's `removed` output is permanently empty. **Drop `removed` from `asServedByParent` and the wire, and delete the expo "NO &lt;allergen&gt;" removed-callout it fed** (`apps/till/src/screens/till-expo-screen.ts` ~665-687) — a permanently-empty branch is dead code and a stale receipt (§1). Update any wire-body `toEqual`/`toMatchObject` assertion that pinned `removed` (re-grep). This is the one deliberate shape change to `asServedByParent`; every other field stays.
 
 - [ ] **Step 6: Remove the dead shared combiners**
 
@@ -228,7 +257,9 @@ Run: `pnpm --filter @waitron/catalogue test -- modifier-contract`
 
 - [ ] **Step 4: Update the contract**
 
-`modifier-contract.ts`: `effectKeys = ["addAllergens", "dietaryEffect"]` (64 — drop `removeAllergens`); in `effects()` delete the `removeAllergens` block (69-71) and the `assertAllergenOverlayDisjoint` call (72); remove the now-unused imports (`assertAllergenOverlayDisjoint`, `validateRemoveAllergens`). In `allergens.ts` delete those two functions if grep shows no other consumer.
+`modifier-contract.ts`: `effectKeys = ["addAllergens", "dietaryEffect"]` (64 — drop `removeAllergens`); in `effects()` delete the `removeAllergens` block (69-71) and the `assertAllergenOverlayDisjoint` call (72); remove the now-unused IMPORTS (`assertAllergenOverlayDisjoint`, `validateRemoveAllergens`) from this file only. **Do NOT delete those functions from `allergens.ts`** — `packages/catalogue/src/operations.ts` (1976, 1982, 2003) uses `validateRemoveAllergens`, `assertAllergenOverlayDisjoint` and `validateOrigins` for the product manual overlay (the KEEP list). They and their tests stay.
+
+Cover the rest of the inventory in this task: drop the three fields from `packages/module/src/module.ts` (158-160, the cross-package contract), `apps/dashboard/src/widgets/option-group-manager.ts` (its add/remove-allergen + origin comboboxes — read the file), `apps/server/src/catalogue-api.ts` (1245-1354 option route bodies), `apps/server/src/working-order.ts:239-242` (the picker feed — separate from the fold removed in Task 2), the till wire (`apps/till/src/api/client.ts`, `apps/till/src/widgets/modifier-picker.ts`), and the extra `ModifierEffects`-shaped declarations in `client.ts` (487, 538, 559) and `modifier-form.ts:374-375`. Adjust the schema guard `packages/db/src/schema/catalogue.test.ts` (100-109) that asserts the `add_origins`/`remove_origins` columns exist.
 
 - [ ] **Step 5: Update persistence + projection + schema**
 
@@ -331,6 +362,8 @@ Keep `DIETARY_LABELS` (6) and `validateDietaryDeclarations` for the product path
 `modifiers.ts`: `writeChoices` value `dietarySuitability: choice.suitableFor ?? []` (replace 187); `listModifiers` projection `suitableFor: item.dietarySuitability ?? []` (replace 70).
 `schema/catalogue.ts`: replace the `dietaryEffect` column (233) with `dietarySuitability: jsonb("dietary_suitability").$type<string[]>()`. Run `pnpm --filter @waitron/db generate`.
 
+Cover the rest of the `dietaryEffect` inventory: `packages/module/src/module.ts:161` (the cross-package contract — replace the `dietaryEffect?: { invalidates }` field with `suitableFor?: readonly string[] | null`), `apps/server/src/catalogue-api.ts`, `apps/server/src/working-order.ts:242` (picker feed), the till wire (`apps/till/src/api/client.ts` 315, 528), and the dashboard `modifiers-screen.ts` read-back. **Rewrite the demo seed** `apps/server/scripts/demo-seed/seed-options.ts`: replace each `dietaryEffect: { invalidates: [...] }` (105, 114, 123, 142, 148) with `suitableFor: [...]` using the four positive labels, and (already required by Task 1) drop its `type: "yes-no"` modifier — otherwise `createModifier`/`parseModifierInput` reject the seed and the `wa-wt demo` stack + `seed-options.test.ts` break.
+
 - [ ] **Step 6: Dashboard mirror + choice form default**
 
 `client.ts`: `ModifierEffects.suitableFor?: string[] | null`; export a `DIETARY_SUITABILITY`/`DietarySuitability` for the editor (browser-local copy, per the #70 bundle rule — do not import from catalogue).
@@ -384,7 +417,7 @@ Turns the three-combobox picker into one allergen multi-select plus a four-item 
 - Modify: `apps/dashboard/src/widgets/allergen-dietary-picker.ts` (whole — drop the removeAllergens combobox; dietary → checkbox group over `DIETARY_SUITABILITY`)
 - Modify: `apps/dashboard/src/widgets/choice-form.ts` (`#effects` heading 171-173)
 - Modify: `apps/dashboard/src/i18n/strings.ts` (EN + ES): rename `modifiers.effects` "Allergens and dietary effects" → "Nutritional information" (115 / ES ~2? — find the ES sibling); rename `modifiers.invalidates_dietary` "No longer suitable for" → "Dietary preferences" (120 / 1373); the allergen picker's single list needs a label key `modifiers.allergens` ("Allergens" / "Alérgenos"); drop the now-unused `modifiers.add_allergen` / `modifiers.remove_allergen` if nothing else references them (grep). Ensure `editor.diet.*` has only the four labels used (leave the string entries; unused `no_meat`/`no_fish` keys are harmless but remove if the picker was their only consumer — grep).
-- Test: `apps/dashboard/src/widgets/allergen-dietary-picker.test.ts` (or `choice-form.test.ts`)
+- Test: `apps/dashboard/src/widgets/allergen-dietary-picker.test.ts`, and the a11y suites this rewrite changes structure in — `allergen-dietary-picker.a11y.test.ts`, `choice-form.a11y.test.ts`, `modifier-form.a11y.test.ts` (a `wt-*` primitive needs an axe a11y test per distinct state in both themes; the checkbox group must pass axe with proper labels). Re-grep the widget tests before finishing.
 
 **Interfaces:**
 - Consumes: `DIETARY_SUITABILITY` (Task 4). Produces: `AllergenDietaryValue = { allergens: string[]; dietary: DietarySuitability[] }` (rename `addAllergens`→`allergens`, drop `removeAllergens`).
