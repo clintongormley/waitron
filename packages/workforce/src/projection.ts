@@ -52,7 +52,7 @@ export interface TimeEntryRecord {
   recordedAt: string;
   /** The wall-clock offset in minutes (`event_offset_minutes`), for deriving the local calendar day. */
   offsetMinutes: number;
-  /** The 1-based tamper-evident chain position (`sequence_no`) within this (tenant, node, location)
+  /** The 1-based tamper-evident chain position (`sequence_no`) within this (node, location)
    * chain — hashed (chain-hash.ts) AND contiguity-checked by `verifyChain`, so it cannot be reordered
    * undetected. The last key of the cross-node correction order (`applyCorrections`), decisive only
    * within a single chain once `recordedAt` and `nodeId` tie. */

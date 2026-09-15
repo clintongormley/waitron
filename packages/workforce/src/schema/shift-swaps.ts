@@ -1,5 +1,4 @@
 import { foreignKey, index, pgEnum, pgTable, timestamp, uuid } from "drizzle-orm/pg-core";
-import { tenants } from "@waitron/db";
 import { persons } from "@waitron/identity";
 import { shifts } from "./shifts.js";
 
@@ -37,7 +36,6 @@ export const shiftSwaps = pgTable(
   "shift_swaps",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    tenantId: uuid("tenant_id").notNull(),
     /** The person offering the swap — must own `from_shift` (`requestSwap` enforces it). */
     requestedByPersonId: uuid("requested_by_person_id").notNull(),
     /** The shift being offered. */
@@ -59,11 +57,6 @@ export const shiftSwaps = pgTable(
   (t) => [
     // The array `foreignKey({...})` form, not `.references(() => …)`, for the coverage reason the
     // sibling schema files document.
-    foreignKey({
-      columns: [t.tenantId],
-      foreignColumns: [tenants.id],
-      name: "shift_swaps_tenant_fk",
-    }).onDelete("restrict"),
     foreignKey({
       columns: [t.requestedByPersonId],
       foreignColumns: [persons.id],
@@ -92,7 +85,6 @@ export const shiftSwaps = pgTable(
       foreignColumns: [persons.id],
       name: "shift_swaps_decided_by_person_fk",
     }).onDelete("restrict"),
-    index("shift_swaps_tenant_id_idx").on(t.tenantId),
-    index("shift_swaps_tenant_from_shift_idx").on(t.tenantId, t.fromShiftId),
+    index("shift_swaps_from_shift_idx").on(t.fromShiftId),
   ],
 );

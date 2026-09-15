@@ -16,7 +16,7 @@ import { WORKFORCE_ES_MIGRATIONS } from "../migrations.js";
  * that order. workforce-es's `convenio_config` builds on the workforce schema, which builds on
  * identity, which builds on core, so all four sets are migrated, core first (that ordering is the
  * runtime's responsibility and nothing enforces it across packages, so it is explicit here). Worth
- * noting: `convenio_config`'s own foreign keys reach ONLY core (`tenants`/`locations`), and the sole
+ * noting: `convenio_config`'s own foreign keys reach ONLY core (`locations`), and the sole
  * real-PG suite this package ever had seeded only a tenant and a location — never a workforce or
  * identity row — so the IDENTITY and WORKFORCE sets are present not because that suite's rows needed
  * them but because the workforce-es PACKAGE depends on `@waitron/workforce` (this and `convenio.ts`

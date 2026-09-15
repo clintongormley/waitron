@@ -13,7 +13,6 @@ import type { ShiftSwapStatus } from "./schema/shift-swaps.js";
 
 /** A window read of one person's shifts over a half-open local-date range `[from, to)`. */
 export interface ListShiftsForPersonInput {
-  tenantId: string;
   personId: string;
   /** Inclusive lower bound, `YYYY-MM-DD`, compared against each shift's LOCAL wall date. */
   from: string;
@@ -69,8 +68,7 @@ export interface PersonAbsenceRow {
  * `starts_at`. The window compares `(starts_at at time zone 'UTC' + starts_offset_minutes)::date`, the
  * same offset-aware local-date expression `publishRoster`/`plannedShiftsInPeriod` use (offset 0 in this
  * slice, so local = UTC), so a shift is placed by its LOCAL day rather than its raw UTC instant. The
- * matching index is `shifts_tenant_person_starts_idx` on `(tenant_id, person_id, starts_at)` (plan
- * fact 4), whose leading `tenant_id` this query does not name.
+ * matching index is `shifts_person_starts_idx` on `(person_id, starts_at)`.
  */
 export async function listShiftsForPerson(
   tx: Transaction,
@@ -118,7 +116,7 @@ export async function listShiftsForPerson(
  */
 export async function listSwapsForPerson(
   tx: Transaction,
-  input: { tenantId: string; personId: string },
+  input: { personId: string },
 ): Promise<PersonSwapRow[]> {
   const { rows } = await tx.execute<{
     id: string;
@@ -151,12 +149,11 @@ export async function listSwapsForPerson(
 /**
  * All of the requester's absences, EVERY status (not only `requested` like the manager queue), ordered by
  * `starts_on` desc — a staff member's own leave history and pending requests. Person-scoped in application
- * code. The matching index is `absences_tenant_person_idx` on `(tenant_id, person_id, starts_on)`,
- * whose leading `tenant_id` this query does not name.
+ * code. The matching index is `absences_person_idx` on `(person_id, starts_on)`.
  */
 export async function listAbsencesForPerson(
   tx: Transaction,
-  input: { tenantId: string; personId: string },
+  input: { personId: string },
 ): Promise<PersonAbsenceRow[]> {
   const { rows } = await tx.execute<{
     id: string;

@@ -497,7 +497,7 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
       const to = requirePeriod(c.req.query("to"), "to");
       const rows = await asStaff(async (tx) => {
         const { personId } = await resolveManagementSession(tx, sessionId);
-        return listShiftsForPerson(tx, { tenantId: deps.cfg.tenantId, personId, from, to });
+        return listShiftsForPerson(tx, { personId, from, to });
       });
       return c.json(rows);
     }),
@@ -509,7 +509,7 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
       const sessionId = requireManagementSession(c);
       const rows = await asStaff(async (tx) => {
         const { personId } = await resolveManagementSession(tx, sessionId);
-        return listSwapsForPerson(tx, { tenantId: deps.cfg.tenantId, personId });
+        return listSwapsForPerson(tx, { personId });
       });
       return c.json(rows);
     }),
@@ -527,7 +527,6 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
       const swapId = await asStaff(async (tx) => {
         const { personId } = await resolveManagementSession(tx, sessionId);
         return requestSwap(tx, {
-          tenantId: deps.cfg.tenantId,
           requestedByPersonId: personId,
           fromShiftId,
           toPersonId,
@@ -546,7 +545,7 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
       const swapId = requireUuidParam(c.req.param("swapId"), "SwapId");
       await asStaff(async (tx) => {
         const { personId } = await resolveManagementSession(tx, sessionId);
-        return acceptSwap(tx, { tenantId: deps.cfg.tenantId, swapId, acceptingPersonId: personId });
+        return acceptSwap(tx, { swapId, acceptingPersonId: personId });
       });
       return c.body(null, 204);
     }),
@@ -558,7 +557,7 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
       const sessionId = requireManagementSession(c);
       const rows = await asStaff(async (tx) => {
         const { personId } = await resolveManagementSession(tx, sessionId);
-        return listAbsencesForPerson(tx, { tenantId: deps.cfg.tenantId, personId });
+        return listAbsencesForPerson(tx, { personId });
       });
       return c.json(rows);
     }),
@@ -576,7 +575,6 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
       const absenceId = await asStaff(async (tx) => {
         const { personId } = await resolveManagementSession(tx, sessionId);
         return createAbsence(tx, {
-          tenantId: deps.cfg.tenantId,
           personId,
           kind,
           startsOn,

@@ -56,7 +56,7 @@ describe("PGlite cannot test lock contention", () => {
         pg.db.transaction((tx) =>
           appendToChain(
             tx,
-            { tenantId, nodeId, locationId },
+            { nodeId, locationId },
             inputAt(`2026-01-05T06:${String(i).padStart(2, "0")}:00Z`),
           ),
         ),

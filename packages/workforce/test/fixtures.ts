@@ -62,34 +62,33 @@ export async function seedPerson(db: Database, tenantId: string, name = "Ana"): 
 /** An employment for the person, defaulting to a 40h (2400-minute) contracted week. Returns its id. */
 export async function seedEmployment(
   db: Database | Transaction,
-  params: { tenantId: string; personId: string; contractedMinutesPerWeek?: number },
+  params: { personId: string; contractedMinutesPerWeek?: number },
 ): Promise<string> {
   const result = await db.execute<{ id: string }>(sql`
     insert into employments (
-      tenant_id, person_id, contracted_minutes_per_week, contract_type, start_date, pay_rate
+      person_id, contracted_minutes_per_week, contract_type, start_date, pay_rate
     ) values (
-      ${params.tenantId}, ${params.personId},
+      ${params.personId},
       ${params.contractedMinutesPerWeek ?? 2400}, 'full_time', '2026-01-01', '15.00'
     )
     returning id`);
   return result.rows[0]!.id;
 }
 
-/** A draft roster_versions row for the tenant/location. Defaults to a one-week period. Returns its
+/** A draft roster_versions row for the location. Defaults to a one-week period. Returns its
  * id. Planning data (mutable) — inserted as `draft` with no `published_at`. */
 export async function insertRosterVersion(
   db: Database | Transaction,
   params: {
-    tenantId: string;
     locationId: string;
     periodStart?: string;
     periodEnd?: string;
   },
 ): Promise<string> {
   const result = await db.execute<{ id: string }>(sql`
-    insert into roster_versions (tenant_id, location_id, period_start, period_end)
+    insert into roster_versions (location_id, period_start, period_end)
     values (
-      ${params.tenantId}, ${params.locationId},
+      ${params.locationId},
       ${params.periodStart ?? "2026-01-05"}, ${params.periodEnd ?? "2026-01-11"}
     )
     returning id`);
@@ -101,7 +100,6 @@ export async function insertRosterVersion(
 export async function insertDraftShift(
   db: Database | Transaction,
   params: {
-    tenantId: string;
     personId: string;
     locationId: string;
     startsAt?: string;
@@ -114,10 +112,10 @@ export async function insertDraftShift(
 ): Promise<string> {
   const result = await db.execute<{ id: string }>(sql`
     insert into shifts (
-      tenant_id, person_id, location_id, starts_at, starts_offset_minutes,
+      person_id, location_id, starts_at, starts_offset_minutes,
       ends_at, ends_offset_minutes, role, roster_version_id
     ) values (
-      ${params.tenantId}, ${params.personId}, ${params.locationId},
+      ${params.personId}, ${params.locationId},
       ${params.startsAt ?? "2026-01-05T09:00:00Z"}, ${params.startsOffsetMinutes ?? 0},
       ${params.endsAt ?? "2026-01-05T17:00:00Z"}, ${params.endsOffsetMinutes ?? 0},
       ${params.role ?? null}, ${params.rosterVersionId ?? null}
@@ -126,14 +124,13 @@ export async function insertDraftShift(
   return result.rows[0]!.id;
 }
 
-/** An `absences` row for the tenant/person. Defaults to a 5–8 Jan holiday, status `requested`, no
+/** An `absences` row for the person. Defaults to a 5–8 Jan holiday, status `requested`, no
  * note. `createdAt` defaults to the DB's `now()`; pass it to control ordering (the listPending suites
  * seed OUT-OF-INSERT-ORDER timestamps to prove `order by created_at`). Planning data (mutable).
  * Returns its id. */
 export async function insertAbsence(
   db: Database | Transaction,
   params: {
-    tenantId: string;
     personId: string;
     kind?: string;
     startsOn?: string;
@@ -144,9 +141,9 @@ export async function insertAbsence(
   },
 ): Promise<string> {
   const result = await db.execute<{ id: string }>(sql`
-    insert into absences (tenant_id, person_id, absence_kind, starts_on, ends_on, status, note, created_at)
+    insert into absences (person_id, absence_kind, starts_on, ends_on, status, note, created_at)
     values (
-      ${params.tenantId}, ${params.personId}, ${params.kind ?? "holiday"},
+      ${params.personId}, ${params.kind ?? "holiday"},
       ${params.startsOn ?? "2026-01-05"}, ${params.endsOn ?? "2026-01-08"},
       ${params.status ?? "requested"}, ${params.note ?? null},
       ${params.createdAt === undefined ? sql`default` : params.createdAt}
@@ -155,12 +152,11 @@ export async function insertAbsence(
   return result.rows[0]!.id;
 }
 
-/** An `availability` row for the tenant/person. Defaults to weekday 0, 09:00–17:00, from 1 Jan,
+/** An `availability` row for the person. Defaults to weekday 0, 09:00–17:00, from 1 Jan,
  * open-ended. Planning data (mutable). Returns its id. */
 export async function insertAvailability(
   db: Database | Transaction,
   params: {
-    tenantId: string;
     personId: string;
     weekday?: number;
     availableFromMinute?: number;
@@ -171,10 +167,10 @@ export async function insertAvailability(
 ): Promise<string> {
   const result = await db.execute<{ id: string }>(sql`
     insert into availability (
-      tenant_id, person_id, weekday, available_from_minute, available_to_minute,
+      person_id, weekday, available_from_minute, available_to_minute,
       effective_from, effective_to
     ) values (
-      ${params.tenantId}, ${params.personId}, ${params.weekday ?? 0},
+      ${params.personId}, ${params.weekday ?? 0},
       ${params.availableFromMinute ?? 540}, ${params.availableToMinute ?? 1020},
       ${params.effectiveFrom ?? "2026-01-01"}, ${params.effectiveTo ?? null}
     )
@@ -182,12 +178,11 @@ export async function insertAvailability(
   return result.rows[0]!.id;
 }
 
-/** A `shift_templates` row for the tenant/location. Defaults to "Evening bar", weekday 0,
+/** A `shift_templates` row for the location. Defaults to "Evening bar", weekday 0,
  * 18:00–24:00, role null. Planning data (mutable). Returns its id. */
 export async function insertShiftTemplate(
   db: Database | Transaction,
   params: {
-    tenantId: string;
     locationId: string;
     label?: string;
     weekday?: number;
@@ -198,9 +193,9 @@ export async function insertShiftTemplate(
 ): Promise<string> {
   const result = await db.execute<{ id: string }>(sql`
     insert into shift_templates (
-      tenant_id, location_id, label, weekday, starts_minute, ends_minute, role
+      location_id, label, weekday, starts_minute, ends_minute, role
     ) values (
-      ${params.tenantId}, ${params.locationId}, ${params.label ?? "Evening bar"},
+      ${params.locationId}, ${params.label ?? "Evening bar"},
       ${params.weekday ?? 0}, ${params.startsMinute ?? 1080}, ${params.endsMinute ?? 1440},
       ${params.role ?? null}
     )
@@ -208,14 +203,13 @@ export async function insertShiftTemplate(
   return result.rows[0]!.id;
 }
 
-/** A `shift_swaps` row for the tenant. Status defaults to `requested`, `to_shift_id` null. `createdAt`
+/** A `shift_swaps` row. Status defaults to `requested`, `to_shift_id` null. `createdAt`
  * defaults to the DB's `now()`; pass it to control ordering (the listPending suites seed
  * OUT-OF-INSERT-ORDER timestamps to prove `order by created_at`). Planning data (mutable). Returns its
  * id. */
 export async function insertShiftSwap(
   db: Database | Transaction,
   params: {
-    tenantId: string;
     requestedByPersonId: string;
     fromShiftId: string;
     toPersonId: string;
@@ -226,9 +220,9 @@ export async function insertShiftSwap(
 ): Promise<string> {
   const result = await db.execute<{ id: string }>(sql`
     insert into shift_swaps (
-      tenant_id, requested_by_person_id, from_shift_id, to_person_id, to_shift_id, status, created_at
+      requested_by_person_id, from_shift_id, to_person_id, to_shift_id, status, created_at
     ) values (
-      ${params.tenantId}, ${params.requestedByPersonId}, ${params.fromShiftId},
+      ${params.requestedByPersonId}, ${params.fromShiftId},
       ${params.toPersonId}, ${params.toShiftId ?? null}, ${params.status ?? "requested"},
       ${params.createdAt === undefined ? sql`default` : params.createdAt}
     )
@@ -241,11 +235,10 @@ export async function insertShiftSwap(
  *
  * Wrapped in `.transaction()` because `appendToChain` needs a Transaction for its savepoint retry
  * and its `FOR UPDATE` head lock; both a `Database` (BEGIN) and a `Transaction` (SAVEPOINT) expose
- * `.transaction()`, so this fixture works whether a suite hands it a pool or a live tenant tx. */
+ * `.transaction()`, so this fixture works whether a suite hands it a pool or a live tx. */
 export async function insertTimeEntry(
   tx: Database | Transaction,
   params: {
-    tenantId: string;
     nodeId: string;
     personId: string;
     locationId: string;
@@ -257,7 +250,7 @@ export async function insertTimeEntry(
   await tx.transaction((inner) =>
     appendToChain(
       inner,
-      { tenantId: params.tenantId, nodeId: params.nodeId, locationId: params.locationId },
+      { nodeId: params.nodeId, locationId: params.locationId },
       {
         personId: params.personId,
         entryKind: params.entryKind ?? "in",

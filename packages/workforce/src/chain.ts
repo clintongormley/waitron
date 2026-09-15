@@ -20,11 +20,10 @@ const UNIQUE_VIOLATION = "23505";
  */
 const MAX_APPEND_ATTEMPTS = 3;
 
-/** The chain key — one chain per (tenant, node, location) (spec §2.1). Passed to `appendToChain`,
+/** The chain key — one chain per (node, location) (spec §2.1). Passed to `appendToChain`,
  * `lockChainHead` and `readChain` rather than positional strings, so a caller cannot transpose the
  * node and location. */
 export interface ChainKey {
-  tenantId: string;
   nodeId: string;
   locationId: string;
 }
@@ -104,7 +103,7 @@ async function selectHeadForUpdate(tx: Transaction, key: ChainKey): Promise<Chai
  * insert wait on it and then do nothing on the conflict, so the re-select observes the COMMITTED row
  * rather than one that might still roll back. Exported separately from `appendToChain` because it is
  * the seam a future chain verifier reads the head under the same lock. Same shape as fiscal
- * `lockChainHead`, keyed by (tenant, node, location).
+ * `lockChainHead`, keyed by (node, location).
  */
 export async function lockChainHead(tx: Transaction, key: ChainKey): Promise<ChainHead> {
   const existing = await selectHeadForUpdate(tx, key);
@@ -112,10 +111,8 @@ export async function lockChainHead(tx: Transaction, key: ChainKey): Promise<Cha
 
   await tx
     .insert(workforceChains)
-    .values({ tenantId: key.tenantId, nodeId: key.nodeId, locationId: key.locationId })
-    .onConflictDoNothing({
-      target: [workforceChains.tenantId, workforceChains.nodeId, workforceChains.locationId],
-    });
+    .values({ nodeId: key.nodeId, locationId: key.locationId })
+    .onConflictDoNothing({ target: [workforceChains.nodeId, workforceChains.locationId] });
 
   const created = await selectHeadForUpdate(tx, key);
   /* v8 ignore start */
@@ -199,7 +196,6 @@ async function attemptAppend(
   const [inserted] = await tx
     .insert(timeEntries)
     .values({
-      tenantId: key.tenantId,
       personId: entry.personId,
       locationId: key.locationId,
       nodeId: key.nodeId,
@@ -241,7 +237,7 @@ async function attemptAppend(
 }
 
 /**
- * Appends one entry to the (tenant, node, location) chain, in the caller's transaction — the single
+ * Appends one entry to the (node, location) chain, in the caller's transaction — the single
  * active writer's path for every clock event and every correction (design §5; the 2026-08-02
  * single-writer decision).
  *
@@ -279,7 +275,7 @@ export async function appendToChain(
 }
 
 /**
- * Reads one (tenant, node, location) chain's rows as `VerifiableEntry`s, ordered by chain position —
+ * Reads one (node, location) chain's rows as `VerifiableEntry`s, ordered by chain position —
  * the seam a test (and later a status page) verifies against the database rather than hand-rolling
  * the select. `event_at` and `recorded_at` are read through `to_char(… 'HH24:MI:SS"Z"')` so
  * `computeEntryHash` reproduces the stored hash under node-postgres (the Date-vs-string trap the

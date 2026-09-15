@@ -42,9 +42,9 @@ beforeEach(async () => {
   nodeId = await seedNode(pg.db, brandTenantId(tenantId), brandLocationId(locationId));
 });
 
-/** The chain key for this suite's default (tenant, node, location). */
+/** The chain key for this suite's default (node, location). */
 function key(location = locationId, node = nodeId): ChainKey {
-  return { tenantId, nodeId: node, locationId: location };
+  return { nodeId: node, locationId: location };
 }
 
 /** A base `in` clock event's append input at a given instant. */
@@ -104,7 +104,7 @@ describe("appendToChain", () => {
       last_recorded_at: string | null;
     }>(sql`
       select sequence_no, last_entry_id, last_entry_hash, last_recorded_at from workforce_chains
-      where tenant_id = ${tenantId} and node_id = ${nodeId} and location_id = ${locationId}`);
+      where node_id = ${nodeId} and location_id = ${locationId}`);
     expect(rows[0]).toMatchObject({
       sequence_no: 1,
       last_entry_id: id,
@@ -199,10 +199,10 @@ describe("appendToChain", () => {
     const error = await captureError(() =>
       pg.db.execute(sql`
         insert into time_entries (
-          tenant_id, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
+          person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
           recorded_by_person_id, recorded_at, entry_hash, sequence_no, is_first_entry
         ) values (
-          ${tenantId}, ${personId}, ${locationId}, ${nodeId}, 'in', '2026-01-05T09:00:00.123Z', 0,
+          ${personId}, ${locationId}, ${nodeId}, 'in', '2026-01-05T09:00:00.123Z', 0,
           ${personId}, '2026-01-05T09:00:00Z', ${"0".repeat(64)}, 1, true)`),
     );
     expect(pgErrorCode(error)).toBe("23514");
@@ -214,10 +214,10 @@ describe("appendToChain", () => {
     const error = await captureError(() =>
       pg.db.execute(sql`
         insert into time_entries (
-          tenant_id, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
+          person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
           recorded_by_person_id, recorded_at, entry_hash, sequence_no, is_first_entry
         ) values (
-          ${tenantId}, ${personId}, ${locationId}, ${nodeId}, 'in', '2026-01-05T09:00:00Z', 0,
+          ${personId}, ${locationId}, ${nodeId}, 'in', '2026-01-05T09:00:00Z', 0,
           ${personId}, '2026-01-05T09:00:00.123Z', ${"0".repeat(64)}, 1, true)`),
     );
     expect(pgErrorCode(error)).toBe("23514");
@@ -231,10 +231,10 @@ describe("appendToChain", () => {
     const error = await captureError(() =>
       pg.db.execute(sql`
         insert into time_entries (
-          tenant_id, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
+          person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
           recorded_by_person_id, recorded_at, entry_hash, sequence_no, is_first_entry
         ) values (
-          ${tenantId}, ${personId}, ${locationId}, ${nodeId}, 'out', '2026-01-05T18:00:00Z', 0,
+          ${personId}, ${locationId}, ${nodeId}, 'out', '2026-01-05T18:00:00Z', 0,
           ${personId}, '2026-01-05T18:00:00Z', ${"0".repeat(64)}, 1, true)`),
     );
     expect(pgErrorCode(error)).toBe("23505");
@@ -247,10 +247,10 @@ describe("appendToChain", () => {
     // recognise. Mirrors fiscal chain.test.ts's equivalent.
     await pg.db.execute(sql`
       insert into time_entries (
-        tenant_id, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
+        person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
         recorded_by_person_id, recorded_at, entry_hash, sequence_no, is_first_entry
       ) values (
-        ${tenantId}, ${personId}, ${locationId}, ${nodeId}, 'in', '2026-01-05T08:00:00Z', 0,
+        ${personId}, ${locationId}, ${nodeId}, 'in', '2026-01-05T08:00:00Z', 0,
         ${personId}, '2026-01-05T08:00:00Z', ${"1".repeat(64)}, 1, true)`);
 
     const error = await pg.db
@@ -258,7 +258,7 @@ describe("appendToChain", () => {
       .catch((caught: unknown) => caught);
     expect(error).toBeInstanceOf(AppError);
     expect((error as AppError).code).toBe("attendance.append_contention");
-    expect((error as AppError).params).toEqual({ tenantId, nodeId, locationId, attempts: 3 });
+    expect((error as AppError).params).toEqual({ nodeId, locationId, attempts: 3 });
   });
 
   it("surfaces exhausted retries as a structured AppError, never a bare string", async () => {
@@ -273,7 +273,7 @@ describe("appendToChain", () => {
     );
     expect(error).toBeInstanceOf(AppError);
     expect((error as AppError).code).toBe("attendance.append_contention");
-    expect((error as AppError).params).toEqual({ tenantId, nodeId, locationId, attempts: 3 });
+    expect((error as AppError).params).toEqual({ nodeId, locationId, attempts: 3 });
   });
 
   it("does not retry an error that is not a chain collision", async () => {
@@ -367,7 +367,7 @@ describe("lockChainHead", () => {
     });
     const { rows } = await pg.db.execute<{ count: number }>(sql`
       select count(*)::int as count from workforce_chains
-      where tenant_id = ${tenantId} and node_id = ${nodeId} and location_id = ${locationId}`);
+      where node_id = ${nodeId} and location_id = ${locationId}`);
     expect(rows[0]?.count).toBe(1);
   });
 
@@ -380,7 +380,7 @@ describe("lockChainHead", () => {
     expect(head.lastRecordedAt).not.toBeNull();
     const { rows } = await pg.db.execute<{ count: number }>(sql`
       select count(*)::int as count from workforce_chains
-      where tenant_id = ${tenantId} and node_id = ${nodeId} and location_id = ${locationId}`);
+      where node_id = ${nodeId} and location_id = ${locationId}`);
     expect(rows[0]?.count).toBe(1);
   });
 });

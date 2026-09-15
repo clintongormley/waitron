@@ -15,7 +15,7 @@ import { insertTimeEntry, seedLocation, seedPerson } from "../test/fixtures.js";
 // package globalSetup boots.
 const suite = useTemplateDb({ template: "core_identity_workforce" });
 
-let ctx: { tenantId: string; nodeId: string; personId: string; locationId: string };
+let ctx: { nodeId: string; personId: string; locationId: string };
 
 // Reseed PER TEST, not once: `useTemplateDb` defaults `resetPerTest: true`, so the shared reset
 // TRUNCATEs every data table (cascade) after each `it`, wiping the tenant/node/person these rows
@@ -29,7 +29,7 @@ beforeEach(async () => {
   const locationId = await seedLocation(suite.admin, tenantId);
   const nodeId = await seedNode(suite.admin, brandTenantId(tenantId), brandLocationId(locationId));
   const personId = await seedPerson(suite.admin, tenantId);
-  ctx = { tenantId, nodeId, personId, locationId };
+  ctx = { nodeId, personId, locationId };
 });
 
 /** Runs `fn` inside a tenant transaction, downgraded to the non-owner application role. */

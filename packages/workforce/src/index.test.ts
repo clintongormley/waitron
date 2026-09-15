@@ -66,7 +66,6 @@ describe("employments constraint declarations (forces the lazy extraConfig callb
     const config = getTableConfig(api.employments);
 
     const fkNames = config.foreignKeys.map((fk) => fk.getName());
-    expect(fkNames).toContain("employments_tenant_fk");
     expect(fkNames).toContain("employments_person_fk");
 
     const checkNames = config.checks.map((c) => c.name);
@@ -76,13 +75,12 @@ describe("employments constraint declarations (forces the lazy extraConfig callb
 });
 
 describe("time_entries constraint declarations (forces the lazy extraConfig callback)", () => {
-  it("declares time_entries' six foreign keys and the offset/second checks", () => {
+  it("declares time_entries' seven foreign keys and the offset/second checks", () => {
     const config = getTableConfig(api.timeEntries);
 
     const fkNames = config.foreignKeys.map((fk) => fk.getName());
     expect(fkNames).toEqual(
       expect.arrayContaining([
-        "time_entries_tenant_fk",
         "time_entries_person_fk",
         "time_entries_location_fk",
         "time_entries_captured_by_till_fk",
@@ -119,16 +117,15 @@ describe("workforce_chains constraint declarations (forces the lazy extraConfig 
   it("declares the chain head's composite key, foreign keys and pointer check", () => {
     const config = getTableConfig(api.workforceChains);
 
-    // The PK is the composite (tenant_id, node_id, location_id) in extraConfig — asserting it forces
+    // The PK is the composite (node_id, location_id) in extraConfig — asserting it forces
     // the lazy callback to run.
     expect(config.primaryKeys.map((pk) => pk.getName())).toContain(
-      "workforce_chains_tenant_id_node_id_location_id_pk",
+      "workforce_chains_node_id_location_id_pk",
     );
 
     const fkNames = config.foreignKeys.map((fk) => fk.getName());
     expect(fkNames).toEqual(
       expect.arrayContaining([
-        "workforce_chains_tenant_id_tenants_id_fk",
         "workforce_chains_node_id_nodes_id_fk",
         "workforce_chains_location_id_locations_id_fk",
         "workforce_chains_last_entry_id_time_entries_id_fk",
@@ -146,7 +143,6 @@ describe("roster_versions constraint declarations (forces the lazy extraConfig c
     const fkNames = config.foreignKeys.map((fk) => fk.getName());
     expect(fkNames).toEqual(
       expect.arrayContaining([
-        "roster_versions_tenant_fk",
         "roster_versions_location_fk",
         "roster_versions_published_by_person_fk",
       ]),
@@ -159,13 +155,12 @@ describe("roster_versions constraint declarations (forces the lazy extraConfig c
 });
 
 describe("shifts constraint declarations (forces the lazy extraConfig callback)", () => {
-  it("declares shifts' four foreign keys and its offset/interval checks", () => {
+  it("declares shifts' three foreign keys and its offset/interval checks", () => {
     const config = getTableConfig(api.shifts);
 
     const fkNames = config.foreignKeys.map((fk) => fk.getName());
     expect(fkNames).toEqual(
       expect.arrayContaining([
-        "shifts_tenant_fk",
         "shifts_person_fk",
         "shifts_location_fk",
         // The roster-version link, SET NULL on delete — a discarded version detaches its shifts.
@@ -187,7 +182,6 @@ describe("absences constraint declarations (forces the lazy extraConfig callback
     const fkNames = config.foreignKeys.map((fk) => fk.getName());
     expect(fkNames).toEqual(
       expect.arrayContaining([
-        "absences_tenant_fk",
         "absences_person_fk",
         // roster slice 2: the manager who decided the absence (approve/reject).
         "absences_decided_by_person_fk",
@@ -203,9 +197,7 @@ describe("availability constraint declarations (forces the lazy extraConfig call
     const config = getTableConfig(api.availability);
 
     const fkNames = config.foreignKeys.map((fk) => fk.getName());
-    expect(fkNames).toEqual(
-      expect.arrayContaining(["availability_tenant_fk", "availability_person_fk"]),
-    );
+    expect(fkNames).toEqual(expect.arrayContaining(["availability_person_fk"]));
 
     const checkNames = config.checks.map((c) => c.name);
     expect(checkNames).toContain("availability_weekday_ck");
@@ -221,9 +213,7 @@ describe("shift_templates constraint declarations (forces the lazy extraConfig c
     const config = getTableConfig(api.shiftTemplates);
 
     const fkNames = config.foreignKeys.map((fk) => fk.getName());
-    expect(fkNames).toEqual(
-      expect.arrayContaining(["shift_templates_tenant_fk", "shift_templates_location_fk"]),
-    );
+    expect(fkNames).toEqual(expect.arrayContaining(["shift_templates_location_fk"]));
 
     const checkNames = config.checks.map((c) => c.name);
     expect(checkNames).toContain("shift_templates_label_ck");
@@ -240,7 +230,6 @@ describe("shift_swaps constraint declarations (forces the lazy extraConfig callb
     const fkNames = config.foreignKeys.map((fk) => fk.getName());
     expect(fkNames).toEqual(
       expect.arrayContaining([
-        "shift_swaps_tenant_fk",
         "shift_swaps_requested_by_person_fk",
         "shift_swaps_to_person_fk",
         // from_shift cascades (a swap dies with its offered shift), to_shift SET NULLs.

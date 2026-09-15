@@ -38,14 +38,13 @@ async function codeOfRejection(fn: () => Promise<unknown>): Promise<string | und
 
 describe("createAbsence", () => {
   // A FRESH person per test: the suite shares one PGlite db, and the overlap guard is scoped per
-  // (tenant, person), so a person reused across tests would carry an earlier test's absence and make
+  // person, so a person reused across tests would carry an earlier test's absence and make
   // these order-dependent (CLAUDE.md §4). Seeding a new person is cheaper than an afterEach cleanup
   // and cannot be forgotten.
   it("inserts a requested absence with no note by default", async () => {
     const p = await seedPerson(suite.db, tenantId, `abs-${crypto.randomUUID()}`);
     const id = await run((tx) =>
       createAbsence(tx, {
-        tenantId,
         personId: p,
         kind: "holiday",
         startsOn: "2026-02-10",
@@ -62,7 +61,6 @@ describe("createAbsence", () => {
     const p = await seedPerson(suite.db, tenantId, `abs-${crypto.randomUUID()}`);
     const id = await run((tx) =>
       createAbsence(tx, {
-        tenantId,
         personId: p,
         kind: "sick_leave",
         startsOn: "2026-05-01",
@@ -80,7 +78,6 @@ describe("createAbsence", () => {
     // Existing 10–15 Feb. New 12–18 Feb overlaps it (12 ≤ 15 and 10 ≤ 18) → absence.overlaps.
     const p = await seedPerson(suite.db, tenantId, `abs-${crypto.randomUUID()}`);
     await insertAbsence(suite.db, {
-      tenantId,
       personId: p,
       startsOn: "2026-02-10",
       endsOn: "2026-02-15",
@@ -88,7 +85,6 @@ describe("createAbsence", () => {
     const code = await codeOfRejection(() =>
       run((tx) =>
         createAbsence(tx, {
-          tenantId,
           personId: p,
           kind: "leave",
           startsOn: "2026-02-12",
@@ -107,14 +103,12 @@ describe("createAbsence", () => {
     // would wrongly accept the 12–18 case above. 16 > 15, so there is no shared day.
     const p = await seedPerson(suite.db, tenantId, `abs-${crypto.randomUUID()}`);
     await insertAbsence(suite.db, {
-      tenantId,
       personId: p,
       startsOn: "2026-02-10",
       endsOn: "2026-02-15",
     });
     const id = await run((tx) =>
       createAbsence(tx, {
-        tenantId,
         personId: p,
         kind: "leave",
         startsOn: "2026-02-16",
@@ -139,7 +133,6 @@ describe("createAbsence", () => {
     const code = await codeOfRejection(() =>
       run((tx) =>
         createAbsence(tx, {
-          tenantId,
           personId: p,
           kind: "holiday",
           startsOn: "2026-05-10",
@@ -158,7 +151,6 @@ describe("createAbsence", () => {
     const p = await seedPerson(suite.db, tenantId, `abs-${crypto.randomUUID()}`);
     const id = await run((tx) =>
       createAbsence(tx, {
-        tenantId,
         personId: p,
         kind: "leave",
         startsOn: "2026-04-20",
@@ -178,14 +170,12 @@ describe("createAbsence", () => {
     const p = await seedPerson(suite.db, tenantId, `abs-${crypto.randomUUID()}`);
     const other = await seedPerson(suite.db, tenantId, `abs-${crypto.randomUUID()}`);
     await insertAbsence(suite.db, {
-      tenantId,
       personId: other,
       startsOn: "2026-02-10",
       endsOn: "2026-02-15",
     });
     const id = await run((tx) =>
       createAbsence(tx, {
-        tenantId,
         personId: p,
         kind: "holiday",
         startsOn: "2026-02-11",
@@ -202,11 +192,10 @@ describe("createAbsence", () => {
 
 describe("setAbsenceStatus", () => {
   it("moves a requested absence to approved and stamps the decider + decided_at", async () => {
-    const id = await insertAbsence(suite.db, { tenantId, personId });
+    const id = await insertAbsence(suite.db, { personId });
     const decider = await seedPerson(suite.db, tenantId, `mgr-${crypto.randomUUID()}`);
     await run((tx) =>
       setAbsenceStatus(tx, {
-        tenantId,
         absenceId: id,
         status: "approved",
         decidedByPersonId: decider,
@@ -222,11 +211,10 @@ describe("setAbsenceStatus", () => {
     expect(rows.rows[0]!.decided_at).not.toBeNull();
   });
 
-  it("throws absence.not_found for an absence that does not exist under the tenant", async () => {
+  it("throws absence.not_found for an absence that does not exist", async () => {
     const code = await codeOfRejection(() =>
       run((tx) =>
         setAbsenceStatus(tx, {
-          tenantId,
           absenceId: crypto.randomUUID(),
           status: "rejected",
           decidedByPersonId: null,
@@ -238,7 +226,7 @@ describe("setAbsenceStatus", () => {
 });
 
 describe("listPendingAbsences", () => {
-  it("returns only requested absences for the tenant, ordered by created_at", async () => {
+  it("returns only requested absences, ordered by created_at", async () => {
     // The shared PGlite DB persists across the file, and the `createAbsence` tests leave several
     // `requested` absences behind. The queue reads every absence in the database (one tenant per
     // database), so clear the earlier tests' absences to keep the ordered assertion below
@@ -252,7 +240,6 @@ describe("listPendingAbsences", () => {
     // the query falls back to physical/insert order [holiday, sick_leave] and the toEqual below reddens
     // (CLAUDE.md §4 prove-by-deletion).
     const requestedLate = await insertAbsence(suite.db, {
-      tenantId: listTenant,
       personId: p,
       kind: "holiday",
       startsOn: "2026-06-10",
@@ -262,7 +249,6 @@ describe("listPendingAbsences", () => {
       createdAt: "2026-03-02T10:00:00Z",
     });
     const requestedEarly = await insertAbsence(suite.db, {
-      tenantId: listTenant,
       personId: p,
       kind: "sick_leave",
       startsOn: "2026-06-01",
@@ -273,15 +259,12 @@ describe("listPendingAbsences", () => {
     });
     // An already-approved absence must NOT appear (the status filter).
     await insertAbsence(suite.db, {
-      tenantId: listTenant,
       personId: p,
       startsOn: "2026-07-01",
       endsOn: "2026-07-02",
       status: "approved",
     });
-    const rows = await withTransaction(suite.db, (tx) =>
-      listPendingAbsences(tx, { tenantId: listTenant }),
-    );
+    const rows = await withTransaction(suite.db, (tx) => listPendingAbsences(tx));
     // created_at ASC → [early, late], the REVERSE of insertion order; the approved absence is excluded.
     expect(rows.map((r) => r.id)).toEqual([requestedEarly, requestedLate]);
     expect(rows.map((r) => r.createdAt)).toEqual(["2026-03-01T10:00:00Z", "2026-03-02T10:00:00Z"]);

@@ -58,7 +58,7 @@ function mountApp(): Hono {
   // plumbed into cfg but never reaches the chain.
   mountWorkforceApi(
     app,
-    { db: suite.db, cfg: { tenantId, nodeId: "00000000-0000-4000-8000-000000000000" } },
+    { db: suite.db, cfg: { nodeId: "00000000-0000-4000-8000-000000000000" } },
     noopLog,
   );
   return app;
@@ -298,9 +298,9 @@ describe("mountWorkforceApi — publish", () => {
     await withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       await tx.execute(sql`
-        insert into convenio_config (tenant_id, location_id)
-        values (${tenantId}, ${locationId})
-        on conflict (tenant_id, location_id) do nothing`);
+        insert into convenio_config (location_id)
+        values (${locationId})
+        on conflict (location_id) do nothing`);
     });
   }
 
@@ -397,12 +397,12 @@ describe("mountWorkforceApi — swap + absence approvals", () => {
     return withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       const shift = await tx.execute<{ id: string }>(sql`
-        insert into shifts (tenant_id, person_id, location_id, starts_at, starts_offset_minutes, ends_at, ends_offset_minutes)
-        values (${tenantId}, ${personId}, ${locationId}, '2026-03-02T09:00:00Z', 0, '2026-03-02T13:00:00Z', 0)
+        insert into shifts (person_id, location_id, starts_at, starts_offset_minutes, ends_at, ends_offset_minutes)
+        values (${personId}, ${locationId}, '2026-03-02T09:00:00Z', 0, '2026-03-02T13:00:00Z', 0)
         returning id`);
       const swap = await tx.execute<{ id: string }>(sql`
-        insert into shift_swaps (tenant_id, requested_by_person_id, from_shift_id, to_person_id, status)
-        values (${tenantId}, ${personId}, ${shift.rows[0]!.id}, ${personId}, 'accepted') returning id`);
+        insert into shift_swaps (requested_by_person_id, from_shift_id, to_person_id, status)
+        values (${personId}, ${shift.rows[0]!.id}, ${personId}, 'accepted') returning id`);
       return swap.rows[0]!.id;
     });
   }
@@ -410,8 +410,8 @@ describe("mountWorkforceApi — swap + absence approvals", () => {
     return withTransaction(suite.db, async (tx) => {
       await asAppUser(tx);
       const r = await tx.execute<{ id: string }>(sql`
-        insert into absences (tenant_id, person_id, absence_kind, starts_on, ends_on)
-        values (${tenantId}, ${personId}, 'holiday', '2026-03-02', '2026-03-04') returning id`);
+        insert into absences (person_id, absence_kind, starts_on, ends_on)
+        values (${personId}, 'holiday', '2026-03-02', '2026-03-04') returning id`);
       return r.rows[0]!.id;
     });
   }

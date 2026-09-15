@@ -12,7 +12,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { locations, nodes, tenants, tills } from "@waitron/db";
+import { locations, nodes, tills } from "@waitron/db";
 import { persons } from "@waitron/identity";
 
 /**
@@ -61,12 +61,11 @@ export const timeEntries = pgTable(
   "time_entries",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    tenantId: uuid("tenant_id").notNull(),
     personId: uuid("person_id").notNull(),
     /** The workplace the event was captured at — the site the Inspección scopes to. */
     locationId: uuid("location_id").notNull(),
     /** The node whose chain this entry belongs to — stamped by the append, never by the device. Part
-     * of the chain key (tenant, node, location) so a promoted cloud and a returning box each keep
+     * of the chain key (node, location) so a promoted cloud and a returning box each keep
      * their own chain (spec §2.1). */
     nodeId: uuid("node_id").notNull(),
     entryKind: workforceEntryKind("entry_kind").notNull(),
@@ -99,14 +98,14 @@ export const timeEntries = pgTable(
     correctionActorId: uuid("correction_actor_id"),
     // Slice 4 — the tamper-evidence hash chain (design §5). Assigned by `appendToChain`
     // (../chain.ts) under a row lock on `workforce_chains`, never by the device: one chain per
-    // (tenant, node, location), one active writer per chain. IMMUTABLE like the rest of the row — the existing
+    // (node, location), one active writer per chain. IMMUTABLE like the rest of the row — the existing
     // REVOKE + `reject_mutation` trigger (drizzle/0001_workforce_baseline_sql.sql) already covers these
     // new columns, since they are written once at INSERT and the app holds no UPDATE.
     /** This entry's own hash — `computeEntryHash(content ‖ prev_entry_hash)`, uppercase hex. */
     entryHash: text("entry_hash").notNull(),
     /** The predecessor's `entry_hash`; null on the genesis entry (hashed as empty). */
     prevEntryHash: text("prev_entry_hash"),
-    /** The 1-based position within this (tenant, node, location) chain — `workforce_chains.sequence_no`
+    /** The 1-based position within this (node, location) chain — `workforce_chains.sequence_no`
      * advanced by one. Contiguous and ours, and the position the tamper-evidence hash commits to. */
     sequenceNo: integer("sequence_no").notNull(),
     /** The genesis marker: exactly the first entry of a chain. NOT the mutable "current head" — that
@@ -118,11 +117,6 @@ export const timeEntries = pgTable(
     // Array `foreignKey({...})` form throughout — see employments.ts for why the thunk form hurts
     // coverage. restrict everywhere: a clock event must never be orphaned by deleting the person,
     // location or till it attributes work to.
-    foreignKey({
-      columns: [t.tenantId],
-      foreignColumns: [tenants.id],
-      name: "time_entries_tenant_fk",
-    }).onDelete("restrict"),
     foreignKey({
       columns: [t.personId],
       foreignColumns: [persons.id],
@@ -162,8 +156,7 @@ export const timeEntries = pgTable(
       foreignColumns: [persons.id],
       name: "time_entries_correction_actor_fk",
     }).onDelete("restrict"),
-    index("time_entries_tenant_id_idx").on(t.tenantId),
-    index("time_entries_tenant_person_event_idx").on(t.tenantId, t.personId, t.eventAt),
+    index("time_entries_person_event_idx").on(t.personId, t.eventAt),
     // The projection resolves each base event by looking up approved corrections that target it, so
     // the reverse lookup (rows correcting a given id) needs an index.
     index("time_entries_corrects_entry_idx").on(t.correctsEntryId),
@@ -185,14 +178,9 @@ export const timeEntries = pgTable(
     // THE backstop against two writers claiming one chain position — a real risk when several tills
     // at one location clock in the same instant. On real Postgres a naive read-then-write loses the
     // race here; the loser retries under `appendToChain`'s savepoint (../chain.ts). Keyed on the
-    // full chain key (tenant, node, location), so two nodes at one location never collide across a
-    // promotion. Mirrors fiscal's `registros_tenant_node_secuencia_uq`.
-    uniqueIndex("time_entries_chain_position_uq").on(
-      t.tenantId,
-      t.nodeId,
-      t.locationId,
-      t.sequenceNo,
-    ),
+    // full chain key (node, location), so two nodes at one location never collide across a
+    // promotion.
+    uniqueIndex("time_entries_chain_position_uq").on(t.nodeId, t.locationId, t.sequenceNo),
     // The stored hash is uppercase SHA-256 hex (../chain-hash.ts). Mirrors `registros_huella_ck`.
     check("time_entries_entry_hash_ck", sql`${t.entryHash} ~ '^[0-9A-F]{64}$'`),
     check("time_entries_sequence_no_ck", sql`${t.sequenceNo} > 0`),

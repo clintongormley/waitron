@@ -2108,11 +2108,11 @@ export async function startServer(
   // SELECTs only.
   mountReportApi(app, { db, cfg: { tenantId: till.tenantId, nodeId: dataNodeId } }, log);
   // The deployment holds one tenant per database. The dashboard's gated shift-planning surface
-  // (roster authoring + publish) on the SAME app, the identical convention. Reuses the EXACT db +
-  // tenant (till.tenantId); no fiscal backend, clock, card provider or media store — these routes
+  // (roster authoring + publish) on the SAME app, the identical convention. Reuses the EXACT db and
+  // this node's id; no fiscal backend, clock, card provider or media store — these routes
   // touch only roster_versions / shifts / convenio_config / locations. Routes only; the
   // schedule.manage gate runs per request.
-  mountWorkforceApi(app, { db, cfg: { tenantId: till.tenantId, nodeId: till.nodeId } }, log);
+  mountWorkforceApi(app, { db, cfg: { nodeId: till.nodeId } }, log);
   // The STAFF-FACING half of the schedule surface on the SAME app — the till-session-gated request
   // routes (view my shifts/swaps/absences, request a swap or absence, accept a swap offered to me),
   // the counterpart to mountWorkforceApi's manager approval half. Same minimal deps (db + this venue's

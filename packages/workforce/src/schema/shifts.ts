@@ -9,7 +9,7 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
-import { locations, tenants } from "@waitron/db";
+import { locations } from "@waitron/db";
 import { persons } from "@waitron/identity";
 import { rosterVersions } from "./roster-versions.js";
 
@@ -35,7 +35,6 @@ export const shifts = pgTable(
   "shifts",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    tenantId: uuid("tenant_id").notNull(),
     personId: uuid("person_id").notNull(),
     /** The workplace the shift is scheduled at. */
     locationId: uuid("location_id").notNull(),
@@ -54,14 +53,9 @@ export const shifts = pgTable(
   },
   (t) => [
     // The array `foreignKey({...})` form, not `.references(() => …)`, for the coverage reason
-    // employments.ts documents. restrict for the referents a shift must never orphan (tenant,
-    // person, location); SET NULL for the roster version, so discarding a version detaches its
+    // employments.ts documents. restrict for the referents a shift must never orphan (person,
+    // location); SET NULL for the roster version, so discarding a version detaches its
     // shifts rather than blocking the delete or cascading them away — planning data is discardable.
-    foreignKey({
-      columns: [t.tenantId],
-      foreignColumns: [tenants.id],
-      name: "shifts_tenant_fk",
-    }).onDelete("restrict"),
     foreignKey({
       columns: [t.personId],
       foreignColumns: [persons.id],
@@ -77,8 +71,7 @@ export const shifts = pgTable(
       foreignColumns: [rosterVersions.id],
       name: "shifts_roster_version_fk",
     }).onDelete("set null"),
-    index("shifts_tenant_id_idx").on(t.tenantId),
-    index("shifts_tenant_person_starts_idx").on(t.tenantId, t.personId, t.startsAt),
+    index("shifts_person_starts_idx").on(t.personId, t.startsAt),
     index("shifts_roster_version_idx").on(t.rosterVersionId),
     // Same wall-offset domain sales/time_entries use (±14h) — a stored offset outside it is a bug.
     check("shifts_starts_offset_ck", sql`${t.startsOffsetMinutes} between -840 and 840`),

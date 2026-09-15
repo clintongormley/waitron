@@ -249,26 +249,26 @@ describe("configuration transfer database path", () => {
            'source-pin-secret', 'source-password-secret', 'ada@example.test', 'manager')`);
       await tx.execute(sql`
         insert into employments
-          (id, tenant_id, person_id, contracted_minutes_per_week, contract_type, start_date, pay_rate)
+          (id, person_id, contracted_minutes_per_week, contract_type, start_date, pay_rate)
         values
-          ('66666666-aaaa-aaaa-aaaa-666666666666', ${source.tenantId},
+          ('66666666-aaaa-aaaa-aaaa-666666666666',
            '33333333-aaaa-aaaa-aaaa-333333333333', 2400, 'permanent', '2026-01-01', 12.50)`);
       await tx.execute(sql`
         insert into availability
-          (id, tenant_id, person_id, weekday, available_from_minute, available_to_minute,
+          (id, person_id, weekday, available_from_minute, available_to_minute,
            effective_from)
         values
-          ('77777777-aaaa-aaaa-aaaa-777777777777', ${source.tenantId},
+          ('77777777-aaaa-aaaa-aaaa-777777777777',
            '33333333-aaaa-aaaa-aaaa-333333333333', 1, 540, 1020, '2026-01-01')`);
       await tx.execute(sql`
         insert into shift_templates
-          (id, tenant_id, location_id, label, weekday, starts_minute, ends_minute, role)
+          (id, location_id, label, weekday, starts_minute, ends_minute, role)
         values
-          ('88888888-aaaa-aaaa-aaaa-888888888888', ${source.tenantId}, ${source.locationId},
+          ('88888888-aaaa-aaaa-aaaa-888888888888', ${source.locationId},
            'Evening', 1, 1020, 120, 'bar')`);
       await tx.execute(sql`
-        insert into convenio_config (id, tenant_id, location_id)
-        values ('99999999-aaaa-aaaa-aaaa-999999999999', ${source.tenantId}, ${source.locationId})`);
+        insert into convenio_config (id, location_id)
+        values ('99999999-aaaa-aaaa-aaaa-999999999999', ${source.locationId})`);
       await tx.execute(sql`
         insert into payment_policy (offline_mode, offline_amount_cap) values ('cash_only', 50)`);
       await tx.execute(sql`
@@ -432,10 +432,10 @@ describe("configuration transfer database path", () => {
           where tenant_id = ${target.tenantId} and not active and local_key = 'B120300001') as inactive_printers,
         (select count(*)::int from print_agents
           where tenant_id = ${target.tenantId} and token_hash = 'source-agent-token') as source_agent_secrets,
-        (select count(*)::int from employments where tenant_id = ${target.tenantId}) as employments,
-        (select count(*)::int from availability where tenant_id = ${target.tenantId}) as availability,
-        (select count(*)::int from shift_templates where tenant_id = ${target.tenantId}) as shift_templates,
-        (select count(*)::int from convenio_config where tenant_id = ${target.tenantId}) as convenio_config,
+        (select count(*)::int from employments) as employments,
+        (select count(*)::int from availability) as availability,
+        (select count(*)::int from shift_templates) as shift_templates,
+        (select count(*)::int from convenio_config) as convenio_config,
         (select count(*)::int from payment_policy) as payment_policy,
         (select count(*)::int from dining_tables
           where tenant_id = ${target.tenantId} and tab_id is not null) as linked_tables,

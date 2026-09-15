@@ -9,7 +9,6 @@ import "./errors.js";
 /** A request to swap shifts — person A offers their `fromShift` to person B, optionally taking B's
  * `toShift` in return. */
 export interface RequestSwapInput {
-  tenantId: string;
   /** The person offering the swap; must OWN `fromShift`. */
   requestedByPersonId: string;
   /** The shift being offered. */
@@ -22,7 +21,6 @@ export interface RequestSwapInput {
 
 /** A request by the offered person to accept a pending swap. */
 export interface AcceptSwapInput {
-  tenantId: string;
   swapId: string;
   /** Who is accepting — must be the swap's `to_person`. */
   acceptingPersonId: string;
@@ -31,29 +29,28 @@ export interface AcceptSwapInput {
 /**
  * Records a swap request — PLANNING data, an ordinary INSERT. Guards, in order:
  *
- * - the offered `fromShift` must exist under the tenant (`shift.not_found` otherwise) AND be OWNED by
+ * - the offered `fromShift` must exist (`shift.not_found` otherwise) AND be OWNED by
  *   the requester — you may only offer a shift that is yours (`swap.not_permitted` otherwise);
- * - a supplied `toShift` must exist under the tenant (`shift.not_found` otherwise) AND be OWNED by the
+ * - a supplied `toShift` must exist (`shift.not_found` otherwise) AND be OWNED by the
  *   `toPerson` the swap is offered to — the return leg must be that person's own shift, not a third
  *   party's (`swap.not_permitted` otherwise); a null `toShift` is a one-sided give-away and skips both.
  *
  * Returns the new swap's id, status `requested`.
  */
 export async function requestSwap(tx: Transaction, input: RequestSwapInput): Promise<string> {
-  const fromShiftOwner = await shiftOwner(tx, input.tenantId, input.fromShiftId);
+  const fromShiftOwner = await shiftOwner(tx, input.fromShiftId);
   if (fromShiftOwner === undefined) {
-    throw new AppError("shift.not_found", { tenantId: input.tenantId, shiftId: input.fromShiftId });
+    throw new AppError("shift.not_found", { shiftId: input.fromShiftId });
   }
   if (fromShiftOwner !== input.requestedByPersonId) {
     throw new AppError("swap.not_permitted", {
-      tenantId: input.tenantId,
       personId: input.requestedByPersonId,
     });
   }
   if (input.toShiftId !== null) {
-    const toShiftOwner = await shiftOwner(tx, input.tenantId, input.toShiftId);
+    const toShiftOwner = await shiftOwner(tx, input.toShiftId);
     if (toShiftOwner === undefined) {
-      throw new AppError("shift.not_found", { tenantId: input.tenantId, shiftId: input.toShiftId });
+      throw new AppError("shift.not_found", { shiftId: input.toShiftId });
     }
     // The return leg must be the OFFERED person's own shift — a swap that put up a third party's shift
     // in return is not a permitted arrangement (guards the two-sided API even though this slice's UI
@@ -61,16 +58,15 @@ export async function requestSwap(tx: Transaction, input: RequestSwapInput): Pro
     // from-shift ownership check above.
     if (toShiftOwner !== input.toPersonId) {
       throw new AppError("swap.not_permitted", {
-        tenantId: input.tenantId,
         personId: input.toPersonId,
       });
     }
   }
   const { rows } = await tx.execute<{ id: string }>(sql`
     insert into shift_swaps (
-      tenant_id, requested_by_person_id, from_shift_id, to_person_id, to_shift_id
+      requested_by_person_id, from_shift_id, to_person_id, to_shift_id
     ) values (
-      ${input.tenantId}, ${input.requestedByPersonId}, ${input.fromShiftId},
+      ${input.requestedByPersonId}, ${input.fromShiftId},
       ${input.toPersonId}, ${input.toShiftId}
     )
     returning id`);
@@ -81,7 +77,7 @@ export async function requestSwap(tx: Transaction, input: RequestSwapInput): Pro
  * Accepts a pending swap on behalf of the offered person — a status flip `requested → accepted` over
  * PLANNING data. Guards, in order (IDENTITY before STATE, mirroring the read order):
  *
- * - `swap.not_found` if no such swap exists under the tenant;
+ * - `swap.not_found` if no such swap exists;
  * - `swap.not_permitted` if the acceptor is not the swap's `to_person` (only the person a swap is
  *   offered to may accept it) — screened BEFORE the state check, so a non-recipient never learns the
  *   swap's state;
@@ -103,11 +99,10 @@ export async function acceptSwap(tx: Transaction, input: AcceptSwapInput): Promi
     limit 1`);
   const swap = rows[0];
   if (swap === undefined) {
-    throw new AppError("swap.not_found", { tenantId: input.tenantId, swapId: input.swapId });
+    throw new AppError("swap.not_found", { swapId: input.swapId });
   }
   if (swap.to_person_id !== input.acceptingPersonId) {
     throw new AppError("swap.not_permitted", {
-      tenantId: input.tenantId,
       personId: input.acceptingPersonId,
     });
   }
@@ -116,13 +111,12 @@ export async function acceptSwap(tx: Transaction, input: AcceptSwapInput): Promi
     where id = ${input.swapId} and status = 'requested'
     returning id`);
   if (accepted.length === 0) {
-    throw new AppError("swap.not_acceptable", { tenantId: input.tenantId, swapId: input.swapId });
+    throw new AppError("swap.not_acceptable", { swapId: input.swapId });
   }
 }
 
 /** A manager's decision on an ACCEPTED swap. */
 export interface DecideSwapInput {
-  tenantId: string;
   swapId: string;
   /** The manager's decision. Only these two — a decide never returns a swap to requested/accepted. */
   decision: "approved" | "rejected";
@@ -160,9 +154,9 @@ export async function decideSwap(tx: Transaction, input: DecideSwapInput): Promi
     where id = ${input.swapId}
     limit 1`);
   if (rows[0] === undefined) {
-    throw new AppError("swap.not_found", { tenantId: input.tenantId, swapId: input.swapId });
+    throw new AppError("swap.not_found", { swapId: input.swapId });
   }
-  throw new AppError("swap.not_decidable", { tenantId: input.tenantId, swapId: input.swapId });
+  throw new AppError("swap.not_decidable", { swapId: input.swapId });
 }
 
 /** One accepted-and-pending swap awaiting a manager decision (the approvals queue). */
@@ -180,15 +174,11 @@ export interface PendingSwapRow {
 }
 
 /**
- * The tenant's ACCEPTED swaps awaiting a manager decision, ordered by `created_at`. NOT
+ * The venue's ACCEPTED swaps awaiting a manager decision, ordered by `created_at`. NOT
  * location-scoped: `shift_swaps` carries no `location_id` (`schema/shift-swaps.ts`) — the location
- * lives on the referenced shifts — so the queue is the whole tenant's accepted swaps (design §3a).
+ * lives on the referenced shifts — so the queue is every accepted swap (design §3a).
  */
-export async function listPendingSwaps(
-  tx: Transaction,
-  input: { tenantId: string },
-): Promise<PendingSwapRow[]> {
-  void input;
+export async function listPendingSwaps(tx: Transaction): Promise<PendingSwapRow[]> {
   const { rows } = await tx.execute<{
     id: string;
     requested_by_person_id: string;
@@ -214,14 +204,9 @@ export async function listPendingSwaps(
   }));
 }
 
-/** The `person_id` of a shift under the tenant, or `undefined` when no such shift exists (never
+/** The `person_id` of a shift, or `undefined` when no such shift exists (never
  * created). */
-async function shiftOwner(
-  tx: Transaction,
-  tenantId: string,
-  shiftId: string,
-): Promise<string | undefined> {
-  void tenantId;
+async function shiftOwner(tx: Transaction, shiftId: string): Promise<string | undefined> {
   const { rows } = await tx.execute<{ person_id: string }>(sql`
     select person_id from shifts
     where id = ${shiftId}

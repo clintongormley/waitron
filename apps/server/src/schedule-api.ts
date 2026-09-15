@@ -82,9 +82,7 @@ export function mountScheduleApi(app: Hono, deps: ScheduleApiDeps, log: Logger):
       const { personId } = await requireSession(deps, c);
       const from = requirePeriod(c.req.query("from"), "from");
       const to = requirePeriod(c.req.query("to"), "to");
-      const rows = await asStaff((tx) =>
-        listShiftsForPerson(tx, { tenantId: deps.cfg.tenantId, personId, from, to }),
-      );
+      const rows = await asStaff((tx) => listShiftsForPerson(tx, { personId, from, to }));
       return c.json(rows);
     }),
   );
@@ -93,9 +91,7 @@ export function mountScheduleApi(app: Hono, deps: ScheduleApiDeps, log: Logger):
   app.get("/api/schedule/swaps", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
-      const rows = await asStaff((tx) =>
-        listSwapsForPerson(tx, { tenantId: deps.cfg.tenantId, personId }),
-      );
+      const rows = await asStaff((tx) => listSwapsForPerson(tx, { personId }));
       return c.json(rows);
     }),
   );
@@ -111,7 +107,6 @@ export function mountScheduleApi(app: Hono, deps: ScheduleApiDeps, log: Logger):
       const toShiftId = requireNullableBodyUuid(body.toShiftId, "toShiftId");
       const swapId = await asStaff((tx) =>
         requestSwap(tx, {
-          tenantId: deps.cfg.tenantId,
           requestedByPersonId: personId,
           fromShiftId,
           toPersonId,
@@ -128,9 +123,7 @@ export function mountScheduleApi(app: Hono, deps: ScheduleApiDeps, log: Logger):
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
       const swapId = requireUuidParam(c.req.param("swapId"), "SwapId");
-      await asStaff((tx) =>
-        acceptSwap(tx, { tenantId: deps.cfg.tenantId, swapId, acceptingPersonId: personId }),
-      );
+      await asStaff((tx) => acceptSwap(tx, { swapId, acceptingPersonId: personId }));
       return c.body(null, 204);
     }),
   );
@@ -139,9 +132,7 @@ export function mountScheduleApi(app: Hono, deps: ScheduleApiDeps, log: Logger):
   app.get("/api/schedule/absences", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
-      const rows = await asStaff((tx) =>
-        listAbsencesForPerson(tx, { tenantId: deps.cfg.tenantId, personId }),
-      );
+      const rows = await asStaff((tx) => listAbsencesForPerson(tx, { personId }));
       return c.json(rows);
     }),
   );
@@ -156,7 +147,7 @@ export function mountScheduleApi(app: Hono, deps: ScheduleApiDeps, log: Logger):
       const endsOn = requirePeriod(body.endsOn, "endsOn");
       const note = requireNullableString(body.note, "note");
       const absenceId = await asStaff((tx) =>
-        createAbsence(tx, { tenantId: deps.cfg.tenantId, personId, kind, startsOn, endsOn, note }),
+        createAbsence(tx, { personId, kind, startsOn, endsOn, note }),
       );
       return c.json({ absenceId }, 201);
     }),

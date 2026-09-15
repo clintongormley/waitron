@@ -8,7 +8,6 @@ import "./errors.js";
 
 /** A request to record a planned absence for a person over an inclusive date range. */
 export interface CreateAbsenceInput {
-  tenantId: string;
   personId: string;
   kind: AbsenceKind;
   /** First day of the absence, inclusive (`YYYY-MM-DD`). */
@@ -21,7 +20,6 @@ export interface CreateAbsenceInput {
 
 /** A request to move an existing absence to a decided status. */
 export interface SetAbsenceStatusInput {
-  tenantId: string;
   absenceId: string;
   status: AbsenceStatus;
   /** The manager who decided, recorded on the absence; null when unattributed (mirrors
@@ -33,8 +31,8 @@ export interface SetAbsenceStatusInput {
  * Records a planned absence — PLANNING data, an ordinary INSERT (not an append to the immutable
  * ledger). The new absence is always `requested`; a manager decides it later via `setAbsenceStatus`.
  *
- * Refuses an absence whose date range OVERLAPS an existing absence for the SAME person under this
- * tenant, throwing `absence.overlaps` — one person cannot be absent twice over the same day. The
+ * Refuses an absence whose date range OVERLAPS an existing absence for the SAME person,
+ * throwing `absence.overlaps` — one person cannot be absent twice over the same day. The
  * overlap is inclusive on both ends: two ranges [a1,a2] and [b1,b2] overlap iff a1 ≤ b2 AND b1 ≤ a2,
  * so a range starting the day AFTER another ends does not conflict. Status is not considered — any
  * existing absence for the person, whatever its status, blocks an overlapping one (a deliberate
@@ -54,7 +52,6 @@ export async function createAbsence(tx: Transaction, input: CreateAbsenceInput):
   // days. The range is inclusive, so `endsOn == startsOn` (a single-day absence) is valid — hence `<`.
   if (input.endsOn < input.startsOn) {
     throw new AppError("absence.invalid", {
-      tenantId: input.tenantId,
       reason: "ends_before_starts",
     });
   }
@@ -65,14 +62,13 @@ export async function createAbsence(tx: Transaction, input: CreateAbsenceInput):
     limit 1`);
   if (conflicts.length > 0) {
     throw new AppError("absence.overlaps", {
-      tenantId: input.tenantId,
       personId: input.personId,
     });
   }
   const { rows } = await tx.execute<{ id: string }>(sql`
-    insert into absences (tenant_id, person_id, absence_kind, starts_on, ends_on, note)
+    insert into absences (person_id, absence_kind, starts_on, ends_on, note)
     values (
-      ${input.tenantId}, ${input.personId}, ${input.kind},
+      ${input.personId}, ${input.kind},
       ${input.startsOn}, ${input.endsOn}, ${input.note}
     )
     returning id`);
@@ -83,7 +79,7 @@ export async function createAbsence(tx: Transaction, input: CreateAbsenceInput):
  * Moves an existing absence to a decided status (`approved`/`rejected`, or back to `requested`) — a
  * plain UPDATE of the status column over PLANNING data, not a workflow: no role gate is imposed here
  * (who may decide an absence is a later owner decision, plan §7). Throws `absence.not_found` if no
- * such absence exists under the tenant (never created).
+ * such absence exists (never created).
  */
 export async function setAbsenceStatus(
   tx: Transaction,
@@ -98,7 +94,6 @@ export async function setAbsenceStatus(
     returning id`);
   if (rows.length === 0) {
     throw new AppError("absence.not_found", {
-      tenantId: input.tenantId,
       absenceId: input.absenceId,
     });
   }
@@ -119,14 +114,10 @@ export interface PendingAbsenceRow {
 }
 
 /**
- * The tenant's REQUESTED absences awaiting a manager decision, ordered by `created_at` (design §3b).
+ * The venue's REQUESTED absences awaiting a manager decision, ordered by `created_at` (design §3b).
  * Not location-scoped — `absences` has no location.
  */
-export async function listPendingAbsences(
-  tx: Transaction,
-  input: { tenantId: string },
-): Promise<PendingAbsenceRow[]> {
-  void input;
+export async function listPendingAbsences(tx: Transaction): Promise<PendingAbsenceRow[]> {
   const { rows } = await tx.execute<{
     id: string;
     person_id: string;

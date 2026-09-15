@@ -54,7 +54,7 @@ describe("publishRoster under real contention", () => {
     // no lost update. Prove the lock matters by DELETION: drop `for update` from rosterVersionStatus
     // and two or more publishers observe `draft` at once and each flip it, so the fulfilled count
     // climbs above one and both assertions below fail.
-    const versionId = await insertRosterVersion(suite.admin, { tenantId, locationId });
+    const versionId = await insertRosterVersion(suite.admin, { locationId });
     // A distinct publisher person per call, so the surviving `published_by` identifies the ONE winner
     // and proves no refused publisher overwrote it.
     const persons = await Promise.all(
@@ -67,7 +67,7 @@ describe("publishRoster under real contention", () => {
       const results = await Promise.allSettled(
         dbs.map((db, i) =>
           db.transaction((tx) =>
-            backend.publishRoster(tx, { tenantId, versionId, publishedByPersonId: persons[i]! }),
+            backend.publishRoster(tx, { versionId, publishedByPersonId: persons[i]! }),
           ),
         ),
       );
@@ -120,14 +120,14 @@ describe("publishRoster under real contention", () => {
     const period = { periodStart: "2026-06-01", periodEnd: "2026-06-07" };
     const versions = await Promise.all(
       Array.from({ length: PUBLISHERS }, () =>
-        insertRosterVersion(suite.admin, { tenantId, locationId, ...period }),
+        insertRosterVersion(suite.admin, { locationId, ...period }),
       ),
     );
     const dbs = await Promise.all(Array.from({ length: PUBLISHERS }, () => suite.pg.connect()));
     try {
       const results = await Promise.allSettled(
         dbs.map((db, i) =>
-          db.transaction((tx) => backend.publishRoster(tx, { tenantId, versionId: versions[i]! })),
+          db.transaction((tx) => backend.publishRoster(tx, { versionId: versions[i]! })),
         ),
       );
 
@@ -147,7 +147,7 @@ describe("publishRoster under real contention", () => {
           count(*) filter (where status = 'published')::int as published,
           count(*)::int as total
         from roster_versions
-        where tenant_id = ${tenantId} and location_id = ${locationId}
+        where location_id = ${locationId}
           and period_start = ${period.periodStart} and period_end = ${period.periodEnd}`);
       expect(rows[0]!.published).toBe(1);
       expect(rows[0]!.total).toBe(PUBLISHERS);

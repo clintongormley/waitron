@@ -39,7 +39,7 @@ export interface WorkforceApiDeps {
   // `nodeId` is this node's origin id — the chain a clock event or correction would be appended
   // under (spec §3.3). No clock-in HTTP route exists yet (only tests call `clockIn`/`clockOut`), so
   // it is plumbed here ahead of that route rather than read by any handler below.
-  cfg: { tenantId: string; nodeId: string };
+  cfg: { nodeId: string };
 }
 
 /** The permissions gating the workforce routes — referenced through these constants, never an inline
@@ -138,7 +138,7 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
       const locationId = requireUuidParam(c.req.query("locationId") ?? "", "LocationId");
       const period = requirePeriod(c.req.query("period"), "period");
       const snapshot = await gated(sessionId, SCHEDULE_PERMISSION, (tx) =>
-        backend.getRoster(tx, { tenantId: deps.cfg.tenantId, locationId, period }),
+        backend.getRoster(tx, { locationId, period }),
       );
       return c.json(snapshot);
     }),
@@ -151,7 +151,7 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
       const locationId = requireBodyUuid(body.locationId, "locationId");
       const period = requirePeriod(body.period, "period");
       const versionId = await gated(sessionId, SCHEDULE_PERMISSION, (tx) =>
-        backend.createRosterVersion(tx, { tenantId: deps.cfg.tenantId, locationId, period }),
+        backend.createRosterVersion(tx, { locationId, period }),
       );
       return c.json({ versionId }, 201);
     }),
@@ -174,7 +174,6 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
       const role = requireNullableString(body.role, "role");
       const shiftId = await gated(sessionId, SCHEDULE_PERMISSION, (tx) =>
         backend.addShift(tx, {
-          tenantId: deps.cfg.tenantId,
           versionId,
           personId,
           locationId,
@@ -195,7 +194,6 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
       const shiftId = requireUuidParam(c.req.param("shiftId"), "ShiftId");
       const body = await readJsonBody<Record<string, unknown>>(c);
       const patch: import("@waitron/workforce").UpdateShiftInput = {
-        tenantId: deps.cfg.tenantId,
         shiftId,
       };
       if (body.personId !== undefined) patch.personId = requireBodyUuid(body.personId, "personId");
@@ -218,9 +216,7 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const shiftId = requireUuidParam(c.req.param("shiftId"), "ShiftId");
-      await gated(sessionId, SCHEDULE_PERMISSION, (tx) =>
-        backend.removeShift(tx, { tenantId: deps.cfg.tenantId, shiftId }),
-      );
+      await gated(sessionId, SCHEDULE_PERMISSION, (tx) => backend.removeShift(tx, { shiftId }));
       return c.body(null, 204);
     }),
   );
@@ -239,15 +235,12 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
           permission: SCHEDULE_PERMISSION,
         });
         const version = await backend.getRosterVersion(tx, {
-          tenantId: deps.cfg.tenantId,
           versionId,
         });
         const ruleset = await resolveWorkTimeRuleset(tx, {
-          tenantId: deps.cfg.tenantId,
           locationId: version.locationId,
         });
         return backend.publishRoster(tx, {
-          tenantId: deps.cfg.tenantId,
           versionId,
           publishedByPersonId: authorizedBy,
           ruleset,
@@ -261,9 +254,7 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
   app.get("/management-api/swaps", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const rows = await gated(sessionId, SWAP_APPROVE_PERMISSION, (tx) =>
-        listPendingSwaps(tx, { tenantId: deps.cfg.tenantId }),
-      );
+      const rows = await gated(sessionId, SWAP_APPROVE_PERMISSION, (tx) => listPendingSwaps(tx));
       return c.json(rows);
     }),
   );
@@ -283,7 +274,6 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
           permission: SWAP_APPROVE_PERMISSION,
         });
         await decideSwap(tx, {
-          tenantId: deps.cfg.tenantId,
           swapId,
           decision,
           decidedByPersonId: authorizedBy,
@@ -298,7 +288,7 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const rows = await gated(sessionId, ABSENCE_DECIDE_PERMISSION, (tx) =>
-        listPendingAbsences(tx, { tenantId: deps.cfg.tenantId }),
+        listPendingAbsences(tx),
       );
       return c.json(rows);
     }),
@@ -318,7 +308,6 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
         });
         // setAbsenceStatus accepts any AbsenceStatus; "approved"/"rejected" are two of its three values.
         await setAbsenceStatus(tx, {
-          tenantId: deps.cfg.tenantId,
           absenceId,
           status: decision,
           decidedByPersonId: authorizedBy,
@@ -337,7 +326,6 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
       const to = requirePeriod(c.req.query("to"), "to");
       const rows = await gated(sessionId, SCHEDULE_PERMISSION, (tx) =>
         backend.getPlannedVsActual(tx, {
-          tenantId: deps.cfg.tenantId,
           locationId,
           period: { start: from, end: to },
         }),

@@ -56,7 +56,7 @@ beforeEach(async () => {
 });
 
 function event(at: string): ClockEventInput {
-  return { tenantId, nodeId, personId, locationId, at, offsetMinutes: 0 };
+  return { nodeId, personId, locationId, at, offsetMinutes: 0 };
 }
 
 /** Classifies a racer's outcome for an `.toEqual` assertion: a domain rejection reports its AppError
@@ -93,7 +93,6 @@ async function attemptCorrection(
   try {
     await withTransaction(db, (tx) =>
       backend.requestCorrection(tx, {
-        tenantId,
         nodeId,
         correctsEntryId,
         at: "2026-01-05T07:59:00Z",
@@ -113,7 +112,6 @@ async function attemptCorrection(
  * Runs as the superuser owner; this also creates the location chain head the holder locks below. */
 async function seedCompletedShift(): Promise<string> {
   await insertTimeEntry(suite.admin, {
-    tenantId,
     nodeId,
     personId,
     locationId,
@@ -121,7 +119,6 @@ async function seedCompletedShift(): Promise<string> {
     eventAt: "2026-01-05T08:00:00Z",
   });
   await insertTimeEntry(suite.admin, {
-    tenantId,
     nodeId,
     personId,
     locationId,
@@ -185,7 +182,6 @@ describe("clockIn serialises per person under real contention", () => {
     // Pre-create the location chain head via a DIFFERENT person, so there is a row for the holder to
     // lock while `personId`'s own live state stays "out" (currentState filters by person_id).
     await insertTimeEntry(suite.admin, {
-      tenantId,
       nodeId,
       personId: otherPersonId,
       locationId,
@@ -205,7 +201,7 @@ describe("clockIn serialises per person under real contention", () => {
       const acquired = new Promise<void>((resolve) => (acquire = resolve));
       holding = holder.transaction(async (tx) => {
         await tx.execute(
-          sql`select 1 from workforce_chains where tenant_id = ${tenantId} and location_id = ${locationId} for update`,
+          sql`select 1 from workforce_chains where location_id = ${locationId} for update`,
         );
         acquire();
         await held;
@@ -263,7 +259,7 @@ describe("clockIn does not deadlock against a concurrent same-person correction"
       const acquired = new Promise<void>((resolve) => (acquire = resolve));
       holding = holder.transaction(async (tx) => {
         await tx.execute(
-          sql`select 1 from workforce_chains where tenant_id = ${tenantId} and location_id = ${locationId} for update`,
+          sql`select 1 from workforce_chains where location_id = ${locationId} for update`,
         );
         acquire();
         await held;

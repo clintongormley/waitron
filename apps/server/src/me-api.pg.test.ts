@@ -167,17 +167,16 @@ async function cookieFor(tenantId: string, personId: string): Promise<string> {
   return `${MANAGEMENT_COOKIE}=${session.id}`;
 }
 
-/** A shift for `personId`, seeded as admin (superuser) with tenant_id explicit. Returns its id. */
+/** A shift for `personId`, seeded as admin (superuser). Returns its id. */
 async function seedShift(
-  tenantId: string,
   personId: string,
   locationId: string,
   startsAt: string,
   endsAt: string,
 ): Promise<string> {
   const r = await suite.admin.execute<{ id: string }>(sql`
-    insert into shifts (tenant_id, person_id, location_id, starts_at, starts_offset_minutes, ends_at, ends_offset_minutes)
-    values (${tenantId}, ${personId}, ${locationId}, ${startsAt}, 0, ${endsAt}, 0) returning id`);
+    insert into shifts (person_id, location_id, starts_at, starts_offset_minutes, ends_at, ends_offset_minutes)
+    values (${personId}, ${locationId}, ${startsAt}, 0, ${endsAt}, 0) returning id`);
   return r.rows[0]!.id;
 }
 
@@ -227,7 +226,6 @@ describe("Me API over real Postgres (the identity property: the session's person
     const p = await seedPerson(venue.tenantId, "P");
     const q = await seedPerson(venue.tenantId, "Q");
     const pShift = await seedShift(
-      venue.tenantId,
       p,
       venue.locationId,
       "2026-05-04T09:00:00Z",
@@ -293,19 +291,12 @@ describe("Me API over real Postgres (the identity property: the session's person
     const p = await seedPerson(venue.tenantId, "P");
     const q = await seedPerson(venue.tenantId, "Q");
     const pShift = await seedShift(
-      venue.tenantId,
       p,
       venue.locationId,
       "2026-06-01T09:00:00Z",
       "2026-06-01T17:00:00Z",
     );
-    await seedShift(
-      venue.tenantId,
-      q,
-      venue.locationId,
-      "2026-06-01T10:00:00Z",
-      "2026-06-01T18:00:00Z",
-    );
+    await seedShift(q, venue.locationId, "2026-06-01T10:00:00Z", "2026-06-01T18:00:00Z");
     const app = mountApp(venue.tenantId);
     const cookieP = await cookieFor(venue.tenantId, p);
 

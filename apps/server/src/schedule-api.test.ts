@@ -84,8 +84,8 @@ async function send(
 
 async function insertShift(personId: string, startsAt: string, endsAt: string): Promise<string> {
   const r = await suite.db.execute<{ id: string }>(sql`
-    insert into shifts (tenant_id, person_id, location_id, starts_at, starts_offset_minutes, ends_at, ends_offset_minutes, role)
-    values (${tenantId}, ${personId}, ${locationId}, ${startsAt}, 0, ${endsAt}, 0, 'bar') returning id`);
+    insert into shifts (person_id, location_id, starts_at, starts_offset_minutes, ends_at, ends_offset_minutes, role)
+    values (${personId}, ${locationId}, ${startsAt}, 0, ${endsAt}, 0, 'bar') returning id`);
   return r.rows[0]!.id;
 }
 
@@ -96,16 +96,16 @@ async function insertSwap(params: {
   status?: string;
 }): Promise<string> {
   const r = await suite.db.execute<{ id: string }>(sql`
-    insert into shift_swaps (tenant_id, requested_by_person_id, from_shift_id, to_person_id, status)
-    values (${tenantId}, ${params.requestedBy}, ${params.fromShiftId}, ${params.toPerson}, ${params.status ?? "requested"})
+    insert into shift_swaps (requested_by_person_id, from_shift_id, to_person_id, status)
+    values (${params.requestedBy}, ${params.fromShiftId}, ${params.toPerson}, ${params.status ?? "requested"})
     returning id`);
   return r.rows[0]!.id;
 }
 
 async function insertAbsence(personId: string, startsOn: string, endsOn: string): Promise<string> {
   const r = await suite.db.execute<{ id: string }>(sql`
-    insert into absences (tenant_id, person_id, absence_kind, starts_on, ends_on)
-    values (${tenantId}, ${personId}, 'holiday', ${startsOn}, ${endsOn}) returning id`);
+    insert into absences (person_id, absence_kind, starts_on, ends_on)
+    values (${personId}, 'holiday', ${startsOn}, ${endsOn}) returning id`);
   return r.rows[0]!.id;
 }
 

@@ -36,9 +36,9 @@ beforeEach(async () => {
   nodeId = await seedNode(suite.admin, brandTenantId(tenantId), brandLocationId(locationId));
 });
 
-/** The chain key for this suite's default (tenant, node, location). */
+/** The chain key for this suite's default (node, location). */
 function key(location = locationId, node = nodeId): ChainKey {
-  return { tenantId, nodeId: node, locationId: location };
+  return { nodeId: node, locationId: location };
 }
 
 function inputAt(at: string): TimeEntryAppend {
@@ -145,7 +145,7 @@ describe("appendToChain under real contention", () => {
       const acquired = new Promise<void>((resolve) => (acquire = resolve));
       holding = holder.transaction(async (tx) => {
         await tx.execute(
-          sql`select 1 from workforce_chains where tenant_id = ${tenantId} and location_id = ${locationId} for update`,
+          sql`select 1 from workforce_chains where location_id = ${locationId} for update`,
         );
         acquire();
         await held;
@@ -190,7 +190,7 @@ describe("appendToChain under real contention", () => {
       const acquired = new Promise<void>((resolve) => (acquire = resolve));
       holding = holder.transaction(async (tx) => {
         await tx.execute(
-          sql`select 1 from workforce_chains where tenant_id = ${tenantId} and location_id = ${locationId} for update`,
+          sql`select 1 from workforce_chains where location_id = ${locationId} for update`,
         );
         acquire();
         await held;
@@ -214,10 +214,10 @@ describe("appendToChain under real contention", () => {
     // The rekey's whole point (spec §2.1): a promoted cloud and a returning box write ONE location
     // through two chains keyed by node_id, so their positions live in disjoint spaces and cannot
     // collide. Both nodes race for the same sequence_no VALUES (1, 2, 3 …) at one location — the
-    // exact clash the old (tenant, location) position uq forced — and with node_id in that uq none
+    // exact clash a (location, sequence_no) position uq would force — and with node_id in that uq none
     // of them contend. This two-node case passes only because `node_id` is in
     // `time_entries_chain_position_uq`: drop it and the two nodes' equal sequence_no values collide
-    // on (tenant, location, sequence_no).
+    // on (location, sequence_no).
     const nodeB = await seedNode(suite.admin, brandTenantId(tenantId), brandLocationId(locationId));
     const perNode = WRITERS / 2;
     const dbs = await Promise.all(Array.from({ length: WRITERS }, () => suite.pg.connect()));

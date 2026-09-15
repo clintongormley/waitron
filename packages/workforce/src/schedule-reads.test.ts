@@ -48,7 +48,6 @@ describe("listShiftsForPerson", () => {
     const other = await seedPerson(suite.db, tenantId, `other-${crypto.randomUUID()}`);
     // Two of MINE, seeded OUT of starts_at order, plus one of the OTHER person's in the same window.
     const late = await insertDraftShift(suite.db, {
-      tenantId,
       personId: me,
       locationId,
       startsAt: "2026-01-06T09:00:00Z",
@@ -57,7 +56,6 @@ describe("listShiftsForPerson", () => {
       rosterVersionId: null,
     });
     const early = await insertDraftShift(suite.db, {
-      tenantId,
       personId: me,
       locationId,
       startsAt: "2026-01-05T09:00:00Z",
@@ -65,14 +63,13 @@ describe("listShiftsForPerson", () => {
       role: "kitchen",
     });
     await insertDraftShift(suite.db, {
-      tenantId,
       personId: other,
       locationId,
       startsAt: "2026-01-05T10:00:00Z",
       endsAt: "2026-01-05T18:00:00Z",
     });
     const rows = await run((tx) =>
-      listShiftsForPerson(tx, { tenantId, personId: me, from: "2026-01-05", to: "2026-01-08" }),
+      listShiftsForPerson(tx, { personId: me, from: "2026-01-05", to: "2026-01-08" }),
     );
     // Only mine, and in starts_at ASC order (the reverse of insertion order above).
     expect(rows.map((r) => r.id)).toEqual([early, late]);
@@ -94,28 +91,25 @@ describe("listShiftsForPerson", () => {
     // drop `< to` and the 06-Jan shift (at the exclusive upper bound) leaks in.
     const me = await seedPerson(suite.db, tenantId, `me-${crypto.randomUUID()}`);
     const before = await insertDraftShift(suite.db, {
-      tenantId,
       personId: me,
       locationId,
       startsAt: "2026-01-04T09:00:00Z",
       endsAt: "2026-01-04T17:00:00Z",
     });
     const atFrom = await insertDraftShift(suite.db, {
-      tenantId,
       personId: me,
       locationId,
       startsAt: "2026-01-05T09:00:00Z",
       endsAt: "2026-01-05T17:00:00Z",
     });
     const atTo = await insertDraftShift(suite.db, {
-      tenantId,
       personId: me,
       locationId,
       startsAt: "2026-01-06T09:00:00Z",
       endsAt: "2026-01-06T17:00:00Z",
     });
     const rows = await run((tx) =>
-      listShiftsForPerson(tx, { tenantId, personId: me, from: "2026-01-05", to: "2026-01-06" }),
+      listShiftsForPerson(tx, { personId: me, from: "2026-01-05", to: "2026-01-06" }),
     );
     const ids = rows.map((r) => r.id);
     expect(ids).toEqual([atFrom]);
@@ -130,7 +124,6 @@ describe("listShiftsForPerson", () => {
     // would fall inside, leaking it in — the offset-awareness this window shares with publishRoster.
     const me = await seedPerson(suite.db, tenantId, `me-${crypto.randomUUID()}`);
     const rollsOver = await insertDraftShift(suite.db, {
-      tenantId,
       personId: me,
       locationId,
       startsAt: "2026-01-05T23:30:00Z",
@@ -139,7 +132,7 @@ describe("listShiftsForPerson", () => {
       endsOffsetMinutes: 60,
     });
     const rows = await run((tx) =>
-      listShiftsForPerson(tx, { tenantId, personId: me, from: "2026-01-05", to: "2026-01-06" }),
+      listShiftsForPerson(tx, { personId: me, from: "2026-01-05", to: "2026-01-06" }),
     );
     expect(rows.map((r) => r.id)).not.toContain(rollsOver);
   });
@@ -159,31 +152,28 @@ describe("listSwapsForPerson", () => {
     // which column matched.
     const { me, other } = await twoPeople();
     const third = await seedPerson(suite.db, tenantId, `third-${crypto.randomUUID()}`);
-    const myShift = await insertDraftShift(suite.db, { tenantId, personId: me, locationId });
-    const theirShift = await insertDraftShift(suite.db, { tenantId, personId: other, locationId });
-    const othersShift = await insertDraftShift(suite.db, { tenantId, personId: other, locationId });
+    const myShift = await insertDraftShift(suite.db, { personId: me, locationId });
+    const theirShift = await insertDraftShift(suite.db, { personId: other, locationId });
+    const othersShift = await insertDraftShift(suite.db, { personId: other, locationId });
     // One I requested (me → other), one offered to me (other → me), one between two other people.
     const requestedByMe = await insertShiftSwap(suite.db, {
-      tenantId,
       requestedByPersonId: me,
       fromShiftId: myShift,
       toPersonId: other,
       createdAt: "2026-03-01T10:00:00Z",
     });
     const offeredToMe = await insertShiftSwap(suite.db, {
-      tenantId,
       requestedByPersonId: other,
       fromShiftId: theirShift,
       toPersonId: me,
       createdAt: "2026-03-02T10:00:00Z",
     });
     const notMine = await insertShiftSwap(suite.db, {
-      tenantId,
       requestedByPersonId: other,
       fromShiftId: othersShift,
       toPersonId: third,
     });
-    const rows = await run((tx) => listSwapsForPerson(tx, { tenantId, personId: me }));
+    const rows = await run((tx) => listSwapsForPerson(tx, { personId: me }));
     const ids = rows.map((r) => r.id);
     // created_at DESC → the later-created (offeredToMe) first.
     expect(ids).toEqual([offeredToMe, requestedByMe]);
@@ -214,26 +204,23 @@ describe("listAbsencesForPerson", () => {
     // Two of mine (a requested and a rejected, so ALL statuses show — not just requested like the
     // manager queue), seeded out of starts_on order, plus one of the other person's.
     const mineEarly = await insertAbsence(suite.db, {
-      tenantId,
       personId: me,
       startsOn: "2026-02-01",
       endsOn: "2026-02-03",
       status: "requested",
     });
     const mineLate = await insertAbsence(suite.db, {
-      tenantId,
       personId: me,
       startsOn: "2026-03-10",
       endsOn: "2026-03-12",
       status: "rejected",
     });
     const theirs = await insertAbsence(suite.db, {
-      tenantId,
       personId: other,
       startsOn: "2026-02-15",
       endsOn: "2026-02-16",
     });
-    const rows = await run((tx) => listAbsencesForPerson(tx, { tenantId, personId: me }));
+    const rows = await run((tx) => listAbsencesForPerson(tx, { personId: me }));
     const ids = rows.map((r) => r.id);
     // starts_on DESC → the later-starting absence first.
     expect(ids).toEqual([mineLate, mineEarly]);

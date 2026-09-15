@@ -38,7 +38,6 @@ async function clockDay(
 ): Promise<void> {
   await run((tx) =>
     backend.clockIn(tx, {
-      tenantId,
       nodeId,
       personId,
       locationId,
@@ -48,7 +47,6 @@ async function clockDay(
   );
   await run((tx) =>
     backend.clockOut(tx, {
-      tenantId,
       nodeId,
       personId,
       locationId,
@@ -68,17 +66,17 @@ describe("workSummary driven by a resolved convenio_config ruleset", () => {
     const locationId = await seedLocation(suite.db, tenantId);
     const nodeId = await seedNode(suite.db, brandTenantId(tenantId), brandLocationId(locationId));
     const personId = await seedPerson(suite.db, tenantId, "es-default");
-    await seedEmployment(suite.db, { tenantId, personId, contractedMinutesPerWeek: 2400 });
-    await seedConvenioConfig(suite.db, { tenantId, locationId });
+    await seedEmployment(suite.db, { personId, contractedMinutesPerWeek: 2400 });
+    await seedConvenioConfig(suite.db, { locationId });
     for (const day of ["2026-01-05", "2026-01-06", "2026-01-07", "2026-01-08", "2026-01-09"]) {
       await clockDay(personId, nodeId, locationId, day, "08:00", "17:00");
     }
 
-    const ruleset = await run((tx) => resolveWorkTimeRuleset(tx, { tenantId, locationId }));
+    const ruleset = await run((tx) => resolveWorkTimeRuleset(tx, { locationId }));
     const summary = await run((tx) =>
       backend.workSummary(
         tx,
-        { tenantId, personId, period: { start: "2026-01-05", end: "2026-01-12" } },
+        { personId, period: { start: "2026-01-05", end: "2026-01-12" } },
         ruleset,
       ),
     );
@@ -109,14 +107,12 @@ describe("workSummary driven by a resolved convenio_config ruleset", () => {
     const dailyNode = await seedNode(suite.db, brandTenantId(tenantId), brandLocationId(dailyLoc));
     const periodLoc = await seedLocation(suite.db, tenantId);
     const personId = await seedPerson(suite.db, tenantId, "es-model");
-    await seedEmployment(suite.db, { tenantId, personId, contractedMinutesPerWeek: 2400 });
+    await seedEmployment(suite.db, { personId, contractedMinutesPerWeek: 2400 });
     await seedConvenioConfig(suite.db, {
-      tenantId,
       locationId: dailyLoc,
       overtimeModel: "daily_accrual",
     });
     await seedConvenioConfig(suite.db, {
-      tenantId,
       locationId: periodLoc,
       overtimeModel: "period_net",
     });
@@ -124,16 +120,11 @@ describe("workSummary driven by a resolved convenio_config ruleset", () => {
     await clockDay(personId, dailyNode, dailyLoc, "2026-01-06", "09:00", "16:00"); // 7h
 
     const query = {
-      tenantId,
       personId,
       period: { start: "2026-01-05", end: "2026-01-12" },
     } as const;
-    const dailyRuleset = await run((tx) =>
-      resolveWorkTimeRuleset(tx, { tenantId, locationId: dailyLoc }),
-    );
-    const periodRuleset = await run((tx) =>
-      resolveWorkTimeRuleset(tx, { tenantId, locationId: periodLoc }),
-    );
+    const dailyRuleset = await run((tx) => resolveWorkTimeRuleset(tx, { locationId: dailyLoc }));
+    const periodRuleset = await run((tx) => resolveWorkTimeRuleset(tx, { locationId: periodLoc }));
     const daily = await run((tx) => backend.workSummary(tx, query, dailyRuleset));
     const period = await run((tx) => backend.workSummary(tx, query, periodRuleset));
 

@@ -10,7 +10,7 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
-import { locations, tenants } from "@waitron/db";
+import { locations } from "@waitron/db";
 
 /**
  * A reusable shift SHAPE at a location — "Monday bar, 18:00–02:00" — from which concrete `shifts` are
@@ -28,7 +28,6 @@ export const shiftTemplates = pgTable(
   "shift_templates",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    tenantId: uuid("tenant_id").notNull(),
     /** The workplace the template's shifts are scheduled at. */
     locationId: uuid("location_id").notNull(),
     /** A human label for the slot (e.g. "Evening bar"). */
@@ -47,20 +46,14 @@ export const shiftTemplates = pgTable(
   },
   (t) => [
     // The array `foreignKey({...})` form, not `.references(() => …)`, for the coverage reason the
-    // sibling schema files document. restrict: a template must not be orphaned by a tenant/location
+    // sibling schema files document. restrict: a template must not be orphaned by a location
     // delete.
-    foreignKey({
-      columns: [t.tenantId],
-      foreignColumns: [tenants.id],
-      name: "shift_templates_tenant_fk",
-    }).onDelete("restrict"),
     foreignKey({
       columns: [t.locationId],
       foreignColumns: [locations.id],
       name: "shift_templates_location_fk",
     }).onDelete("restrict"),
-    index("shift_templates_tenant_id_idx").on(t.tenantId),
-    index("shift_templates_tenant_location_idx").on(t.tenantId, t.locationId),
+    index("shift_templates_location_idx").on(t.locationId),
     check("shift_templates_label_ck", sql`length(${t.label}) > 0`),
     check("shift_templates_weekday_ck", sql`${t.weekday} between 0 and 6`),
     check("shift_templates_starts_minute_ck", sql`${t.startsMinute} between 0 and 1440`),

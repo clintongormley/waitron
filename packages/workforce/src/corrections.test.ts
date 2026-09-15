@@ -35,7 +35,7 @@ const suite = usePgliteDb({
 });
 
 function event(personId: string, at: string): ClockEventInput {
-  return { tenantId, nodeId, personId, locationId, at, offsetMinutes: 0 };
+  return { nodeId, personId, locationId, at, offsetMinutes: 0 };
 }
 
 function run<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
@@ -87,22 +87,21 @@ async function insertApprovedCorrection(row: {
 }): Promise<void> {
   await suite.db.execute(sql`
     insert into time_entries (
-      tenant_id, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
+      person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
       recorded_by_person_id, recorded_at, corrects_entry_id, correction_reason, correction_status,
       correction_actor_id, entry_hash, prev_entry_hash, sequence_no, is_first_entry)
     values (
-      ${tenantId}, ${row.personId}, ${locationId}, ${row.node}, 'correction', ${row.eventAt}, 0,
+      ${row.personId}, ${locationId}, ${row.node}, 'correction', ${row.eventAt}, 0,
       ${row.actorId}, ${row.recordedAt}, ${row.correctsEntryId}, 'cross-node merge', 'approved',
       ${row.actorId}, ${"A".repeat(64)}, ${"B".repeat(64)}, ${row.sequenceNo}, false)`);
 }
 
 async function workedMinutes(personId: string): Promise<number> {
-  await seedEmployment(suite.db, { tenantId, personId });
+  await seedEmployment(suite.db, { personId });
   const summary = await run((tx) =>
     backend.workSummary(
       tx,
       {
-        tenantId,
         personId,
         period: { start: "2026-01-05", end: "2026-01-12" },
       },
@@ -118,7 +117,6 @@ describe("requestCorrection", () => {
     const actor = await supervisor("req-1-sup");
     await run((tx) =>
       backend.requestCorrection(tx, {
-        tenantId,
         nodeId,
         correctsEntryId: outEntryId,
         at: "2026-01-05T18:00:00Z",
@@ -148,7 +146,6 @@ describe("requestCorrection", () => {
     const code = await codeOfRejection(() =>
       run((tx) =>
         backend.requestCorrection(tx, {
-          tenantId,
           nodeId,
           correctsEntryId: crypto.randomUUID(),
           at: "2026-01-05T18:00:00Z",
@@ -168,7 +165,6 @@ describe("approveCorrection", () => {
     const sup = await supervisor("appr-1-sup");
     const correctionId = await run((tx) =>
       backend.requestCorrection(tx, {
-        tenantId,
         nodeId,
         correctsEntryId: outEntryId,
         at: "2026-01-05T18:00:00Z",
@@ -178,7 +174,7 @@ describe("approveCorrection", () => {
       }),
     );
     await run((tx) =>
-      backend.approveCorrection(tx, { tenantId, nodeId, correctionId, approverPersonId: sup }),
+      backend.approveCorrection(tx, { nodeId, correctionId, approverPersonId: sup }),
     );
 
     // Reprojected: the corrected 18:00 end makes it a 9h day.
@@ -196,7 +192,6 @@ describe("approveCorrection", () => {
     const { personId, outEntryId } = await nineToFive("appr-2");
     const correctionId = await run((tx) =>
       backend.requestCorrection(tx, {
-        tenantId,
         nodeId,
         correctsEntryId: outEntryId,
         at: "2026-01-05T18:00:00Z",
@@ -209,7 +204,6 @@ describe("approveCorrection", () => {
     const code = await codeOfRejection(() =>
       run((tx) =>
         backend.approveCorrection(tx, {
-          tenantId,
           nodeId,
           correctionId,
           approverPersonId: personId,
@@ -226,7 +220,6 @@ describe("approveCorrection", () => {
     const code = await codeOfRejection(() =>
       run((tx) =>
         backend.approveCorrection(tx, {
-          tenantId,
           nodeId,
           correctionId: crypto.randomUUID(),
           approverPersonId: sup,
@@ -241,7 +234,6 @@ describe("approveCorrection", () => {
     const sup = await supervisor("appr-4-sup");
     const correctionId = await run((tx) =>
       backend.requestCorrection(tx, {
-        tenantId,
         nodeId,
         correctsEntryId: outEntryId,
         at: "2026-01-05T18:00:00Z",
@@ -253,16 +245,14 @@ describe("approveCorrection", () => {
     // First approval takes effect (the request row stays `requested` — approval is a second append,
     // never a mutation, so the id passed the second time still names a `requested` row).
     await run((tx) =>
-      backend.approveCorrection(tx, { tenantId, nodeId, correctionId, approverPersonId: sup }),
+      backend.approveCorrection(tx, { nodeId, correctionId, approverPersonId: sup }),
     );
     // Second approval of the SAME request is refused: the target already carries an approved
     // correction, so re-approving would append a duplicate `approved` row (the request→approve-once
     // invariant). Restricting the lookup to `requested` would NOT catch this — the request is still
     // `requested` — so the guard is on the target's existing approval.
     const code = await codeOfRejection(() =>
-      run((tx) =>
-        backend.approveCorrection(tx, { tenantId, nodeId, correctionId, approverPersonId: sup }),
-      ),
+      run((tx) => backend.approveCorrection(tx, { nodeId, correctionId, approverPersonId: sup })),
     );
     expect(code).toBe("correction.not_pending");
     // Exactly ONE approved correction row exists — the refused approval appended nothing.
@@ -281,7 +271,7 @@ describe("cross-node correction precedence (§4.2, reprojection)", () => {
     // Once corrections chain per node, sync can leave ONE `out` with an approved correction in the
     // box's chain AND in a promoted cloud's — the state the DB-wide approve guard forbids through the
     // backend, so both are inserted directly (insertApprovedCorrection). `entriesInPeriod` fetches by
-    // tenant+person, never by chain (§4.3), so reprojection sees both and must pick the greatest
+    // person, never by chain (§4.3), so reprojection sees both and must pick the greatest
     // (recorded_at, node_id, sequence_no). The cloud row was RECORDED LATER (10:06) though it carries
     // the LOWER sequence_no (2 vs 5), so its 18:30 corrected time wins over the box's 18:00 — a
     // sequence_no-max rule would instead land on 540 (18:00), so the two rules disagree here.
