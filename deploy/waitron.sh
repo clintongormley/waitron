@@ -128,7 +128,8 @@ select_image() {
   if [ "$ref" = "main" ]; then
     env_unset WAITRON_IMAGE
     env_unset WAITRON_PRINT_AGENT_IMAGE
-    docker compose -f "$WAITRON_DIR/compose.yml" pull --ignore-pull-failures
+    docker compose -f "$WAITRON_DIR/compose.yml" pull \
+      || die "could not pull the Waitron images: check the network and that the image registry is reachable, or whether an image is published for this machine's architecture ($(uname -m))"
   else
     local safe tag agent_tag
     safe="$(printf '%s' "$ref" | tr -c 'A-Za-z0-9._-' '-')"; safe="${safe:0:100}"

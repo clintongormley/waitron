@@ -25,11 +25,13 @@ afterEach(() => {
 //     box whose state volume has no trading.env); `run … find …` (reset) prints nothing.
 //   - `volume inspect` -> exit 0 (the volume exists); `volume rm` -> exit 0 unless rmFail names a
 //     volume ("db" makes `docker volume rm waitron_db` fail, to test the abort-on-failure path).
-// Three failure knobs model the read/write faults the production-safety fixes must survive:
+// Failure knobs model the read/write faults the install and production-safety fixes must survive:
 //   - readError: BOTH is_production reads (trading.env cat and the db-stamp psql) exit non-zero, so
 //     the environment cannot be established — reset must then fail CLOSED.
 //   - rmFail: the named volume's `docker volume rm` exits non-zero.
 //   - envWriteFail: `mv` exits non-zero, so the atomic .env rewrite's final rename fails.
+//   - pullFail: `compose … pull` exits non-zero, as when the registry is unreachable or has no image
+//     for this machine's architecture.
 // `curl`/`wget` write a marker to their -o target so fetched files exist. `qrencode` is a no-op.
 // `systemctl` and `sudo` are stubbed so ensure_docker's `sudo -n systemctl enable --now docker` is a
 // no-op and the suite is hermetic on Linux with or without passwordless sudo (not just on macOS,
@@ -42,6 +44,7 @@ function sandbox({
   readError = false,
   rmFail = "",
   envWriteFail = false,
+  pullFail = false,
 } = {}) {
   const root = mkdtempSync(join(tmpdir(), "waitron-sh-"));
   dirs.push(root);
@@ -60,6 +63,7 @@ function sandbox({
   };
   const aheadEcho = aheadLogs ? 'echo "provisioning.database_ahead: the database is newer"' : ":";
   const readErr = readError ? "1" : "0";
+  const pullErr = pullFail ? "1" : "0";
   stub(
     "docker",
     `
@@ -70,6 +74,10 @@ esac
 case "$1" in
   compose)
     case "$args" in
+      *" pull "*|*" pull")
+        # Real compose exits 0 on a failed pull when given this flag (probed on Compose v5.1.0).
+        case "$args" in *--ignore-pull-failures*) exit 0 ;; esac
+        [ "${pullErr}" = "1" ] && exit 1 ;;
       *" ps "*|*" ps") echo "${dockerPs}" ;;
       *" logs "*) ${aheadEcho} ;;
       *" exec "*)
@@ -142,6 +150,20 @@ describe("waitron.sh install (published main)", () => {
     expect(r.stdout).toContain("http://waitron.local:9110");
     expect(r.stdout).toContain("http://waitron.local/setup/trust");
     expect(r.stdout).toContain("https://waitron.local/setup/trust");
+  });
+});
+
+describe("waitron.sh install (published main) when the pull fails", () => {
+  it("stops with a message naming the likely causes and never starts the containers", () => {
+    const sb = sandbox({ pullFail: true });
+    const r = run(sb, ["install"]);
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toContain("could not pull the Waitron images");
+    expect(r.stderr).toContain("registry");
+    expect(r.stderr).toContain("architecture");
+    const calls = readFileSync(sb.log, "utf8");
+    expect(calls).toMatch(/docker compose .*pull/);
+    expect(calls).not.toMatch(/docker compose .*up/);
   });
 });
 
