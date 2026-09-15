@@ -577,7 +577,7 @@ What it left open:
   dashboard tests including both-theme accessibility, the fiscal privilege and immutability suites, and
   the real Veri\*Factu backend accepting a controlled zero-rate sale. What it does not record is the
   plan's own step 8: the single journey through the actual routes against a real database, creating a
-  unit, a category and all four modifier types from inside a dirty product draft and taking the result
+  unit, a category and three modifier types from inside a dirty product draft and taking the result
   through the till. That is the shape of check that #344 showed matters — the image library passed
   review and CI and still returned a 500 to the first person who opened it. **Next action:** walk it
   once on a dev stack before treating the overhaul as finished.

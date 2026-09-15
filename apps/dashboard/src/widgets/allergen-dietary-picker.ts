@@ -105,7 +105,7 @@ export class AllergenDietaryPicker extends LitElement {
         @wt-change=${(e: CustomEvent<{ values: string[] }>) => this.#onAllergens(e)}
       ></wt-combobox>
       <fieldset data-test="dietary">
-        <legend>${t("modifiers.invalidates_dietary")}</legend>
+        <legend>${t("modifiers.dietary_preferences")}</legend>
         ${DIETARY_SUITABILITY.map(
           (label) =>
             html`<label class="diet"

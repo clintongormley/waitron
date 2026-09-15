@@ -363,7 +363,7 @@ describe("till-basket", () => {
 
     // The extra's OWN allergen node carries its milk, NOT the dish's gluten — a node distinct from the
     // dish's own allergen row.
-    const optionAllergens = el.shadowRoot!.querySelector(`[data-test="option-allergens-0"]`);
+    const optionAllergens = el.shadowRoot!.querySelector(`[data-test="option-allergens-0-0"]`);
     expect(optionAllergens).not.toBeNull();
     expect(optionAllergens!.textContent).toContain(milkName);
     expect(optionAllergens!.textContent).not.toMatch(/gluten/i);
@@ -374,7 +374,7 @@ describe("till-basket", () => {
     expect(dishAllergens!.textContent).not.toContain(milkName);
 
     // The extra's OWN diet badge shows its positive suitability (halal).
-    const optionDiet = el.shadowRoot!.querySelector(`[data-test="option-diet-0"]`);
+    const optionDiet = el.shadowRoot!.querySelector(`[data-test="option-diet-0-0"]`);
     expect(optionDiet).not.toBeNull();
     expect(optionDiet!.querySelector("[data-diet='halal']")).not.toBeNull();
     expect(optionDiet!.textContent).toContain(t("diet.halal"));
@@ -411,8 +411,8 @@ describe("till-basket", () => {
       { optionGroupItemId: "opt-plain", name: { es: "Pan normal" }, priceDelta: "0.00" },
     ]);
     const { el } = await mountWidget<TillBasket>("till-basket", { store });
-    expect(el.shadowRoot!.querySelector(`[data-test="option-allergens-0"]`)).toBeNull();
-    expect(el.shadowRoot!.querySelector(`[data-test="option-diet-0"]`)).toBeNull();
+    expect(el.shadowRoot!.querySelector(`[data-test="option-allergens-0-0"]`)).toBeNull();
+    expect(el.shadowRoot!.querySelector(`[data-test="option-diet-0-0"]`)).toBeNull();
   });
 
   it("resolves a selected extra's own nutrition from the product's modifiers (not just optionGroups)", async () => {
@@ -452,11 +452,11 @@ describe("till-basket", () => {
       { optionGroupItemId: "opt-bacon", name: { es: "Bacon" }, priceDelta: "1.00" },
     ]);
     const { el } = await mountWidget<TillBasket>("till-basket", { store });
-    expect(el.shadowRoot!.querySelector(`[data-test="option-allergens-0"]`)!.textContent).toContain(
-      allergenName("milk", currentLocale()),
-    );
     expect(
-      el.shadowRoot!.querySelector(`[data-test="option-diet-0"] [data-diet='kosher']`),
+      el.shadowRoot!.querySelector(`[data-test="option-allergens-0-0"]`)!.textContent,
+    ).toContain(allergenName("milk", currentLocale()));
+    expect(
+      el.shadowRoot!.querySelector(`[data-test="option-diet-0-0"] [data-diet='kosher']`),
     ).not.toBeNull();
   });
 

@@ -392,7 +392,7 @@ export class TillBasket extends LitElement {
                   >
                   <span class="option-total">${formatMoney(optionGross(line, option))}</span>
                 </div>
-                ${own ? extraNutrition(own, `option-allergens-${i}`, `option-diet-${i}`) : nothing}
+                ${own ? extraNutrition(own, `option-allergens-${index}-${i}`, `option-diet-${index}-${i}`) : nothing}
               `;
             },
           )}

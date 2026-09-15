@@ -153,7 +153,6 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "allergen.invalid_code": 400,
   "allergen.invalid_presence": 400,
   "allergen.invalid_source": 400,
-  "allergen.add_remove_conflict": 400,
   // The diet-write validation codes: an untrusted product `dietOverride` that fails the
   // taxonomy/label/disjointness checks in the core diet validators is a CLIENT fault → 400. Listed
   // explicitly as the house style requires; the `?? 400` default already covers them.

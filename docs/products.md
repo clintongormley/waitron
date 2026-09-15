@@ -51,10 +51,9 @@ The allergen and dietary sections show only declarations you selected. Choose **
 **Add dietary declaration** to find another entry. An empty reviewed allergen list means you checked
 the product and declared none; a pending declaration means it has not been reviewed.
 
-Dietary declarations describe the product as served before optional changes. A modifier choice can
-invalidate a claim. For example, adding bacon with a meat-free invalidation stops the till and kitchen
-from claiming that the resulting dish is vegan or vegetarian. Halal and kosher remain independent
-declarations and are never inferred from vegan or vegetarian.
+Each product and each modifier choice states its own dietary suitability — a positive `suitableFor`
+list over vegan, vegetarian, halal and kosher — and its own allergens. The till and kitchen show each
+item's own list and no longer compute a combined "as-served" figure across the dish and its extras.
 
 Recipes and ingredient origins no longer author product declarations in the supported dashboard
 workflow. Existing purchasing data and recorded order facts remain available, but you maintain live
@@ -64,13 +63,13 @@ product allergens and dietary suitability in **Products**.
 
 Create reusable choices in **Modifiers**, then attach them to the product in the order you want the
 till to ask for them. See [Reuse choices across your products](modifiers.md) for text, extras,
-options, yes/no answers, defaults, caps and menu-specific extra prices.
+options, defaults, caps and menu-specific extra prices.
 
 When you park or complete an order, Waitron saves the chosen product and variant names, kitchen name,
 prices and modifier answers. Later catalogue edits apply to new selections. The parked order,
 kitchen ticket, receipt and reprint continue to show the facts saved with that order.
 
 The demo venue includes a bilingual coffee with two categories, a Reporting Category, a custom unit,
-two variants, a separate kitchen name, direct dietary declarations and all four modifier types. Its
+two variants, a separate kitchen name, direct dietary declarations and three modifier types. Its
 menu variant and extra prices deliberately differ from the product definitions, so you can see which
 price wins at the till.

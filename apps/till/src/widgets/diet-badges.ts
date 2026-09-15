@@ -13,6 +13,13 @@ const SUITABILITY_KEYS = {
   kosher: "diet.kosher",
 } as const;
 
+/** One positive-suitability pill — the identical chip {@link dietBadges} and {@link extraNutrition}
+ * both render for a claim (`vegan`/`vegetarian`/`halal`/`kosher`), kept in one place so they cannot
+ * drift. `key` drives the `diet-*` class and `data-diet`; `label` is the already-localized copy. */
+function dietBadge(key: string, label: string): TemplateResult {
+  return html`<span class="diet-badge diet-${key}" data-diet=${key}>${label}</span>`;
+}
+
 /**
  * A SELECTED EXTRA's OWN nutrition, shown beside the dish's own on the basket, the KDS station display
  * and the expo/pass board — its own allergens as "contains" chips and its own positive dietary
@@ -53,12 +60,7 @@ export function extraNutrition(
     ${
       diets.length > 0
         ? html`<span class="extra-diet" data-test=${dietTest}
-            >${diets.map(
-              (label) =>
-                html`<span class="diet-badge diet-${label}" data-diet=${label}
-                  >${tr(SUITABILITY_KEYS[label])}</span
-                >`,
-            )}</span
+            >${diets.map((label) => dietBadge(label, tr(SUITABILITY_KEYS[label])))}</span
           >`
         : nothing
     }
@@ -115,9 +117,7 @@ export function dietBadges(
 
   return html`<span class="line-diet" data-test=${dataTest}>
     <span class="diet-label">${tr("diet.label")}</span>
-    ${positives.map(
-      (p) => html`<span class="diet-badge diet-${p.key}" data-diet=${p.key}>${p.label}</span>`,
-    )}
+    ${positives.map((p) => dietBadge(p.key, p.label))}
     ${contains.map(
       (tag) =>
         html`<span class="diet-contains" data-diet-contains=${tag}

@@ -222,8 +222,9 @@ export const en = {
   "allergens.print": "Print",
   "allergens.close": "Close",
   // As-served allergens on the basket dish line (modifier↔allergen, Task 7). `as_served` labels the
-  // per-line chip row (the dish's declared allergens folded with its modifiers). `none` is shown when
-  // the fold leaves an empty set on a REVIEWED dish (nothing to declare). `not_reviewed` is the
+  // per-line chip row (the dish's OWN declared allergens — no modifier fold; each extra shows its own
+  // list separately). `none` is shown when that set is empty on a REVIEWED dish (nothing to declare).
+  // `not_reviewed` is the
   // Cautious note the waiter sees whenever the dish's own allergens are unreviewed — the note must
   // read as "review pending" (the browser test pins /review|pendiente/i).
   "allergens.as_served": "As served",
