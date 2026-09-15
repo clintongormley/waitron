@@ -516,4 +516,56 @@ describe("units-screen", () => {
     await new Promise((resolve) => requestAnimationFrame(resolve));
     expect(menu.shadowRoot!.activeElement).toBe(trigger);
   });
+
+  it("opens the products modal when a unit row is clicked", async () => {
+    setLocale("es-ES");
+    const listUnitProducts = vi
+      .fn()
+      .mockResolvedValue([{ id: "p1", name: { es: "Sopa", en: "Soup" }, available: true }]);
+    const el = await mount(stubApi({ listUnitProducts }));
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    // The whole-row activator lives in the first cell of the units table's shadow root.
+    table.shadowRoot!.querySelector<HTMLButtonElement>(".row-activate")!.click();
+    await flush(el);
+    expect(listUnitProducts).toHaveBeenCalledTimes(1);
+    const dialog = el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
+      "[data-test=in-use-dialog]",
+    )!;
+    expect(dialog.open).toBe(true);
+    expect(dialog.querySelector("wt-data-table")!.shadowRoot!.textContent).toContain("Sopa");
+  });
+
+  it("offers Each (no unit) as a reassign target and reassigns to it", async () => {
+    setLocale("es-ES");
+    const listUnitProducts = vi
+      .fn()
+      .mockResolvedValue([{ id: "p1", name: { es: "Sopa", en: "Soup" }, available: true }]);
+    const reassignProductsUnit = vi.fn().mockResolvedValue([]);
+    const el = await mount(stubApi({ listUnitProducts, reassignProductsUnit }));
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    table.shadowRoot!.querySelector<HTMLButtonElement>(".row-activate")!.click();
+    await flush(el);
+    const dialog = el.shadowRoot!.querySelector<HTMLElement>("[data-test=in-use-dialog]")!;
+    dialog
+      .querySelector("wt-data-table")!
+      .shadowRoot!.querySelector<HTMLInputElement>("[data-test=select-p1]")!
+      .click();
+    await el.updateComplete;
+    const select = dialog.querySelector<HTMLSelectElement>("[data-test=reassign-unit]")!;
+    // Pick the Each option by its localized label, then reassign — its value is a sentinel, not a uuid.
+    const eachOption = [...select.options].find(
+      (option) => option.textContent!.trim() === t("units.change_unit_each"),
+    )!;
+    expect(eachOption).toBeTruthy();
+    select.value = eachOption.value;
+    select.dispatchEvent(new Event("change"));
+    await el.updateComplete;
+    dialog.querySelector<HTMLElement>("[data-test=change-unit]")!.click();
+    await flush(el);
+    const clickedUnitId = listUnitProducts.mock.calls[0]![0] as string;
+    // Each maps to a null target — assert the null, not the sentinel string.
+    expect(reassignProductsUnit).toHaveBeenCalledWith(clickedUnitId, ["p1"], null);
+  });
 });
