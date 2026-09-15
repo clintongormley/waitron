@@ -26,7 +26,7 @@ export interface CertExtension {
   value?: string;
 }
 
-export interface CertificateIssuer {
+interface CertificateIssuer {
   cn: string;
   key: forge.pki.rsa.PrivateKey;
 }

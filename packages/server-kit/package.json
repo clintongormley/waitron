@@ -6,6 +6,7 @@
   "main": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
+    "./certificate.js": "./src/certificate.ts",
     "./testing/mtls.js": "./src/testing/mtls.ts"
   },
   "scripts": {

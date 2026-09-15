@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { AppError } from "@waitron/shared";
-import { certificate, type CertExtension } from "@waitron/server-kit";
+import { certificate, type CertExtension } from "@waitron/server-kit/certificate.js";
 import forge from "node-forge";
 import "./errors.js";
 

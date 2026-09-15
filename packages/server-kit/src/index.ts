@@ -1,5 +1,6 @@
-// The public surface of @waitron/server-kit: server-side helpers (HTTP request handling, X.509
-// certificate building) that apps/server and modules share without either depending on the other.
+// The public surface of @waitron/server-kit: server-side HTTP helpers that apps/server and modules
+// share without either depending on the other. The X.509 certificate builder is a separate entry
+// (`@waitron/server-kit/certificate.js`) so a module importing this barrel never loads node-forge.
 // Re-exports only.
 //
 // Excluded from coverage in vitest.config.ts (a pure re-export barrel), the same reason
@@ -9,8 +10,6 @@
 // reachability rule scripts/errors-reachable.test.ts enforces.
 import "./errors.js";
 
-export { certificate } from "./certificate.js";
-export type { CertExtension, CertificateIssuer } from "./certificate.js";
 export { createErrorBoundary } from "./error-boundary.js";
 export { codeOf } from "./error-code.js";
 export { readJsonBody, readRawJsonBody } from "./read-json-body.js";
