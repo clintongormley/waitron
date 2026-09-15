@@ -248,7 +248,7 @@ describe("the resolved client over a real client-certificate handshake", () => {
     // is not a substitute for the `SocketError` check above — but it directly disproves the one
     // thing this test's name asserts and an error TYPE never can: that the server actually accepted
     // and answered the request. (Flipping `rejectUnauthorized` to `false` in
-    // `@waitron/server-kit/testing/mtls.ts` makes the request succeed and turns this test red.)
+    // `packages/server-kit/src/testing/mtls.ts` makes the request succeed and turns this test red.)
     expect(server.requests()).toBe(requestsBefore);
   });
 });
