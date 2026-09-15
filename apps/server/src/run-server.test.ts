@@ -146,6 +146,63 @@ describe("installShutdownHandlers", () => {
     expect(h.written.join("")).not.toContain("server.shutdown_timeout");
   });
 
+  it("a close() resolving after the deadline already exited does not exit again", async () => {
+    let fire: (() => void) | undefined;
+    let resolveClose: (() => void) | undefined;
+    const exit = vi.fn();
+    const handlers = new Map<string, () => void>();
+    installShutdownHandlers(
+      { close: () => new Promise<void>((resolve) => (resolveClose = resolve)) },
+      {
+        on: (sig, fn) => void handlers.set(sig, fn),
+        write: (_line, done) => done(),
+        exit,
+        now: () => new Date("2026-09-08T00:00:00Z"),
+        setTimer: (_ms, fn) => {
+          fire = fn;
+          return { cancel: () => {} };
+        },
+      },
+    );
+    handlers.get("SIGTERM")!();
+    fire!();
+    resolveClose!();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(exit).toHaveBeenCalledTimes(1);
+    expect(exit).toHaveBeenCalledWith(0);
+  });
+
+  it("a stalled failure-log write completing after the deadline's exit does not exit again", async () => {
+    let fire: (() => void) | undefined;
+    const pendingWrites: (() => void)[] = [];
+    const exit = vi.fn();
+    const written: string[] = [];
+    const handlers = new Map<string, () => void>();
+    installShutdownHandlers(
+      { close: () => Promise.reject(new Error("pool end failed")) },
+      {
+        on: (sig, fn) => void handlers.set(sig, fn),
+        write: (line, done) => {
+          written.push(line);
+          pendingWrites.push(done);
+        },
+        exit,
+        now: () => new Date("2026-09-08T00:00:00Z"),
+        setTimer: (_ms, fn) => {
+          fire = fn;
+          return { cancel: () => {} };
+        },
+      },
+    );
+    handlers.get("SIGTERM")!();
+    await vi.waitFor(() => expect(written.join("")).toContain("server.shutdown_failed"));
+    fire!();
+    expect(exit).toHaveBeenCalledWith(1);
+    for (const done of pendingWrites) done();
+    expect(exit).toHaveBeenCalledTimes(1);
+    expect(exit).toHaveBeenCalledWith(1);
+  });
+
   it("a rejection arriving after the deadline already exited neither logs nor exits again", async () => {
     let fire: (() => void) | undefined;
     let rejectClose: ((e: Error) => void) | undefined;
