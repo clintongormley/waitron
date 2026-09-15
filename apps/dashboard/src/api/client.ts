@@ -253,6 +253,12 @@ export interface CategoryDependants {
   parentId: string | null;
   routes: { id: string; station: string | null; zone: string | null }[];
 }
+/** `GET /management-api/modifiers/:id/dependants` — what a delete confirmation must show. */
+export interface ModifierDependants {
+  products: { id: string; name: Record<string, string> }[];
+  menus: { id: string; name: Record<string, string> }[];
+  orders: number;
+}
 export interface ProductCategories {
   categoryIds: string[];
   primaryCategoryId: string | null;
@@ -2083,6 +2089,15 @@ export class DashboardApi {
   }
   deleteModifier(id: string): Promise<void> {
     return this.#request<void>(`/management-api/modifiers/${id}`, "DELETE");
+  }
+  /** `GET /management-api/modifiers/:id/dependants` — products, menus and open orders a delete would affect. */
+  async getModifierDependants(id: string): Promise<ModifierDependants> {
+    return (
+      await this.#request<{ dependants: ModifierDependants }>(
+        `/management-api/modifiers/${id}/dependants`,
+        "GET",
+      )
+    ).dependants;
   }
 
   // ── Option groups (reusable modifiers) + their items (Task 11/12) ────────────────────────────────

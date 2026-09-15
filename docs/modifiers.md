@@ -33,13 +33,16 @@ you cannot preselect more choices than the total maximum allows. A required extr
 defaults, so the operator must make an active choice.
 
 Turn off **Available** on a choice to stop new selections of it and clear its default. If an
-available required modifier has no usable choices, you must add a choice or deactivate the
-modifier. If a published menu later reaches that state, the till explains why the product cannot
-be added. It does not silently waive the required choice.
+available required Options or Extras modifier has no usable choices, add or enable a choice so the
+requirement can be met. If a published menu later reaches that state, the till explains why the
+product cannot be added. It does not silently waive the required choice.
 
-Deactivating a whole modifier leaves its existing product attachments in place, ready for you to
-reactivate it. You cannot attach it to another product while it is unavailable. An unavailable
-choice already present in an open picker must be corrected before you add the dish.
+Only a Yes/no modifier can be turned off as a whole. A text, Options or Extras modifier has no
+modifier-level Available toggle — its availability is set per choice — so you take one of those out
+of use by detaching it from the product. Deactivating a whole Yes/no modifier leaves its existing
+product attachments in place, ready for you to reactivate it, and you cannot attach it to another
+product while it is unavailable. An unavailable choice already present in an open picker must be
+corrected before you add the dish.
 
 ## Keep menu offers deliberate
 
@@ -57,9 +60,11 @@ When you park an order, its answers, labels and prices are saved. Retrieving it 
 the quantity keeps those saved facts, even after you edit the definition. Kitchen views, completed
 sales and reprints display the recorded answers.
 
-Delete a modifier only when it is unused. A product, menu offer or retained order can prevent
-deletion; the message identifies which kind of use remains. Deactivate it if you want to stop new
-selections. Changing a modifier's type is also refused while it is attached to a product or menu.
+Deleting a modifier detaches it from every product and menu offer that uses it — those attachments
+are removed for you. Deletion is refused only while an open order still uses the modifier; the
+message says so, and you finish or void that order first. To stop new selections without deleting,
+detach the modifier from the product (or, for a Yes/no modifier, deactivate it). Changing a
+modifier's type is still refused while it is attached to a product or menu.
 
 The optional **Allergens and dietary effects** section describes how a choice changes the served
 dish. Add or remove allergens directly. For dietary suitability, select the declarations that the

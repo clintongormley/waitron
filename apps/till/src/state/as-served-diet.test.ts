@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { asServedDiet, asServedAllergens } from "./as-served.js";
+import { asServedDiet, asServedAllergens, asServedDietaryDeclarations } from "./as-served.js";
 import type { OrderLine } from "./working-order.js";
 import type { DietDerivation, DietOverride, TillOptionItem, TillProduct } from "../api/client.js";
 
@@ -93,6 +93,33 @@ describe("asServedDiet", () => {
       vegetarian: "unknown",
     });
     expect(asServedDiet(line(prod, "bacon")).halal).toBeUndefined();
+  });
+  it("keeps the dish's declared labels when a selected choice has a null dietary effect", () => {
+    // A dish declared vegan; a selected choice whose dietaryEffect is null means "no effect",
+    // so it must leave the declared claim intact rather than withhold it.
+    const prod = product(null, []);
+    prod.dietaryDeclarations = ["vegan"];
+    prod.modifiers = [
+      {
+        id: "extras",
+        name: { en: "Extras" },
+        type: "extras",
+        available: true,
+        required: false,
+        maxTotalQuantity: null,
+        choices: [
+          {
+            ...item("bacon", {}),
+            dietaryEffect: null,
+            available: true,
+            preselected: false,
+          },
+        ],
+      },
+    ];
+    delete prod.optionGroups;
+    expect(asServedDietaryDeclarations(line(prod, "bacon"))).toContain("vegan");
+    expect(asServedDiet(line(prod, "bacon")).vegan).toBe("yes");
   });
   it("a 'no cheese' option flips a {plant,dairy} line to vegan as-served", () => {
     // Base: plant + dairy, reviewed (not pending) ⇒ vegetarian but NOT vegan.

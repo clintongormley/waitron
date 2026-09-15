@@ -1,7 +1,16 @@
 import { randomUUID } from "node:crypto";
 import { expect, it } from "vitest";
-import { sql } from "drizzle-orm";
-import { asAppUser, withTenant, type Transaction } from "@waitron/db";
+import { and, eq, sql } from "drizzle-orm";
+import {
+  asAppUser,
+  optionGroups,
+  optionGroupItems,
+  productOptionGroups,
+  withTenant,
+  workingOrders,
+  workingOrderLines,
+  type Transaction,
+} from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import {
@@ -11,9 +20,17 @@ import {
   listModifiers,
   getModifier,
 } from "./modifiers.js";
-import { createCatalogue, createProduct, setProductOptionGroups } from "./operations.js";
+import { menuItemOptionGroups } from "./schema/menu.js";
+import {
+  createCatalogue,
+  createMenuItem,
+  createMenuSection,
+  createProduct,
+  setMenuItemOptionGroups,
+  setProductOptionGroups,
+} from "./operations.js";
 import { tenantId as brandTenantId } from "@waitron/shared";
-import { seedLegacySellingUnits } from "../test/fixtures.js";
+import { seedLegacySellingUnits, seedVenue } from "../test/fixtures.js";
 
 // Grants and attachment races need independent, non-superuser PostgreSQL connections.
 const suite = useTemplateDb({ template: "core" });
@@ -79,6 +96,28 @@ it("saves complete definitions as app_user, preserves ids/order, and scopes ever
   expect(await app(tenant, (tx) => listModifiers(tx, tenant))).toEqual([]);
 });
 
+it("reads a stored-inactive non-yes/no modifier as available", async () => {
+  // The write side forces available:true for text/extras/options (only yes/no is authored), so a
+  // stored active=false on such a group is an inconsistency the read must not surface: the
+  // projection and validateModifierSelections still offer it, so reading it back as unavailable
+  // would hide it from the till widgets and leave an unsatisfiable required selection. Insert the
+  // raw inconsistent row as the owner (the contract cannot produce it) and read it back.
+  const tenant = await seedTenant(suite.admin);
+  const groupId = randomUUID();
+  await suite.admin.insert(optionGroups).values({
+    tenantId: tenant,
+    id: groupId,
+    name,
+    type: "options",
+    active: false,
+  });
+  await suite.admin
+    .insert(optionGroupItems)
+    .values({ tenantId: tenant, id: randomUUID(), groupId, name: { en: "Oat" }, active: true });
+  const [modifier] = await app(tenant, (tx) => listModifiers(tx, tenant));
+  expect(modifier).toMatchObject({ id: groupId, type: "options", available: true });
+});
+
 it("rolls back the whole save when a choice belongs to another modifier", async () => {
   const tenant = await seedTenant(suite.admin);
   const choice = extra();
@@ -98,7 +137,7 @@ it("rolls back the whole save when a choice belongs to another modifier", async 
   expect(await app(tenant, (tx) => listModifiers(tx, tenant))).toEqual([original]);
 });
 
-it("blocks type changes and deletion for attached definitions, but permits deactivation", async () => {
+it("blocks a type change for attached definitions, but permits other edits", async () => {
   const tenant = await seedTenant(suite.admin);
   await seedLegacySellingUnits(suite.admin, tenant);
   const definition = await app(tenant, (tx) => createModifier(tx, tenant, text, "en"));
@@ -114,20 +153,21 @@ it("blocks type changes and deletion for attached definitions, but permits deact
     });
     await setProductOptionGroups(tx, brandTenantId(tenant), product.id, [definition.id]);
   });
-  await expect(
-    app(tenant, (tx) => deleteModifier(tx, tenant, definition.id)),
-  ).rejects.toMatchObject({ code: "modifier.in_use", params: { dependency: "product" } });
+  // A product attachment no longer blocks deletion (the delete cascades it away); the delete-detach
+  // path is covered separately. A TYPE CHANGE is still refused while attached.
   await expect(
     app(tenant, (tx) => updateModifier(tx, tenant, definition.id, { type: "yes-no", name }, "en")),
   ).rejects.toMatchObject({ code: "modifier.in_use" });
+  // A non-yes-no modifier cannot be turned off as a whole, so a sent available:false is ignored
+  // (forced true) rather than rejected — the edit is still permitted while attached.
   expect(
     await app(tenant, (tx) =>
       updateModifier(tx, tenant, definition.id, { ...text, available: false }, "en"),
     ),
-  ).toMatchObject({ available: false });
+  ).toMatchObject({ available: true });
 });
 
-it("serializes deletion behind an attachment write and reports its committed dependency", async () => {
+it("serializes deletion behind an attachment write, then cascades the committed attachment", async () => {
   const tenant = await seedTenant(suite.admin);
   await seedLegacySellingUnits(suite.admin, tenant);
   const definition = await app(tenant, (tx) => createModifier(tx, tenant, text, "en"));
@@ -177,13 +217,21 @@ it("serializes deletion behind an attachment write and reports its committed dep
       .toBe(true);
     release();
     await writing;
-    expect(await deleting).toMatchObject({ code: "modifier.in_use" });
+    // The delete waited on the writer's advisory lock (proven above), then saw the committed
+    // attachment and cascaded it away rather than refusing — no open order references the modifier.
+    expect(await deleting).toBeUndefined();
   } finally {
     release();
     await writing;
     await writer.close();
     await deleter.close();
   }
+  expect(await app(tenant, (tx) => listModifiers(tx, tenant))).toEqual([]);
+  expect(
+    await app(tenant, (tx) =>
+      tx.select().from(productOptionGroups).where(eq(productOptionGroups.tenantId, tenant)),
+    ),
+  ).toEqual([]);
 });
 
 it("blocks a default-language change while a yes/no modifier name is untranslated", async () => {
@@ -216,7 +264,10 @@ it("blocks a default-language change while a yes/no modifier name is untranslate
 it("preserves unavailable attachments when editing a product, but refuses a new attachment", async () => {
   const tenant = await seedTenant(suite.admin);
   await seedLegacySellingUnits(suite.admin, tenant);
-  const definition = await app(tenant, (tx) => createModifier(tx, tenant, text, "en"));
+  // Only a yes-no modifier can be turned off as a whole, so it is the type that can become an
+  // inactive group — the state this test needs to exercise the attachment guard.
+  const yesNo = { type: "yes-no" as const, name };
+  const definition = await app(tenant, (tx) => createModifier(tx, tenant, yesNo, "en"));
   const products = await app(tenant, async (tx) => {
     const catalogue = await createCatalogue(tx, brandTenantId(tenant), { name: "Menu" });
     const products = [];
@@ -235,7 +286,7 @@ it("preserves unavailable attachments when editing a product, but refuses a new 
     return products;
   });
   await app(tenant, (tx) =>
-    updateModifier(tx, tenant, definition.id, { ...text, available: false }, "en"),
+    updateModifier(tx, tenant, definition.id, { ...yesNo, available: false }, "en"),
   );
   await app(tenant, (tx) =>
     setProductOptionGroups(tx, brandTenantId(tenant), products[0]!.id, [definition.id]),
@@ -261,5 +312,116 @@ it("maps an old author's total cap into the canonical extras definition", async 
       type: "extras",
       maxTotalQuantity: 3,
     });
+  });
+});
+
+it("deletes a modifier attached to a product and published on a menu, cascading the links", async () => {
+  const { tenantId } = await seedVenue(suite.admin);
+  await seedLegacySellingUnits(suite.admin, tenantId);
+  const choice = { id: randomUUID(), name: { en: "Oat" }, available: true };
+  const modifierId = await app(tenantId, async (tx) => {
+    const menu = await createCatalogue(tx, tenantId, { name: "Menu" });
+    const section = await createMenuSection(tx, tenantId, {
+      menuId: menu.id,
+      name: { en: "Drinks" },
+    });
+    const product = await createProduct(tx, tenantId, {
+      catalogueId: menu.id,
+      categoryId: null,
+      descriptions: { en: "Coffee" },
+      pricingUnit: "each",
+      unitPrice: "2.00",
+      vatClass: "reduced",
+    });
+    const item = await createMenuItem(tx, tenantId, {
+      menuId: menu.id,
+      sectionId: section.id,
+      productId: product.id,
+      grossPrice: "2.00",
+    });
+    const modifier = await createModifier(
+      tx,
+      tenantId,
+      { type: "options", name, choices: [choice], defaultChoiceId: choice.id },
+      "en",
+    );
+    await setProductOptionGroups(tx, tenantId, product.id, [modifier.id]);
+    await setMenuItemOptionGroups(tx, tenantId, item.id, [
+      { groupId: modifier.id, options: [{ optionId: choice.id, priceDelta: "0" }] },
+    ]);
+    return modifier.id;
+  });
+  await app(tenantId, (tx) => deleteModifier(tx, tenantId, modifierId));
+  await expect(app(tenantId, (tx) => getModifier(tx, tenantId, modifierId))).rejects.toMatchObject({
+    code: "modifier.not_found",
+  });
+  expect(
+    await app(tenantId, async (tx) => ({
+      products: await tx
+        .select()
+        .from(productOptionGroups)
+        .where(
+          and(
+            eq(productOptionGroups.tenantId, tenantId),
+            eq(productOptionGroups.groupId, modifierId),
+          ),
+        ),
+      menus: await tx
+        .select()
+        .from(menuItemOptionGroups)
+        .where(
+          and(
+            eq(menuItemOptionGroups.tenantId, tenantId),
+            eq(menuItemOptionGroups.groupId, modifierId),
+          ),
+        ),
+    })),
+  ).toEqual({ products: [], menus: [] });
+});
+
+it("refuses to delete a modifier an open working order uses", async () => {
+  const { tenantId, tillId, nodeId } = await seedVenue(suite.admin);
+  await seedLegacySellingUnits(suite.admin, tenantId);
+  const choice = { id: randomUUID(), name: { en: "Oat" }, available: true };
+  const modifierId = await app(tenantId, async (tx) => {
+    const menu = await createCatalogue(tx, tenantId, { name: "Menu" });
+    const product = await createProduct(tx, tenantId, {
+      catalogueId: menu.id,
+      categoryId: null,
+      descriptions: { en: "Coffee" },
+      pricingUnit: "each",
+      unitPrice: "2.00",
+      vatClass: "reduced",
+    });
+    const modifier = await createModifier(
+      tx,
+      tenantId,
+      { type: "options", name, choices: [choice], defaultChoiceId: choice.id },
+      "en",
+    );
+    const [order] = await tx
+      .insert(workingOrders)
+      .values({ tenantId, tillId, nodeId, orderNumber: 1 })
+      .returning();
+    await tx.insert(workingOrderLines).values({
+      tenantId,
+      workingOrderId: order!.id,
+      productId: product.id,
+      lineNo: 1,
+      descriptions: { "en-GB": "Coffee" },
+      optionGroupItemId: choice.id,
+      quantity: "1",
+      unitPrice: "1.82",
+      unitPriceGross: "2.00",
+      vatRate: "10.00",
+      lineTotal: "2.00",
+    });
+    return modifier.id;
+  });
+  await expect(
+    app(tenantId, (tx) => deleteModifier(tx, tenantId, modifierId)),
+  ).rejects.toMatchObject({
+    code: "modifier.in_use",
+    params: expect.objectContaining({ dependency: "order" }),
   });
 });

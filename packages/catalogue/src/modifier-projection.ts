@@ -1,6 +1,6 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { productOptionGroups, type Transaction } from "@waitron/db";
-import type { Modifier } from "@waitron/shared";
+import { isModifierOffered, type Modifier } from "@waitron/shared";
 import { listModifiers } from "./modifiers.js";
 import { menuItemOptionGroups, menuItemOptions } from "./schema/menu.js";
 
@@ -37,7 +37,7 @@ export async function readProductModifiers(
   if (productIds.length === 0) return result;
   const definitions = new Map(
     (await listModifiers(tx, tenantId))
-      .filter((modifier) => modifier.available)
+      .filter(isModifierOffered)
       .map((modifier) => [modifier.id, modifier]),
   );
   const attachments = await tx
@@ -69,7 +69,7 @@ export async function readMenuModifiers(
   if (menuItemIds.length === 0) return result;
   const definitions = new Map(
     (await listModifiers(tx, tenantId))
-      .filter((modifier) => modifier.available)
+      .filter(isModifierOffered)
       .map((modifier) => [modifier.id, modifier]),
   );
   const publications = await tx

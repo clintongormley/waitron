@@ -46,8 +46,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "No se encontró este modificador. Actualiza la lista e inténtalo de nuevo.",
   },
   "modifier.in_use": {
-    en: "This modifier is used by a product, menu or saved order. Make it unavailable, or detach it before changing its type.",
-    es: "Este modificador se usa en un producto, menú o pedido guardado. Márcalo como no disponible o desvincúlalo antes de cambiar su tipo.",
+    en: "This modifier is used by a product, menu or saved order. Detach it from the product or remove it from the menu before changing its type.",
+    es: "Este modificador se usa en un producto, menú o pedido guardado. Desvincúlalo del producto o retíralo del menú antes de cambiar su tipo.",
   },
   "printer.probe_busy": {
     en: "Several addresses are being checked. Wait a moment and try again.",

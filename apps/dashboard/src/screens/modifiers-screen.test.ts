@@ -2,11 +2,17 @@ import { afterEach, expect, it, vi } from "vitest";
 import { LiveData } from "@waitron/dashboard-kit";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { ModifiersScreen } from "./modifiers-screen.js";
-import type { DashboardApi, Modifier } from "../api/client.js";
+import type { DashboardApi, Modifier, ModifierDependants } from "../api/client.js";
 import type { ModifierForm } from "../widgets/modifier-form.js";
 import { t } from "../i18n/t.js";
+import { allergenName } from "../i18n/domain.js";
 import { codeMessage } from "../i18n/codes.js";
 afterEach(cleanupWidgets);
+// The deep-link tests below rewrite the address bar; restore it so later tests read a clean URL.
+const originalHref = location.href;
+afterEach(() => {
+  history.replaceState(null, "", originalHref);
+});
 const modifier: Modifier = { id: "m", type: "text", name: { es: "Nota" }, available: true };
 function api(overrides: Partial<DashboardApi> = {}) {
   return {
@@ -17,6 +23,7 @@ function api(overrides: Partial<DashboardApi> = {}) {
     createModifier: vi.fn().mockResolvedValue(modifier),
     updateModifier: vi.fn().mockResolvedValue(modifier),
     deleteModifier: vi.fn().mockResolvedValue(undefined),
+    getModifierDependants: vi.fn().mockResolvedValue({ products: [], menus: [], orders: 0 }),
     ...overrides,
   } as unknown as DashboardApi;
 }
@@ -43,30 +50,50 @@ function submitText(form: ModifierForm) {
   );
 }
 async function create(el: ModifiersScreen) {
-  el.shadowRoot!.querySelector<HTMLElement>('[data-test="create"]')!.click();
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="create-modifier"]')!.click();
   await el.updateComplete;
   return el.shadowRoot!.querySelector<ModifierForm>("dashboard-modifier-form")!;
 }
 it("shows searchable rows and opens the shared form", async () => {
   const el = await mount();
-  const table = el.shadowRoot!.querySelector("wt-data-table") as unknown as { rows: Modifier[] };
+  const table = el.shadowRoot!.querySelector("wt-data-table") as unknown as {
+    rows: Modifier[];
+    searchable: boolean;
+  };
+  // The table receives every row and searches them itself via each column's searchValue; the
+  // screen no longer filters the list or renders its own search box.
   expect(table.rows).toEqual([modifier]);
-  el.shadowRoot!.querySelector('[name="modifier-search"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "absent" } }),
-  );
-  await el.updateComplete;
-  expect(table.rows).toEqual([]);
+  expect(table.searchable).toBe(true);
+  expect(el.shadowRoot!.querySelector('[name="modifier-search"]')).toBeNull();
   expect((await create(el)).open).toBe(true);
 });
-it("opens the new-modifier form from a round add button with an accessible name", async () => {
+it("adds a modifier from a header button with an accessible name", async () => {
   const el = await mount();
-  const add = el.shadowRoot!.querySelector<HTMLElement>('[data-test="create"]')!;
-  expect(add.getAttribute("shape")).toBe("round");
-  expect(add.getAttribute("aria-label")).toBe(t("modifiers.new"));
-  expect(el.shadowRoot!.querySelector("wt-row-actions")).toBeNull(); // the old kebab is gone from the heading
-  add.click();
+  const button = el.shadowRoot!.querySelector<HTMLElement>('[data-test="create-modifier"]')!;
+  expect(button.textContent).toContain(t("modifiers.add"));
+  button.click();
   await el.updateComplete;
   expect(el.shadowRoot!.querySelector<ModifierForm>("dashboard-modifier-form")!.open).toBe(true);
+});
+it("configures the table to remember its view and default to Name ascending", async () => {
+  const el = await mount();
+  const table = el.shadowRoot!.querySelector("wt-data-table")! as unknown as {
+    viewKey: string;
+    sortKey: string;
+    sortDirection: string;
+    searchable: boolean;
+  };
+  expect(table.viewKey).toBe("waitron.modifiers.table");
+  expect(table.sortKey).toBe("name");
+  expect(table.sortDirection).toBe("ascending");
+  expect(table.searchable).toBe(true);
+});
+it("has no modifier-level Available column", async () => {
+  const el = await mount();
+  const table = el.shadowRoot!.querySelector("wt-data-table")! as unknown as {
+    columns: { key: string }[];
+  };
+  expect(table.columns.map((c) => c.key)).toEqual(["name", "type", "choices", "actions"]);
 });
 it("keeps failed saves in the form and closes after successful writes even if reload fails", async () => {
   const client = api({
@@ -125,25 +152,239 @@ it("shows failed initial loads and retries", async () => {
   el.shadowRoot!.querySelector<HTMLElement>('[data-test="retry"]')!.click();
   await vi.waitFor(() => expect(el.shadowRoot!.querySelector("wt-data-table")).not.toBeNull());
 });
-it("keeps deletion failures in confirmation and deletes only after confirmation", async () => {
-  const client = api({
-    deleteModifier: vi
-      .fn()
-      .mockRejectedValueOnce({ code: "options.group_invalid" })
-      .mockResolvedValue(undefined),
-  });
-  const el = await mount(client);
+// The delete confirmation carries a dependants preview: it lists the products and menu items that
+// would lose the modifier, blocks while an open order still uses it, and shows its own error when
+// the preview cannot load. These mirror the categories screen's delete tests.
+async function openDelete(el: ModifiersScreen) {
   const table = el.shadowRoot!.querySelector("wt-data-table")!;
   await table.updateComplete;
   table.shadowRoot!.querySelector<HTMLElement>('[data-test="delete-m"]')!.click();
   await el.updateComplete;
+}
+function deleteDialog(el: ModifiersScreen) {
+  return el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-modal"]>(
+    'wt-modal[data-test="delete-dialog"]',
+  )!;
+}
+function confirmDelete(el: ModifiersScreen) {
+  return el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+    '[data-test="confirm-delete"]',
+  )!;
+}
+it("shows a spinner in the delete dialog and keeps delete disabled until the preview resolves", async () => {
+  let resolve!: (value: ModifierDependants) => void;
+  const client = api({
+    getModifierDependants: vi
+      .fn()
+      .mockReturnValue(new Promise<ModifierDependants>((r) => (resolve = r))),
+  });
+  const el = await mount(client);
+  await openDelete(el);
+  const dialog = deleteDialog(el);
+  expect(dialog.querySelector("wt-spinner")).not.toBeNull();
+  expect(confirmDelete(el).disabled).toBe(true);
+  resolve({ products: [], menus: [], orders: 0 });
+  await vi.waitFor(() => expect(confirmDelete(el).disabled).toBe(false));
+  expect(dialog.querySelector("wt-spinner")).toBeNull();
+});
+it("lists the affected products and menu items and enables delete", async () => {
+  const client = api({
+    getModifierDependants: vi.fn().mockResolvedValue({
+      products: [{ id: "p1", name: { es: "Café" } }],
+      menus: [{ id: "mn1", name: { es: "Desayuno" } }],
+      orders: 0,
+    }),
+  });
+  const el = await mount(client);
+  await openDelete(el);
+  const dialog = deleteDialog(el);
+  await vi.waitFor(() =>
+    expect(dialog.querySelector('[data-test="delete-warning"]')).not.toBeNull(),
+  );
+  const warning = dialog.querySelector('[data-test="delete-warning"]')!;
+  expect(warning.getAttribute("role")).toBe("alert");
+  expect(warning.textContent).toContain(t("modifiers.delete_warning_intro"));
+  expect(warning.textContent).toContain(
+    t("modifiers.delete_warning_products").replace("{count}", "1"),
+  );
+  expect(warning.textContent).toContain(
+    t("modifiers.delete_warning_menus").replace("{count}", "1"),
+  );
+  expect(dialog.querySelector('[data-test="modifier-delete-products"]')!.textContent).toContain(
+    "Café",
+  );
+  expect(dialog.querySelector('[data-test="modifier-delete-menus"]')!.textContent).toContain(
+    "Desayuno",
+  );
+  expect(dialog.querySelector('[data-test="orders-block"]')).toBeNull();
+  expect(confirmDelete(el).disabled).toBe(false);
+});
+it("blocks deletion while an open order uses the modifier", async () => {
+  const client = api({
+    getModifierDependants: vi.fn().mockResolvedValue({ products: [], menus: [], orders: 2 }),
+  });
+  const el = await mount(client);
+  await openDelete(el);
+  const dialog = deleteDialog(el);
+  await vi.waitFor(() => expect(dialog.querySelector('[data-test="orders-block"]')).not.toBeNull());
+  expect(dialog.querySelector('[data-test="orders-block"]')!.textContent).toContain(
+    t("modifiers.delete_orders_block"),
+  );
+  expect(confirmDelete(el).disabled).toBe(true);
+});
+it("shows no warning and enables delete when nothing depends on the modifier", async () => {
+  const el = await mount();
+  await openDelete(el);
+  const dialog = deleteDialog(el);
+  await vi.waitFor(() => expect(confirmDelete(el).disabled).toBe(false));
+  expect(dialog.querySelector('[data-test="delete-warning"]')).toBeNull();
+  expect(dialog.querySelector('[data-test="modifier-delete-products"]')).toBeNull();
+  expect(dialog.querySelector('[data-test="modifier-delete-menus"]')).toBeNull();
+  expect(dialog.querySelector('[data-test="orders-block"]')).toBeNull();
+  expect(dialog.querySelector("wt-spinner")).toBeNull();
+});
+it("says the delete preview failed and keeps delete disabled", async () => {
+  const client = api({
+    getModifierDependants: vi.fn().mockRejectedValue(new Error("offline")),
+  });
+  const el = await mount(client);
+  await openDelete(el);
+  const dialog = deleteDialog(el);
+  await vi.waitFor(() =>
+    expect(dialog.querySelector('[data-test="dependants-error"]')).not.toBeNull(),
+  );
+  const err = dialog.querySelector('[data-test="dependants-error"]')!;
+  expect(err.textContent).toContain(t("modifiers.delete_preview_error"));
+  expect(err.getAttribute("role")).toBe("alert");
+  expect(dialog.querySelector("wt-spinner")).toBeNull();
+  expect(confirmDelete(el).disabled).toBe(true);
+});
+it("keeps a rejected delete in the dialog with its reason, then closes and reloads on success", async () => {
+  const client = api({
+    deleteModifier: vi
+      .fn()
+      .mockRejectedValueOnce({
+        code: "modifier.in_use",
+        params: { dependency: "order", modifierId: "m" },
+      })
+      .mockResolvedValue(undefined),
+  });
+  const el = await mount(client);
+  await openDelete(el);
+  const dialog = deleteDialog(el);
+  await vi.waitFor(() => expect(confirmDelete(el).disabled).toBe(false));
   expect(client.deleteModifier).not.toHaveBeenCalled();
-  el.shadowRoot!.querySelector<HTMLElement>('[data-test="confirm-delete"]')!.click();
+  confirmDelete(el).click();
   await vi.waitFor(() => expect(client.deleteModifier).toHaveBeenCalledTimes(1));
-  await vi.waitFor(() => expect(el.shadowRoot!.querySelector("wt-dialog")!.open).toBe(true));
-  el.shadowRoot!.querySelector<HTMLElement>('[data-test="confirm-delete"]')!.click();
-  await vi.waitFor(() => expect(el.shadowRoot!.querySelector("wt-dialog")!.open).toBe(false));
+  await vi.waitFor(() => expect(dialog.textContent).toContain(t("modifiers.in_use.order")));
+  expect(dialog.open).toBe(true);
+  // Retrying the same delete succeeds: the dialog closes and the list reloads.
+  confirmDelete(el).click();
+  await vi.waitFor(() => expect(dialog.open).toBe(false));
   expect(client.deleteModifier).toHaveBeenLastCalledWith("m");
+  expect(client.listModifiers).toHaveBeenCalledTimes(2);
+});
+// A failed preview on one modifier must not poison the next dialog: reopening mints a fresh
+// generation, so the stale rejection is discarded.
+it("clears a failed delete preview when the dialog is reopened", async () => {
+  const client = api({
+    getModifierDependants: vi
+      .fn()
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValue({ products: [], menus: [], orders: 0 }),
+  });
+  const el = await mount(client);
+  await openDelete(el);
+  const dialog = deleteDialog(el);
+  await vi.waitFor(() =>
+    expect(dialog.querySelector('[data-test="dependants-error"]')).not.toBeNull(),
+  );
+  dialog.querySelector<HTMLElement>('wt-button[slot="cancel"]')!.click();
+  await el.updateComplete;
+  await openDelete(el);
+  await vi.waitFor(async () => {
+    await el.updateComplete;
+    expect(confirmDelete(el).disabled).toBe(false);
+  });
+  expect(dialog.querySelector('[data-test="dependants-error"]')).toBeNull();
+});
+// The reopen test above lets the first fetch fully settle before reopening, so it never has two
+// requests in flight at once — it cannot catch a stale response clobbering a fresh one. These two
+// exercise the actual race the generation guard exists for: two fetches for the SAME modifier in
+// flight at once, where the older one settles LATE and must be discarded. Following the categories
+// suite, they open the same row TWICE WITHOUT closing (`#openDelete` has no guard against being
+// called while already open), so the only thing under test is the generation guard — not wt-modal's
+// `.open`/native-`wt-close` timing, which crosses a macrotask boundary a fixed wait cannot pin. A
+// resolved/rejected promise's continuation and the Lit update it triggers are both microtask work,
+// so `updateComplete` (awaited twice: once for the fetch's own continuation, once for the paint)
+// genuinely settles the outcome. Remove EITHER `if (generation === this.#deleteGeneration)` check in
+// #loadDependants and one of these goes red (proven by deletion).
+it("ignores a stale preview success from an earlier open of the same modifier", async () => {
+  let resolveFirst!: (value: ModifierDependants) => void;
+  let rejectSecond!: (error: Error) => void;
+  const client = api({
+    getModifierDependants: vi
+      .fn()
+      .mockImplementationOnce(
+        () => new Promise<ModifierDependants>((resolve) => (resolveFirst = resolve)),
+      )
+      .mockImplementationOnce(
+        () => new Promise<ModifierDependants>((_resolve, reject) => (rejectSecond = reject)),
+      ),
+  });
+  const el = await mount(client);
+  const table = el.shadowRoot!.querySelector("wt-data-table")!;
+  await table.updateComplete;
+  const clickDelete = () =>
+    table.shadowRoot!.querySelector<HTMLElement>('[data-test="delete-m"]')!.click();
+  clickDelete(); // first open — its fetch never resolves yet
+  await el.updateComplete;
+  clickDelete(); // reopen the SAME modifier without closing — a second, fresh fetch starts
+  await el.updateComplete;
+  const dialog = deleteDialog(el);
+  rejectSecond(new Error("offline")); // the current (second) request fails
+  await vi.waitFor(() =>
+    expect(dialog.querySelector('[data-test="dependants-error"]')).not.toBeNull(),
+  );
+  // The stale first request lands LATE with a DIFFERENT, successful (empty) outcome.
+  resolveFirst({ products: [], menus: [], orders: 0 });
+  await el.updateComplete;
+  await el.updateComplete;
+  // The stale success must not clear the error or enable Delete.
+  expect(dialog.querySelector('[data-test="dependants-error"]')).not.toBeNull();
+  expect(confirmDelete(el).disabled).toBe(true);
+});
+it("ignores a stale preview failure from an earlier open of the same modifier", async () => {
+  let rejectFirst!: (error: Error) => void;
+  let resolveSecond!: (value: ModifierDependants) => void;
+  const client = api({
+    getModifierDependants: vi
+      .fn()
+      .mockImplementationOnce(
+        () => new Promise<ModifierDependants>((_resolve, reject) => (rejectFirst = reject)),
+      )
+      .mockImplementationOnce(
+        () => new Promise<ModifierDependants>((resolve) => (resolveSecond = resolve)),
+      ),
+  });
+  const el = await mount(client);
+  const table = el.shadowRoot!.querySelector("wt-data-table")!;
+  await table.updateComplete;
+  const clickDelete = () =>
+    table.shadowRoot!.querySelector<HTMLElement>('[data-test="delete-m"]')!.click();
+  clickDelete(); // first open — its fetch never resolves yet
+  await el.updateComplete;
+  clickDelete(); // reopen the SAME modifier without closing — a second, fresh fetch starts
+  await el.updateComplete;
+  const dialog = deleteDialog(el);
+  resolveSecond({ products: [], menus: [], orders: 0 }); // the current (second) request succeeds
+  await vi.waitFor(() => expect(confirmDelete(el).disabled).toBe(false));
+  rejectFirst(new Error("offline")); // the stale first request fails LATE
+  await el.updateComplete;
+  await el.updateComplete;
+  // The stale failure must not surface the error block or disable Delete.
+  expect(dialog.querySelector('[data-test="dependants-error"]')).toBeNull();
+  expect(confirmDelete(el).disabled).toBe(false);
 });
 it("displays only enabled content translations", async () => {
   const { setLocale } = await import("../i18n/t.js");
@@ -218,23 +459,100 @@ it("lists a field's server error once in the summary and shows it beside that fi
     (form.shadowRoot!.querySelector('[name="name-es"]') as unknown as { error: string }).error,
   ).toBe(message);
 });
-it("identifies a retained-order dependency and offers deactivation", async () => {
-  const { t } = await import("../i18n/t.js");
-  const client = api({
-    deleteModifier: vi.fn().mockRejectedValue({
-      code: "modifier.in_use",
-      params: { dependency: "order", modifierId: "m" },
-    }),
-  });
-  const el = await mount(client);
+const extrasModifier: Modifier = {
+  id: "x",
+  type: "extras",
+  name: { es: "Toppings" },
+  available: true,
+  required: false,
+  maxTotalQuantity: null,
+  choices: [
+    {
+      id: "c1",
+      name: { es: "Cheese" },
+      available: true,
+      priceDelta: "1.50",
+      maxQuantity: 1,
+      preselected: false,
+      vatClass: null,
+      addAllergens: { gluten: { presence: "contains" } },
+      removeAllergens: ["milk"],
+      dietaryEffect: { invalidates: ["vegan"] },
+    },
+    {
+      id: "c2",
+      name: { es: "Ham" },
+      available: true,
+      priceDelta: "2.00",
+      maxQuantity: 1,
+      preselected: false,
+      vatClass: null,
+      dietaryEffect: { invalidates: [] },
+    },
+  ],
+};
+async function openDetails(el: ModifiersScreen, modifier: Modifier) {
   const table = el.shadowRoot!.querySelector("wt-data-table")!;
   await table.updateComplete;
-  table.shadowRoot!.querySelector<HTMLElement>('[data-test="delete-m"]')!.click();
+  table.shadowRoot!.querySelector<HTMLElement>(`[data-test="open-${modifier.id}"]`)!.click();
   await el.updateComplete;
-  el.shadowRoot!.querySelector<HTMLElement>('[data-test="confirm-delete"]')!.click();
+  return el.shadowRoot!.querySelector('[data-test="details-modal"]')! as unknown as HTMLElement & {
+    open: boolean;
+  };
+}
+it("opens a modifier's details from its name and hands off to Edit", async () => {
+  const el = await mount(api({ listModifiers: vi.fn().mockResolvedValue([extrasModifier]) }));
+  const modal = await openDetails(el, extrasModifier);
+  expect(modal.open).toBe(true);
+  expect(modal.textContent).toContain("Cheese");
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="details-edit"]')!.click();
+  await el.updateComplete;
+  expect(modal.open).toBe(false);
+  expect(el.shadowRoot!.querySelector<ModifierForm>("dashboard-modifier-form")!.open).toBe(true);
+});
+it("dismisses the details modal with Close", async () => {
+  const el = await mount(api({ listModifiers: vi.fn().mockResolvedValue([extrasModifier]) }));
+  const modal = await openDetails(el, extrasModifier);
+  expect(modal.open).toBe(true);
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="details-close"]')!.click();
+  await el.updateComplete;
+  expect(modal.open).toBe(false);
+});
+it("shows a choice's allergen and dietary summary only when present", async () => {
+  const el = await mount(api({ listModifiers: vi.fn().mockResolvedValue([extrasModifier]) }));
+  await openDetails(el, extrasModifier);
+  const first = el.shadowRoot!.querySelector('[data-test="summary-c1"]')!;
+  expect(first.textContent).toContain(t("modifiers.adds_allergens"));
+  expect(first.textContent).toContain(allergenName("gluten"));
+  expect(first.textContent).toContain(t("modifiers.removes_allergens"));
+  expect(first.textContent).toContain(allergenName("milk"));
+  expect(first.textContent).toContain(t("modifiers.dietary_removed"));
+  expect(first.textContent).toContain(t("editor.diet.vegan"));
+  const second = el.shadowRoot!.querySelector('[data-test="summary-c2"]')!;
+  expect(second.textContent!.trim()).toBe("");
+  expect(second.querySelector("div")).toBeNull();
+});
+// A `?modifier=<id>` deep link opens that modifier's editor once, then clears the param so a refresh
+// does not reopen it — mirroring the categories screen's `?category=<id>` behaviour.
+it("opens the editor for a ?modifier=<id> deep link and clears the param", async () => {
+  history.replaceState(null, "", "/manage/modifiers?modifier=m");
+  const el = await mount();
   await vi.waitFor(() =>
-    expect(el.shadowRoot!.querySelector("wt-dialog")!.textContent).toContain(
-      t("modifiers.in_use.order"),
-    ),
+    expect(el.shadowRoot!.querySelector<ModifierForm>("dashboard-modifier-form")!.open).toBe(true),
   );
+  expect(new URL(location.href).searchParams.get("modifier")).toBeNull();
+});
+it("ignores an unknown ?modifier=<id> deep link without opening the editor", async () => {
+  history.replaceState(null, "", "/manage/modifiers?modifier=nope");
+  const el = await mount();
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector<ModifierForm>("dashboard-modifier-form")!.open).toBe(false);
+});
+it("clears the details modal when the dialog dismisses itself", async () => {
+  const el = await mount(api({ listModifiers: vi.fn().mockResolvedValue([extrasModifier]) }));
+  const modal = await openDetails(el, extrasModifier);
+  expect(modal.open).toBe(true);
+  modal.dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
+  await el.updateComplete;
+  expect(modal.open).toBe(false);
 });

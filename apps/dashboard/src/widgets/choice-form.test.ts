@@ -28,6 +28,20 @@ async function change(el: ChoiceForm, name: string, value: string | boolean) {
     );
   await el.updateComplete;
 }
+/**
+ * Drives the shared allergen/dietary picker the way the picker itself reports a change: the choice
+ * form only ever sees the widget's `wt-change`, never the inner comboboxes. `dietary` is a plain
+ * string list here so a test can pass an arbitrary label without importing the union.
+ */
+async function drivePicker(
+  el: ChoiceForm,
+  value: { addAllergens: string[]; removeAllergens: string[]; dietary: string[] },
+) {
+  el.shadowRoot!.querySelector("dashboard-allergen-dietary-picker")!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+  );
+  await el.updateComplete;
+}
 async function click(el: ChoiceForm, id: string) {
   el.shadowRoot!.querySelector<HTMLElement>(`[data-test="${id}"]`)!.click();
   await el.updateComplete;
@@ -123,20 +137,47 @@ it("authors allergen and dietary effects on an extras choice", async () => {
   });
   const save = vi.fn();
   el.addEventListener("wt-choice-save", save);
-  // A choice declares only presence; an existing source is carried through but never edited here.
-  expect(el.shadowRoot!.querySelector('input[name*="source"]')).toBeNull();
-  await change(el, "addAllergens", "eggs");
-  await change(el, "presence-eggs", "may_contain");
-  await change(el, "dietaryEffect", "vegan");
+  // The shared picker seeds from the stored effects — milk added, halal invalidated, nothing removed.
+  expect(el.shadowRoot!.querySelector("dashboard-allergen-dietary-picker")!.value).toEqual({
+    addAllergens: ["milk"],
+    removeAllergens: [],
+    dietary: ["halal"],
+  });
+  // Editing through the picker records each added allergen as `contains`. The presence granularity
+  // and the per-entry `source` the old per-code select carried are gone by design (a choice authors
+  // only which allergens it adds); the follow-up allergen spec drops the presence wrapper too.
+  await drivePicker(el, {
+    addAllergens: ["milk", "eggs"],
+    removeAllergens: [],
+    dietary: ["halal", "vegan"],
+  });
   await click(el, "choice-save");
   const value = (save.mock.calls[0]![0] as CustomEvent<{ value: ChoiceDraft }>).detail.value;
-  expect(value).toMatchObject({
-    addAllergens: {
-      milk: { presence: "contains", source: "queso" },
-      eggs: { presence: "may_contain" },
-    },
-    dietaryEffect: { invalidates: ["halal", "vegan"] },
+  expect(value.addAllergens).toEqual({
+    milk: { presence: "contains" },
+    eggs: { presence: "contains" },
   });
+  expect(value.dietaryEffect).toEqual({ invalidates: ["halal", "vegan"] });
+});
+
+it("writes an added allergen as contains and a non-null dietary effect", async () => {
+  const el = await mountChoice({ kind: "extras" });
+  const save = vi.fn();
+  el.addEventListener("wt-choice-save", save);
+  await change(el, "name-es", "Queso");
+  await drivePicker(el, { addAllergens: ["gluten"], removeAllergens: [], dietary: ["vegan"] });
+  await click(el, "choice-save");
+  const value = (save.mock.calls[0]![0] as CustomEvent<{ value: ChoiceDraft }>).detail.value;
+  expect(value.addAllergens).toEqual({ gluten: { presence: "contains" } });
+  expect(value.dietaryEffect).toEqual({ invalidates: ["vegan"] });
+});
+
+it("renders no presence select and no reviewed switch", async () => {
+  const el = await mountChoice({ kind: "extras" });
+  expect(el.shadowRoot!.querySelector('[name^="presence-"]')).toBeNull();
+  // The reviewed switch used to render as a wt-switch named "dietary-reviewed"; assert its absence
+  // structurally so this fails if the control ever comes back, not on a removed string key.
+  expect(el.shadowRoot!.querySelector('wt-switch[name="dietary-reviewed"]')).toBeNull();
 });
 
 it("emits an options choice with only its shared fields", async () => {
@@ -148,7 +189,14 @@ it("emits an options choice with only its shared fields", async () => {
   await change(el, "available", false);
   await click(el, "choice-save");
   const value = (save.mock.calls[0]![0] as CustomEvent<{ value: ChoiceDraft }>).detail.value;
-  expect(value).toEqual({ id: value.id, name: { es: "Uno" }, available: false });
+  // No price fields on an options choice. The client always sends an explicit (here empty) dietary
+  // effect rather than omitting it, so the record can never be read as "not yet reviewed".
+  expect(value).toEqual({
+    id: value.id,
+    name: { es: "Uno" },
+    available: false,
+    dietaryEffect: { invalidates: [] },
+  });
 });
 
 it("authors allergen and dietary effects on an options choice", async () => {
@@ -161,9 +209,7 @@ it("authors allergen and dietary effects on an options choice", async () => {
   // Effects are edited for options too, not just extras — the till reads them for diet checks.
   expect(el.shadowRoot!.querySelector("details")).not.toBeNull();
   expect(el.shadowRoot!.querySelector('[name="priceDelta"]')).toBeNull();
-  await change(el, "addAllergens", "eggs");
-  await change(el, "dietary-reviewed", true);
-  await change(el, "dietaryEffect", "vegan");
+  await drivePicker(el, { addAllergens: ["eggs"], removeAllergens: [], dietary: ["vegan"] });
   await click(el, "choice-save");
   const value = (save.mock.calls[0]![0] as CustomEvent<{ value: ChoiceDraft }>).detail.value;
   expect(value).toMatchObject({

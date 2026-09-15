@@ -7,16 +7,12 @@ import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-form-error-summary.js";
-import {
-  DIETARY_LABELS,
-  type AllergenDeclaration,
-  type DietaryLabel,
-  type ModifierEffects,
-  type VatClass,
-} from "../api/client.js";
-import { ALLERGEN_CODES, allergenName, vatClassName } from "../i18n/domain.js";
+import { type DietaryLabel, type ModifierEffects, type VatClass } from "../api/client.js";
+import { vatClassName } from "../i18n/domain.js";
 import { isModifierPrice } from "@waitron/catalogue/src/modifier-limits.js";
 import { t } from "../i18n/t.js";
+import "./allergen-dietary-picker.js";
+import type { AllergenDietaryValue } from "./allergen-dietary-picker.js";
 import {
   isModifierQuantity,
   nameFields,
@@ -56,12 +52,6 @@ export class ChoiceForm extends LitElement {
       }
       label {
         display: grid;
-        gap: var(--wt-space-2);
-      }
-      .selected {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
         gap: var(--wt-space-2);
       }
       summary {
@@ -138,6 +128,9 @@ export class ChoiceForm extends LitElement {
       name: nonBlankNames(this.name),
       available: this.available,
       ...this.effects,
+      // The client always sends an explicit dietary effect, never null or absent, so the record
+      // can never be mistaken for "not yet reviewed". The contract normalises anyway.
+      dietaryEffect: this.effects.dietaryEffect ?? { invalidates: [] },
       ...(this.kind === "extras"
         ? {
             priceDelta: this.priceDelta,
@@ -153,151 +146,37 @@ export class ChoiceForm extends LitElement {
   #fields(): FieldContext {
     return { busy: this.busy, locales: this.locales, error: (key) => this.#error(key) };
   }
-  #effectList(key: "removeAllergens", label: string, options: readonly string[]) {
-    const selected = this.effects[key] ?? [];
-    const display = (code: string) => allergenName(code);
-    return html`<label
-        >${label}<select
-          name=${key}
-          .disabled=${this.busy}
-          @change=${(event: Event) => {
-            event.stopPropagation();
-            const select = event.target as HTMLSelectElement;
-            if (select.value) this.#patch({ [key]: [...selected, select.value] });
-            select.value = "";
-          }}
-        >
-          <option value="">${t("modifiers.choose")}</option>
-          ${options.filter((code) => !selected.includes(code)).map((code) => html`<option value=${code}>${display(code)}</option>`)}
-        </select></label
-      >${selected.map((code) => html`<div class="selected"><span>${display(code)}</span><wt-button variant="secondary" .disabled=${this.busy} aria-label=${`${t("action.remove")}: ${label} ${display(code)}`} @click=${() => this.#patch({ [key]: selected.filter((value) => value !== code) })}>${t("action.remove")}</wt-button></div>`)}`;
+  #pickerValue(): AllergenDietaryValue {
+    return {
+      addAllergens: Object.keys(this.effects.addAllergens ?? {}),
+      removeAllergens: this.effects.removeAllergens ?? [],
+      dietary: (this.effects.dietaryEffect?.invalidates ?? []) as DietaryLabel[],
+    };
   }
-  #dietaryEffect() {
-    const reviewed =
-      this.effects.dietaryEffect !== undefined && this.effects.dietaryEffect !== null;
-    const selected = this.effects.dietaryEffect?.invalidates ?? [];
-    return html`${switchField(
-      this.#fields(),
-      "dietary-reviewed",
-      t("modifiers.dietary_reviewed"),
-      reviewed,
-      (checked) => this.#patch({ dietaryEffect: checked ? { invalidates: [] } : null }),
-    )}${
-      reviewed
-        ? html`<label
-              >${t("modifiers.invalidates_dietary")}
-              <select
-                name="dietaryEffect"
-                .disabled=${this.busy}
-                @change=${(event: Event) => {
-                  event.stopPropagation();
-                  const select = event.target as HTMLSelectElement;
-                  if (select.value)
-                    this.#patch({
-                      dietaryEffect: {
-                        invalidates: [...selected, select.value as DietaryLabel],
-                      },
-                    });
-                  select.value = "";
-                }}
-              >
-                <option value="">${t("modifiers.choose")}</option>
-                ${DIETARY_LABELS.filter((label) => !selected.includes(label)).map(
-                  (label) => html`<option value=${label}>${t(`editor.diet.${label}`)}</option>`,
-                )}
-              </select></label
-            >
-            ${selected.map(
-              (label) =>
-                html`<div class="selected">
-                  <span>${t(`editor.diet.${label}`)}</span
-                  ><wt-button
-                    variant="secondary"
-                    .disabled=${this.busy}
-                    @click=${() =>
-                      this.#patch({
-                        dietaryEffect: { invalidates: selected.filter((value) => value !== label) },
-                      })}
-                    >${t("action.remove")}</wt-button
-                  >
-                </div>`,
-            )}`
-        : nothing
-    }`;
+  #onPicker(event: CustomEvent<{ value: AllergenDietaryValue }>): void {
+    event.stopPropagation();
+    const v = event.detail.value;
+    this.#patch({
+      // Every added allergen is recorded as `contains`. The follow-up allergen spec
+      // (docs/superpowers/specs — contains/may-contain removal) deletes this presence wrapper.
+      addAllergens: v.addAllergens.length
+        ? Object.fromEntries(
+            v.addAllergens.map((code) => [code, { presence: "contains" as const }]),
+          )
+        : {},
+      removeAllergens: v.removeAllergens,
+      dietaryEffect: { invalidates: v.dietary },
+    });
   }
   #effects() {
-    const added: NonNullable<AllergenDeclaration> = this.effects.addAllergens ?? {};
     return html`<details>
       <summary>${t("modifiers.effects")}</summary>
       <div class="fields">
-        <label
-          >${t("modifiers.add_allergen")}<select
-            name="addAllergens"
-            .disabled=${this.busy}
-            @change=${(event: Event) => {
-              event.stopPropagation();
-              const select = event.target as HTMLSelectElement;
-              if (select.value)
-                this.#patch({
-                  addAllergens: { ...added, [select.value]: { presence: "contains" } },
-                  removeAllergens: (this.effects.removeAllergens ?? []).filter(
-                    (code) => code !== select.value,
-                  ),
-                });
-              select.value = "";
-            }}
-          >
-            <option value="">${t("modifiers.choose")}</option>
-            ${ALLERGEN_CODES.filter((code) => !added[code]).map((code) => html`<option value=${code}>${allergenName(code)}</option>`)}
-          </select></label
-        >
-        ${Object.entries(added).map(
-          ([code, entry]) =>
-            html`<div class="selected">
-              <label
-                >${allergenName(code)}<select
-                  name=${`presence-${code}`}
-                  .disabled=${this.busy}
-                  @change=${(event: Event) => {
-                    event.stopPropagation();
-                    this.#patch({
-                      addAllergens: {
-                        ...added,
-                        [code]: {
-                          ...entry,
-                          presence: (event.target as HTMLSelectElement).value as
-                            "contains" | "may_contain",
-                        },
-                      },
-                    });
-                  }}
-                >
-                  <option value="contains" ?selected=${entry.presence === "contains"}>
-                    ${t("modifiers.contains")}
-                  </option>
-                  <option value="may_contain" ?selected=${entry.presence === "may_contain"}>
-                    ${t("modifiers.may_contain")}
-                  </option>
-                </select></label
-              ><wt-button
-                variant="secondary"
-                .disabled=${this.busy}
-                aria-label=${`${t("action.remove")}: ${allergenName(code)}`}
-                @click=${() => {
-                  const next = { ...added };
-                  delete next[code];
-                  this.#patch({ addAllergens: next });
-                }}
-                >${t("action.remove")}</wt-button
-              >
-            </div>`,
-        )}
-        ${this.#effectList(
-          "removeAllergens",
-          t("modifiers.remove_allergen"),
-          ALLERGEN_CODES.filter((code) => !added[code]),
-        )}
-        ${this.#dietaryEffect()}
+        <dashboard-allergen-dietary-picker
+          .busy=${this.busy}
+          .value=${this.#pickerValue()}
+          @wt-change=${(e: CustomEvent<{ value: AllergenDietaryValue }>) => this.#onPicker(e)}
+        ></dashboard-allergen-dietary-picker>
       </div>
     </details>`;
   }

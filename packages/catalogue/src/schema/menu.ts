@@ -130,7 +130,7 @@ export const menuItemOptionGroups = pgTable(
       columns: [t.tenantId, t.groupId],
       foreignColumns: [optionGroups.tenantId, optionGroups.id],
       name: "menu_item_option_groups_group_fk",
-    }).onDelete("restrict"),
+    }).onDelete("cascade"),
   ],
 );
 
@@ -162,6 +162,6 @@ export const menuItemOptions = pgTable(
       columns: [t.tenantId, t.optionId],
       foreignColumns: [optionGroupItems.tenantId, optionGroupItems.id],
       name: "menu_item_options_option_fk",
-    }).onDelete("restrict"),
+    }).onDelete("cascade"),
   ],
 );

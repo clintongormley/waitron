@@ -362,7 +362,10 @@ export class ModifierForm extends LitElement {
     }
     this.errors = errors;
     if (Object.keys(errors).length) return;
-    const common = { name: nonBlankNames(this.name), available: this.available };
+    const common = {
+      name: nonBlankNames(this.name),
+      available: this.type === "yes-no" ? this.available : true,
+    };
     const choices = this.choices.map((choice) => ({
       id: choice.id,
       name: nonBlankNames(choice.name),
@@ -573,15 +576,19 @@ export class ModifierForm extends LitElement {
             ${TYPES.map((type) => html`<option value=${type} ?selected=${this.type === type}>${t(`modifiers.${type}`)}</option>`)}
           </select></label
         >
-        ${switchField(
-          this.#fields(),
-          "available",
-          t("modifiers.available"),
-          this.available,
-          (value) => {
-            this.available = value;
-          },
-        )}
+        ${
+          this.type === "yes-no"
+            ? switchField(
+                this.#fields(),
+                "available",
+                t("modifiers.available"),
+                this.available,
+                (value) => {
+                  this.available = value;
+                },
+              )
+            : nothing
+        }
         ${this.type === "text" ? html`<p>${t("modifiers.text_help")}</p>` : nothing}
         ${
           this.type === "yes-no"
