@@ -128,7 +128,6 @@ export class ModifierForm extends LitElement {
   @state() private serverErrors: Record<string, string> = {};
   @state() private name: Record<string, string> = {};
   @state() private type: ModifierInput["type"] = "text";
-  @state() private available = true;
   @state() private required = false;
   @state() private cap = "";
   @state() private choices: FormChoice[] = [];
@@ -160,7 +159,6 @@ export class ModifierForm extends LitElement {
     const value = this.value;
     this.name = { ...value?.name };
     this.type = value?.type ?? "text";
-    this.available = value?.available ?? true;
     this.required = value?.type === "extras" && value.required;
     this.cap =
       value?.type === "extras" && value.maxTotalQuantity !== null
@@ -325,7 +323,6 @@ export class ModifierForm extends LitElement {
     if (!this.name[language]?.trim()) errors.name = t("modifiers.name_required");
     if (
       (this.type === "extras" || this.type === "options") &&
-      this.available &&
       (this.type === "options" || this.required) &&
       !this.choices.some((choice) => choice.available)
     )

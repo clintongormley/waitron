@@ -6,13 +6,17 @@ import type { AllergenDietaryPicker, AllergenDietaryValue } from "./allergen-die
 afterEach(cleanupWidgets);
 
 describe.each(["light", "dark"] as const)("allergen-dietary-picker a11y (%s theme)", (theme) => {
-  it.each<AllergenDietaryValue>([
-    { addAllergens: [], removeAllergens: [], dietary: [] },
-    { addAllergens: ["milk"], removeAllergens: ["gluten"], dietary: ["vegan", "vegetarian"] },
-  ])("renders value %j accessibly", async (value) => {
+  it.each<{ label: string; value: AllergenDietaryValue; busy?: boolean }>([
+    { label: "empty", value: { allergens: [], dietary: [] } },
+    {
+      label: "populated",
+      value: { allergens: ["milk", "gluten"], dietary: ["vegan", "vegetarian"] },
+    },
+    { label: "busy", value: { allergens: ["milk"], dietary: ["halal"] }, busy: true },
+  ])("renders the $label state accessibly", async ({ value, busy }) => {
     const { host } = await mountWidget<AllergenDietaryPicker>(
       "dashboard-allergen-dietary-picker",
-      { value },
+      { value, busy: busy ?? false },
       theme,
     );
     await expectNoA11yViolations(host);

@@ -7,7 +7,7 @@ import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-form-error-summary.js";
-import { type DietaryLabel, type ModifierEffects, type VatClass } from "../api/client.js";
+import { type DietarySuitability, type ModifierEffects, type VatClass } from "../api/client.js";
 import { vatClassName } from "../i18n/domain.js";
 import { isModifierPrice } from "@waitron/catalogue/src/modifier-limits.js";
 import { t } from "../i18n/t.js";
@@ -142,24 +142,19 @@ export class ChoiceForm extends LitElement {
     return { busy: this.busy, locales: this.locales, error: (key) => this.#error(key) };
   }
   #pickerValue(): AllergenDietaryValue {
-    // A choice no longer carries a removes list; the picker still renders its (now inert) removes
-    // combobox until Task 5 simplifies the widget, so feed it an empty list and ignore what it emits.
     return {
-      addAllergens: Object.keys(this.effects.addAllergens ?? {}),
-      removeAllergens: [],
-      dietary: (this.effects.suitableFor ?? []) as DietaryLabel[],
+      allergens: Object.keys(this.effects.addAllergens ?? {}),
+      dietary: (this.effects.suitableFor ?? []) as DietarySuitability[],
     };
   }
   #onPicker(event: CustomEvent<{ value: AllergenDietaryValue }>): void {
     event.stopPropagation();
     const v = event.detail.value;
     this.#patch({
-      // Every added allergen is recorded as `contains`. The follow-up allergen spec
+      // Every allergen the choice contains is recorded as `contains`. The follow-up allergen spec
       // (docs/superpowers/specs — contains/may-contain removal) deletes this presence wrapper.
-      addAllergens: v.addAllergens.length
-        ? Object.fromEntries(
-            v.addAllergens.map((code) => [code, { presence: "contains" as const }]),
-          )
+      addAllergens: v.allergens.length
+        ? Object.fromEntries(v.allergens.map((code) => [code, { presence: "contains" as const }]))
         : {},
       suitableFor: v.dietary,
     });
