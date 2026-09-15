@@ -151,7 +151,7 @@ function groupByLayout<T extends KitchenPrinterLayout>(printers: readonly T[]): 
  * recalled/voided line's item BYTE-FOR-BYTE like the original ticket the cook is correcting: same
  * name resolution (`kitchenPresentationName`), same per-option-quantity modifier labels, same
  * locale (`cfg.locale`). Reads the fired parents' qty + their frozen names and their child modifier
- * lines in ONE grouped read each (never N+1), explicitly tenant-filtered.
+ * lines in ONE grouped read each (never N+1).
  * `lineIds` are the PARENT dish lines; a child modifier is never itself a key here (it is fetched
  * as sub-text of its parent).
  */
@@ -187,8 +187,7 @@ async function buildTicketItems(
 
   // The CHILD modifier lines of the fired parents (ordering modifiers) — one grouped read, keyed
   // by `parent_line_id` over the fired parents' ids, printed as indented `+ <name>` sub-text
-  // beneath each dish. Ordered by `line_no` so the options print in selection order; explicitly
-  // tenant-filtered.
+  // beneath each dish. Ordered by `line_no` so the options print in selection order.
   const childRows = await tx
     .select({
       parentLineId: workingOrderLines.parentLineId,
@@ -237,8 +236,7 @@ async function buildTicketItems(
 }
 
 /**
- * The involved stations' names (a ticket/slip header), keyed by station id, explicitly
- * tenant-filtered.
+ * The involved stations' names (a ticket/slip header), keyed by station id.
  */
 async function readStationNames(
   tx: Transaction,
@@ -256,7 +254,7 @@ async function readStationNames(
 /**
  * The order header: the human order number + the dining-table label. The label comes from the
  * fan-out-proof scalar subquery `listExpoQueue` uses (both `tab_id` and `delivery_table_id` directions,
- * tenant + location scoped); a walk-up with no table resolves null. The outer `working_orders` columns
+ * location scoped); a walk-up with no table resolves null. The outer `working_orders` columns
  * are referenced by their LITERAL qualified names, NOT via `${workingOrders.id}`: drizzle renders a
  * base-`.from()` table's column inside a `sql` template as a BARE `"id"`, which inside this subquery would
  * bind to `dining_tables.id` (→ `dt.tab_id = dt.id`, never matching) rather than correlating to the outer
@@ -436,7 +434,7 @@ export async function enqueueKitchenTickets(
  * `lockActivePrinters` ACTIVE-filters and FOR-SHARE-locks, so `enqueuePrintJob`'s
  * `printer.not_found` stays unreachable and the enqueue rides the caller's recall/void tx (rolls
  * back with it). An empty `items` — the common case, a recall/void of a held line — enqueues
- * nothing. Explicitly tenant-filtered.
+ * nothing.
  *
  * NOTE for VOID: {@link voidTabLine}'s delete cascades the line + its ticket item away
  * (`ON DELETE CASCADE`), and this function RE-READS the line from `working_order_lines` via
@@ -507,7 +505,7 @@ export async function enqueueCorrectionSlips(
 /**
  * Reprint the current kitchen tickets for a whole order (design §3d) — the operator's "a jam ate the
  * paper, print it again" lever, surfaced on the station display + expo. Gathers EVERY currently-fired
- * ticket item of the order (`fired_at IS NOT NULL`, tenant-scoped) and re-enqueues them through the same
+ * ticket item of the order (`fired_at IS NOT NULL`) and re-enqueues them through the same
  * `enqueueKitchenTickets` the fire path uses, so the tickets have the SAME FORMAT and STRUCTURE a fire
  * produces (the per-station tickets and the one consolidated group-printer ticket), but with two
  * deliberate differences from any single fire: they are AGGREGATED across every fired round rather than
@@ -528,7 +526,6 @@ export async function enqueueCorrectionSlips(
  * inherits the fire path's never-block posture for free: enqueue is an outbox INSERT that opens
  * no socket, and the `FOR SHARE` lock in `enqueueKitchenTickets` keeps `enqueuePrintJob`'s
  * `printer.not_found` unreachable exactly as it does on the fire path (see the header).
- * Explicitly tenant-filtered.
  */
 export async function reprintOrderTickets(
   tx: Transaction,

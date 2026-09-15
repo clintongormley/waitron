@@ -6,7 +6,7 @@ export type TenderMethod = "cash" | "card" | "voucher" | "transfer" | "other";
 
 export interface DailyCloseInput {
   tenantId: TenantId;
-  /** Omit → aggregate across ALL the tenant's nodes (the tenant predicate scopes it), the same
+  /** Omit → aggregate across ALL the tenant's nodes (every node in the database), the same
    * venue-wide shape `PeriodVatInput` allows. Node-grain callers (the fiscal daily close, the
    * dashboard's per-till daily-close view) pass a node; the dashboard OVERVIEW omits it so its
    * takings/counts aggregate the whole venue (report-api overview, membership promotion R3a). */
@@ -21,7 +21,7 @@ export interface DailyCloseInput {
 
 export interface PeriodVatInput {
   tenantId: TenantId;
-  /** Omit → aggregate across ALL the tenant's nodes (the tenant predicate scopes it). */
+  /** Omit → aggregate across ALL the tenant's nodes (every node in the database). */
   nodeId?: NodeId;
   /** Inclusive lower bound, local calendar date of the business day, "YYYY-MM-DD". */
   fromBusinessDay: string;

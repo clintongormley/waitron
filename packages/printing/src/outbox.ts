@@ -29,8 +29,7 @@ export async function enqueuePrintJob(
   // A friendly `printer.not_found` for an absent printer, via a DB-only pre-check SELECT (indexed
   // PK lookup — no socket, no wait). Chosen over catching the FK violation because a raised 23503
   // would ABORT the caller's enclosing transaction (a fire/sale may enqueue mid-transaction),
-  // whereas this pre-check leaves the tx clean on the not_found path. The explicit `tenant_id`
-  // predicate limits the lookup to `cfg.tenantId`, the agent.ts shape; all values bind as `$n`,
+  // whereas this pre-check leaves the tx clean on the not_found path. All values bind as `$n`,
   // never concatenated. `printerId` is not shape-screened here, and needs no screen of its own:
   // its sole caller — the test-print route (apps/server/src/print-api.ts's `/test-print` handler)
   // — validates the path param's uuid shape upstream with `requireUuidParam` before calling in,

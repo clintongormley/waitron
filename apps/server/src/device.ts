@@ -108,10 +108,8 @@ async function createRegister(
 }
 
 /**
- * Assert `registerId` names a `tills` row of THIS tenant at THIS venue and return it. A by-id read that
- * carries its OWN `tenant_id` predicate — one-tenant-per-db is NOT the query's isolation boundary
- * (CLAUDE.md §3) — plus the `location_id` scope, so a register that is absent, another tenant's, or
- * another venue's is rejected here rather than trusted or left to the `devices` composite FK (which
+ * Assert `registerId` names a `tills` row at THIS venue and return it. A by-id read with the
+ * `location_id` scope, so a register that is absent or another venue's is rejected here rather than trusted or left to the `devices` composite FK (which
  * sees neither location). No such row → `device.binding_invalid` naming the `tillId` FIELD (never the
  * id), the code the domain already uses for "named a binding id that matches no row of this tenant".
  */

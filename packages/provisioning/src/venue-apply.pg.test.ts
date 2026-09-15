@@ -135,7 +135,7 @@ describe("applyVenue against a real container, as the non-superuser owner", () =
       },
     ]);
 
-    // Read the committed venue back in one transaction with explicit tenant and node predicates.
+    // Read the committed venue back in one transaction, by the ids the apply returned.
     const { counts, node, sif, profiles } = await withTransaction(owner, async (tx) => {
       const counts = await tx.execute<{
         tenants: number;

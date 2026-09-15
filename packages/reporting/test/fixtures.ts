@@ -58,8 +58,8 @@ export async function seedVenue(db: Database): Promise<SeededVenue> {
 
 /**
  * A SECOND node (with its own series) under an existing venue's tenant+location — for tests that need
- * two nodes in ONE tenant, which `seedVenue` (always a fresh tenant) cannot express. The shared
- * tenant lets a test distinguish the explicit node predicate from the tenant predicate.
+ * two nodes in ONE tenant, which `seedVenue` (always a fresh tenant) cannot express. Two nodes in one
+ * database let a test tell a node-grain aggregate from a venue-wide one.
  */
 export async function seedNodeAndSeries(
   db: Database,

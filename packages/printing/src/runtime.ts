@@ -56,9 +56,9 @@ export const MAX_DELIVERY_ATTEMPTS = 5;
 export const PRINT_JOB_LEASE_MS = 60_000;
 
 export interface AgentRuntimeDeps {
-  /** A tenant-scoped transaction (the Task-6 route wraps this in `withTransaction` + `asAppUser`). */
+  /** The caller's transaction (the Task-6 route wraps this in `withTransaction` + `asAppUser`). */
   tx: Transaction;
-  /** The tenant the agent belongs to, enforced by the pull's explicit tenant predicate. */
+  /** The tenant the agent belongs to. Not read by the pull: one tenant per database. */
   cfg: { tenantId: string };
   /** The calling agent. NOT an eligibility filter (printers carry no agent binding) — it is stamped
    * into `claimed_by` on every claim and is what authorises the later report (only the claimer reports
@@ -114,7 +114,7 @@ export type JobOutcome = { status: "done" } | { status: "failed"; error: string 
  * UNAMBIGUOUSLY load-bearing. Delete the lock and two agents' SELECTs both return the same row, and
  * both UPDATEs (keyed only on `id`) then re-mark it — a double claim (runtime.race.test.ts proves
  * exactly this by deletion). All values bind as `$n` (Drizzle-parameterised), never concatenated. The
- * join to `printers` on `(tenant_id, id)` reads each job's connection facts; it is NOT the
+ * join to `printers` on its id reads each job's connection facts; it is NOT the
  * authorization scope. Eligibility is DERIVED (design §3): a `network_tcp` printer is claimable by any
  * agent reporting this venue (`p.location_id = ctx.locationId`), a `usb`/`bluetooth` printer only when
  * its `local_key` is one the agent currently SEES (`ctx.visibleKeys`). An empty `visibleKeys` degenerates
@@ -242,7 +242,7 @@ export async function reportPrintJob(
 ): Promise<{ updated: boolean }> {
   void cfg;
   const { agentId, jobId, outcome } = input;
-  // Only the SET clause differs by outcome; the WHERE — the tenant predicate, the `status = 'printing'`
+  // Only the SET clause differs by outcome; the WHERE — the job id, the `status = 'printing'`
   // idempotency guard and the `claimed_by` claimer-scope — is IDENTICAL for both, so it is written
   // once. `done` stamps `delivered_at`; `failed` records `last_error` and bumps the bounded-retry
   // `attempts`. `${outcome.error}` binds as `$n` like every other value here, never concatenated.

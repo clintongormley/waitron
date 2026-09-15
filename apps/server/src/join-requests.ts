@@ -175,8 +175,8 @@ export async function listPendingJoinRequests(
     .orderBy(joinRequests.createdAt);
 }
 
-/** Fetch one pending request, tenant-scoped, or throw. A globally-unique UUID is not the isolation
- * boundary (CLAUDE.md §3): every by-id read still carries its own tenant predicate. */
+/** Fetch one pending request by id, or throw. One tenant per database, so the id alone identifies
+ * the row. */
 async function requirePending(
   tx: Transaction,
   cfg: TillConfig,
@@ -216,7 +216,7 @@ async function requirePending(
  * enumerates the venue's pending requests one guess at a time. That needs the miss as a VALUE the
  * route can hold until after the gate, not as a control-flow exit taken before it.
  *
- * Tenant-scoped like every by-id read here (CLAUDE.md §3), and it sweeps first, so a lapsed row reads
+ * It sweeps first, so a lapsed row reads
  * as absent exactly as it does to `requirePending` and the verbs that follow.
  */
 export async function joinRequestKind(
@@ -305,7 +305,7 @@ export type AcceptResult =
  * double-clicking Accept, or one admin with two tabs, must not reach a 500).
  *
  * The kind predicate rides the SAME delete, not a separate check: a `print_agent` row (or none, or
- * another tenant's, or already decided) all return zero rows and fold into the one
+ * one already decided) all return zero rows and fold into the one
  * `join_request.not_found` — a device accept can never consume an agent's request.
  *
  * ONE transaction: the caller's `withTransaction` covers the consuming delete, the register
@@ -382,7 +382,7 @@ export type AgentAcceptResult =
 /**
  * Approve a print agent's ask-to-join. The mirror of {@link acceptDeviceJoinRequest}, minus the device
  * binding: consume the request with a locking `DELETE … RETURNING` whose `kind = "print_agent"`
- * predicate rides along (a device row, another tenant's, or an already-decided one all fold into
+ * predicate rides along (a device row, or an already-decided one, both fold into
  * `join_request.not_found`), then — only on a matching choice — insert the real `print_agents` row with
  * the request's own id and token hash, so the bearer the agent has held since join keeps working.
  * ONE transaction: the caller's `withTransaction` covers the delete and the insert together.
@@ -426,7 +426,7 @@ export async function acceptPrintAgentJoinRequest(
  * {@link readJoinStatus}, resolving the approved fallback against `print_agents` rather than `devices`
  * — the id is carried through accept, so one selector answers both questions. Denied, lapsed and
  * never-existed all fold into `not_approved`; the agent's recovery (restart → re-join) is identical in
- * every case. Both by-id reads carry their own tenant predicate (CLAUDE.md §3).
+ * every case. One tenant per database, so both by-id reads need only the id.
  */
 export async function readAgentJoinStatus(
   tx: Transaction,
@@ -471,8 +471,7 @@ export async function denyJoinRequest(
  * survive. A row that has been REVOKED (`active = false`) is NOT silently reactivated: self-enrol
  * refuses with `device.join_revoked` so a deliberate revoke sticks (spec §4); an admin's "allow again"
  * is the only way back. The returned token is the accept-shape `${agentId}.${secret}` so it
- * authenticates through `authenticateAgent` exactly like a knock-and-accept token. By-id/by-node reads
- * carry the tenant predicate (CLAUDE.md §3).
+ * authenticates through `authenticateAgent` exactly like a knock-and-accept token.
  */
 export async function selfEnrolNodeAgent(
   tx: Transaction,

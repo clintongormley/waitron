@@ -68,8 +68,9 @@ export interface PersonAbsenceRow {
  * The requester's shifts whose LOCAL wall date falls in the half-open window `[from, to)`, ordered by
  * `starts_at`. The window compares `(starts_at at time zone 'UTC' + starts_offset_minutes)::date`, the
  * same offset-aware local-date expression `publishRoster`/`plannedShiftsInPeriod` use (offset 0 in this
- * slice, so local = UTC), so a shift is placed by its LOCAL day rather than its raw UTC instant. Covered
- * by `shifts_tenant_person_starts_idx` on `(tenant_id, person_id, starts_at)` (plan fact 4).
+ * slice, so local = UTC), so a shift is placed by its LOCAL day rather than its raw UTC instant. The
+ * matching index is `shifts_tenant_person_starts_idx` on `(tenant_id, person_id, starts_at)` (plan
+ * fact 4), whose leading `tenant_id` this query does not name.
  */
 export async function listShiftsForPerson(
   tx: Transaction,
@@ -150,7 +151,8 @@ export async function listSwapsForPerson(
 /**
  * All of the requester's absences, EVERY status (not only `requested` like the manager queue), ordered by
  * `starts_on` desc — a staff member's own leave history and pending requests. Person-scoped in application
- * code. Covered by `absences_tenant_person_idx` on `(tenant_id, person_id, starts_on)`.
+ * code. The matching index is `absences_tenant_person_idx` on `(tenant_id, person_id, starts_on)`,
+ * whose leading `tenant_id` this query does not name.
  */
 export async function listAbsencesForPerson(
   tx: Transaction,

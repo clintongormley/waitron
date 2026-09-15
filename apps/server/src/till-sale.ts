@@ -385,16 +385,12 @@ export async function payWorkingOrder(
     return await withTransaction(deps.db, async (tx) => {
       await asAppUser(tx);
 
-      // The deployment holds one tenant per database. Step
-      // 1. Lock/resolve the order by its id in this database. FOR UPDATE serialises a
+      // 1. Lock/resolve the order by its id (one tenant per database). FOR UPDATE serialises a
       //    concurrent pay on a PARKED order; on a walk-up there is no row yet, so it locks
       //    nothing and the 23505 catch below is that shape's backstop.
       const [locked] = await tx
         .select({ status: workingOrders.status })
         .from(workingOrders)
-        // Tenant-scoped: a by-id read is not isolated since RLS was dropped (#255), so a foreign
-        // tenant's order id must resolve as "no row" (walk-up) here, never as their open order
-        // (CLAUDE.md §3). Same-tenant pay is unchanged — the order is this tenant's.
         .where(eq(workingOrders.id, req.id))
         .for("update");
 
@@ -502,7 +498,6 @@ export async function payWorkingOrder(
       const [row] = await tx
         .select({ status: workingOrders.status })
         .from(workingOrders)
-        // Tenant-scoped like the lock read above (CLAUDE.md §3).
         .where(eq(workingOrders.id, req.id));
       /* v8 ignore start */
       if (row?.status !== "settled") {
@@ -715,8 +710,8 @@ async function fileImmediateSale(
       settledAt: settledAt.toISOString(),
       ...(markCollected ? { collectedAt: settledAt.toISOString() } : {}),
     })
-    // Tenant-scoped for uniformity with the sibling finalize updates; the caller has already taken a
-    // tenant-scoped `.for("update")` lock on this row, so this can only ever match its own order.
+    // The caller has already taken a `.for("update")` lock on this row, so this can only ever match
+    // its own order.
     .where(eq(workingOrders.id, workingOrderId));
 
   // Read the tender block back AFTER the tender row (recordSale) and, for a manual card, the payment

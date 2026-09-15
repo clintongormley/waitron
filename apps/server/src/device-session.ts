@@ -131,14 +131,14 @@ export interface DeviceBinding {
   receiptPrinterId: string | null;
   hasCashDrawer: boolean;
   // The device PROFILE's declared capability set (device-profile §5.3), carried here off the SAME
-  // (tenant_id, device_profile_id) join that resolves `formFactor` — so the capability firewall
+  // `device_profile_id` join that resolves `formFactor` — so the capability firewall
   // (`assertDeviceCapability`) reads it straight off the binding rather than opening a second
   // transaction to re-read the profile. `[]` for a profile that declares none.
   capabilities: CapabilityFlag[];
 }
 
 // The device→profile join and the binding projection, defined once and reused by both `tryReadDevice`
-// selects (and the device-api list read): `devices ⨝ device_profiles ON (tenant_id, device_profile_id)`.
+// selects (and the device-api list read): `devices ⨝ device_profiles ON device_profile_id`.
 // The join always matches — `device_profile_id` is NOT NULL with a RESTRICT composite FK — so the
 // binding always carries the profile's `formFactor` and `capabilities`.
 const deviceProfileJoin = eq(deviceProfiles.id, devices.deviceProfileId);
@@ -202,8 +202,8 @@ function toDeviceBinding(
  * cookie success path, so a firewall probe on a non-device request is a pure read — and so is the
  * devMode override branch above, which resolves the binding by id and writes nothing.
  *
- * `deps.cfg` is typed to the ONE field this reads — `tenantId` — matching `requireSession`, so any route
- * group carrying only `{ tenantId }` can gate on it without contriving a full config.
+ * `deps.cfg` is typed to `{ tenantId }` — matching `requireSession` — and not read, so any route group
+ * carrying only `{ tenantId }` can gate on it without contriving a full config.
  */
 export async function tryReadDevice(
   deps: { db: Database; cfg: { tenantId: string }; devMode?: boolean },
@@ -224,15 +224,11 @@ export async function tryReadDevice(
         await asAppUser(tx);
         const [row] = await tx
           // The form factor AND capabilities come from the device's profile (a device is DEFINED by its
-          // profile) — the shared (tenant_id, device_profile_id) inner join, which always matches since
+          // profile) — the shared `device_profile_id` inner join, which always matches since
           // device_profile_id is NOT NULL and its FK is RESTRICT.
           .select(deviceBindingColumns)
           .from(devices)
           .innerJoin(deviceProfiles, deviceProfileJoin)
-          // Scope to THIS tenant explicitly: since RLS was dropped (#255) `withTransaction` no longer
-          // isolates SELECTs, so a by-id read must carry its own tenant predicate — one-tenant-per-db
-          // is NOT the query's isolation boundary (CLAUDE.md §3; till-reroute-S3). Critical on this
-          // dev-override path, which has NO token to verify a foreign device UUID.
           .where(and(eq(devices.id, override), eq(devices.active, true)));
         if (row === undefined) return null;
         return toDeviceBinding(override, row);
@@ -266,10 +262,7 @@ export async function tryReadDevice(
       .from(devices)
       .innerJoin(deviceProfiles, deviceProfileJoin)
       // `active = true` is the revocation filter: a revoked device is simply not found. Parameterised
-      // by Drizzle — `id` and the boolean both bind as `$n`, never string-concatenated. The tenant
-      // predicate is explicit: since RLS was dropped (#255) `withTransaction` no longer isolates SELECTs, so
-      // a by-id read carries its own `tenant_id` scope — one-tenant-per-db is NOT the query's isolation
-      // boundary (CLAUDE.md §3; till-reroute-S3). Defence-in-depth here (the token is still verified).
+      // by Drizzle — `id` and the boolean both bind as `$n`, never string-concatenated.
       .where(and(eq(devices.id, deviceId), eq(devices.active, true)));
     if (row === undefined) return null;
     // Constant-time scrypt check (REUSED, never home-rolled): the token is never compared with `===`.

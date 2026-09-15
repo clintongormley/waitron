@@ -744,12 +744,9 @@ describe("dev-override header (real Postgres)", () => {
   });
 });
 
-describe("tryReadDevice is tenant-scoped (real Postgres)", () => {
-  // CLAUDE.md §3 / the till-reroute-S3 incident: since RLS was dropped (#255) `withTransaction` no longer
-  // isolates SELECTs, so a by-id device read must carry its OWN `tenant_id` predicate —
-  // one-tenant-per-db is NOT the query's isolation boundary. Seeded DIRECTLY (not through the enrol
-  // path, which Tasks 6-7 still owe), so these two cases are self-contained. The dev-override path
-  // carries no token, so without the predicate it would resolve ANY tenant's device by UUID.
+describe("tryReadDevice dev override resolves a seeded device (real Postgres)", () => {
+  // Seeded DIRECTLY (not through the enrol path), so the case is self-contained. The dev-override
+  // path carries no token and reads the device by id alone.
   async function seedKdsDeviceUnderNewTenant(): Promise<{ tenantId: string; deviceId: string }> {
     const admin = suite.admin;
     const tenantId = await seedTenant(admin);

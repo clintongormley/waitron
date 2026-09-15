@@ -149,8 +149,8 @@ export function businessDayRangeClause(column: SQL, input: PeriodVatInput): SQL 
  * substitutes (their VAT already lives in the substituted F2 tickets — design §4, confirmed against
  * *modelo 303* in the AEAT FAQ). Assumes the outer query aliases `sales` as `s`. Shared by the VAT
  * summary and the record counts so the two cannot drift on which sales are "active". No leading
- * `and` — the caller writes `and ${activeSalesClause(input)}`. Only `tenantId` is read, so the param
- * is narrowed to that shape (the daily-close/counts callers still satisfy it structurally).
+ * `and` — the caller writes `and ${activeSalesClause(input)}`. `input` is not read: one tenant per
+ * database, so the subqueries carry no tenant predicate.
  */
 export function activeSalesClause(input: { tenantId: TenantId }): SQL {
   void input;
@@ -161,7 +161,7 @@ export function activeSalesClause(input: { tenantId: TenantId }): SQL {
 /**
  * The optional node predicate every sales aggregate applies: `and s.node_id = <nodeId>` when a node is
  * fixed (a node-grain view — the dashboard overview/daily-close/period), an empty fragment when it is
- * omitted (a tenant-wide aggregate — e.g. modelo 303 — relying on the tenant predicate). Assumes
+ * omitted (a tenant-wide aggregate — e.g. modelo 303 — over the database's one tenant). Assumes
  * the outer query aliases `sales` as `s`, and carries its own leading `and`, so the caller writes it
  * inline as `${nodeScopeClause(input.nodeId)}` — the `activeSalesClause` convention. Shared by
  * `aggregateVatByRate` and `computeTopSellers` so the two cannot drift on how a node is scoped.

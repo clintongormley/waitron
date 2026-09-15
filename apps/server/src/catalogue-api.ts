@@ -79,7 +79,7 @@ import { setProductCourse, setProductStation } from "./kitchen.js";
 import type { TillConfig } from "./till-config.js";
 import type { Logger } from "./logger.js";
 
-/** Catalogue and content-language routes scope every operation to the configured tenant. */
+/** Catalogue and content-language routes. One tenant per database, so no operation filters by tenant. */
 export interface CatalogueApiDeps {
   contentTranslationGaps?: (
     tx: Transaction,
@@ -87,7 +87,7 @@ export interface CatalogueApiDeps {
     language: string,
   ) => Promise<{ kind: string; id: string }[]>;
   db: Database;
-  /** `cfg.tenantId` scopes every `withTransaction` below (one tenant per database). `nodeId` is this
+  /** `cfg.tenantId` is the tenant the writes below stamp (one tenant per database). `nodeId` is this
    * node's id, carried on the uniform write-path `cfg` shape every mounted API takes; it no longer
    * stamps a capture origin — the application outbox and its capture triggers were removed (native
    * replication ships every row). */
@@ -346,7 +346,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
   // of the mount (cfg.tenantId is fixed), the low-risk form of the dedup (deps keeps cfg: { tenantId:
   // string }, the sibling convention).
   const tenantId = brandTenantId(deps.cfg.tenantId);
-  // Open a tenant-scoped transaction as the app role, confirm the caller's management session carries
+  // Open a transaction as the app role, confirm the caller's management session carries
   // CATALOGUE_WRITE_PERMISSION, then run `fn`. Every route funnels its DB work through here so the gate
   // is applied identically and in exactly one place — the design §3 seam.
   const gated = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> =>

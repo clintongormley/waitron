@@ -9,7 +9,7 @@ import { FALLBACK_LOCALE, SUPPORTED_LOCALE_CODES, type SupportedLocale } from "@
 /**
  * The venue's default UI locale, resolved ONCE at boot from geography + an optional env override.
  * Reads the tenant's country and the till location's province under the app role (`withTransaction` +
- * `asAppUser`, with the location scoped to the tenant), then applies the shared `override →
+ * `asAppUser`), then applies the shared `override →
  * area → country → English` chain (the installed-country resolver returns an AVAILABLE
  * code, so nothing here post-processes its result).
  *

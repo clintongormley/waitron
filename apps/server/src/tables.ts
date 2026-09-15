@@ -97,7 +97,7 @@ export interface DiningTable {
 
 /**
  * Create a dining table in the till's venue (its `cfg.locationId`), returning the minted id. Runs on the
- * CALLER's transaction under its tenant/app_user scope. A duplicate `(tenant, location, label)` collides
+ * CALLER's transaction as app_user. A duplicate `(tenant, location, label)` collides
  * on `dining_tables_location_label_key` (the only unique an INSERT can trip — `id` is fresh) and is
  * surfaced as `table.label_taken` rather than the raw 23505. A `zoneId` naming no `floor_zones` row
  * (or another tenant's) trips the composite `dining_tables_zone_fk` (23503) and is surfaced as
@@ -221,7 +221,7 @@ export async function deactivateTable(
 /**
  * The deployment holds one tenant per database. Place a table on the FP-2 spatial floor plan
  * (design §placement): write its zone + canvas coordinates + shape + rotation. Runs on the
- * CALLER's transaction under its tenant/app_user scope. LOCATION-scoped to `cfg.locationId` (like
+ * CALLER's transaction as app_user. LOCATION-scoped to `cfg.locationId` (like
  * the sibling read {@link listTables}): a tenant can hold several venues, so both the table and
  * the zone must belong to THIS venue — a caller supplying another location's table or zone UUID
  * is refused, not allowed to reach across venues. Validates IN ORDER, each with its own precise
@@ -321,7 +321,7 @@ export interface FloorZone {
 
 /**
  * Create a floor-plan zone in the till's venue (its `cfg.locationId`), returning the minted id. Runs on
- * the CALLER's transaction under its tenant/app_user scope. A duplicate `(tenant, location, name)`
+ * the CALLER's transaction as app_user. A duplicate `(tenant, location, name)`
  * collides on `floor_zones_name_key` (the only unique an INSERT can trip — `id` is fresh) and is
  * surfaced as `zone.name_taken` rather than the raw 23505 — the same shape {@link createTable} maps
  * `table.label_taken` with.
@@ -615,7 +615,7 @@ export async function deactivateStatus(
  * route (`requireSession`, Task 8), NOT by `venue.configure`. Validates the table is active (an
  * absent or deactivated table → `table.not_found`, design §3b) and, when `statusId` is non-null,
  * that the status is real (`status.not_found`) and `active` (`status.inactive`). Runs on the
- * CALLER's transaction under its tenant/app_user scope. The status is occupancy-INDEPENDENT: a
+ * CALLER's transaction as app_user. The status is occupancy-INDEPENDENT: a
  * `free` table may carry one, so this never consults the tab state.
  */
 export async function setTableStatus(

@@ -29,9 +29,7 @@ function run<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
 }
 
 /** Registers a passkey for a person, the same row shape `finishPasskeyRegistration` writes
- * (packages/identity/src/passkey.ts). The transaction is opened for the tenant the row names, so a
- * credential seeded under another tenant is not silently written from this tenant's transaction. The
- * credential id is unique per call so two seeded passkeys in one tenant do not collide on
+ * (packages/identity/src/passkey.ts). The credential id is unique per call so two seeded passkeys in one tenant do not collide on
  * `webauthn_credentials_credential_id_uq`. */
 async function seedPasskey(input: { tenantId: string; personId: string }): Promise<void> {
   await withTransaction(suite.db, (tx) =>

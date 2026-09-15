@@ -15,7 +15,7 @@ import type { Transaction } from "@waitron/db";
 import type { TillConfig } from "./till-config.js";
 
 // KDS-1 (design §3a) station config + routing verbs. Config only — plain inserts / by-id UPDATEs
-// on the caller's transaction under its tenant/app_user scope; the `till.configure` gate is
+// on the caller's transaction as app_user; the `till.configure` gate is
 // applied at the ROUTE layer (Task 7, the layout-routes model), exactly as the FP-1 zone/table
 // verbs in tables.ts rely on the route's authorizeManager rather than gating inside the verb.
 // Deliberately imports nothing from working-order.ts — the `order_prep` rework (Tasks 3/4/6)
@@ -379,7 +379,7 @@ export async function setFireControl(
 // Config verbs mirroring the station-config verbs above, minus the default concept: `kitchen_courses`
 // has no `is_default` (a null course simply fires earliest, spec §2b), so there is no clear-then-set
 // dance and no partial unique to protect. Same shape otherwise — plain inserts / by-id UPDATEs on the
-// caller's transaction under its tenant/app_user scope, `course.name_taken` on a duplicate
+// caller's transaction as app_user, `course.name_taken` on a duplicate
 // `(tenant, location, name)` and `course.not_found` for an id this venue may not reach; the
 // `till.configure` gate is applied at the ROUTE layer (Task 5), exactly as the station verbs rely on.
 

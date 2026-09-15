@@ -50,8 +50,7 @@ export class FakePaymentProvider implements PaymentProvider {
 
   /** The tenant this fake serves. Real `PaymentProvider`s are per-till, therefore per-tenant,
    * objects (see `StripeOnDeviceProviderOptions.tenantId`); a double that drained every tenant at
-   * once would model a shape no real provider has — and `claimAcceptedOffline` now carries the
-   * same explicit tenant predicate its unlocked twin does. */
+   * once would model a shape no real provider has. */
   constructor(
     private readonly db: Database,
     private readonly tenantId: string,

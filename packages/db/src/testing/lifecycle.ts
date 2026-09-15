@@ -29,8 +29,8 @@ export interface PgliteSuiteOptions {
   /** Override when a suite's own setup is slower than the default. */
   timeoutMs?: number;
   /**
-   * Empty every data table after each test so the suite is order-independent WITHOUT scoping reads
-   * by tenant (the isolation the drop-tenant-id branch removes). Default `true`.
+   * Empty every data table after each test so the suite is order-independent even though no query
+   * filters by tenant. Default `true`.
    *
    * Set `false` for a suite that seeds shared rows ONCE — in `setup` or its own `beforeAll` — and
    * reads them across several `it`s; a per-test reset would wipe that fixture out from under the
@@ -185,9 +185,9 @@ export interface RealPostgresSuiteOptions {
   timeoutMs?: number;
   /**
    * Empty every data table after each test, exactly as {@link PgliteSuiteOptions.resetPerTest} —
-   * so a real-PG container suite is order-independent WITHOUT scoping reads by tenant (the isolation
-   * the drop-tenant-id branch removes). Default `true`. The reset runs on the `admin` (superuser)
-   * connection, the only one that may TRUNCATE and toggle the append-only `ENABLE ALWAYS` triggers.
+   * so a real-PG container suite is order-independent even though no query filters by tenant. Default
+   * `true`. The reset runs on the `admin` (superuser) connection, the only one that may TRUNCATE and
+   * toggle the append-only `ENABLE ALWAYS` triggers.
    *
    * Set `false` for a suite that seeds shared rows ONCE — in `setup` or its own `beforeAll` — and
    * reads them across several `it`s; a per-test reset would wipe that fixture. Only DATA is cleared;
@@ -392,7 +392,7 @@ export interface TemplateDbSuiteOptions {
   getHandle?: () => SharedContainerHandle;
   /**
    * Empty every data table after each test, exactly as {@link RealPostgresSuiteOptions.resetPerTest}
-   * — order-independence without tenant-scoped reads, run on the clone's `admin` connection. Default
+   * — order-independence without a tenant filter on any read, run on the clone's `admin` connection. Default
    * `true`. Set `false` for a suite that seeds shared rows once and reads them across tests.
    */
   resetPerTest?: boolean;

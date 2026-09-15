@@ -230,9 +230,8 @@ function tillProviderForReader(provider: string): "sumup_cloud" | "stripe_termin
  * The `card_readers` row a `/api/pay` charge routes to (Task 12), resolved as the app role under the
  * till's tenant. The reader is `body.readerId` when the caller named one (Task 17's picker), else the
  * paying DEVICE's default (`device_card_readers`). A device with neither → `reader.not_found`. The
- * chosen reader is loaded BY ID with an explicit `eq(tenantId)` predicate — one-tenant-per-db is NOT
- * the query's isolation boundary (CLAUDE.md §3), so a foreign or unknown reader id is `reader.not_found`,
- * never chargeable — and must still be `active` (a disabled reader cannot take a payment).
+ * chosen reader is loaded BY ID — one tenant per database, so the id alone identifies it; an unknown
+ * reader id is `reader.not_found`, never chargeable — and must still be `active` (a disabled reader cannot take a payment).
  */
 async function resolvePayReader(
   deps: TillApiDeps,
@@ -263,8 +262,7 @@ async function resolvePayReader(
     // adapters turn a deferred credential-read failure into a payment DECLINE, so without this
     // pre-check a disconnected provider would answer a misleading "declined" (200) instead of the
     // actionable `reader.provider_disconnected` (409). Metadata read only — the purpose, never the
-    // ciphertext — scoped by the explicit `tenant_id` predicate (CLAUDE.md §3), the same pre-check the
-    // payments-management surface makes before add-reader. The seat declares its own credential
+    // ciphertext — the same pre-check the payments-management surface makes before add-reader. The seat declares its own credential
     // purpose (`CardProviderContribution.credentialPurpose`), read from the composition list boot
     // threads in, so there is no provider → purpose map to keep in step with the seats.
     if (deps.providers !== undefined) {
@@ -608,7 +606,7 @@ function requireLineNo(tabId: string, raw: string): number {
  * SHOWS the button, not who may call it; every surface is session-gated, spec §3c). `:id` (the order) is
  * `isUuid`-screened as `working_order.not_found` (404) and `:courseId` as `course.not_found` (404) BEFORE
  * either reaches a `uuid` column — a malformed id passed straight into `eq(…, id)` would `22P02` → an
- * opaque 500 — then `verb(tx, cfg, orderId, courseId)` runs under the till's tenant/`app_user` scope and
+ * opaque 500 — then `verb(tx, cfg, orderId, courseId)` runs under the till's `app_user` transaction and
  * the route returns 200 with an empty body (the display re-reads the queue). The three verbs differ only
  * in what they stamp on `ticket_items` and whether they existence-check the course — `fireCourse`/
  * `markCourseAway` do (via `requireCourse`, so an unknown/foreign course is `course.not_found`),
@@ -803,8 +801,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       // to render from.
       const device = await tryReadDevice({ db: deps.db, cfg: deps.cfg, devMode: deps.devMode }, c);
       // The venue's server list (till-reroute §3.2). Read HERE, outside the boot transaction below:
-      // `node_membership` is a whole-DB singleton row with no `tenant_id`, so it has no place under
-      // `withTransaction`'s tenant scope. Read straight off `deps.db`, like every other read in this file.
+      // `node_membership` is a whole-DB singleton row with no `tenant_id`, so it does not need the
+      // transaction. Read straight off `deps.db`, like every other read in this file.
       const held = await readNodeMembership(deps.db);
       // The deployment holds one tenant per database. ONE transaction reads the issuer identity
       // and the authored receipt trim (`getReceipt`, its own `tenant_receipts` row — SP-B4), plus
@@ -1213,8 +1211,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       }
 
       // A LIVE/integration till (Task 12 cutover): route the charge to a reader's own provider. Resolve
-      // the reader (request `readerId`, else the device's default), tenant-scoped by-id — a foreign or
-      // unknown reader is `reader.not_found`, and a device with no default and no request reader is
+      // the reader (request `readerId`, else the device's default), by id — an unknown reader is
+      // `reader.not_found`, and a device with no default and no request reader is
       // `reader.not_found` too (the deliberate "no sellable reader" refusal that replaced the old
       // "no provider configured" 500). `resolvePayReader` ALSO pre-checks the provider is connected,
       // throwing `reader.provider_disconnected` when no credential is sealed (the adapters would
@@ -2136,7 +2134,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // `authorize(venue.configure)` gate. Unlike every sibling above, `requireSession` is not the whole
   // guard: the session only IDENTIFIES the operator, and the write is a manager-level venue-config
   // action. So this route pulls `sessionId` out of the session (the sale routes ignore it) and, inside
-  // the tenant/app_user transaction, calls `authorize(tx, { sessionId, permission: "venue.configure" })`
+  // the app_user transaction, calls `authorize(tx, { sessionId, permission: "venue.configure" })`
   // — which resolves the OPERATOR's OWN role and throws `authorization.not_permitted` (→ 403) when it
   // lacks the permission. NO supervisor `override` is parsed this slice (manager-on-till only, spec
   // §3c): a staff/supervisor operator is simply refused. The gate runs BEFORE `setTablePlacement`, so a

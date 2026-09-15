@@ -120,7 +120,7 @@ export interface PendingAbsenceRow {
 
 /**
  * The tenant's REQUESTED absences awaiting a manager decision, ordered by `created_at` (design §3b).
- * Tenant-scoped — `absences` has no location.
+ * Not location-scoped — `absences` has no location.
  */
 export async function listPendingAbsences(
   tx: Transaction,

@@ -58,7 +58,7 @@ export interface JoinApiDeps {
  * everywhere.
  */
 const STATUS: Record<string, ContentfulStatusCode> = {
-  // Unknown, another tenant's, already decided, or (on the accept route) an agent's ask — all fold
+  // Unknown, already decided, or (on the accept route) an agent's ask — all fold
   // here, because the caller's recovery is identical and none of them may confirm the others.
   "join_request.not_found": 404,
   // A wrong number denies the request (the row is already gone), so this is a plain request fault.
@@ -131,7 +131,7 @@ function optionalBodyUuid(v: unknown, field: string): string | null {
  *     refuses the OTHER kind 404 via the predicate riding its consuming delete.
  */
 export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
-  // Open a tenant-scoped transaction as the app role, confirm the caller's management session carries
+  // Open a transaction as the app role, confirm the caller's management session carries
   // `permission`, then run `fn` — `device-api.ts`'s `gated`, with the permission passed in rather than
   // baked in, because this surface gates on two of them.
   const gated = <T>(
@@ -149,7 +149,7 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
    * The shared by-id routes need the permission the ROW's kind demands, which is not known until the
    * row is read — so `gated` cannot take it up front. The shape, exactly:
    *
-   *   1. inside `withTransaction` + `asAppUser`, read the row's kind (tenant-scoped);
+   *   1. inside `withTransaction` + `asAppUser`, read the row's kind;
    *   2. `authorizeManager` for `PERMISSION_FOR[kind]`;
    *   3. act.
    *

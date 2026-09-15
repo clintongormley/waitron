@@ -100,9 +100,8 @@ export async function settleWebhook(
 ): Promise<WebhookOutcome> {
   const tenant = brandTenantId(pathTenantId);
   const ref = { tenantId: pathTenantId, purpose: PURPOSE };
-  // Per-tenant secret selection. `readCredential` is itself tenant-scoped (it opens `withTransaction`),
-  // so the secret this request is verified against belongs to the path tenant and no other — the
-  // guard the cross-secret test proves by deletion.
+  // Secret selection. `readCredential` reads the database's one credential for this purpose and opens
+  // it with the path tenant as AAD, so a secret sealed for any other tenant fails to decrypt.
   const payload = await readCredential(deps.db, deps.ring, tenant, PURPOSE);
   const secretKey = stripeSecretKeyFrom(payload, ref, deps.environment);
   const webhookSecret = hostedWebhookSecretFrom(payload, ref);
@@ -133,7 +132,7 @@ export async function settleWebhook(
   const event = parsed;
 
   // Cross-check the #26 seam: the resolved owner must be the path tenant. `resolvePaymentTenant`
-  // runs on a plain handle OUTSIDE any tenant scope — its SECURITY DEFINER function is the single
+  // runs on a plain handle OUTSIDE any transaction — its SECURITY DEFINER function is the single
   // lookup function, returning only `tenant_id`.
   const resolved = await resolvePaymentTenant(deps.db, event.provider, event.externalRef);
   if (resolved === null) {

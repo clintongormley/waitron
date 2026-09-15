@@ -134,7 +134,7 @@ describe("demo seed end-to-end", () => {
     // A small horizon so the back-dated sales are cheap but non-empty (fills yesterday fully).
     await seedDemoRestaurant(suite.admin, { venue, locale: LOCALE, salesDays: 3 });
 
-    // --- Read the seeded catalogue set and a business day's close in one tenant/app_user scope. ---
+    // --- Read the seeded catalogue set and a business day's close in one app_user transaction. ---
     const read = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       const menus = await listAccessibleCatalogues(tx, venue.locationId);

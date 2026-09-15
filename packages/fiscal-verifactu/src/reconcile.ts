@@ -286,7 +286,7 @@ export async function reconcile(
   return result;
 }
 
-/** Our envios for the requested tenant and expedition month, joined to their registros.
+/** Our envios for the expedition month, joined to their registros (one tenant per database).
  * Records carry no FechaOperacion, so the period filter uses fecha_expedicion_factura. */
 async function rowsForPeriod(
   tx: Transaction,

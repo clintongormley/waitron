@@ -37,7 +37,7 @@ export interface SeedDemoInput {
 
 /**
  * Seed the whole demo restaurant onto an already-provisioned venue: catalogues, floor, staff and
- * media inside one tenant/`app_user` transaction, then the historical sales on their own connections.
+ * media inside one `app_user` transaction, then the historical sales on their own connections.
  */
 export async function seedDemoRestaurant(
   db: Database,
@@ -45,7 +45,7 @@ export async function seedDemoRestaurant(
 ): Promise<void> {
   const { tenantId, locationId } = venue;
 
-  // One tenant/app_user tx for the four in-transaction sub-seeds. `listAvailableProducts` is read at
+  // One app_user tx for the four in-transaction sub-seeds. `listAvailableProducts` is read at
   // the end, inside the SAME tx, so the sales generator draws from exactly what was just seeded.
   const products = await withTransaction(db, async (tx) => {
     await asAppUser(tx);

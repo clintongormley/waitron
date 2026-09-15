@@ -207,7 +207,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
   // `ENROL_RATE_WINDOW_MS`), throwing `device.join_rate_limited` (429).
   const enrolLimiter = deps.enrolRateLimiter ?? createEnrolRateLimiter();
 
-  // Open a tenant-scoped transaction as the app role, confirm the caller's management session carries
+  // Open a transaction as the app role, confirm the caller's management session carries
   // `device.manage`, then run `fn`. Every management route funnels its DB work through here so the gate
   // is applied identically and in exactly one place (purchasing-api's `gated`, permission baked in).
   const gated = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> =>
@@ -220,12 +220,8 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       return fn(tx);
     });
 
-  // A by-id device predicate that ALSO scopes to this tenant — the one place the by-id management
-  // writes build their `.where`. Since RLS was dropped (#255) `withTransaction` no longer isolates by
-  // tenant, so a by-id read OR write must carry its own `tenant_id` scope (CLAUDE.md §3;
-  // till-reroute-S3): a globally-unique device UUID is NOT the query's isolation boundary, so a
-  // request scoped to tenant A must update/read zero of tenant B's rows (→ 404 / omitted), never
-  // reassign or revoke a foreign device.
+  // The by-id device predicate — the one place the by-id management writes build their `.where`. One
+  // tenant per database, so the id alone identifies the device; an unknown id updates 0 rows (→ 404).
   const ownDeviceById = (id: string) => eq(devices.id, id);
 
   // ── Knock (UNAUTHENTICATED) ────────────────────────────────────────────────────────────────────────
@@ -400,7 +396,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       const sessionId = requireManagementSession(c);
       // The deployment holds one tenant per database. Newest enrolment first. The device KIND has no
       // column any more — it is DERIVED from the device's profile form factor (`kindOfFormFactor`), read
-      // through an inner join on the tenant-consistent (tenant_id, device_profile_id), which always
+      // through an inner join on `device_profile_id`, which always
       // matches since `device_profile_id` is NOT NULL with a RESTRICT FK.
       const rows = await gated(sessionId, (tx) =>
         tx
@@ -416,10 +412,6 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
           })
           .from(devices)
           .innerJoin(deviceProfiles, eq(deviceProfiles.id, devices.deviceProfileId))
-          // Scope the list to THIS tenant explicitly — since RLS was dropped (#255) `withTransaction` no
-          // longer isolates SELECTs, so without this a manager sees (and, via the by-id writes below,
-          // could reassign/revoke) every tenant's devices in a multi-tenant DB (CLAUDE.md §3).
-
           .orderBy(desc(devices.enrolledAt)),
       );
       return c.json(
@@ -533,9 +525,8 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       if (Object.keys(set).length === 0) {
         throw new AppError("management.request_invalid", { field: "hardware" });
       }
-      // Tenant + id scope — a by-id write STILL scopes to the tenant (CLAUDE.md §3: one-tenant-per-db
-      // is not the query's isolation boundary), so another tenant's device id updates 0 rows → 404, the
-      // assign-device-profile / revoke by-id idiom. A `receiptPrinterId` naming no printer of this
+      // By-id scope — an unknown device id updates 0 rows → 404, the assign-device-profile / revoke
+      // by-id idiom. A `receiptPrinterId` naming no printer of this
       // tenant reaches the composite `devices_receipt_printer_fk` and is translated to
       // `device.binding_invalid` naming the field (the same `bindingFkField` helper + shape the reassign
       // route uses); any other error rethrows raw.
@@ -579,7 +570,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
             // revoked device is not one. NO token/tokenHash column is selected: the credential never
             // leaves the enrol Set-Cookie header (§device-session), so this list carries only bindings.
             // The device KIND is derived from the profile's form factor (`kindOfFormFactor`) through an
-            // inner join on the tenant-consistent (tenant_id, device_profile_id), always matching since
+            // inner join on `device_profile_id`, always matching since
             // `device_profile_id` is NOT NULL with a RESTRICT FK.
             const deviceRows = await tx
               .select({

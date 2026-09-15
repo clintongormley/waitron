@@ -373,7 +373,7 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
     }),
   );
 
-  /** Read the configured tenant's public display identity inside the same tenant-scoped app-role
+  /** Read the configured tenant's public display identity inside the same app-role
    * transaction as its caller. A missing row means the boot configuration names no tenant. */
   const readVenueName = async (tx: Transaction): Promise<string> => {
     const [venue] = await tx

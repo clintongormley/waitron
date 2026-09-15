@@ -87,8 +87,8 @@ export async function applyVenue(
           // Seed the tenant's admin ONCE. Like ensure-tenant's ON CONFLICT DO NOTHING, this makes a
           // re-run a no-op on a row keyed to the TENANT — the admin belongs to the tenant, not to a
           // venue, so an idempotent same-venue re-run must not add a duplicate admin. A plain insert did exactly
-          // that. `insert … select … where not exists` seeds the admin only if the tenant has none
-          // yet (the explicit tenant_id and role='admin' predicates). Raw SQL like
+          // that. `insert … select … where not exists` seeds the admin only if the database has none
+          // yet (the role='admin' predicate). Raw SQL like
           // every other insert — no @waitron/identity import; the `persons` table exists because the
           // identity migrations run before a venue is applied. `pin_hash` (till) and `password_hash`
           // (dashboard) are already scrypt hashes, hashed at the CLI boundary, never a plaintext
@@ -318,7 +318,7 @@ export async function applyVenue(
  * seed-admin created — the only person who can open a `till.configure` management session the store's
  * `createDeviceProfile` authorises against — opens one, and creates each missing profile with
  * `canvasId: null` (→ the form-factor default canvas at runtime). Names + capabilities are already
- * resolved by the planner. Runs on the caller's tenant-scoped tx.
+ * resolved by the planner. Runs on the caller's tx.
  */
 async function seedDeviceProfiles(
   tx: Transaction,

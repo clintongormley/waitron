@@ -1,8 +1,7 @@
 // Booking operations run on the caller's transaction. Creation and day lists use the
 // configured location; table assignments also check that location. Route handlers
-// own authorization. Every by-id booking read and write scopes cfg.tenantId (creation stamps
-// it) — the id is a globally-unique UUID and withTransaction no longer isolates SELECTs (#255), so
-// it is never the isolation boundary.
+// own authorization. Creation stamps cfg.tenantId; one tenant per database, so a by-id read or
+// write needs only the id.
 import "./errors.js";
 import { and, asc, eq, inArray, type InferSelectModel } from "drizzle-orm";
 import { diningTables, type Transaction } from "@waitron/db";
@@ -128,9 +127,8 @@ export async function listBookings(
 }
 
 /**
- * Read one reservation by id WITHIN the caller's tenant, returning undefined when absent. The id is a
- * globally-unique UUID and `withTransaction` no longer isolates SELECTs (#255), so the read scopes tenantId
- * itself (CLAUDE.md §3). Lifecycle verbs translate absence into booking.not_found.
+ * Read one reservation by id, returning undefined when absent. One tenant per database, so the id
+ * alone identifies the row. Lifecycle verbs translate absence into booking.not_found.
  */
 export async function getBooking(
   tx: Transaction,

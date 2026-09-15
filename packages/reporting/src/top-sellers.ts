@@ -22,8 +22,8 @@ import type { TopSeller, TopSellersInput } from "./types.js";
  * large coffee and a small one are ranked apart, which is what an operator is asking when they ask
  * what sold. The returned `name` is the two joined via `staffPresentationName`, so the row carries the
  * same label a till button shows. Same exclusions and predicates as the VAT roll-up
- * (`aggregateVatByRate`): the explicit tenant predicate scopes the tenant, the node
- * predicate applies only when `nodeId` is given, and `activeSalesClause` drops voided sales and
+ * (`aggregateVatByRate`): the node predicate applies only when `nodeId` is given, and
+ * `activeSalesClause` drops voided sales and
  * F3-canje substitutes. Corrections (rectificativas) are NOT excluded — their negative lines net the
  * quantity and total down, so a returned coffee reduces its rank.
  *

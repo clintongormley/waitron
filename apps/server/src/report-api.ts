@@ -105,8 +105,8 @@ function requireDeclarationType(raw: string | undefined): string {
 }
 
 /**
- * Read the configured data node's location clock, matching both tenant and location
- * on the join. Convert day_cutover to HH:MM. A missing location is a configuration
+ * Read the configured data node's location clock, joining the node to its location.
+ * Convert day_cutover to HH:MM. A missing location is a configuration
  * error surfaced as an opaque server error.
  */
 export async function resolveVenueClock(
@@ -135,7 +135,6 @@ export async function resolveVenueClock(
 
 /**
  * Count active dining tables and open tabs at the data node's location.
- * The query explicitly matches tenant ids and the configured tenant.
  */
 async function countOpenTables(
   tx: Transaction,

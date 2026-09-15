@@ -160,7 +160,7 @@ export const BOOKINGS_ROUTES: ModuleRoutes = {
   mount(app, ctx: ModuleRouteContext, log: Logger): void {
     const { db, cfg, core } = ctx;
 
-    // Open a tenant-scoped transaction as the app role, confirm the caller's management session carries
+    // Open a transaction as the app role, confirm the caller's management session carries
     // BOOKING_WRITE, then run `fn` with the tx AND the authorization result. Every route funnels its DB
     // work through here so the gate is applied identically and in exactly one place. `fn` receives
     // `{ authorizedBy }` (the person id the session resolved to) so the create route can stamp
@@ -181,7 +181,7 @@ export const BOOKINGS_ROUTES: ModuleRoutes = {
     // The three no-body lifecycle moves (cancel / no-show / complete) are byte-for-byte identical apart
     // from the URL suffix and the verb — `mountCourseVerb`'s booking parallel (till-api.ts). Session gate
     // first (→ 401), `:id` screened to a uuid (→ `shared.invalid_id` 400 before any DB work), then the verb
-    // under `gated` (BOOKING_WRITE + tenant/`app_user` scope), 204 on success. `gated`/`cfg` are captured.
+    // under `gated` (BOOKING_WRITE + `app_user` scope), 204 on success. `gated`/`cfg` are captured.
     const mountBookingLifecycleVerb = (
       suffix: string,
       verb: (tx: Transaction, cfg: BookingConfig, id: string) => Promise<void>,

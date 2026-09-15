@@ -377,7 +377,7 @@ const run = createErrorBoundary(STATUS, "management.failed");
  * it here as `person.not_found` (a caller-supplied uuid, safe to echo) turns that 500 into a
  * clean 404. This screens SHAPE only — it does NOT check existence: a WELL-FORMED id that names
  * no row passes this guard; the identity operation then returns `person.not_found`. Every staff
- * route that takes a person id shares this shape guard before its tenant-scoped lookup.
+ * route that takes a person id shares this shape guard before its lookup.
  */
 function requirePersonId(id: string): string {
   if (!isUuid(id)) throw new AppError("person.not_found", { personId: id });
@@ -486,7 +486,7 @@ function requireVenueCfg(deps: ManagementApiDeps): TillConfig {
 
 /**
  * The one authorize gate every floor-zone + table config route (FP-1) runs its DB work through: open a
- * tenant-scoped transaction as the app role, confirm the caller's management session carries
+ * transaction as the app role, confirm the caller's management session carries
  * `venue.configure`, then run `fn`. Extracted verbatim from the eight zone/table routes so the gate is
  * applied identically and in exactly one place (the `gated` seam `catalogue-api.ts` uses). The route's
  * own `requireManagementSession` (→ 401) still runs FIRST, BEFORE this — this helper only carries the
@@ -1254,7 +1254,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   // The deployment holds one tenant per database. The dashboard's receipt-trim editor
   // surface. Both routes are gated (`requireManagementSession` first, 401 before any DB work) and
   // every DB touch runs under `withTransaction` + `asAppUser`, in this database; the receipt store
-  // explicitly keys rows by tenant id. The receipt routes read/write the tenant's own
+  // upserts on the tenant id. The receipt routes read/write the tenant's own
   // `tenant_receipts` row (SP-B4 — the trim moved out of the old widget-layout model, now
   // removed). The PUT delegates the authorize + validate + upsert to `@waitron/layouts`'s
   // `putReceipt`; the GET calls `getReceipt`, which does NOT authorize (it is shared with the
@@ -1315,8 +1315,8 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   // The deployment holds one tenant per database. The dashboard's reusable-canvas CRUD
   // and the tenant's base theme (design §4/§9, SP-A.2 §16.3). All routes are gated
   // (`requireManagementSession` first, 401 before any DB work) and every DB touch runs
-  // `withTransaction` + `asAppUser`, in this database; the canvas/theme stores explicitly filter or
-  // key rows by tenant id. The READS (`GET /canvases`, `/canvases/:id`, `/theme`) carry their own
+  // `withTransaction` + `asAppUser`, in this database; the theme store upserts on the tenant id and
+  // the canvas store reads by id alone. The READS (`GET /canvases`, `/canvases/:id`, `/theme`) carry their own
   // explicit `authorizeManager(..., "layout.configure")` — `listCanvases`/`getCanvas`/
   // `getTenantTheme` do NOT self-authorize (mirroring `GET /management-api/receipt`) — while the
   // WRITES delegate the gate to the store fns
@@ -1495,8 +1495,8 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   // device-profile CRUD (design 2026-09-05 §5.1) — a named capability set + optional default
   // canvas that a device (a later task's reassign route) points at. Mirrors the canvas block: all
   // routes are gated (`requireManagementSession` first, 401 before any DB work) and every DB
-  // touch runs `withTransaction` + `asAppUser`, in this database; the device-profile store explicitly
-  // filters rows by tenant id. The READS (`GET /device-profiles`, `/device-profiles/:id`) carry
+  // touch runs `withTransaction` + `asAppUser`, in this database; the device-profile store reads by
+  // id alone. The READS (`GET /device-profiles`, `/device-profiles/:id`) carry
   // their own explicit `authorizeManager(..., "layout.configure")` —
   // `listDeviceProfiles`/`getDeviceProfile` do NOT self-authorize (the canvas-read shape) — while
   // the WRITES delegate the gate to the store fns (`createDeviceProfile`/`updateDeviceProfile`/

@@ -501,10 +501,8 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
   app.get("/management-api/print-agents", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      // Tenant-scoped like every other read (§3): since RLS was dropped (#255) `withTransaction` no longer
-      // isolates SELECTs, so without the explicit `tenantId` predicate a manager would see every
-      // tenant's agents in a multi-tenant DB (mirrors the revoke/allow routes below and device-api.ts).
-      // Newest enrolment first. The `token_hash` is NEVER selected — a secret never leaves the row.
+      // Every agent in the database is this tenant's (one tenant per database). Newest enrolment
+      // first. The `token_hash` is NEVER selected — a secret never leaves the row.
       const rows = await gated(sessionId, (tx) =>
         tx
           .select({
@@ -612,10 +610,8 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
   // The dashboard's create flow (design §6/§10): every device the agents currently report, each carrying
   // the registered printer it matches (`printerId` — a usb/bluetooth device on its `local_key`, a network
   // device on host:port) and the time of the report that last carried it (`lastSeenAt`). Stale entries
-  // (a device the box stopped reporting) are pruned by the TTL first. Two tenant-scoped reads back the
-  // merge — the registered printers' ids and connection columns, and the agents' names — both under an
-  // explicit `tenant_id` predicate (CLAUDE.md §3: a list read carries its own, one-tenant-per-db is not
-  // the query boundary).
+  // (a device the box stopped reporting) are pruned by the TTL first. Two reads back the merge — the
+  // registered printers' ids and connection columns, and the agents' names.
   app.get("/management-api/discovered-printers", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -630,8 +626,8 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             host: printers.host,
             port: printers.port,
           })
-          .from(printers), // tenant predicate — CLAUDE.md §3
-        agents: await tx.select({ id: printAgents.id, name: printAgents.name }).from(printAgents), // tenant predicate — CLAUDE.md §3
+          .from(printers),
+        agents: await tx.select({ id: printAgents.id, name: printAgents.name }).from(printAgents),
       }));
       const names = new Map(agents.map((a) => [a.id, a.name]));
       // A usb/bluetooth device matches a registered printer on its stable local key; a network printer
@@ -959,8 +955,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
   // ── List a station's printers (printer.manage)
   // ─────────────────────────────────────────────────── The station-centric read: which printers
   // a station prints to (the config editor's per-station view). `:sid` is
-  // `requireUuidParam`-screened first. `listStationPrinters` explicitly filters by
-  // `cfg.tenantId`.
+  // `requireUuidParam`-screened first.
   app.get("/management-api/stations/:sid/printers", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -992,8 +987,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
   // persisted value across a reload. Lives beside the sibling `PATCH
   // …/tills/:id/receipt-printer`, funnelled through the SAME `gated` helper so `printer.manage`
   // is enforced identically (the by-deletion proof on that helper covers this route too). Runs in
-  // `gated`'s `withTransaction` + `asAppUser` transaction, with an explicit `tenant_id` predicate
-  // matching the sibling till/location writes. Ordered by name for a stable list.
+  // `gated`'s `withTransaction` + `asAppUser` transaction. Ordered by name for a stable list.
   app.get("/management-api/tills", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1006,7 +1000,6 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             receiptPrinterId: tills.receiptPrinterId,
           })
           .from(tills)
-
           .orderBy(tills.name),
       );
       return c.json(rows);
@@ -1038,9 +1031,8 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       const printerId =
         body.printerId === null ? null : requireBodyUuid(body.printerId, "printerId");
       await gated(sessionId, async (tx) => {
-        // The till must exist in this tenant (checked by the explicit tenant predicate). Read its
-        // location so a named printer is validated against the till's OWN location — "from the
-        // location's printers" (§5).
+        // The till must exist. Read its location so a named printer is validated against the till's
+        // OWN location — "from the location's printers" (§5).
         const [till] = await tx
           .select({ locationId: tills.locationId })
           .from(tills)
@@ -1072,9 +1064,8 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
   // per-location print-mode toggle (`auto`/`on_request`/`never`, which the print-on-sale hook
   // reads). Same `gated` / `printer.manage` gate + `requireUuidParam` id screen as the till route
   // above. `mode` is screened to the `receipt_print_mode` enum's members
-  // (`management.request_invalid`, 400, before the enum column). An unknown location or one
-  // excluded by the tenant predicate is `management.request_invalid` (400) — there is no
-  // `location.*` code, the same request-shape treatment the unknown-till case above takes.
+  // (`management.request_invalid`, 400, before the enum column). An unknown location is
+  // `management.request_invalid` (400) — there is no `location.*` code, the same request-shape treatment the unknown-till case above takes.
   app.patch("/management-api/locations/:id/receipt-print-mode", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1101,9 +1092,8 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
   // hook reads). One-for-one SIBLING of the receipt-print-mode route above: same `gated` /
   // `printer.manage` gate + `requireUuidParam` id screen. `policy` is screened to the
   // `drawer_open_policy` enum's members (`management.request_invalid`, 400, before the enum
-  // column). An unknown location or one excluded by the tenant predicate is
-  // `management.request_invalid` (400) — there is no `location.*` code, the same request-shape
-  // treatment the receipt-print-mode route takes.
+  // column). An unknown location is `management.request_invalid` (400) — there is no `location.*`
+  // code, the same request-shape treatment the receipt-print-mode route takes.
   app.patch("/management-api/locations/:id/drawer-open-policy", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);

@@ -181,7 +181,7 @@ function declarations(modules: readonly WaitronModule[]): ConfigurationTransferT
   return ordered;
 }
 
-/** Read only explicitly declared, tenant-scoped configuration rows from one consistent transaction. */
+/** Read every row of the explicitly declared configuration tables (one tenant per database). */
 export async function exportConfigurationTables(
   db: Database | Transaction,
   tenantId: string,

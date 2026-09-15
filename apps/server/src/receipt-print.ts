@@ -27,8 +27,8 @@ export interface ReceiptPrinter extends ReceiptPrinterSettings {
 
 /**
  * Resolve the calling till's ACTIVE receipt printer, or `undefined` when none applies (no printer set,
- * or the named one is inactive). Joined `tills → printers` on the tenant-consistent
- * (tenant_id, receipt_printer_id) key and filtered to `active = true`; `FOR SHARE OF printers` row-locks
+ * or the named one is inactive). Joined `tills → printers` on `receipt_printer_id` and
+ * filtered to `active = true`; `FOR SHARE OF printers` row-locks
  * the matched printer so a concurrent `deactivatePrinter` cannot flip it inactive before
  * `enqueuePrintJob`'s READ-COMMITTED re-check. Shared by all three consumers — the
  * print-on-sale hook, the reprint, and the manual drawer-open — so the ONE place a till's printer is

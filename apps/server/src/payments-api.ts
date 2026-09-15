@@ -36,8 +36,8 @@ import type { TillConfig } from "./till-config.js";
 import type { Logger } from "./logger.js";
 
 /**
- * Everything `mountPaymentsApi` needs. One tenant per database (`cfg.tenantId` scopes every query and
- * every by-id read — one-tenant-per-db is NOT the query's isolation boundary, CLAUDE.md §3). `ring` is
+ * Everything `mountPaymentsApi` needs. One tenant per database, so no query filters by `cfg.tenantId`
+ * and a by-id read needs only the id. `ring` is
  * the vault key ring the host opened once at boot: this is the FIRST dashboard write to the credential
  * vault. `pool` is the lazy card-provider pool — these routes only `evict` it so a credential change
  * takes effect without a restart; the pay path (Task 12) is what `get`s from it. `providers` is the
@@ -117,13 +117,13 @@ function screenStringMap(body: Record<string, unknown>): Record<string, string> 
 /**
  * Mounts the payments-management routes on an existing Hono app — the `mountPrintApi` convention.
  * Every route is `requireManagementSession`-gated then funnels its DB work through the local `gated`
- * helper, which opens a tenant-scoped app-role transaction and `authorizeManager`s `payments.manage`
+ * helper, which opens an app-role transaction and `authorizeManager`s `payments.manage`
  * before the op runs, in exactly one place. Provider `connect`/reader calls reach the network, so they
  * run OUTSIDE any transaction (a `withTransaction` is never held across a provider round-trip); the gate
  * runs first, in its own `gated` call, so an unauthorised caller never reaches the provider.
  */
 export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger): void {
-  // Open a tenant-scoped transaction as the app role, confirm the caller's management session carries
+  // Open a transaction as the app role, confirm the caller's management session carries
   // `payments.manage`, then run `fn`. Every route funnels its DB work through here so the gate is
   // applied identically and in exactly one place (print-api.ts's seam). Proven by deletion: removing
   // the `authorizeManager(...)` call makes a staff session succeed on every gated route.
@@ -267,9 +267,8 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
   app.get("/management-api/payments/providers", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      // "Connected" = a sealed credential exists for the seat's purpose. Read the purposes THIS tenant
-      // holds (metadata only — no ciphertext, no decrypt, never a secret), scoped by the explicit
-      // `tenant_id` predicate (CLAUDE.md §3, one-tenant-per-db is not the query boundary).
+      // "Connected" = a sealed credential exists for the seat's purpose. Read the purposes the database
+      // holds (metadata only — no ciphertext, no decrypt, never a secret).
       const rows = await gated(sessionId, (tx) =>
         tx.select({ purpose: tenantCredentials.purpose }).from(tenantCredentials),
       );
@@ -335,7 +334,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       await gated(sessionId, async (tx) => {
         const seat = cardProviderById(deps.providers, id); // payment.provider_unknown on a bad id
         // Refuse while any ACTIVE reader still uses this provider — the operator disables those first.
-        // `activeReaders` is a COUNT (never a reader id or a secret), scoped to the tenant.
+        // `activeReaders` is a COUNT (never a reader id or a secret).
         const active = await tx
           .select({ id: cardReaders.id })
           .from(cardReaders)
@@ -358,7 +357,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       // Active AND disabled: `active` on each row lets the dashboard show a disabled reader (historical
-      // payments still resolve its name). `deviceCount` comes from a SEPARATE tenant-scoped aggregate
+      // payments still resolve its name). `deviceCount` comes from a SEPARATE aggregate
       // rather than a correlated subquery over the `.from()` base — a `sql` scalar correlated to the
       // base table binds to the subquery's table and returns a wrong answer (CLAUDE.md §3, #152).
       const { readers, counts } = await gated(sessionId, async (tx) => ({
@@ -449,8 +448,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const readerId = requireUuidParam(c.req.param("id"), "CardReaderId");
-      // Load the reader BY ID with an explicit `tenant_id` predicate — a by-id read still scopes to the
-      // tenant (CLAUDE.md §3); another tenant's reader id is `reader.not_found`, never readable.
+      // Load the reader BY ID — an unknown reader id is `reader.not_found`, never readable.
       const reader = await gated(sessionId, async (tx) => {
         const [row] = await tx
           .select({ provider: cardReaders.provider, providerRef: cardReaders.providerRef })
@@ -513,8 +511,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       }
       const readerId = body.readerId === null ? null : requireBodyUuid(body.readerId, "readerId");
       await gated(sessionId, async (tx) => {
-        // The device must be THIS tenant's (by-id, tenant-scoped) — an unknown/foreign device id is
-        // `device.not_found`, which also keeps the composite device FK from 23503-ing an opaque 500.
+        // The device must exist (by id) — an unknown device id is `device.not_found`, which also keeps the composite device FK from 23503-ing an opaque 500.
         const [device] = await tx
           .select({ id: devices.id })
           .from(devices)
@@ -525,8 +522,8 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
           await tx.delete(deviceCardReaders).where(eq(deviceCardReaders.deviceId, deviceId));
           return;
         }
-        // A named reader must be THIS tenant's AND active — a foreign or disabled reader is
-        // `reader.not_found`, never assignable (CLAUDE.md §3; keeps the composite reader FK from a 500).
+        // A named reader must exist AND be active — an unknown or disabled reader is `reader.not_found`,
+        // never assignable (keeps the composite reader FK from a 500).
         const [reader] = await tx
           .select({ id: cardReaders.id })
           .from(cardReaders)

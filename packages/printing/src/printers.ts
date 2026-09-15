@@ -187,11 +187,10 @@ export interface PrinterRow {
 /**
  * Apply a partial edit to a printer (design §6). Only the fields PRESENT in `patch` are written —
  * an absent field is left unchanged, an explicit `null` clears a nullable one — so the caller's
- * screen decides what changes. `0` rows updated (an unknown id or one excluded by the tenant
- * predicate) → `printer.not_found`. The transport-fields CHECK / local_key UNIQUE are the DB backstop,
- * translated to `printer.invalid_config` / `printer.already_registered` (`createPrinter`'s reasoning,
- * for the update path). The explicit tenant predicate limits the update to `cfg.tenantId`; all values
- * bind as `$n`.
+ * screen decides what changes. `0` rows updated (an unknown id) → `printer.not_found`. The
+ * transport-fields CHECK / local_key UNIQUE are the DB backstop, translated to
+ * `printer.invalid_config` / `printer.already_registered` (`createPrinter`'s reasoning, for the
+ * update path). One tenant per database, so the id alone selects the row; all values bind as `$n`.
  */
 export async function updatePrinter(
   tx: Transaction,
@@ -236,8 +235,8 @@ export async function updatePrinter(
 /**
  * Deactivate a printer (design §2b/§6) — flip `active = false`, NEVER a hard DELETE: a
  * `print_jobs` history references it and `app_user` holds no DELETE on `printers`. `0` rows
- * (unknown id or one excluded by the tenant predicate) → `printer.not_found`. The explicit tenant
- * predicate limits the update to `cfg.tenantId`; values bind as `$n`.
+ * (unknown id) → `printer.not_found`. One tenant per database, so the id alone selects the row;
+ * values bind as `$n`.
  *
  * `active = false` DISABLES the printer for both directions, not a soft-hide from the list: enqueue
  * rejects it as `printer.not_found` (`enqueuePrintJob`'s `active = true` pre-check) and the agent stops
@@ -260,9 +259,8 @@ export async function deactivatePrinter(
 
 /**
  * List this tenant's printers by name (design §6, the Impresoras surface). `printers` carries no
- * created_at, so the stable order for a config list is `name` rather than an insertion proxy. The
- * explicit tenant predicate limits the read to `cfg.tenantId`, matching `authenticateAgent` and
- * `enqueuePrintJob`. Returns both active and deactivated printers so the surface can show and
+ * created_at, so the stable order for a config list is `name` rather than an insertion proxy. Every
+ * printer in the database is this tenant's, so the read carries no tenant predicate. Returns both active and deactivated printers so the surface can show and
  * reactivate them.
  */
 export async function listPrinters(tx: Transaction, cfg: PrintConfig): Promise<PrinterRow[]> {
@@ -283,6 +281,5 @@ export async function listPrinters(tx: Transaction, cfg: PrintConfig): Promise<P
       active: printers.active,
     })
     .from(printers)
-
     .orderBy(printers.name);
 }

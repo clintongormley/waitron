@@ -63,7 +63,7 @@ export function mountDiagnosticsApi(app: Hono, deps: DiagnosticsApiDeps, log: Lo
   const run = createErrorBoundary(STATUS, "diagnostics.failed");
 
   // The one authorize gate every route runs its request through: refuse an unauthenticated/forged
-  // session (401) first, then open a tenant-scoped transaction as the app role and confirm the
+  // session (401) first, then open a transaction as the app role and confirm the
   // session carries `diagnostics.view` (403 otherwise). Extracted so the gate is applied identically
   // in exactly one place — the `withVenueAuth` seam management-api.ts uses.
   const authorize = async (c: Context): Promise<void> => {

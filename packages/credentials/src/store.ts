@@ -23,8 +23,8 @@ export interface CredentialMeta {
 }
 
 /**
- * Reads and decrypts one credential, matching its tenant id and purpose. The tenant id is also
- * authenticated as AAD, so moving ciphertext to another tenant makes decryption fail.
+ * Reads and decrypts one credential, matching its purpose (one tenant per database). The tenant id is
+ * authenticated as AAD, so ciphertext sealed for another tenant fails to decrypt.
  */
 export async function getCredential(
   tx: Transaction,

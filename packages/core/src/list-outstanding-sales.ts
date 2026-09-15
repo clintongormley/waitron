@@ -24,7 +24,7 @@ export interface OutstandingSale {
 /**
  * Lists a tenant's outstanding sales: ordinary sales (`corrects_sale_id` NULL) that are neither an F3
  * canje substitute (already paid via their tickets — AEAT "no cobrar dos veces"), settled, nor
- * voided. The outer query and every subquery filter by tenant. This is a plain read.
+ * voided. This is a plain read; `tenantId` is not read, as the database holds one tenant.
  */
 export async function listOutstandingSales(
   tx: Transaction,

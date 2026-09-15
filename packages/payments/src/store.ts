@@ -359,7 +359,7 @@ export async function findCapturedPaymentForWorkingOrder(
 }
 
 /** The shared body of both captured-payment reads: the most-recent captured/accepted-offline payment
- * for a working order, tenant-scoped, optionally narrowed to ONE provider. `provider` omitted selects
+ * for a working order, optionally narrowed to ONE provider. `provider` omitted selects
  * across every provider — Drizzle's `and()` drops an `undefined` clause, so the same query serves the
  * provider-filtered §4 pre-check and the ticket path's any-provider read. The `desc nulls last`
  * ordering and the at-most-one-per-order invariant are documented on
@@ -388,8 +388,7 @@ async function selectCapturedForWorkingOrder(
  * Returns null when none (a cash sale, or a card sale whose payment row is absent). Shares
  * `selectCapturedForWorkingOrder` with the provider-filtered read above, passing no `provider` so the
  * query spans every provider; the only difference is the null (not undefined) empty return this
- * caller wants. Tenant-scoped explicitly, like every read here (CLAUDE.md §3): one-tenant-per-database
- * is not the query's isolation boundary. */
+ * caller wants. */
 export async function findCapturedPaymentForWorkingOrderAnyProvider(
   tx: Transaction,
   key: { tenantId: string; workingOrderId: string },
@@ -397,8 +396,7 @@ export async function findCapturedPaymentForWorkingOrderAnyProvider(
   return (await selectCapturedForWorkingOrder(tx, key)) ?? null;
 }
 
-/** A payment row plus its tenant, looked up by (provider, paymentRef) WITHOUT a tenant filter — the
- * lookup a provider uses when it holds only its own reference (e.g. the fake's `void`/`refund`, or a
+/** A payment row plus its tenant, looked up by (provider, paymentRef) alone — the lookup a provider uses when it holds only its own reference (e.g. the fake's `void`/`refund`, or a
  * real adapter's webhook). */
 export interface PaymentRecord extends PaymentRow {
   tenantId: string;
@@ -438,9 +436,9 @@ const FORWARDABLE_COLUMNS = {
 
 /**
  * The predicate both forward-queue reads share — kept as one function so the twins below cannot
- * drift, which they briefly did when only one of them gained the tenant filter.
+ * drift.
  *
- * Filters by tenant, provider and accepted_offline state.
+ * Filters by provider and accepted_offline state; one tenant per database, so `tenantId` is not read.
  */
 function forwardableWhere(tenantId: string, provider: string) {
   void tenantId;
@@ -452,8 +450,7 @@ function forwardableWhere(tenantId: string, provider: string) {
  * SKIP LOCKED so concurrent `forward` passes partition the queue and never double-advance a row.
  * State IS the queue (no outbox table). Ordered by `created_at` for a stable pass.
  *
- * Takes the same `tenantId` as its unlocked twin, and for the same reason — see
- * `forwardableWhere`. Its only caller today is `FakePaymentProvider`, whose single-transaction
+ * Shares its predicate with its unlocked twin through `forwardableWhere`. Its only caller today is `FakePaymentProvider`, whose single-transaction
  * drain has no network call to split around; a REAL adapter uses `listAcceptedOffline` instead so
  * it never holds a row lock across the processor round-trip.
  */
@@ -504,7 +501,7 @@ export interface AttemptingPayment {
  * `resolvePending` pass. Unlocked for the same reason `listAcceptedOffline` is: the processor
  * lookup that follows is a network call, and the T2 advances (`captureAttempting` /
  * `failAttempting`) each match only a row still `attempting`, so two concurrent passes are
- * harmless. Tenant-scoped explicitly (CLAUDE.md §3). */
+ * harmless. */
 export async function listAttempting(
   tx: Transaction,
   tenantId: string,
@@ -747,9 +744,9 @@ export interface ReconcilableRow {
  * timestamp columns needs a usable index on BOTH arms before the planner will build a BitmapOr;
  * there is an index leading `(tenant_id, provider, settled_at)` but none on `created_at`, so the OR
  * form degrades to a scan of the tenant's whole payments history on every sweep — for a tenant with
- * a year of payments, every row, every night. Split, the `captured`/`settled` arm uses
- * `payments_reconcile_idx` fully, and the `initiated` arm uses its leading `(tenant_id, provider)`
- * columns and then filters a set that is small and short-lived by nature (a minted-but-unpaid hosted
+ * a year of payments, every row, every night. Split, the `captured`/`settled` arm lines up with
+ * `payments_reconcile_idx`'s `(provider, settled_at)` columns, and the `initiated` arm with its
+ * `provider` column and then filters a set that is small and short-lived by nature (a minted-but-unpaid hosted
  * payment resolves or expires within minutes). A second index on `created_at` would buy the same
  * thing at the cost of another write-path index, which is why it is not the answer here.
  *
@@ -757,8 +754,8 @@ export interface ReconcilableRow {
  * single query's created_at ordering AND is fully deterministic (the old single `ORDER BY
  * created_at` left same-instant rows in whatever order the plan produced them).
  *
- * Both arms filter by `payments.tenantId`. The join's tenant equality keeps the two tables
- * consistent with each other; the explicit predicate scopes the result to the requested tenant.
+ * Neither arm filters by tenant: one tenant per database, so every payment row is this tenant's. The
+ * index still leads with `tenant_id`, a column neither arm names.
  */
 export async function listReconcilable(
   tx: Transaction,
@@ -837,10 +834,8 @@ const CHUNK_SIZE = 1000;
  * than the local rows (settlement lags capture by days), so a window-difference would manufacture
  * false positives for payments whose local row simply sits outside the audited period.
  *
- * Scopes by provider and reference only. With one tenant per database (CLAUDE.md §3) the table
- * holds a single tenant's payments, so no other tenant's `external_ref` exists to match — the
- * per-query tenant predicate that once scoped this check has been dropped, as it has on every read.
- * The `tenantId` argument is retained until Phase B removes the column and the insert shape fields.
+ * Scopes by provider and reference only: one tenant per database, so the table holds a single
+ * tenant's payments and no other tenant's `external_ref` exists to match. `tenantId` is not read.
  */
 export async function existingReferences(
   tx: Transaction,
@@ -891,11 +886,9 @@ export async function markReconcileRemediated(
  * would lengthen lock contention with the concurrent sweeps this feature explicitly supports (see
  * `reconcile.concurrency.test.ts`), worst-case largest for a large report with few or no local rows.
  *
- * Returns a map keyed by `workingOrderId`; an id that does not exist (or that the tenant predicate excludes) is simply
- * absent from it, which the caller reads as "skip this hint" — the same contract the unbatched
- * single-lookup form expressed with `undefined`.
- *
- * The explicit `workingOrders.tenantId` predicate scopes the lookup to the requested tenant.
+ * Returns a map keyed by `workingOrderId`; an id that does not exist is simply absent from it,
+ * which the caller reads as "skip this hint" — the same contract the unbatched single-lookup form
+ * expressed with `undefined`. `tenantId` is not read: one tenant per database.
  */
 export async function tillsForWorkingOrders(
   tx: Transaction,

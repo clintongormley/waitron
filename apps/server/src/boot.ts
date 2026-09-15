@@ -406,7 +406,7 @@ export function withPendingSweep(
  * The per-pass enumerator `withPendingSweep` calls: the demo/prepare simulator (if one was built),
  * plus every pooled card provider this tenant has a SEALED CREDENTIAL for — the same
  * credential-presence signal `payments-api`'s GET providers and `/api/pay`'s connected pre-check use.
- * Read EACH pass, as the app role under the tenant, so a provider connected mid-run is swept next
+ * Read EACH pass, as the app role, so a provider connected mid-run is swept next
  * pass without a restart. A provider with no sealed credential is NOT swept (its `resolvePending`
  * would only fail on a missing credential), which is the negative control the test pins.
  *
@@ -2171,7 +2171,7 @@ export async function startServer(
     environment: config.environment,
     stateDir: config.stateDir,
     jitterSeed: till.nodeId,
-    // The venue's real wall clock (tz + business-day cutover), tenant-scoped and keyed by this node —
+    // The venue's real wall clock (tz + business-day cutover), keyed by this node —
     // the same read `report-api` uses, so an `at: "auto"` / wall-clock schedule fires in the venue's
     // local time rather than the interim UTC placeholder the previous task carried.
     readClock: () =>

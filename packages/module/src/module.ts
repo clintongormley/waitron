@@ -74,8 +74,8 @@ export type ModulePermission = { readonly permission: string; readonly grantedFr
  *
  * The returned Map carries one entry PER input `tableId` (`reservedTime` null when the table has no
  * imminent reservation), so the merge is a plain per-row lookup. `reservedTime` is the venue-local
- * `HH:MM` the floor renders as "Reserved HH:MM", already normalised by the annotator. `cfg` is scoped
- * to tenant AND location (a by-id/by-location read still scopes to the tenant — CLAUDE.md §3).
+ * `HH:MM` the floor renders as "Reserved HH:MM", already normalised by the annotator. `cfg` carries
+ * the location an annotator scopes its reads to.
  */
 export interface FloorAnnotator {
   annotate(

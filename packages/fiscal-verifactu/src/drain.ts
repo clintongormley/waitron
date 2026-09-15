@@ -489,10 +489,8 @@ async function recoverStaleClaims(tx: Transaction, tenantId: string, now: Date):
  * from, and `intentos` (returned already incremented) is what `backoffBatch` computes THIS
  * attempt's wait from if the submit below fails.
  *
- * `FOR UPDATE OF e SKIP LOCKED`: two tenants' claims never contend (each `drainTenant` call is
- * scoped to one `tenantId`, so this WHERE never matches another tenant's rows), but two concurrent
- * drainers racing the SAME tenant do — e.g. two scheduler instances, or a retried call overlapping
- * a slow one. Without row locking here, both transactions' plain `SELECT` would each see the same
+ * `FOR UPDATE OF e SKIP LOCKED`: the database holds one tenant, so two concurrent drainers race
+ * over the same rows — e.g. two scheduler instances, or a retried call overlapping a slow one. Without row locking here, both transactions' plain `SELECT` would each see the same
  * `pendiente` rows (READ COMMITTED takes a fresh per-statement snapshot, but neither SELECT blocks
  * on the other), and both would go on to submit the SAME batch to AEAT — a genuine duplicate
  * submission, not merely a wasted query. `FOR UPDATE` alone would already prevent this (the second

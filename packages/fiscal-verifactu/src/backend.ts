@@ -773,7 +773,7 @@ export class VerifactuBackend implements FiscalBackend {
    * How many of this node's records AEAT has not yet confirmed — the art. 16.4 unsent count
    * (node-id rekey, 2026-08-03: the chain is per-node, so the unsent count is per-node too).
    *
-   * Filters on `tenant_id` explicitly, and opens its OWN `withTransaction` because it takes no caller
+   * Opens its OWN `withTransaction` because it takes no caller
    * transaction (unlike `filedReceiptFor` and `checkIntegrity`, which are handed one).
    */
   async pendingCount(tenantId: TenantId, nodeId: NodeId): Promise<number> {

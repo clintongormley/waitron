@@ -6,7 +6,7 @@ import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { readVenueTimeZone } from "./venue-time-zone.js";
 
-// PGlite exercises the read and tenant predicate; no concurrency or privilege claim is made.
+// PGlite exercises the read and its location predicate; no concurrency or privilege claim is made.
 let tenantId: string;
 let locationId: string;
 const suite = usePgliteDb({

@@ -180,7 +180,7 @@ export interface PendingSwapRow {
 }
 
 /**
- * The tenant's ACCEPTED swaps awaiting a manager decision, ordered by `created_at`. Tenant-scoped, NOT
+ * The tenant's ACCEPTED swaps awaiting a manager decision, ordered by `created_at`. NOT
  * location-scoped: `shift_swaps` carries no `location_id` (`schema/shift-swaps.ts`) — the location
  * lives on the referenced shifts — so the queue is the whole tenant's accepted swaps (design §3a).
  */

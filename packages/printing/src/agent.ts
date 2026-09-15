@@ -21,7 +21,7 @@ import { verifySecret } from "@waitron/identity";
 /**
  * The tenant + venue scope an agent is minted under. The route resolves it (single-tenant deli
  * deployment, `deps.tenantId` + the location) and passes it down, so this verb never derives scope
- * from client input. `authenticateAgent` reads only `tenantId` (typed narrower at its call site).
+ * from client input. `authenticateAgent` takes only the `tenantId` shape and does not read it.
  */
 export interface PrintAgentConfig {
   tenantId: string;
@@ -43,8 +43,8 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  * The agent-auth CORE (§3a, Ruling 5). Resolves a presented bearer token STRING to its agent id, or
  * throws `agent.unauthorized`. The Task-6 Hono wrapper (`requireAgent`) extracts the
  * `Authorization: Bearer <token>` header and calls this; header parsing is that wrapper's trivial
- * concern, so this core takes a plain string and never sees Hono. The `tx` is already tenant-scoped by
- * that wrapper (`withTransaction` + `asAppUser`), the machine-to-machine shape.
+ * concern, so this core takes a plain string and never sees Hono. The `tx` is opened by that wrapper
+ * (`withTransaction` + `asAppUser`), the machine-to-machine shape.
  *
  * The token is `${agentId}.${secret}`: the id SELECTS the row (scrypt is per-row-salted, so the id is
  * needed to fetch the salt) and the secret VALIDATES it. Every failure — a malformed token, a
@@ -81,9 +81,8 @@ export async function authenticateAgent(
   const [row] = await tx
     .select({ tokenHash: printAgents.tokenHash })
     .from(printAgents)
-    // `active = true` is the revocation filter: a revoked agent is simply not found. The explicit
-    // `tenant_id` predicate limits the lookup to `cfg.tenantId`, matching the predicate on
-    // `acceptPrintAgentJoinRequest`'s consuming DELETE. All bind as `$n`, never string-concatenated.
+    // `active = true` is the revocation filter: a revoked agent is simply not found. All bind as `$n`,
+    // never string-concatenated.
     .where(and(eq(printAgents.id, agentId), eq(printAgents.active, true)));
   if (row === undefined) throw new AppError("agent.unauthorized", {});
   // Constant-time scrypt check (REUSED, never home-rolled): the secret is never compared with `===`.

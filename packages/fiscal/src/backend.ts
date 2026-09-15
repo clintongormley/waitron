@@ -335,8 +335,8 @@ export interface FiscalBackend {
 
   /**
    * Whatever this backend must check about what it has already recorded, before recording
-   * anything more. `tenantId` is passed explicitly — the caller is always inside a tenant-scoped
-   * transaction and already holds it, so the backend need not re-derive it. `nodeId` because the
+   * anything more. `tenantId` is passed explicitly — the caller already holds
+   * it, so the backend need not re-derive it. `nodeId` because the
    * chain being verified is per-node (node-id rekey, 2026-08-03). The caller records the report and
    * surfaces it to staff; it must NEVER branch on `ok` to abandon the sale. No fiscal condition
    * blocks a sale (spec §4), and a backend whose regime has nothing to check answers

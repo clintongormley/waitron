@@ -48,7 +48,7 @@ describe("membership trust-set accessors", () => {
   });
 
   it("readMembershipTrustSet returns every keyed node (two-node topology)", async () => {
-    // A second node in the SAME tenant, so both are in the trust set the tenant-scoped read returns.
+    // A second node in the SAME database, so both are in the trust set the read returns.
     const nodeId2 = await seedNode(pg.db, tenantId, await seedLocation(pg.db, tenantId));
     await setNodePublicKey(pg.db, tenantId, nodeId, "KEY_A");
     await setNodePublicKey(pg.db, tenantId, nodeId2, "KEY_B");

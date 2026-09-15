@@ -744,8 +744,8 @@ describe("tenant incident reads", () => {
     expect(rows.map((r) => r.tillId)).toEqual([secondTill.tillId, tillId]);
   });
 
-  // Each call mints fresh ids, inserted in ascending order: a read with no second sort key tends to hand tied rows back in that order,
-  // which fails the descending expectation.
+  // Each call mints fresh ids, inserted in ascending order: a read with no second sort key tends to
+  // hand tied rows back in that order, which fails the descending expectation.
   async function insertTied(acknowledgedAt: string | null): Promise<string[]> {
     const prefix = crypto.randomUUID().slice(0, -2);
     const ids = ["0a", "0b", "0c"].map((suffix) => `${prefix}${suffix}`);

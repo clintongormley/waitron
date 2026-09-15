@@ -91,7 +91,7 @@ export function mountRecipeApi(app: Hono, deps: RecipeApiDeps, log: Logger): voi
   // of the mount (cfg.tenantId is fixed), the low-risk form of the dedup (deps keeps cfg: { tenantId:
   // string }, the sibling convention).
   const tenantId = brandTenantId(deps.cfg.tenantId);
-  // Open a tenant-scoped transaction as the app role, confirm the caller's management session carries
+  // Open a transaction as the app role, confirm the caller's management session carries
   // RECIPE_WRITE_PERMISSION, then run `fn`. Every route funnels its DB work through here so the gate is
   // applied identically and in exactly one place — the catalogue §3 seam.
   const gated = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> =>

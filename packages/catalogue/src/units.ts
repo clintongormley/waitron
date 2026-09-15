@@ -202,7 +202,7 @@ export async function assignProductUnit(
  * its row locks in one scan instead of interleaving N separate statements' locks across a loop. The
  * scan order is PostgreSQL's choice, not the caller's list order, which is what `units.pg.test.ts`
  * runs two opposite-order reassignments against. An id that is not currently on `sourceUnitId` —
- * an unknown id or another tenant's included — matches no row and is skipped, never an error. A
+ * an unknown id included — matches no row and is skipped, never an error. A
  * `null` target instead deletes those rows and, in the same transaction, sets their `pricing_unit`
  * to `'each'`, so the listed products become Each (no unit) with the no-unit ⟺ each invariant held. */
 export async function reassignProductsToUnit(

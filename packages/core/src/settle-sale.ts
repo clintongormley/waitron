@@ -21,8 +21,7 @@ export interface SettleSaleInput {
  */
 export async function settleSale(tx: Transaction, input: SettleSaleInput): Promise<void> {
   // Net the sale's fiscal total with every correction in a correlated scalar subquery,
-  // as listOutstandingSales does for correctionTotal. The outer lookup and corrective sum
-  // each filter by tenant.
+  // as listOutstandingSales does for correctionTotal.
   // `${sales}.id` (not `${sales.id}`) so the column renders table-qualified — inside a select-list
   // sql template Drizzle emits a bare `"id"`, which the subquery's own `sales c` would capture.
   const [sale] = await tx

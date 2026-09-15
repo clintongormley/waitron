@@ -339,7 +339,7 @@ function apiDepsWithPool(cfg: TillConfig, pool: CardProviderPool): TillApiDeps {
 }
 
 /** Seed an ACTIVE `card_readers` row (default provider `stripe`) and return its id + `providerRef`.
- * `tenantId` can be overridden to seed ANOTHER tenant's reader (the by-id isolation probe). */
+ * `tenantId` overrides the stamped tenant id. */
 async function seedReader(
   cfg: TillConfig,
   opts: { provider?: string; providerRef?: string; tenantId?: string; name?: string } = {},
@@ -894,12 +894,12 @@ describe("/api/working-orders → pay (park & retrieve, idempotent over HTTP)", 
 
 // POST /api/pay (Task 12 cutover): the integrated-card-terminal pay route now RESOLVES the reader
 // (request `readerId`, else the paying device's default in `device_card_readers`), loads the reader
-// row tenant-scoped by id, PRE-CHECKS the provider is connected, then drives the reader's provider
+// row by id, PRE-CHECKS the provider is connected, then drives the reader's provider
 // (from the pool) through the real `payWorkingOrderIntegrated` split-transaction flow (P1 commit →
 // network collect → P3 file/settle) over a `FakeStripe`-backed `StripeTerminalProvider` — so a
 // capture/decline genuinely round-trips the adapter rather than being stubbed. Real Postgres for the
-// same reason every suite here is (the split flow + the provider's FK-before-attempting ordering +
-// the by-id tenant-isolation probe need a real multi-backend, non-superuser Postgres, CLAUDE.md §4);
+// same reason every suite here is (the split flow + the provider's FK-before-attempting ordering need
+// a real multi-backend, non-superuser Postgres, CLAUDE.md §4);
 // the cookieless refusal is hermetic, in `till-api.test.ts`.
 describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
   it("routes to the device's DEFAULT reader, captures, and STAMPS payments.reader_id", async () => {
