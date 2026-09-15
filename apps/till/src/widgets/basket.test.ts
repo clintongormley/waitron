@@ -799,16 +799,17 @@ describe("till-basket", () => {
   });
 });
 
-it("keeps different answers on distinct lines through quantity editing and shows an affirmative answer's name", async () => {
+it("keeps different answers on distinct lines through quantity editing and shows the answer's name", async () => {
   const store = new WorkingOrderStore();
-  for (const value of [false, true])
+  for (const choiceId of ["fino", "grueso"])
     store.addProduct(cafe, "1", undefined, {
-      modifierSelections: [{ modifierId: "cut", type: "yes-no", value }],
+      modifierSelections: [{ modifierId: "cut", type: "options", choiceId }],
       modifierSnapshots: [
         {
           modifierId: "cut",
-          type: "yes-no",
-          value,
+          type: "options",
+          choiceId,
+          choiceName: { es: choiceId === "fino" ? "Fino" : "Grueso" },
           name: { es: "Cortar" },
         },
       ],
@@ -817,31 +818,13 @@ it("keeps different answers on distinct lines through quantity editing and shows
   store.setLineQuantity(0, "2");
   await el.updateComplete;
   expect(store.lines.map((line) => line.modifierSelections)).toEqual([
-    [{ modifierId: "cut", type: "yes-no", value: false }],
-    [{ modifierId: "cut", type: "yes-no", value: true }],
+    [{ modifierId: "cut", type: "options", choiceId: "fino" }],
+    [{ modifierId: "cut", type: "options", choiceId: "grueso" }],
   ]);
-  // Ruling C: an affirmative yes/no shows the modifier name alone; the negative line shows nothing.
+  // Each line keeps its own recorded choice, resolved as the modifier name and the chosen label.
   expect(
     [...el.shadowRoot!.querySelectorAll(".modifier-answer")].map((answer) => answer.textContent),
-  ).toEqual(["Cortar"]);
-});
-
-it("shows the modifier name for an affirmative yes/no answer and omits a negative one", async () => {
-  const snapshot = { modifierId: "cut", type: "yes-no" as const, name: { es: "Extra hot" } };
-  const yesStore = new WorkingOrderStore();
-  yesStore.addProduct(cafe, "1", undefined, {
-    modifierSelections: [{ modifierId: "cut", type: "yes-no", value: true }],
-    modifierSnapshots: [{ ...snapshot, value: true }],
-  });
-  const { el: yes } = await mountWidget<TillBasket>("till-basket", { store: yesStore });
-  expect(yes.shadowRoot!.textContent).toContain("Extra hot");
-  const noStore = new WorkingOrderStore();
-  noStore.addProduct(cafe, "1", undefined, {
-    modifierSelections: [{ modifierId: "cut", type: "yes-no", value: false }],
-    modifierSnapshots: [{ ...snapshot, value: false }],
-  });
-  const { el: no } = await mountWidget<TillBasket>("till-basket", { store: noStore });
-  expect(no.shadowRoot!.textContent).not.toContain("Extra hot");
+  ).toEqual(["Cortar: Fino", "Cortar: Grueso"]);
 });
 
 it("reopens a draft modifier editor with its explicit answer and changes only that line", async () => {
@@ -852,15 +835,19 @@ it("reopens a draft modifier editor with its explicit answer and changes only th
       {
         id: "cut",
         name: { es: "Cortar" },
-        type: "yes-no",
+        type: "options",
         available: true,
-        defaultValue: true,
+        defaultChoiceId: "fino",
+        choices: [
+          { id: "fino", name: { es: "Fino" }, available: true },
+          { id: "grueso", name: { es: "Grueso" }, available: true },
+        ],
       },
     ],
   };
   for (let index = 0; index < 2; index++)
     store.addProduct(product, "1", undefined, {
-      modifierSelections: [{ modifierId: "cut", type: "yes-no", value: false }],
+      modifierSelections: [{ modifierId: "cut", type: "options", choiceId: "fino" }],
     });
   const { el } = await mountWidget<TillBasket>("till-basket", { store });
   el.shadowRoot!.querySelector<HTMLElement>(".edit-modifiers")!.click();
@@ -870,21 +857,29 @@ it("reopens a draft modifier editor with its explicit answer and changes only th
       "till-modifier-picker",
     )!;
   await picker.updateComplete;
-  // The reopened draft is an explicit "no", so the toggle reads unchecked; switch it on.
-  const toggle = picker.shadowRoot!.querySelector<HTMLElement & { checked: boolean }>(
-    'wt-switch[name="modifier-cut"]',
-  )!;
-  expect(toggle.checked).toBe(false);
-  toggle.dispatchEvent(new CustomEvent("wt-change", { detail: { checked: true } }));
+  // The reopened draft chose "Fino"; switch it to the second option ("Grueso") on this line only.
+  const radios = [
+    ...picker.shadowRoot!.querySelectorAll<HTMLInputElement>(
+      'input[type="radio"][name="modifier-cut"]',
+    ),
+  ];
+  radios[1]!.checked = true;
+  radios[1]!.dispatchEvent(new Event("change"));
   await picker.updateComplete;
   picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!.click();
   await el.updateComplete;
   expect(el.shadowRoot!.querySelector("till-modifier-picker")).toBeNull();
   expect(store.lines.map((line) => line.modifierSelections)).toEqual([
-    [{ modifierId: "cut", type: "yes-no", value: true }],
-    [{ modifierId: "cut", type: "yes-no", value: false }],
+    [{ modifierId: "cut", type: "options", choiceId: "grueso" }],
+    [{ modifierId: "cut", type: "options", choiceId: "fino" }],
   ]);
   expect(store.lines[0]?.modifierSnapshots).toEqual([
-    { modifierId: "cut", name: { es: "Cortar" }, type: "yes-no", value: true },
+    {
+      modifierId: "cut",
+      name: { es: "Cortar" },
+      type: "options",
+      choiceId: "grueso",
+      choiceName: { es: "Grueso" },
+    },
   ]);
 });

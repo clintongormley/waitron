@@ -4736,7 +4736,7 @@ describe("canonical modifier selections", () => {
         for (const input of [
           { type: "text", name: { es: "Mensaje" } },
           {
-            type: "yes-no",
+            type: "text",
             name: { es: "Caliente" },
           },
           {
@@ -4778,7 +4778,7 @@ describe("canonical modifier selections", () => {
       });
       const modifierSelections = [
         { modifierId: definitions[0]!.id, type: "text" as const, text: " <b>hello</b> " },
-        { modifierId: definitions[1]!.id, type: "yes-no" as const, value: false },
+        { modifierId: definitions[1]!.id, type: "text" as const, text: "extra" },
         { modifierId: definitions[2]!.id, type: "options" as const, choiceId: optionId },
         {
           modifierId: definitions[3]!.id,
@@ -4803,7 +4803,7 @@ describe("canonical modifier selections", () => {
         modifierSelections,
         modifierSnapshots: [
           { type: "text", text: " <b>hello</b> " },
-          { type: "yes-no", value: false },
+          { type: "text", text: "extra" },
           { type: "options", choiceId: optionId, choiceName: { es: "Grande" } },
           { type: "extras", choices: [{ choiceId, quantity: 2 }] },
         ],
@@ -4848,8 +4848,10 @@ describe("canonical modifier selections", () => {
             cfg.tenantId,
             definitions[0]!.id,
             {
-              type: "yes-no",
+              type: "options",
               name: { es: "Changed type" },
+              choices: [{ id: randomUUID(), name: { es: "Elección" } }],
+              defaultChoiceId: null,
             },
             "es",
           );

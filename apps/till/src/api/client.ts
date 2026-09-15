@@ -356,17 +356,12 @@ export type Modifier = { id: string; name: Record<string, string>; available: bo
           available: boolean;
         })[];
     }
-  | {
-      type: "yes-no";
-      defaultValue: boolean;
-    }
 );
 
 export type ModifierSelection =
   | { modifierId: string; type: "text"; text: string }
   | { modifierId: string; type: "extras"; choices: { choiceId: string; quantity: number }[] }
-  | { modifierId: string; type: "options"; choiceId: string }
-  | { modifierId: string; type: "yes-no"; value: boolean };
+  | { modifierId: string; type: "options"; choiceId: string };
 
 export type ModifierSnapshot = { modifierId: string; name: Record<string, string> } & (
   | { type: "text"; text: string }
@@ -375,7 +370,6 @@ export type ModifierSnapshot = { modifierId: string; name: Record<string, string
       choices: { choiceId: string; name: Record<string, string>; quantity: number }[];
     }
   | { type: "options"; choiceId: string; choiceName: Record<string, string> }
-  | { type: "yes-no"; value: boolean }
 );
 
 /** One sellable product from `GET /api/products` (mirrors catalogue's `AvailableProduct`). */

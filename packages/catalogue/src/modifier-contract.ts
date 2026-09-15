@@ -1,5 +1,4 @@
-import { AppError, isUuid, isModifierOffered } from "@waitron/shared";
-export { isModifierOffered } from "@waitron/shared";
+import { AppError, isUuid } from "@waitron/shared";
 import {
   assertAllergenOverlayDisjoint,
   validateAllergens,
@@ -83,20 +82,11 @@ function effects(row: Record<string, unknown>): ModifierEffects {
 export function parseModifierInput(value: unknown): ModifierInput {
   const row = record(value, "modifier");
   const name = label(row.name, "name");
-  // `available` stays allowed so no stray-key error; it is read only for yes-no.
+  // `available` stays allowed so no stray-key error; every type is always offered as a whole now.
   const baseKeys = ["type", "name", "available"];
   if (row.type === "text") {
     keys(row, baseKeys, "modifier");
     return { name, available: true, type: "text" };
-  }
-  if (row.type === "yes-no") {
-    keys(row, [...baseKeys, "defaultValue"], "modifier");
-    return {
-      name,
-      available: bool(row.available === undefined ? true : row.available, "available"),
-      type: "yes-no",
-      defaultValue: bool(row.defaultValue === undefined ? false : row.defaultValue, "defaultValue"),
-    };
   }
   if (row.type !== "extras" && row.type !== "options") invalid("type");
   const common = { name, available: true };
@@ -206,8 +196,7 @@ export function validateModifierSelections(
     if (typeof row.modifierId !== "string" || seen.has(row.modifierId)) invalid("modifierId");
     seen.add(row.modifierId);
     const definition = byId.get(row.modifierId);
-    if (!definition || !isModifierOffered(definition) || row.type !== definition.type)
-      invalid("modifierId");
+    if (!definition || row.type !== definition.type) invalid("modifierId");
     const base = { modifierId: definition.id };
     switch (definition.type) {
       case "text": {
@@ -216,10 +205,6 @@ export function validateModifierSelections(
         if (row.text.trim() !== "") out.push({ ...base, type: "text", text: row.text });
         break;
       }
-      case "yes-no":
-        keys(row, ["modifierId", "type", "value"], "selection");
-        out.push({ ...base, type: "yes-no", value: bool(row.value, "value") });
-        break;
       case "options":
         keys(row, ["modifierId", "type", "choiceId"], "selection");
         if (!definition.choices.some((choice) => choice.id === row.choiceId && choice.available))
@@ -255,11 +240,8 @@ export function validateModifierSelections(
     }
   }
   for (const definition of definitions) {
-    if (!isModifierOffered(definition)) continue;
     if (
-      (definition.type === "options" ||
-        definition.type === "yes-no" ||
-        (definition.type === "extras" && definition.required)) &&
+      (definition.type === "options" || (definition.type === "extras" && definition.required)) &&
       !seen.has(definition.id)
     )
       invalid("required");

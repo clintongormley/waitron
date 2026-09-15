@@ -2296,97 +2296,69 @@ describe("handheld sales and device capability gates", () => {
   });
 });
 
-it("files all four modifier modes through cash checkout and reprints their saved facts", async () => {
+it("files every modifier mode through cash checkout and reprints their saved facts", async () => {
   const { cfg, available, operatorId } = await setupVenue();
   const product = available.find((item) => item.pricingUnit === "each")!;
   const optionId = randomUUID(),
     extraId = randomUUID();
-  const { note, answer, option, extra } = await withTenant(
-    suite.admin,
-    cfg.tenantId,
-    async (tx) => {
-      await asAppUser(tx);
-      const note = await createModifier(
-        tx,
-        cfg.tenantId,
-        { type: "text", name: { es: "Nota" }, available: true },
-        "es",
-      );
-      const answer = await createModifier(
-        tx,
-        cfg.tenantId,
-        {
-          type: "yes-no",
-          name: { es: "Cubiertos" },
-          defaultValue: true,
-          available: true,
-        },
-        "es",
-      );
-      const option = await createModifier(
-        tx,
-        cfg.tenantId,
-        {
-          type: "options",
-          name: { es: "Preparación" },
-          available: true,
-          choices: [{ id: optionId, name: { es: "Frío" }, available: true }],
-          defaultChoiceId: optionId,
-        },
-        "es",
-      );
-      const extra = await createModifier(
-        tx,
-        cfg.tenantId,
-        {
-          type: "extras",
-          name: { es: "Extras" },
-          available: true,
-          required: false,
-          maxTotalQuantity: 2,
-          choices: [
-            {
-              id: extraId,
-              name: { es: "Queso" },
-              available: true,
-              priceDelta: "9.00",
-              vatClass: "reduced",
-              maxQuantity: 2,
-              preselected: false,
-            },
-          ],
-        },
-        "es",
-      );
-      await setProductOptionGroups(tx, cfg.tenantId, product.id, [
-        note.id,
-        answer.id,
-        option.id,
-        extra.id,
-      ]);
-      await setMenuItemOptionGroups(tx, cfg.tenantId, product.menuItemId, [
-        { groupId: note.id, options: [] },
-        { groupId: answer.id, options: [] },
-        { groupId: option.id, options: [{ optionId, priceDelta: "0.00" }] },
-        { groupId: extra.id, options: [{ optionId: extraId, priceDelta: "0.35" }] },
-      ]);
-      return { note, answer, option, extra };
-    },
-  );
+  const { note, option, extra } = await withTenant(suite.admin, cfg.tenantId, async (tx) => {
+    await asAppUser(tx);
+    const note = await createModifier(
+      tx,
+      cfg.tenantId,
+      { type: "text", name: { es: "Nota" }, available: true },
+      "es",
+    );
+    const option = await createModifier(
+      tx,
+      cfg.tenantId,
+      {
+        type: "options",
+        name: { es: "Preparación" },
+        available: true,
+        choices: [{ id: optionId, name: { es: "Frío" }, available: true }],
+        defaultChoiceId: optionId,
+      },
+      "es",
+    );
+    const extra = await createModifier(
+      tx,
+      cfg.tenantId,
+      {
+        type: "extras",
+        name: { es: "Extras" },
+        available: true,
+        required: false,
+        maxTotalQuantity: 2,
+        choices: [
+          {
+            id: extraId,
+            name: { es: "Queso" },
+            available: true,
+            priceDelta: "9.00",
+            vatClass: "reduced",
+            maxQuantity: 2,
+            preselected: false,
+          },
+        ],
+      },
+      "es",
+    );
+    await setProductOptionGroups(tx, cfg.tenantId, product.id, [note.id, option.id, extra.id]);
+    await setMenuItemOptionGroups(tx, cfg.tenantId, product.menuItemId, [
+      { groupId: note.id, options: [] },
+      { groupId: option.id, options: [{ optionId, priceDelta: "0.00" }] },
+      { groupId: extra.id, options: [{ optionId: extraId, priceDelta: "0.35" }] },
+    ]);
+    return { note, option, extra };
+  });
   const selections: ModifierSelection[] = [
     { modifierId: note.id, type: "text", text: "sin sal" },
-    { modifierId: answer.id, type: "yes-no", value: true },
     { modifierId: option.id, type: "options", choiceId: optionId },
     { modifierId: extra.id, type: "extras", choices: [{ choiceId: extraId, quantity: 2 }] },
   ];
   const snapshots: ModifierSnapshot[] = [
     { modifierId: note.id, name: { es: "Nota" }, type: "text", text: "sin sal" },
-    {
-      modifierId: answer.id,
-      name: { es: "Cubiertos" },
-      type: "yes-no",
-      value: true,
-    },
     {
       modifierId: option.id,
       name: { es: "Preparación" },
@@ -2501,18 +2473,6 @@ it("files all four modifier modes through cash checkout and reprints their saved
     await updateModifier(
       tx,
       cfg.tenantId,
-      answer.id,
-      {
-        type: "yes-no",
-        name: { es: "Nuevo nombre" },
-        defaultValue: true,
-        available: true,
-      },
-      "es",
-    );
-    await updateModifier(
-      tx,
-      cfg.tenantId,
       option.id,
       {
         type: "options",
@@ -2548,11 +2508,9 @@ it("files all four modifier modes through cash checkout and reprints their saved
   expect(printed.rows).toHaveLength(1);
   const text = decodeTicket(new Uint8Array(printed.rows[0]!.payload));
   expect(text).toContain("sin sal");
-  // The yes/no answer here is "yes", so the modifier's saved name prints and proves snapshot
-  // immutability directly: the original "Cubiertos" appears and the renamed "Nuevo nombre" does not.
-  expect(text).toContain("Cubiertos");
+  // The saved snapshot proves immutability directly: the option's original "Frío" appears and the
+  // renamed "Nuevo frío" does not.
   expect(text).toContain("Frío");
-  expect(text).not.toContain("Nuevo nombre");
   expect(text).not.toContain("Nuevo frío");
   expect(text).toContain("DUPLICADO");
   const recordCount = await withTenant(suite.admin, cfg.tenantId, async (tx) => {

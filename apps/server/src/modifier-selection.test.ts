@@ -12,14 +12,20 @@ const snapshots: ModifierSnapshot[] = [
       { choiceId: "b", name: { en: "B" }, quantity: 2 },
     ],
   },
-  { modifierId: "boolean", type: "yes-no", name: { en: "Ice" }, value: false },
+  {
+    modifierId: "milk",
+    type: "options",
+    name: { en: "Milk" },
+    choiceId: "oat",
+    choiceName: { en: "Oat" },
+  },
 ];
 
 it("compares recorded answers independently of object, modifier and choice ordering", () => {
   expect(
     sameModifierSelections(
       [
-        { value: false, type: "yes-no", modifierId: "boolean" },
+        { choiceId: "oat", type: "options", modifierId: "milk" },
         {
           choices: [
             { quantity: 2, choiceId: "b" },
@@ -69,10 +75,13 @@ it.each(
       },
       selectionsFromSnapshots(snapshots)[1],
     ],
-    [selectionsFromSnapshots(snapshots)[0], { modifierId: "boolean", type: "yes-no", value: true }],
     [
       selectionsFromSnapshots(snapshots)[0],
-      { modifierId: "boolean", type: "yes-no", value: false, unexpected: true },
+      { modifierId: "milk", type: "options", choiceId: "soy" },
+    ],
+    [
+      selectionsFromSnapshots(snapshots)[0],
+      { modifierId: "milk", type: "options", choiceId: "oat", unexpected: true },
     ],
   ].map((value) => ({ value })),
 )("requires new validation for malformed or changed answers (%#)", ({ value }) => {

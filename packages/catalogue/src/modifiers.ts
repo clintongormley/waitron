@@ -42,21 +42,15 @@ export async function listModifiers(tx: Transaction, tenantId: string): Promise<
     )
     .orderBy(optionGroupItems.sort, optionGroupItems.id);
   return groups.map((group): Modifier => {
-    // Mirror the write side, which forces available:true for every non-yes/no type (only yes/no is
-    // authored). A stored active=false on such a group is an inconsistency; reading it back as
-    // unavailable would hide it from the till while the projection still requires a selection.
+    // Every modifier is offered as a whole; availability is toggled per choice. A stored active=false
+    // on a group is an inconsistency; reading it back as unavailable would hide it from the till
+    // while the projection still requires a selection.
     const common = {
       id: group.id,
       name: group.name,
-      available: group.type === "yes-no" ? group.active : true,
+      available: true,
     };
     if (group.type === "text") return { ...common, type: "text" };
-    if (group.type === "yes-no")
-      return {
-        ...common,
-        type: "yes-no",
-        defaultValue: group.defaultValue,
-      };
     const choices = items
       .filter((item) => item.groupId === group.id)
       .map((item) => ({
@@ -145,7 +139,6 @@ function groupValues(input: ModifierInput) {
     maxSelect: input.type === "extras" ? (input.maxTotalQuantity ?? MAX_MODIFIER_INTEGER) : 1,
     maxTotalQuantity: input.type === "extras" ? input.maxTotalQuantity : null,
     defaultChoiceId: input.type === "options" ? input.defaultChoiceId : null,
-    defaultValue: input.type === "yes-no" ? input.defaultValue : false,
   };
 }
 async function writeChoices(

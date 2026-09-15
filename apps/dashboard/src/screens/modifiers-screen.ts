@@ -369,18 +369,6 @@ export class ModifiersScreen extends LitElement {
       <p>${t("modifiers.type")}: ${t(`modifiers.${modifier.type}`)}</p>
       ${modifier.type === "text" ? html`<p>${t("modifiers.text_help")}</p>` : nothing}
       ${
-        modifier.type === "yes-no"
-          ? html`<p>
-                ${t("modifiers.default_value")}:
-                ${modifier.defaultValue ? t("modifiers.yes") : t("modifiers.no")}
-              </p>
-              <p>
-                ${t("modifiers.available")}:
-                ${modifier.available ? t("modifiers.available") : t("modifiers.unavailable")}
-              </p>`
-          : nothing
-      }
-      ${
         modifier.type === "extras"
           ? html`<p>
                 ${t("modifiers.required")}:
@@ -436,7 +424,7 @@ export class ModifiersScreen extends LitElement {
           label: t("modifiers.type"),
           allLabel: t("modifiers.filter_type_all"),
           value: (modifier) => modifier.type,
-          options: (["text", "extras", "options", "yes-no"] as const).map((type) => ({
+          options: (["text", "extras", "options"] as const).map((type) => ({
             value: type,
             label: t(`modifiers.${type}`),
           })),

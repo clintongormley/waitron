@@ -583,16 +583,6 @@ it("transfers every modifier type, remaps default choice ids and preserves menu 
         },
         "es",
       ),
-      await createModifier(
-        tx,
-        source.tenantId,
-        {
-          type: "yes-no",
-          name: { es: "Hielo" },
-          defaultValue: false,
-        },
-        "es",
-      ),
     ];
     await setProductOptionGroups(
       tx,
@@ -616,7 +606,7 @@ it("transfers every modifier type, remaps default choice ids and preserves menu 
     new Date("2026-09-12T12:00:00Z"),
     versions,
   );
-  expect(transferred.tables.option_groups).toHaveLength(4);
+  expect(transferred.tables.option_groups).toHaveLength(3);
   expect(transferred.tables.option_group_items).toHaveLength(2);
   const target = await applyVenue(planVenue(venue("B44332211"), ALL_MODULES), {
     db: suite.db,
@@ -627,15 +617,12 @@ it("transfers every modifier type, remaps default choice ids and preserves menu 
   await withTenant(suite.db, target.tenantId, async (tx) => {
     await asAppUser(tx);
     const definitions = await listModifiers(tx, target.tenantId);
-    expect(definitions).toHaveLength(4);
+    expect(definitions).toHaveLength(3);
     expect(
       definitions.every((definition) =>
         original.definitions.every((source) => source.id !== definition.id),
       ),
     ).toBe(true);
-    expect(definitions.find((definition) => definition.type === "yes-no")).toMatchObject({
-      defaultValue: false,
-    });
     const options = definitions.find((definition) => definition.type === "options")!;
     if (options.type !== "options") throw new Error("missing options modifier");
     expect(options.defaultChoiceId).toBe(options.choices[0]!.id);
@@ -654,7 +641,6 @@ it("transfers every modifier type, remaps default choice ids and preserves menu 
       "text",
       "options",
       "extras",
-      "yes-no",
     ]);
     expect(offers[0]!.modifiers[2]).toMatchObject({
       choices: [{ priceDelta: "1.50", preselected: true, vatClass: "general" }],

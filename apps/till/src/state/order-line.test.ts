@@ -167,7 +167,6 @@ it("prices repeated extras per fractional product unit and sends only canonical 
       type: "extras" as const,
       choices: [{ choiceId: "opt-shot", quantity: 2 }],
     },
-    { modifierId: "cut", type: "yes-no" as const, value: false },
   ];
   const line: OrderLine = {
     product: jamon,

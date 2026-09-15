@@ -36,7 +36,7 @@ import {
  * the table owns because it is edited inline, not in the modal. For an options choice `preselected`
  * is unused; the single options default is tracked separately as `defaultChoiceId`. */
 type FormChoice = ChoiceDraft & { preselected: boolean };
-const TYPES = ["text", "extras", "options", "yes-no"] as const;
+const TYPES = ["text", "extras", "options"] as const;
 
 @customElement("dashboard-modifier-form")
 export class ModifierForm extends LitElement {
@@ -133,7 +133,6 @@ export class ModifierForm extends LitElement {
   @state() private cap = "";
   @state() private choices: FormChoice[] = [];
   @state() private defaultChoiceId: string | null = null;
-  @state() private defaultValue = false;
   @state() private choiceOpen = false;
   @state() private editingChoice: FormChoice | null = null;
   /** The live pointer drag: the choice being dragged and the pointer that owns the gesture. */
@@ -175,7 +174,6 @@ export class ModifierForm extends LitElement {
           }))
         : [];
     this.defaultChoiceId = value?.type === "options" ? value.defaultChoiceId : null;
-    this.defaultValue = value?.type === "yes-no" ? value.defaultValue : false;
     this.choiceOpen = false;
     this.editingChoice = null;
     this.errors = {};
@@ -206,7 +204,6 @@ export class ModifierForm extends LitElement {
     this.required = false;
     this.cap = "";
     this.defaultChoiceId = null;
-    this.defaultValue = false;
     this.choiceOpen = false;
     this.editingChoice = null;
     this.errors = {};
@@ -364,7 +361,7 @@ export class ModifierForm extends LitElement {
     if (Object.keys(errors).length) return;
     const common = {
       name: nonBlankNames(this.name),
-      available: this.type === "yes-no" ? this.available : true,
+      available: true,
     };
     const choices = this.choices.map((choice) => ({
       id: choice.id,
@@ -378,9 +375,6 @@ export class ModifierForm extends LitElement {
     switch (this.type) {
       case "text":
         value = { ...common, type: "text" };
-        break;
-      case "yes-no":
-        value = { ...common, type: "yes-no", defaultValue: this.defaultValue };
         break;
       case "options":
         value = { ...common, type: "options", choices, defaultChoiceId: this.defaultChoiceId };
@@ -576,33 +570,7 @@ export class ModifierForm extends LitElement {
             ${TYPES.map((type) => html`<option value=${type} ?selected=${this.type === type}>${t(`modifiers.${type}`)}</option>`)}
           </select></label
         >
-        ${
-          this.type === "yes-no"
-            ? switchField(
-                this.#fields(),
-                "available",
-                t("modifiers.available"),
-                this.available,
-                (value) => {
-                  this.available = value;
-                },
-              )
-            : nothing
-        }
         ${this.type === "text" ? html`<p>${t("modifiers.text_help")}</p>` : nothing}
-        ${
-          this.type === "yes-no"
-            ? switchField(
-                this.#fields(),
-                "defaultValue",
-                t("modifiers.default_value"),
-                this.defaultValue,
-                (value) => {
-                  this.defaultValue = value;
-                },
-              )
-            : nothing
-        }
         ${
           this.type === "extras"
             ? html`${switchField(

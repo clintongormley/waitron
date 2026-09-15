@@ -876,12 +876,6 @@ it("prints stored nonprice modifier facts when enqueueing a kitchen ticket", asy
             choiceId: "oat",
             choiceName: { [LOCALE]: "Oat" },
           },
-          {
-            modifierId: "ice",
-            name: { [LOCALE]: "Ice" },
-            type: "yes-no",
-            value: true,
-          },
         ],
       })
       .where(eq(workingOrderLines.id, parent.id!));
@@ -894,7 +888,6 @@ it("prints stored nonprice modifier facts when enqueueing a kitchen ticket", asy
   const paper = decodeTicket(jobs[0]!.payload);
   expect(paper).toContain("Message: Happy birthday");
   expect(paper).toContain("Milk: Oat");
-  expect(paper).toContain("Ice");
 });
 
 it("prints the frozen kitchen name with the selected variant", async () => {

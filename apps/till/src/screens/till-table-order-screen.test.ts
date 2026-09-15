@@ -1280,7 +1280,6 @@ describe("till-table-order-screen", () => {
 it("sends explicit modifier answers in table rounds without sending local charge previews", async () => {
   const { el } = await mount();
   const modifierSelections = [
-    { modifierId: "cut", type: "yes-no" as const, value: false },
     {
       modifierId: "extras",
       type: "extras" as const,
@@ -1313,8 +1312,9 @@ it("shows a retained table line's recorded name and modifier answer after live n
           {
             modifierId: "cut",
             name: { "es-ES": "Cortar" },
-            type: "yes-no",
-            value: true,
+            type: "options",
+            choiceId: "fino",
+            choiceName: { "es-ES": "Fino" },
           },
         ],
       },
@@ -1323,7 +1323,7 @@ it("shows a retained table line's recorded name and modifier answer after live n
   await openDrawer(el);
   const row = el.shadowRoot!.querySelector(".pending-line")!;
   expect(row.textContent).toContain("Nombre guardado");
-  // Ruling C: an affirmative yes/no shows the modifier name alone, resolved from the snapshot.
+  // The saved snapshot resolves the modifier name and the chosen label, not the live catalogue name.
   expect(row.textContent).toContain("Cortar");
   expect(row.textContent).not.toContain("Nuevo nombre");
 });

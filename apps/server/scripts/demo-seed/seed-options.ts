@@ -151,17 +151,6 @@ export async function seedOptions(
           },
           locale,
         ),
-        await createModifier(
-          tx,
-          tenantId,
-          {
-            type: "yes-no",
-            name: { en: "Demo decaf", es: "Descafeinado demo" },
-            available: true,
-            defaultValue: false,
-          },
-          locale,
-        ),
       ];
       for (const modifier of demoModifiers) {
         groupIds.push(modifier.id);

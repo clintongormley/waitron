@@ -1,11 +1,11 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { productOptionGroups, type Transaction } from "@waitron/db";
-import { isModifierOffered, type Modifier } from "@waitron/shared";
+import { type Modifier } from "@waitron/shared";
 import { listModifiers } from "./modifiers.js";
 import { menuItemOptionGroups, menuItemOptions } from "./schema/menu.js";
 
 function projectModifier(modifier: Modifier, prices?: Map<string, string>): Modifier {
-  if (modifier.type === "text" || modifier.type === "yes-no") return modifier;
+  if (modifier.type === "text") return modifier;
   const available = modifier.choices.filter(
     (choice) => choice.available && (prices === undefined || prices.has(choice.id)),
   );
@@ -36,9 +36,7 @@ export async function readProductModifiers(
   const result = new Map<string, Modifier[]>();
   if (productIds.length === 0) return result;
   const definitions = new Map(
-    (await listModifiers(tx, tenantId))
-      .filter(isModifierOffered)
-      .map((modifier) => [modifier.id, modifier]),
+    (await listModifiers(tx, tenantId)).map((modifier) => [modifier.id, modifier]),
   );
   const attachments = await tx
     .select({ productId: productOptionGroups.productId, modifierId: productOptionGroups.groupId })
@@ -68,9 +66,7 @@ export async function readMenuModifiers(
   const result = new Map<string, Modifier[]>();
   if (menuItemIds.length === 0) return result;
   const definitions = new Map(
-    (await listModifiers(tx, tenantId))
-      .filter(isModifierOffered)
-      .map((modifier) => [modifier.id, modifier]),
+    (await listModifiers(tx, tenantId)).map((modifier) => [modifier.id, modifier]),
   );
   const publications = await tx
     .select({

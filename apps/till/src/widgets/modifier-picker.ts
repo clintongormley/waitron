@@ -1,4 +1,3 @@
-import "@waitron/ui/src/components/wt-switch.js";
 import { ContentLanguageController } from "@waitron/ui";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
@@ -129,7 +128,7 @@ export class TillModifierPicker extends LitElement {
 
   @property() quantity = "1";
   @property({ attribute: false }) initialSelections?: ModifierSelection[];
-  @state() private answers: Record<string, string | boolean> = {};
+  @state() private answers: Record<string, string> = {};
   #seeded = false;
   #choiceOwners = new Map<string, string>();
 
@@ -147,15 +146,12 @@ export class TillModifierPicker extends LitElement {
           for (const choice of selection.choices)
             this.quantities[choice.choiceId] = choice.quantity;
         else if (selection.type === "text") this.answers[selection.modifierId] = selection.text;
-        else if (selection.type === "options")
-          this.answers[selection.modifierId] = selection.choiceId;
-        else this.answers[selection.modifierId] = selection.value;
+        else this.answers[selection.modifierId] = selection.choiceId;
       }
       return;
     }
     for (const modifier of this.product.modifiers ?? []) {
       if (!modifier.available) continue;
-      if (modifier.type === "yes-no") this.answers[modifier.id] = modifier.defaultValue;
       if (
         modifier.type === "options" &&
         modifier.defaultChoiceId !== null &&
@@ -275,20 +271,18 @@ export class TillModifierPicker extends LitElement {
           return modifier.choices.some(
             (choice) => choice.available && choice.id === this.answers[modifier.id],
           );
-        if (modifier.type === "extras")
-          return (
-            !this.#staleExtra(modifier) &&
-            modifier.choices.every((choice) => {
-              const quantity = this.quantities[choice.id] ?? 0;
-              return (
-                Number.isInteger(quantity) &&
-                quantity >= 0 &&
-                quantity <= choice.maxQuantity &&
-                (quantity === 0 || choice.available)
-              );
-            })
-          );
-        return typeof this.answers[modifier.id] === "boolean";
+        return (
+          !this.#staleExtra(modifier) &&
+          modifier.choices.every((choice) => {
+            const quantity = this.quantities[choice.id] ?? 0;
+            return (
+              Number.isInteger(quantity) &&
+              quantity >= 0 &&
+              quantity <= choice.maxQuantity &&
+              (quantity === 0 || choice.available)
+            );
+          })
+        );
       })
     );
   }
@@ -470,10 +464,6 @@ export class TillModifierPicker extends LitElement {
           choiceId: choice.id,
           choiceName: choice.name,
         });
-      } else if (modifier.type === "yes-no") {
-        const value = this.answers[modifier.id] === true;
-        modifierSelections.push({ modifierId: modifier.id, type: "yes-no", value });
-        modifierSnapshots.push({ ...common, type: "yes-no", value });
       } else {
         const choices = modifier.choices
           .filter((choice) => (this.quantities[choice.id] ?? 0) > 0)
@@ -518,32 +508,22 @@ export class TillModifierPicker extends LitElement {
                 };
               }}
             ></textarea>`
-          : modifier.type === "options"
-            ? modifier.choices
-                .filter((choice) => choice.available)
-                .map(
-                  (choice) =>
-                    html`<label class="option"
-                      ><input
-                        type="radio"
-                        name=${`modifier-${modifier.id}`}
-                        .checked=${this.answers[modifier.id] === choice.id}
-                        @change=${(event: Event) => {
-                          event.stopPropagation();
-                          this.answers = { ...this.answers, [modifier.id]: choice.id };
-                        }}
-                      />${descriptionFor(choice.name, choice.id)}</label
-                    >`,
-                )
-            : html`<wt-switch
-                name=${`modifier-${modifier.id}`}
-                label=${name}
-                .checked=${this.answers[modifier.id] === true}
-                @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
-                  event.stopPropagation();
-                  this.answers = { ...this.answers, [modifier.id]: event.detail.checked };
-                }}
-              ></wt-switch>`
+          : modifier.choices
+              .filter((choice) => choice.available)
+              .map(
+                (choice) =>
+                  html`<label class="option"
+                    ><input
+                      type="radio"
+                      name=${`modifier-${modifier.id}`}
+                      .checked=${this.answers[modifier.id] === choice.id}
+                      @change=${(event: Event) => {
+                        event.stopPropagation();
+                        this.answers = { ...this.answers, [modifier.id]: choice.id };
+                      }}
+                    />${descriptionFor(choice.name, choice.id)}</label
+                  >`,
+              )
       }
       ${required && noChoices ? html`<p role="alert">${name}: ${t("modifier.unavailable_choices")}</p>` : nothing}
     </fieldset>`;

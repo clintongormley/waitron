@@ -98,25 +98,15 @@ it("changes an unused type without leaking fields and retains disabled-language 
   const el = await mount(extra);
   const submit = vi.fn();
   el.addEventListener("wt-submit", submit);
-  await change(el, "type", "yes-no");
+  await change(el, "type", "text");
   await click(el, "save");
   expect(submit.mock.calls[0]![0].detail.value).toEqual({
-    type: "yes-no",
+    type: "text",
     name: base.name,
     available: true,
-    defaultValue: false,
   });
 });
-it("shows the modifier-level Available switch only for a yes-no modifier", async () => {
-  const el = await mount(); // type defaults to "text"
-  const availableSwitch = () => el.shadowRoot!.querySelector('[name="available"]');
-  expect(availableSwitch()).toBeNull();
-  await change(el, "type", "yes-no");
-  expect(availableSwitch()).not.toBeNull();
-  await change(el, "type", "extras");
-  expect(availableSwitch()).toBeNull();
-});
-it("submits available true for a non-yes-no modifier", async () => {
+it("submits available true for every modifier", async () => {
   const el = await mount(); // type text
   const submit = vi.fn();
   el.addEventListener("wt-submit", submit);

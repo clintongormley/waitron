@@ -499,9 +499,10 @@ it("retains structured modifier snapshots when a dish quantity is split onto a c
     const modifierSnapshots = [
       {
         modifierId: randomUUID(),
-        name: { [LOCALE]: "Ice" },
-        type: "yes-no" as const,
-        value: false,
+        name: { [LOCALE]: "Milk" },
+        type: "options" as const,
+        choiceId: "oat",
+        choiceName: { [LOCALE]: "Oat" },
       },
     ];
     await tx

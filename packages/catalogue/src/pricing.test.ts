@@ -454,12 +454,6 @@ describe("structured modifier snapshots", () => {
         choiceId: "oat",
         choiceName: { en: "Oat" },
       },
-      {
-        modifierId: "ice",
-        name: { en: "Ice" },
-        type: "yes-no" as const,
-        value: false,
-      },
     ];
     const live = priceBasketWithOptions([
       { product: each("2.20", "reduced"), quantity: "2", options: [], modifierSnapshots },

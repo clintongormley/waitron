@@ -457,10 +457,6 @@ export type ModifierInput = ModifierCommon &
         choices: ModifierExtraChoice[];
       }
     | { type: "options"; defaultChoiceId: string | null; choices: ModifierChoice[] }
-    | {
-        type: "yes-no";
-        defaultValue: boolean;
-      }
   );
 export type Modifier = ModifierInput & { id: string };
 

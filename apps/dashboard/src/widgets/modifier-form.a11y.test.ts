@@ -7,7 +7,6 @@ afterEach(cleanupWidgets);
 const common = { id: "m", name: { es: "Modificador" }, available: true };
 const values: Modifier[] = [
   { ...common, type: "text" },
-  { ...common, type: "yes-no", defaultValue: false },
   {
     ...common,
     type: "options",

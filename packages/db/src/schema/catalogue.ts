@@ -171,13 +171,9 @@ export const optionGroups = pgTable(
       .notNull()
       .references(() => tenants.id),
     name: jsonb("name").$type<Record<string, string>>().notNull(),
-    type: text("type")
-      .$type<"text" | "extras" | "options" | "yes-no">()
-      .notNull()
-      .default("extras"),
+    type: text("type").$type<"text" | "extras" | "options">().notNull().default("extras"),
     maxTotalQuantity: integer("max_total_quantity"),
     defaultChoiceId: uuid("default_choice_id"),
-    defaultValue: boolean("default_value").notNull().default(false),
     minSelect: integer("min_select").notNull().default(0),
     maxSelect: integer("max_select").notNull().default(1),
     required: boolean("required").notNull().default(false),
@@ -185,7 +181,7 @@ export const optionGroups = pgTable(
     active: boolean("active").notNull().default(true),
   },
   (t) => [
-    check("option_groups_type_ck", sql`${t.type} in ('text','extras','options','yes-no')`),
+    check("option_groups_type_ck", sql`${t.type} in ('text','extras','options')`),
     check(
       "option_groups_total_ck",
       sql`${t.maxTotalQuantity} is null or ${t.maxTotalQuantity} >= 1`,

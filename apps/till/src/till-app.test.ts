@@ -6932,7 +6932,6 @@ it("sends explicit modifier answers at walk-up payment without local price previ
   const { el } = await mountApp();
   const c = await toCounter(el);
   const modifierSelections = [
-    { modifierId: "cut", type: "yes-no" as const, value: false },
     { modifierId: "note", type: "text" as const, text: "<b>Happy day</b>" },
   ];
   c.store.addProduct(cafe, "1", undefined, { modifierSelections });

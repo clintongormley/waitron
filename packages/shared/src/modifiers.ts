@@ -23,17 +23,9 @@ export type ModifierInput = Common &
     | { type: "text" }
     | { type: "extras"; required: boolean; maxTotalQuantity: number | null; choices: ExtraChoice[] }
     | { type: "options"; choices: ModifierChoice[]; defaultChoiceId: string | null }
-    | { type: "yes-no"; defaultValue: boolean }
   );
 export type Modifier = ModifierInput & { id: string };
 export type ModifierSelection =
   | { modifierId: string; type: "text"; text: string }
   | { modifierId: string; type: "extras"; choices: { choiceId: string; quantity: number }[] }
-  | { modifierId: string; type: "options"; choiceId: string }
-  | { modifierId: string; type: "yes-no"; value: boolean };
-
-/** Whether a modifier is offered at all. Only a yes/no modifier can be turned off as a whole; the
- * other types are always offered and toggle availability per choice. */
-export function isModifierOffered(modifier: { type: string; available: boolean }): boolean {
-  return modifier.type !== "yes-no" || modifier.available;
-}
+  | { modifierId: string; type: "options"; choiceId: string };

@@ -120,7 +120,7 @@ describe("seedOptions", () => {
       coffee!.modifiers
         .filter((modifier) => modifier.name.en?.startsWith("Demo "))
         .map((modifier) => modifier.type),
-    ).toEqual(["text", "extras", "options", "yes-no"]);
+    ).toEqual(["text", "extras", "options"]);
     const toppings = modifiers.find((modifier) => modifier.name.en === "Demo add-ons")!;
     expect(toppings).toMatchObject({
       type: "extras",
