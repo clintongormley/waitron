@@ -11,7 +11,7 @@ import {
 import type { Transaction } from "@waitron/db";
 import type { TenantId } from "@waitron/shared";
 import { priceBasket } from "./pricing.js";
-import type { PriceableProduct } from "./pricing.js";
+import type { PriceableProduct, PricingUnit } from "./pricing.js";
 import {
   addCatalogueToLocation,
   applyDietDerivation,
@@ -547,6 +547,46 @@ describe("catalogue operations", () => {
           vatClass: "general",
         }),
       ).rejects.toMatchObject({ code: "management.request_invalid" });
+    });
+  });
+
+  it("rejects a create whose legacy pricingUnit is neither 'each' nor 'weight'", async () => {
+    await asTenant(async (tx) => {
+      const cat = await createCatalogue(tx, tenantId, { name: "Deli" });
+      await expect(
+        createProduct(tx, tenantId, {
+          catalogueId: cat.id,
+          categoryId: null,
+          descriptions: { en: "mystery" },
+          // A stray legacy value must be rejected at the boundary, not treated as weight.
+          pricingUnit: "portion" as PricingUnit,
+          unitPrice: "0.00",
+          vatClass: "general",
+        }),
+      ).rejects.toMatchObject({
+        code: "management.request_invalid",
+        params: { field: "pricingUnit" },
+      });
+    });
+  });
+
+  it("rejects an update whose legacy pricingUnit is neither 'each' nor 'weight'", async () => {
+    await asTenant(async (tx) => {
+      const cat = await createCatalogue(tx, tenantId, { name: "Deli" });
+      const product = await createProduct(tx, tenantId, {
+        catalogueId: cat.id,
+        categoryId: null,
+        descriptions: { en: "ham" },
+        unitId: kgUnitId,
+        unitPrice: "24.90",
+        vatClass: "reduced",
+      });
+      await expect(
+        updateProduct(tx, tenantId, product.id, { pricingUnit: "portion" as PricingUnit }),
+      ).rejects.toMatchObject({
+        code: "management.request_invalid",
+        params: { field: "pricingUnit" },
+      });
     });
   });
 

@@ -1204,10 +1204,13 @@ export async function createProduct(
     selectedUnit = await getSellableUnit(tx, tenantId, input.unitId); // 404s an unknown unit
   } else if (input.pricingUnit === "each") {
     selectedUnit = null;
-  } else {
+  } else if (input.pricingUnit === "weight") {
     selectedUnit = await getSeededUnit(tx, tenantId, "kg"); // legacy weight → the retained kg seed
     if (selectedUnit === null)
       throw new AppError("management.request_invalid", { field: "unitId" });
+  } else {
+    // Any other legacy `pricingUnit` value is rejected at the boundary, not silently treated as weight.
+    throw new AppError("management.request_invalid", { field: "pricingUnit" });
   }
   // Validate before the write: an unreviewed product stores null, a supplied map is checked against
   // the EU-14 taxonomy and rejected (throws `allergen.invalid_code`/`allergen.invalid_presence`)
@@ -1408,10 +1411,13 @@ export async function updateProduct(
     unitAction = { kind: "keep" };
   } else if (pricingUnit === "each") {
     unitAction = { kind: "clear" };
-  } else {
+  } else if (pricingUnit === "weight") {
     const kg = await getSeededUnit(tx, tenantId, "kg");
     if (kg === null) throw new AppError("management.request_invalid", { field: "unitId" });
     unitAction = { kind: "set", unit: kg };
+  } else {
+    // Any other legacy `pricingUnit` value is rejected at the boundary, not silently treated as weight.
+    throw new AppError("management.request_invalid", { field: "pricingUnit" });
   }
   await tx
     .update(products)
