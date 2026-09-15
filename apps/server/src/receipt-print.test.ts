@@ -225,6 +225,7 @@ async function configureReceipt(
 async function printJobsFor(
   cfg: TillConfig,
 ): Promise<{ printerId: string; status: string; payload: Buffer }[]> {
+  void cfg;
   return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     return tx
@@ -233,14 +234,14 @@ async function printJobsFor(
         status: printJobs.status,
         payload: printJobs.payload,
       })
-      .from(printJobs)
-      .where(eq(printJobs.tenantId, cfg.tenantId));
+      .from(printJobs);
   });
 }
 
 async function drawerOpensFor(
   cfg: TillConfig,
 ): Promise<{ reason: string; saleId: string | null; personId: string; tillId: string }[]> {
+  void cfg;
   return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     return tx
@@ -250,18 +251,15 @@ async function drawerOpensFor(
         personId: drawerOpens.personId,
         tillId: drawerOpens.tillId,
       })
-      .from(drawerOpens)
-      .where(eq(drawerOpens.tenantId, cfg.tenantId));
+      .from(drawerOpens);
   });
 }
 
 async function registroCount(cfg: TillConfig): Promise<number> {
+  void cfg;
   return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
-    const rows = await tx
-      .select()
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.tenantId, cfg.tenantId));
+    const rows = await tx.select().from(registrosFacturacion);
     return rows.length;
   });
 }
@@ -269,12 +267,10 @@ async function registroCount(cfg: TillConfig): Promise<number> {
 /** The id of the tenant's single filed sale — each test provisions its own tenant, so there is exactly
  *  one — for pinning the `drawer_opens.sale_id` back-reference the helper wires. */
 async function onlySaleId(cfg: TillConfig): Promise<string> {
+  void cfg;
   return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
-    const rows = await tx
-      .select({ id: sales.id })
-      .from(sales)
-      .where(eq(sales.tenantId, cfg.tenantId));
+    const rows = await tx.select({ id: sales.id }).from(sales);
     return rows[0]!.id;
   });
 }

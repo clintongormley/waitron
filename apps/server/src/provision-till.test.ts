@@ -11,16 +11,13 @@ import type { NodeId, TenantId, TillId } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
 import { provisionNode } from "./provision-till.js";
 
-// PGlite exercises the explicit node-ownership comparison. Both PGlite and a superuser PostgreSQL
-// connection can expose a missing tenant predicate; withTransaction adds no filtering. The fiscal seed
-// one layer down uses the same target in packages/fiscal-verifactu/src/provisioning.test.ts, as
-// do stripe-account.test.ts and aeat-transport.test.ts. No role or concurrency behaviour is under
-// test here, so a container adds
-//
-// no needed coverage (§4).
+// PGlite is enough: `provisionNode` looks a node up by id and runs each module's seed, no role or
+// concurrency behaviour under test, so a container adds no needed coverage (§4). The fiscal seed one
+// layer down uses the same target in packages/fiscal-verifactu/src/provisioning.test.ts, as do
+// stripe-account.test.ts and aeat-transport.test.ts.
 
 // Well-formed but absent — the shape a mistyped argument actually takes, since a malformed one
-// never survives `tenantId()`'s brand.
+// never survives the `nodeId()`/`tenantId()` brand.
 const ABSENT = "00000000-0000-0000-0000-000000000000";
 
 // The full manifest (`manifestSets()`), not just [core, fiscal]: each module lands on top of its
@@ -106,11 +103,11 @@ describe("provisioning a node that has no SIF registration yet", () => {
     expect(live.rows).toEqual([{ nif, id_sistema_informatico: "W1", numero_instalacion: 1 }]);
   });
 
-  it("refuses a tenant that does not exist (the node is not its)", async () => {
-    const { nodeId } = await bootstrapTenant();
+  it("refuses a node id that names no node", async () => {
+    const { tenantId } = await bootstrapTenant();
 
     await expect(
-      provisionNode(suite.db, { tenantId: brandTenantId(ABSENT), nodeId }, ALL_MODULES),
-    ).rejects.toMatchObject({ code: "node.not_found", params: { id: nodeId, tenantId: ABSENT } });
+      provisionNode(suite.db, { tenantId, nodeId: brandNodeId(ABSENT) }, ALL_MODULES),
+    ).rejects.toMatchObject({ code: "node.not_found", params: { id: ABSENT } });
   });
 });

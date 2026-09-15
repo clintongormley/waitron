@@ -22,22 +22,20 @@ import { validateContentTranslations } from "./content-languages.js";
 import "./errors.js";
 
 export async function listModifiers(tx: Transaction, tenantId: string): Promise<Modifier[]> {
+  void tenantId;
   const groups = await tx
     .select()
     .from(optionGroups)
-    .where(eq(optionGroups.tenantId, tenantId))
+
     .orderBy(optionGroups.sort, optionGroups.id);
   if (groups.length === 0) return [];
   const items = await tx
     .select()
     .from(optionGroupItems)
     .where(
-      and(
-        eq(optionGroupItems.tenantId, tenantId),
-        inArray(
-          optionGroupItems.groupId,
-          groups.map((g) => g.id),
-        ),
+      inArray(
+        optionGroupItems.groupId,
+        groups.map((g) => g.id),
       ),
     )
     .orderBy(optionGroupItems.sort, optionGroupItems.id);
@@ -148,7 +146,7 @@ async function writeChoices(
   const old = await tx
     .select()
     .from(optionGroupItems)
-    .where(and(eq(optionGroupItems.tenantId, tenantId), eq(optionGroupItems.groupId, modifierId)));
+    .where(eq(optionGroupItems.groupId, modifierId));
   const retained = new Set(choices.map((choice) => choice.id));
   for (const item of old) {
     if (retained.has(item.id)) continue;
@@ -157,9 +155,7 @@ async function writeChoices(
       union all select 1 from working_order_lines where tenant_id = ${tenantId} and (option_group_item_id = ${item.id} or modifier_snapshots @> ${JSON.stringify([{ type: "options", choiceId: item.id }])}::jsonb) limit 1`);
     if (usage.rows.length)
       throw new AppError("modifier.in_use", { modifierId, dependency: "choice" });
-    await tx
-      .delete(optionGroupItems)
-      .where(and(eq(optionGroupItems.tenantId, tenantId), eq(optionGroupItems.id, item.id)));
+    await tx.delete(optionGroupItems).where(eq(optionGroupItems.id, item.id));
   }
   for (const [sort, choice] of choices.entries()) {
     const values = {
@@ -177,13 +173,7 @@ async function writeChoices(
       await tx
         .update(optionGroupItems)
         .set(values)
-        .where(
-          and(
-            eq(optionGroupItems.tenantId, tenantId),
-            eq(optionGroupItems.groupId, modifierId),
-            eq(optionGroupItems.id, choice.id),
-          ),
-        );
+        .where(and(eq(optionGroupItems.groupId, modifierId), eq(optionGroupItems.id, choice.id)));
     } else {
       const inserted = await tx
         .insert(optionGroupItems)
@@ -220,10 +210,7 @@ export async function updateModifier(
   await lockModifierDefinitions(tx, tenantId);
   const old = await getModifier(tx, tenantId, modifierId);
   if (old.type !== input.type) await assertUnused(tx, tenantId, modifierId);
-  await tx
-    .update(optionGroups)
-    .set(groupValues(input))
-    .where(and(eq(optionGroups.tenantId, tenantId), eq(optionGroups.id, modifierId)));
+  await tx.update(optionGroups).set(groupValues(input)).where(eq(optionGroups.id, modifierId));
   await writeChoices(tx, tenantId, modifierId, input);
   return getModifier(tx, tenantId, modifierId);
 }
@@ -233,16 +220,14 @@ export async function deleteModifier(
   modifierId: string,
 ): Promise<void> {
   await lockModifierDefinitions(tx, tenantId);
-  await getModifier(tx, tenantId, modifierId); // 404s a foreign/absent id, tenant-scoped
+  await getModifier(tx, tenantId, modifierId); // 404s an absent id
   // A product or menu attachment is cascaded away by the delete, so neither blocks it. An OPEN order
   // is different: its line still references this modifier — by saved snapshot or chosen item — and
   // deleting would orphan a live, un-settled basket line, so a live reference refuses the delete.
   const open = await tx.execute<{ one: number }>(sql`
     select 1 as one from working_order_lines where ${openOrderUse(tenantId, modifierId)} limit 1`);
   if (open.rows[0]) throw new AppError("modifier.in_use", { modifierId, dependency: "order" });
-  await tx
-    .delete(optionGroups)
-    .where(and(eq(optionGroups.tenantId, tenantId), eq(optionGroups.id, modifierId)));
+  await tx.delete(optionGroups).where(eq(optionGroups.id, modifierId));
 }
 
 export interface ModifierDependants {

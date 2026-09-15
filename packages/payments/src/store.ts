@@ -203,13 +203,7 @@ export async function recordRefund(
   const prior = await tx
     .select({ amount: paymentRefunds.amount })
     .from(paymentRefunds)
-    .where(
-      and(
-        eq(paymentRefunds.tenantId, params.tenantId),
-        eq(paymentRefunds.paymentId, row.id),
-        eq(paymentRefunds.state, "succeeded"),
-      ),
-    );
+    .where(and(eq(paymentRefunds.paymentId, row.id), eq(paymentRefunds.state, "succeeded")));
   const alreadyRefunded = sumDecimals(prior.map((r) => decimal(r.amount)));
   const afterThis = addDecimal(alreadyRefunded, params.amount);
   const captured = decimal(row.amount);
@@ -379,7 +373,6 @@ async function selectCapturedForWorkingOrder(
     .from(payments)
     .where(
       and(
-        eq(payments.tenantId, key.tenantId),
         key.provider === undefined ? undefined : eq(payments.provider, key.provider),
         eq(payments.workingOrderId, key.workingOrderId),
         inArray(payments.state, ["captured", "accepted_offline"]),
@@ -450,11 +443,8 @@ const FORWARDABLE_COLUMNS = {
  * Filters by tenant, provider and accepted_offline state.
  */
 function forwardableWhere(tenantId: string, provider: string) {
-  return and(
-    eq(payments.tenantId, tenantId),
-    eq(payments.provider, provider),
-    eq(payments.state, "accepted_offline"),
-  );
+  void tenantId;
+  return and(eq(payments.provider, provider), eq(payments.state, "accepted_offline"));
 }
 
 /**
@@ -520,6 +510,7 @@ export async function listAttempting(
   tenantId: string,
   provider: string,
 ): Promise<AttemptingPayment[]> {
+  void tenantId;
   return tx
     .select({
       tenantId: payments.tenantId,
@@ -530,13 +521,7 @@ export async function listAttempting(
       createdAt: payments.createdAt,
     })
     .from(payments)
-    .where(
-      and(
-        eq(payments.tenantId, tenantId),
-        eq(payments.provider, provider),
-        eq(payments.state, "attempting"),
-      ),
-    )
+    .where(and(eq(payments.provider, provider), eq(payments.state, "attempting")))
     .orderBy(payments.createdAt);
 }
 
@@ -667,11 +652,7 @@ export async function resolvePaymentTenant(
 }
 
 function keyWhere(params: Key) {
-  return and(
-    eq(payments.tenantId, params.tenantId),
-    eq(payments.provider, params.provider),
-    eq(payments.paymentRef, params.paymentRef),
-  );
+  return and(eq(payments.provider, params.provider), eq(payments.paymentRef, params.paymentRef));
 }
 
 /** Read-only reversibility pre-check for integrated adapters: validates a payment can be reversed the
@@ -710,13 +691,7 @@ export async function assertReversible(
   const prior = await tx
     .select({ amount: paymentRefunds.amount })
     .from(paymentRefunds)
-    .where(
-      and(
-        eq(paymentRefunds.tenantId, params.tenantId),
-        eq(paymentRefunds.paymentId, row.id),
-        eq(paymentRefunds.state, "succeeded"),
-      ),
-    );
+    .where(and(eq(paymentRefunds.paymentId, row.id), eq(paymentRefunds.state, "succeeded")));
   const alreadyRefunded = sumDecimals(prior.map((r) => decimal(r.amount)));
   const requested = params.amount ?? decimal(row.amount);
   if (compareDecimal(addDecimal(alreadyRefunded, requested), decimal(row.amount)) > 0) {
@@ -791,6 +766,7 @@ export async function listReconcilable(
   provider: string,
   period: { from: Date; to: Date },
 ): Promise<ReconcilableRow[]> {
+  void tenantId;
   const from = period.from.toISOString();
   const to = period.to.toISOString();
   const auditable = () =>
@@ -810,17 +786,10 @@ export async function listReconcilable(
         reconcileRemediatedAt: payments.reconcileRemediatedAt,
       })
       .from(payments)
-      .innerJoin(
-        workingOrders,
-        and(
-          eq(workingOrders.id, payments.workingOrderId),
-          eq(workingOrders.tenantId, payments.tenantId),
-        ),
-      );
+      .innerJoin(workingOrders, eq(workingOrders.id, payments.workingOrderId));
 
   const held = await auditable().where(
     and(
-      eq(payments.tenantId, tenantId),
       eq(payments.provider, provider),
       inArray(payments.state, ["captured", "settled"]),
       gte(payments.settledAt, from),
@@ -829,7 +798,6 @@ export async function listReconcilable(
   );
   const pending = await auditable().where(
     and(
-      eq(payments.tenantId, tenantId),
       eq(payments.provider, provider),
       eq(payments.state, "initiated"),
       gte(payments.createdAt, from),
@@ -869,10 +837,10 @@ const CHUNK_SIZE = 1000;
  * than the local rows (settlement lags capture by days), so a window-difference would manufacture
  * false positives for payments whose local row simply sits outside the audited period.
  *
- * Carries an explicit `eq(payments.tenantId, tenantId)` predicate to scope the check. The consequence of skipping it here
- * is sharper than `listReconcilable`'s: a match against another tenant's `external_ref` would
- * suppress a real `missingLocal` finding, silently hiding exactly the money-loss case this audit
- * exists to catch.
+ * Scopes by provider and reference only. With one tenant per database (CLAUDE.md §3) the table
+ * holds a single tenant's payments, so no other tenant's `external_ref` exists to match — the
+ * per-query tenant predicate that once scoped this check has been dropped, as it has on every read.
+ * The `tenantId` argument is retained until Phase B removes the column and the insert shape fields.
  */
 export async function existingReferences(
   tx: Transaction,
@@ -880,6 +848,7 @@ export async function existingReferences(
   provider: string,
   references: string[],
 ): Promise<Set<string>> {
+  void tenantId;
   if (references.length === 0) return new Set();
   const found = new Set<string>();
   for (let i = 0; i < references.length; i += CHUNK_SIZE) {
@@ -887,13 +856,7 @@ export async function existingReferences(
     const rows = await tx
       .select({ externalRef: payments.externalRef })
       .from(payments)
-      .where(
-        and(
-          eq(payments.tenantId, tenantId),
-          eq(payments.provider, provider),
-          inArray(payments.externalRef, chunk),
-        ),
-      );
+      .where(and(eq(payments.provider, provider), inArray(payments.externalRef, chunk)));
     // `externalRef` is never null here: the WHERE clause matches only rows whose external_ref
     // equals one of `chunk`'s (non-null) entries. The cast avoids a null check the query already
     // forecloses, which would otherwise sit as a branch no test can legitimately take.
@@ -939,6 +902,7 @@ export async function tillsForWorkingOrders(
   tenantId: string,
   workingOrderIds: string[],
 ): Promise<Map<string, string>> {
+  void tenantId;
   if (workingOrderIds.length === 0) return new Map();
   const tills = new Map<string, string>();
   for (let i = 0; i < workingOrderIds.length; i += CHUNK_SIZE) {
@@ -946,7 +910,7 @@ export async function tillsForWorkingOrders(
     const rows = await tx
       .select({ id: workingOrders.id, tillId: workingOrders.tillId })
       .from(workingOrders)
-      .where(and(eq(workingOrders.tenantId, tenantId), inArray(workingOrders.id, chunk)));
+      .where(inArray(workingOrders.id, chunk));
     for (const row of rows) tills.set(row.id, row.tillId);
   }
   return tills;

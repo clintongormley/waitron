@@ -91,7 +91,6 @@ export async function readStandardSeriesIdTx(
     .from(invoiceSeries)
     .where(
       and(
-        eq(invoiceSeries.tenantId, tenantId),
         eq(invoiceSeries.nodeId, nodeId),
         eq(invoiceSeries.purpose, "standard"),
         isNull(invoiceSeries.retiredAt),
@@ -128,16 +127,11 @@ export async function retireNodeSeriesTx(
   tenantId: string,
   nodeId: string,
 ): Promise<number> {
+  void tenantId;
   const rows = await tx
     .update(invoiceSeries)
     .set({ retiredAt: sql`now()` })
-    .where(
-      and(
-        eq(invoiceSeries.tenantId, tenantId),
-        eq(invoiceSeries.nodeId, nodeId),
-        isNull(invoiceSeries.retiredAt),
-      ),
-    )
+    .where(and(eq(invoiceSeries.nodeId, nodeId), isNull(invoiceSeries.retiredAt)))
     .returning({ id: invoiceSeries.id });
   return rows.length;
 }
@@ -165,7 +159,6 @@ export async function insertNodeSeriesTx(
     .from(invoiceSeries)
     .where(
       and(
-        eq(invoiceSeries.tenantId, tenantId),
         eq(invoiceSeries.nodeId, nodeId),
         inArray(
           invoiceSeries.code,

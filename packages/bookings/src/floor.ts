@@ -100,7 +100,7 @@ export const BOOKINGS_FLOOR_ANNOTATIONS: FloorAnnotator = {
     const [loc] = await tx
       .select({ timeZone: locations.timeZone })
       .from(locations)
-      .where(and(eq(locations.id, cfg.locationId), eq(locations.tenantId, cfg.tenantId)));
+      .where(eq(locations.id, cfg.locationId));
     const timeZone = safeTimeZone(loc?.timeZone ?? DEFAULT_TIME_ZONE);
     const { date: venueToday, time: venueNow } = venueWallClock(now, timeZone);
     const graceFloor = reservationGraceFloor(venueNow);
@@ -110,7 +110,6 @@ export const BOOKINGS_FLOOR_ANNOTATIONS: FloorAnnotator = {
       .from(bookings)
       .where(
         and(
-          eq(bookings.tenantId, cfg.tenantId),
           eq(bookings.locationId, cfg.locationId),
           inArray(bookings.tableId, tableIds),
           eq(bookings.status, "booked"),

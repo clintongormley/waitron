@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
   asAppUser,
   readMembershipTrustSet,
@@ -59,7 +59,12 @@ const RING: KeyRing = loadKeyRing({
 // endorsement's signature verifies against the primary's key over canonicalize({nodeId, publicKey}).
 const STANDBY_PUB = generateNodeKeyPair().publicKey;
 
-const suite = useTemplateDb({ template: "manifest", resetPerTest: false });
+// Reset per test (the default): each test provisions its OWN venue and then mutates the membership
+// document (appends standbys, bumps the term, reserves identities), so tests must not accumulate
+// tenants in one database — with the tenant filters removed, a membership/reserved-identity read
+// across accumulated tenants returns the wrong row. The reset wipes the deployment stamp, so it is
+// re-applied in beforeEach.
+const suite = useTemplateDb({ template: "manifest" });
 
 // Tenants accumulate for the life of the shared container and `tenants_country_tax_id_key` is unique,
 // so each provisioned venue needs its own NIF — the per-suite counter the sibling real-Postgres suites use.
@@ -218,10 +223,14 @@ beforeAll(async () => {
       .caCertPem,
   );
 
-  // One deployment stamp serves this file's database.
-  await stampDeployment(suite.admin, "preproduction");
   appDb = await suite.pg.connectAs("app_login", "app_pw");
 }, 180_000);
+
+// The per-test reset (afterEach) truncates the deployment stamp along with the data, so re-stamp
+// before each test — every test needs its database provisioned `preproduction`.
+beforeEach(async () => {
+  await stampDeployment(suite.admin, "preproduction");
+});
 
 afterAll(async () => {
   if (appDb !== undefined) await appDb.close();

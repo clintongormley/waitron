@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { asAppUser, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
@@ -58,10 +58,7 @@ describe("payments.reader_id", () => {
 
     const stored = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
-      return tx
-        .select()
-        .from(payments)
-        .where(and(eq(payments.tenantId, tenantId), eq(payments.paymentRef, "pay_1")));
+      return tx.select().from(payments).where(eq(payments.paymentRef, "pay_1"));
     });
     expect(stored).toHaveLength(1);
     expect(stored[0]!.readerId).toBe(readerId);

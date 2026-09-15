@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { setTimeout as liveRetryDelay } from "node:timers/promises";
 import { serve } from "@hono/node-server";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { inArray, sql } from "drizzle-orm";
 import type { Hono } from "hono";
 import {
   asAppUser,
@@ -430,12 +430,7 @@ export function connectedCardProviderSweep(deps: {
         const rows = await tx
           .select({ purpose: tenantCredentials.purpose })
           .from(tenantCredentials)
-          .where(
-            and(
-              eq(tenantCredentials.tenantId, deps.tenantId),
-              inArray(tenantCredentials.purpose, purposes),
-            ),
-          );
+          .where(inArray(tenantCredentials.purpose, purposes));
         return new Set(rows.map((r) => r.purpose));
       });
       for (const c of deps.contributions) {

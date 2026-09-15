@@ -702,7 +702,7 @@ describe("parkOrder", () => {
     ).rejects.toMatchObject({ code: "sale.unknown_product" });
     const parked = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
-      return tx.select().from(workingOrders).where(eq(workingOrders.tenantId, cfg.tenantId));
+      return tx.select().from(workingOrders);
     });
     expect(parked).toHaveLength(0);
   });
@@ -1900,13 +1900,7 @@ async function ticketItemsFor(
       state: ticketItems.state,
     })
     .from(ticketItems)
-    .innerJoin(
-      workingOrderLines,
-      and(
-        eq(ticketItems.workingOrderLineId, workingOrderLines.id),
-        eq(ticketItems.tenantId, workingOrderLines.tenantId),
-      ),
-    )
+    .innerJoin(workingOrderLines, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
     .where(eq(ticketItems.workingOrderId, orderId));
 }
 
@@ -2246,13 +2240,7 @@ async function ticketItemRows(
   return tx
     .select({ id: ticketItems.id, lineNo: workingOrderLines.lineNo, state: ticketItems.state })
     .from(ticketItems)
-    .innerJoin(
-      workingOrderLines,
-      and(
-        eq(ticketItems.workingOrderLineId, workingOrderLines.id),
-        eq(ticketItems.tenantId, workingOrderLines.tenantId),
-      ),
-    )
+    .innerJoin(workingOrderLines, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
     .where(eq(ticketItems.workingOrderId, orderId))
     .orderBy(workingOrderLines.lineNo);
 }
@@ -2839,13 +2827,7 @@ async function courseItemsFor(
       state: ticketItems.state,
     })
     .from(ticketItems)
-    .innerJoin(
-      workingOrderLines,
-      and(
-        eq(ticketItems.workingOrderLineId, workingOrderLines.id),
-        eq(ticketItems.tenantId, workingOrderLines.tenantId),
-      ),
-    )
+    .innerJoin(workingOrderLines, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
     .where(eq(ticketItems.workingOrderId, orderId));
 }
 
@@ -3235,13 +3217,7 @@ describe("sendLines (A2: fire specific held lines / send-all)", () => {
         queuedAt: ticketItems.queuedAt,
       })
       .from(ticketItems)
-      .innerJoin(
-        workingOrderLines,
-        and(
-          eq(ticketItems.workingOrderLineId, workingOrderLines.id),
-          eq(ticketItems.tenantId, workingOrderLines.tenantId),
-        ),
-      )
+      .innerJoin(workingOrderLines, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
       .where(eq(ticketItems.workingOrderId, tabId));
     return new Map(rows.map((r) => [r.lineNo, { firedAt: r.firedAt, queuedAt: r.queuedAt }]));
   }

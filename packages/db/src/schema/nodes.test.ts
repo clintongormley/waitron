@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
 import { captureError, pgErrorCode } from "../testing/errors.js";
@@ -63,10 +63,7 @@ describe("nodes schema", () => {
 
   it("inserts a node under its tenant", async () => {
     await db.insert(nodes).values({ tenantId: TENANT_A, locationId: LOCATION_A, name: "Node A1" });
-    const found = await db
-      .select({ name: nodes.name })
-      .from(nodes)
-      .where(eq(nodes.tenantId, TENANT_A));
+    const found = await db.select({ name: nodes.name }).from(nodes);
     expect(found.map((r) => r.name)).toEqual(["Node A1"]);
   });
 

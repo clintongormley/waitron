@@ -470,13 +470,7 @@ async function seedDemoDevices(
       return tx
         .select({ id: tills.id })
         .from(tills)
-        .where(
-          and(
-            eq(tills.tenantId, cfg.tenantId),
-            eq(tills.locationId, cfg.locationId),
-            eq(tills.name, "Mostrador"),
-          ),
-        );
+        .where(and(eq(tills.locationId, cfg.locationId), eq(tills.name, "Mostrador")));
     })
   )[0];
   if (counter === undefined) {

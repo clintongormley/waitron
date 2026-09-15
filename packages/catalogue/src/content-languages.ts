@@ -6,7 +6,7 @@ import {
   resolveContentText,
   type ContentLanguages,
 } from "@waitron/shared";
-import { eq, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { contentLanguages } from "./schema/menu.js";
 import "./errors.js";
 
@@ -69,13 +69,13 @@ export async function readContentLanguages(
   tenantId: string,
   fallbackLanguage: string,
 ): Promise<ContentLanguages> {
+  void tenantId;
   const [row] = await tx
     .select({
       defaultLanguage: contentLanguages.defaultLanguage,
       languages: contentLanguages.languages,
     })
-    .from(contentLanguages)
-    .where(eq(contentLanguages.tenantId, tenantId));
+    .from(contentLanguages);
   if (row) return row;
   let defaultLanguage: string;
   try {

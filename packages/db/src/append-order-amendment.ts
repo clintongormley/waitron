@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import type { Transaction } from "./client.js";
 import { computeAmendmentHash } from "./order-amendment-hash.js";
 import { orderAmendments } from "./schema/order-amendments.js";
@@ -56,20 +56,13 @@ export async function appendOrderAmendment(
   await tx
     .select({ id: workingOrders.id })
     .from(workingOrders)
-    .where(
-      and(eq(workingOrders.tenantId, input.tenantId), eq(workingOrders.id, input.workingOrderId)),
-    )
+    .where(eq(workingOrders.id, input.workingOrderId))
     .for("update");
 
   const [prev] = await tx
     .select({ sequenceNo: orderAmendments.sequenceNo, entryHash: orderAmendments.entryHash })
     .from(orderAmendments)
-    .where(
-      and(
-        eq(orderAmendments.tenantId, input.tenantId),
-        eq(orderAmendments.workingOrderId, input.workingOrderId),
-      ),
-    )
+    .where(eq(orderAmendments.workingOrderId, input.workingOrderId))
     .orderBy(desc(orderAmendments.sequenceNo))
     .limit(1);
 

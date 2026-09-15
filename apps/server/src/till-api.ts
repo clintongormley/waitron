@@ -246,12 +246,7 @@ async function resolvePayReader(
       const [row] = await tx
         .select({ readerId: deviceCardReaders.readerId })
         .from(deviceCardReaders)
-        .where(
-          and(
-            eq(deviceCardReaders.tenantId, deps.cfg.tenantId),
-            eq(deviceCardReaders.deviceId, deviceId),
-          ),
-        );
+        .where(eq(deviceCardReaders.deviceId, deviceId));
       readerId = row?.readerId;
     }
     if (readerId === undefined) throw new AppError("reader.not_found", { id: "" });
@@ -262,13 +257,7 @@ async function resolvePayReader(
         providerRef: cardReaders.providerRef,
       })
       .from(cardReaders)
-      .where(
-        and(
-          eq(cardReaders.tenantId, deps.cfg.tenantId),
-          eq(cardReaders.id, readerId),
-          eq(cardReaders.active, true),
-        ),
-      );
+      .where(and(eq(cardReaders.id, readerId), eq(cardReaders.active, true)));
     if (reader === undefined) throw new AppError("reader.not_found", { id: readerId });
     // The provider must be CONNECTED (a sealed credential exists) before we drive the reader. Both
     // adapters turn a deferred credential-read failure into a payment DECLINE, so without this
@@ -283,12 +272,7 @@ async function resolvePayReader(
       const [cred] = await tx
         .select({ purpose: tenantCredentials.purpose })
         .from(tenantCredentials)
-        .where(
-          and(
-            eq(tenantCredentials.tenantId, deps.cfg.tenantId),
-            eq(tenantCredentials.purpose, purpose),
-          ),
-        );
+        .where(eq(tenantCredentials.purpose, purpose));
       if (cred === undefined) {
         throw new AppError("reader.provider_disconnected", { providerId: reader.provider });
       }
@@ -922,19 +906,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           const [reader] = await tx
             .select({ id: cardReaders.id, provider: cardReaders.provider })
             .from(deviceCardReaders)
-            .innerJoin(
-              cardReaders,
-              and(
-                eq(cardReaders.tenantId, deviceCardReaders.tenantId),
-                eq(cardReaders.id, deviceCardReaders.readerId),
-              ),
-            )
+            .innerJoin(cardReaders, eq(cardReaders.id, deviceCardReaders.readerId))
             .where(
-              and(
-                eq(deviceCardReaders.tenantId, deps.cfg.tenantId),
-                eq(deviceCardReaders.deviceId, device.deviceId),
-                eq(cardReaders.active, true),
-              ),
+              and(eq(deviceCardReaders.deviceId, device.deviceId), eq(cardReaders.active, true)),
             );
           if (reader !== undefined) {
             const provider = tillProviderForReader(reader.provider);
@@ -950,7 +924,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           await tx
             .select({ id: cardReaders.id, name: cardReaders.name, provider: cardReaders.provider })
             .from(cardReaders)
-            .where(and(eq(cardReaders.tenantId, deps.cfg.tenantId), eq(cardReaders.active, true)))
+            .where(eq(cardReaders.active, true))
         ).flatMap((r) => {
           const provider = tillProviderForReader(r.provider);
           return provider === undefined ? [] : [{ id: r.id, name: r.name, provider }];
@@ -1711,9 +1685,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         const [loc] = await tx
           .select({ policy: locations.drawerOpenPolicy })
           .from(locations)
-          .where(
-            and(eq(locations.tenantId, deps.cfg.tenantId), eq(locations.id, deps.cfg.locationId)),
-          );
+          .where(eq(locations.id, deps.cfg.locationId));
         // The till's own location is selected by id and tenant id (like the receipt-mode read in
         // `receipt-print.ts`); if it somehow does not, fall back to the SECURE 'gated' default so
         // a missing row can never leave the gate open.

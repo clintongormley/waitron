@@ -342,101 +342,87 @@ describe("venue service management routes", () => {
     });
   });
 
-  it("scopes edited rows and route references to their tenant and venue", async () => {
+  it("scopes edited rows and route references to their venue", async () => {
+    // A SECOND venue (a new location) in the SAME tenant — one tenant per database, so the scoping
+    // that still exists is by LOCATION, not tenant. `fx`'s manager (location L1) must not reach rows
+    // or references that live in `other`'s location (L2). (The cross-TENANT half of this probe was
+    // dropped: with one tenant per database it asserts a property the schema no longer has.)
     const fx = await fixture();
-    for (const other of [await fixture(), await fixture(fx.tenantId)]) {
-      const department = (await (
-        await send(
-          other.app,
-          "POST",
-          "/management-api/venue-service/departments",
-          other.managerCookie,
-          { name: "Other", defaultServiceMode: "prepay" },
-        )
-      ).json()) as { id: string };
-      const route = (await (
-        await send(other.app, "POST", "/management-api/venue-service/routes", other.managerCookie, {
-          categoryId: other.categoryId,
-          noPreparation: true,
-        })
-      ).json()) as { id: string };
-      expect(
-        (
-          await send(
-            fx.app,
-            "PATCH",
-            `/management-api/venue-service/departments/${department.id}`,
-            fx.managerCookie,
-            { name: "Wrong", tradingName: "Wrong", defaultServiceMode: "prepay" },
-          )
-        ).status,
-      ).toBe(404);
-      expect(
-        (
-          await send(
-            fx.app,
-            "PUT",
-            `/management-api/venue-service/routes/${route.id}`,
-            fx.managerCookie,
-            { zoneId: null, categoryId: fx.categoryId, noPreparation: true },
-          )
-        ).status,
-      ).toBe(404);
-      const own = (await (
-        await send(fx.app, "POST", "/management-api/venue-service/routes", fx.managerCookie, {
-          categoryId: fx.categoryId,
-          noPreparation: true,
-        })
-      ).json()) as { id: string };
-      expect(
-        (
-          await send(
-            fx.app,
-            "PUT",
-            `/management-api/venue-service/routes/${own.id}`,
-            fx.managerCookie,
-            { zoneId: null, categoryId: fx.categoryId, stationId: other.stationId },
-          )
-        ).status,
-      ).toBe(409);
-      expect(
-        (
-          await send(
-            fx.app,
-            "PUT",
-            `/management-api/venue-service/routes/${own.id}`,
-            fx.managerCookie,
-            { zoneId: other.zoneId, categoryId: fx.categoryId, noPreparation: true },
-          )
-        ).status,
-      ).toBe(404);
-      if (other.tenantId !== fx.tenantId)
-        expect(
-          (
-            await send(
-              fx.app,
-              "PUT",
-              `/management-api/venue-service/routes/${own.id}`,
-              fx.managerCookie,
-              { zoneId: null, categoryId: other.categoryId, noPreparation: true },
-            )
-          ).status,
-        ).toBe(404);
+    const other = await fixture(fx.tenantId);
+    const department = (await (
       await send(
-        fx.app,
-        "DELETE",
-        `/management-api/venue-service/routes/${own.id}`,
-        fx.managerCookie,
-      );
-      expect(
-        await (
-          await send(other.app, "GET", "/management-api/venue-service", other.managerCookie)
-        ).json(),
-      ).toMatchObject({
-        departments: [{ id: department.id, name: "Other" }],
-        routes: [{ id: route.id, categoryId: other.categoryId, noPreparation: true }],
-      });
-    }
+        other.app,
+        "POST",
+        "/management-api/venue-service/departments",
+        other.managerCookie,
+        { name: "Other", defaultServiceMode: "prepay" },
+      )
+    ).json()) as { id: string };
+    const route = (await (
+      await send(other.app, "POST", "/management-api/venue-service/routes", other.managerCookie, {
+        categoryId: other.categoryId,
+        noPreparation: true,
+      })
+    ).json()) as { id: string };
+    expect(
+      (
+        await send(
+          fx.app,
+          "PATCH",
+          `/management-api/venue-service/departments/${department.id}`,
+          fx.managerCookie,
+          { name: "Wrong", tradingName: "Wrong", defaultServiceMode: "prepay" },
+        )
+      ).status,
+    ).toBe(404);
+    expect(
+      (
+        await send(
+          fx.app,
+          "PUT",
+          `/management-api/venue-service/routes/${route.id}`,
+          fx.managerCookie,
+          { zoneId: null, categoryId: fx.categoryId, noPreparation: true },
+        )
+      ).status,
+    ).toBe(404);
+    const own = (await (
+      await send(fx.app, "POST", "/management-api/venue-service/routes", fx.managerCookie, {
+        categoryId: fx.categoryId,
+        noPreparation: true,
+      })
+    ).json()) as { id: string };
+    expect(
+      (
+        await send(
+          fx.app,
+          "PUT",
+          `/management-api/venue-service/routes/${own.id}`,
+          fx.managerCookie,
+          { zoneId: null, categoryId: fx.categoryId, stationId: other.stationId },
+        )
+      ).status,
+    ).toBe(409);
+    expect(
+      (
+        await send(
+          fx.app,
+          "PUT",
+          `/management-api/venue-service/routes/${own.id}`,
+          fx.managerCookie,
+          { zoneId: other.zoneId, categoryId: fx.categoryId, noPreparation: true },
+        )
+      ).status,
+    ).toBe(404);
+    await send(fx.app, "DELETE", `/management-api/venue-service/routes/${own.id}`, fx.managerCookie);
+    expect(
+      await (
+        await send(other.app, "GET", "/management-api/venue-service", other.managerCookie)
+      ).json(),
+    ).toMatchObject({
+      departments: [{ id: department.id, name: "Other" }],
+      routes: [{ id: route.id, categoryId: other.categoryId, noPreparation: true }],
+    });
   });
 
   it("rejects a duplicate route edit and keeps the original route", async () => {

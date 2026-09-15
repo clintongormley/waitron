@@ -1,7 +1,7 @@
 import { tenantReceipts } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
-import { eq, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { DEFAULT_RECEIPT } from "./defaults.js";
 import type { ReceiptConfig } from "./types.js";
 import { validateReceiptConfig } from "./validate.js";
@@ -22,10 +22,8 @@ import { validateReceiptConfig } from "./validate.js";
 
 /** The tenant's authored receipt trim, or DEFAULT_RECEIPT (`{}`) when it has never authored one. */
 export async function getReceipt(tx: Transaction, tenantId: string): Promise<ReceiptConfig> {
-  const [row] = await tx
-    .select({ receipt: tenantReceipts.receipt })
-    .from(tenantReceipts)
-    .where(eq(tenantReceipts.tenantId, tenantId));
+  void tenantId;
+  const [row] = await tx.select({ receipt: tenantReceipts.receipt }).from(tenantReceipts);
   if (row === undefined) return DEFAULT_RECEIPT;
   return row.receipt as ReceiptConfig;
 }

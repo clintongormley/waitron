@@ -540,10 +540,7 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
     // the count is order-independent).
     const registros = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
-      return tx
-        .select()
-        .from(registrosFacturacion)
-        .where(eq(registrosFacturacion.tenantId, cfg.tenantId));
+      return tx.select().from(registrosFacturacion);
     });
     expect(registros.length).toBe(1);
     expect(registros[0]!.tenantId).toBe(cfg.tenantId);
@@ -553,10 +550,7 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
     // 5. The sale is attributed to the logged-in operator — the whole point of the session guard.
     const saleRows = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
-      return tx
-        .select({ operatorId: sales.operatorId })
-        .from(sales)
-        .where(eq(sales.tenantId, cfg.tenantId));
+      return tx.select({ operatorId: sales.operatorId }).from(sales);
     });
     expect(saleRows).toEqual([{ operatorId }]);
   });
@@ -691,7 +685,7 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
       return tx
         .select()
         .from(registrosFacturacion)
-        .where(eq(registrosFacturacion.tenantId, cfg.tenantId))
+
         .orderBy(registrosFacturacion.secuencia);
     });
     expect(registros).toHaveLength(2);
@@ -746,10 +740,7 @@ describe("sale-time till_id from the authenticated device (SP-A.2 cutover)", () 
     // Refused before the fiscal write — the unrecoverable record is never touched (CLAUDE.md §5).
     const registros = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
-      return tx
-        .select()
-        .from(registrosFacturacion)
-        .where(eq(registrosFacturacion.tenantId, cfg.tenantId));
+      return tx.select().from(registrosFacturacion);
     });
     expect(registros).toHaveLength(0);
   });
@@ -791,10 +782,7 @@ describe("sale-time till_id from the authenticated device (SP-A.2 cutover)", () 
     expect(await res.json()).toMatchObject({ error: { code: "device.till_required" } });
     const registros = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
-      return tx
-        .select()
-        .from(registrosFacturacion)
-        .where(eq(registrosFacturacion.tenantId, cfg.tenantId));
+      return tx.select().from(registrosFacturacion);
     });
     expect(registros).toHaveLength(0);
   });
@@ -859,18 +847,14 @@ describe("/api/working-orders → pay (park & retrieve, idempotent over HTTP)", 
     const after = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
       return {
-        registros: await tx
-          .select()
-          .from(registrosFacturacion)
-          .where(eq(registrosFacturacion.tenantId, cfg.tenantId)),
+        registros: await tx.select().from(registrosFacturacion),
         wo: await tx
           .select({ status: workingOrders.status })
           .from(workingOrders)
           .where(eq(workingOrders.id, workingOrderId)),
         saleRows: await tx
           .select({ workingOrderId: sales.workingOrderId, operatorId: sales.operatorId })
-          .from(sales)
-          .where(eq(sales.tenantId, cfg.tenantId)),
+          .from(sales),
       };
     });
     expect(after.registros).toHaveLength(1);
@@ -902,10 +886,7 @@ describe("/api/working-orders → pay (park & retrieve, idempotent over HTTP)", 
     // Still exactly ONE record — the replay filed nothing.
     const stillOne = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
-      return tx
-        .select()
-        .from(registrosFacturacion)
-        .where(eq(registrosFacturacion.tenantId, cfg.tenantId));
+      return tx.select().from(registrosFacturacion);
     });
     expect(stillOne).toHaveLength(1);
   });
@@ -1168,10 +1149,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
       const after = await withTransaction(suite.admin, async (tx) => {
         await asAppUser(tx);
         return {
-          registros: await tx
-            .select()
-            .from(registrosFacturacion)
-            .where(eq(registrosFacturacion.tenantId, cfg.tenantId)),
+          registros: await tx.select().from(registrosFacturacion),
           wo: await tx
             .select({ status: workingOrders.status })
             .from(workingOrders)
@@ -1383,7 +1361,7 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
 
     const noSaleYet = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
-      return tx.select({ id: sales.id }).from(sales).where(eq(sales.tenantId, modeCfg.tenantId));
+      return tx.select({ id: sales.id }).from(sales);
     });
     expect(noSaleYet).toEqual([]); // Mode T: nothing filed at placing
 
@@ -1518,10 +1496,7 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
           .select({ status: workingOrders.status })
           .from(workingOrders)
           .where(eq(workingOrders.id, workingOrderId)),
-        registros: await tx
-          .select()
-          .from(registrosFacturacion)
-          .where(eq(registrosFacturacion.tenantId, cfg.tenantId)),
+        registros: await tx.select().from(registrosFacturacion),
       };
     });
     expect(after.wo).toEqual([{ status: "settled" }]);
@@ -1860,7 +1835,7 @@ describe("handheld sales and device capability gates", () => {
       return tx
         .select()
         .from(registrosFacturacion)
-        .where(eq(registrosFacturacion.tenantId, cfg.tenantId))
+
         .orderBy(registrosFacturacion.secuencia);
     });
     expect(registros).toHaveLength(1);
@@ -1913,7 +1888,7 @@ describe("handheld sales and device capability gates", () => {
       return tx
         .select()
         .from(registrosFacturacion)
-        .where(eq(registrosFacturacion.tenantId, cfg.tenantId))
+
         .orderBy(registrosFacturacion.secuencia);
     });
     expect(registros).toHaveLength(1);
@@ -2077,10 +2052,7 @@ describe("handheld sales and device capability gates", () => {
     // Nothing was filed — the unrecoverable chained record the guard protects (CLAUDE.md §5).
     const afterRefused = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
-      return tx
-        .select()
-        .from(registrosFacturacion)
-        .where(eq(registrosFacturacion.tenantId, cfg.tenantId));
+      return tx.select().from(registrosFacturacion);
     });
     expect(afterRefused.length).toBe(0);
 
@@ -2096,10 +2068,7 @@ describe("handheld sales and device capability gates", () => {
     expect((await placed.json()).invoiceNumber).toMatch(/^A\/\d+$/);
     const afterPlaced = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
-      return tx
-        .select()
-        .from(registrosFacturacion)
-        .where(eq(registrosFacturacion.tenantId, cfg.tenantId));
+      return tx.select().from(registrosFacturacion);
     });
     expect(afterPlaced.length).toBe(1);
   });
@@ -2149,10 +2118,7 @@ describe("handheld sales and device capability gates", () => {
     expect((await refused.json()).error.code).toBe("device.forbidden_action");
     const afterRefused = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
-      return tx
-        .select()
-        .from(registrosFacturacion)
-        .where(eq(registrosFacturacion.tenantId, cfg.tenantId));
+      return tx.select().from(registrosFacturacion);
     });
     expect(afterRefused.length).toBe(0);
 
@@ -2174,10 +2140,7 @@ describe("handheld sales and device capability gates", () => {
           .select({ status: workingOrders.status })
           .from(workingOrders)
           .where(eq(workingOrders.id, workingOrderId)),
-        registros: await tx
-          .select()
-          .from(registrosFacturacion)
-          .where(eq(registrosFacturacion.tenantId, cfg.tenantId)),
+        registros: await tx.select().from(registrosFacturacion),
       };
     });
     expect(after.wo).toEqual([{ status: "settled" }]);
@@ -2400,10 +2363,7 @@ it("files every modifier mode through cash checkout and reprints their saved fac
     }>(
       sql`select quantity,vat_rate,modifier_snapshots,unit_name,unit_precision from sale_lines where tenant_id=${cfg.tenantId} order by line_no`,
     );
-    const records = await tx
-      .select()
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.tenantId, cfg.tenantId));
+    const records = await tx.select().from(registrosFacturacion);
     return { rows: rows.rows, records };
   });
   expect(stored.rows).toEqual([
@@ -2471,10 +2431,7 @@ it("files every modifier mode through cash checkout and reprints their saved fac
   expect(text).toContain("DUPLICADO");
   const recordCount = await withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
-    return tx
-      .select({ id: registrosFacturacion.id })
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.tenantId, cfg.tenantId));
+    return tx.select({ id: registrosFacturacion.id }).from(registrosFacturacion);
   });
   expect(recordCount).toHaveLength(1);
 });

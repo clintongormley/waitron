@@ -54,18 +54,9 @@ export async function liveSeriesBases(
   const live = await tx
     .select({ code: invoiceSeries.code, purpose: invoiceSeries.purpose })
     .from(invoiceSeries)
-    .where(
-      and(
-        eq(invoiceSeries.tenantId, node.tenantId),
-        eq(invoiceSeries.nodeId, node.nodeId),
-        isNull(invoiceSeries.retiredAt),
-      ),
-    )
+    .where(and(eq(invoiceSeries.nodeId, node.nodeId), isNull(invoiceSeries.retiredAt)))
     .orderBy(invoiceSeries.code);
-  const numbers = await tx
-    .select({ n: registroSif.numeroInstalacion })
-    .from(registroSif)
-    .where(eq(registroSif.tenantId, node.tenantId));
+  const numbers = await tx.select({ n: registroSif.numeroInstalacion }).from(registroSif);
   const registered = new Set(numbers.map((r) => r.n));
   const seen = new Set<string>();
   const claimed = new Set<string>();

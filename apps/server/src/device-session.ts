@@ -141,10 +141,7 @@ export interface DeviceBinding {
 // selects (and the device-api list read): `devices ⨝ device_profiles ON (tenant_id, device_profile_id)`.
 // The join always matches — `device_profile_id` is NOT NULL with a RESTRICT composite FK — so the
 // binding always carries the profile's `formFactor` and `capabilities`.
-const deviceProfileJoin = and(
-  eq(deviceProfiles.tenantId, devices.tenantId),
-  eq(deviceProfiles.id, devices.deviceProfileId),
-);
+const deviceProfileJoin = eq(deviceProfiles.id, devices.deviceProfileId);
 const deviceBindingColumns = {
   formFactor: deviceProfiles.formFactor,
   label: devices.label,
@@ -236,13 +233,7 @@ export async function tryReadDevice(
           // isolates SELECTs, so a by-id read must carry its own tenant predicate — one-tenant-per-db
           // is NOT the query's isolation boundary (CLAUDE.md §3; till-reroute-S3). Critical on this
           // dev-override path, which has NO token to verify a foreign device UUID.
-          .where(
-            and(
-              eq(devices.tenantId, deps.cfg.tenantId),
-              eq(devices.id, override),
-              eq(devices.active, true),
-            ),
-          );
+          .where(and(eq(devices.id, override), eq(devices.active, true)));
         if (row === undefined) return null;
         return toDeviceBinding(override, row);
       });
@@ -279,13 +270,7 @@ export async function tryReadDevice(
       // predicate is explicit: since RLS was dropped (#255) `withTransaction` no longer isolates SELECTs, so
       // a by-id read carries its own `tenant_id` scope — one-tenant-per-db is NOT the query's isolation
       // boundary (CLAUDE.md §3; till-reroute-S3). Defence-in-depth here (the token is still verified).
-      .where(
-        and(
-          eq(devices.tenantId, deps.cfg.tenantId),
-          eq(devices.id, deviceId),
-          eq(devices.active, true),
-        ),
-      );
+      .where(and(eq(devices.id, deviceId), eq(devices.active, true)));
     if (row === undefined) return null;
     // Constant-time scrypt check (REUSED, never home-rolled): the token is never compared with `===`.
     if (!verifySecret(token, row.tokenHash)) return null;

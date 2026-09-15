@@ -123,13 +123,7 @@ export async function listBookings(
   return tx
     .select()
     .from(bookings)
-    .where(
-      and(
-        eq(bookings.tenantId, cfg.tenantId),
-        eq(bookings.locationId, cfg.locationId),
-        eq(bookings.bookingDate, date),
-      ),
-    )
+    .where(and(eq(bookings.locationId, cfg.locationId), eq(bookings.bookingDate, date)))
     .orderBy(asc(bookings.bookingTime), asc(bookings.id));
 }
 
@@ -143,10 +137,8 @@ export async function getBooking(
   cfg: BookingConfig,
   id: string,
 ): Promise<Booking | undefined> {
-  const [row] = await tx
-    .select()
-    .from(bookings)
-    .where(and(eq(bookings.id, id), eq(bookings.tenantId, cfg.tenantId)));
+  void cfg;
+  const [row] = await tx.select().from(bookings).where(eq(bookings.id, id));
   return row;
 }
 
@@ -179,9 +171,7 @@ export async function updateBooking(
       notes: patch.notes,
       tableId: patch.tableId,
     })
-    .where(
-      and(eq(bookings.id, id), eq(bookings.tenantId, cfg.tenantId), eq(bookings.status, "booked")),
-    )
+    .where(and(eq(bookings.id, id), eq(bookings.status, "booked")))
     .returning({ id: bookings.id });
   if (updated.length === 0) {
     throw new AppError("booking.not_found", { bookingId: id });
@@ -199,20 +189,16 @@ async function advanceStatus(
   from: readonly ("booked" | "seated" | "completed" | "no_show" | "cancelled")[],
   to: "seated" | "completed" | "no_show" | "cancelled",
 ): Promise<void> {
+  void cfg;
   const updated = await tx
     .update(bookings)
     .set({ status: to })
-    .where(
-      and(eq(bookings.id, id), eq(bookings.tenantId, cfg.tenantId), inArray(bookings.status, from)),
-    )
+    .where(and(eq(bookings.id, id), inArray(bookings.status, from)))
     .returning({ id: bookings.id });
   if (updated.length > 0) {
     return;
   }
-  const [row] = await tx
-    .select({ id: bookings.id })
-    .from(bookings)
-    .where(and(eq(bookings.id, id), eq(bookings.tenantId, cfg.tenantId)));
+  const [row] = await tx.select({ id: bookings.id }).from(bookings).where(eq(bookings.id, id));
   if (row === undefined) {
     throw new AppError("booking.not_found", { bookingId: id });
   }
@@ -289,9 +275,7 @@ export async function seatBooking(
   const seated = await tx
     .update(bookings)
     .set({ tableId, tabId, status: "seated" })
-    .where(
-      and(eq(bookings.id, id), eq(bookings.tenantId, cfg.tenantId), eq(bookings.status, "booked")),
-    )
+    .where(and(eq(bookings.id, id), eq(bookings.status, "booked")))
     .returning({ id: bookings.id });
   if (seated.length === 0) {
     throw new AppError("booking.invalid_transition", { bookingId: id });

@@ -1,7 +1,7 @@
 import "./errors.js";
 import { AppError } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
-import { and, eq, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { persons } from "./schema/persons.js";
 import { normalizeEmail } from "./email.js";
 import { hashPassword, verifyPassword } from "./verify-password.js";
@@ -111,9 +111,7 @@ export async function loginManager(
   // case-insensitive unique index (persons_tenant_email_uq), so `lower(email)` here mirrors the index
   // and login is case-insensitive.
   const email = normalizeEmail(input.email);
-  const [person] = await selectPersonLogin(tx).where(
-    and(eq(persons.tenantId, input.tenantId), eq(sql`lower(${persons.email})`, email)),
-  );
+  const [person] = await selectPersonLogin(tx).where(eq(sql`lower(${persons.email})`, email));
   // Enumeration hardening: an unknown email is indistinguishable from a wrong password on the public
   // login form — both throw `password.invalid`, so the response never reveals which addresses have
   // accounts. We run one `verifyPassword` against a dummy hash first so the not-found path costs the
@@ -150,9 +148,7 @@ export async function loginManagerById(
   // surface to hide here — a caller either holds a valid primary admin id or does not — so an unknown
   // id is a straight `person.not_found` (no dummy-KDF equalisation). Everything after the lookup is
   // identical to `loginManager`, via `completeManagerLogin`.
-  const [person] = await selectPersonLogin(tx).where(
-    and(eq(persons.tenantId, input.tenantId), eq(persons.id, input.personId)),
-  );
+  const [person] = await selectPersonLogin(tx).where(eq(persons.id, input.personId));
   if (person === undefined) throw new AppError("person.not_found", { personId: input.personId });
   return completeManagerLogin(tx, input, person, "totp.invalid");
 }

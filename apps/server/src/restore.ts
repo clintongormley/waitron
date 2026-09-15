@@ -1,6 +1,6 @@
 import { mkdir, rename, rm } from "node:fs/promises";
 import { join, posix } from "node:path";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import {
   AppError,
   isAppError,
@@ -394,7 +394,7 @@ export async function runRestoreHooks(args: {
     const [known] = await tx
       .select({ id: nodes.id })
       .from(nodes)
-      .where(and(eq(nodes.tenantId, node.tenantId), eq(nodes.id, node.nodeId)))
+      .where(eq(nodes.id, node.nodeId))
       .limit(1);
     if (known === undefined) {
       throw new AppError("restore.identity_unknown", {

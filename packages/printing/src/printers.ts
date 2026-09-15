@@ -2,7 +2,7 @@
 // throws them — the reachability convention every code-throwing file in the tree follows, guarded
 // tree-wide by scripts/errors-reachable.test.ts. See errors.ts.
 import "./errors.js";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import { isPgError, printers } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
@@ -199,6 +199,7 @@ export async function updatePrinter(
   id: string,
   patch: UpdatePrinterInput,
 ): Promise<void> {
+  void cfg;
   // The SET is `patch` with every undefined-valued key dropped, so it carries ONLY the fields the edit
   // names — an absent field is left untouched, an explicit `null` is written to clear a nullable one.
   // Filtering here (rather than trusting the caller to omit undefined keys) keeps the empty-patch
@@ -214,10 +215,7 @@ export async function updatePrinter(
   // present one a no-op. `printers` carries no `updated_at`, so there is nothing an empty edit would
   // touch anyway.
   if (Object.keys(set).length === 0) {
-    const [exists] = await tx
-      .select({ id: printers.id })
-      .from(printers)
-      .where(and(eq(printers.tenantId, cfg.tenantId), eq(printers.id, id)));
+    const [exists] = await tx.select({ id: printers.id }).from(printers).where(eq(printers.id, id));
     if (exists === undefined) throw new AppError("printer.not_found", { id });
     return;
   }
@@ -227,7 +225,7 @@ export async function updatePrinter(
     updated = await tx
       .update(printers)
       .set(set)
-      .where(and(eq(printers.tenantId, cfg.tenantId), eq(printers.id, id)))
+      .where(eq(printers.id, id))
       .returning({ id: printers.id });
   } catch (error) {
     return translatePrinterWriteError(error, patch.localKey ?? undefined);
@@ -251,10 +249,11 @@ export async function deactivatePrinter(
   cfg: PrintConfig,
   id: string,
 ): Promise<void> {
+  void cfg;
   const updated = await tx
     .update(printers)
     .set({ active: false })
-    .where(and(eq(printers.tenantId, cfg.tenantId), eq(printers.id, id)))
+    .where(eq(printers.id, id))
     .returning({ id: printers.id });
   if (updated.length === 0) throw new AppError("printer.not_found", { id });
 }
@@ -267,6 +266,7 @@ export async function deactivatePrinter(
  * reactivate them.
  */
 export async function listPrinters(tx: Transaction, cfg: PrintConfig): Promise<PrinterRow[]> {
+  void cfg;
   return tx
     .select({
       id: printers.id,
@@ -283,6 +283,6 @@ export async function listPrinters(tx: Transaction, cfg: PrintConfig): Promise<P
       active: printers.active,
     })
     .from(printers)
-    .where(eq(printers.tenantId, cfg.tenantId))
+
     .orderBy(printers.name);
 }

@@ -1,7 +1,7 @@
 import { tenantThemes } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
-import { eq, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import type { ThemeOverride } from "./canvas.js";
 import { validateThemeOverride } from "./theme.js";
 
@@ -30,10 +30,8 @@ export async function getTenantTheme(
   tx: Transaction,
   tenantId: string,
 ): Promise<ThemeOverride | undefined> {
-  const [row] = await tx
-    .select({ theme: tenantThemes.theme })
-    .from(tenantThemes)
-    .where(eq(tenantThemes.tenantId, tenantId));
+  void tenantId;
+  const [row] = await tx.select({ theme: tenantThemes.theme }).from(tenantThemes);
   if (row === undefined) return undefined;
   return row.theme as ThemeOverride;
 }

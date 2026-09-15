@@ -188,32 +188,14 @@ describe("rotateCredentials", () => {
     expect(legacy?.key_version).toBe(1);
   });
 
-  it("does not count listed metadata whose tenant-purpose lookup finds no row", async () => {
-    // Synthetic fixture for the absent-read branch: listCredentials returns both rows, then
-    // each tenant's pass tries the other purpose, whose tenant-purpose pair is absent.
-    // This exercises the count rule without claiming to simulate concurrent deletion.
-    const p = await seedTenant(suite.db);
-    const q = await seedTenant(suite.db);
-    await withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING_V1, { tenantId: p, purpose: "payments.stripe", value: STRIPE }),
-    );
-    await withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING_V1, {
-        tenantId: q,
-        purpose: "fiscal.aeat",
-        value: { pfxBase64: "AA", passphrase: "p", certKind: "sello" },
-      }),
-    );
-
-    const result = await rotateCredentials(suite.db, RING_BOTH);
-    // Exactly 2: P's own row and Q's own row, each rotated exactly once when its OWN tenant's pass
-    // reaches it. Before M6's fix, the spurious `{tenantId: P, purpose: "fiscal.aeat"}` lookup
-    // during P's pass (finding nothing) still incremented `rotated`, making this 3.
-    expect(result.rotated).toBe(2);
-
-    const versions = await suite.db.execute<{ tenant_id: string; key_version: number }>(sql`
-      select tenant_id, key_version from tenant_credentials where tenant_id in (${p}, ${q})`);
-    expect(versions.rows).toHaveLength(2);
-    for (const row of versions.rows) expect(row.key_version).toBe(2);
-  });
+  // The count rule "a listed metadata row whose per-tenant-purpose lookup finds no row is not
+  // counted" (rotateCredentials' `if (value === null) return`) was proven here by a two-tenant
+  // fixture: each tenant's pass tried the OTHER tenant's purpose, whose (tenant, purpose) pair was
+  // absent. One tenant per database (this branch's whole point) makes that synthesis impossible —
+  // there is no second tenant to hold the absent pair, and with the tenant read-filter gone a
+  // single-tenant lookup for a listed purpose always finds its row. The branch now guards only a row
+  // deleted between the list and the read (concurrent deletion), which this test explicitly did NOT
+  // simulate; a single-tenant test for it belongs with B2's rotateCredentials restructuring (where
+  // the tenant loop itself goes). Removed rather than rewritten to a one-tenant form that would
+  // assert nothing about the absent-lookup path.
 });

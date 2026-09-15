@@ -4,7 +4,7 @@
 // package's own public barrel (index.ts). Mirrors ./registro-sif.ts's identical convention of
 // importing from the file that documents the code a module throws.
 import "./errors.js";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { recordIncident } from "@waitron/core";
 import { AppError } from "@waitron/shared";
 import type { NodeId, SaleId, TenantId, TillId } from "@waitron/shared";
@@ -107,6 +107,7 @@ async function selectHeadForUpdate(
   tenantId: TenantId,
   nodeId: NodeId,
 ): Promise<ChainHead | undefined> {
+  void tenantId;
   const [row] = await tx
     .select({
       secuencia: cadenas.secuencia,
@@ -114,7 +115,7 @@ async function selectHeadForUpdate(
       ultimaHuella: cadenas.ultimaHuella,
     })
     .from(cadenas)
-    .where(and(eq(cadenas.tenantId, tenantId), eq(cadenas.nodeId, nodeId)))
+    .where(eq(cadenas.nodeId, nodeId))
     .for("update");
   return row;
 }
@@ -262,7 +263,7 @@ async function attemptAppend(
   await tx
     .update(cadenas)
     .set({ secuencia, ultimoRegistroId: inserted.id, ultimaHuella: row.huella })
-    .where(and(eq(cadenas.tenantId, tenantId), eq(cadenas.nodeId, nodeId)));
+    .where(eq(cadenas.nodeId, nodeId));
 
   // A warning does not block: AEAT accepts these under its own tolerance. But our totals
   // disagreeing with our own VAT lines is a bug in the money while the venue keeps selling, so it

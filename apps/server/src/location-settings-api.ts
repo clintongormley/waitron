@@ -1,5 +1,5 @@
 import type { Hono } from "hono";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import {
   asAppUser,
   locations,
@@ -30,10 +30,7 @@ export function mountLocationSettingsApi(
   deps: { db: Database; cfg: { tenantId: string; locationId: string }; fiscal: FiscalContribution },
   log: Logger,
 ): void {
-  const scope = and(
-    eq(locations.id, deps.cfg.locationId),
-    eq(locations.tenantId, deps.cfg.tenantId),
-  );
+  const scope = eq(locations.id, deps.cfg.locationId);
   const gated = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>) =>
     withTransaction(deps.db, async (tx) => {
       await asAppUser(tx);

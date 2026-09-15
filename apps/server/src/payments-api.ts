@@ -154,17 +154,11 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
     const [credential] = await tx
       .select({ purpose: tenantCredentials.purpose })
       .from(tenantCredentials)
-      .where(
-        and(
-          eq(tenantCredentials.tenantId, deps.cfg.tenantId),
-          eq(tenantCredentials.purpose, seat.credentialPurpose),
-        ),
-      );
+      .where(eq(tenantCredentials.purpose, seat.credentialPurpose));
     if (credential === undefined)
       throw new AppError("reader.provider_disconnected", { providerId: seat.providerId });
   };
-  const readerWhere = (id: string) =>
-    and(eq(cardReaders.tenantId, deps.cfg.tenantId), eq(cardReaders.id, id));
+  const readerWhere = (id: string) => eq(cardReaders.id, id);
   const requireReader = async (tx: Transaction, id: string) => {
     // Local mutations decide from the locked row, so Enable cannot race a committed unpair.
     const [reader] = await tx.select().from(cardReaders).where(readerWhere(id)).for("update");
@@ -182,12 +176,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         tx
           .select({ providerRef: cardReaders.providerRef, active: cardReaders.active })
           .from(cardReaders)
-          .where(
-            and(
-              eq(cardReaders.tenantId, deps.cfg.tenantId),
-              eq(cardReaders.provider, seat.providerId),
-            ),
-          ),
+          .where(eq(cardReaders.provider, seat.providerId)),
       );
       const registered = new Map(rows.map((row) => [row.providerRef, row.active]));
       return c.json(
@@ -282,10 +271,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       // holds (metadata only — no ciphertext, no decrypt, never a secret), scoped by the explicit
       // `tenant_id` predicate (CLAUDE.md §3, one-tenant-per-db is not the query boundary).
       const rows = await gated(sessionId, (tx) =>
-        tx
-          .select({ purpose: tenantCredentials.purpose })
-          .from(tenantCredentials)
-          .where(eq(tenantCredentials.tenantId, deps.cfg.tenantId)),
+        tx.select({ purpose: tenantCredentials.purpose }).from(tenantCredentials),
       );
       const connected = new Set(rows.map((r) => r.purpose));
       // `merchantName` is deliberately omitted here: it is not stored (only returned at connect time),
@@ -353,13 +339,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         const active = await tx
           .select({ id: cardReaders.id })
           .from(cardReaders)
-          .where(
-            and(
-              eq(cardReaders.tenantId, deps.cfg.tenantId),
-              eq(cardReaders.provider, id),
-              eq(cardReaders.active, true),
-            ),
-          );
+          .where(and(eq(cardReaders.provider, id), eq(cardReaders.active, true)));
         if (active.length > 0) {
           throw new AppError("payment.provider_in_use", { activeReaders: active.length });
         }
@@ -391,7 +371,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
             canEnable: sql<boolean>`${cardReaders.unpairedAt} is null`,
           })
           .from(cardReaders)
-          .where(eq(cardReaders.tenantId, deps.cfg.tenantId))
+
           .orderBy(cardReaders.name),
         counts: await tx
           .select({
@@ -399,7 +379,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
             n: sql<number>`count(*)::int`,
           })
           .from(deviceCardReaders)
-          .where(eq(deviceCardReaders.tenantId, deps.cfg.tenantId))
+
           .groupBy(deviceCardReaders.readerId),
       }));
       const countByReader = new Map(counts.map((r) => [r.readerId, r.n]));
@@ -424,12 +404,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         const [cred] = await tx
           .select({ purpose: tenantCredentials.purpose })
           .from(tenantCredentials)
-          .where(
-            and(
-              eq(tenantCredentials.tenantId, deps.cfg.tenantId),
-              eq(tenantCredentials.purpose, seat.credentialPurpose),
-            ),
-          );
+          .where(eq(tenantCredentials.purpose, seat.credentialPurpose));
         if (cred === undefined) throw new AppError("reader.provider_disconnected", { providerId });
       });
       // Relay to the seat (pairs SumUp / verifies Stripe) OUTSIDE any transaction — a provider
@@ -445,12 +420,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         const [cred] = await tx
           .select({ purpose: tenantCredentials.purpose })
           .from(tenantCredentials)
-          .where(
-            and(
-              eq(tenantCredentials.tenantId, deps.cfg.tenantId),
-              eq(tenantCredentials.purpose, seat.credentialPurpose),
-            ),
-          );
+          .where(eq(tenantCredentials.purpose, seat.credentialPurpose));
         if (cred === undefined) return undefined;
         const [row] = await tx
           .insert(cardReaders)
@@ -485,7 +455,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         const [row] = await tx
           .select({ provider: cardReaders.provider, providerRef: cardReaders.providerRef })
           .from(cardReaders)
-          .where(and(eq(cardReaders.tenantId, deps.cfg.tenantId), eq(cardReaders.id, readerId)));
+          .where(eq(cardReaders.id, readerId));
         if (row === undefined) throw new AppError("reader.not_found", { id: readerId });
         return row;
       });
@@ -525,12 +495,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         tx
           .select({ readerId: deviceCardReaders.readerId })
           .from(deviceCardReaders)
-          .where(
-            and(
-              eq(deviceCardReaders.tenantId, deps.cfg.tenantId),
-              eq(deviceCardReaders.deviceId, deviceId),
-            ),
-          ),
+          .where(eq(deviceCardReaders.deviceId, deviceId)),
       );
       return c.json({ readerId: rows[0]?.readerId ?? null });
     }),
@@ -553,18 +518,11 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         const [device] = await tx
           .select({ id: devices.id })
           .from(devices)
-          .where(and(eq(devices.tenantId, deps.cfg.tenantId), eq(devices.id, deviceId)));
+          .where(eq(devices.id, deviceId));
         if (device === undefined) throw new AppError("device.not_found", { deviceId });
         if (readerId === null) {
           // Clear the default = delete the row (idempotent; a device with none just has no default).
-          await tx
-            .delete(deviceCardReaders)
-            .where(
-              and(
-                eq(deviceCardReaders.tenantId, deps.cfg.tenantId),
-                eq(deviceCardReaders.deviceId, deviceId),
-              ),
-            );
+          await tx.delete(deviceCardReaders).where(eq(deviceCardReaders.deviceId, deviceId));
           return;
         }
         // A named reader must be THIS tenant's AND active — a foreign or disabled reader is
@@ -572,13 +530,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         const [reader] = await tx
           .select({ id: cardReaders.id })
           .from(cardReaders)
-          .where(
-            and(
-              eq(cardReaders.tenantId, deps.cfg.tenantId),
-              eq(cardReaders.id, readerId),
-              eq(cardReaders.active, true),
-            ),
-          );
+          .where(and(eq(cardReaders.id, readerId), eq(cardReaders.active, true)));
         if (reader === undefined) throw new AppError("reader.not_found", { id: readerId });
         await tx
           .insert(deviceCardReaders)

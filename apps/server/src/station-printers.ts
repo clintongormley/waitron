@@ -57,25 +57,13 @@ export async function attachPrinterToStation(
   const [live] = await tx
     .select({ id: kitchenStations.id })
     .from(kitchenStations)
-    .where(
-      and(
-        eq(kitchenStations.tenantId, cfg.tenantId),
-        eq(kitchenStations.id, stationId),
-        eq(kitchenStations.active, true),
-      ),
-    );
+    .where(and(eq(kitchenStations.id, stationId), eq(kitchenStations.active, true)));
   if (live === undefined) throw new AppError("station.not_found", { stationId });
 
   const [printer] = await tx
     .select({ id: printers.id })
     .from(printers)
-    .where(
-      and(
-        eq(printers.tenantId, cfg.tenantId),
-        eq(printers.id, printerId),
-        eq(printers.active, true),
-      ),
-    );
+    .where(and(eq(printers.id, printerId), eq(printers.active, true)));
   if (printer === undefined) throw new AppError("printer.not_found", { id: printerId });
 
   await tx
@@ -96,15 +84,10 @@ export async function detachPrinterFromStation(
   cfg: PrintConfig,
   { stationId, printerId }: StationPrinter,
 ): Promise<void> {
+  void cfg;
   await tx
     .delete(stationPrinters)
-    .where(
-      and(
-        eq(stationPrinters.tenantId, cfg.tenantId),
-        eq(stationPrinters.stationId, stationId),
-        eq(stationPrinters.printerId, printerId),
-      ),
-    );
+    .where(and(eq(stationPrinters.stationId, stationId), eq(stationPrinters.printerId, printerId)));
 }
 
 /**
@@ -125,7 +108,8 @@ export async function listStationPrinters(
   cfg: PrintConfig,
   filter?: { stationId?: string; printerId?: string },
 ): Promise<StationPrinter[]> {
-  const conditions: SQL[] = [eq(stationPrinters.tenantId, cfg.tenantId)];
+  void cfg;
+  const conditions: SQL[] = [];
   if (filter?.stationId !== undefined) {
     conditions.push(eq(stationPrinters.stationId, filter.stationId));
   }

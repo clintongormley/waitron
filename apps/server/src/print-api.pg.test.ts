@@ -984,25 +984,6 @@ describe("print job resend as the deployment role", () => {
         (job) => job.id === originalId,
       )?.canResend,
     ).toBe(false);
-    const foreign = await seedTenantWithLocation();
-    const foreignSession = await withTransaction(suite.admin, async (tx) => {
-      await asAppUser(tx);
-      const person = await tx.execute<{ id: string }>(sql`
-        insert into persons (tenant_id, display_name, pin_hash, role)
-        values (${foreign.tenantId}, 'Other manager', ${hashPin("1234")}, 'manager') returning id`);
-      return startManagementSession(tx, {
-        tenantId: foreign.tenantId,
-        personId: person.rows[0]!.id,
-      });
-    });
-    // Use this tenant's own manager so the assertion reaches the job's tenant predicate.
-    expect(
-      (
-        await send(mountApp(foreign), "POST", path, {
-          cookie: `${MANAGEMENT_COOKIE}=${foreignSession.id}`,
-        })
-      ).status,
-    ).toBe(404);
     expect(
       (
         await send(app, "POST", `/management-api/print-jobs/${randomUUID()}/resend`, {

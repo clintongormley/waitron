@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { catalogues, products, type Transaction } from "@waitron/db";
 import { AppError, type TenantId } from "@waitron/shared";
 import { readProductCategories, replaceProductCategories } from "./categories.js";
@@ -44,10 +44,7 @@ export async function readProductEditor(
   tenantId: TenantId,
   productId: string,
 ): Promise<ProductEditorValue> {
-  const [row] = await tx
-    .select(columns)
-    .from(products)
-    .where(and(eq(products.tenantId, tenantId), eq(products.id, productId)));
+  const [row] = await tx.select(columns).from(products).where(eq(products.id, productId));
   if (!row) throw new AppError("product.not_found", { productId });
   const categories = await readProductCategories(tx, tenantId, productId);
   return {
@@ -81,14 +78,14 @@ export async function saveProductEditor(
     const [product] = await tx
       .select({ id: products.id })
       .from(products)
-      .where(and(eq(products.tenantId, tenantId), eq(products.id, productId)))
+      .where(eq(products.id, productId))
       .for("update");
     if (!product) throw new AppError("product.not_found", { productId });
   } else {
     const [catalogue] = await tx
       .select({ id: catalogues.id })
       .from(catalogues)
-      .where(and(eq(catalogues.tenantId, tenantId), eq(catalogues.id, catalogueId)));
+      .where(eq(catalogues.id, catalogueId));
     if (!catalogue) throw new AppError("catalogue.not_found", { catalogueId });
   }
   if (productId === null) {

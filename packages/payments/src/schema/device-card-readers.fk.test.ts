@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { asAppUser, captureError, pgErrorCode, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
@@ -62,12 +62,7 @@ describe("device_card_readers", () => {
 
     const stored = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
-      return tx
-        .select()
-        .from(deviceCardReaders)
-        .where(
-          and(eq(deviceCardReaders.tenantId, tenantId), eq(deviceCardReaders.deviceId, deviceId)),
-        );
+      return tx.select().from(deviceCardReaders).where(eq(deviceCardReaders.deviceId, deviceId));
     });
     expect(stored).toHaveLength(1);
     expect(stored[0]!.readerId).toBe(readerId);
@@ -76,20 +71,11 @@ describe("device_card_readers", () => {
     // The mapping is mutable — DELETE clears the device's default (unlike an append-only ledger).
     await withTransaction(db, async (tx) => {
       await asAppUser(tx);
-      await tx
-        .delete(deviceCardReaders)
-        .where(
-          and(eq(deviceCardReaders.tenantId, tenantId), eq(deviceCardReaders.deviceId, deviceId)),
-        );
+      await tx.delete(deviceCardReaders).where(eq(deviceCardReaders.deviceId, deviceId));
     });
     const afterDelete = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
-      return tx
-        .select()
-        .from(deviceCardReaders)
-        .where(
-          and(eq(deviceCardReaders.tenantId, tenantId), eq(deviceCardReaders.deviceId, deviceId)),
-        );
+      return tx.select().from(deviceCardReaders).where(eq(deviceCardReaders.deviceId, deviceId));
     });
     expect(afterDelete).toHaveLength(0);
   });

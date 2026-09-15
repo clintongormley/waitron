@@ -226,13 +226,7 @@ export async function registerSif(
   await tx
     .update(registroSif)
     .set({ revocadoEn: sql`now()` })
-    .where(
-      and(
-        eq(registroSif.tenantId, params.tenantId),
-        eq(registroSif.nodeId, params.nodeId),
-        isNull(registroSif.revocadoEn),
-      ),
-    );
+    .where(and(eq(registroSif.nodeId, params.nodeId), isNull(registroSif.revocadoEn)));
 
   const numeroInstalacion = await mintNumeroInstalacion(
     tx,
@@ -294,13 +288,7 @@ export async function currentSif(
       revocadoEn: registroSif.revocadoEn,
     })
     .from(registroSif)
-    .where(
-      and(
-        eq(registroSif.tenantId, tenantId),
-        eq(registroSif.nodeId, nodeId),
-        isNull(registroSif.revocadoEn),
-      ),
-    )
+    .where(and(eq(registroSif.nodeId, nodeId), isNull(registroSif.revocadoEn)))
     .limit(1);
 
   if (row === undefined) {
@@ -325,10 +313,11 @@ export async function esPrimerRegistro(
   tenantId: TenantId,
   nodeId: NodeId,
 ): Promise<boolean> {
+  void tenantId;
   const [row] = await tx
     .select({ ultimaHuella: cadenas.ultimaHuella })
     .from(cadenas)
-    .where(and(eq(cadenas.tenantId, tenantId), eq(cadenas.nodeId, nodeId)))
+    .where(eq(cadenas.nodeId, nodeId))
     .limit(1);
 
   return (row?.ultimaHuella ?? null) === null;

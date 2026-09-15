@@ -258,6 +258,7 @@ async function configureReceipt(
 async function printJobsFor(
   cfg: TillConfig,
 ): Promise<{ printerId: string; status: string; payload: Buffer }[]> {
+  void cfg;
   return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     return tx
@@ -266,8 +267,7 @@ async function printJobsFor(
         status: printJobs.status,
         payload: printJobs.payload,
       })
-      .from(printJobs)
-      .where(eq(printJobs.tenantId, cfg.tenantId));
+      .from(printJobs);
   });
 }
 
@@ -281,6 +281,7 @@ async function drawerOpensFor(cfg: TillConfig): Promise<
     viaOverride: boolean;
   }[]
 > {
+  void cfg;
   return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     return tx
@@ -292,8 +293,7 @@ async function drawerOpensFor(cfg: TillConfig): Promise<
         authorizedBy: drawerOpens.authorizedBy,
         viaOverride: drawerOpens.viaOverride,
       })
-      .from(drawerOpens)
-      .where(eq(drawerOpens.tenantId, cfg.tenantId));
+      .from(drawerOpens);
   });
 }
 
@@ -310,22 +310,18 @@ async function setDrawerPolicy(cfg: TillConfig, policy: "gated" | "open"): Promi
 }
 
 async function registroCount(cfg: TillConfig): Promise<number> {
+  void cfg;
   return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
-    return (
-      await tx
-        .select()
-        .from(registrosFacturacion)
-        .where(eq(registrosFacturacion.tenantId, cfg.tenantId))
-    ).length;
+    return (await tx.select().from(registrosFacturacion)).length;
   });
 }
 
 async function saleCount(cfg: TillConfig): Promise<number> {
+  void cfg;
   return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
-    return (await tx.select({ id: sales.id }).from(sales).where(eq(sales.tenantId, cfg.tenantId)))
-      .length;
+    return (await tx.select({ id: sales.id }).from(sales)).length;
   });
 }
 

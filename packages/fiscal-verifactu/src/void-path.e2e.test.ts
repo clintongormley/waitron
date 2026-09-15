@@ -104,7 +104,7 @@ describe("alta and anulación interleave in one chain", () => {
     const rows = await pg.db
       .select()
       .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.tenantId, tenantId))
+
       .orderBy(asc(registrosFacturacion.secuencia));
 
     expect(rows.map((r) => r.tipoRegistro)).toEqual(["alta", "alta", "anulacion"]);
@@ -140,7 +140,7 @@ describe("alta and anulación interleave in one chain", () => {
   it("gives the anulación its own pending sidecar row", async () => {
     const a = await sell();
     await voidSale(a.saleId);
-    const rows = await pg.db.select().from(envios).where(eq(envios.tenantId, tenantId));
+    const rows = await pg.db.select().from(envios);
     // Two registros, two sidecars. An anulación that shared the alta's row would be submitted to
     // AEAT never or twice, both unrecoverable.
     expect(rows).toHaveLength(2);

@@ -1,6 +1,6 @@
 // Real PostgreSQL exercises sale writes and receipt reads after SET ROLE app_user.
 import { Hono } from "hono";
-import { eq, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { asAppUser, sales, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
@@ -298,6 +298,7 @@ interface Registro {
 
 /** Every fiscal record filed for the tenant, oldest first — one per sale, this tenant's alone. */
 async function registrosFor(cfg: TillConfig): Promise<Registro[]> {
+  void cfg;
   return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const rows = await tx
@@ -310,8 +311,7 @@ async function registrosFor(cfg: TillConfig): Promise<Registro[]> {
         entorno: registrosFacturacion.entorno,
         numSerieFactura: registrosFacturacion.numSerieFactura,
       })
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.tenantId, cfg.tenantId));
+      .from(registrosFacturacion);
     return rows.sort((a, b) => a.secuencia - b.secuencia);
   });
 }
@@ -319,12 +319,12 @@ async function registrosFor(cfg: TillConfig): Promise<Registro[]> {
 /** Each sale's stored `sales.till_id`, ordered by the per-series `invoice_number` (1, 2, …) so it
  *  lines up with the registros ordered by `secuencia`. */
 async function saleTillIds(cfg: TillConfig): Promise<string[]> {
+  void cfg;
   return withTransaction(suite.admin, async (tx) => {
     await asAppUser(tx);
     const rows = await tx
       .select({ tillId: sales.tillId, invoiceNumber: sales.invoiceNumber })
-      .from(sales)
-      .where(eq(sales.tenantId, cfg.tenantId));
+      .from(sales);
     return rows.sort((a, b) => a.invoiceNumber - b.invoiceNumber).map((r) => r.tillId);
   });
 }

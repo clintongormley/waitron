@@ -157,10 +157,7 @@ describe("recordVoid", () => {
     expect(ref.backend).toBe("verifactu");
     expect(ref.state).toBe("pending");
 
-    const rows = await pg.db
-      .select()
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.tenantId, tenantId));
+    const rows = await pg.db.select().from(registrosFacturacion);
     const alta = rows.find((row) => row.tipoRegistro === "alta");
     const anulacion = rows.find((row) => row.tipoRegistro === "anulacion");
     expect(anulacion?.idEmisorFactura).toBe(alta?.idEmisorFactura);

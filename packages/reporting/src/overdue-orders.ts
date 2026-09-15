@@ -71,33 +71,14 @@ export async function computeOverdueOrders(
     .from(ticketItems)
     // The owning order — composite (tenant_id too), the tenant-consistent shape ticket_items' FKs
     // carry, mirroring listStationQueue/listExpoQueue.
-    .innerJoin(
-      workingOrders,
-      and(
-        eq(ticketItems.workingOrderId, workingOrders.id),
-        eq(ticketItems.tenantId, workingOrders.tenantId),
-      ),
-    )
+    .innerJoin(workingOrders, eq(ticketItems.workingOrderId, workingOrders.id))
     // The line this item was fired from — needed for `served_at` (the age-model's "until served").
-    .innerJoin(
-      workingOrderLines,
-      and(
-        eq(ticketItems.workingOrderLineId, workingOrderLines.id),
-        eq(ticketItems.tenantId, workingOrderLines.tenantId),
-      ),
-    )
+    .innerJoin(workingOrderLines, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
     // The item's OWN station, for its name + order-timing thresholds — a plain INNER JOIN keyed on
     // the tenant-consistent (tenant_id, station_id) FK, never a correlated subquery (CLAUDE.md §3).
-    .innerJoin(
-      kitchenStations,
-      and(
-        eq(ticketItems.stationId, kitchenStations.id),
-        eq(ticketItems.tenantId, kitchenStations.tenantId),
-      ),
-    )
+    .innerJoin(kitchenStations, eq(ticketItems.stationId, kitchenStations.id))
     .where(
       and(
-        eq(ticketItems.tenantId, input.tenantId),
         eq(ticketItems.nodeId, input.nodeId),
         // "Open" for the age model (design §3/Task 4): not abandoned, not yet collected — the SAME
         // definition listExpoQueue/listStationQueue use, wider than status = 'open'.

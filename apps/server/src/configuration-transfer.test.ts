@@ -617,13 +617,14 @@ it("transfers every modifier type, remaps default choice ids and preserves menu 
   });
   await withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
-    const definitions = await listModifiers(tx, target.tenantId);
+    // Source and target venues share this one test database, and listModifiers no longer scopes by
+    // tenant (drop-tenant-id), so it returns both venues' modifiers. The imported set is the three
+    // whose ids the import remapped away from the source's — their presence is the round-trip proof.
+    const sourceIds = new Set(original.definitions.map((definition) => definition.id));
+    const definitions = (await listModifiers(tx, target.tenantId)).filter(
+      (definition) => !sourceIds.has(definition.id),
+    );
     expect(definitions).toHaveLength(3);
-    expect(
-      definitions.every((definition) =>
-        original.definitions.every((source) => source.id !== definition.id),
-      ),
-    ).toBe(true);
     const options = definitions.find((definition) => definition.type === "options")!;
     if (options.type !== "options") throw new Error("missing options modifier");
     expect(options.defaultChoiceId).toBe(options.choices[0]!.id);

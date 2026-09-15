@@ -80,12 +80,12 @@ export async function assertDisplayNameAvailable(
   displayName: string,
   excludedPersonId?: string,
 ): Promise<void> {
+  void tenantId;
   const [existing] = await tx
     .select({ id: persons.id })
     .from(persons)
     .where(
       and(
-        eq(persons.tenantId, tenantId),
         eq(sql`lower(btrim(${persons.displayName}))`, displayName.toLocaleLowerCase()),
         ne(persons.status, "suspended"),
         excludedPersonId === undefined ? undefined : ne(persons.id, excludedPersonId),
@@ -100,12 +100,12 @@ export async function assertEmailAvailable(
   email: string,
   excludedPersonId?: string,
 ): Promise<void> {
+  void tenantId;
   const [existing] = await tx
     .select({ id: persons.id })
     .from(persons)
     .where(
       and(
-        eq(persons.tenantId, tenantId),
         or(eq(sql`lower(${persons.email})`, email), eq(sql`lower(${persons.pendingEmail})`, email)),
         excludedPersonId === undefined ? undefined : ne(persons.id, excludedPersonId),
       ),
@@ -118,35 +118,20 @@ async function revokePersonAccess(
   tenantId: string,
   personId: string,
 ): Promise<void> {
+  void tenantId;
   await tx
     .update(sessions)
     .set({ endedAt: sql`now()` })
-    .where(
-      and(
-        eq(sessions.tenantId, tenantId),
-        eq(sessions.personId, personId),
-        isNull(sessions.endedAt),
-      ),
-    );
+    .where(and(eq(sessions.personId, personId), isNull(sessions.endedAt)));
   await tx
     .update(managementSessions)
     .set({ endedAt: sql`now()` })
-    .where(
-      and(
-        eq(managementSessions.tenantId, tenantId),
-        eq(managementSessions.personId, personId),
-        isNull(managementSessions.endedAt),
-      ),
-    );
+    .where(and(eq(managementSessions.personId, personId), isNull(managementSessions.endedAt)));
   await tx
     .update(managementAccountActions)
     .set({ usedAt: sql`now()` })
     .where(
-      and(
-        eq(managementAccountActions.tenantId, tenantId),
-        eq(managementAccountActions.personId, personId),
-        isNull(managementAccountActions.usedAt),
-      ),
+      and(eq(managementAccountActions.personId, personId), isNull(managementAccountActions.usedAt)),
     );
 }
 
@@ -176,15 +161,13 @@ export async function updatePersonDetails(
   const activeAdmins = await tx
     .select({ id: persons.id })
     .from(persons)
-    .where(
-      and(eq(persons.tenantId, tenantId), eq(persons.role, "admin"), eq(persons.status, "active")),
-    )
+    .where(and(eq(persons.role, "admin"), eq(persons.status, "active")))
     .orderBy(persons.id)
     .for("update");
   const [person] = await tx
     .select()
     .from(persons)
-    .where(and(eq(persons.tenantId, tenantId), eq(persons.id, input.personId)))
+    .where(eq(persons.id, input.personId))
     .for("update");
   if (person === undefined) throw new AppError("person.not_found", { personId: input.personId });
   if (input.status === "suspended" && authorizedBy === input.personId.toLowerCase()) {
@@ -229,7 +212,7 @@ export async function updatePersonDetails(
         role: input.role,
         status: input.status,
       })
-      .where(and(eq(persons.tenantId, tenantId), eq(persons.id, person.id)));
+      .where(eq(persons.id, person.id));
   } catch (error) {
     asPersonUniqueViolation(error, { displayName, email });
   }
@@ -249,15 +232,13 @@ export async function deactivatePerson(
   const activeAdmins = await tx
     .select({ id: persons.id })
     .from(persons)
-    .where(
-      and(eq(persons.tenantId, tenantId), eq(persons.role, "admin"), eq(persons.status, "active")),
-    )
+    .where(and(eq(persons.role, "admin"), eq(persons.status, "active")))
     .orderBy(persons.id)
     .for("update");
   const [person] = await tx
     .select({ id: persons.id, role: persons.role, status: persons.status })
     .from(persons)
-    .where(and(eq(persons.tenantId, tenantId), eq(persons.id, input.personId)))
+    .where(eq(persons.id, input.personId))
     .for("update");
   if (person === undefined) throw new AppError("person.not_found", { personId: input.personId });
   if (authorizedBy === input.personId.toLowerCase()) {
@@ -267,10 +248,7 @@ export async function deactivatePerson(
     throw new AppError("person.last_admin", {});
   }
   if (person.status === "suspended") return;
-  await tx
-    .update(persons)
-    .set({ status: "suspended" })
-    .where(and(eq(persons.tenantId, tenantId), eq(persons.id, person.id)));
+  await tx.update(persons).set({ status: "suspended" }).where(eq(persons.id, person.id));
   await revokePersonAccess(tx, tenantId, person.id);
 }
 
@@ -279,26 +257,20 @@ export async function clearPersonPin(
   tx: Transaction,
   input: { managementSessionId: string; personId: string },
 ): Promise<void> {
-  const { tenantId } = await authorizeManager(tx, {
+  await authorizeManager(tx, {
     managementSessionId: input.managementSessionId,
     permission: "person.manage",
   });
   const updated = await tx
     .update(persons)
     .set({ pinHash: null })
-    .where(and(eq(persons.tenantId, tenantId), eq(persons.id, input.personId)))
+    .where(eq(persons.id, input.personId))
     .returning({ id: persons.id });
   if (updated.length !== 1) throw new AppError("person.not_found", { personId: input.personId });
   await tx
     .update(sessions)
     .set({ endedAt: sql`now()` })
-    .where(
-      and(
-        eq(sessions.tenantId, tenantId),
-        eq(sessions.personId, input.personId),
-        isNull(sessions.endedAt),
-      ),
-    );
+    .where(and(eq(sessions.personId, input.personId), isNull(sessions.endedAt)));
 }
 
 /** Clears every login method and returns an account to Pending before issuing a new invitation. */
@@ -313,9 +285,7 @@ export async function resetPersonLogin(
   const activeAdmins = await tx
     .select({ id: persons.id })
     .from(persons)
-    .where(
-      and(eq(persons.tenantId, tenantId), eq(persons.role, "admin"), eq(persons.status, "active")),
-    )
+    .where(and(eq(persons.role, "admin"), eq(persons.status, "active")))
     .orderBy(persons.id)
     .for("update");
   const [person] = await tx
@@ -326,7 +296,7 @@ export async function resetPersonLogin(
       status: persons.status,
     })
     .from(persons)
-    .where(and(eq(persons.tenantId, tenantId), eq(persons.id, input.personId)))
+    .where(eq(persons.id, input.personId))
     .for("update");
   if (person === undefined) throw new AppError("person.not_found", { personId: input.personId });
   if (person.status === "suspended") throw new AppError("person.transition_invalid", {});
@@ -343,25 +313,11 @@ export async function resetPersonLogin(
       emailVerifiedAt: null,
       status: "pending",
     })
-    .where(and(eq(persons.tenantId, tenantId), eq(persons.id, person.id)));
-  await tx
-    .delete(webauthnCredentials)
-    .where(
-      and(eq(webauthnCredentials.tenantId, tenantId), eq(webauthnCredentials.personId, person.id)),
-    );
-  await tx
-    .delete(recoveryCodes)
-    .where(and(eq(recoveryCodes.tenantId, tenantId), eq(recoveryCodes.personId, input.personId)));
-  await tx
-    .delete(totpEnrollments)
-    .where(
-      and(eq(totpEnrollments.tenantId, tenantId), eq(totpEnrollments.personId, input.personId)),
-    );
-  await tx
-    .delete(webauthnChallenges)
-    .where(
-      and(eq(webauthnChallenges.tenantId, tenantId), eq(webauthnChallenges.personId, person.id)),
-    );
+    .where(eq(persons.id, person.id));
+  await tx.delete(webauthnCredentials).where(eq(webauthnCredentials.personId, person.id));
+  await tx.delete(recoveryCodes).where(eq(recoveryCodes.personId, input.personId));
+  await tx.delete(totpEnrollments).where(eq(totpEnrollments.personId, input.personId));
+  await tx.delete(webauthnChallenges).where(eq(webauthnChallenges.personId, person.id));
   await revokePersonAccess(tx, tenantId, person.id);
 }
 
@@ -377,7 +333,7 @@ export async function reactivatePersonForInvitation(
   const [person] = await tx
     .select({ id: persons.id, displayName: persons.displayName, status: persons.status })
     .from(persons)
-    .where(and(eq(persons.tenantId, tenantId), eq(persons.id, input.personId)))
+    .where(eq(persons.id, input.personId))
     .for("update");
   if (person === undefined) throw new AppError("person.not_found", { personId: input.personId });
   if (person.status !== "suspended") throw new AppError("person.transition_invalid", {});
@@ -393,26 +349,14 @@ export async function reactivatePersonForInvitation(
         googleSubject: null,
         emailVerifiedAt: null,
       })
-      .where(and(eq(persons.tenantId, tenantId), eq(persons.id, person.id)));
+      .where(eq(persons.id, person.id));
   } catch (error) {
     asPersonUniqueViolation(error, { displayName: person.displayName });
   }
-  await tx
-    .delete(webauthnCredentials)
-    .where(
-      and(eq(webauthnCredentials.tenantId, tenantId), eq(webauthnCredentials.personId, person.id)),
-    );
-  await tx
-    .delete(recoveryCodes)
-    .where(and(eq(recoveryCodes.tenantId, tenantId), eq(recoveryCodes.personId, person.id)));
-  await tx
-    .delete(totpEnrollments)
-    .where(and(eq(totpEnrollments.tenantId, tenantId), eq(totpEnrollments.personId, person.id)));
-  await tx
-    .delete(webauthnChallenges)
-    .where(
-      and(eq(webauthnChallenges.tenantId, tenantId), eq(webauthnChallenges.personId, person.id)),
-    );
+  await tx.delete(webauthnCredentials).where(eq(webauthnCredentials.personId, person.id));
+  await tx.delete(recoveryCodes).where(eq(recoveryCodes.personId, person.id));
+  await tx.delete(totpEnrollments).where(eq(totpEnrollments.personId, person.id));
+  await tx.delete(webauthnChallenges).where(eq(webauthnChallenges.personId, person.id));
   await revokePersonAccess(tx, tenantId, person.id);
 }
 
@@ -522,14 +466,11 @@ export async function setRole(
   tx: Transaction,
   input: { managementSessionId: string; personId: string; role: PersonRoleValue },
 ): Promise<void> {
-  const { tenantId } = await authorizeManager(tx, {
+  await authorizeManager(tx, {
     managementSessionId: input.managementSessionId,
     permission: "person.manage",
   });
-  await tx
-    .update(persons)
-    .set({ role: input.role })
-    .where(and(eq(persons.tenantId, tenantId), eq(persons.id, input.personId)));
+  await tx.update(persons).set({ role: input.role }).where(eq(persons.id, input.personId));
 }
 
 /** Resets a person's PIN. Gated on `person.manage`; the new PIN is length-checked, then stored
@@ -538,7 +479,7 @@ export async function resetPin(
   tx: Transaction,
   input: { managementSessionId: string; personId: string; pin: string },
 ): Promise<void> {
-  const { tenantId } = await authorizeManager(tx, {
+  await authorizeManager(tx, {
     managementSessionId: input.managementSessionId,
     permission: "person.manage",
   });
@@ -546,7 +487,7 @@ export async function resetPin(
   await tx
     .update(persons)
     .set({ pinHash: hashPin(input.pin) })
-    .where(and(eq(persons.tenantId, tenantId), eq(persons.id, input.personId)));
+    .where(eq(persons.id, input.personId));
 }
 
 /** Grants (or replaces) a person's dashboard password. Gated on `person.manage`:
@@ -557,7 +498,7 @@ export async function setPassword(
   tx: Transaction,
   input: { managementSessionId: string; personId: string; password: string },
 ): Promise<void> {
-  const { tenantId } = await authorizeManager(tx, {
+  await authorizeManager(tx, {
     managementSessionId: input.managementSessionId,
     permission: "person.manage",
   });
@@ -565,7 +506,7 @@ export async function setPassword(
   await tx
     .update(persons)
     .set({ passwordHash: hashPassword(input.password) })
-    .where(and(eq(persons.tenantId, tenantId), eq(persons.id, input.personId)));
+    .where(eq(persons.id, input.personId));
 }
 
 /** Sets (or replaces) a person's login email — the identifier for dashboard sign-in. Gated on
@@ -577,7 +518,7 @@ export async function setEmail(
   tx: Transaction,
   input: { managementSessionId: string; personId: string; email: string },
 ): Promise<void> {
-  const { tenantId } = await authorizeManager(tx, {
+  await authorizeManager(tx, {
     managementSessionId: input.managementSessionId,
     permission: "person.manage",
   });
@@ -586,7 +527,7 @@ export async function setEmail(
     await tx
       .update(persons)
       .set({ email, emailVerifiedAt: null })
-      .where(and(eq(persons.tenantId, tenantId), eq(persons.id, input.personId)));
+      .where(eq(persons.id, input.personId));
   } catch (err) {
     asEmailTaken(err, email);
   }
@@ -604,10 +545,7 @@ export async function setPersonLocale(
   input: { tenantId: string; personId: string; locale: string },
 ): Promise<void> {
   const locale = assertSupportedLocale(input.locale);
-  await tx
-    .update(persons)
-    .set({ locale })
-    .where(and(eq(persons.tenantId, input.tenantId), eq(persons.id, input.personId)));
+  await tx.update(persons).set({ locale }).where(eq(persons.id, input.personId));
 }
 
 /** Suspends a person: keeps the row (and its history) while refusing login. Gated on
@@ -616,16 +554,13 @@ export async function suspendPerson(
   tx: Transaction,
   input: { managementSessionId: string; personId: string },
 ): Promise<void> {
-  const { authorizedBy, tenantId } = await authorizeManager(tx, {
+  const { authorizedBy } = await authorizeManager(tx, {
     managementSessionId: input.managementSessionId,
     permission: "person.manage",
   });
   if (authorizedBy === input.personId.toLowerCase())
     throw new AppError("person.self_deactivation", {});
-  await tx
-    .update(persons)
-    .set({ status: "suspended" })
-    .where(and(eq(persons.tenantId, tenantId), eq(persons.id, input.personId)));
+  await tx.update(persons).set({ status: "suspended" }).where(eq(persons.id, input.personId));
 }
 
 /** Reactivates a suspended person, restoring login. Gated on `person.manage`. */
@@ -633,14 +568,11 @@ export async function reactivatePerson(
   tx: Transaction,
   input: { managementSessionId: string; personId: string },
 ): Promise<void> {
-  const { tenantId } = await authorizeManager(tx, {
+  await authorizeManager(tx, {
     managementSessionId: input.managementSessionId,
     permission: "person.manage",
   });
-  await tx
-    .update(persons)
-    .set({ status: "active" })
-    .where(and(eq(persons.tenantId, tenantId), eq(persons.id, input.personId)));
+  await tx.update(persons).set({ status: "active" }).where(eq(persons.id, input.personId));
 }
 
 /** One entry in the pre-login roster: the id the lock screen logs in with, and the name it shows. */
@@ -723,7 +655,7 @@ export async function listPersons(
   tx: Transaction,
   args: { managementSessionId: string },
 ): Promise<PersonSummary[]> {
-  const { tenantId } = await authorizeManager(tx, {
+  await authorizeManager(tx, {
     managementSessionId: args.managementSessionId,
     permission: "person.manage",
   });
@@ -741,7 +673,7 @@ export async function listPersons(
       totpSecret: persons.totpSecret,
     })
     .from(persons)
-    .where(eq(persons.tenantId, tenantId))
+
     .orderBy(persons.displayName);
   return rows.map((r) => ({
     personId: r.personId,

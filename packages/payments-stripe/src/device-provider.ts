@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import {
   AppError,
   saleId as brandSaleId,
@@ -274,9 +274,7 @@ export class StripeOnDeviceProvider implements PaymentProvider {
           const [wo] = await tx
             .select({ tillId: workingOrders.tillId })
             .from(workingOrders)
-            .where(
-              and(eq(workingOrders.tenantId, p.tenantId), eq(workingOrders.id, p.workingOrderId)),
-            );
+            .where(eq(workingOrders.id, p.workingOrderId));
           const raised = await recordIncidentOnce(tx, {
             tenantId: brandTenantId(p.tenantId),
             tillId: brandTillId(wo.tillId),

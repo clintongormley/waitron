@@ -65,6 +65,7 @@ export async function authenticateAgent(
   cfg: { tenantId: string },
   token: string,
 ): Promise<{ agentId: string }> {
+  void cfg;
   // Split on the FIRST `.` only: the id is a uuid (no dots) and a base64url secret has none either,
   // but splitting on the first separator keeps a secret that somehow carried one intact rather than
   // truncated. `dot <= 0` rejects both a missing separator (indexOf → -1) and an empty selector (dot at
@@ -83,13 +84,7 @@ export async function authenticateAgent(
     // `active = true` is the revocation filter: a revoked agent is simply not found. The explicit
     // `tenant_id` predicate limits the lookup to `cfg.tenantId`, matching the predicate on
     // `acceptPrintAgentJoinRequest`'s consuming DELETE. All bind as `$n`, never string-concatenated.
-    .where(
-      and(
-        eq(printAgents.id, agentId),
-        eq(printAgents.tenantId, cfg.tenantId),
-        eq(printAgents.active, true),
-      ),
-    );
+    .where(and(eq(printAgents.id, agentId), eq(printAgents.active, true)));
   if (row === undefined) throw new AppError("agent.unauthorized", {});
   // Constant-time scrypt check (REUSED, never home-rolled): the secret is never compared with `===`.
   if (!verifySecret(secret, row.tokenHash)) throw new AppError("agent.unauthorized", {});

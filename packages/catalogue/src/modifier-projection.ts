@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { inArray } from "drizzle-orm";
 import { productOptionGroups, type Transaction } from "@waitron/db";
 import { type Modifier } from "@waitron/shared";
 import { listModifiers } from "./modifiers.js";
@@ -41,12 +41,7 @@ export async function readProductModifiers(
   const attachments = await tx
     .select({ productId: productOptionGroups.productId, modifierId: productOptionGroups.groupId })
     .from(productOptionGroups)
-    .where(
-      and(
-        eq(productOptionGroups.tenantId, tenantId),
-        inArray(productOptionGroups.productId, productIds),
-      ),
-    )
+    .where(inArray(productOptionGroups.productId, productIds))
     .orderBy(productOptionGroups.sort, productOptionGroups.groupId);
   for (const attachment of attachments) {
     const definition = definitions.get(attachment.modifierId);
@@ -74,19 +69,12 @@ export async function readMenuModifiers(
       modifierId: menuItemOptionGroups.groupId,
     })
     .from(menuItemOptionGroups)
-    .where(
-      and(
-        eq(menuItemOptionGroups.tenantId, tenantId),
-        inArray(menuItemOptionGroups.menuItemId, menuItemIds),
-      ),
-    )
+    .where(inArray(menuItemOptionGroups.menuItemId, menuItemIds))
     .orderBy(menuItemOptionGroups.displayOrder, menuItemOptionGroups.groupId);
   const options = await tx
     .select()
     .from(menuItemOptions)
-    .where(
-      and(eq(menuItemOptions.tenantId, tenantId), inArray(menuItemOptions.menuItemId, menuItemIds)),
-    );
+    .where(inArray(menuItemOptions.menuItemId, menuItemIds));
   for (const publication of publications) {
     const definition = definitions.get(publication.modifierId);
     if (!definition) continue;

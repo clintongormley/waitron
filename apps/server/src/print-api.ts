@@ -437,11 +437,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             .update(printAgents)
             .set({ host })
             .where(
-              and(
-                eq(printAgents.tenantId, deps.cfg.tenantId),
-                eq(printAgents.id, agentId),
-                sql`${printAgents.host} is distinct from ${host}`,
-              ),
+              and(eq(printAgents.id, agentId), sql`${printAgents.host} is distinct from ${host}`),
             );
         }
         return claimPrintJobs(tx, deps.cfg, agentId, {
@@ -525,7 +521,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             enrolledAt: printAgents.enrolledAt,
           })
           .from(printAgents)
-          .where(eq(printAgents.tenantId, deps.cfg.tenantId))
+
           .orderBy(desc(printAgents.enrolledAt)),
       );
       return c.json(rows);
@@ -543,7 +539,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
         tx
           .update(printAgents)
           .set({ name })
-          .where(and(eq(printAgents.tenantId, deps.cfg.tenantId), eq(printAgents.id, id)))
+          .where(eq(printAgents.id, id))
           .returning({ id: printAgents.id }),
       );
       if (rows.length === 0) throw new AppError("agent.not_found", { id });
@@ -563,7 +559,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
         tx
           .update(printAgents)
           .set({ active: false })
-          .where(and(eq(printAgents.tenantId, deps.cfg.tenantId), eq(printAgents.id, id)))
+          .where(eq(printAgents.id, id))
           .returning({ id: printAgents.id }),
       );
       if (updated.length === 0) throw new AppError("agent.not_found", { id });
@@ -583,7 +579,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
         tx
           .update(printAgents)
           .set({ active: true })
-          .where(and(eq(printAgents.tenantId, deps.cfg.tenantId), eq(printAgents.id, id)))
+          .where(eq(printAgents.id, id))
           .returning({ id: printAgents.id }),
       );
       if (updated.length === 0) throw new AppError("agent.not_found", { id });
@@ -636,12 +632,8 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             host: printers.host,
             port: printers.port,
           })
-          .from(printers)
-          .where(eq(printers.tenantId, deps.cfg.tenantId)), // tenant predicate — CLAUDE.md §3
-        agents: await tx
-          .select({ id: printAgents.id, name: printAgents.name })
-          .from(printAgents)
-          .where(eq(printAgents.tenantId, deps.cfg.tenantId)), // tenant predicate — CLAUDE.md §3
+          .from(printers), // tenant predicate — CLAUDE.md §3
+        agents: await tx.select({ id: printAgents.id, name: printAgents.name }).from(printAgents), // tenant predicate — CLAUDE.md §3
       }));
       const names = new Map(agents.map((a) => [a.id, a.name]));
       // A usb/bluetooth device matches a registered printer on its stable local key; a network printer
@@ -850,18 +842,14 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
         const recentCompleted = tx
           .select({ id: printJobs.id })
           .from(printJobs)
-          .where(and(eq(printJobs.tenantId, deps.cfg.tenantId), eq(printJobs.status, "done")))
+          .where(eq(printJobs.status, "done"))
           .orderBy(sql`${printJobs.deliveredAt} desc nulls last`, desc(printJobs.id))
           .limit(RECENT_JOBS_LIMIT);
         const recentFailed = tx
           .select({ id: printJobs.id })
           .from(printJobs)
           .where(
-            and(
-              eq(printJobs.tenantId, deps.cfg.tenantId),
-              eq(printJobs.status, "failed"),
-              gte(printJobs.attempts, MAX_DELIVERY_ATTEMPTS),
-            ),
+            and(eq(printJobs.status, "failed"), gte(printJobs.attempts, MAX_DELIVERY_ATTEMPTS)),
           )
           .orderBy(desc(printJobs.createdAt), desc(printJobs.id))
           .limit(RECENT_JOBS_LIMIT);
@@ -878,14 +866,11 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           })
           .from(printJobs)
           .where(
-            and(
-              eq(printJobs.tenantId, deps.cfg.tenantId),
-              or(
-                and(ne(printJobs.status, "done"), ne(printJobs.status, "failed")),
-                and(eq(printJobs.status, "failed"), lt(printJobs.attempts, MAX_DELIVERY_ATTEMPTS)),
-                inArray(printJobs.id, recentCompleted),
-                inArray(printJobs.id, recentFailed),
-              ),
+            or(
+              and(ne(printJobs.status, "done"), ne(printJobs.status, "failed")),
+              and(eq(printJobs.status, "failed"), lt(printJobs.attempts, MAX_DELIVERY_ATTEMPTS)),
+              inArray(printJobs.id, recentCompleted),
+              inArray(printJobs.id, recentFailed),
             ),
           )
           .orderBy(desc(printJobs.createdAt), desc(printJobs.id));
@@ -924,11 +909,8 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             resolution: printers.resolution,
           })
           .from(printJobs)
-          .innerJoin(
-            printers,
-            and(eq(printers.tenantId, printJobs.tenantId), eq(printers.id, printJobs.printerId)),
-          )
-          .where(and(eq(printJobs.tenantId, deps.cfg.tenantId), eq(printJobs.id, id))),
+          .innerJoin(printers, eq(printers.id, printJobs.printerId))
+          .where(eq(printJobs.id, id)),
       );
       if (job === undefined) throw new AppError("print_job.not_found", { id });
       // The printer's CURRENT settings: a job built for 42 columns previews as it would print now.
@@ -1026,7 +1008,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             receiptPrinterId: tills.receiptPrinterId,
           })
           .from(tills)
-          .where(eq(tills.tenantId, deps.cfg.tenantId))
+
           .orderBy(tills.name),
       );
       return c.json(rows);
@@ -1064,7 +1046,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
         const [till] = await tx
           .select({ locationId: tills.locationId })
           .from(tills)
-          .where(and(eq(tills.tenantId, deps.cfg.tenantId), eq(tills.id, tillId)));
+          .where(eq(tills.id, tillId));
         if (till === undefined) {
           throw new AppError("management.request_invalid", { field: "tillId" });
         }
@@ -1074,7 +1056,6 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             .from(printers)
             .where(
               and(
-                eq(printers.tenantId, deps.cfg.tenantId),
                 eq(printers.id, printerId),
                 eq(printers.locationId, till.locationId),
                 eq(printers.active, true),
@@ -1082,10 +1063,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             );
           if (printer === undefined) throw new AppError("printer.not_found", { id: printerId });
         }
-        await tx
-          .update(tills)
-          .set({ receiptPrinterId: printerId })
-          .where(and(eq(tills.tenantId, deps.cfg.tenantId), eq(tills.id, tillId)));
+        await tx.update(tills).set({ receiptPrinterId: printerId }).where(eq(tills.id, tillId));
       });
       return c.body(null, 204);
     }),
@@ -1109,7 +1087,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
         const updated = await tx
           .update(locations)
           .set({ receiptPrintMode: mode })
-          .where(and(eq(locations.tenantId, deps.cfg.tenantId), eq(locations.id, locationRowId)))
+          .where(eq(locations.id, locationRowId))
           .returning({ id: locations.id });
         if (updated.length === 0) {
           throw new AppError("management.request_invalid", { field: "locationId" });
@@ -1138,7 +1116,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
         const updated = await tx
           .update(locations)
           .set({ drawerOpenPolicy: policy })
-          .where(and(eq(locations.tenantId, deps.cfg.tenantId), eq(locations.id, locationRowId)))
+          .where(eq(locations.id, locationRowId))
           .returning({ id: locations.id });
         if (updated.length === 0) {
           throw new AppError("management.request_invalid", { field: "locationId" });

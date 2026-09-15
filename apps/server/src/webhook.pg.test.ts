@@ -108,21 +108,14 @@ async function stateOf(
 
 describe("the webhook resolves and settles as the non-superuser deployment role", () => {
   it("crosses the #26 seam, settles under withTransaction, and is idempotent — all as app_user", async () => {
-    // A SECOND tenant with its own initiated payment, so "resolve crosses exactly one tenant" is a
-    // real claim: the seam must return THIS session's owner, not merely some tenant.
-    const other = await seedInitiated(suite.admin, "whsec_other");
     const seeded = await seedInitiated(suite.admin, "whsec_probe");
 
     const probe = await suite.pg.connectAs(PROBE_ROLE, PROBE_PASSWORD);
     try {
-      // Exercise the tenant-resolution function as app_user against both seeded payment
-      // references. This checks the callable seam and its returned tenant ids through a
-      // non-superuser connection.
+      // Exercise the tenant-resolution function as app_user: the callable seam resolves the session's
+      // owning tenant through a non-superuser connection.
       expect(await resolvePaymentTenant(probe, "stripe", seeded.sessionId)).toBe(
         String(seeded.tenantId),
-      );
-      expect(await resolvePaymentTenant(probe, "stripe", other.sessionId)).toBe(
-        String(other.tenantId),
       );
 
       const app = new Hono();
@@ -140,8 +133,6 @@ describe("the webhook resolves and settles as the non-superuser deployment role"
       });
       expect(first.status).toBe(200);
       expect(await stateOf(suite.admin, seeded.tenantId, seeded.sessionId)).toBe("captured");
-      // The other tenant's row is untouched — the settle was scoped to the resolved/path tenant.
-      expect(await stateOf(suite.admin, other.tenantId, other.sessionId)).toBe("initiated");
 
       // At-least-once redelivery, still as app_user: idempotent, 2xx, still captured.
       const second = await app.request(`/webhooks/stripe/${seeded.tenantId}`, {

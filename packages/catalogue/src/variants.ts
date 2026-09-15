@@ -53,10 +53,11 @@ function validateAvailability(available: boolean): void {
 }
 
 async function lockProduct(tx: Transaction, tenantId: TenantId, productId: string): Promise<void> {
+  void tenantId;
   const [product] = await tx
     .select({ id: products.id })
     .from(products)
-    .where(and(eq(products.tenantId, tenantId), eq(products.id, productId)))
+    .where(eq(products.id, productId))
     .for("update");
   if (!product) throw new AppError("product.not_found", { productId });
 }
@@ -75,17 +76,13 @@ export async function listProductVariantsForProducts(
   tenantId: TenantId,
   productIds: readonly string[],
 ): Promise<Map<string, ProductVariant[]>> {
+  void tenantId;
   const grouped = new Map<string, ProductVariant[]>();
   if (productIds.length === 0) return grouped;
   const rows = await tx
     .select({ productId: productVariants.productId, ...variantColumns })
     .from(productVariants)
-    .where(
-      and(
-        eq(productVariants.tenantId, tenantId),
-        inArray(productVariants.productId, [...new Set(productIds)]),
-      ),
-    )
+    .where(inArray(productVariants.productId, [...new Set(productIds)]))
     .orderBy(
       asc(productVariants.productId),
       asc(productVariants.displayOrder),
@@ -134,9 +131,7 @@ export async function setProductVariants(
     const dependencies = await tx
       .select({ variantId: menuItemVariants.variantId, menuItemId: menuItemVariants.menuItemId })
       .from(menuItemVariants)
-      .where(
-        and(eq(menuItemVariants.tenantId, tenantId), inArray(menuItemVariants.variantId, removed)),
-      );
+      .where(inArray(menuItemVariants.variantId, removed));
     if (dependencies.length) {
       const variantId = dependencies[0]!.variantId;
       throw new AppError("product.variant_in_use", {
@@ -146,13 +141,7 @@ export async function setProductVariants(
     }
     await tx
       .delete(productVariants)
-      .where(
-        and(
-          eq(productVariants.tenantId, tenantId),
-          eq(productVariants.productId, productId),
-          inArray(productVariants.id, removed),
-        ),
-      );
+      .where(and(eq(productVariants.productId, productId), inArray(productVariants.id, removed)));
   }
   for (const [displayOrder, input] of normalized.entries()) {
     const values = {
@@ -170,13 +159,7 @@ export async function setProductVariants(
       await tx
         .update(productVariants)
         .set(values)
-        .where(
-          and(
-            eq(productVariants.tenantId, tenantId),
-            eq(productVariants.productId, productId),
-            eq(productVariants.id, input.id),
-          ),
-        );
+        .where(and(eq(productVariants.productId, productId), eq(productVariants.id, input.id)));
     }
   }
   return listProductVariants(tx, tenantId, productId);
@@ -188,25 +171,18 @@ export async function listMenuVariants(
   menuItemId: string,
   menuId?: string,
 ): Promise<MenuVariant[]> {
+  void tenantId;
   if (menuId !== undefined) {
     const [offer] = await tx
       .select({ id: menuItems.id })
       .from(menuItems)
-      .where(
-        and(
-          eq(menuItems.tenantId, tenantId),
-          eq(menuItems.id, menuItemId),
-          eq(menuItems.menuId, menuId),
-        ),
-      );
+      .where(and(eq(menuItems.id, menuItemId), eq(menuItems.menuId, menuId)));
     if (!offer) throw new AppError("menu_item.not_found", { menuItemId });
   }
   return tx
     .select(publicationColumns)
     .from(menuItemVariants)
-    .where(
-      and(eq(menuItemVariants.tenantId, tenantId), eq(menuItemVariants.menuItemId, menuItemId)),
-    )
+    .where(eq(menuItemVariants.menuItemId, menuItemId))
     .orderBy(asc(menuItemVariants.displayOrder), asc(menuItemVariants.variantId));
 }
 
@@ -222,7 +198,6 @@ export async function setMenuVariants(
     .from(menuItems)
     .where(
       and(
-        eq(menuItems.tenantId, tenantId),
         eq(menuItems.id, menuItemId),
         ...(menuId === undefined ? [] : [eq(menuItems.menuId, menuId)]),
       ),
@@ -253,7 +228,6 @@ export async function setMenuVariants(
     .delete(menuItemVariants)
     .where(
       and(
-        eq(menuItemVariants.tenantId, tenantId),
         eq(menuItemVariants.menuItemId, menuItemId),
         ...(seen.size ? [notInArray(menuItemVariants.variantId, [...seen])] : []),
       ),
@@ -349,19 +323,10 @@ export async function resolveMenuVariant(
       unitPrice: menuItems.grossPrice,
     })
     .from(menuItems)
-    .innerJoin(
-      products,
-      and(eq(products.tenantId, menuItems.tenantId), eq(products.id, menuItems.productId)),
-    )
-    .innerJoin(
-      catalogues,
-      and(eq(catalogues.tenantId, menuItems.tenantId), eq(catalogues.id, menuItems.menuId)),
-    )
-    .innerJoin(
-      menuSections,
-      and(eq(menuSections.tenantId, menuItems.tenantId), eq(menuSections.id, menuItems.sectionId)),
-    )
-    .where(and(eq(menuItems.tenantId, tenantId), eq(menuItems.id, menuItemId)));
+    .innerJoin(products, eq(products.id, menuItems.productId))
+    .innerJoin(catalogues, eq(catalogues.id, menuItems.menuId))
+    .innerJoin(menuSections, eq(menuSections.id, menuItems.sectionId))
+    .where(eq(menuItems.id, menuItemId));
   if (!offer) throw new AppError("menu_item.not_found", { menuItemId });
   if (
     !offer.available ||

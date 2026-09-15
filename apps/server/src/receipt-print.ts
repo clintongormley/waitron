@@ -47,15 +47,8 @@ export async function resolveReceiptPrinter(
       characterSet: printers.characterSet,
     })
     .from(tills)
-    .innerJoin(
-      printers,
-      and(
-        eq(printers.tenantId, tills.tenantId),
-        eq(printers.id, tills.receiptPrinterId),
-        eq(printers.active, true),
-      ),
-    )
-    .where(and(eq(tills.tenantId, cfg.tenantId), eq(tills.id, cfg.tillId)))
+    .innerJoin(printers, and(eq(printers.id, tills.receiptPrinterId), eq(printers.active, true)))
+    .where(eq(tills.id, cfg.tillId))
     .for("share", { of: printers });
   return printer;
 }
@@ -125,7 +118,7 @@ export async function enqueueSaleReceipt(
   const [loc] = await tx
     .select({ mode: locations.receiptPrintMode })
     .from(locations)
-    .where(and(eq(locations.tenantId, cfg.tenantId), eq(locations.id, cfg.locationId)));
+    .where(eq(locations.id, cfg.locationId));
   if (loc?.mode !== "auto") return;
   await enqueueOriginalReceipt(tx, cfg, ticket);
 }

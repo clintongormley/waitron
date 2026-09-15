@@ -107,11 +107,10 @@ async function consumeChallenge(
   tenantId: string,
   challengeHandle: string,
 ): Promise<string> {
+  void tenantId;
   const [challenge] = await tx
     .delete(webauthnChallenges)
-    .where(
-      and(eq(webauthnChallenges.tenantId, tenantId), eq(webauthnChallenges.id, challengeHandle)),
-    )
+    .where(eq(webauthnChallenges.id, challengeHandle))
     .returning({
       challenge: webauthnChallenges.challenge,
       createdAt: webauthnChallenges.createdAt,
@@ -137,7 +136,7 @@ export async function beginPasskeyRegistration(
   const [person] = await tx
     .select({ displayName: persons.displayName })
     .from(persons)
-    .where(and(eq(persons.tenantId, tenantId), eq(persons.id, personId)));
+    .where(eq(persons.id, personId));
   // Exclude the person's existing passkeys so the authenticator refuses to enroll a duplicate, each
   // carrying its stored transports (see `serializeTransports`) so the match holds across any transport.
   const existing = await tx
@@ -146,9 +145,7 @@ export async function beginPasskeyRegistration(
       transports: webauthnCredentials.transports,
     })
     .from(webauthnCredentials)
-    .where(
-      and(eq(webauthnCredentials.tenantId, tenantId), eq(webauthnCredentials.personId, personId)),
-    );
+    .where(eq(webauthnCredentials.personId, personId));
   const options = await generateRegistrationOptions({
     rpID: input.rpId,
     rpName: input.rpName,
@@ -342,13 +339,7 @@ export async function finishPasskeyAuthentication(
     })
     .from(webauthnCredentials)
     .innerJoin(persons, eq(persons.id, webauthnCredentials.personId))
-    .where(
-      and(
-        eq(webauthnCredentials.tenantId, input.tenantId),
-        eq(persons.tenantId, input.tenantId),
-        eq(webauthnCredentials.credentialId, input.response.id),
-      ),
-    );
+    .where(eq(webauthnCredentials.credentialId, input.response.id));
   if (cred === undefined) throw new AppError("passkey.verification_failed", {});
   // This public endpoint must not reveal that the returned credential belongs to a suspended or
   // pending account. No session is minted for any non-active owner.
@@ -391,13 +382,7 @@ export async function finishPasskeyAuthentication(
   await tx
     .update(webauthnCredentials)
     .set({ counter: newCounter })
-    .where(
-      and(
-        eq(webauthnCredentials.tenantId, input.tenantId),
-        eq(webauthnCredentials.id, cred.id),
-        lt(webauthnCredentials.counter, newCounter),
-      ),
-    );
+    .where(and(eq(webauthnCredentials.id, cred.id), lt(webauthnCredentials.counter, newCounter)));
   // Verifier seam: like loginManager, a successful passkey ends in a management session.
   return startManagementSession(tx, { tenantId: input.tenantId, personId: cred.personId });
 }

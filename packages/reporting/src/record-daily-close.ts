@@ -4,7 +4,7 @@
 // its registry directly) — not ./errors.reachability.test.ts, which per CLAUDE.md §4 is only a smoke
 // test that the codes construct and does NOT prove barrel reachability.
 import "./errors.js";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { AppError, addDecimal, compareDecimal, decimal, subtractDecimal } from "@waitron/shared";
 import type { Decimal, NodeId, TenantId, TillId } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
@@ -97,9 +97,7 @@ export async function recordDailyClose(
   await tx
     .update(dailyCloseChain)
     .set({ sequenceNo, lastEntryHash: entryHash })
-    .where(
-      and(eq(dailyCloseChain.tenantId, input.tenantId), eq(dailyCloseChain.nodeId, input.nodeId)),
-    );
+    .where(eq(dailyCloseChain.nodeId, input.nodeId));
 
   // 8.
   return {
@@ -237,13 +235,14 @@ async function selectHeadForUpdate(
   tenantId: TenantId,
   nodeId: NodeId,
 ): Promise<ChainHead | undefined> {
+  void tenantId;
   const [row] = await tx
     .select({
       sequenceNo: dailyCloseChain.sequenceNo,
       lastEntryHash: dailyCloseChain.lastEntryHash,
     })
     .from(dailyCloseChain)
-    .where(and(eq(dailyCloseChain.tenantId, tenantId), eq(dailyCloseChain.nodeId, nodeId)))
+    .where(eq(dailyCloseChain.nodeId, nodeId))
     .for("update");
   return row;
 }

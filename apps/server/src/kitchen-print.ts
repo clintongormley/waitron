@@ -107,6 +107,7 @@ async function lockActivePrinters(
     characterSet: CharacterSet;
   }[]
 > {
+  void tenantId;
   return tx
     .select({
       stationId: stationPrinters.stationId,
@@ -116,20 +117,8 @@ async function lockActivePrinters(
       characterSet: printers.characterSet,
     })
     .from(stationPrinters)
-    .innerJoin(
-      printers,
-      and(
-        eq(stationPrinters.printerId, printers.id),
-        eq(stationPrinters.tenantId, printers.tenantId),
-      ),
-    )
-    .where(
-      and(
-        eq(stationPrinters.tenantId, tenantId),
-        inArray(stationPrinters.stationId, stationIds),
-        eq(printers.active, true),
-      ),
-    )
+    .innerJoin(printers, eq(stationPrinters.printerId, printers.id))
+    .where(and(inArray(stationPrinters.stationId, stationIds), eq(printers.active, true)))
     .for("share", { of: printers });
 }
 
@@ -193,9 +182,7 @@ async function buildTicketItems(
       doneness: workingOrderLines.doneness,
     })
     .from(workingOrderLines)
-    .where(
-      and(eq(workingOrderLines.tenantId, cfg.tenantId), inArray(workingOrderLines.id, lineIds)),
-    );
+    .where(inArray(workingOrderLines.id, lineIds));
   const lineById = new Map(lineRows.map((row) => [row.id, row]));
 
   // The CHILD modifier lines of the fired parents (ordering modifiers) — one grouped read, keyed
@@ -210,12 +197,7 @@ async function buildTicketItems(
       name: workingOrderLines.name,
     })
     .from(workingOrderLines)
-    .where(
-      and(
-        eq(workingOrderLines.tenantId, cfg.tenantId),
-        inArray(workingOrderLines.parentLineId, lineIds),
-      ),
-    )
+    .where(inArray(workingOrderLines.parentLineId, lineIds))
     .orderBy(workingOrderLines.lineNo);
   // parent line id → its option strings in line_no order. Per-option quantity is recovered from the filed
   // COMBINED child quantity (see perDishOptionQuantity); a per-dish count > 1 appends an ASCII " xN"
@@ -263,10 +245,11 @@ async function readStationNames(
   tenantId: string,
   stationIds: string[],
 ): Promise<Map<string, string>> {
+  void tenantId;
   const rows = await tx
     .select({ id: kitchenStations.id, name: kitchenStations.name })
     .from(kitchenStations)
-    .where(and(eq(kitchenStations.tenantId, tenantId), inArray(kitchenStations.id, stationIds)));
+    .where(inArray(kitchenStations.id, stationIds));
   return new Map(rows.map((row) => [row.id, row.name]));
 }
 
@@ -296,7 +279,7 @@ async function readOrderHeader(
         limit 1)`,
     })
     .from(workingOrders)
-    .where(and(eq(workingOrders.tenantId, cfg.tenantId), eq(workingOrders.id, orderId)));
+    .where(eq(workingOrders.id, orderId));
   const order = rows[0]!;
   return { orderNumber: String(order.orderNumber), tableLabel: order.tableLabel };
 }
@@ -559,12 +542,6 @@ export async function reprintOrderTickets(
       stationId: ticketItems.stationId,
     })
     .from(ticketItems)
-    .where(
-      and(
-        eq(ticketItems.tenantId, cfg.tenantId),
-        eq(ticketItems.workingOrderId, orderId),
-        isNotNull(ticketItems.firedAt),
-      ),
-    );
+    .where(and(eq(ticketItems.workingOrderId, orderId), isNotNull(ticketItems.firedAt)));
   await enqueueKitchenTickets(tx, cfg, orderId, fired);
 }

@@ -398,6 +398,7 @@ export class WorkforceBackend {
     locationId: string,
     period: Period,
   ): Promise<TimeEntryRecord[]> {
+    void tenantId;
     const windowStart = shiftDay(period.start, -1);
     const windowEnd = shiftDay(period.end, 1);
     const rows = await tx
@@ -417,7 +418,6 @@ export class WorkforceBackend {
       .from(timeEntries)
       .where(
         and(
-          eq(timeEntries.tenantId, tenantId),
           eq(timeEntries.locationId, locationId),
           gte(timeEntries.eventAt, windowStart),
           lt(timeEntries.eventAt, windowEnd),
@@ -1142,7 +1142,6 @@ export class WorkforceBackend {
       .from(timeEntries)
       .where(
         and(
-          eq(timeEntries.tenantId, query.tenantId),
           eq(timeEntries.personId, query.personId),
           gte(timeEntries.eventAt, windowStart),
           lt(timeEntries.eventAt, windowEnd),

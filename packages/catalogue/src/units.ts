@@ -99,18 +99,17 @@ export async function createUnit(
 }
 
 export async function listUnits(tx: Transaction, tenantId: string): Promise<Unit[]> {
+  void tenantId;
   return tx
     .select(UNIT_COLUMNS)
     .from(units)
-    .where(eq(units.tenantId, tenantId))
+
     .orderBy(asc(units.id));
 }
 
 export async function getUnit(tx: Transaction, tenantId: string, unitId: string): Promise<Unit> {
-  const [row] = await tx
-    .select(UNIT_COLUMNS)
-    .from(units)
-    .where(and(eq(units.tenantId, tenantId), eq(units.id, unitId)));
+  void tenantId;
+  const [row] = await tx.select(UNIT_COLUMNS).from(units).where(eq(units.id, unitId));
   if (row === undefined) throw new AppError("unit.not_found", { unitId });
   return row;
 }
@@ -121,10 +120,8 @@ export async function getSellableUnit(
   tenantId: string,
   unitId: string,
 ): Promise<SellableUnit> {
-  const [row] = await tx
-    .select(SELLABLE_UNIT_COLUMNS)
-    .from(units)
-    .where(and(eq(units.tenantId, tenantId), eq(units.id, unitId)));
+  void tenantId;
+  const [row] = await tx.select(SELLABLE_UNIT_COLUMNS).from(units).where(eq(units.id, unitId));
   if (row === undefined) throw new AppError("unit.not_found", { unitId });
   return toSellableUnit(row);
 }
@@ -135,10 +132,11 @@ export async function getSeededUnit(
   tenantId: string,
   seedKey: "each" | "kg",
 ): Promise<SellableUnit | null> {
+  void tenantId;
   const [row] = await tx
     .select(SELLABLE_UNIT_COLUMNS)
     .from(units)
-    .where(and(eq(units.tenantId, tenantId), eq(units.seedKey, seedKey)));
+    .where(eq(units.seedKey, seedKey));
   return row === undefined ? null : toSellableUnit(row);
 }
 
@@ -166,7 +164,7 @@ export async function updateUnit(
   const [row] = await tx
     .update(units)
     .set(patch)
-    .where(and(eq(units.tenantId, tenantId), eq(units.id, unitId)))
+    .where(eq(units.id, unitId))
     .returning(UNIT_COLUMNS);
   if (row === undefined) throw new AppError("unit.not_found", { unitId });
   return row;
@@ -181,13 +179,13 @@ export async function assignProductUnit(
   const [unit] = await tx
     .select({ id: units.id })
     .from(units)
-    .where(and(eq(units.tenantId, tenantId), eq(units.id, unitId)))
+    .where(eq(units.id, unitId))
     .for("key share");
   if (unit === undefined) throw new AppError("unit.not_found", { unitId });
   const [product] = await tx
     .select({ id: products.id })
     .from(products)
-    .where(and(eq(products.tenantId, tenantId), eq(products.id, productId)));
+    .where(eq(products.id, productId));
   if (product === undefined) throw new AppError("product.not_found", { productId });
   await tx
     .insert(productUnits)
@@ -214,8 +212,8 @@ export async function reassignProductsToUnit(
   productIds: readonly string[],
   targetUnitId: string | null,
 ): Promise<void> {
+  void tenantId;
   const scope = and(
-    eq(productUnits.tenantId, tenantId),
     eq(productUnits.unitId, sourceUnitId),
     inArray(productUnits.productId, productIds),
   );
@@ -228,12 +226,9 @@ export async function reassignProductsToUnit(
       .update(products)
       .set({ pricingUnit: "each" })
       .where(
-        and(
-          eq(products.tenantId, tenantId),
-          inArray(
-            products.id,
-            tx.select({ id: productUnits.productId }).from(productUnits).where(scope),
-          ),
+        inArray(
+          products.id,
+          tx.select({ id: productUnits.productId }).from(productUnits).where(scope),
         ),
       );
     await tx.delete(productUnits).where(scope);
@@ -242,7 +237,7 @@ export async function reassignProductsToUnit(
   const [target] = await tx
     .select({ id: units.id })
     .from(units)
-    .where(and(eq(units.tenantId, tenantId), eq(units.id, targetUnitId)))
+    .where(eq(units.id, targetUnitId))
     .for("key share");
   if (target === undefined) throw new AppError("unit.not_found", { unitId: targetUnitId });
   await tx.update(productUnits).set({ unitId: targetUnitId }).where(scope);
@@ -256,14 +251,12 @@ export async function readProductUnitId(
   tenantId: string,
   productId: string,
 ): Promise<string | null> {
+  void tenantId;
   const [row] = await tx
     .select({ productId: products.id, unitId: productUnits.unitId })
     .from(products)
-    .leftJoin(
-      productUnits,
-      and(eq(productUnits.tenantId, products.tenantId), eq(productUnits.productId, products.id)),
-    )
-    .where(and(eq(products.tenantId, tenantId), eq(products.id, productId)));
+    .leftJoin(productUnits, eq(productUnits.productId, products.id))
+    .where(eq(products.id, productId));
   if (row === undefined) throw new AppError("product.not_found", { productId });
   return row.unitId;
 }
@@ -286,14 +279,12 @@ export async function productsUsingUnit(
   tenantId: string,
   unitId: string,
 ): Promise<ProductUsingUnit[]> {
+  void tenantId;
   return tx
     .select({ id: products.id, name: products.name, available: products.active })
     .from(productUnits)
-    .innerJoin(
-      products,
-      and(eq(products.tenantId, productUnits.tenantId), eq(products.id, productUnits.productId)),
-    )
-    .where(and(eq(productUnits.tenantId, tenantId), eq(productUnits.unitId, unitId)))
+    .innerJoin(products, eq(products.id, productUnits.productId))
+    .where(eq(productUnits.unitId, unitId))
     .orderBy(asc(products.id));
 }
 
@@ -301,12 +292,12 @@ export async function deleteUnit(tx: Transaction, tenantId: string, unitId: stri
   const [locked] = await tx
     .select({ id: units.id })
     .from(units)
-    .where(and(eq(units.tenantId, tenantId), eq(units.id, unitId)))
+    .where(eq(units.id, unitId))
     .for("update");
   if (locked === undefined) throw new AppError("unit.not_found", { unitId });
   const references = await productsUsingUnit(tx, tenantId, unitId);
   if (references.length > 0) {
     throw new AppError("unit.in_use", { products: references });
   }
-  await tx.delete(units).where(and(eq(units.tenantId, tenantId), eq(units.id, unitId)));
+  await tx.delete(units).where(eq(units.id, unitId));
 }

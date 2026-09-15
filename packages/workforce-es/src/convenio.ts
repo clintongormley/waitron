@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import type { Database, Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import type { OvertimeModel, WorkTimeRuleset } from "@waitron/workforce";
@@ -50,12 +50,7 @@ export async function resolveWorkTimeRuleset(
       breaksCountAsWorked: convenioConfig.breaksCountAsWorked,
     })
     .from(convenioConfig)
-    .where(
-      and(
-        eq(convenioConfig.tenantId, params.tenantId),
-        eq(convenioConfig.locationId, params.locationId),
-      ),
-    )
+    .where(eq(convenioConfig.locationId, params.locationId))
     .limit(1);
   const row = rows[0];
   if (row === undefined) {

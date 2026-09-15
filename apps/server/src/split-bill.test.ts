@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   asAppUser,
@@ -303,10 +303,7 @@ describe("splitOffCheck", () => {
         .from(workingOrderLines)
         .where(eq(workingOrderLines.workingOrderId, tabId))
         .orderBy(workingOrderLines.lineNo);
-      const orders = await tx
-        .select({ id: workingOrders.id })
-        .from(workingOrders)
-        .where(eq(workingOrders.tenantId, cfg.tenantId));
+      const orders = await tx.select({ id: workingOrders.id }).from(workingOrders);
       return { originLines, orderCount: orders.length };
     });
     // Origin untouched — still the whole agua×3, quantity conserved (NOT split down to 2.000).
@@ -352,10 +349,7 @@ describe("splitOffCheck", () => {
         .from(workingOrderLines)
         .where(eq(workingOrderLines.workingOrderId, tabId))
         .orderBy(workingOrderLines.lineNo);
-      const orders = await tx
-        .select({ id: workingOrders.id })
-        .from(workingOrders)
-        .where(eq(workingOrders.tenantId, cfg.tenantId));
+      const orders = await tx.select({ id: workingOrders.id }).from(workingOrders);
       return { originLines, orderCount: orders.length };
     });
     // Origin untouched — still the whole agua×3.
@@ -426,7 +420,7 @@ describe("unjoinTable", () => {
       const [{ count }] = await tx
         .select({ count: sql<number>`count(*)::int` })
         .from(workingOrders)
-        .where(and(eq(workingOrders.status, "open"), eq(workingOrders.tenantId, cfg.tenantId)));
+        .where(eq(workingOrders.status, "open"));
       return { anchor, count };
     });
     expect(state.anchor?.tabId).toBe(tabId); // unchanged — the guard threw before the repoint

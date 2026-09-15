@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { asAppUser, captureError, pgErrorCode, pgErrorMessage, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
@@ -35,10 +35,7 @@ describe("card_readers", () => {
     // Round-trips: the row is readable and its defaults are what the schema promises.
     const stored = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
-      return tx
-        .select()
-        .from(cardReaders)
-        .where(and(eq(cardReaders.tenantId, tenantId), eq(cardReaders.providerRef, "rdr_1")));
+      return tx.select().from(cardReaders).where(eq(cardReaders.providerRef, "rdr_1"));
     });
     expect(stored).toHaveLength(1);
     expect(stored[0]!.name).toBe("Counter");

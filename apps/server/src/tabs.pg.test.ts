@@ -75,6 +75,11 @@ import "./errors.js";
 const LOCALE = "es-ES";
 
 const suite = useTemplateDb({ template: "manifest" });
+// A SECOND, independent database (its own clone) for the H2 huella-comparison tests. Those file two
+// records carrying the IDENTICAL AEAT identity, which one-tenant-per-database keeps apart by putting
+// each in its own database (see `secondVenueSharingNif`). Every other test in this file uses `suite`
+// alone; the helpers below default to `suite.admin` and take `suiteB.admin` only on the H2 path.
+const suiteB = useTemplateDb({ template: "manifest" });
 
 // Tenants accumulate for the life of the shared container and `tenants_country_tax_id_key` is unique,
 // so each provisioned venue needs its own NIF — the same shape `working-order.pg.test.ts` uses.
@@ -113,7 +118,7 @@ interface SeededVenue {
  * role and read back two `each`/general(21%) products. Each test gets its OWN tenant so its counts are
  * order-independent (CLAUDE.md §4).
  */
-async function setupVenue(): Promise<SeededVenue> {
+async function setupVenue(db: Database = suite.admin): Promise<SeededVenue> {
   const venue = await applyVenue(
     planVenue(
       {
@@ -145,11 +150,11 @@ async function setupVenue(): Promise<SeededVenue> {
       },
       ALL_MODULES,
     ),
-    { db: suite.admin, modules: ALL_MODULES },
+    { db, modules: ALL_MODULES },
   );
 
   const cfg = tillConfigFromVenue(venue);
-  const available = await withTransaction(suite.admin, async (tx) => {
+  const available = await withTransaction(db, async (tx) => {
     await asAppUser(tx);
     const cat = await createCatalogue(tx, cfg.tenantId, { name: "Delicatessen" });
     const bebidas = await createCategory(tx, cfg.tenantId, { name: { [LOCALE]: "Bebidas" } });
@@ -178,8 +183,12 @@ async function setupVenue(): Promise<SeededVenue> {
 }
 
 /** Seed one active dining table in the venue as the app role; returns its id. */
-async function seedTable(cfg: TillConfig, label: string): Promise<string> {
-  return withTransaction(suite.admin, async (tx) => {
+async function seedTable(
+  cfg: TillConfig,
+  label: string,
+  db: Database = suite.admin,
+): Promise<string> {
+  return withTransaction(db, async (tx) => {
     await asAppUser(tx);
     const { id } = await createTable(tx, cfg, { label });
     return id;
@@ -203,6 +212,8 @@ async function openOrderCount(cfg: TillConfig): Promise<number> {
 // own scaffolding (the pay-closes-tab and huella tests file real chained records, so the suite needs a
 // real `VerifactuBackend`). `resolveClient` REJECTS: `recordSale` must never contact AEAT (spec §4).
 let backend: FiscalBackend;
+// The H2 tests file tenant B in `suiteB`, so they need a backend bound to that database.
+let backendB: FiscalBackend;
 let clock: TrustedClock;
 
 /** The system wall clock, reported confident/anchored — the identical stub the sibling suites use. */
@@ -227,14 +238,17 @@ function systemClock(): TrustedClock {
 
 beforeAll(() => {
   clock = systemClock();
-  backend = new VerifactuBackend({
-    clock,
-    db: suite.admin,
-    environment: deploymentEnvironment(process.env),
-    deploymentEnvironment: deploymentEnvironment(process.env),
-    resolveClient: () =>
-      Promise.reject(new Error("tabs.pg.test: resolveClient must never be called by recordSale")),
-  });
+  const makeBackend = (db: Database): FiscalBackend =>
+    new VerifactuBackend({
+      clock,
+      db,
+      environment: deploymentEnvironment(process.env),
+      deploymentEnvironment: deploymentEnvironment(process.env),
+      resolveClient: () =>
+        Promise.reject(new Error("tabs.pg.test: resolveClient must never be called by recordSale")),
+    });
+  backend = makeBackend(suite.admin);
+  backendB = makeBackend(suiteB.admin);
 });
 
 /** The working order's own state — status + whether settled_at is set (the biconditional's witness). */
@@ -437,43 +451,44 @@ function fixedClock(instant: Date): TrustedClock {
  * issuer identifier (`IDEmisorFactura`) `recordSale` files under, and the field the two filings
  * must SHARE for their huellas to match. Owner read.
  */
-async function nifOf(cfg: TillConfig): Promise<string> {
-  const { rows } = await suite.admin.execute<{ tax_id: string }>(
+async function nifOf(cfg: TillConfig, db: Database = suite.admin): Promise<string> {
+  const { rows } = await db.execute<{ tax_id: string }>(
     sql`select tax_id from tenants where id = ${cfg.tenantId}`,
   );
   return rows[0]!.tax_id;
 }
 
 /**
- * A SECOND, wholly separate venue (its own tenant) whose node files under `nif` — tenant A's NIF —
- * rather than its own. This is the crux of the H2 proof, and it MUST be a second TENANT, not a second
- * node under one tenant: `registros_identidad_uq`
- * (packages/fiscal-verifactu/src/schema/registros.ts:177) is keyed
- * (tenant_id, id_emisor_factura, num_serie_factura, fecha_expedicion_factura, tipo_registro) — NODE-
- * AGNOSTIC, because AEAT record identity is per-obligado NIF (a duplicate is AEAT error 3000). Two
- * filings with the IDENTICAL huella necessarily share (NIF, "A/1", date), which under ONE tenant
- * violates that unique — verified by receipt: the same basket on a second node of ONE tenant fails
- * `chain.append_contention` (the retried identity-unique violation). A DIFFERENT tenant_id lets both
- * `A/1` rows coexist, while re-registering this venue's node SIF under tenant A's `nif` makes
- * `IDEmisorFactura` — hence the huella input — identical. This mirrors `fiscal-verifactu`'s own
- * `entorno is not part of the huella` proof, which files two same-huella records from two fresh tenants
- * sharing a FIXED `IDEmisorFactura` (verify.test.ts + testing/seed.ts's `TEST_NIF` / `altaFor`).
+ * A SECOND, wholly separate venue whose node files under `nif` — tenant A's NIF — rather than its own,
+ * provisioned in a SECOND database (`db`, defaulting to `suiteB.admin`). This is the crux of the H2
+ * proof, and it MUST be a second DATABASE, not a second tenant or node in one database:
+ * `registros_identidad_uq` (packages/fiscal-verifactu/src/schema/registros.ts) is keyed on
+ * (id_emisor_factura, num_serie_factura, fecha_expedicion_factura, tipo_registro) — record identity is
+ * per-obligado NIF, because a duplicate is AEAT error 3000. Two filings with the IDENTICAL huella
+ * necessarily share (NIF, "A/1", date), so under ONE database they collide on that unique. Under
+ * one-tenant-per-database there is no tenant column to hold them apart (the unique is global), so each
+ * filing goes in its OWN database; re-registering this venue's node SIF under `nif` makes
+ * `IDEmisorFactura` — hence the huella input — identical across the two databases. This mirrors
+ * `fiscal-verifactu`'s own `entorno is not part of the huella` proof, which files two same-huella
+ * records sharing a FIXED `IDEmisorFactura` (verify.test.ts + testing/seed.ts's `TEST_NIF` / `altaFor`).
  *
- * `setupVenue` provisions tenant B fully (tenant, node, series "A" at next_number 1, catalogue, till,
- * and its OWN SIF under its OWN nif); `registerSif` then RE-registers node B under `nif`, which also
- * resets node B's chain head so its first sale is a primer_registro. It mints a fresh installation
- * number under (`nif`, "W1") — "W1" is `WAITRON_ID_SISTEMA` (`@waitron/fiscal-verifactu`, the id the
- * fiscal seed registers under; inlined so the literal reads beside the tuple it keys), and NONE of
- * the SIF identity (IdSistemaInformatico / NumeroInstalacion) enters `computeHuella`
- * (huella.ts:45-58 hashes eight invoice fields only), so the
- * distinct installation numbers do not move the huella. The re-registration is LOAD-BEARING and proven
- * by deletion: remove it and tenant B keeps `setupVenue`'s own-nif SIF, so its filing carries a
- * DIFFERENT `IDEmisorFactura` and the two huellas diverge (verified: `D251…` vs the walk-up's `1E79…`)
- * — it is the shared NIF, not tenant identity, that the matching huella depends on.
+ * `setupVenue(db)` provisions the venue fully in `db` (tenant, node, series "A" at next_number 1,
+ * catalogue, till, and its OWN SIF under its OWN nif); `registerSif` then RE-registers the node under
+ * `nif`, which also resets the node's chain head so its first sale is a primer_registro. It mints a
+ * fresh installation number under (`nif`, "W1") — "W1" is `WAITRON_ID_SISTEMA` (`@waitron/fiscal-verifactu`,
+ * the id the fiscal seed registers under; inlined so the literal reads beside the tuple it keys), and
+ * NONE of the SIF identity (IdSistemaInformatico / NumeroInstalacion) enters `computeHuella`
+ * (huella.ts:45-58 hashes eight invoice fields only), so the installation number does not move the
+ * huella. The re-registration is proven by deletion: remove it and this venue keeps `setupVenue`'s
+ * own-nif SIF, so its filing carries a DIFFERENT `IDEmisorFactura` and the two huellas diverge — it is
+ * the shared NIF, not any tenant identity, that the matching huella depends on.
  */
-async function secondVenueSharingNif(nif: string): Promise<SeededVenue> {
-  const venue = await setupVenue();
-  await withTransaction(suite.admin, async (tx) => {
+async function secondVenueSharingNif(
+  nif: string,
+  db: Database = suiteB.admin,
+): Promise<SeededVenue> {
+  const venue = await setupVenue(db);
+  await withTransaction(db, async (tx) => {
     await registerSif(tx, {
       tenantId: venue.cfg.tenantId,
       nodeId: venue.cfg.nodeId,
@@ -485,8 +500,8 @@ async function secondVenueSharingNif(nif: string): Promise<SeededVenue> {
 }
 
 /** The filed huella for a working order's sale — owner read. */
-async function filedHuella(workingOrderId: string): Promise<string> {
-  const { rows } = await suite.admin.execute<{ huella: string }>(sql`
+async function filedHuella(workingOrderId: string, db: Database = suite.admin): Promise<string> {
+  const { rows } = await db.execute<{ huella: string }>(sql`
     select r.huella from registros_facturacion r
     join sales s on s.id = r.sale_id
     where s.working_order_id = ${workingOrderId}`);
@@ -501,42 +516,41 @@ describe("H2: the huella is independent of whether the order was a tab", () => {
   it("the SAME basket filed walk-up and from a tab yields the identical huella", async () => {
     const at = new Date("2026-08-17T19:20:30+01:00");
     const clockFixed = fixedClock(at);
-    const deps = { db: suite.admin, backend, clock: clockFixed };
+    const depsA = { db: suite.admin, backend, clock: clockFixed };
+    const depsB = { db: suiteB.admin, backend: backendB, clock: clockFixed };
 
-    // Tenant A — a WALK-UP, no table → A/1, primer_registro, filed under A's own NIF.
+    // Tenant A — a WALK-UP, no table → A/1, primer_registro, filed under A's own NIF (database `suite`).
     const { cfg: cfgA, cafe: cafeA } = await setupVenue();
     const nifA = await nifOf(cfgA);
     const walkUpId = randomUUID();
-    await payWorkingOrder(deps, cfgA, {
+    await payWorkingOrder(depsA, cfgA, {
       id: walkUpId,
       lines: [{ productId: cafeA.id, quantity: "1" }],
       tender: { method: "cash", amount: "5.00" },
     });
 
-    // Tenant B (a SEPARATE tenant SHARING A's NIF, series "A") — a TAB on a table (dining_tables.tab_id
-    // → the order) → also A/1, primer_registro. A distinct tenant_id lets both `A/1` rows coexist under
-    // the node-agnostic `registros_identidad_uq`; the shared NIF makes IDEmisorFactura — hence the
-    // huella input — identical. (A second NODE of ONE tenant cannot: it collides on that unique, which
-    // is the receipt `secondVenueSharingNif` documents.)
+    // Tenant B (a SEPARATE database SHARING A's NIF, series "A") — a TAB on a table (dining_tables.tab_id
+    // → the order) → also A/1, primer_registro. A separate database lets both `A/1` rows exist without
+    // colliding on the (now global) `registros_identidad_uq`; the shared NIF makes IDEmisorFactura —
+    // hence the huella input — identical (the receipt `secondVenueSharingNif` documents).
     const { cfg: cfgB, cafe: cafeB } = await secondVenueSharingNif(nifA);
-    const tableId = await seedTable(cfgB, "H2-tab");
-    const { tabId } = await withTransaction(suite.admin, async (tx) => {
+    const tableId = await seedTable(cfgB, "H2-tab", suiteB.admin);
+    const { tabId } = await withTransaction(suiteB.admin, async (tx) => {
       await asAppUser(tx);
       return openTab(tx, cfgB, { tableId, lines: [{ productId: cafeB.id, quantity: "1" }] });
     });
-    await payWorkingOrder(deps, cfgB, {
+    await payWorkingOrder(depsB, cfgB, {
       id: tabId,
       lines: [],
       tender: { method: "cash", amount: "5.00" },
     });
 
-    // Non-vacuity control (mirrors the `entorno is not part of the huella` precedent's
-    // read-back): the two orders GENUINELY differ in table-ness — the TAB order is pointed at by
-    // a `dining_tables` row, the WALK-UP order by none. Owner reads (the uuids are globally
-    // unique, so the cross-tenant count is exact). Without this, a regression where `openTab`
-    // stopped setting `tab_id` would leave both filings table-less and make the equality below
-    // vacuously true.
-    const tabPointers = await suite.admin.execute<{ n: string }>(
+    // Non-vacuity control (mirrors the `entorno is not part of the huella` precedent's read-back): the
+    // two orders GENUINELY differ in table-ness — the TAB order (in `suiteB`) is pointed at by a
+    // `dining_tables` row, the WALK-UP order (in `suite`) by none. Owner reads, each against the database
+    // its order lives in. Without this, a regression where `openTab` stopped setting `tab_id` would leave
+    // both filings table-less and make the equality below vacuously true.
+    const tabPointers = await suiteB.admin.execute<{ n: string }>(
       sql`select count(*)::text as n from dining_tables where tab_id = ${tabId}`,
     );
     const walkUpPointers = await suite.admin.execute<{ n: string }>(
@@ -554,13 +568,16 @@ describe("H2: the huella is independent of whether the order was a tab", () => {
     // equality would STILL hold. Column-independence is established SEPARATELY and dispositively by
     // (i) the UNTOUCHED fiscal core — this whole diff is test-only (`git diff --stat`) — and (ii) the
     // Step-1 grep-proof that `recordSale`/`computeHuella`/the alta builder never reference the column.
-    expect(await filedHuella(tabId)).toBe(await filedHuella(walkUpId));
+    expect(await filedHuella(tabId, suiteB.admin)).toBe(await filedHuella(walkUpId, suite.admin));
   });
 });
 
 /** The delivery_table_id stamped on a working order — owner read. */
-async function deliveryTableOf(workingOrderId: string): Promise<string | null> {
-  const { rows } = await suite.admin.execute<{ d: string | null }>(
+async function deliveryTableOf(
+  workingOrderId: string,
+  db: Database = suite.admin,
+): Promise<string | null> {
+  const { rows } = await db.execute<{ d: string | null }>(
     sql`select delivery_table_id as d from working_orders where id = ${workingOrderId}`,
   );
   return rows[0]!.d;
@@ -625,41 +642,45 @@ describe("H2 (column): the huella is independent of delivery_table_id", () => {
   it("two counter sales differing ONLY in delivery_table_id yield the identical huella", async () => {
     const at = new Date("2026-08-17T19:20:30+01:00");
     const clockFixed = fixedClock(at);
-    const deps = { db: suite.admin, backend, clock: clockFixed };
+    const depsA = { db: suite.admin, backend, clock: clockFixed };
+    const depsB = { db: suiteB.admin, backend: backendB, clock: clockFixed };
 
-    // Tenant A — a counter sale DELIVERED to a table → A/1, primer_registro, filed under A's own NIF.
+    // Tenant A — a counter sale DELIVERED to a table → A/1, primer_registro, filed under A's own NIF
+    // (database `suite`).
     const { cfg: cfgA, cafe: cafeA } = await setupVenue();
     const nifA = await nifOf(cfgA);
     const tableA = await seedTable(cfgA, "H2col-A");
     const deliveredId = randomUUID();
-    await recordTillSale(deps, cfgA, {
+    await recordTillSale(depsA, cfgA, {
       workingOrderId: deliveredId,
       lines: [{ productId: cafeA.id, quantity: "1" }],
       tender: { method: "cash", amount: "5.00" },
       deliveryTableId: tableA,
     });
 
-    // Tenant B (a SEPARATE tenant SHARING A's NIF, series "A") — a plain walk-up, NO delivery table →
+    // Tenant B (a SEPARATE database SHARING A's NIF, series "A") — a plain walk-up, NO delivery table →
     // also A/1, primer_registro. The shared NIF makes IDEmisorFactura — hence the huella input —
-    // identical; a distinct tenant_id lets both `A/1` rows coexist under the node-agnostic
+    // identical; a separate database lets both `A/1` rows exist without colliding on the (now global)
     // `registros_identidad_uq` (the same trick `secondVenueSharingNif` documents for the tab H2 test).
     const { cfg: cfgB, cafe: cafeB } = await secondVenueSharingNif(nifA);
     const walkUpId = randomUUID();
-    await recordTillSale(deps, cfgB, {
+    await recordTillSale(depsB, cfgB, {
       workingOrderId: walkUpId,
       lines: [{ productId: cafeB.id, quantity: "1" }],
       tender: { method: "cash", amount: "5.00" },
     });
 
-    // Non-vacuity control: the two orders GENUINELY differ in the one column under test — A
-    // carries the real table, B carries NULL. Owner reads (the uuids are globally unique).
-    expect(await deliveryTableOf(deliveredId)).toBe(tableA);
-    expect(await deliveryTableOf(walkUpId)).toBe(null);
+    // Non-vacuity control: the two orders GENUINELY differ in the one column under test — A (in `suite`)
+    // carries the real table, B (in `suiteB`) carries NULL. Owner reads, each against its own database.
+    expect(await deliveryTableOf(deliveredId, suite.admin)).toBe(tableA);
+    expect(await deliveryTableOf(walkUpId, suiteB.admin)).toBe(null);
 
     // Same NIF + same "A/1" + same fixed timestamp + same amount + both primer_registro, differing ONLY
     // in delivery_table_id ⇒ identical huella. This is the EMPIRICAL proof — possible for the first time
     // now the column is settable — that the newly-threaded delivery_table_id does NOT leak into the hash:
     // two rows differing solely in it hash alike (the fiscal core never reads it, per the Step-1 grep).
-    expect(await filedHuella(deliveredId)).toBe(await filedHuella(walkUpId));
+    expect(await filedHuella(deliveredId, suite.admin)).toBe(
+      await filedHuella(walkUpId, suiteB.admin),
+    );
   });
 });

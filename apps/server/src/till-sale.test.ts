@@ -503,10 +503,7 @@ describe("recordTillSale", () => {
     // A genuine chained fiscal record exists — one for this tenant's single sale.
     const rows = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
-      return tx
-        .select()
-        .from(registrosFacturacion)
-        .where(eq(registrosFacturacion.tenantId, cfg.tenantId));
+      return tx.select().from(registrosFacturacion);
     });
     expect(rows.length).toBe(1);
   });

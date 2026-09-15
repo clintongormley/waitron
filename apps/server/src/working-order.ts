@@ -898,11 +898,7 @@ export async function createOpenOrder(
       .select({ id: diningTables.id, zoneId: diningTables.zoneId })
       .from(diningTables)
       .where(
-        and(
-          eq(diningTables.id, deliveryTableId),
-          eq(diningTables.tenantId, cfg.tenantId),
-          eq(diningTables.locationId, cfg.locationId),
-        ),
+        and(eq(diningTables.id, deliveryTableId), eq(diningTables.locationId, cfg.locationId)),
       );
     if (table === undefined) {
       throw new AppError("table.not_found", { tableId: deliveryTableId });
@@ -1002,13 +998,7 @@ export async function parkOrder(
         .from(workingOrders)
         // Tenant-scoped: without it, replaying a FOREIGN tenant's id (a 23505 id collision on the
         // global `working_orders.id` PK) returned that tenant's order number (CLAUDE.md §3).
-        .where(
-          and(
-            eq(workingOrders.id, req.id),
-            eq(workingOrders.status, "open"),
-            eq(workingOrders.tenantId, cfg.tenantId),
-          ),
-        );
+        .where(and(eq(workingOrders.id, req.id), eq(workingOrders.status, "open")));
       // Not a replayable held order — either the colliding id is not `open` (abandoned/settled/placed,
       // a pathological id reuse) OR it belongs to ANOTHER tenant (the predicate above hides it) — so
       // re-throw the raw 23505 unchanged per the docstring's exception, never fabricating a result.
@@ -1050,7 +1040,7 @@ export async function openTab(
     // Scope the by-id read to the tenant: since RLS was dropped (#255) `withTransaction` no longer isolates
     // SELECTs, so a by-id read is not the isolation boundary (CLAUDE.md §3, till-reroute S3). Without
     // `tenant_id` this read reaches another tenant's row in a multi-tenant DB, leaking its state.
-    .where(and(eq(diningTables.id, req.tableId), eq(diningTables.tenantId, cfg.tenantId)))
+    .where(eq(diningTables.id, req.tableId))
     .for("update");
   if (table === undefined) {
     throw new AppError("table.not_found", { tableId: req.tableId });
@@ -1103,12 +1093,13 @@ export async function openTab(
 // transposition compile clean — the §3 bug class this scoping exists to prevent — so the tenant
 // arrives as a `TillConfig` a caller cannot swap with the id (sibling shape: `freeTablesCoveredBy`).
 async function lockOpenTabRow(tx: Transaction, cfg: TillConfig, tabId: string): Promise<void> {
+  void cfg;
   const [row] = await tx
     .select({ status: workingOrders.status })
     .from(workingOrders)
     // Scoped to the tenant, not by id alone: since RLS was dropped (#255) a by-id read is not isolated,
     // so a foreign tenant's globally-unique order id must read as absent here (CLAUDE.md §3).
-    .where(and(eq(workingOrders.id, tabId), eq(workingOrders.tenantId, cfg.tenantId)))
+    .where(eq(workingOrders.id, tabId))
     .for("update");
   if (row?.status !== "open") {
     throw new AppError("tab.not_open", { tabId });
@@ -1126,7 +1117,7 @@ async function lockOpenTab(tx: Transaction, cfg: TillConfig, tabId: string): Pro
     .from(diningTables)
     // Tenant-scoped like the row lock above — the back-pointer read must not reach another tenant's
     // `dining_tables` row by `tab_id` alone (CLAUDE.md §3).
-    .where(and(eq(diningTables.tabId, tabId), eq(diningTables.tenantId, cfg.tenantId)));
+    .where(eq(diningTables.tabId, tabId));
   if (pointer === undefined) {
     throw new AppError("tab.not_open", { tabId });
   }
@@ -1207,7 +1198,6 @@ export async function fireLines(
     .from(kitchenStations)
     .where(
       and(
-        eq(kitchenStations.tenantId, cfg.tenantId),
         eq(kitchenStations.locationId, cfg.locationId),
         eq(kitchenStations.isDefault, true),
         eq(kitchenStations.active, true),
@@ -1227,11 +1217,8 @@ export async function fireLines(
       categoryStationId: categories.stationId,
     })
     .from(products)
-    .leftJoin(
-      categories,
-      and(eq(categories.tenantId, products.tenantId), eq(categories.id, products.categoryId)),
-    )
-    .where(and(eq(products.tenantId, cfg.tenantId), inArray(products.id, productIds)));
+    .leftJoin(categories, eq(categories.id, products.categoryId))
+    .where(inArray(products.id, productIds));
   const routeByProduct = new Map(routes.map((route) => [route.productId, route]));
 
   // --- KDS-2 hold-and-fire (§3c): snapshot each line's course + decide fired-vs-held ---
@@ -1257,15 +1244,9 @@ export async function fireLines(
     .from(kitchenCourses)
     .leftJoin(
       ticketItems,
-      and(
-        eq(ticketItems.courseId, kitchenCourses.id),
-        eq(ticketItems.tenantId, kitchenCourses.tenantId),
-        eq(ticketItems.workingOrderId, orderId),
-      ),
+      and(eq(ticketItems.courseId, kitchenCourses.id), eq(ticketItems.workingOrderId, orderId)),
     )
-    .where(
-      and(eq(kitchenCourses.tenantId, cfg.tenantId), eq(kitchenCourses.locationId, cfg.locationId)),
-    )
+    .where(eq(kitchenCourses.locationId, cfg.locationId))
     .groupBy(kitchenCourses.id, kitchenCourses.displayOrder);
 
   // Courses with an EXISTING fired item — a new item of one joins the already-cooking course and fires.
@@ -1562,6 +1543,7 @@ export async function bumpCourseReady(
   orderId: string,
   courseId: string,
 ): Promise<void> {
+  void cfg;
   await tx
     .update(ticketItems)
     .set(advanceSet("ready"))
@@ -1569,7 +1551,6 @@ export async function bumpCourseReady(
       and(
         // Tenant-scoped: this by-order update must not reach another tenant's `ticket_items` rows
         // (CLAUDE.md §3) — `withTransaction` does not isolate it since RLS was dropped (#255).
-        eq(ticketItems.tenantId, cfg.tenantId),
         eq(ticketItems.workingOrderId, orderId),
         eq(ticketItems.courseId, courseId),
         ne(ticketItems.state, "ready"),
@@ -1736,13 +1717,7 @@ export async function voidTabLine(
       stationId: ticketItems.stationId,
     })
     .from(workingOrderLines)
-    .leftJoin(
-      ticketItems,
-      and(
-        eq(ticketItems.tenantId, workingOrderLines.tenantId),
-        eq(ticketItems.workingOrderLineId, workingOrderLines.id),
-      ),
-    )
+    .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
     .where(and(eq(workingOrderLines.workingOrderId, tabId), eq(workingOrderLines.lineNo, lineNo)));
   if (target === undefined) {
     throw new AppError("tab.line_not_found", { tabId, lineNo });
@@ -1938,12 +1913,7 @@ export async function moveTabLines(
     // Tenant-scoped: an exported primitive must not lock/move another tenant's tab by id alone, even
     // though today's callers pre-validate — the empty-source merge path had no composite-FK backstop
     // (CLAUDE.md §3, the run-it review's mergeTabs probe).
-    .where(
-      and(
-        or(eq(workingOrders.id, fromTabId), eq(workingOrders.id, toTabId)),
-        eq(workingOrders.tenantId, cfg.tenantId),
-      ),
-    )
+    .where(or(eq(workingOrders.id, fromTabId), eq(workingOrders.id, toTabId)))
     .orderBy(workingOrders.id)
     .for("update");
   const from = locked.find((r) => r.id === fromTabId);
@@ -2004,11 +1974,7 @@ export async function moveTabLines(
       .update(workingOrderLines)
       .set({ workingOrderId: toTabId, lineNo: base + index + 1 })
       .where(
-        and(
-          eq(workingOrderLines.tenantId, cfg.tenantId),
-          eq(workingOrderLines.workingOrderId, fromTabId),
-          eq(workingOrderLines.id, line.id),
-        ),
+        and(eq(workingOrderLines.workingOrderId, fromTabId), eq(workingOrderLines.id, line.id)),
       );
   }
   if (source.length > 0) {
@@ -2016,12 +1982,9 @@ export async function moveTabLines(
       .update(ticketItems)
       .set({ workingOrderId: toTabId })
       .where(
-        and(
-          eq(ticketItems.tenantId, cfg.tenantId),
-          inArray(
-            ticketItems.workingOrderLineId,
-            source.map((line) => line.id),
-          ),
+        inArray(
+          ticketItems.workingOrderLineId,
+          source.map((line) => line.id),
         ),
       );
   }
@@ -2034,11 +1997,12 @@ export async function moveTabLines(
  * `dining_tables` back-pointer both verbs intentionally avoid (see their docstrings).
  */
 async function assertTabOpen(tx: Transaction, cfg: TillConfig, tabId: string): Promise<void> {
+  void cfg;
   const [tab] = await tx
     .select({ status: workingOrders.status })
     .from(workingOrders)
     // Tenant-scoped: a foreign tenant's order id must read as absent, not as an open tab (CLAUDE.md §3).
-    .where(and(eq(workingOrders.id, tabId), eq(workingOrders.tenantId, cfg.tenantId)));
+    .where(eq(workingOrders.id, tabId));
   if (tab === undefined || tab.status !== "open") {
     throw new AppError("tab.not_open", { tabId });
   }
@@ -2127,19 +2091,8 @@ export async function readTabLines(
       state: ticketItems.state,
     })
     .from(workingOrderLines)
-    .leftJoin(
-      ticketItems,
-      and(
-        eq(ticketItems.tenantId, workingOrderLines.tenantId),
-        eq(ticketItems.workingOrderLineId, workingOrderLines.id),
-      ),
-    )
-    .where(
-      and(
-        eq(workingOrderLines.tenantId, cfg.tenantId),
-        eq(workingOrderLines.workingOrderId, tabId),
-      ),
-    )
+    .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
+    .where(eq(workingOrderLines.workingOrderId, tabId))
     .orderBy(workingOrderLines.lineNo);
   // The tab shows one label per line, so the line's two frozen staff names are joined into it.
   return rows.map(({ variantName, ...row }) => ({
@@ -2162,6 +2115,7 @@ async function assertTableAvailable(
   table: { tabId: string | null; active: boolean } | undefined,
   tableId: string,
 ): Promise<void> {
+  void cfg;
   if (table === undefined) {
     throw new AppError("table.not_found", { tableId });
   }
@@ -2174,13 +2128,7 @@ async function assertTableAvailable(
       .from(workingOrders)
       // Tenant-scoped like every other by-id read here: the occupancy check must not reach another
       // tenant's `working_orders` row by `tab_id` alone (CLAUDE.md §3).
-      .where(
-        and(
-          eq(workingOrders.id, table.tabId),
-          eq(workingOrders.tenantId, cfg.tenantId),
-          eq(workingOrders.status, "open"),
-        ),
-      );
+      .where(and(eq(workingOrders.id, table.tabId), eq(workingOrders.status, "open")));
     if (pointed !== undefined) {
       throw new AppError("table.occupied", { tableId });
     }
@@ -2193,10 +2141,11 @@ async function assertTableAvailable(
  * (design §4). Shared by `moveTab` (freeing the source) and `mergeTabs`'s consolidate branch.
  */
 async function freeTablesCoveredBy(tx: Transaction, cfg: TillConfig, tabId: string): Promise<void> {
+  void cfg;
   await tx
     .update(diningTables)
     .set({ tabId: null, statusId: null })
-    .where(and(eq(diningTables.tenantId, cfg.tenantId), eq(diningTables.tabId, tabId)));
+    .where(eq(diningTables.tabId, tabId));
 }
 
 /**
@@ -2240,12 +2189,7 @@ export async function moveTab(
     .from(diningTables)
     // Tenant-scoped: a foreign tenant's globally-unique table id must read as absent here, so the
     // move never reaches another tenant's `dining_tables` row (CLAUDE.md §3).
-    .where(
-      and(
-        eq(diningTables.tenantId, cfg.tenantId),
-        or(eq(diningTables.id, toTableId), eq(diningTables.tabId, tabId)),
-      ),
-    )
+    .where(or(eq(diningTables.id, toTableId), eq(diningTables.tabId, tabId)))
     .orderBy(diningTables.id)
     .for("update");
   await assertTableAvailable(
@@ -2267,7 +2211,7 @@ export async function moveTab(
   await tx
     .update(diningTables)
     .set({ tabId, statusId: null })
-    .where(and(eq(diningTables.id, toTableId), eq(diningTables.tenantId, cfg.tenantId)));
+    .where(eq(diningTables.id, toTableId));
 }
 
 /**
@@ -2292,7 +2236,7 @@ export async function joinTable(
     .from(diningTables)
     // Tenant-scoped: a foreign tenant's globally-unique table id must read as absent here, so the
     // join never reaches another tenant's `dining_tables` row (CLAUDE.md §3).
-    .where(and(eq(diningTables.id, tableId), eq(diningTables.tenantId, cfg.tenantId)))
+    .where(eq(diningTables.id, tableId))
     .for("update");
   await assertTableAvailable(tx, cfg, table, tableId);
 
@@ -2309,10 +2253,7 @@ export async function joinTable(
     });
   }
 
-  await tx
-    .update(diningTables)
-    .set({ tabId })
-    .where(and(eq(diningTables.id, tableId), eq(diningTables.tenantId, cfg.tenantId)));
+  await tx.update(diningTables).set({ tabId }).where(eq(diningTables.id, tableId));
 }
 
 /**
@@ -2372,12 +2313,7 @@ export async function mergeTabs(
     // Tenant-scoped: without it, tenant A could merge/abandon tenant B's tabs by id alone — the empty
     // source has no composite-FK backstop, so step 3 abandoned B's order across tenants (CLAUDE.md §3,
     // reproduced by the run-it review).
-    .where(
-      and(
-        or(eq(workingOrders.id, intoTabId), eq(workingOrders.id, fromTabId)),
-        eq(workingOrders.tenantId, cfg.tenantId),
-      ),
-    )
+    .where(or(eq(workingOrders.id, intoTabId), eq(workingOrders.id, fromTabId)))
     .orderBy(workingOrders.id)
     .for("update");
   const into = tabs.find((t) => t.id === intoTabId);
@@ -2391,12 +2327,7 @@ export async function mergeTabs(
   await tx
     .select({ id: diningTables.id })
     .from(diningTables)
-    .where(
-      and(
-        or(eq(diningTables.tabId, intoTabId), eq(diningTables.tabId, fromTabId)),
-        eq(diningTables.tenantId, cfg.tenantId),
-      ),
-    )
+    .where(or(eq(diningTables.tabId, intoTabId), eq(diningTables.tabId, fromTabId)))
     .orderBy(diningTables.id)
     .for("update");
 
@@ -2413,7 +2344,7 @@ export async function mergeTabs(
     await tx
       .update(diningTables)
       .set({ tabId: intoTabId })
-      .where(and(eq(diningTables.tenantId, cfg.tenantId), eq(diningTables.tabId, fromTabId)));
+      .where(eq(diningTables.tabId, fromTabId));
   }
 
   // 3. Abandon the now-empty fromTab (open → abandoned; the working_orders_enforce_transition state
@@ -2421,7 +2352,7 @@ export async function mergeTabs(
   await tx
     .update(workingOrders)
     .set({ status: "abandoned" })
-    .where(and(eq(workingOrders.id, fromTabId), eq(workingOrders.tenantId, cfg.tenantId)));
+    .where(eq(workingOrders.id, fromTabId));
 }
 
 /**
@@ -2950,6 +2881,7 @@ export async function listHeldOrders(
   deps: WorkingOrderDeps,
   cfg: TillConfig,
 ): Promise<HeldOrderSummary[]> {
+  void cfg;
   return withTransaction(deps.db, async (tx) => {
     await asAppUser(tx);
     return (
@@ -2965,19 +2897,13 @@ export async function listHeldOrders(
         .from(workingOrders)
         // Composite join predicate (tenant_id too, not order id alone): the same tenant-consistency the
         // schema's composite FKs enforce, so a line only aggregates onto an order of its own tenant.
-        .leftJoin(
-          workingOrderLines,
-          and(
-            eq(workingOrderLines.workingOrderId, workingOrders.id),
-            eq(workingOrderLines.tenantId, workingOrders.tenantId),
-          ),
-        )
+        .leftJoin(workingOrderLines, eq(workingOrderLines.workingOrderId, workingOrders.id))
         // Venue-wide, not node-scoped (till-reroute design §3.6): under warm standby one node sells at a time,
         // and a promoted node inherits the venue's open tabs tagged with the dead node's id (swap spec §4.3).
         // `node_id` is still written at create — the writer's id, for replication — and never filtered on here.
         // Scoped to the tenant (the venue), the way report-api's venue-wide reads are: `withTransaction` no longer
         // isolates SELECTs since RLS was dropped, so the tenant predicate is the read's own scope.
-        .where(and(eq(workingOrders.tenantId, cfg.tenantId), eq(workingOrders.status, "open")))
+        .where(eq(workingOrders.status, "open"))
         .groupBy(
           workingOrders.id,
           workingOrders.orderNumber,
@@ -3011,13 +2937,7 @@ export async function getHeldOrder(
         label: workingOrders.label,
       })
       .from(workingOrders)
-      .where(
-        and(
-          eq(workingOrders.tenantId, cfg.tenantId),
-          eq(workingOrders.id, id),
-          eq(workingOrders.status, "open"),
-        ),
-      );
+      .where(and(eq(workingOrders.id, id), eq(workingOrders.status, "open")));
 
     if (order === undefined) {
       throw new AppError("working_order.not_found", { workingOrderId: id });
@@ -3044,9 +2964,7 @@ export async function getHeldOrder(
         name: workingOrderLines.name,
       })
       .from(workingOrderLines)
-      .where(
-        and(eq(workingOrderLines.tenantId, cfg.tenantId), eq(workingOrderLines.workingOrderId, id)),
-      )
+      .where(eq(workingOrderLines.workingOrderId, id))
       .orderBy(workingOrderLines.lineNo);
 
     const contextByLine = new Map(
@@ -3183,7 +3101,7 @@ export async function updateHeldOrder(
     const [order] = await tx
       .select({ status: workingOrders.status })
       .from(workingOrders)
-      .where(and(eq(workingOrders.tenantId, cfg.tenantId), eq(workingOrders.id, id)))
+      .where(eq(workingOrders.id, id))
       .for("update");
 
     if (order === undefined || order.status !== "open") {
@@ -3214,9 +3132,7 @@ export async function updateHeldOrder(
         doneness: workingOrderLines.doneness,
       })
       .from(workingOrderLines)
-      .where(
-        and(eq(workingOrderLines.tenantId, cfg.tenantId), eq(workingOrderLines.workingOrderId, id)),
-      )
+      .where(eq(workingOrderLines.workingOrderId, id))
       .orderBy(workingOrderLines.lineNo);
     const storedParents = storedRows.filter((line) => line.parentLineId === null);
     const childrenByParent = new Map<string, typeof storedRows>();
@@ -3297,11 +3213,7 @@ export async function updateHeldOrder(
             lineTotal: grossLineTotal(stored.unitPriceGross, requested.quantity),
           })
           .where(
-            and(
-              eq(workingOrderLines.tenantId, cfg.tenantId),
-              eq(workingOrderLines.workingOrderId, id),
-              eq(workingOrderLines.id, stored.id),
-            ),
+            and(eq(workingOrderLines.workingOrderId, id), eq(workingOrderLines.id, stored.id)),
           );
         const optionQuantityById = new Map<string, number>();
         for (const option of requested.modifierSelections === undefined
@@ -3331,18 +3243,14 @@ export async function updateHeldOrder(
               lineTotal: grossLineTotal(child.unitPriceGross, childQuantity),
             })
             .where(
-              and(
-                eq(workingOrderLines.tenantId, cfg.tenantId),
-                eq(workingOrderLines.workingOrderId, id),
-                eq(workingOrderLines.id, child.id),
-              ),
+              and(eq(workingOrderLines.workingOrderId, id), eq(workingOrderLines.id, child.id)),
             );
         }
       }
       await tx
         .update(workingOrders)
         .set({ label: req.label ?? null })
-        .where(and(eq(workingOrders.tenantId, cfg.tenantId), eq(workingOrders.id, id)));
+        .where(eq(workingOrders.id, id));
       return;
     }
 
@@ -3384,19 +3292,14 @@ export async function abandonHeldOrder(
   cfg: TillConfig,
   id: string,
 ): Promise<void> {
+  void cfg;
   return withTransaction(deps.db, async (tx) => {
     await asAppUser(tx);
 
     const updated = await tx
       .update(workingOrders)
       .set({ status: "abandoned" })
-      .where(
-        and(
-          eq(workingOrders.tenantId, cfg.tenantId),
-          eq(workingOrders.id, id),
-          eq(workingOrders.status, "open"),
-        ),
-      )
+      .where(and(eq(workingOrders.id, id), eq(workingOrders.status, "open")))
       .returning({ id: workingOrders.id });
 
     if (updated.length === 0) {
@@ -3445,7 +3348,7 @@ export async function placeOrder(
     const [locked] = await tx
       .select({ status: workingOrders.status })
       .from(workingOrders)
-      .where(and(eq(workingOrders.tenantId, cfg.tenantId), eq(workingOrders.id, id)))
+      .where(eq(workingOrders.id, id))
       .for("update");
     if (locked === undefined || locked.status !== "open") {
       throw new AppError("working_order.not_open", { workingOrderId: id });
@@ -3517,7 +3420,7 @@ export async function placeOrder(
         status: "placed",
         ...(issuedOrderLabel === undefined ? {} : { label: issuedOrderLabel }),
       })
-      .where(and(eq(workingOrders.id, id), eq(workingOrders.tenantId, cfg.tenantId)));
+      .where(eq(workingOrders.id, id));
 
     // Open the amendment log with its `order_placed` genesis. `appendOrderAmendment` owns the
     // parent-row-lock serialisation, the per-order sequence and the tamper-evident hash (Task 3); the
@@ -3556,9 +3459,7 @@ export async function placeOrder(
         doneness: workingOrderLines.doneness,
       })
       .from(workingOrderLines)
-      .where(
-        and(eq(workingOrderLines.tenantId, cfg.tenantId), eq(workingOrderLines.workingOrderId, id)),
-      )
+      .where(eq(workingOrderLines.workingOrderId, id))
       .orderBy(workingOrderLines.lineNo);
     await fireLines(tx, cfg, id, firedLines);
 
@@ -3635,7 +3536,7 @@ export async function sendToPrep(
     const [order] = await tx
       .select({ status: workingOrders.status })
       .from(workingOrders)
-      .where(and(eq(workingOrders.tenantId, cfg.tenantId), eq(workingOrders.id, id)));
+      .where(eq(workingOrders.id, id));
     if (order === undefined || order.status !== "settled") {
       throw new AppError("working_order.not_settled", { workingOrderId: id });
     }
@@ -3653,9 +3554,7 @@ export async function sendToPrep(
         doneness: workingOrderLines.doneness,
       })
       .from(workingOrderLines)
-      .where(
-        and(eq(workingOrderLines.tenantId, cfg.tenantId), eq(workingOrderLines.workingOrderId, id)),
-      )
+      .where(eq(workingOrderLines.workingOrderId, id))
       .orderBy(workingOrderLines.lineNo);
     await fireLines(tx, cfg, id, firedLines);
   });
@@ -3753,6 +3652,7 @@ export async function advanceTicketItem(
   itemId: string,
   to: TicketState,
 ): Promise<void> {
+  void cfg;
   // `to as Exclude<TicketState, "queued">` only satisfies the index type — it asserts nothing at
   // runtime, so "queued" (not a key of TICKET_TRANSITIONS) and any missing/garbage `to` both read back
   // `undefined` here and are refused together, before `advanceSet`/`.from` ever run.
@@ -3775,7 +3675,6 @@ export async function advanceTicketItem(
       and(
         // Tenant-scoped: a foreign tenant's item id must miss here (CLAUDE.md §3), so it is refused
         // exactly as a non-existent item — never advanced across the tenant boundary.
-        eq(ticketItems.tenantId, cfg.tenantId),
         eq(ticketItems.id, itemId),
         eq(ticketItems.state, transition.from),
         isNotNull(ticketItems.firedAt),
@@ -3788,7 +3687,7 @@ export async function advanceTicketItem(
       .from(ticketItems)
       // Same tenant scope as the update above — the not-found read-back must not see another
       // tenant's item, or a foreign held item would surface as `ticket.item_held` (CLAUDE.md §3).
-      .where(and(eq(ticketItems.id, itemId), eq(ticketItems.tenantId, cfg.tenantId)));
+      .where(eq(ticketItems.id, itemId));
     if (item !== undefined && item.firedAt === null) {
       throw new AppError("ticket.item_held", { ticketItemId: itemId });
     }
@@ -3808,6 +3707,7 @@ export async function advanceTicket(
   stationId: string,
   to: Exclude<TicketState, "queued">,
 ): Promise<void> {
+  void cfg;
   await tx
     .update(ticketItems)
     .set(advanceSet(to))
@@ -3815,7 +3715,6 @@ export async function advanceTicket(
       and(
         // Tenant-scoped: this by-order/station update must not reach another tenant's `ticket_items`
         // rows (CLAUDE.md §3) — `withTransaction` does not isolate it since RLS was dropped (#255).
-        eq(ticketItems.tenantId, cfg.tenantId),
         eq(ticketItems.workingOrderId, orderId),
         eq(ticketItems.stationId, stationId),
         eq(ticketItems.state, TICKET_TRANSITIONS[to].from),
@@ -3967,6 +3866,7 @@ async function readQueueSubItems(
     }
   >;
 }> {
+  void tenantId;
   const modifiersByParent = new Map<string, QueueModifier[]>();
   const asServedByParent = new Map<
     string,
@@ -3989,19 +3889,8 @@ async function readQueueSubItems(
       suitableFor: optionGroupItems.dietarySuitability,
     })
     .from(workingOrderLines)
-    .leftJoin(
-      optionGroupItems,
-      and(
-        eq(optionGroupItems.tenantId, tenantId),
-        eq(optionGroupItems.id, workingOrderLines.optionGroupItemId),
-      ),
-    )
-    .where(
-      and(
-        eq(workingOrderLines.tenantId, tenantId),
-        inArray(workingOrderLines.parentLineId, parentLineIds),
-      ),
-    )
+    .leftJoin(optionGroupItems, eq(optionGroupItems.id, workingOrderLines.optionGroupItemId))
+    .where(inArray(workingOrderLines.parentLineId, parentLineIds))
     .orderBy(workingOrderLines.lineNo);
   for (const child of childRows) {
     // `parentLineId` is non-null on every row (the `inArray` matched it).
@@ -4024,13 +3913,8 @@ async function readQueueSubItems(
       dietaryDeclarations: products.dietaryDeclarations,
     })
     .from(workingOrderLines)
-    .leftJoin(
-      products,
-      and(eq(products.tenantId, tenantId), eq(products.id, workingOrderLines.productId)),
-    )
-    .where(
-      and(eq(workingOrderLines.tenantId, tenantId), inArray(workingOrderLines.id, parentLineIds)),
-    );
+    .leftJoin(products, eq(products.id, workingOrderLines.productId))
+    .where(inArray(workingOrderLines.id, parentLineIds));
   for (const p of parents) {
     const allergens = (p.allergens ?? {}) as ProductAllergens;
     const expanded = expandDietaryDeclarations(p.dietaryDeclarations as DietaryLabel[]);
@@ -4104,47 +3988,22 @@ export async function listStationQueue(
     .from(ticketItems)
     // Composite join predicate (tenant_id too) — the tenant-consistency `listPrepQueue`'s own join
     // enforced, matching the composite shape the ticket_items → working_order_lines FK carries.
-    .innerJoin(
-      workingOrders,
-      and(
-        eq(ticketItems.workingOrderId, workingOrders.id),
-        eq(ticketItems.tenantId, workingOrders.tenantId),
-      ),
-    )
+    .innerJoin(workingOrders, eq(ticketItems.workingOrderId, workingOrders.id))
     // The line this item was fired from, for its display name + quantity. Composite (tenant_id too),
     // mirroring the tenant-consistent (tenant_id, working_order_line_id) FK ticket_items carries.
-    .innerJoin(
-      workingOrderLines,
-      and(
-        eq(ticketItems.workingOrderLineId, workingOrderLines.id),
-        eq(ticketItems.tenantId, workingOrderLines.tenantId),
-      ),
-    )
+    .innerJoin(workingOrderLines, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
     // The item's OWN station, for its order-timing thresholds (KDS order-timing alerts, design §3/§6).
     // A plain INNER JOIN — never a correlated subquery (CLAUDE.md §3's caution) — keyed on the
     // tenant-consistent (tenant_id, station_id) FK `ticket_items.station_id` carries; every row here is
     // already filtered to `stationId` below, so this always resolves.
-    .innerJoin(
-      kitchenStations,
-      and(
-        eq(ticketItems.stationId, kitchenStations.id),
-        eq(ticketItems.tenantId, kitchenStations.tenantId),
-      ),
-    )
+    .innerJoin(kitchenStations, eq(ticketItems.stationId, kitchenStations.id))
     // The item's course, for the display header + coursing order (KDS-2 §5a). LEFT join — `course_id`
     // is nullable (a courseless line), and it is NOT filtered by `active`, so a course deactivated after
     // the item was fired still names its header. Composite (tenant_id too), mirroring the
     // tenant-consistent (tenant_id, course_id) → kitchen_courses FK ticket_items carries.
-    .leftJoin(
-      kitchenCourses,
-      and(
-        eq(ticketItems.courseId, kitchenCourses.id),
-        eq(ticketItems.tenantId, kitchenCourses.tenantId),
-      ),
-    )
+    .leftJoin(kitchenCourses, eq(ticketItems.courseId, kitchenCourses.id))
     .where(
       and(
-        eq(ticketItems.tenantId, cfg.tenantId),
         eq(ticketItems.stationId, stationId),
         ne(workingOrders.status, "abandoned"),
         isNull(workingOrders.collectedAt),
@@ -4429,43 +4288,18 @@ export async function listExpoQueue(
     .from(ticketItems)
     // The owning order, for the display fields + the open/collected/abandoned exclusions. Composite
     // (tenant_id too), the tenant-consistent shape ticket_items' FKs carry, mirroring listStationQueue.
-    .innerJoin(
-      workingOrders,
-      and(
-        eq(ticketItems.workingOrderId, workingOrders.id),
-        eq(ticketItems.tenantId, workingOrders.tenantId),
-      ),
-    )
+    .innerJoin(workingOrders, eq(ticketItems.workingOrderId, workingOrders.id))
     // The line this item was fired from, for its display name + quantity. Composite (tenant_id too).
-    .innerJoin(
-      workingOrderLines,
-      and(
-        eq(ticketItems.workingOrderLineId, workingOrderLines.id),
-        eq(ticketItems.tenantId, workingOrderLines.tenantId),
-      ),
-    )
+    .innerJoin(workingOrderLines, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
     // The item's STATION, for its name — the join that makes this read cross-station. Composite
     // (tenant_id too), mirroring the tenant-consistent (tenant_id, station_id) → kitchen_stations FK.
-    .innerJoin(
-      kitchenStations,
-      and(
-        eq(ticketItems.stationId, kitchenStations.id),
-        eq(ticketItems.tenantId, kitchenStations.tenantId),
-      ),
-    )
+    .innerJoin(kitchenStations, eq(ticketItems.stationId, kitchenStations.id))
     // The item's course, for the header + coursing order. LEFT join — `course_id` is nullable, and (as
     // in listStationQueue) it is NOT filtered by `active`, so a course deactivated after the item was
     // fired still names its header. Composite (tenant_id too).
-    .leftJoin(
-      kitchenCourses,
-      and(
-        eq(ticketItems.courseId, kitchenCourses.id),
-        eq(ticketItems.tenantId, kitchenCourses.tenantId),
-      ),
-    )
+    .leftJoin(kitchenCourses, eq(ticketItems.courseId, kitchenCourses.id))
     .where(
       and(
-        eq(ticketItems.tenantId, cfg.tenantId),
         ne(workingOrders.status, "abandoned"),
         isNull(workingOrders.collectedAt),
         // Fully-away exclusion, order-level, computed at query time (there is no per-order "done"

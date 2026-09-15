@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { AppError, decimal } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
 import { recordIncidentOnce } from "@waitron/core";
@@ -138,9 +138,7 @@ export class FakePaymentProvider implements PaymentProvider {
           const [wo] = await tx
             .select({ tillId: workingOrders.tillId })
             .from(workingOrders)
-            .where(
-              and(eq(workingOrders.tenantId, p.tenantId), eq(workingOrders.id, p.workingOrderId)),
-            );
+            .where(eq(workingOrders.id, p.workingOrderId));
           const raised = await recordIncidentOnce(tx, {
             tenantId: brandTenantId(p.tenantId),
             tillId: brandTillId(wo.tillId),

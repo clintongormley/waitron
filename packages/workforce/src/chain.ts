@@ -90,11 +90,7 @@ async function selectHeadForUpdate(tx: Transaction, key: ChainKey): Promise<Chai
     })
     .from(workforceChains)
     .where(
-      and(
-        eq(workforceChains.tenantId, key.tenantId),
-        eq(workforceChains.nodeId, key.nodeId),
-        eq(workforceChains.locationId, key.locationId),
-      ),
+      and(eq(workforceChains.nodeId, key.nodeId), eq(workforceChains.locationId, key.locationId)),
     )
     .for("update");
   return row;
@@ -238,11 +234,7 @@ async function attemptAppend(
       lastRecordedAt: recordedAt,
     })
     .where(
-      and(
-        eq(workforceChains.tenantId, key.tenantId),
-        eq(workforceChains.nodeId, key.nodeId),
-        eq(workforceChains.locationId, key.locationId),
-      ),
+      and(eq(workforceChains.nodeId, key.nodeId), eq(workforceChains.locationId, key.locationId)),
     );
 
   return { id: inserted.id, sequenceNo, entryHash };
@@ -320,13 +312,7 @@ export async function readChain(
       isFirstEntry: timeEntries.isFirstEntry,
     })
     .from(timeEntries)
-    .where(
-      and(
-        eq(timeEntries.tenantId, key.tenantId),
-        eq(timeEntries.nodeId, key.nodeId),
-        eq(timeEntries.locationId, key.locationId),
-      ),
-    )
+    .where(and(eq(timeEntries.nodeId, key.nodeId), eq(timeEntries.locationId, key.locationId)))
     .orderBy(timeEntries.sequenceNo);
   return rows;
 }

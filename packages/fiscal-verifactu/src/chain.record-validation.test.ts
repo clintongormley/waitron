@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { recordSale } from "@waitron/core";
@@ -61,15 +61,12 @@ describe("a record AEAT could not accept never enters the chain", () => {
     await useSeriesCode("Serie A");
     await expect(sell()).rejects.toMatchObject({ code: "fiscal.record_invalid" });
 
-    const registros = await pg.db
-      .select()
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.tenantId, tenantId));
+    const registros = await pg.db.select().from(registrosFacturacion);
     expect(registros).toEqual([]);
 
     // The sale itself must be gone too — `recordSale` writes the sale and the fiscal record in ONE
     // transaction, so a refusal that left a sale behind would be a sale with no fiscal record.
-    const soldRows = await pg.db.select().from(sales).where(eq(sales.tenantId, tenantId));
+    const soldRows = await pg.db.select().from(sales);
     expect(soldRows).toEqual([]);
 
     // And the chain head must not have advanced: a refused record leaves the node exactly where it
@@ -85,10 +82,7 @@ describe("a record AEAT could not accept never enters the chain", () => {
     const { saleId } = await sell();
     expect(saleId).toBeDefined();
 
-    const [registro] = await pg.db
-      .select()
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.tenantId, tenantId));
+    const [registro] = await pg.db.select().from(registrosFacturacion);
     expect(registro?.numSerieFactura).toBe("FS/1");
   });
 
@@ -147,10 +141,7 @@ describe("a record whose totals disagree with themselves is written, filed and f
     });
     expect(saleId).toBeDefined();
 
-    const registros = await pg.db
-      .select()
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.tenantId, tenantId));
+    const registros = await pg.db.select().from(registrosFacturacion);
     expect(registros).toHaveLength(1);
   });
 
@@ -255,13 +246,10 @@ describe("a recipient's name is checked as closely as the issuer's", () => {
       code: "fiscal.record_invalid",
     });
 
-    const registros = await pg.db
-      .select()
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.tenantId, tenantId));
+    const registros = await pg.db.select().from(registrosFacturacion);
     expect(registros).toEqual([]);
 
-    const soldRows = await pg.db.select().from(sales).where(eq(sales.tenantId, tenantId));
+    const soldRows = await pg.db.select().from(sales);
     expect(soldRows).toEqual([]);
 
     const heads = await pg.db.execute<{ secuencia: number }>(
@@ -274,10 +262,7 @@ describe("a recipient's name is checked as closely as the issuer's", () => {
     await useSeriesCode("FS");
     await sellToNamedRecipient("Cliente SL");
 
-    const [registro] = await pg.db
-      .select()
-      .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.tenantId, tenantId));
+    const [registro] = await pg.db.select().from(registrosFacturacion);
     expect(registro?.destinatarios).toEqual({
       IDDestinatario: [{ NombreRazon: "Cliente SL", NIF: "B12345678" }],
     });

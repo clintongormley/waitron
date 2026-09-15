@@ -221,14 +221,9 @@ describe("the write path against the real Veri*Factu backend", () => {
       }),
     ).rejects.toThrow("simulated crash");
 
-    expect(await pg.db.select().from(sales).where(eq(sales.tenantId, tenantId))).toHaveLength(0);
-    expect(
-      await pg.db
-        .select()
-        .from(registrosFacturacion)
-        .where(eq(registrosFacturacion.tenantId, tenantId)),
-    ).toHaveLength(0);
-    expect(await pg.db.select().from(envios).where(eq(envios.tenantId, tenantId))).toHaveLength(0);
+    expect(await pg.db.select().from(sales)).toHaveLength(0);
+    expect(await pg.db.select().from(registrosFacturacion)).toHaveLength(0);
+    expect(await pg.db.select().from(envios)).toHaveLength(0);
     // The chain head row itself still exists — `seedTenantWithSif`'s own `registerSif` call
     // created it at provisioning time, in a transaction that already committed — but its
     // `secuencia` is untouched by the rolled-back sale.

@@ -100,21 +100,20 @@ declare module "@waitron/shared" {
      */
     "tenant.not_found": { id: string };
     /**
-     * No such node *for this tenant*. The SIF is the compute node (#33), so provisioning registers a
-     * node, not a till (node-id rekey, 2026-08-03). A node belonging to ANOTHER tenant reports this
-     * same code rather than a distinct "wrong owner" one: to a caller scoped to one tenant the two are
-     * the same fact, and a separate code would confirm the existence of another tenant's node to
-     * whoever asked.
+     * No such node with this id. The SIF is the compute node (#33), so provisioning registers a
+     * node, not a till (node-id rekey, 2026-08-03). One tenant per database, so a node is named by
+     * its id alone: `nodeLocation`, called by `provisionNode`, looks the node up by id and
+     * throws this when the id matches no row.
      *
-     * This is enforced by comparing `nodes.tenant_id` in `ownedNodeLocation`, called by
-     * `provisionNode`, including on a superuser connection. `node.*`, not `server.*`:
-     * it is a fact about a node, the rule
+     * The id is echoed because it is a caller-supplied uuid the caller already holds, not a secret —
+     * an id that matches nothing is unactionable if withheld, the same fail-closed reasoning the
+     * codes citing this note rely on. `node.*`, not `server.*`: it is a fact about a node, the rule
      * `tenant.not_found`'s own note gives.
      *
      * (The former `till.not_found` was removed with the rekey — pre-production, no bwc — since its
      * only thrower, `provisionTill`'s ownership check, is now `provisionNode`'s and throws this.)
      */
-    "node.not_found": { id: string; tenantId: string };
+    "node.not_found": { id: string };
     /**
      * A write reached a node running as a read-only MIRROR. The mirror serves the dashboard read-only
      * and pulls + applies a primary's rows; it refuses every non-GET at the HTTP layer (the read-only

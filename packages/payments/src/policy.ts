@@ -1,4 +1,3 @@
-import { eq } from "drizzle-orm";
 import { compareDecimal, decimal } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
@@ -17,13 +16,13 @@ export async function getPaymentPolicy(
   tx: Transaction,
   tenantId: string,
 ): Promise<PaymentPolicyRow | undefined> {
+  void tenantId;
   const [row] = await tx
     .select({
       offlineMode: paymentPolicy.offlineMode,
       offlineAmountCap: paymentPolicy.offlineAmountCap,
     })
-    .from(paymentPolicy)
-    .where(eq(paymentPolicy.tenantId, tenantId));
+    .from(paymentPolicy);
   return row as PaymentPolicyRow | undefined;
 }
 

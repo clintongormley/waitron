@@ -273,9 +273,7 @@ describe("split-bill: pay each check files its own registro", () => {
     // emptied origin is abandoned in Task 3, it files nothing).
 
     // (1) EXACTLY THREE registros_facturacion for this tenant — one per check, none from the origin.
-    const rows = await asApp(cfg, (tx) =>
-      tx.select().from(registrosFacturacion).where(eq(registrosFacturacion.tenantId, cfg.tenantId)),
-    );
+    const rows = await asApp(cfg, (tx) => tx.select().from(registrosFacturacion));
     expect(rows.length).toBe(3);
 
     // (2) Contiguous invoice numbers from the tab's series (fresh series ⇒ 1,2,3 in pay order).
@@ -315,10 +313,7 @@ describe("split-bill: pay each check files its own registro", () => {
 
     // (5) Each registro is tied to its OWN check via sales.working_order_id (the idempotency key).
     const filedFor = await asApp(cfg, (tx) =>
-      tx
-        .select({ workingOrderId: sales.workingOrderId })
-        .from(sales)
-        .where(eq(sales.tenantId, cfg.tenantId)),
+      tx.select({ workingOrderId: sales.workingOrderId }).from(sales),
     );
     expect(new Set(filedFor.map((s) => s.workingOrderId))).toEqual(new Set([a, b, c]));
   });
@@ -349,8 +344,7 @@ describe("split-bill: pay each check files its own registro", () => {
           quantity: saleLines.quantity,
         })
         .from(saleLines)
-        .innerJoin(sales, eq(sales.id, saleLines.saleId))
-        .where(eq(saleLines.tenantId, cfg.tenantId));
+        .innerJoin(sales, eq(sales.id, saleLines.saleId));
       const filedForOrigin = await tx
         .select({ id: sales.id })
         .from(sales)

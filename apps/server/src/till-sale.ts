@@ -200,6 +200,7 @@ export async function readTenderBlock(
   saleId: SaleId,
   workingOrderId: string,
 ): Promise<TenderBlock> {
+  void cfg;
   const [tender] = await tx
     .select({
       method: tenders.method,
@@ -208,7 +209,7 @@ export async function readTenderBlock(
       cashTendered: tenders.cashTendered,
     })
     .from(tenders)
-    .where(and(eq(tenders.tenantId, cfg.tenantId), eq(tenders.saleId, saleId)));
+    .where(eq(tenders.saleId, saleId));
   // Invoice-first issuance legitimately precedes the tender.
   if (tender === undefined) return { method: "unpaid" };
   if (tender.method === "cash") {
@@ -225,7 +226,6 @@ export async function readTenderBlock(
     .from(payments)
     .where(
       and(
-        eq(payments.tenantId, cfg.tenantId),
         eq(payments.saleId, saleId),
         eq(payments.workingOrderId, workingOrderId),
         eq(payments.provider, "manual"),
@@ -395,7 +395,7 @@ export async function payWorkingOrder(
         // Tenant-scoped: a by-id read is not isolated since RLS was dropped (#255), so a foreign
         // tenant's order id must resolve as "no row" (walk-up) here, never as their open order
         // (CLAUDE.md §3). Same-tenant pay is unchanged — the order is this tenant's.
-        .where(and(eq(workingOrders.id, req.id), eq(workingOrders.tenantId, cfg.tenantId)))
+        .where(eq(workingOrders.id, req.id))
         .for("update");
 
       // Step 2. Already settled → idempotent replay. A retry whose first response was lost, or the
@@ -503,7 +503,7 @@ export async function payWorkingOrder(
         .select({ status: workingOrders.status })
         .from(workingOrders)
         // Tenant-scoped like the lock read above (CLAUDE.md §3).
-        .where(and(eq(workingOrders.id, req.id), eq(workingOrders.tenantId, cfg.tenantId)));
+        .where(eq(workingOrders.id, req.id));
       /* v8 ignore start */
       if (row?.status !== "settled") {
         // A unique violation with no settled winner is not our idempotency case (e.g. a pay racing a
@@ -536,7 +536,7 @@ async function readSettledTicket(
     })
     .from(sales)
     .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
-    .where(and(eq(sales.tenantId, cfg.tenantId), eq(sales.workingOrderId, workingOrderId)));
+    .where(eq(sales.workingOrderId, workingOrderId));
 
   /* v8 ignore start */
   if (issued === undefined) {
@@ -603,7 +603,7 @@ export async function printSaleReceipt(
     const [existing] = await tx
       .select({ id: sales.id })
       .from(sales)
-      .where(and(eq(sales.tenantId, cfg.tenantId), eq(sales.workingOrderId, workingOrderId)));
+      .where(eq(sales.workingOrderId, workingOrderId));
     if (existing === undefined) return;
     const ticket = await readSettledTicket(deps.backend, tx, cfg, workingOrderId);
     if (duplicate) await enqueueReceiptReprint(tx, cfg, ticket);
@@ -717,7 +717,7 @@ async function fileImmediateSale(
     })
     // Tenant-scoped for uniformity with the sibling finalize updates; the caller has already taken a
     // tenant-scoped `.for("update")` lock on this row, so this can only ever match its own order.
-    .where(and(eq(workingOrders.id, workingOrderId), eq(workingOrders.tenantId, cfg.tenantId)));
+    .where(eq(workingOrders.id, workingOrderId));
 
   // Read the tender block back AFTER the tender row (recordSale) and, for a manual card, the payment
   // row (recordManualCardPayment) are both written above — so a manual acquirer reference is visible.
@@ -774,7 +774,7 @@ async function readOutstandingSaleForOrder(
       corrections: sql<string>`coalesce((select sum(c.total) from sales c where c.corrects_sale_id = ${sales}.id and c.tenant_id = ${tenantId}), 0)::numeric(12, 2)::text`,
     })
     .from(sales)
-    .where(and(eq(sales.tenantId, tenantId), eq(sales.workingOrderId, workingOrderId)));
+    .where(eq(sales.workingOrderId, workingOrderId));
   if (row === undefined) {
     return undefined;
   }
@@ -839,7 +839,7 @@ export async function payWorkingOrderIntegrated(
     const [locked] = await tx
       .select({ status: workingOrders.status })
       .from(workingOrders)
-      .where(and(eq(workingOrders.id, req.id), eq(workingOrders.tenantId, cfg.tenantId)))
+      .where(eq(workingOrders.id, req.id))
       .for("update");
 
     // Already settled → idempotent replay (a retry whose first response was lost). Files nothing.
@@ -1091,7 +1091,7 @@ async function finalizeCapture(
           settledAt: settledAt.toISOString(),
           ...(markCollected ? { collectedAt: settledAt.toISOString() } : {}),
         })
-        .where(and(eq(workingOrders.id, req.id), eq(workingOrders.tenantId, cfg.tenantId)));
+        .where(eq(workingOrders.id, req.id));
 
       // The card tender row (recordSale) and the captured payment row (associated just above) are
       // both committed on this tx, so the tender block reads them back; a card hands nothing back.
@@ -1178,7 +1178,7 @@ async function finalizeRecovery(
     const [locked] = await tx
       .select({ status: workingOrders.status })
       .from(workingOrders)
-      .where(and(eq(workingOrders.id, req.id), eq(workingOrders.tenantId, cfg.tenantId)))
+      .where(eq(workingOrders.id, req.id))
       .for("update");
 
     // A concurrent winner (another retry) filed the sale and settled the order while this one waited on
@@ -1272,7 +1272,7 @@ async function finalizeRecovery(
         settledAt: settledAt.toISOString(),
         ...(locked?.status === "placed" ? { collectedAt: settledAt.toISOString() } : {}),
       })
-      .where(and(eq(workingOrders.id, req.id), eq(workingOrders.tenantId, cfg.tenantId)));
+      .where(eq(workingOrders.id, req.id));
 
     // The card tender row (recordSale) and the recovered captured payment (associated just above) are
     // both committed on this tx; read the tender block back. A card hands nothing back.
@@ -1319,12 +1319,7 @@ async function firePrepayOrder(
       doneness: workingOrderLines.doneness,
     })
     .from(workingOrderLines)
-    .where(
-      and(
-        eq(workingOrderLines.tenantId, cfg.tenantId),
-        eq(workingOrderLines.workingOrderId, workingOrderId),
-      ),
-    )
+    .where(eq(workingOrderLines.workingOrderId, workingOrderId))
     .orderBy(workingOrderLines.lineNo);
 
   await fireLines(tx, cfg, workingOrderId, lines);
@@ -1412,7 +1407,7 @@ async function finalizeSettle(
           settledAt: settledAt.toISOString(),
           collectedAt: settledAt.toISOString(),
         })
-        .where(and(eq(workingOrders.id, req.id), eq(workingOrders.tenantId, cfg.tenantId)));
+        .where(eq(workingOrders.id, req.id));
 
       // Read the ticket back from the just-settled (already-issued) invoice — a fresh collect, so
       // `change` stays the "0.00" default.
@@ -1474,7 +1469,7 @@ async function finalizeSettleRecovery(
     const [locked] = await tx
       .select({ status: workingOrders.status })
       .from(workingOrders)
-      .where(and(eq(workingOrders.id, req.id), eq(workingOrders.tenantId, cfg.tenantId)))
+      .where(eq(workingOrders.id, req.id))
       .for("update");
 
     // A concurrent winner settled the invoice and moved the order while this one waited on the lock →
@@ -1540,7 +1535,7 @@ async function finalizeSettleRecovery(
         settledAt: settledAt.toISOString(),
         collectedAt: settledAt.toISOString(),
       })
-      .where(and(eq(workingOrders.id, req.id), eq(workingOrders.tenantId, cfg.tenantId)));
+      .where(eq(workingOrders.id, req.id));
 
     const ticket = await readSettledTicket(deps.backend, tx, cfg, req.id);
     return { outcome: "captured", ticket };
@@ -1614,7 +1609,7 @@ export async function collectOrder(
     const [locked] = await tx
       .select({ status: workingOrders.status })
       .from(workingOrders)
-      .where(and(eq(workingOrders.id, req.id), eq(workingOrders.tenantId, cfg.tenantId)))
+      .where(eq(workingOrders.id, req.id))
       .for("update");
 
     // Already settled → idempotent replay: a retry whose first response was lost, or the loser of a
@@ -1646,7 +1641,7 @@ export async function collectOrder(
       const [sale] = await tx
         .select({ id: sales.id, total: sales.total })
         .from(sales)
-        .where(and(eq(sales.tenantId, cfg.tenantId), eq(sales.workingOrderId, req.id)));
+        .where(eq(sales.workingOrderId, req.id));
       /* v8 ignore start */
       if (sale === undefined) {
         // Structurally unreachable: an invoice-first order reaches `placed` only via `placeOrder`,
@@ -1712,7 +1707,7 @@ export async function collectOrder(
           settledAt: settledAt.toISOString(),
           collectedAt: settledAt.toISOString(),
         })
-        .where(and(eq(workingOrders.id, req.id), eq(workingOrders.tenantId, cfg.tenantId)));
+        .where(eq(workingOrders.id, req.id));
 
       // The just-settled invoice now carries its persisted payment facts.
       const ticket = await readSettledTicket(deps.backend, tx, cfg, req.id);

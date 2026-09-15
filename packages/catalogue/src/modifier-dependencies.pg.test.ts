@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { expect, it } from "vitest";
 import {
   asAppUser,
@@ -267,10 +267,7 @@ it("refuses deletion solely because an actual order retains a saved modifier sna
     app(suite.admin, tenantId, (tx) => deleteModifier(tx, tenantId, modifier.id)),
   ).rejects.toMatchObject({ code: "modifier.in_use", params: { dependency: "order" } });
   const saved = await app(suite.admin, tenantId, (tx) =>
-    tx
-      .select({ snapshots: workingOrderLines.modifierSnapshots })
-      .from(workingOrderLines)
-      .where(eq(workingOrderLines.tenantId, tenantId)),
+    tx.select({ snapshots: workingOrderLines.modifierSnapshots }).from(workingOrderLines),
   );
   expect(saved).toEqual([{ snapshots }]);
   expect(await app(suite.admin, tenantId, (tx) => getModifier(tx, tenantId, modifier.id))).toEqual(

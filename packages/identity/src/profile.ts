@@ -46,18 +46,13 @@ async function ownPerson(tx: Transaction, input: Owner) {
   const [session] = await tx
     .select({ personId: managementSessions.personId })
     .from(managementSessions)
-    .where(
-      and(
-        eq(managementSessions.id, input.managementSessionId),
-        eq(managementSessions.tenantId, input.tenantId),
-      ),
-    );
+    .where(eq(managementSessions.id, input.managementSessionId));
   if (session === undefined) throw new AppError("management_session.required", {});
   // Serialize profile changes before touching session rows: a password change also ends other sessions.
   const [person] = await tx
     .select()
     .from(persons)
-    .where(and(eq(persons.id, session.personId), eq(persons.tenantId, input.tenantId)))
+    .where(eq(persons.id, session.personId))
     .for("update");
   if (person === undefined) throw new AppError("management_session.required", {});
   await resolveManagementSession(tx, input.managementSessionId);
@@ -101,11 +96,7 @@ export async function beginOwnTotpEnrollment(
   verifyCurrent(person, input);
   const secret = generateTotpSecret();
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
-  await tx
-    .delete(totpEnrollments)
-    .where(
-      and(eq(totpEnrollments.tenantId, input.tenantId), eq(totpEnrollments.personId, person.id)),
-    );
+  await tx.delete(totpEnrollments).where(eq(totpEnrollments.personId, person.id));
   const [row] = await tx
     .insert(totpEnrollments)
     .values({
@@ -134,7 +125,6 @@ export async function finishOwnTotpEnrollment(
     .where(
       and(
         eq(totpEnrollments.id, input.enrollmentId),
-        eq(totpEnrollments.tenantId, input.tenantId),
         eq(totpEnrollments.personId, person.id),
         gt(totpEnrollments.expiresAt, new Date().toISOString()),
       ),
@@ -147,12 +137,8 @@ export async function finishOwnTotpEnrollment(
   await tx
     .update(persons)
     .set({ totpSecret: enrollment!.encryptedSecret })
-    .where(and(eq(persons.id, person.id), eq(persons.tenantId, input.tenantId)));
-  await tx
-    .delete(totpEnrollments)
-    .where(
-      and(eq(totpEnrollments.tenantId, input.tenantId), eq(totpEnrollments.id, input.enrollmentId)),
-    );
+    .where(eq(persons.id, person.id));
+  await tx.delete(totpEnrollments).where(eq(totpEnrollments.id, input.enrollmentId));
   return { codes: await replaceRecoveryCodes(tx, input.tenantId, person.id) };
 }
 
@@ -171,39 +157,24 @@ export async function disableOwnTotp(
 ): Promise<void> {
   const person = await ownPerson(tx, input);
   verifyCurrent(person, input);
-  await tx
-    .update(persons)
-    .set({ totpSecret: null })
-    .where(and(eq(persons.id, person.id), eq(persons.tenantId, input.tenantId)));
-  await tx
-    .delete(recoveryCodes)
-    .where(and(eq(recoveryCodes.tenantId, input.tenantId), eq(recoveryCodes.personId, person.id)));
-  await tx
-    .delete(totpEnrollments)
-    .where(
-      and(eq(totpEnrollments.tenantId, input.tenantId), eq(totpEnrollments.personId, person.id)),
-    );
+  await tx.update(persons).set({ totpSecret: null }).where(eq(persons.id, person.id));
+  await tx.delete(recoveryCodes).where(eq(recoveryCodes.personId, person.id));
+  await tx.delete(totpEnrollments).where(eq(totpEnrollments.personId, person.id));
 }
 
 export async function unlinkOwnGoogle(tx: Transaction, input: Owner & Credentials): Promise<void> {
   const person = await ownPerson(tx, input);
   verifyCurrent(person, input);
-  await tx
-    .update(persons)
-    .set({ googleSubject: null })
-    .where(and(eq(persons.id, person.id), eq(persons.tenantId, input.tenantId)));
+  await tx.update(persons).set({ googleSubject: null }).where(eq(persons.id, person.id));
 }
 
 async function invalidateLinks(tx: Transaction, tenantId: string, personId: string): Promise<void> {
+  void tenantId;
   await tx
     .update(managementAccountActions)
     .set({ usedAt: sql`now()` })
     .where(
-      and(
-        eq(managementAccountActions.tenantId, tenantId),
-        eq(managementAccountActions.personId, personId),
-        isNull(managementAccountActions.usedAt),
-      ),
+      and(eq(managementAccountActions.personId, personId), isNull(managementAccountActions.usedAt)),
     );
 }
 
@@ -216,12 +187,7 @@ export async function readOwnProfile(tx: Transaction, input: Owner) {
       createdAt: webauthnCredentials.createdAt,
     })
     .from(webauthnCredentials)
-    .where(
-      and(
-        eq(webauthnCredentials.tenantId, input.tenantId),
-        eq(webauthnCredentials.personId, person.id),
-      ),
-    )
+    .where(eq(webauthnCredentials.personId, person.id))
     .orderBy(webauthnCredentials.createdAt, webauthnCredentials.id);
   return {
     displayName: person.displayName,
@@ -281,7 +247,7 @@ export async function saveOwnProfile(
         pendingEmail: changedEmail ? email : null,
         locale,
       })
-      .where(and(eq(persons.id, person.id), eq(persons.tenantId, input.tenantId)));
+      .where(eq(persons.id, person.id));
   } catch (error) {
     asPersonUniqueViolation(error, { displayName, email });
   }
@@ -323,17 +289,11 @@ export async function changeOwnPin(
   await tx
     .update(persons)
     .set({ pinHash: hashPin(input.pin) })
-    .where(and(eq(persons.id, person.id), eq(persons.tenantId, input.tenantId)));
+    .where(eq(persons.id, person.id));
   await tx
     .update(sessions)
     .set({ endedAt: sql`now()` })
-    .where(
-      and(
-        eq(sessions.tenantId, input.tenantId),
-        eq(sessions.personId, person.id),
-        isNull(sessions.endedAt),
-      ),
-    );
+    .where(and(eq(sessions.personId, person.id), isNull(sessions.endedAt)));
 }
 
 export async function changeOwnPassword(
@@ -346,14 +306,13 @@ export async function changeOwnPassword(
   await tx
     .update(persons)
     .set({ passwordHash: hashPassword(input.password) })
-    .where(and(eq(persons.id, person.id), eq(persons.tenantId, input.tenantId)));
+    .where(eq(persons.id, person.id));
   await invalidateLinks(tx, input.tenantId, person.id);
   await tx
     .update(managementSessions)
     .set({ endedAt: sql`now()` })
     .where(
       and(
-        eq(managementSessions.tenantId, input.tenantId),
         eq(managementSessions.personId, person.id),
         ne(managementSessions.id, input.managementSessionId),
         isNull(managementSessions.endedAt),
@@ -369,13 +328,7 @@ export async function removeOwnPasskey(
   verifyCurrent(person, input);
   const removed = await tx
     .delete(webauthnCredentials)
-    .where(
-      and(
-        eq(webauthnCredentials.id, input.id),
-        eq(webauthnCredentials.tenantId, input.tenantId),
-        eq(webauthnCredentials.personId, person.id),
-      ),
-    )
+    .where(and(eq(webauthnCredentials.id, input.id), eq(webauthnCredentials.personId, person.id)))
     .returning({ id: webauthnCredentials.id });
   if (removed.length === 0) throw new AppError("passkey.not_registered", {});
 }

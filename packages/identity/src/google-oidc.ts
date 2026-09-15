@@ -46,14 +46,7 @@ async function begin(
   const nonce = randomBytes(32).toString("base64url");
   const verifier = randomBytes(48).toString("base64url");
   const now = input.now ?? new Date();
-  await tx
-    .delete(googleOidcStates)
-    .where(
-      and(
-        eq(googleOidcStates.tenantId, input.tenantId),
-        lt(googleOidcStates.expiresAt, now.toISOString()),
-      ),
-    );
+  await tx.delete(googleOidcStates).where(lt(googleOidcStates.expiresAt, now.toISOString()));
   await tx.insert(googleOidcStates).values({
     tenantId: input.tenantId,
     personId,
@@ -100,7 +93,6 @@ export async function claimGoogleState(
     .delete(googleOidcStates)
     .where(
       and(
-        eq(googleOidcStates.tenantId, input.tenantId),
         eq(googleOidcStates.stateHash, digest(input.state)),
         gt(googleOidcStates.expiresAt, (input.now ?? new Date()).toISOString()),
       ),
@@ -126,13 +118,7 @@ export async function completeGoogleLink(
     const updated = await tx
       .update(persons)
       .set({ googleSubject: input.subject })
-      .where(
-        and(
-          eq(persons.tenantId, input.tenantId),
-          eq(persons.id, input.personId),
-          eq(persons.status, "active"),
-        ),
-      )
+      .where(and(eq(persons.id, input.personId), eq(persons.status, "active")))
       .returning({ id: persons.id });
     if (updated.length !== 1) throw new AppError("google.invalid", {});
   } catch (error) {
@@ -148,7 +134,7 @@ export async function loginWithGoogle(
   const [person] = await tx
     .select({ id: persons.id, status: persons.status, totpSecret: persons.totpSecret })
     .from(persons)
-    .where(and(eq(persons.tenantId, input.tenantId), eq(persons.googleSubject, input.subject)));
+    .where(eq(persons.googleSubject, input.subject));
   if (person === undefined || person.status !== "active") throw new AppError("google.invalid", {});
   if (person.totpSecret !== null) throw new AppError("google.second_factor_required", {});
   return startManagementSession(tx, { tenantId: input.tenantId, personId: person.id });

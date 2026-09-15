@@ -1,7 +1,7 @@
 // No `import "./errors.js"`: this file throws no AppError code (it reads two rows and defers to the
 // country-pack locale resolver), so it is not in the throw graph the sibling route/config files load
 // the registry for.
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { asAppUser, locations, tenants, withTransaction, type Database } from "@waitron/db";
 import { resolveInstalledCountryLocale } from "@waitron/country-packs";
 import { FALLBACK_LOCALE, SUPPORTED_LOCALE_CODES, type SupportedLocale } from "@waitron/shared";
@@ -34,7 +34,7 @@ export async function readVenueLocale(
     const [loc] = await tx
       .select({ province: locations.province })
       .from(locations)
-      .where(and(eq(locations.id, params.locationId), eq(locations.tenantId, params.tenantId)));
+      .where(eq(locations.id, params.locationId));
     return resolveInstalledCountryLocale(SUPPORTED_LOCALE_CODES, {
       override: params.override,
       area: loc?.province ?? null,

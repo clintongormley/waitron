@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import type { Transaction } from "@waitron/db";
@@ -137,7 +137,7 @@ async function setupGbVenue(): Promise<GbVenue> {
   const seriesRows = await suite.admin
     .select({ id: invoiceSeries.id, purpose: invoiceSeries.purpose })
     .from(invoiceSeries)
-    .where(and(eq(invoiceSeries.tenantId, tenantId), eq(invoiceSeries.nodeId, nodeId)));
+    .where(eq(invoiceSeries.nodeId, nodeId));
   const standard = seriesRows.find((r) => r.purpose === "standard");
   const rectificative = seriesRows.find((r) => r.purpose === "rectificative");
   if (standard === undefined || rectificative === undefined) {

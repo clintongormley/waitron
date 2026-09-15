@@ -8,7 +8,7 @@ import {
 import type { Transaction } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
-import { and, asc, eq, sql } from "drizzle-orm";
+import { asc, eq, sql } from "drizzle-orm";
 import { DEFAULT_CANVASES } from "./default-canvases.js";
 import type { FormFactor, CanvasDef } from "./canvas.js";
 import { validateCanvas } from "./validate-canvas.js";
@@ -72,14 +72,14 @@ export async function listCanvases(
   tx: Transaction,
   tenantId: string,
 ): Promise<{ id: string; name: string; definition: CanvasDef }[]> {
+  void tenantId;
   const rows = await tx
     .select({
       id: canvases.id,
       name: canvases.name,
       definition: canvases.definition,
     })
-    .from(canvases)
-    .where(eq(canvases.tenantId, tenantId));
+    .from(canvases);
   return rows.map((row) => ({
     id: row.id,
     name: row.name,
@@ -93,6 +93,7 @@ export async function getCanvas(
   tenantId: string,
   id: string,
 ): Promise<{ id: string; name: string; definition: CanvasDef } | undefined> {
+  void tenantId;
   const [row] = await tx
     .select({
       id: canvases.id,
@@ -100,7 +101,7 @@ export async function getCanvas(
       definition: canvases.definition,
     })
     .from(canvases)
-    .where(and(eq(canvases.tenantId, tenantId), eq(canvases.id, id)));
+    .where(eq(canvases.id, id));
   if (row === undefined) return undefined;
   return { id: row.id, name: row.name, definition: row.definition as CanvasDef };
 }
@@ -154,7 +155,7 @@ export async function updateCanvas(
     updated = await tx
       .update(canvases)
       .set({ name: input.name, definition, updatedAt: sql`now()` })
-      .where(and(eq(canvases.tenantId, input.tenantId), eq(canvases.id, input.id)))
+      .where(eq(canvases.id, input.id))
       .returning({ id: canvases.id });
   } catch (error) {
     translateWriteError(error);
@@ -185,7 +186,7 @@ export async function deleteCanvas(
   try {
     deleted = await tx
       .delete(canvases)
-      .where(and(eq(canvases.tenantId, input.tenantId), eq(canvases.id, input.id)))
+      .where(eq(canvases.id, input.id))
       .returning({ id: canvases.id });
   } catch (error) {
     translateWriteError(error);
@@ -206,15 +207,11 @@ export async function getCanvasForFormFactor(
   tenantId: string,
   formFactor: FormFactor,
 ): Promise<CanvasDef> {
+  void tenantId;
   const [row] = await tx
     .select({ definition: canvases.definition })
     .from(canvases)
-    .where(
-      and(
-        eq(canvases.tenantId, tenantId),
-        eq(sql`${canvases.definition} ->> 'formFactor'`, formFactor),
-      ),
-    )
+    .where(eq(sql`${canvases.definition} ->> 'formFactor'`, formFactor))
     .orderBy(asc(canvases.createdAt))
     .limit(1);
   if (row === undefined) return DEFAULT_CANVASES[formFactor];

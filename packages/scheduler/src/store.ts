@@ -59,10 +59,7 @@ export async function readSnapshot(
   params: { tenantId: TenantId; duty: string; horizonStart: Date },
 ): Promise<LedgerSnapshot> {
   const horizon = params.horizonStart.toISOString();
-  const scope = and(
-    eq(scheduledRuns.tenantId, params.tenantId),
-    eq(scheduledRuns.duty, params.duty),
-  );
+  const scope = eq(scheduledRuns.duty, params.duty);
 
   const rows = await tx
     .select({
@@ -273,11 +270,7 @@ export async function enqueueSuccessor(
   params: { tenantId: TenantId; duty: string; period: RunPeriod; dueAt: Date },
 ): Promise<boolean> {
   const periodFrom = params.period.from.toISOString();
-  const scope = and(
-    eq(scheduledRuns.tenantId, params.tenantId),
-    eq(scheduledRuns.duty, params.duty),
-    eq(scheduledRuns.periodFrom, periodFrom),
-  );
+  const scope = and(eq(scheduledRuns.duty, params.duty), eq(scheduledRuns.periodFrom, periodFrom));
 
   const [state] = await tx
     .select({

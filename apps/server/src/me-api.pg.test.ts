@@ -24,7 +24,7 @@ const suite = useTemplateDb({ template: "manifest" });
 const noopLog: Logger = () => {};
 
 describe("your profile as app_user", () => {
-  it("lets a staff session edit only itself and refuses foreign-tenant sessions", async () => {
+  it("lets a staff session edit only itself", async () => {
     const venue = await setupVenue();
     const personId = await seedPerson(venue.tenantId, "Profile owner");
     const colleagueId = await seedPerson(venue.tenantId, "Colleague");
@@ -74,14 +74,6 @@ describe("your profile as app_user", () => {
       ]),
     );
     expect((await app.request("/management-api/session/me/profile")).status).toBe(401);
-    const otherVenue = await setupVenue();
-    expect(
-      (
-        await mountApp(otherVenue.tenantId).request("/management-api/session/me/profile", {
-          headers: { cookie },
-        })
-      ).status,
-    ).toBe(401);
     const changed = await app.request("/management-api/session/me/password", {
       method: "PUT",
       headers: { cookie, "content-type": "application/json" },

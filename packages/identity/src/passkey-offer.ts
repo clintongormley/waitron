@@ -17,23 +17,12 @@ export async function shouldOfferPasskey(
   const [person] = await tx
     .select({ personId: persons.id })
     .from(persons)
-    .where(
-      and(
-        eq(persons.tenantId, input.tenantId),
-        eq(persons.id, input.personId),
-        isNull(persons.passkeyOfferedAt),
-      ),
-    );
+    .where(and(eq(persons.id, input.personId), isNull(persons.passkeyOfferedAt)));
   if (person === undefined) return false;
   const [credential] = await tx
     .select({ id: webauthnCredentials.id })
     .from(webauthnCredentials)
-    .where(
-      and(
-        eq(webauthnCredentials.tenantId, input.tenantId),
-        eq(webauthnCredentials.personId, input.personId),
-      ),
-    )
+    .where(eq(webauthnCredentials.personId, input.personId))
     .limit(1);
   return credential === undefined;
 }
@@ -52,5 +41,5 @@ export async function markPasskeyOffered(
   await tx
     .update(persons)
     .set({ passkeyOfferedAt: sql`now()` })
-    .where(and(eq(persons.tenantId, input.tenantId), eq(persons.id, input.personId)));
+    .where(eq(persons.id, input.personId));
 }

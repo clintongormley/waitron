@@ -2,7 +2,7 @@
 // Clone the whole manifest once per file and assert the stored environment and chain.
 
 import { describe, expect, it } from "vitest";
-import { eq, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { asAppUser, sales, saleLines, withTransaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { applyVenue, planVenue } from "@waitron/provisioning";
@@ -137,8 +137,7 @@ describe("seedSales", () => {
       await asAppUser(tx);
       const saleRows = await tx
         .select({ id: sales.id, issuedAt: sales.issuedAt, total: sales.total })
-        .from(sales)
-        .where(eq(sales.tenantId, venue.tenantId));
+        .from(sales);
       const registros = await tx
         .select({ entorno: registrosFacturacion.entorno })
         .from(registrosFacturacion);
@@ -211,7 +210,7 @@ describe("seedSales", () => {
 
     const saleRows = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
-      return tx.select({ id: sales.id }).from(sales).where(eq(sales.tenantId, venue.tenantId));
+      return tx.select({ id: sales.id }).from(sales);
     });
     expect(saleRows.length).toBe(0);
   });
@@ -303,8 +302,7 @@ describe("seedSales", () => {
           descriptions: saleLines.descriptions,
           vatRate: saleLines.vatRate,
         })
-        .from(saleLines)
-        .where(eq(saleLines.tenantId, venue.tenantId));
+        .from(saleLines);
     });
 
     const parents = rows.filter((r) => r.parentLineId === null);

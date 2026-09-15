@@ -20,7 +20,7 @@ export async function printSalePaymentSlip(
     const [sale] = await tx
       .select({ id: sales.id })
       .from(sales)
-      .where(and(eq(sales.tenantId, cfg.tenantId), eq(sales.workingOrderId, workingOrderId)));
+      .where(eq(sales.workingOrderId, workingOrderId));
     if (sale === undefined) throw new AppError("working_order.not_found", { workingOrderId });
     const [payment] = await tx
       .select({
@@ -33,17 +33,9 @@ export async function printSalePaymentSlip(
         authCode: payments.cardAuthCode,
       })
       .from(payments)
-      .innerJoin(
-        tenders,
-        and(
-          eq(tenders.saleId, payments.saleId),
-          eq(tenders.tenantId, payments.tenantId),
-          eq(tenders.method, "card"),
-        ),
-      )
+      .innerJoin(tenders, and(eq(tenders.saleId, payments.saleId), eq(tenders.method, "card")))
       .where(
         and(
-          eq(payments.tenantId, cfg.tenantId),
           eq(payments.saleId, sale.id),
           eq(payments.workingOrderId, workingOrderId),
           ne(payments.provider, "manual"),

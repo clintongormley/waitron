@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { withTransaction, type Database, type Transaction } from "@waitron/db";
 import { AppError, tenantId as brandTenantId } from "@waitron/shared";
 import type { TenantId } from "@waitron/shared";
@@ -49,9 +49,7 @@ export async function tryGetCredential(
   const [row] = await tx
     .select()
     .from(tenantCredentials)
-    .where(
-      and(eq(tenantCredentials.tenantId, ref.tenantId), eq(tenantCredentials.purpose, ref.purpose)),
-    );
+    .where(eq(tenantCredentials.purpose, ref.purpose));
   if (row === undefined) return null;
 
   // The ROW's version, never the ring's current one: that is what keeps a half-finished rotation
@@ -167,9 +165,7 @@ export async function putCredential(
 export async function deleteCredential(tx: Transaction, ref: CredentialRef): Promise<boolean> {
   const removed = await tx
     .delete(tenantCredentials)
-    .where(
-      and(eq(tenantCredentials.tenantId, ref.tenantId), eq(tenantCredentials.purpose, ref.purpose)),
-    )
+    .where(eq(tenantCredentials.purpose, ref.purpose))
     .returning({ purpose: tenantCredentials.purpose });
   return removed.length > 0;
 }

@@ -42,17 +42,12 @@ export async function lockCategories(tx: Transaction, tenantId: string): Promise
   );
 }
 export async function listCategories(tx: Transaction, tenantId: string): Promise<Category[]> {
+  void tenantId;
   return tx
     .select(columns)
     .from(categories)
-    .leftJoin(
-      categoryDetails,
-      and(
-        eq(categoryDetails.tenantId, categories.tenantId),
-        eq(categoryDetails.categoryId, categories.id),
-      ),
-    )
-    .where(eq(categories.tenantId, tenantId))
+    .leftJoin(categoryDetails, eq(categoryDetails.categoryId, categories.id))
+
     .orderBy(categories.createdAt, categories.id);
 }
 export async function readCategory(
@@ -60,17 +55,12 @@ export async function readCategory(
   tenantId: string,
   id: string,
 ): Promise<Category> {
+  void tenantId;
   const [row] = await tx
     .select(columns)
     .from(categories)
-    .leftJoin(
-      categoryDetails,
-      and(
-        eq(categoryDetails.tenantId, categories.tenantId),
-        eq(categoryDetails.categoryId, categories.id),
-      ),
-    )
-    .where(and(eq(categories.tenantId, tenantId), eq(categories.id, id)));
+    .leftJoin(categoryDetails, eq(categoryDetails.categoryId, categories.id))
+    .where(eq(categories.id, id));
   if (!row) throw new AppError("category.not_found", { categoryId: id });
   return row;
 }
@@ -161,7 +151,7 @@ export async function updateCategory(
   await tx
     .update(categories)
     .set({ name: patch.name ?? current.name, updatedAt: sql`now()` })
-    .where(and(eq(categories.tenantId, tenantId), eq(categories.id, id)));
+    .where(eq(categories.id, id));
   await tx
     .insert(categoryDetails)
     .values({ tenantId, categoryId: id, parentId, image, color })
@@ -178,29 +168,27 @@ export async function deleteCategory(tx: Transaction, tenantId: string, id: stri
   await tx
     .select({ id: categories.id })
     .from(categories)
-    .where(and(eq(categories.tenantId, tenantId), eq(categories.id, id)))
+    .where(eq(categories.id, id))
     .for("update");
   // 1. memberships
-  await tx
-    .delete(productCategories)
-    .where(and(eq(productCategories.tenantId, tenantId), eq(productCategories.categoryId, id)));
+  await tx.delete(productCategories).where(eq(productCategories.categoryId, id));
   // 2. clear reporting category where it was this one
   await tx
     .update(products)
     .set({ categoryId: null, updatedAt: sql`now()` })
-    .where(and(eq(products.tenantId, tenantId), eq(products.categoryId, id)));
+    .where(eq(products.categoryId, id));
   // 3. reparent direct children to this category's own parent (clears the RESTRICT parent FK)
   await tx
     .update(categoryDetails)
     .set({ parentId: category.parentId })
-    .where(and(eq(categoryDetails.tenantId, tenantId), eq(categoryDetails.parentId, id)));
+    .where(eq(categoryDetails.parentId, id));
   // 4. drop preparation routes for this category, if the (optional) venue table exists.
   if (await preparationRoutesPresent(tx))
     await tx.execute(
       sql`delete from preparation_routes where tenant_id = ${tenantId} and category_id = ${id}`,
     );
   // 5. the category row (category_details cascades via its FK)
-  await tx.delete(categories).where(and(eq(categories.tenantId, tenantId), eq(categories.id, id)));
+  await tx.delete(categories).where(eq(categories.id, id));
 }
 export interface CategoryDependants {
   products: { id: string; name: string; reporting: boolean }[];
@@ -220,25 +208,15 @@ export async function categoryDependants(
     .from(products)
     .innerJoin(
       productCategories,
-      and(
-        eq(productCategories.tenantId, products.tenantId),
-        eq(productCategories.productId, products.id),
-        eq(productCategories.categoryId, id),
-      ),
+      and(eq(productCategories.productId, products.id), eq(productCategories.categoryId, id)),
     )
-    .where(eq(products.tenantId, tenantId))
+
     .orderBy(products.id);
   const childRows = await tx
     .select({ id: categories.id, name: categories.name })
     .from(categoryDetails)
-    .innerJoin(
-      categories,
-      and(
-        eq(categories.tenantId, categoryDetails.tenantId),
-        eq(categories.id, categoryDetails.categoryId),
-      ),
-    )
-    .where(and(eq(categoryDetails.tenantId, tenantId), eq(categoryDetails.parentId, id)))
+    .innerJoin(categories, eq(categories.id, categoryDetails.categoryId))
+    .where(eq(categoryDetails.parentId, id))
     .orderBy(categories.id);
   // Raw SQL, because this joins two other modules' tables by name.
   const routes: CategoryDependants["routes"] = [];
@@ -268,6 +246,7 @@ export async function readProductCategories(
   tenantId: string,
   productId: string,
 ): Promise<ProductCategoryMembership> {
+  void tenantId;
   const [product] = await tx
     .select({
       primaryCategoryId: products.categoryId,
@@ -276,14 +255,8 @@ export async function readProductCategories(
       >`coalesce(array_agg(${productCategories.categoryId}::text order by ${productCategories.categoryId}) filter (where ${productCategories.categoryId} is not null), array[]::text[])`,
     })
     .from(products)
-    .leftJoin(
-      productCategories,
-      and(
-        eq(productCategories.tenantId, products.tenantId),
-        eq(productCategories.productId, products.id),
-      ),
-    )
-    .where(and(eq(products.tenantId, tenantId), eq(products.id, productId)))
+    .leftJoin(productCategories, eq(productCategories.productId, products.id))
+    .where(eq(products.id, productId))
     .groupBy(products.id);
   if (!product) throw new AppError("product.not_found", { productId });
   return product;
@@ -316,11 +289,7 @@ export async function replaceProductCategories(
   // check below is what rejects that case.
   if (primary !== null && !input.categoryIds.includes(primary))
     throw new AppError("category.membership_invalid", {});
-  await tx
-    .delete(productCategories)
-    .where(
-      and(eq(productCategories.tenantId, tenantId), eq(productCategories.productId, productId)),
-    );
+  await tx.delete(productCategories).where(eq(productCategories.productId, productId));
   if (input.categoryIds.length)
     await tx
       .insert(productCategories)
@@ -328,7 +297,7 @@ export async function replaceProductCategories(
   await tx
     .update(products)
     .set({ categoryId: primary, updatedAt: sql`now()` })
-    .where(and(eq(products.tenantId, tenantId), eq(products.id, productId)));
+    .where(eq(products.id, productId));
   return { categoryIds: [...input.categoryIds].sort(), primaryCategoryId: primary };
 }
 /**
@@ -358,7 +327,7 @@ export async function addProductsToCategory(
   const found = await tx
     .select({ id: products.id, primaryCategoryId: products.categoryId })
     .from(products)
-    .where(and(eq(products.tenantId, tenantId), inArray(products.id, productIds)));
+    .where(inArray(products.id, productIds));
   if (found.length !== productIds.length) throw new AppError("category.membership_invalid", {});
   await tx
     .insert(productCategories)
@@ -369,7 +338,7 @@ export async function addProductsToCategory(
     await tx
       .update(products)
       .set({ categoryId, updatedAt: sql`now()` })
-      .where(and(eq(products.tenantId, tenantId), inArray(products.id, needReporting)));
+      .where(inArray(products.id, needReporting));
 }
 export async function listCategoryProducts(tx: Transaction, tenantId: string, categoryId: string) {
   await readCategory(tx, tenantId, categoryId);
@@ -387,20 +356,10 @@ export async function listCategoryProducts(tx: Transaction, tenantId: string, ca
     .from(products)
     .innerJoin(
       selected,
-      and(
-        eq(selected.tenantId, products.tenantId),
-        eq(selected.productId, products.id),
-        eq(selected.categoryId, categoryId),
-      ),
+      and(eq(selected.productId, products.id), eq(selected.categoryId, categoryId)),
     )
-    .innerJoin(
-      productCategories,
-      and(
-        eq(productCategories.tenantId, products.tenantId),
-        eq(productCategories.productId, products.id),
-      ),
-    )
-    .where(eq(products.tenantId, tenantId))
+    .innerJoin(productCategories, eq(productCategories.productId, products.id))
+
     .groupBy(products.id)
     .orderBy(products.id);
 }

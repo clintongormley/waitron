@@ -14,7 +14,7 @@ import {
   FALLBACK_LOCALE,
   resolveContentText,
 } from "@waitron/shared";
-import { and, eq, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { mediaImageData, mediaImages } from "./schema/images.js";
 import "./errors.js";
 
@@ -142,10 +142,11 @@ export async function listImageUsages(
   tenantId: string,
   imageId: string,
 ): Promise<ImageUsage[]> {
+  void tenantId;
   const image = await tx
     .select({ filename: mediaImages.filename })
     .from(mediaImages)
-    .where(and(eq(mediaImages.tenantId, tenantId), eq(mediaImages.id, imageId)));
+    .where(eq(mediaImages.id, imageId));
   if (!image[0]) throw new AppError("image.not_found", { imageId });
   const rows = await tx
     .select({
@@ -155,7 +156,7 @@ export async function listImageUsages(
       active: products.active,
     })
     .from(products)
-    .where(and(eq(products.tenantId, tenantId), eq(products.image, image[0].filename)))
+    .where(eq(products.image, image[0].filename))
     .orderBy(products.id);
   // A variant carries its own photo, so a variant reference protects the image exactly as a
   // product's does. Without this the picture behind a published variant could be deleted.
@@ -183,16 +184,8 @@ export async function listImageUsages(
   const categoryRows = await tx
     .select({ id: categories.id, names: categories.name })
     .from(categoryDetails)
-    .innerJoin(
-      categories,
-      and(
-        eq(categories.tenantId, categoryDetails.tenantId),
-        eq(categories.id, categoryDetails.categoryId),
-      ),
-    )
-    .where(
-      and(eq(categoryDetails.tenantId, tenantId), eq(categoryDetails.image, image[0].filename)),
-    )
+    .innerJoin(categories, eq(categories.id, categoryDetails.categoryId))
+    .where(eq(categoryDetails.image, image[0].filename))
     .orderBy(categories.id);
   return [
     ...rows.map((row): ImageUsage => ({ kind: "product", ...row })),
@@ -211,10 +204,7 @@ export async function readImage(
   tenantId: string,
   imageId: string,
 ): Promise<ImageRecord> {
-  const [row] = await tx
-    .select()
-    .from(mediaImages)
-    .where(and(eq(mediaImages.tenantId, tenantId), eq(mediaImages.id, imageId)));
+  const [row] = await tx.select().from(mediaImages).where(eq(mediaImages.id, imageId));
   if (!row) throw new AppError("image.not_found", { imageId });
   return {
     id: row.id,
@@ -243,7 +233,7 @@ export async function uploadImage(
   const [existing] = await tx
     .select({ id: mediaImages.id })
     .from(mediaImages)
-    .where(and(eq(mediaImages.tenantId, tenantId), eq(mediaImages.filename, filename)));
+    .where(eq(mediaImages.filename, filename));
   if (existing) return { created: false, image: await readImage(tx, tenantId, existing.id) };
   const [row] = await tx
     .insert(mediaImages)
@@ -258,17 +248,12 @@ export async function readImageBytes(
   tenantId: string,
   filename: string,
 ): Promise<{ bytes: Uint8Array; contentType: string } | null> {
+  void tenantId;
   const [row] = await tx
     .select({ bytes: mediaImageData.bytes })
     .from(mediaImages)
-    .innerJoin(
-      mediaImageData,
-      and(
-        eq(mediaImages.tenantId, mediaImageData.tenantId),
-        eq(mediaImages.id, mediaImageData.imageId),
-      ),
-    )
-    .where(and(eq(mediaImages.tenantId, tenantId), eq(mediaImages.filename, filename)));
+    .innerJoin(mediaImageData, eq(mediaImages.id, mediaImageData.imageId))
+    .where(eq(mediaImages.filename, filename));
   if (!row) return null;
   const contentType = filename.endsWith(".jpg")
     ? "image/jpeg"
@@ -290,7 +275,7 @@ export async function updateImage(
   const updated = await tx
     .update(mediaImages)
     .set({ ...values, updatedAt: new Date() })
-    .where(and(eq(mediaImages.tenantId, tenantId), eq(mediaImages.id, imageId)))
+    .where(eq(mediaImages.id, imageId))
     .returning({ id: mediaImages.id });
   if (updated.length === 0) throw new AppError("image.not_found", { imageId });
   return readImage(tx, tenantId, imageId);
@@ -308,11 +293,9 @@ export async function listImageTranslationGaps(
   tenantId: string,
   language: string,
 ): Promise<{ kind: "image"; id: string }[]> {
+  void tenantId;
   const code = contentLanguageCode(language);
-  const rows = await tx
-    .select({ id: mediaImages.id, names: mediaImages.names })
-    .from(mediaImages)
-    .where(eq(mediaImages.tenantId, tenantId));
+  const rows = await tx.select({ id: mediaImages.id, names: mediaImages.names }).from(mediaImages);
   // Only a missing name is a gap; alt text is optional, so its absence never blocks a
   // default-language change.
   return rows
@@ -329,14 +312,12 @@ export async function deleteImage(
   const [image] = await tx
     .select({ id: mediaImages.id })
     .from(mediaImages)
-    .where(and(eq(mediaImages.tenantId, tenantId), eq(mediaImages.id, imageId)))
+    .where(eq(mediaImages.id, imageId))
     .for("update");
   if (!image) throw new AppError("image.not_found", { imageId });
   const uses = await listImageUsages(tx, tenantId, imageId);
   if (uses.length > 0) return { deleted: false, uses };
-  await tx
-    .delete(mediaImages)
-    .where(and(eq(mediaImages.tenantId, tenantId), eq(mediaImages.id, imageId)));
+  await tx.delete(mediaImages).where(eq(mediaImages.id, imageId));
   return { deleted: true, uses: [] };
 }
 

@@ -73,7 +73,7 @@ export async function issueAccountAction(
       status: persons.status,
     })
     .from(persons)
-    .where(and(eq(persons.id, input.personId), eq(persons.tenantId, input.tenantId)));
+    .where(eq(persons.id, input.personId));
   if (person === undefined) throw new AppError("person.not_found", { personId: input.personId });
   if (person.status === "suspended") {
     throw new AppError("person.suspended", { personId: input.personId });
@@ -94,7 +94,6 @@ export async function issueAccountAction(
     .set({ usedAt: nowIso })
     .where(
       and(
-        eq(managementAccountActions.tenantId, input.tenantId),
         eq(managementAccountActions.personId, input.personId),
         eq(managementAccountActions.purpose, input.purpose),
         isNull(managementAccountActions.usedAt),
@@ -163,7 +162,6 @@ export async function confirmEmailChangeByCode(
     .from(managementAccountActions)
     .where(
       and(
-        eq(managementAccountActions.tenantId, input.tenantId),
         eq(managementAccountActions.personId, input.personId),
         eq(managementAccountActions.purpose, "email_change"),
         isNull(managementAccountActions.usedAt),
@@ -186,37 +184,20 @@ export async function confirmEmailChangeByCode(
     await tx
       .update(managementAccountActions)
       .set({ codeAttempts: sql`${managementAccountActions.codeAttempts} + 1` })
-      .where(
-        and(
-          eq(managementAccountActions.tenantId, input.tenantId),
-          eq(managementAccountActions.id, action.id),
-        ),
-      );
+      .where(eq(managementAccountActions.id, action.id));
     return null;
   }
   const claimed = await tx
     .update(managementAccountActions)
     .set({ usedAt: nowIso })
-    .where(
-      and(
-        eq(managementAccountActions.tenantId, input.tenantId),
-        eq(managementAccountActions.id, action.id),
-        isNull(managementAccountActions.usedAt),
-      ),
-    )
+    .where(and(eq(managementAccountActions.id, action.id), isNull(managementAccountActions.usedAt)))
     .returning({ id: managementAccountActions.id });
   if (claimed.length !== 1) return null;
   try {
     const changed = await tx
       .update(persons)
       .set({ email: action.targetEmail, pendingEmail: null, emailVerifiedAt: nowIso })
-      .where(
-        and(
-          eq(persons.id, input.personId),
-          eq(persons.tenantId, input.tenantId),
-          eq(persons.pendingEmail, action.targetEmail),
-        ),
-      )
+      .where(and(eq(persons.id, input.personId), eq(persons.pendingEmail, action.targetEmail)))
       .returning({ email: persons.email });
     if (changed.length !== 1) return null;
     return changed[0]!.email;
@@ -262,16 +243,9 @@ export async function inspectAccountAction(
   const [action] = await tx
     .select({ email: persons.email, status: persons.status })
     .from(managementAccountActions)
-    .innerJoin(
-      persons,
-      and(
-        eq(persons.id, managementAccountActions.personId),
-        eq(persons.tenantId, managementAccountActions.tenantId),
-      ),
-    )
+    .innerJoin(persons, eq(persons.id, managementAccountActions.personId))
     .where(
       and(
-        eq(managementAccountActions.tenantId, input.tenantId),
         eq(managementAccountActions.tokenHash, hashToken(input.token)),
         eq(managementAccountActions.purpose, input.purpose),
         isNull(managementAccountActions.usedAt),
@@ -298,7 +272,7 @@ async function finishClaimedAction(
   const [person] = await tx
     .select({ status: persons.status })
     .from(persons)
-    .where(and(eq(persons.id, personId), eq(persons.tenantId, input.tenantId)))
+    .where(eq(persons.id, personId))
     .for("update");
   if (
     person === undefined ||
@@ -316,19 +290,13 @@ async function finishClaimedAction(
         ? { pinHash: hashPin(input.pin!), status: "active" as const }
         : {}),
     })
-    .where(and(eq(persons.id, personId), eq(persons.tenantId, input.tenantId)))
+    .where(eq(persons.id, personId))
     .returning({ id: persons.id });
   if (updated.length !== 1) throw new AppError("account_action.invalid", {});
   await tx
     .update(managementSessions)
     .set({ endedAt: sql`now()` })
-    .where(
-      and(
-        eq(managementSessions.tenantId, input.tenantId),
-        eq(managementSessions.personId, personId),
-        isNull(managementSessions.endedAt),
-      ),
-    );
+    .where(and(eq(managementSessions.personId, personId), isNull(managementSessions.endedAt)));
   return {
     personId,
     session:
@@ -349,11 +317,7 @@ export async function requestAccountRecoveryAction(
     .select({ id: persons.id, status: persons.status })
     .from(persons)
     .where(
-      and(
-        eq(persons.tenantId, input.tenantId),
-        eq(sql`lower(${persons.email})`, email),
-        inArray(persons.status, ["active", "pending"]),
-      ),
+      and(eq(sql`lower(${persons.email})`, email), inArray(persons.status, ["active", "pending"])),
     )
     .for("update");
   if (person === undefined) return null;
@@ -380,7 +344,6 @@ export async function completeAccountAction(
     .set({ usedAt: nowIso })
     .where(
       and(
-        eq(managementAccountActions.tenantId, input.tenantId),
         eq(managementAccountActions.tokenHash, hashToken(input.token)),
         eq(managementAccountActions.purpose, input.purpose),
         isNull(managementAccountActions.usedAt),

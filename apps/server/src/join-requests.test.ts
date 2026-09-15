@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   JOIN_TTL_MS,
@@ -804,10 +804,7 @@ describe("acceptPrintAgentJoinRequest", () => {
     expect(result).toEqual({ ok: true, agentId: made.joinId, name: "kitchen-pi" });
 
     const [agent] = await asApp(cfg, (tx) =>
-      tx
-        .select()
-        .from(printAgents)
-        .where(and(eq(printAgents.tenantId, cfg.tenantId), eq(printAgents.id, made.joinId))),
+      tx.select().from(printAgents).where(eq(printAgents.id, made.joinId)),
     );
     expect(agent).toMatchObject({ id: made.joinId, name: "kitchen-pi", active: true });
     // At the VERB layer `token` IS the bare secret (createJoinRequest returns it un-composed);
@@ -816,10 +813,7 @@ describe("acceptPrintAgentJoinRequest", () => {
     expect(verifySecret(made.token, agent!.tokenHash)).toBe(true);
 
     const gone = await asApp(cfg, (tx) =>
-      tx
-        .select()
-        .from(joinRequests)
-        .where(and(eq(joinRequests.tenantId, cfg.tenantId), eq(joinRequests.id, made.joinId))),
+      tx.select().from(joinRequests).where(eq(joinRequests.id, made.joinId)),
     );
     expect(gone).toHaveLength(0);
   });
@@ -839,10 +833,7 @@ describe("acceptPrintAgentJoinRequest", () => {
       ),
     ).toEqual({ ok: false, reason: "mismatch" });
     const agents = await asApp(cfg, (tx) =>
-      tx
-        .select()
-        .from(printAgents)
-        .where(and(eq(printAgents.tenantId, cfg.tenantId), eq(printAgents.id, made.joinId))),
+      tx.select().from(printAgents).where(eq(printAgents.id, made.joinId)),
     );
     expect(agents).toHaveLength(0);
     // consumed: a retry with the RIGHT choice is now not_found.
@@ -917,10 +908,7 @@ describe("selfEnrolNodeAgent", () => {
     expect(second.token).not.toBe(first.token); // fresh secret
 
     const rows = await asApp(cfg, (tx) =>
-      tx
-        .select()
-        .from(printAgents)
-        .where(and(eq(printAgents.tenantId, cfg.tenantId), eq(printAgents.nodeId, nodeId))),
+      tx.select().from(printAgents).where(eq(printAgents.nodeId, nodeId)),
     );
     expect(rows).toHaveLength(1);
 

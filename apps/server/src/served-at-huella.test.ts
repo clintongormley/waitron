@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { and, eq, isNotNull, sql } from "drizzle-orm";
 import {
   asAppUser,
@@ -8,6 +8,7 @@ import {
   withTransaction,
   workingOrderLines,
   workingOrders,
+  type Database,
 } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import {
@@ -62,10 +63,11 @@ import "./errors.js";
 // deterministic either way; the value is a stronger end-to-end receipt.
 const LOCALE = "es-ES";
 
+// TWO databases, one shop in each — the one-tenant-per-database rework of what used to be two tenants
+// in one clone (see `seedShop`). `useTemplateDb` clones the template per file, so these are two
+// independent databases; each holds exactly one tenant and one fiscal chain.
 const suite = useTemplateDb({ template: "manifest" });
-
-let backend: FiscalBackend;
-let clock: TrustedClock;
+const suiteB = useTemplateDb({ template: "manifest" });
 
 /**
  * A clock FROZEN at one instant, so both pays stamp the SAME `issued_at` — and therefore the SAME
@@ -92,9 +94,24 @@ function frozenClock(): TrustedClock {
   };
 }
 
-// A fresh, unique NIF per test. The clone this suite runs against is its own database (useTemplateDb
-// clones per file), so this never collides with any other suite; the counter keeps repeated tests in
-// THIS file order-independent.
+const clock: TrustedClock = frozenClock();
+
+/** A fiscal backend bound to ONE shop's database — each database has its own, because the backend
+ *  reads and files against the `db` it is constructed with. */
+function makeBackend(db: Database): FiscalBackend {
+  return new VerifactuBackend({
+    clock,
+    db,
+    environment: deploymentEnvironment(process.env),
+    deploymentEnvironment: deploymentEnvironment(process.env),
+    resolveClient: () =>
+      Promise.reject(new Error("served-at-huella.test: resolveClient must never be called")),
+  });
+}
+
+// A fresh, unique NIF per test. Each clone this file runs against is its own database (useTemplateDb
+// clones per file, and there are two), so a NIF never collides across databases; the counter keeps
+// repeated tests in THIS file order-independent.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
@@ -147,6 +164,8 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
 }
 
 interface Shop {
+  db: Database;
+  backend: FiscalBackend;
   cfg: TillConfig;
   aguaId: string;
   cafeId: string;
@@ -158,32 +177,35 @@ interface Shop {
 }
 
 /**
- * Provision a shop under its OWN fresh tenant, RE-REGISTER its node's SIF under the SHARED emisor NIF,
- * seed an IDENTICAL two-product catalogue, and create one dining table.
+ * Provision a shop in ITS OWN database, RE-REGISTER its node's SIF under the SHARED emisor NIF, seed
+ * an IDENTICAL two-product catalogue, and create one dining table.
  *
- * TWO SEPARATE tenants are deliberate. `registros_identidad_uq` is PER TENANT on (id_emisor_factura,
- * num_serie_factura, fecha_expedicion_factura, tipo_registro): two records sharing that AEAT identity
- * inside one tenant are a duplicate (AEAT error 3000) and collide. But the huella hashes exactly those
- * identity fields, so the two records this test compares MUST share them — so each goes in its OWN
- * tenant, where identidad_uq (tenant-scoped) never fires. The SHARED emisor NIF then keeps
- * `IDEmisorFactura` — the one hashed identity field a fresh tenant would otherwise vary — identical.
- * This mirrors verify.test.ts's entorno test, which likewise uses a fresh tenant per record while
- * pinning IDEmisorFactura to one constant (there via `altaFor`'s hardcoded TEST_NIF).
+ * TWO SEPARATE DATABASES are deliberate — one tenant per database, always. `registros_identidad_uq`
+ * is UNIQUE on (id_emisor_factura, num_serie_factura, fecha_expedicion_factura, tipo_registro): two
+ * records sharing that AEAT identity are a duplicate (AEAT error 3000) and collide. But the huella
+ * hashes exactly those identity fields, so the two records this test compares MUST share them — so
+ * each goes in its OWN database, where the uniqueness index never fires across the pair. The SHARED
+ * emisor NIF then keeps `IDEmisorFactura` — the one hashed identity field a fresh venue would
+ * otherwise vary — identical. (This replaced an earlier two-tenants-in-one-clone trick, which the
+ * one-tenant-per-database change made impossible: with the tenant column gone the uniqueness index
+ * is global.) This mirrors verify.test.ts's entorno test, which likewise files each record fresh
+ * while pinning IDEmisorFactura to one constant (there via `altaFor`'s hardcoded TEST_NIF).
  *
- * `applyVenue` registers the node's SIF under the tenant's own tax_id; re-registering under
+ * `applyVenue` registers the node's SIF under the venue's own tax_id; re-registering under
  * `emisorNif` (registerSif revokes the old identity, mints a fresh installation number, and
  * resets the chain to empty) is what makes both shops file under one obligado NIF while each
- * starts a first record. The NumeroInstalacion differs between the two shops (a per-NIF counter)
- * but is not hashed. Run as the owner inside withTransaction — exactly how applyVenue itself runs
- * registerSif (no asAppUser).
+ * starts a first record. The NumeroInstalacion is not hashed, so whether it matches between the two
+ * shops or not cannot move the huella (with each shop in its own database the per-NIF counter resets,
+ * so they in fact match). Run as the owner inside withTransaction — exactly how applyVenue itself
+ * runs registerSif (no asAppUser).
  */
-async function seedShop(emisorNif: string): Promise<Shop> {
+async function seedShop(db: Database, emisorNif: string): Promise<Shop> {
   const venue = await applyVenue(planVenue(venueRequest(nextNif()), ALL_MODULES), {
-    db: suite.admin,
+    db,
     modules: ALL_MODULES,
   });
   const cfg = tillConfigFromVenue(venue);
-  await withTransaction(suite.admin, (tx) =>
+  await withTransaction(db, (tx) =>
     registerSif(tx, {
       tenantId: cfg.tenantId,
       nodeId: cfg.nodeId,
@@ -191,7 +213,7 @@ async function seedShop(emisorNif: string): Promise<Shop> {
       idSistemaInformatico: "W1",
     }),
   );
-  const seeded = await withTransaction(suite.admin, async (tx) => {
+  const seeded = await withTransaction(db, async (tx) => {
     await asAppUser(tx);
     const cat = await createCatalogue(tx, cfg.tenantId, { name: "Delicatessen" });
     const bebidas = await createCategory(tx, cfg.tenantId, { name: { [LOCALE]: "Bebidas" } });
@@ -239,7 +261,7 @@ async function seedShop(emisorNif: string): Promise<Shop> {
       tableId: table.id,
     };
   });
-  return { cfg, ...seeded };
+  return { db, backend: makeBackend(db), cfg, ...seeded };
 }
 
 /**
@@ -253,8 +275,8 @@ async function openServeAndPay(
   shop: Shop,
   serveEveryLine: boolean,
 ): Promise<{ tabId: string; huella: string }> {
-  const { cfg, aguaId, cafeId, aguaMenuItemId, cafeMenuItemId, tableId } = shop;
-  const { tabId } = await withTransaction(suite.admin, async (tx) => {
+  const { db, backend, cfg, aguaId, cafeId, aguaMenuItemId, cafeMenuItemId, tableId } = shop;
+  const { tabId } = await withTransaction(db, async (tx) => {
     await asAppUser(tx);
     const table = (await listTables(tx, cfg)).find((candidate) => candidate.id === tableId);
     const lines =
@@ -274,20 +296,20 @@ async function openServeAndPay(
   });
 
   if (serveEveryLine) {
-    await withTransaction(suite.admin, async (tx) => {
+    await withTransaction(db, async (tx) => {
       await asAppUser(tx);
       await markLineServed(tx, cfg, tabId, 1);
       await markLineServed(tx, cfg, tabId, 2);
     });
   }
 
-  await payWorkingOrder({ db: suite.admin, backend, clock }, cfg, {
+  await payWorkingOrder({ db, backend, clock }, cfg, {
     id: tabId,
     lines: [],
     tender: { method: "cash", amount: "10.00" },
   });
 
-  const huella = await withTransaction(suite.admin, async (tx) => {
+  const huella = await withTransaction(db, async (tx) => {
     await asAppUser(tx);
     const rows = await tx
       .select({ huella: registrosFacturacion.huella, secuencia: registrosFacturacion.secuencia })
@@ -301,9 +323,8 @@ async function openServeAndPay(
 }
 
 /** `served_at` per line, in line_no order — the field this test differs between the two tabs. */
-async function servedAtByLine(cfg: TillConfig, tabId: string): Promise<(string | null)[]> {
-  void cfg;
-  return withTransaction(suite.admin, async (tx) => {
+async function servedAtByLine(shop: Shop, tabId: string): Promise<(string | null)[]> {
+  return withTransaction(shop.db, async (tx) => {
     await asAppUser(tx);
     const rows = await tx
       .select({ lineNo: workingOrderLines.lineNo, servedAt: workingOrderLines.servedAt })
@@ -314,26 +335,14 @@ async function servedAtByLine(cfg: TillConfig, tabId: string): Promise<(string |
   });
 }
 
-beforeAll(() => {
-  clock = frozenClock();
-  backend = new VerifactuBackend({
-    clock,
-    db: suite.admin,
-    environment: deploymentEnvironment(process.env),
-    deploymentEnvironment: deploymentEnvironment(process.env),
-    resolveClient: () =>
-      Promise.reject(new Error("served-at-huella.test: resolveClient must never be called")),
-  });
-});
-
 describe("served_at is not part of the huella", () => {
   it("files an IDENTICAL huella whether every line was served or none — served_at never enters the fiscal record", async () => {
-    // TWO shops (own tenants), ONE shared emisor NIF → same IDEmisorFactura; each its own node → its
-    // own chain, so each files A/1 as a first record. With emisor-NIF + basket + chain-position +
+    // TWO shops in SEPARATE databases, ONE shared emisor NIF → same IDEmisorFactura; each its own node
+    // → its own chain, so each files A/1 as a first record. With emisor-NIF + basket + chain-position +
     // (frozen) clock all fixed, `served_at` is the ONLY thing that differs between the two filings.
     const emisorNif = nextNif();
-    const shopServed = await seedShop(emisorNif);
-    const shopUnserved = await seedShop(emisorNif);
+    const shopServed = await seedShop(suite.admin, emisorNif);
+    const shopUnserved = await seedShop(suiteB.admin, emisorNif);
 
     const served = await openServeAndPay(shopServed, true); // every line served
     const unserved = await openServeAndPay(shopUnserved, false); // no line served
@@ -349,8 +358,8 @@ describe("served_at is not part of the huella", () => {
     // `served_at`. Every line of the served tab carries a timestamp; every line of the unserved tab is
     // NULL. Without this, a silent break in the serve plumbing would leave BOTH tabs unserved and this
     // test would pass while differing nothing — no longer testing what its name claims.
-    const servedTimes = await servedAtByLine(shopServed.cfg, served.tabId);
-    const unservedTimes = await servedAtByLine(shopUnserved.cfg, unserved.tabId);
+    const servedTimes = await servedAtByLine(shopServed, served.tabId);
+    const unservedTimes = await servedAtByLine(shopUnserved, unserved.tabId);
     expect(servedTimes).toHaveLength(2);
     expect(servedTimes.every((t) => t !== null)).toBe(true);
     expect(unservedTimes).toHaveLength(2);
@@ -364,7 +373,7 @@ describe("served_at is not part of the huella", () => {
  * shape and rotation. The values are concrete and non-trivial so the self-check below can pin them.
  */
 async function placeTable(shop: Shop): Promise<void> {
-  await withTransaction(suite.admin, async (tx) => {
+  await withTransaction(shop.db, async (tx) => {
     await asAppUser(tx);
     const zone = await createZone(tx, shop.cfg, { name: "Terraza" });
     const department = await tx.execute<{ department_id: string }>(sql`
@@ -410,7 +419,7 @@ interface Placement {
 /** This shop's table's placement, read back through the real `listTables` projection (the Task-7b
  *  read side). */
 async function placementOf(shop: Shop): Promise<Placement> {
-  return withTransaction(suite.admin, async (tx) => {
+  return withTransaction(shop.db, async (tx) => {
     await asAppUser(tx);
     const table = (await listTables(tx, shop.cfg)).find((t) => t.id === shop.tableId);
     expect(table).toBeDefined();
@@ -433,12 +442,12 @@ async function placementOf(shop: Shop): Promise<Placement> {
 // field) was.
 describe("table placement is not part of the huella", () => {
   it("files an IDENTICAL huella whether the table is placed on the floor plan or a walk-up — placement never enters the fiscal record", async () => {
-    // TWO shops (own tenants), ONE shared emisor NIF → same IDEmisorFactura; each its own node → its
-    // own chain, so each files A/1 as a first record. With emisor-NIF + basket + chain-position +
+    // TWO shops in SEPARATE databases, ONE shared emisor NIF → same IDEmisorFactura; each its own node
+    // → its own chain, so each files A/1 as a first record. With emisor-NIF + basket + chain-position +
     // (frozen) clock all fixed, table PLACEMENT is the ONLY thing that differs between the two filings.
     const emisorNif = nextNif();
-    const shopPlaced = await seedShop(emisorNif);
-    const shopWalkup = await seedShop(emisorNif);
+    const shopPlaced = await seedShop(suite.admin, emisorNif);
+    const shopWalkup = await seedShop(suiteB.admin, emisorNif);
 
     // Place shopPlaced's table on the canvas; shopWalkup's table stays unplaced (a walk-up).
     await placeTable(shopPlaced);
@@ -488,8 +497,8 @@ describe("table placement is not part of the huella", () => {
  * to the self-check. app_user holds UPDATE on `working_orders` (the settle path writes it as app_user).
  */
 async function openKitchenLifecycleAndPay(shop: Shop): Promise<{ tabId: string; huella: string }> {
-  const { cfg, aguaId, cafeId, tableId } = shop;
-  const { tabId } = await withTransaction(suite.admin, async (tx) => {
+  const { db, backend, cfg, aguaId, cafeId, tableId } = shop;
+  const { tabId } = await withTransaction(db, async (tx) => {
     await asAppUser(tx);
     return openTab(tx, cfg, {
       tableId,
@@ -500,7 +509,7 @@ async function openKitchenLifecycleAndPay(shop: Shop): Promise<{ tabId: string; 
     });
   });
 
-  await withTransaction(suite.admin, async (tx) => {
+  await withTransaction(db, async (tx) => {
     await asAppUser(tx);
     // Fire the tab's two stored lines to the kitchen (each falls to the seeded default station — neither
     // product nor category names a route), then walk each ticket item queued→preparing→ready.
@@ -532,13 +541,13 @@ async function openKitchenLifecycleAndPay(shop: Shop): Promise<{ tabId: string; 
       .where(eq(workingOrders.id, tabId));
   });
 
-  await payWorkingOrder({ db: suite.admin, backend, clock }, cfg, {
+  await payWorkingOrder({ db, backend, clock }, cfg, {
     id: tabId,
     lines: [],
     tender: { method: "cash", amount: "10.00" },
   });
 
-  const huella = await withTransaction(suite.admin, async (tx) => {
+  const huella = await withTransaction(db, async (tx) => {
     await asAppUser(tx);
     const rows = await tx
       .select({ huella: registrosFacturacion.huella, secuencia: registrosFacturacion.secuencia })
@@ -560,8 +569,7 @@ interface KdsState {
 }
 
 async function kdsStateOf(shop: Shop, tabId: string): Promise<KdsState> {
-  void shop;
-  return withTransaction(suite.admin, async (tx) => {
+  return withTransaction(shop.db, async (tx) => {
     await asAppUser(tx);
     const items = await tx
       .select({ state: ticketItems.state })
@@ -586,12 +594,12 @@ async function kdsStateOf(shop: Shop, tabId: string): Promise<KdsState> {
 // files the record (till-sale.ts) — which is exactly why it is pinned here.
 describe("KDS state (ticket items + collected_at) is not part of the huella", () => {
   it("files an IDENTICAL huella whether the order ran the full kitchen lifecycle or was filed plain — no KDS field enters the fiscal record", async () => {
-    // TWO shops (own tenants), ONE shared emisor NIF → same IDEmisorFactura; each its own node → its
-    // own chain, so each files A/1 as a first record. With emisor-NIF + basket + chain-position +
+    // TWO shops in SEPARATE databases, ONE shared emisor NIF → same IDEmisorFactura; each its own node
+    // → its own chain, so each files A/1 as a first record. With emisor-NIF + basket + chain-position +
     // (frozen) clock all fixed, the order's KDS STATE is the ONLY thing that differs between the two filings.
     const emisorNif = nextNif();
-    const shopKitchen = await seedShop(emisorNif);
-    const shopPlain = await seedShop(emisorNif);
+    const shopKitchen = await seedShop(suite.admin, emisorNif);
+    const shopPlain = await seedShop(suiteB.admin, emisorNif);
 
     const kitchen = await openKitchenLifecycleAndPay(shopKitchen); // fired → ready → collected
     const plain = await openServeAndPay(shopPlain, false); // never fired; not collected
@@ -647,7 +655,7 @@ async function attachOption(
   shop: Shop,
   overlay: { addAllergens: OverlayAllergens | null },
 ): Promise<{ groupId: string; itemId: string }> {
-  return withTransaction(suite.admin, async (tx) => {
+  return withTransaction(shop.db, async (tx) => {
     await asAppUser(tx);
     const group = await createOptionGroup(tx, shop.cfg.tenantId, {
       name: { [LOCALE]: "Pan" },
@@ -677,15 +685,15 @@ async function openWithOptionAndPay(
   shop: Shop,
   itemId: string,
 ): Promise<{ tabId: string; huella: string }> {
-  const { cfg, aguaId, cafeId, tableId } = shop;
+  const { db, backend, cfg, aguaId, cafeId, tableId } = shop;
   // Open the tab empty, then ADD a round carrying the option — `openTab` takes only plain
   // `{productId, quantity}` lines, while `addTabRound` is the path that accepts `options` and expands
   // the dish into a parent row + one child modifier row (working-order.ts `priceOrderLines`).
-  const { tabId } = await withTransaction(suite.admin, async (tx) => {
+  const { tabId } = await withTransaction(db, async (tx) => {
     await asAppUser(tx);
     return openTab(tx, cfg, { tableId });
   });
-  await withTransaction(suite.admin, async (tx) => {
+  await withTransaction(db, async (tx) => {
     await asAppUser(tx);
     await addTabRound(tx, cfg, tabId, [
       { productId: aguaId, quantity: "1", options: [{ optionGroupItemId: itemId }] },
@@ -693,13 +701,13 @@ async function openWithOptionAndPay(
     ]);
   });
 
-  await payWorkingOrder({ db: suite.admin, backend, clock }, cfg, {
+  await payWorkingOrder({ db, backend, clock }, cfg, {
     id: tabId,
     lines: [],
     tender: { method: "cash", amount: "10.00" },
   });
 
-  const huella = await withTransaction(suite.admin, async (tx) => {
+  const huella = await withTransaction(db, async (tx) => {
     await asAppUser(tx);
     const rows = await tx
       .select({ huella: registrosFacturacion.huella, secuencia: registrosFacturacion.secuencia })
@@ -716,8 +724,7 @@ async function openWithOptionAndPay(
  *  into — proves the option was genuinely rung into a child `sale_lines` row, not silently dropped. The
  *  sale is found by its `working_order_id` back-pointer (the pay path stamps it, till-sale.ts). */
 async function filedChildLineCount(shop: Shop, tabId: string): Promise<number> {
-  void shop;
-  return withTransaction(suite.admin, async (tx) => {
+  return withTransaction(shop.db, async (tx) => {
     await asAppUser(tx);
     const rows = await tx
       .select({ id: saleLines.id })
@@ -735,8 +742,7 @@ async function overlayOf(
   groupId: string,
   itemId: string,
 ): Promise<OverlayAllergens | null> {
-  void shop;
-  return withTransaction(suite.admin, async (tx) => {
+  return withTransaction(shop.db, async (tx) => {
     await asAppUser(tx);
     const items = await listOptionGroupItems(tx, groupId);
     const item = items.find((i) => i.id === itemId);
@@ -756,13 +762,13 @@ async function overlayOf(
 // declaration and the other's carrying none, and must file registros with the IDENTICAL huella.
 describe("an option's allergen overlay is not part of the huella", () => {
   it("files an IDENTICAL huella whether the rung option carries an allergen overlay or none — the overlay never enters the fiscal record", async () => {
-    // TWO shops (own tenants), ONE shared emisor NIF → same IDEmisorFactura; each its own node → its
-    // own chain, so each files A/1 as a first record. With emisor-NIF + basket + rung option
+    // TWO shops in SEPARATE databases, ONE shared emisor NIF → same IDEmisorFactura; each its own node
+    // → its own chain, so each files A/1 as a first record. With emisor-NIF + basket + rung option
     // (name/price/vat) + chain-position + (frozen) clock all fixed, the option's allergen OVERLAY is the
     // ONLY thing that differs between the two filings.
     const emisorNif = nextNif();
-    const shopOverlay = await seedShop(emisorNif);
-    const shopPlain = await seedShop(emisorNif);
+    const shopOverlay = await seedShop(suite.admin, emisorNif);
+    const shopPlain = await seedShop(suiteB.admin, emisorNif);
 
     // Both option items are byte-identical in name/priceDelta/vatClass (the constants) so the child
     // sale_lines are identical; only the catalogue allergen declaration differs.

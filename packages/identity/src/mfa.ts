@@ -76,9 +76,7 @@ export async function replaceRecoveryCodes(
     const raw = randomBytes(8).toString("hex").toUpperCase();
     return `${raw.slice(0, 4)}-${raw.slice(4, 8)}-${raw.slice(8, 12)}-${raw.slice(12)}`;
   });
-  await tx
-    .delete(recoveryCodes)
-    .where(and(eq(recoveryCodes.tenantId, tenantId), eq(recoveryCodes.personId, personId)));
+  await tx.delete(recoveryCodes).where(eq(recoveryCodes.personId, personId));
   await tx
     .insert(recoveryCodes)
     .values(codes.map((code) => ({ tenantId, personId, codeHash: recoveryHash(code) })));
@@ -91,12 +89,12 @@ export async function consumeRecoveryCode(
   personId: string,
   code: string,
 ): Promise<boolean> {
+  void tenantId;
   const used = await tx
     .update(recoveryCodes)
     .set({ usedAt: new Date().toISOString() })
     .where(
       and(
-        eq(recoveryCodes.tenantId, tenantId),
         eq(recoveryCodes.personId, personId),
         eq(recoveryCodes.codeHash, recoveryHash(code)),
         isNull(recoveryCodes.usedAt),

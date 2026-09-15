@@ -31,14 +31,10 @@ const JOIN_ALLOC_LOCK_NAMESPACE = 4_915_071;
  * a lapsed row never occupies the cap, never blocks a number, and never appears in the pending list.
  * Swept opportunistically at read, not by a background job. */
 async function sweepLapsed(tx: Transaction, cfg: TillConfig): Promise<void> {
+  void cfg;
   await tx
     .delete(joinRequests)
-    .where(
-      and(
-        eq(joinRequests.tenantId, cfg.tenantId),
-        lt(joinRequests.createdAt, new Date(Date.now() - JOIN_TTL_MS).toISOString()),
-      ),
-    );
+    .where(lt(joinRequests.createdAt, new Date(Date.now() - JOIN_TTL_MS).toISOString()));
 }
 
 /** Every number currently spoken for in this tenant, EITHER kind, split by role. The cross-surface
@@ -48,10 +44,10 @@ export async function pendingNumbers(
   tx: Transaction,
   cfg: TillConfig,
 ): Promise<{ reals: Set<string>; decoys: Set<string> }> {
+  void cfg;
   const rows = await tx
     .select({ n: joinRequests.verificationNumber, d: joinRequests.decoyNumbers })
-    .from(joinRequests)
-    .where(eq(joinRequests.tenantId, cfg.tenantId));
+    .from(joinRequests);
   return {
     reals: new Set(rows.map((r) => r.n)),
     decoys: new Set(rows.flatMap((r) => r.d)),
@@ -98,7 +94,7 @@ export async function createJoinRequest(
   const [{ count }] = await tx
     .select({ count: sql<number>`count(*)::int` })
     .from(joinRequests)
-    .where(and(eq(joinRequests.tenantId, cfg.tenantId), eq(joinRequests.kind, input.kind)));
+    .where(eq(joinRequests.kind, input.kind));
   if (count >= PENDING_CAP) throw new AppError("device.join_full", {});
 
   // The REAL number avoids every existing real AND every issued decoy; the DECOYS avoid every real.
@@ -175,7 +171,7 @@ export async function listPendingJoinRequests(
       createdAt: joinRequests.createdAt,
     })
     .from(joinRequests)
-    .where(and(eq(joinRequests.tenantId, cfg.tenantId), eq(joinRequests.kind, kind)))
+    .where(eq(joinRequests.kind, kind))
     .orderBy(joinRequests.createdAt);
 }
 
@@ -206,7 +202,7 @@ async function requirePending(
       locationId: joinRequests.locationId,
     })
     .from(joinRequests)
-    .where(and(eq(joinRequests.tenantId, cfg.tenantId), eq(joinRequests.id, id)));
+    .where(eq(joinRequests.id, id));
   if (row === undefined) throw new AppError("join_request.not_found", {});
   return row;
 }
@@ -232,7 +228,7 @@ export async function joinRequestKind(
   const [row] = await tx
     .select({ kind: joinRequests.kind })
     .from(joinRequests)
-    .where(and(eq(joinRequests.tenantId, cfg.tenantId), eq(joinRequests.id, id)));
+    .where(eq(joinRequests.id, id));
   return row?.kind;
 }
 
@@ -276,16 +272,14 @@ export async function readJoinStatus(
   const [pending] = await tx
     .select({ tokenHash: joinRequests.tokenHash })
     .from(joinRequests)
-    .where(and(eq(joinRequests.tenantId, cfg.tenantId), eq(joinRequests.id, joinId)));
+    .where(eq(joinRequests.id, joinId));
   if (pending !== undefined) {
     return verifySecret(token, pending.tokenHash) ? "pending" : "not_approved";
   }
   const [accepted] = await tx
     .select({ tokenHash: devices.tokenHash })
     .from(devices)
-    .where(
-      and(eq(devices.tenantId, cfg.tenantId), eq(devices.id, joinId), eq(devices.active, true)),
-    );
+    .where(and(eq(devices.id, joinId), eq(devices.active, true)));
   if (accepted !== undefined && verifySecret(token, accepted.tokenHash)) return "approved";
   return "not_approved";
 }
@@ -341,13 +335,7 @@ export async function acceptDeviceJoinRequest(
 
   const [row] = await tx
     .delete(joinRequests)
-    .where(
-      and(
-        eq(joinRequests.tenantId, cfg.tenantId),
-        eq(joinRequests.id, id),
-        eq(joinRequests.kind, "device"),
-      ),
-    )
+    .where(and(eq(joinRequests.id, id), eq(joinRequests.kind, "device")))
     .returning({
       id: joinRequests.id,
       label: joinRequests.label,
@@ -408,13 +396,7 @@ export async function acceptPrintAgentJoinRequest(
   await sweepLapsed(tx, cfg);
   const [row] = await tx
     .delete(joinRequests)
-    .where(
-      and(
-        eq(joinRequests.tenantId, cfg.tenantId),
-        eq(joinRequests.id, id),
-        eq(joinRequests.kind, "print_agent"),
-      ),
-    )
+    .where(and(eq(joinRequests.id, id), eq(joinRequests.kind, "print_agent")))
     .returning({
       id: joinRequests.id,
       label: joinRequests.label,
@@ -456,20 +438,14 @@ export async function readAgentJoinStatus(
   const [pending] = await tx
     .select({ tokenHash: joinRequests.tokenHash })
     .from(joinRequests)
-    .where(and(eq(joinRequests.tenantId, cfg.tenantId), eq(joinRequests.id, joinId)));
+    .where(eq(joinRequests.id, joinId));
   if (pending !== undefined) {
     return verifySecret(token, pending.tokenHash) ? "pending" : "not_approved";
   }
   const [accepted] = await tx
     .select({ tokenHash: printAgents.tokenHash })
     .from(printAgents)
-    .where(
-      and(
-        eq(printAgents.tenantId, cfg.tenantId),
-        eq(printAgents.id, joinId),
-        eq(printAgents.active, true),
-      ),
-    );
+    .where(and(eq(printAgents.id, joinId), eq(printAgents.active, true)));
   if (accepted !== undefined && verifySecret(token, accepted.tokenHash)) return "approved";
   return "not_approved";
 }
@@ -484,9 +460,7 @@ export async function denyJoinRequest(
   id: string,
 ): Promise<JoinRequestKind> {
   const row = await requirePending(tx, cfg, id);
-  await tx
-    .delete(joinRequests)
-    .where(and(eq(joinRequests.tenantId, cfg.tenantId), eq(joinRequests.id, id)));
+  await tx.delete(joinRequests).where(eq(joinRequests.id, id));
   return row.kind;
 }
 
@@ -508,7 +482,7 @@ export async function selfEnrolNodeAgent(
   const [existing] = await tx
     .select({ id: printAgents.id, active: printAgents.active })
     .from(printAgents)
-    .where(and(eq(printAgents.tenantId, cfg.tenantId), eq(printAgents.nodeId, input.nodeId)));
+    .where(eq(printAgents.nodeId, input.nodeId));
 
   // A revoked row (`active = false`) is refused, never silently reactivated (spec §4) — checked BEFORE
   // minting the token so a refused re-enrol does not spend a scrypt (`hashSecret`) it will throw away.
@@ -518,10 +492,7 @@ export async function selfEnrolNodeAgent(
   const tokenHash = hashSecret(secret);
 
   if (existing !== undefined) {
-    await tx
-      .update(printAgents)
-      .set({ tokenHash })
-      .where(and(eq(printAgents.tenantId, cfg.tenantId), eq(printAgents.id, existing.id)));
+    await tx.update(printAgents).set({ tokenHash }).where(eq(printAgents.id, existing.id));
     return { agentId: existing.id, token: `${existing.id}.${secret}` };
   }
 

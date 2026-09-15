@@ -121,16 +121,11 @@ async function requireLiveRegister(
   locationId: string,
   registerId: string,
 ): Promise<string> {
+  void cfg;
   const [till] = await tx
     .select({ id: tills.id })
     .from(tills)
-    .where(
-      and(
-        eq(tills.tenantId, cfg.tenantId),
-        eq(tills.locationId, locationId),
-        eq(tills.id, registerId),
-      ),
-    );
+    .where(and(eq(tills.locationId, locationId), eq(tills.id, registerId)));
   if (till === undefined) throw new AppError("device.binding_invalid", { field: "tillId" });
   return till.id;
 }

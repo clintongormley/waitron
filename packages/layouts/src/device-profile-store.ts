@@ -8,7 +8,7 @@ import {
 import type { Transaction } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
-import { and, asc, eq, sql } from "drizzle-orm";
+import { asc, eq, sql } from "drizzle-orm";
 import type { CapabilityFlag, FormFactor } from "./canvas.js";
 import { validateCapabilities, validateInactivityTimeout } from "./device-profile.js";
 
@@ -129,10 +129,11 @@ export async function listDeviceProfiles(
   tx: Transaction,
   tenantId: string,
 ): Promise<DeviceProfileRow[]> {
+  void tenantId;
   const rows = await tx
     .select(PROFILE_COLUMNS)
     .from(deviceProfiles)
-    .where(eq(deviceProfiles.tenantId, tenantId))
+
     .orderBy(asc(deviceProfiles.name));
   return rows.map(toRow);
 }
@@ -143,10 +144,11 @@ export async function getDeviceProfile(
   tenantId: string,
   id: string,
 ): Promise<DeviceProfileRow | undefined> {
+  void tenantId;
   const [row] = await tx
     .select(PROFILE_COLUMNS)
     .from(deviceProfiles)
-    .where(and(eq(deviceProfiles.tenantId, tenantId), eq(deviceProfiles.id, id)));
+    .where(eq(deviceProfiles.id, id));
   if (row === undefined) return undefined;
   return toRow(row);
 }
@@ -238,7 +240,7 @@ export async function updateDeviceProfile(
         inactivityTimeoutSeconds,
         updatedAt: sql`now()`,
       })
-      .where(and(eq(deviceProfiles.tenantId, input.tenantId), eq(deviceProfiles.id, input.id)))
+      .where(eq(deviceProfiles.id, input.id))
       .returning(PROFILE_COLUMNS);
     updated = rows.map(toRow);
   } catch (error) {
@@ -271,7 +273,7 @@ export async function deleteDeviceProfile(
   try {
     deleted = await tx
       .delete(deviceProfiles)
-      .where(and(eq(deviceProfiles.tenantId, input.tenantId), eq(deviceProfiles.id, input.id)))
+      .where(eq(deviceProfiles.id, input.id))
       .returning({ id: deviceProfiles.id });
   } catch (error) {
     translateWriteError(error);

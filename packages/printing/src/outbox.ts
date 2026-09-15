@@ -45,13 +45,7 @@ export async function enqueuePrintJob(
   const [printer] = await tx
     .select({ id: printers.id })
     .from(printers)
-    .where(
-      and(
-        eq(printers.tenantId, cfg.tenantId),
-        eq(printers.id, printerId),
-        eq(printers.active, true),
-      ),
-    );
+    .where(and(eq(printers.id, printerId), eq(printers.active, true)));
   if (printer === undefined) throw new AppError("printer.not_found", { id: printerId });
 
   // The single write: a `queued` outbox row carrying the OPAQUE payload bytes verbatim. `Buffer.from`
@@ -87,10 +81,7 @@ export async function resendPrintJob(
   cfg: PrintConfig,
   jobId: string,
 ): Promise<{ jobId: string }> {
-  const [job] = await tx
-    .select()
-    .from(printJobs)
-    .where(and(eq(printJobs.tenantId, cfg.tenantId), eq(printJobs.id, jobId)));
+  const [job] = await tx.select().from(printJobs).where(eq(printJobs.id, jobId));
   if (job === undefined) throw new AppError("print_job.not_found", { id: jobId });
   if (!canResendPrintJob(job)) throw new AppError("print_job.not_resendable", { id: jobId });
   return enqueuePrintJob(

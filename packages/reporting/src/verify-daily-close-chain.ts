@@ -1,4 +1,4 @@
-import { and, asc, eq } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import { dailyCloseChain, dailyCloses } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type { NodeId, TenantId } from "@waitron/shared";
@@ -72,7 +72,7 @@ export async function verifyDailyCloseChain(
       snapshot: dailyCloses.snapshot,
     })
     .from(dailyCloses)
-    .where(and(eq(dailyCloses.tenantId, tenantId), eq(dailyCloses.nodeId, nodeId)))
+    .where(eq(dailyCloses.nodeId, nodeId))
     .orderBy(asc(dailyCloses.sequenceNo));
 
   // The predecessor's stored hash — "" before the genesis close, exactly as `recordDailyClose` seeds
@@ -133,7 +133,7 @@ export async function verifyDailyCloseChain(
       lastEntryHash: dailyCloseChain.lastEntryHash,
     })
     .from(dailyCloseChain)
-    .where(and(eq(dailyCloseChain.tenantId, tenantId), eq(dailyCloseChain.nodeId, nodeId)));
+    .where(eq(dailyCloseChain.nodeId, nodeId));
 
   if (head === undefined) {
     // No head. Benign ONLY for a never-closed node (no closes either). With surviving closes it is a

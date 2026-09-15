@@ -1,6 +1,6 @@
 // Side-effect import registers this package's sale.* codes (mirrors record-sale.ts).
 import "./errors.js";
-import { and, eq, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { isUniqueViolation, saleSettlements, saleVoids, sales, tenders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError, compareDecimal, decimal, sumDecimals } from "@waitron/shared";
@@ -32,7 +32,7 @@ export async function settleSale(tx: Transaction, input: SettleSaleInput): Promi
       corrections: sql<string>`coalesce((select sum(c.total) from sales c where c.corrects_sale_id = ${sales}.id and c.tenant_id = ${input.tenantId}), 0)::numeric(12, 2)::text`,
     })
     .from(sales)
-    .where(and(eq(sales.id, input.saleId), eq(sales.tenantId, input.tenantId)));
+    .where(eq(sales.id, input.saleId));
   if (sale === undefined) {
     throw new AppError("sale.not_found", { saleId: input.saleId });
   }
@@ -42,7 +42,7 @@ export async function settleSale(tx: Transaction, input: SettleSaleInput): Promi
   const [voided] = await tx
     .select({ saleId: saleVoids.saleId })
     .from(saleVoids)
-    .where(and(eq(saleVoids.saleId, input.saleId), eq(saleVoids.tenantId, input.tenantId)));
+    .where(eq(saleVoids.saleId, input.saleId));
   if (voided !== undefined) {
     throw new AppError("sale.voided", { saleId: input.saleId });
   }
@@ -56,9 +56,7 @@ export async function settleSale(tx: Transaction, input: SettleSaleInput): Promi
   const [existing] = await tx
     .select({ saleId: saleSettlements.saleId })
     .from(saleSettlements)
-    .where(
-      and(eq(saleSettlements.saleId, input.saleId), eq(saleSettlements.tenantId, input.tenantId)),
-    );
+    .where(eq(saleSettlements.saleId, input.saleId));
   if (existing !== undefined) {
     throw new AppError("sale.already_settled", { saleId: input.saleId });
   }

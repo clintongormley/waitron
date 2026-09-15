@@ -4,7 +4,7 @@ import { saleLineRows } from "./sale-line-rows.js";
 // mechanical check that keeps errors.ts reachable from this package's own public barrel
 // (index.ts). Mirrors ./record-sale.ts / ./record-correction.ts's identical convention.
 import "./errors.js";
-import { and, eq, inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import {
   allocateInvoiceNumber,
   invoiceSeries,
@@ -173,7 +173,7 @@ export async function recordSubstitution(
       retiredAt: invoiceSeries.retiredAt,
     })
     .from(invoiceSeries)
-    .where(and(eq(invoiceSeries.id, input.seriesId), eq(invoiceSeries.tenantId, input.tenantId)));
+    .where(eq(invoiceSeries.id, input.seriesId));
 
   if (series === undefined) {
     throw new AppError("sale.series_not_found", {
@@ -324,7 +324,7 @@ export async function recordSubstitution(
     .select({ operationDescription: locations.operationDescription })
     .from(tills)
     .innerJoin(locations, eq(locations.id, tills.locationId))
-    .where(and(eq(tills.id, input.tillId), eq(tills.tenantId, input.tenantId)));
+    .where(eq(tills.id, input.tillId));
 
   /* v8 ignore start */
   if (location === undefined) {

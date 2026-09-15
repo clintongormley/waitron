@@ -442,10 +442,11 @@ export async function createCatalogue(
 }
 
 export async function listCatalogues(tx: Transaction, tenantId: TenantId): Promise<Catalogue[]> {
+  void tenantId;
   return tx
     .select(CATALOGUE_COLUMNS)
     .from(catalogues)
-    .where(eq(catalogues.tenantId, tenantId))
+
     .orderBy(catalogues.createdAt, catalogues.id);
 }
 
@@ -472,10 +473,11 @@ export async function listMenuSections(
   tenantId: TenantId,
   menuId: string,
 ): Promise<MenuSection[]> {
+  void tenantId;
   const [menu] = await tx
     .select({ id: catalogues.id })
     .from(catalogues)
-    .where(and(eq(catalogues.tenantId, tenantId), eq(catalogues.id, menuId)));
+    .where(eq(catalogues.id, menuId));
   if (menu === undefined) throw new AppError("catalogue.not_found", { catalogueId: menuId });
   return tx
     .select({
@@ -486,7 +488,7 @@ export async function listMenuSections(
       active: menuSections.active,
     })
     .from(menuSections)
-    .where(and(eq(menuSections.tenantId, tenantId), eq(menuSections.menuId, menuId)))
+    .where(eq(menuSections.menuId, menuId))
     .orderBy(menuSections.displayOrder, menuSections.id);
 }
 
@@ -496,10 +498,11 @@ export async function updateMenuSection(
   sectionId: string,
   patch: { name: Record<string, string> },
 ): Promise<void> {
+  void tenantId;
   const [row] = await tx
     .update(menuSections)
     .set(patch)
-    .where(and(eq(menuSections.tenantId, tenantId), eq(menuSections.id, sectionId)))
+    .where(eq(menuSections.id, sectionId))
     .returning({ id: menuSections.id });
   if (row === undefined) throw new AppError("menu_section.not_found", { sectionId });
 }
@@ -519,19 +522,13 @@ export async function createMenuItem(
   const [product] = await tx
     .select({ id: products.id })
     .from(products)
-    .where(and(eq(products.tenantId, tenantId), eq(products.id, input.productId)));
+    .where(eq(products.id, input.productId));
   if (product === undefined)
     throw new AppError("product.not_found", { productId: input.productId });
   const [section] = await tx
     .select({ id: menuSections.id })
     .from(menuSections)
-    .where(
-      and(
-        eq(menuSections.tenantId, tenantId),
-        eq(menuSections.menuId, input.menuId),
-        eq(menuSections.id, input.sectionId),
-      ),
-    );
+    .where(and(eq(menuSections.menuId, input.menuId), eq(menuSections.id, input.sectionId)));
   if (section === undefined) {
     throw new AppError("menu_section.not_found", {
       menuId: input.menuId,
@@ -541,13 +538,7 @@ export async function createMenuItem(
   const [existing] = await tx
     .select({ id: menuItems.id })
     .from(menuItems)
-    .where(
-      and(
-        eq(menuItems.tenantId, tenantId),
-        eq(menuItems.menuId, input.menuId),
-        eq(menuItems.productId, input.productId),
-      ),
-    );
+    .where(and(eq(menuItems.menuId, input.menuId), eq(menuItems.productId, input.productId)));
   const [row] = await tx
     .insert(menuItems)
     .values({ tenantId, ...input })
@@ -579,26 +570,16 @@ export async function createMenuItem(
       .from(productOptionGroups)
       .innerJoin(
         optionGroups,
-        and(
-          eq(optionGroups.tenantId, productOptionGroups.tenantId),
-          eq(optionGroups.id, productOptionGroups.groupId),
-          eq(optionGroups.active, true),
-        ),
+        and(eq(optionGroups.id, productOptionGroups.groupId), eq(optionGroups.active, true)),
       )
       .leftJoin(
         optionGroupItems,
         and(
-          eq(optionGroupItems.tenantId, productOptionGroups.tenantId),
           eq(optionGroupItems.groupId, productOptionGroups.groupId),
           eq(optionGroupItems.active, true),
         ),
       )
-      .where(
-        and(
-          eq(productOptionGroups.tenantId, tenantId),
-          eq(productOptionGroups.productId, input.productId),
-        ),
-      )
+      .where(eq(productOptionGroups.productId, input.productId))
       .orderBy(productOptionGroups.sort, optionGroupItems.sort, optionGroupItems.id);
     const byGroup = new Map<
       string,
@@ -624,16 +605,12 @@ export async function updateMenuItem(
   menuItemId: string,
   patch: { sectionId?: string; grossPrice?: string; displayOrder?: number },
 ): Promise<void> {
+  void tenantId;
   const [row] = await tx
     .update(menuItems)
     .set(patch)
     .where(
-      and(
-        eq(menuItems.tenantId, tenantId),
-        eq(menuItems.menuId, menuId),
-        eq(menuItems.id, menuItemId),
-        eq(menuItems.active, true),
-      ),
+      and(eq(menuItems.menuId, menuId), eq(menuItems.id, menuItemId), eq(menuItems.active, true)),
     )
     .returning({ id: menuItems.id });
   if (row === undefined) throw new AppError("menu_item.not_found", { menuId, menuItemId });
@@ -645,16 +622,12 @@ export async function deactivateMenuItem(
   menuId: string,
   menuItemId: string,
 ): Promise<void> {
+  void tenantId;
   const [row] = await tx
     .update(menuItems)
     .set({ active: false })
     .where(
-      and(
-        eq(menuItems.tenantId, tenantId),
-        eq(menuItems.menuId, menuId),
-        eq(menuItems.id, menuItemId),
-        eq(menuItems.active, true),
-      ),
+      and(eq(menuItems.menuId, menuId), eq(menuItems.id, menuItemId), eq(menuItems.active, true)),
     )
     .returning({ id: menuItems.id });
   if (row === undefined) throw new AppError("menu_item.not_found", { menuId, menuItemId });
@@ -674,7 +647,7 @@ export async function setMenuItemOptionGroups(
   const [menuItem] = await tx
     .select({ productId: menuItems.productId })
     .from(menuItems)
-    .where(and(eq(menuItems.tenantId, tenantId), eq(menuItems.id, menuItemId)));
+    .where(eq(menuItems.id, menuItemId));
   if (menuItem === undefined) throw new AppError("menu_item.not_found", { menuItemId });
 
   const groupIds = groups.map((group) => group.groupId);
@@ -684,16 +657,9 @@ export async function setMenuItemOptionGroups(
   const requiredGroups = await tx
     .select({ id: productOptionGroups.groupId })
     .from(productOptionGroups)
-    .innerJoin(
-      optionGroups,
-      and(
-        eq(optionGroups.tenantId, productOptionGroups.tenantId),
-        eq(optionGroups.id, productOptionGroups.groupId),
-      ),
-    )
+    .innerJoin(optionGroups, eq(optionGroups.id, productOptionGroups.groupId))
     .where(
       and(
-        eq(productOptionGroups.tenantId, tenantId),
         eq(productOptionGroups.productId, menuItem.productId),
         eq(optionGroups.required, true),
         eq(optionGroups.active, true),
@@ -708,7 +674,6 @@ export async function setMenuItemOptionGroups(
       .from(productOptionGroups)
       .where(
         and(
-          eq(productOptionGroups.tenantId, tenantId),
           eq(productOptionGroups.productId, menuItem.productId),
           inArray(productOptionGroups.groupId, groupIds),
         ),
@@ -720,7 +685,7 @@ export async function setMenuItemOptionGroups(
     const definitions = await tx
       .select({ id: optionGroups.id, minSelect: optionGroups.minSelect, type: optionGroups.type })
       .from(optionGroups)
-      .where(and(eq(optionGroups.tenantId, tenantId), inArray(optionGroups.id, groupIds)));
+      .where(inArray(optionGroups.id, groupIds));
     const definitionById = new Map(definitions.map((definition) => [definition.id, definition]));
     for (const group of groups) {
       const definition = definitionById.get(group.groupId);
@@ -752,7 +717,6 @@ export async function setMenuItemOptionGroups(
           .from(optionGroupItems)
           .where(
             and(
-              eq(optionGroupItems.tenantId, tenantId),
               eq(optionGroupItems.groupId, group.groupId),
               eq(optionGroupItems.active, true),
               inArray(optionGroupItems.id, optionIds),
@@ -765,14 +729,7 @@ export async function setMenuItemOptionGroups(
     }
   }
 
-  await tx
-    .delete(menuItemOptionGroups)
-    .where(
-      and(
-        eq(menuItemOptionGroups.tenantId, tenantId),
-        eq(menuItemOptionGroups.menuItemId, menuItemId),
-      ),
-    );
+  await tx.delete(menuItemOptionGroups).where(eq(menuItemOptionGroups.menuItemId, menuItemId));
   if (groups.length === 0) return;
   await tx.insert(menuItemOptionGroups).values(
     groups.map((group, displayOrder) => ({
@@ -830,33 +787,14 @@ export async function listMenuOffers(
       courseId: products.courseId,
     })
     .from(menuItems)
-    .innerJoin(
-      catalogues,
-      and(eq(catalogues.tenantId, menuItems.tenantId), eq(catalogues.id, menuItems.menuId)),
-    )
-    .innerJoin(
-      menuSections,
-      and(eq(menuSections.tenantId, menuItems.tenantId), eq(menuSections.id, menuItems.sectionId)),
-    )
-    .innerJoin(
-      products,
-      and(eq(products.tenantId, menuItems.tenantId), eq(products.id, menuItems.productId)),
-    )
-    .leftJoin(
-      productUnits,
-      and(eq(productUnits.tenantId, products.tenantId), eq(productUnits.productId, products.id)),
-    )
-    .leftJoin(
-      units,
-      and(eq(units.tenantId, productUnits.tenantId), eq(units.id, productUnits.unitId)),
-    )
-    .leftJoin(
-      categories,
-      and(eq(categories.tenantId, products.tenantId), eq(categories.id, products.categoryId)),
-    )
+    .innerJoin(catalogues, eq(catalogues.id, menuItems.menuId))
+    .innerJoin(menuSections, eq(menuSections.id, menuItems.sectionId))
+    .innerJoin(products, eq(products.id, menuItems.productId))
+    .leftJoin(productUnits, eq(productUnits.productId, products.id))
+    .leftJoin(units, eq(units.id, productUnits.unitId))
+    .leftJoin(categories, eq(categories.id, products.categoryId))
     .where(
       and(
-        eq(menuItems.tenantId, tenantId),
         inArray(menuItems.menuId, menuIds),
         eq(menuItems.active, true),
         eq(menuSections.active, true),
@@ -883,17 +821,10 @@ export async function listMenuOffers(
       suitableFor: optionGroupItems.dietarySuitability,
     })
     .from(menuItemOptionGroups)
-    .innerJoin(
-      optionGroups,
-      and(
-        eq(optionGroups.tenantId, menuItemOptionGroups.tenantId),
-        eq(optionGroups.id, menuItemOptionGroups.groupId),
-      ),
-    )
+    .innerJoin(optionGroups, eq(optionGroups.id, menuItemOptionGroups.groupId))
     .innerJoin(
       menuItemOptions,
       and(
-        eq(menuItemOptions.tenantId, menuItemOptionGroups.tenantId),
         eq(menuItemOptions.menuItemId, menuItemOptionGroups.menuItemId),
         eq(menuItemOptions.groupId, menuItemOptionGroups.groupId),
       ),
@@ -901,14 +832,12 @@ export async function listMenuOffers(
     .innerJoin(
       optionGroupItems,
       and(
-        eq(optionGroupItems.tenantId, menuItemOptions.tenantId),
         eq(optionGroupItems.id, menuItemOptions.optionId),
         eq(optionGroupItems.groupId, menuItemOptions.groupId),
       ),
     )
     .where(
       and(
-        eq(menuItemOptionGroups.tenantId, tenantId),
         inArray(
           menuItemOptionGroups.menuItemId,
           rows.map((row) => row.id),
@@ -974,18 +903,14 @@ export async function listMenuOffers(
     .innerJoin(
       productVariants,
       and(
-        eq(productVariants.tenantId, menuItemVariants.tenantId),
         eq(productVariants.productId, menuItemVariants.productId),
         eq(productVariants.id, menuItemVariants.variantId),
       ),
     )
     .where(
-      and(
-        eq(menuItemVariants.tenantId, tenantId),
-        inArray(
-          menuItemVariants.menuItemId,
-          rows.map((row) => row.id),
-        ),
+      inArray(
+        menuItemVariants.menuItemId,
+        rows.map((row) => row.id),
       ),
     )
     .orderBy(menuItemVariants.displayOrder, menuItemVariants.variantId);
@@ -1057,10 +982,11 @@ export async function renameCatalogue(
   catalogueId: string,
   name: string,
 ): Promise<void> {
+  void tenantId;
   const [row] = await tx
     .update(catalogues)
     .set({ name, updatedAt: sql`now()` })
-    .where(and(eq(catalogues.tenantId, tenantId), eq(catalogues.id, catalogueId)))
+    .where(eq(catalogues.id, catalogueId))
     .returning({ id: catalogues.id });
   if (row === undefined) throw new AppError("catalogue.not_found", { catalogueId });
 }
@@ -1254,15 +1180,9 @@ export async function createProduct(
   const [created] = await tx
     .select(PRODUCT_COLUMNS)
     .from(products)
-    .leftJoin(
-      productUnits,
-      and(eq(productUnits.tenantId, products.tenantId), eq(productUnits.productId, products.id)),
-    )
-    .leftJoin(
-      units,
-      and(eq(units.tenantId, productUnits.tenantId), eq(units.id, productUnits.unitId)),
-    )
-    .where(and(eq(products.tenantId, tenantId), eq(products.id, row!.id)));
+    .leftJoin(productUnits, eq(productUnits.productId, products.id))
+    .leftJoin(units, eq(units.id, productUnits.unitId))
+    .where(eq(products.id, row!.id));
   return toProduct(
     { ...created!, categoryId: membership.primaryCategoryId },
     membership.categoryIds,
@@ -1274,6 +1194,7 @@ export async function listProducts(
   tenantId: TenantId,
   catalogueId?: string,
 ): Promise<Product[]> {
+  void tenantId;
   const rows = await tx
     .select({
       ...PRODUCT_COLUMNS,
@@ -1282,27 +1203,10 @@ export async function listProducts(
       >`coalesce(array_agg(${productCategories.categoryId}::text order by ${productCategories.categoryId}) filter (where ${productCategories.categoryId} is not null), array[]::text[])`,
     })
     .from(products)
-    .leftJoin(
-      productUnits,
-      and(eq(productUnits.tenantId, products.tenantId), eq(productUnits.productId, products.id)),
-    )
-    .leftJoin(
-      units,
-      and(eq(units.tenantId, productUnits.tenantId), eq(units.id, productUnits.unitId)),
-    )
-    .leftJoin(
-      productCategories,
-      and(
-        eq(productCategories.tenantId, products.tenantId),
-        eq(productCategories.productId, products.id),
-      ),
-    )
-    .where(
-      and(
-        eq(products.tenantId, tenantId),
-        catalogueId === undefined ? undefined : eq(products.catalogueId, catalogueId),
-      ),
-    )
+    .leftJoin(productUnits, eq(productUnits.productId, products.id))
+    .leftJoin(units, eq(units.id, productUnits.unitId))
+    .leftJoin(productCategories, eq(productCategories.productId, products.id))
+    .where(catalogueId === undefined ? undefined : eq(products.catalogueId, catalogueId))
     .groupBy(products.id, units.id)
     .orderBy(products.createdAt, products.id);
   if (rows.length === 0) return [];
@@ -1310,12 +1214,9 @@ export async function listProducts(
     .select({ productId: productOptionGroups.productId, groupId: productOptionGroups.groupId })
     .from(productOptionGroups)
     .where(
-      and(
-        eq(productOptionGroups.tenantId, tenantId),
-        inArray(
-          productOptionGroups.productId,
-          rows.map((row) => row.id),
-        ),
+      inArray(
+        productOptionGroups.productId,
+        rows.map((row) => row.id),
       ),
     )
     .orderBy(productOptionGroups.sort, productOptionGroups.groupId);
@@ -1332,12 +1233,9 @@ export async function listProducts(
     })
     .from(productVariants)
     .where(
-      and(
-        eq(productVariants.tenantId, tenantId),
-        inArray(
-          productVariants.productId,
-          rows.map((row) => row.id),
-        ),
+      inArray(
+        productVariants.productId,
+        rows.map((row) => row.id),
       ),
     )
     .orderBy(productVariants.displayOrder, productVariants.id);
@@ -1433,7 +1331,7 @@ export async function updateProduct(
       ...(directDietary === undefined ? {} : { dietaryDeclarations: directDietary }),
       updatedAt: sql`now()`,
     })
-    .where(and(eq(products.tenantId, tenantId), eq(products.id, id)));
+    .where(eq(products.id, id));
   if (unitAction.kind === "set") await assignProductUnit(tx, tenantId, id, unitAction.unit.id);
   else if (unitAction.kind === "clear") await clearProductUnit(tx, tenantId, id);
   // Republish exactly the overlays that changed. When BOTH did, one combined SELECT+UPDATE
@@ -1668,16 +1566,10 @@ export async function listAvailableProducts(
     })
     .from(products)
     .innerJoin(catalogues, eq(catalogues.id, products.catalogueId))
-    .leftJoin(
-      productUnits,
-      and(eq(productUnits.tenantId, products.tenantId), eq(productUnits.productId, products.id)),
-    )
-    .leftJoin(
-      units,
-      and(eq(units.tenantId, productUnits.tenantId), eq(units.id, productUnits.unitId)),
-    )
+    .leftJoin(productUnits, eq(productUnits.productId, products.id))
+    .leftJoin(units, eq(units.id, productUnits.unitId))
     .leftJoin(categories, eq(categories.id, products.categoryId))
-    .leftJoin(contentLanguages, eq(contentLanguages.tenantId, products.tenantId))
+    .leftJoin(contentLanguages, sql`true`)
     .where(
       and(
         inArray(catalogues.id, accessible),
@@ -2007,7 +1899,7 @@ export async function updateOptionGroup(
       required: optionGroups.required,
     })
     .from(optionGroups)
-    .where(and(eq(optionGroups.tenantId, tenantId), eq(optionGroups.id, id)));
+    .where(eq(optionGroups.id, id));
   if (current === undefined) return;
   validateOptionGroupBounds(
     patch.minSelect ?? current.minSelect,
@@ -2020,7 +1912,7 @@ export async function updateOptionGroup(
       ...patch,
       ...(patch.maxSelect === undefined ? {} : { maxTotalQuantity: patch.maxSelect }),
     })
-    .where(and(eq(optionGroups.tenantId, tenantId), eq(optionGroups.id, id)));
+    .where(eq(optionGroups.id, id));
 }
 
 export async function createOptionGroupItem(
@@ -2088,10 +1980,7 @@ export async function updateOptionGroupItem(
   // collapses an empty map to NULL; Drizzle `.set()` writes only the keys present, so an omitted
   // `addAllergens` leaves the stored value untouched. Validated regardless of caller (CLAUDE.md §3).
   const write: Record<string, unknown> = { ...patch, ...(normalizeOverlay(patch) ?? {}) };
-  await tx
-    .update(optionGroupItems)
-    .set(write)
-    .where(and(eq(optionGroupItems.tenantId, tenantId), eq(optionGroupItems.id, itemId)));
+  await tx.update(optionGroupItems).set(write).where(eq(optionGroupItems.id, itemId));
 }
 
 /**
@@ -2110,22 +1999,17 @@ export async function setProductOptionGroups(
   const [product] = await tx
     .select({ id: products.id })
     .from(products)
-    .where(and(eq(products.tenantId, tenantId), eq(products.id, productId)));
+    .where(eq(products.id, productId));
   if (!product) throw new AppError("product.not_found", { productId });
   if (groupIds.length) {
     const retained = await tx
       .select({ id: productOptionGroups.groupId })
       .from(productOptionGroups)
-      .where(
-        and(
-          eq(productOptionGroups.tenantId, tenantId),
-          eq(productOptionGroups.productId, productId),
-        ),
-      );
+      .where(eq(productOptionGroups.productId, productId));
     const available = await tx
       .select({ id: optionGroups.id, active: optionGroups.active })
       .from(optionGroups)
-      .where(and(eq(optionGroups.tenantId, tenantId), inArray(optionGroups.id, groupIds)));
+      .where(inArray(optionGroups.id, groupIds));
     if (
       available.some(
         (group) => !group.active && !retained.some((entry) => entry.id === group.id),
@@ -2135,11 +2019,7 @@ export async function setProductOptionGroups(
     )
       throw new AppError("modifier.invalid", { field: "modifierIds" });
   }
-  await tx
-    .delete(productOptionGroups)
-    .where(
-      and(eq(productOptionGroups.tenantId, tenantId), eq(productOptionGroups.productId, productId)),
-    );
+  await tx.delete(productOptionGroups).where(eq(productOptionGroups.productId, productId));
   if (groupIds.length === 0) return;
   await tx.insert(productOptionGroups).values(
     groupIds.map((groupId, index) => ({
@@ -2158,12 +2038,11 @@ export async function listProductOptionGroupIds(
   tenantId: TenantId,
   productId: string,
 ): Promise<string[]> {
+  void tenantId;
   const rows = await tx
     .select({ groupId: productOptionGroups.groupId })
     .from(productOptionGroups)
-    .where(
-      and(eq(productOptionGroups.tenantId, tenantId), eq(productOptionGroups.productId, productId)),
-    )
+    .where(eq(productOptionGroups.productId, productId))
     .orderBy(asc(productOptionGroups.sort), asc(productOptionGroups.groupId));
   return rows.map((r) => r.groupId);
 }

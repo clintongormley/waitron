@@ -53,6 +53,11 @@ function nextNif(): string {
 let stateDir: string;
 let caPem: string;
 let appDb: Database; // app_login → app_user: reads the venue rows in this database
+// One tenant per database: the venue is provisioned ONCE in beforeAll and every test reuses it. The
+// suite does not reset between tests (resetPerTest:false), so a per-test `setupVenue()` would
+// accumulate tenants — and with the tenant filters removed a credential read would return the wrong
+// tenant's sealed row, failing its AAD check on decrypt.
+let designated: AdoptResult;
 
 /** Provision a fresh venue (as the owner), stamp its database `preproduction`, and return the five
  * designated ids in AdoptResult shape. */
@@ -130,6 +135,7 @@ beforeAll(async () => {
 
   await stampDeployment(suite.admin, "preproduction");
   appDb = await suite.pg.connectAs("app_login", "app_pw");
+  designated = await setupVenue();
 }, 180_000);
 
 afterAll(async () => {
@@ -139,7 +145,6 @@ afterAll(async () => {
 
 describe("assembleMirrorBundle (primary side, real Postgres)", () => {
   it("assembles a bundle carrying tenant + node identity, connection details, and the replication credential", async () => {
-    const designated = await setupVenue();
     const standby = { nodeId: crypto.randomUUID(), publicKey: STANDBY_PUB };
 
     const bundle = await assembleMirrorBundle({ ...baseDeps(), designated, standby });
@@ -207,7 +212,7 @@ describe("assembleMirrorBundle (primary side, real Postgres)", () => {
     try {
       const bundle = await assembleMirrorBundle({
         ...baseDeps(),
-        designated: await setupVenue(),
+        designated,
         standby: { nodeId: crypto.randomUUID(), publicKey: STANDBY_PUB },
       });
       expect(bundle.moduleOverrides).toEqual({ [toggleable]: false });
@@ -219,7 +224,7 @@ describe("assembleMirrorBundle (primary side, real Postgres)", () => {
   it("carries {} when the primary has no modules.json", async () => {
     const bundle = await assembleMirrorBundle({
       ...baseDeps(),
-      designated: await setupVenue(),
+      designated,
       standby: { nodeId: crypto.randomUUID(), publicKey: STANDBY_PUB },
     });
     expect(bundle.moduleOverrides).toEqual({});
@@ -228,7 +233,7 @@ describe("assembleMirrorBundle (primary side, real Postgres)", () => {
   it("carries a WireGuard public key when one is provided, and omits it otherwise (swap S2)", async () => {
     const withKey = await assembleMirrorBundle({
       ...baseDeps(),
-      designated: await setupVenue(),
+      designated,
       standby: { nodeId: crypto.randomUUID(), publicKey: STANDBY_PUB },
       wireguardPublicKey: "PUBKEY==",
     });
@@ -236,14 +241,13 @@ describe("assembleMirrorBundle (primary side, real Postgres)", () => {
 
     const withoutKey = await assembleMirrorBundle({
       ...baseDeps(),
-      designated: await setupVenue(),
+      designated,
       standby: { nodeId: crypto.randomUUID(), publicKey: STANDBY_PUB },
     });
     expect(withoutKey.wireguardPublicKey).toBeUndefined();
   });
 
   it("throws mirror.not_provisioned when the database carries no deployment stamp", async () => {
-    const designated = await setupVenue();
     const unstampedApp = await unstamped.pg.connectAs("app_login", "app_pw");
     try {
       await expect(

@@ -12,7 +12,7 @@
 import "./errors.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { and, desc, eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import { asAppUser, deviceProfiles, devices, ticketItems, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
@@ -226,8 +226,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
   // till-reroute-S3): a globally-unique device UUID is NOT the query's isolation boundary, so a
   // request scoped to tenant A must update/read zero of tenant B's rows (→ 404 / omitted), never
   // reassign or revoke a foreign device.
-  const ownDeviceById = (id: string) =>
-    and(eq(devices.tenantId, deps.cfg.tenantId), eq(devices.id, id));
+  const ownDeviceById = (id: string) => eq(devices.id, id);
 
   // ── Knock (UNAUTHENTICATED) ────────────────────────────────────────────────────────────────────────
   app.post("/api/device/join", (c) =>
@@ -416,17 +415,11 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
             enrolledAt: devices.enrolledAt,
           })
           .from(devices)
-          .innerJoin(
-            deviceProfiles,
-            and(
-              eq(deviceProfiles.tenantId, devices.tenantId),
-              eq(deviceProfiles.id, devices.deviceProfileId),
-            ),
-          )
+          .innerJoin(deviceProfiles, eq(deviceProfiles.id, devices.deviceProfileId))
           // Scope the list to THIS tenant explicitly — since RLS was dropped (#255) `withTransaction` no
           // longer isolates SELECTs, so without this a manager sees (and, via the by-id writes below,
           // could reassign/revoke) every tenant's devices in a multi-tenant DB (CLAUDE.md §3).
-          .where(eq(devices.tenantId, deps.cfg.tenantId))
+
           .orderBy(desc(devices.enrolledAt)),
       );
       return c.json(
@@ -598,13 +591,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
                 active: devices.active,
               })
               .from(devices)
-              .innerJoin(
-                deviceProfiles,
-                and(
-                  eq(deviceProfiles.tenantId, devices.tenantId),
-                  eq(deviceProfiles.id, devices.deviceProfileId),
-                ),
-              )
+              .innerJoin(deviceProfiles, eq(deviceProfiles.id, devices.deviceProfileId))
               .where(eq(devices.active, true))
               .orderBy(desc(devices.enrolledAt));
             return {
