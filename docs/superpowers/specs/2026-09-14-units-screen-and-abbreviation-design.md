@@ -87,6 +87,9 @@ legitimate; do not add an ALTER-to-preserve step.
 
 ### Seeded units
 
+Update, 2026-09-15: the `each` seed was later dropped — a product's unit is now optional and no unit
+shows as Each (see `2026-09-15-optional-product-unit-design.md`).
+
 `packages/catalogue/src/provisioning.ts` `UNIT_NAMES` today seeds six units whose names ARE the
 short forms. Each gains a full name; the current short form moves to `abbreviation`:
 
