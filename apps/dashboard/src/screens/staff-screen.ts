@@ -5,6 +5,7 @@ import { baseStyles, selectStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
+import "@waitron/ui/src/components/wt-help-tooltip.js";
 import { t } from "../i18n/t.js";
 import { roleName, statusName } from "../i18n/domain.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
@@ -63,6 +64,14 @@ export class StaffScreen extends LitElement {
         flex-direction: column;
         gap: var(--wt-space-1);
         color: var(--wt-color-text);
+      }
+      /* Every heading row is button-height, so when the filters sit side by side the Status heading,
+         which holds a help button, is level with the Role heading. */
+      .filter-heading {
+        display: flex;
+        align-items: center;
+        gap: var(--wt-space-1);
+        min-height: var(--wt-tap-min);
       }
       .filter input {
         box-sizing: border-box;
@@ -374,7 +383,7 @@ export class StaffScreen extends LitElement {
       </div>
       <div class="filters" aria-label=${t("staff.filters")}>
         <label class="filter">
-          ${t("staff.search")}
+          <span class="filter-heading">${t("staff.search")}</span>
           <input
             data-test="search"
             name="search"
@@ -386,7 +395,7 @@ export class StaffScreen extends LitElement {
           />
         </label>
         <label class="filter">
-          ${t("staff.filter_role")}
+          <span class="filter-heading">${t("staff.filter_role")}</span>
           <select
             data-test="role-filter"
             name="role-filter"
@@ -399,9 +408,17 @@ export class StaffScreen extends LitElement {
             )}
           </select>
         </label>
-        <label class="filter">
-          ${t("staff.filter_status")}
+        <div class="filter">
+          <span class="filter-heading">
+            <label for="status-filter">${t("staff.filter_status")}</label>
+            <wt-help-tooltip
+              data-test="status-filter-help"
+              aria-label=${t("staff.filter_current_help_label")}
+              >${t("staff.filter_current_help")}</wt-help-tooltip
+            >
+          </span>
           <select
+            id="status-filter"
             data-test="status-filter"
             name="status-filter"
             @change=${(event: Event) =>
@@ -414,7 +431,7 @@ export class StaffScreen extends LitElement {
             <option value="suspended">${statusName("suspended")}</option>
             <option value="all">${t("staff.filter_all_statuses")}</option>
           </select>
-        </label>
+        </div>
       </div>
       <dashboard-staff-list
         .people=${this.#filteredPeople()}

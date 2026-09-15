@@ -463,6 +463,9 @@ export const en = {
   "staff.filter_status": "Status",
   "staff.filter_all_roles": "All roles",
   "staff.filter_current": "Current users",
+  "staff.filter_current_help_label": "About current users",
+  "staff.filter_current_help":
+    "Current users are everyone who has not been disabled: active users, and pending users (invited, but yet to finish setting up their account).",
   "staff.filter_all_statuses": "All statuses",
   "staff.badge_password": "Password",
   "staff.badge_totp": "TOTP",
@@ -1712,6 +1715,9 @@ export const es: Record<StringKey, string> = {
   "staff.filter_status": "Estado",
   "staff.filter_all_roles": "Todos los roles",
   "staff.filter_current": "Usuarios actuales",
+  "staff.filter_current_help_label": "Acerca de los usuarios actuales",
+  "staff.filter_current_help":
+    "Los usuarios actuales son todos los que no están desactivados: los activos y los pendientes (invitados que aún no han terminado de configurar su cuenta).",
   "staff.filter_all_statuses": "Todos los estados",
   "staff.badge_password": "Contraseña",
   "staff.badge_totp": "TOTP",
