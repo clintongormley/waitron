@@ -6,6 +6,7 @@ import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 import { CATALOGUE_PROVISIONING } from "./provisioning.js";
+import { getSeededUnit } from "./units.js";
 
 // This suite checks seeded values and idempotence; it makes no privilege or contention claim.
 const suite = usePgliteDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
@@ -87,19 +88,15 @@ describe("catalogue provisioning", () => {
     expect(menus.rows).toEqual([{ count: 1 }]);
   });
 
-  it("seeds the six units once and preserves edits and intentional deletion on another node", async () => {
+  it("seeds the five units once and preserves edits and intentional deletion on another node", async () => {
     const node = await venue("ES", "Madrid", "es-ES");
     const run = (nodeId = node.nodeId) =>
       suite.db.transaction((tx) => CATALOGUE_PROVISIONING.seed!.run(tx, { ...node, nodeId }));
     await run();
+    await suite.db.transaction(async (tx) => {
+      expect(await getSeededUnit(tx, node.tenantId, "each")).toBeNull();
+    });
     expect(await storedUnits(node.tenantId)).toEqual([
-      {
-        seed_key: "each",
-        name: { en: "Each", es: "Unidad", ca: "Unitat", gl: "Unidade", eu: "Unitatea" },
-        abbreviation: { en: "ea", es: "ud", ca: "u", gl: "u", eu: "u" },
-        precision: 0,
-        hardware_unit: null,
-      },
       {
         seed_key: "g",
         name: { en: "Gram", es: "Gramo", ca: "Gram", gl: "Gramo", eu: "Gramo" },
@@ -156,14 +153,12 @@ describe("catalogue provisioning", () => {
     ]);
     await suite.db.execute(sql`
       update units set name = '{"en":"piece","es":"pieza"}'::jsonb
-      where tenant_id = ${node.tenantId} and seed_key = 'each'`);
+      where tenant_id = ${node.tenantId} and seed_key = 'g'`);
     await suite.db.execute(sql`
       delete from units where tenant_id = ${node.tenantId} and seed_key = 'mg'`);
     const otherNode = await seedNode(suite.db, node.tenantId, node.locationId);
     await run(otherNode);
-    expect(
-      (await storedUnits(node.tenantId)).find((unit) => unit.seed_key === "each")?.name,
-    ).toEqual({
+    expect((await storedUnits(node.tenantId)).find((unit) => unit.seed_key === "g")?.name).toEqual({
       en: "piece",
       es: "pieza",
     });
