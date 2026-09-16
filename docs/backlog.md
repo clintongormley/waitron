@@ -730,7 +730,7 @@ folds the price back, and the server refuses exactly one outright with
 an API caller cannot reach a state the editor will not allow. Two new shared primitives came out of
 it, `wt-disclosure` and `wt-price-input`. Pre-production, so the columns were dropped and recreated
 rather than migrated (CLAUDE.md §3): `packages/db` migrations `0030`–`0031`; the catalogue side was
-folded into that set's regenerated baseline when `feat/drop-tenant-id` rebased onto this work. [Developer guide](developers/products.md), [operator guide](products.md),
+folded into the catalogue set's regenerated baseline when `feat/drop-tenant-id` rebased onto this work. [Developer guide](developers/products.md), [operator guide](products.md),
 [design](superpowers/specs/2026-09-15-product-editor-rework-design.md),
 [plan](superpowers/plans/2026-09-15-product-editor-rework.md).
 
@@ -830,6 +830,19 @@ comments across 15 or more packages still cite them as the guard for error-code 
 real guard is `scripts/errors-reachable.test.ts`. Found while reviewing A1, and deliberately NOT
 swept there — fixing one of 37 makes the rot look addressed, and CLAUDE.md §1 says thin on touch
 rather than sweep. One pass, whenever somebody has the file open anyway.
+
+The same shape, from a different deletion: the outbox removal (#280) deleted
+`apps/server/src/sync-origin.test.ts`, and six comments still describe the capture-origin machinery
+it proved. Three name the deleted file outright as where the proof lives —
+`apps/server/src/recipe-api.ts:40`, `apps/server/src/me-api.test.ts:80` and
+`packages/payments/src/reconcile.test.ts:50` — and `recipe-api.ts` also cites
+`packages/sync/drizzle/0000_sync_baseline.sql`, which the same PR deleted. The other three describe a
+"sync-origin node id" threaded so that enrolled writes capture a real origin, which no trigger does
+any more: `packages/payments-stripe/src/provider.test.ts:25`,
+`packages/payments-stripe/src/device-provider.test.ts:19` and
+`packages/payments-stripe/src/device.test.ts:24`. All six are on `main` today, so they predate
+`feat/drop-tenant-id`; found while reviewing that branch. Same treatment as above — one pass, not a
+sweep.
 
 ### A1a. A foreign business customer needs an identifier-type decision
 
@@ -1683,7 +1696,7 @@ turns out to need a design moves to its track.
    `markCollected` takes a `TillConfig` and discards it (`void cfg;`), then selects and updates on
    `eq(workingOrders.id, id)`; `cancelPlacedOrder` selects and updates the same way and uses `cfg`
    only to stamp the amendment's till and node; `readLockedLines` takes no `cfg` at all, and neither
-   does its one caller `priceStoredOrder`, which is reached from six sites in `till-sale.ts` and one
+   does its one caller `priceStoredOrder`, which is reached from five sites in `till-sale.ts` and one
    inside `working-order.ts` itself. Named by function rather than by line, because the line numbers
    this item used to carry went stale when the file moved.
 2. **A concurrent-corrective race in `settleSale` is untranslated** — a raw `P0001` from the coverage
@@ -1839,6 +1852,26 @@ turns out to need a design moves to its track.
   `docs/developers/` files; it read nowhere after Copilot's review was switched off on 2026-09-06).
   Nothing guards that class, so a future rename needs the sweep done by hand:
   `grep -rn --include="*.md" waitron.instructions .` is the whole list.
+
+**Reads the database does not need:**
+
+- **`readImage` asks the database for the same row twice** (`packages/media/src/images.ts:199`). It
+  selects the image row, then calls `listImageUsages` only to take the `.length` of what comes back,
+  and that function opens by re-reading the same row by id just to get its filename. Handing it the
+  filename `readImage` already holds would turn five queries into four. Pre-existing: the same call
+  is on `main` with a tenant argument (`git show origin/main:packages/media/src/images.ts`, line
+  227). Found while reviewing `feat/drop-tenant-id`.
+- **Checking one product's translations takes a lock and re-reads the language configuration once
+  per value** (`packages/catalogue/src/content-languages.ts:13-27`). `validateContentTranslations`
+  takes the `content-languages` advisory lock and reads the one-row configuration on every call, and
+  callers call it inside loops: once per modifier choice
+  (`packages/catalogue/src/modifiers.ts:106-109`), once per variant
+  (`packages/catalogue/src/variants.ts:115`), and twice for a single unit create
+  (`packages/catalogue/src/units.ts:85-86`). That is the shape `CLAUDE.md` §3's "resolve shared
+  catalogue data once before a basket's line loop" rule exists to prevent. Pre-existing: the same
+  lock-then-read is in `main`'s copy of the file, with a tenant argument
+  (`git show origin/main:packages/catalogue/src/content-languages.ts`, lines 13-19); this branch only
+  dropped that argument. Found while reviewing `feat/drop-tenant-id`.
 
 **Payments:**
 
