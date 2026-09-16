@@ -358,7 +358,7 @@ What it left open:
 - **The Products list has the same styling bug, and nobody has fixed it.** #353's QA saw it on the
   real page, in code that branch did not touch (`apps/dashboard/src/widgets/product-list.ts`): product
   thumbnails render at their full natural size and allergen badges as unstyled text. Confirmed on
-  the real page again on 2026-09-16, during `feat/drop-tenant-id`'s run-it verification — the
+  the real page again on 2026-09-16, during #378's run-it verification — the
   thumbnails came out at the picture's own size (256×256 in the development data) instead of the
   40×40 the screen's own `.thumb` rule asks for. It predates that branch, which does not touch the
   file. The fixed sibling `apps/dashboard/src/screens/categories-screen.ts` shows the shape to copy
@@ -730,7 +730,7 @@ folds the price back, and the server refuses exactly one outright with
 an API caller cannot reach a state the editor will not allow. Two new shared primitives came out of
 it, `wt-disclosure` and `wt-price-input`. Pre-production, so the columns were dropped and recreated
 rather than migrated (CLAUDE.md §3): `packages/db` migrations `0030`–`0031`; the catalogue side was
-folded into the catalogue set's regenerated baseline when `feat/drop-tenant-id` rebased onto this work. [Developer guide](developers/products.md), [operator guide](products.md),
+folded into the catalogue set's regenerated baseline when #378 rebased onto this work. [Developer guide](developers/products.md), [operator guide](products.md),
 [design](superpowers/specs/2026-09-15-product-editor-rework-design.md),
 [plan](superpowers/plans/2026-09-15-product-editor-rework.md).
 
@@ -745,8 +745,8 @@ What it left open:
   `deleteImage` is not stopped by the database. **Next action:** decide whether the variant column
   should get the same foreign key the product column has.
 
-- ~~**This branch added tenant predicates that `feat/drop-tenant-id` deletes.**~~ ~~**A manager can
-  still clear another tenant's category routing.**~~ **Both settled on `feat/drop-tenant-id`, which
+- ~~**This branch added tenant predicates that #378 deletes.**~~ ~~**A manager can
+  still clear another tenant's category routing.**~~ **Both settled on #378, which
   rebased onto this work.** The tenant predicates this work added to `readLockedLines` and
   `readTabLines` (`apps/server/src/working-order.ts`) and to `setProductStation`/`setProductCourse`
   (`apps/server/src/kitchen.ts`) went with the column itself, and so did the probes written against
@@ -841,7 +841,7 @@ the application records. Neither obvious grep bounds it on its own: some comment
 suite obliquely rather than by filename, so searching for `sync-origin.test.ts` finds only part of
 them, while searching for "sync origin" also returns the MIRROR's sync origin — the primary's node id
 a replica pulls from — which is a live concept and must not be swept. All of them are on `main`
-today, so they predate `feat/drop-tenant-id`; found while reviewing that branch. Same treatment as
+today, so they predate #378; found while reviewing that branch. Same treatment as
 above — one pass, not a sweep.
 
 ### A1a. A foreign business customer needs an identifier-type decision
@@ -1493,7 +1493,7 @@ image constraints under *Detail → Box image*.
   `assertNoForeignTenant` (`packages/provisioning/src/tenant-guard.ts`), shared by all three
   taxpayer-creating paths.
 - **Every credential reader checks the fields it uses — decided 2026-09-15, code waits for
-  `feat/drop-tenant-id`.** Reading a credential (`getCredential`/`tryGetCredential`,
+  #378.** Reading a credential (`getCredential`/`tryGetCredential`,
   `packages/credentials/src/store.ts`) does not re-check it against `PURPOSES`, and stays that way:
   a secret saved under an older field list comes back with the new field missing. The owner chose
   this over refusing the read, because refusing would stop every venue holding that kind of secret
@@ -1504,7 +1504,7 @@ image constraints under *Detail → Box image*.
   `apps/server/src/node-identity.ts`'s `readNodeIdentityKey` casts a missing `privateKey`
   `as string`. Both should raise `server.credential_unusable` naming the field, as
   `apps/server/src/stripe-account.ts` does, each with a failing test first. The rewrite it was
-  waiting for is done: `feat/drop-tenant-id` took the tenant parameter out of both functions
+  waiting for is done: #378 took the tenant parameter out of both functions
   (2026-09-14), so this is unblocked. Unchanged by this decision: `rotate` re-checks every secret against the current list, so an out-of-date one
   still stops a key rotation until it is re-entered (commented above `rotateCredentials`).
 - **`CardProviderBuildDeps.nodeId` is dead weight — nothing reads it** (2026-09-16, traced through
@@ -1534,13 +1534,13 @@ image constraints under *Detail → Box image*.
 - **Two concurrent first provisions can still race past the venue guard** (2026-09-14). Both can
   pass the empty-`locations` check and carry on down the venue path; `apps/server/src/provision.ts`
   says in as many words that callers must serialise provisioning, and nothing enforces it — the
-  setup route's latch is process-local. `feat/drop-tenant-id` closed only the taxpayer row's part of
+  setup route's latch is process-local. #378 closed only the taxpayer row's part of
   it (the second insert now loses to the singleton primary key), and its test claims only that
   neither plan dies on a `tenants_*` key. **Next action:** decide where the lock belongs — a
   database advisory lock around guard→stamp→apply is the obvious home — and prove it with two
   concurrent provisions against a real database, not with the row-level check alone.
 - **A venue plan giving `dayCutover` as `HH:MM` would make an idempotent re-provision fail**
-  (found 2026-09-16 during `feat/drop-tenant-id`'s run-it verification; it predates that branch,
+  (found 2026-09-16 during #378's run-it verification; it predates that branch,
   which touches neither line). `packages/provisioning/src/venue-plan.ts` documents the field as
   `"HH:MM" or "HH:MM:SS"`, but on a re-run `packages/provisioning/src/venue-apply.ts` compares the
   stored value — read back from a `time` column, so always `HH:MM:SS` — against the plan's string
@@ -1552,7 +1552,7 @@ image constraints under *Detail → Box image*.
 - **A database ahead of the box's image gets a raw driver error, not the classified one**
   (2026-09-14). `assertNotAhead` (`provisioning.database_ahead`) runs AFTER `ensureInstance`
   migrates (`apps/server/src/node-entry.ts:483-505`), so an ahead database meets the migration first
-  and surfaces something like a `42710` from the driver. `feat/drop-tenant-id` regenerated eleven
+  and surfaces something like a `42710` from the driver. #378 regenerated eleven
   module baselines, so more existing databases are now ahead of an older image than before. A box
   operator has no terminal — the recovery page is their only window — so a raw driver error leaves
   them nothing to act on. **Next action:** run the ahead check before `ensureInstance` migrates, or
@@ -1672,7 +1672,7 @@ image constraints under *Detail → Box image*.
 - **`apps/server/src/boot.mirror.test.ts`'s adoption-pending case no longer has a negative control.**
   The case boots a mirror on an empty database and checks it serves a status surface. Its receipt
   used to be a foreign key from `persons` to `tenants` — remove the guard and the boot would die on
-  it — and `feat/drop-tenant-id` removed every foreign key to that table, so nothing now says what
+  it — and #378 removed every foreign key to that table, so nothing now says what
   would break if the guard went. The test's own comment says this plainly and claims nothing more.
   **Next action:** find a failure the empty database still causes without the guard, and name it;
   if there is none, say so in the comment and stop calling the case a guard test.
@@ -1712,7 +1712,7 @@ turns out to need a design moves to its track.
    `Promise.all` over one transaction: the rest read or delete files, call HTTP or storage
    services, close pools, or query through a pool.
 
-**Names left behind by the tenant-column removal (2026-09-14):**
+**Names left behind by the tenant-column removal (LANDED #378, 2026-09-16):**
 
 - **Thirteen index and key names still read `tenant`, and the columns they name are gone.** Read
   off a database built by applying every migration set in manifest order (2026-09-16), with each
@@ -1731,6 +1731,21 @@ turns out to need a design moves to its track.
   (`packages/identity/src/staff.ts` and `account-action.ts`), `persons_tenant_live_display_name_uq`
   and `persons_tenant_pending_email_uq` (`staff.ts`) — so renaming them changes behaviour and wants
   its own failing tests first. Only `persons_tenant_google_subject_uq` is declared and never matched.
+- **Three shipped error codes were deleted rather than deprecated, and the owner has not ruled on
+  it.** `stripe.tenant_mismatch`, `sumup.tenant_mismatch` and `payment.webhook_tenant_mismatch` went
+  when the condition they described — two taxpayers disagreeing — stopped being reachable. `CLAUDE.md`
+  §3 says a shipped code is never renamed and that you deprecate and add a sibling; this backlog says
+  removing one is the owner's call; and the nearest precedent, in a file #378 edited, keeps a retired
+  code registered with a note saying codes are never deleted once shipped. The case for deleting them
+  is that Waitron is pre-production with no deployed consumer reading them. **Next action:** the owner
+  decides. Re-registering all three as deprecated siblings is a small change either way round.
+- **The Stripe webhook endpoint still has to be repointed by hand, at Stripe.** #378 shortened the
+  address from `/webhooks/stripe/<an id>` to `/webhooks/stripe`, because the id in that path was
+  supplied by the caller and no longer labelled anything real. Nothing in this repository points at
+  the old address and a test pins that it now answers "not found" — but the endpoint registered in
+  the Stripe dashboard is outside this repository and will keep sending to the old one until somebody
+  changes it there. **Next action:** change it in the Stripe dashboard before any card payment is
+  taken through a Stripe webhook.
 - **`DrainResult.tenantsWithWork` is named for a count that can now only be 0 or 1.** One database
   files for one taxpayer (`packages/fiscal/src/backend.ts`), and the field reaches `apps/server`'s
   awaiting-certificate flag (`apps/server/src/pass.ts`, which keys off `> 0`) and `fiscal-none`. A
@@ -1762,7 +1777,7 @@ turns out to need a design moves to its track.
 **Dashboard, till and setup:**
 
 - **The Waitron wordmark is invisible on the dashboard banner in the dark theme** (seen 2026-09-14
-  on the dashboard alerts branch; confirmed 2026-09-16 during `feat/drop-tenant-id`'s run-it
+  on the dashboard alerts branch; confirmed 2026-09-16 during #378's run-it
   verification, which also settled that it predates both branches — `packages/ui/brand/waitron-lockup.svg`
   last changed in #284, on `main`, and neither branch touches it). One file is served to both
   themes, as an `<img>`, so it cannot follow the theme: the wordmark's letters are painted
@@ -1770,7 +1785,7 @@ turns out to need a design moves to its track.
   where 4.5 is the readable minimum. **Next action:** give the lockup a light and a dark variant, or
   paint the wordmark with a token by inlining the SVG instead of loading it as an image.
 - **The Sales and takings screen reads zero between midnight and the venue's business-day cutover,
-  while Overview shows the day's sales** (found 2026-09-16 during `feat/drop-tenant-id`'s run-it
+  while Overview shows the day's sales** (found 2026-09-16 during #378's run-it
   verification; it predates that branch, which does not touch either screen). The screen seeds its
   date range from `today()` (`apps/dashboard/src/date-utils.ts`), which is the UTC calendar day, and
   hands that date straight to the daily close's `businessDay` parameter. But a sale rung at 01:00
@@ -1796,7 +1811,7 @@ turns out to need a design moves to its track.
   wins over the fallback and, matching no registered message, shows the generic sentence. The
   passkey button's `catch` (`:672-674`) has the same flaw. **Fix direction:** the automatic attempt stays silent on every browser-side failure, and
   `codeOf` accepts only a string code (check its other callers first). Seen again on 2026-09-16
-  while running `feat/drop-tenant-id` for real: the red banner is there on a clean first load of the
+  while running #378 for real: the red banner is there on a clean first load of the
   login page, before anyone types anything. It predates that branch — the swallow list it comes from
   is on `main`.
 - **Timestamps across the printers and devices screens show UTC** — `formatIsoMinute`
@@ -1860,7 +1875,7 @@ turns out to need a design moves to its track.
   and that function opens by re-reading the same row by id just to get its filename. Handing it the
   filename `readImage` already holds would turn five queries into four. Pre-existing: the same call
   is on `main` with a tenant argument (`git show origin/main:packages/media/src/images.ts`, line
-  227). Found while reviewing `feat/drop-tenant-id`.
+  227). Found while reviewing #378.
 - **Checking one product's translations takes a lock and re-reads the language configuration once
   per value** (`packages/catalogue/src/content-languages.ts:13-27`). `validateContentTranslations`
   takes the `content-languages` advisory lock and reads the one-row configuration on every call, and
@@ -1871,7 +1886,7 @@ turns out to need a design moves to its track.
   catalogue data once before a basket's line loop" rule exists to prevent. Pre-existing: the same
   lock-then-read is in `main`'s copy of the file, with a tenant argument
   (`git show origin/main:packages/catalogue/src/content-languages.ts`, lines 13-19); this branch only
-  dropped that argument. Found while reviewing `feat/drop-tenant-id`.
+  dropped that argument. Found while reviewing #378.
 
 **Payments:**
 
@@ -2001,7 +2016,8 @@ From the 2026-09-05 whole-project design review and since. They supersede older 
 conflict.
 
 - **One tenant per database everywhere, the cloud included, and the schema carries no tenant
-  column** (2026-09-14). A tenant is one taxpayer (`country` + `tax_id`), held as the single row of
+  column** (2026-09-14; the column removal LANDED #378, 2026-09-16). A tenant is one taxpayer
+  (`country` + `tax_id`), held as the single row of
   `tenants` with its `id` pinned to 1, owning all of its locations. Nothing filters a query by a
   tenant; a query that wants "this tenant's rows" reads the table. Spec:
   [drop-tenant-id](superpowers/specs/2026-09-14-drop-tenant-id-design.md); guard
