@@ -21,4 +21,15 @@ describe.each(["light", "dark"] as const)("allergen-dietary-picker a11y (%s them
     );
     await expectNoA11yViolations(host);
   });
+
+  it.each(["allergens", "dietary"] as const)("renders the %s editor accessibly", async (field) => {
+    const { el, host } = await mountWidget<AllergenDietaryPicker>(
+      "dashboard-allergen-dietary-picker",
+      { value: { allergens: ["milk"], dietary: ["vegan"] } },
+      theme,
+    );
+    el.shadowRoot!.querySelector<HTMLElement>(`[data-test="edit-${field}"]`)!.click();
+    await el.updateComplete;
+    await expectNoA11yViolations(host);
+  });
 });

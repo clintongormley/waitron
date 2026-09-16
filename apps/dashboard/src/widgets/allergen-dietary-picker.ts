@@ -1,6 +1,7 @@
 import { LitElement, css, html } from "lit";
-import { customElement, property } from "lit/decorators.js";
+import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
+import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import { ALLERGEN_CODES, allergenName } from "../i18n/domain.js";
 import { DIETARY_SUITABILITY, type DietarySuitability } from "../api/client.js";
@@ -31,34 +32,28 @@ export class AllergenDietaryPicker extends LitElement {
         display: grid;
         gap: var(--wt-space-3);
       }
-      fieldset {
+      .field {
         display: grid;
         gap: var(--wt-space-2);
-        margin: 0;
         padding: var(--wt-space-3);
         border: 1px solid var(--wt-color-border);
         border-radius: var(--wt-radius-md);
       }
-      legend {
-        padding-inline: var(--wt-space-1);
+      .label {
         font-weight: var(--wt-font-weight-bold);
       }
-      .diet {
+      .summary {
         display: flex;
         align-items: center;
+        justify-content: space-between;
         gap: var(--wt-space-2);
-        font: inherit;
-      }
-      .diet input {
-        min-width: var(--wt-tap-min);
-        min-height: var(--wt-tap-min);
-        accent-color: var(--wt-color-primary);
       }
     `,
   ];
 
   @property({ type: Boolean }) busy = false;
   @property({ attribute: false }) value: AllergenDietaryValue = EMPTY;
+  @state() private editing: "allergens" | "dietary" | null = null;
 
   #emit(next: AllergenDietaryValue): void {
     this.value = next;
@@ -71,6 +66,29 @@ export class AllergenDietaryPicker extends LitElement {
     return ALLERGEN_CODES.map((code) => ({ value: code, label: allergenName(code) }));
   }
 
+  #dietaryOptions() {
+    return DIETARY_SUITABILITY.map((value) => ({
+      value,
+      label: t(`editor.diet.${value}`),
+    }));
+  }
+
+  #summary<T extends string>(values: readonly T[], label: (value: T) => string): string {
+    return values.length ? values.map(label).join(", ") : t("modifiers.none_selected");
+  }
+
+  async #edit(field: "allergens" | "dietary", event: Event): Promise<void> {
+    event.stopPropagation();
+    if (this.busy) return;
+    this.editing = field;
+    await this.updateComplete;
+    this.shadowRoot?.querySelector<HTMLElement>(`[data-test="${field}"]`)?.focus();
+  }
+
+  #finishEditing(field: "allergens" | "dietary"): void {
+    if (this.editing === field) this.editing = null;
+  }
+
   #onAllergens(event: CustomEvent<{ values: string[] }>): void {
     // wt-combobox already stops its own source event; stop this re-dispatched one before we emit ours
     // so a consumer never sees the inner combobox's wt-change alongside the widget's.
@@ -78,15 +96,9 @@ export class AllergenDietaryPicker extends LitElement {
     this.#emit({ ...this.value, allergens: event.detail.values });
   }
 
-  #onDietary(event: Event): void {
-    // The native checkbox change does not compose out of the shadow root, but stopping it keeps the
-    // "re-emit exactly one wt-change" contract explicit rather than relying on that detail.
+  #onDietary(event: CustomEvent<{ values: string[] }>): void {
     event.stopPropagation();
-    const chosen = new Set(this.value.dietary);
-    const input = event.target as HTMLInputElement;
-    if (input.checked) chosen.add(input.value as DietarySuitability);
-    else chosen.delete(input.value as DietarySuitability);
-    // Keep the canonical DIETARY_SUITABILITY order so the emitted list is deterministic.
+    const chosen = new Set(event.detail.values);
     this.#emit({
       ...this.value,
       dietary: DIETARY_SUITABILITY.filter((label) => chosen.has(label)),
@@ -95,31 +107,70 @@ export class AllergenDietaryPicker extends LitElement {
 
   override render() {
     return html`
-      <wt-combobox
-        multiple
-        data-test="allergens"
-        label=${t("modifiers.allergens")}
-        ?disabled=${this.busy}
-        .options=${this.#allergenOptions()}
-        .values=${this.value.allergens}
-        @wt-change=${(e: CustomEvent<{ values: string[] }>) => this.#onAllergens(e)}
-      ></wt-combobox>
-      <fieldset data-test="dietary">
-        <legend>${t("modifiers.dietary_preferences")}</legend>
-        ${DIETARY_SUITABILITY.map(
-          (label) =>
-            html`<label class="diet"
-              ><input
-                type="checkbox"
-                name=${`diet-${label}`}
-                value=${label}
+      <div class="field" role="group" aria-labelledby="allergens-label">
+        <span id="allergens-label" class="label">${t("modifiers.allergens")}</span>
+        ${
+          this.editing === "allergens"
+            ? html`<wt-combobox
+                multiple
+                data-test="allergens"
+                name="allergens"
+                aria-label=${t("modifiers.allergens")}
                 ?disabled=${this.busy}
-                .checked=${this.value.dietary.includes(label)}
-                @change=${(e: Event) => this.#onDietary(e)}
-              /><span>${t(`editor.diet.${label}`)}</span></label
-            >`,
-        )}
-      </fieldset>
+                .options=${this.#allergenOptions()}
+                .values=${this.value.allergens}
+                .countLabel=${(count: number) =>
+                  t("modifiers.allergens_selected_count").replace("{count}", String(count))}
+                @wt-change=${(e: CustomEvent<{ values: string[] }>) => this.#onAllergens(e)}
+                @focusout=${() => this.#finishEditing("allergens")}
+              ></wt-combobox>`
+            : html`<div class="summary">
+                <span data-test="allergens-summary"
+                  >${this.#summary(this.value.allergens, (code) => allergenName(code))}</span
+                >
+                <wt-button
+                  data-test="edit-allergens"
+                  variant="ghost"
+                  .disabled=${this.busy}
+                  aria-label=${`${t("action.edit")}: ${t("modifiers.allergens")}`}
+                  @click=${(event: Event) => void this.#edit("allergens", event)}
+                  >${t("action.edit")}</wt-button
+                >
+              </div>`
+        }
+      </div>
+      <div class="field" role="group" aria-labelledby="dietary-label">
+        <span id="dietary-label" class="label">${t("modifiers.dietary_preferences")}</span>
+        ${
+          this.editing === "dietary"
+            ? html`<wt-combobox
+                multiple
+                data-test="dietary"
+                name="dietary-preferences"
+                aria-label=${t("modifiers.dietary_preferences")}
+                ?disabled=${this.busy}
+                .options=${this.#dietaryOptions()}
+                .values=${this.value.dietary}
+                .countLabel=${(count: number) =>
+                  t("modifiers.dietary_selected_count").replace("{count}", String(count))}
+                @wt-change=${(e: CustomEvent<{ values: string[] }>) => this.#onDietary(e)}
+                @focusout=${() => this.#finishEditing("dietary")}
+              ></wt-combobox>`
+            : html`<div class="summary">
+                <span data-test="dietary-summary"
+                  >${this.#summary(this.value.dietary, (value) => t(`editor.diet.${value}`))}</span
+                >
+                <wt-button
+                  data-test="edit-dietary"
+                  variant="ghost"
+                  .disabled=${this.busy}
+                  aria-label=${`${t("action.edit")}: ${t("modifiers.dietary_preferences")}`}
+                  @click=${(event: Event) => void this.#edit("dietary", event)}
+                  >${t("action.edit")}</wt-button
+                >
+              </div>`
+        }
+      </div>
     `;
   }
 }

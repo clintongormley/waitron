@@ -63,6 +63,7 @@ it("emits an extras choice with names, price and effects, and validates the pric
   const el = await mountChoice({ kind: "extras" });
   const save = vi.fn();
   el.addEventListener("wt-choice-save", save);
+  expect(el.shadowRoot!.querySelector("details")!.open).toBe(true);
   await click(el, "choice-save");
   expect(save).not.toHaveBeenCalled(); // name required in default language
   await change(el, "name-es", "Queso");

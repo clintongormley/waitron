@@ -22,6 +22,7 @@ import { codeMessage, codeOf } from "../i18n/codes.js";
 /** A product or menu item that uses a modifier, as `modifierDependants` returns it. Both the
  * row-click usage modal and the delete confirmation list these. */
 type Dependant = { id: string; name: string };
+type UsageDependant = Dependant & { type: "product" | "menu" };
 
 @customElement("dashboard-modifiers-screen")
 export class ModifiersScreen extends LitElement {
@@ -236,8 +237,16 @@ export class ModifiersScreen extends LitElement {
   #name(modifier: Modifier): string {
     return resolveEnabledContentText(modifier.name, currentLocale(), currentContentLanguages());
   }
-  /** The single Name column behind every dependant table (the usage modal and the delete preview),
-   * searching and sorting on the staff name so a product is found by what the dashboard calls it. */
+  #choiceNames(modifier: Modifier): string {
+    if (modifier.type !== "extras" && modifier.type !== "options") return "";
+    return modifier.choices
+      .map((choice) =>
+        resolveEnabledContentText(choice.name, currentLocale(), currentContentLanguages()),
+      )
+      .join(", ");
+  }
+  /** The single Name column behind each delete-preview table, searching and sorting on the staff
+   * name so a product is found by what the dashboard calls it. */
   #dependantColumns(): DataTableColumn<Dependant>[] {
     return [
       {
@@ -249,22 +258,48 @@ export class ModifiersScreen extends LitElement {
       },
     ];
   }
-  /** A read-only table of the products or menu items that use a modifier — shared by the usage
-   * modal (row click) and the delete confirmation's cascade preview, so both match the categories
-   * screen's product tables. */
+  #usageColumns(): DataTableColumn<UsageDependant>[] {
+    return [
+      {
+        key: "name",
+        label: t("modifiers.name"),
+        cell: (entry) => entry.name,
+        searchValue: (entry) => entry.name,
+        sortValue: (entry) => entry.name,
+      },
+      {
+        key: "type",
+        label: t("modifiers.type"),
+        cell: (entry) => t(`modifiers.usage_type.${entry.type}`),
+        sortValue: (entry) => t(`modifiers.usage_type.${entry.type}`),
+        filter: {
+          label: t("modifiers.type"),
+          allLabel: t("modifiers.filter_usage_type_all"),
+          value: (entry) => entry.type,
+          options: (["product", "menu"] as const).map((type) => ({
+            value: type,
+            label: t(`modifiers.usage_type.${type}`),
+          })),
+        },
+      },
+    ];
+  }
+  /** A read-only table of products or menu items in the delete confirmation's cascade preview. */
   #dependantsTable(
     testId: string,
     label: string,
     viewKey: string,
     emptyMessage: string,
+    searchLabel: string,
+    noMatchesMessage: string,
     rows: Dependant[],
   ) {
     return html`<wt-data-table
       data-test=${testId}
       aria-label=${label}
       searchable
-      searchLabel=${t("modifiers.search_products")}
-      noMatchesMessage=${t("modifiers.products_no_matches")}
+      searchLabel=${searchLabel}
+      noMatchesMessage=${noMatchesMessage}
       viewKey=${viewKey}
       .rows=${rows}
       .columns=${this.#dependantColumns()}
@@ -272,9 +307,9 @@ export class ModifiersScreen extends LitElement {
       .emptyMessage=${emptyMessage}
     ></wt-data-table>`;
   }
-  /** The usage modal's body: a spinner until `#loadUsage` resolves, then the products that use the
-   * modifier and — when there are any — the menu items too. A failed fetch says so instead, because
-   * an empty products table would read as "nothing uses this". */
+  /** The usage modal's body: a spinner until `#loadUsage` resolves, then one filterable table for
+   * every product and menu item that uses the modifier. A failed fetch says so instead, because an
+   * empty table would read as "nothing uses this". */
   #renderUsage() {
     if (this.usageError)
       return html`<p class="error" data-test="usage-error" role="alert">
@@ -282,24 +317,24 @@ export class ModifiersScreen extends LitElement {
       </p>`;
     const usage = this.usage;
     if (!usage) return html`<wt-spinner></wt-spinner>`;
-    return html`${this.#dependantsTable(
-      "modifier-products",
-      t("modifiers.products_modal"),
-      "waitron.modifiers.usage.products.table",
-      t("modifiers.no_products"),
-      usage.products,
-    )}${
-      usage.menus.length > 0
-        ? html`<p id="usage-menus-label">${t("modifiers.menus")}</p>
-            ${this.#dependantsTable(
-              "modifier-usage-menus",
-              t("modifiers.menus"),
-              "waitron.modifiers.usage.menus.table",
-              t("modifiers.no_menus"),
-              usage.menus,
-            )}`
-        : nothing
-    }`;
+    const rows: UsageDependant[] = [
+      ...usage.products.map((entry) => ({ ...entry, type: "product" as const })),
+      ...usage.menus.map((entry) => ({ ...entry, type: "menu" as const })),
+    ];
+    return html`<wt-data-table
+      data-test="modifier-usage"
+      aria-label=${t("modifiers.products_modal")}
+      searchable
+      searchLabel=${t("modifiers.search_usage")}
+      noMatchesMessage=${t("modifiers.usage_no_matches")}
+      viewKey="waitron.modifiers.usage.table"
+      sortKey="name"
+      sortDirection="ascending"
+      .rows=${rows}
+      .columns=${this.#usageColumns()}
+      .rowKey=${(entry: UsageDependant) => `${entry.type}:${entry.id}`}
+      .emptyMessage=${t("modifiers.no_usage")}
+    ></wt-data-table>`;
   }
   /** The single red warning at the top of the delete confirmation: one paragraph naming every
    * cascade consequence, space-joined from the sentences that apply. Only called when there IS
@@ -347,6 +382,8 @@ export class ModifiersScreen extends LitElement {
             t("modifiers.affected_products"),
             "waitron.modifiers.delete.products.table",
             t("modifiers.no_products"),
+            t("modifiers.search_products"),
+            t("modifiers.products_no_matches"),
             dependants.products,
           )
         : nothing
@@ -357,6 +394,8 @@ export class ModifiersScreen extends LitElement {
             t("modifiers.affected_menus"),
             "waitron.modifiers.delete.menus.table",
             t("modifiers.no_menus"),
+            t("modifiers.search_menus"),
+            t("modifiers.menus_no_matches"),
             dependants.menus,
           )
         : nothing
@@ -401,18 +440,15 @@ export class ModifiersScreen extends LitElement {
       {
         key: "choices",
         label: t("modifiers.choices"),
-        sortValue: (modifier) =>
-          modifier.type === "extras" || modifier.type === "options" ? modifier.choices.length : 0,
-        cell: (modifier) =>
-          modifier.type === "extras" || modifier.type === "options"
-            ? String(modifier.choices.length)
-            : "",
+        searchValue: (modifier) => this.#choiceNames(modifier),
+        sortValue: (modifier) => this.#choiceNames(modifier),
+        cell: (modifier) => this.#choiceNames(modifier),
       },
       {
         key: "actions",
-        label: t("action.edit"),
+        label: t("modifiers.actions"),
         cell: (modifier) =>
-          html`<wt-row-actions label=${`${t("action.edit")}: ${this.#name(modifier)}`}
+          html`<wt-row-actions label=${`${t("modifiers.actions")}: ${this.#name(modifier)}`}
             ><wt-button
               align="start"
               variant="ghost"

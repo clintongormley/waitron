@@ -90,11 +90,14 @@ it("configures the table to remember its view and default to Name ascending", as
 it("has no modifier-level Available column", async () => {
   const el = await mount();
   const table = el.shadowRoot!.querySelector("wt-data-table")! as unknown as {
-    columns: { key: string }[];
+    columns: { key: string; label: string }[];
   };
   expect(table.columns.map((c) => c.key)).toEqual(["name", "type", "choices", "actions"]);
+  expect(table.columns.find((column) => column.key === "actions")?.label).toBe(
+    t("modifiers.actions"),
+  );
 });
-it("shows the number of choices for an extras or options modifier", async () => {
+it("shows searchable, sortable choice names for an extras or options modifier", async () => {
   const extras: Modifier = {
     id: "x",
     type: "extras",
@@ -126,9 +129,20 @@ it("shows the number of choices for an extras or options modifier", async () => 
     ],
   };
   const el = await mount(api({ listModifiers: vi.fn().mockResolvedValue([extras]) }));
-  const table = el.shadowRoot!.querySelector("wt-data-table")!;
+  const table = el.shadowRoot!.querySelector("wt-data-table")! as unknown as {
+    columns: {
+      key: string;
+      searchValue: (value: Modifier) => string;
+      sortValue: (value: Modifier) => string;
+    }[];
+    updateComplete: Promise<unknown>;
+    shadowRoot: ShadowRoot;
+  };
   await table.updateComplete;
-  await vi.waitFor(() => expect(table.shadowRoot!.textContent).toContain("2"));
+  await vi.waitFor(() => expect(table.shadowRoot.textContent).toContain("Queso, Jamón"));
+  const choices = table.columns.find((column) => column.key === "choices")!;
+  expect(choices.searchValue(extras)).toBe("Queso, Jamón");
+  expect(choices.sortValue(extras)).toBe("Queso, Jamón");
 });
 it("keeps failed saves in the form and closes after successful writes even if reload fails", async () => {
   const client = api({
@@ -247,10 +261,24 @@ it("lists the affected products and menu items and enables delete", async () => 
   );
   // The affected products and menu items now render in a wt-data-table (matching the categories
   // delete dialog), so their names live in the table's shadow root, not the host's light DOM.
-  const deleteProducts = dialog.querySelector('[data-test="modifier-delete-products"]')!;
-  const deleteMenus = dialog.querySelector('[data-test="modifier-delete-menus"]')!;
+  const deleteProducts = dialog.querySelector(
+    '[data-test="modifier-delete-products"]',
+  )! as unknown as {
+    searchLabel: string;
+    noMatchesMessage: string;
+    shadowRoot: ShadowRoot;
+  };
+  const deleteMenus = dialog.querySelector('[data-test="modifier-delete-menus"]')! as unknown as {
+    searchLabel: string;
+    noMatchesMessage: string;
+    shadowRoot: ShadowRoot;
+  };
   await vi.waitFor(() => expect(deleteProducts.shadowRoot!.textContent).toContain("Café"));
   await vi.waitFor(() => expect(deleteMenus.shadowRoot!.textContent).toContain("Desayuno"));
+  expect(deleteProducts.searchLabel).toBe(t("modifiers.search_products"));
+  expect(deleteProducts.noMatchesMessage).toBe(t("modifiers.products_no_matches"));
+  expect(deleteMenus.searchLabel).toBe(t("modifiers.search_menus"));
+  expect(deleteMenus.noMatchesMessage).toBe(t("modifiers.menus_no_matches"));
   expect(dialog.querySelector('[data-test="orders-block"]')).toBeNull();
   expect(confirmDelete(el).disabled).toBe(false);
 });
@@ -494,10 +522,9 @@ it("lists a field's server error once in the summary and shows it beside that fi
     (form.shadowRoot!.querySelector('[name="name-es"]') as unknown as { error: string }).error,
   ).toBe(message);
 });
-// Clicking a modifier's name opens a read-only "products that use this modifier" modal, listing the
-// products and menu items the shared `modifierDependants` query returns — mirroring the categories
-// screen's products modal. These replace the old read-only details modal (removed with its
-// choice-summary panel).
+// Clicking a modifier's name opens a read-only "products that use this modifier" modal. Products
+// and menu items share one table; its Type filter keeps the distinction without splitting one list
+// across two sections.
 async function openProducts(el: ModifiersScreen, modifier: Modifier) {
   const table = el.shadowRoot!.querySelector("wt-data-table")!;
   await table.updateComplete;
@@ -509,23 +536,7 @@ async function openProducts(el: ModifiersScreen, modifier: Modifier) {
     open: boolean;
   };
 }
-it("opens a products modal when a modifier row is clicked", async () => {
-  const client = api({
-    getModifierDependants: vi.fn().mockResolvedValue({
-      products: [{ id: "p1", name: "Hamburguesa" }],
-      menus: [],
-      orders: 0,
-    }),
-  });
-  const el = await mount(client);
-  const modal = await openProducts(el, modifier);
-  expect(modal.open).toBe(true);
-  expect(client.getModifierDependants).toHaveBeenCalledWith("m");
-  const products = el.shadowRoot!.querySelector('[data-test="modifier-products"]')!;
-  expect(products).not.toBeNull();
-  await vi.waitFor(() => expect(products.shadowRoot!.textContent).toContain("Hamburguesa"));
-});
-it("lists the menu items using a modifier in the products modal", async () => {
+it("combines products and menu items in one searchable, filterable, sortable table", async () => {
   const client = api({
     getModifierDependants: vi.fn().mockResolvedValue({
       products: [{ id: "p1", name: "Hamburguesa" }],
@@ -534,9 +545,39 @@ it("lists the menu items using a modifier in the products modal", async () => {
     }),
   });
   const el = await mount(client);
-  await openProducts(el, modifier);
-  const menus = el.shadowRoot!.querySelector('[data-test="modifier-usage-menus"]')!;
-  await vi.waitFor(() => expect(menus.shadowRoot!.textContent).toContain("Menú del día"));
+  const modal = await openProducts(el, modifier);
+  expect(modal.open).toBe(true);
+  expect(client.getModifierDependants).toHaveBeenCalledWith("m");
+  const usage = el.shadowRoot!.querySelector('[data-test="modifier-usage"]')! as unknown as {
+    rows: { id: string; name: string; type: string }[];
+    columns: { key: string; sortValue?: unknown; filter?: unknown }[];
+    searchable: boolean;
+    searchLabel: string;
+    noMatchesMessage: string;
+    sortKey: string;
+    sortDirection: string;
+    shadowRoot: ShadowRoot;
+  };
+  await vi.waitFor(() => expect(usage.shadowRoot.textContent).toContain("Hamburguesa"));
+  expect(usage.shadowRoot.textContent).toContain("Menú del día");
+  expect(usage.rows).toEqual([
+    { id: "p1", name: "Hamburguesa", type: "product" },
+    { id: "mn1", name: "Menú del día", type: "menu" },
+  ]);
+  expect(usage.searchable).toBe(true);
+  expect(usage.searchLabel).toBe(t("modifiers.search_usage"));
+  expect(usage.noMatchesMessage).toBe(t("modifiers.usage_no_matches"));
+  expect(usage.sortKey).toBe("name");
+  expect(usage.sortDirection).toBe("ascending");
+  expect(usage.columns.find((column) => column.key === "name")?.sortValue).toBeTypeOf("function");
+  expect(usage.columns.find((column) => column.key === "type")?.filter).toBeTruthy();
+  const typeFilter = usage.shadowRoot.querySelector<HTMLSelectElement>('[name="type-filter"]')!;
+  typeFilter.value = "menu";
+  typeFilter.dispatchEvent(new Event("change", { bubbles: true }));
+  await vi.waitFor(() => expect(usage.shadowRoot.textContent).not.toContain("Hamburguesa"));
+  expect(usage.shadowRoot.textContent).toContain("Menú del día");
+  expect(el.shadowRoot!.querySelector('[data-test="modifier-products"]')).toBeNull();
+  expect(el.shadowRoot!.querySelector('[data-test="modifier-usage-menus"]')).toBeNull();
 });
 it("shows a spinner then Close in the products modal, and closes it", async () => {
   let resolve!: (value: ModifierDependants) => void;
