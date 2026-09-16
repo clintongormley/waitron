@@ -34,7 +34,7 @@ afterEach(() => {
 });
 
 // Force ONE duty's snapshot read to throw, leaving every other duty's read untouched. A skip is any
-// (tenant, duty) pair whose processing throws in runDue's outer try, and the snapshot read is the
+// duty whose processing throws in runDue's outer try, and the snapshot read is the
 // earliest such point — precisely the infrastructure read failure that `skipped` documents.
 function failSnapshotFor(dutyName: string): void {
   const real = store.readSnapshot;
@@ -176,7 +176,7 @@ describe("runDue", () => {
 
   // An infrastructure failure has no ledger row to carry it — the claim is what would have created
   // one. Reporting it is the difference between "nothing was due" and "we never found out".
-  it("reports a (tenant, duty) whose claim failed, rather than swallowing it", async () => {
+  it("reports a duty whose claim failed, rather than swallowing it", async () => {
     const duty = new FakeDuty();
     // The snapshot read succeeds and derives a gap; only the claim that would record it throws.
     vi.spyOn(store, "claimGap").mockRejectedValue(new Error("claim failed"));
@@ -329,7 +329,7 @@ describe("runDue", () => {
   // and every existing test would stay green. Two duties, not one, so the mutation is actually
   // distinguishable: with `=`, the second duty processed would silently overwrite the first's
   // contribution instead of adding to it.
-  it("accumulates beyondHorizon across (tenant, duty) pairs onto TickResult, rather than overwriting it", async () => {
+  it("accumulates beyondHorizon across duties onto TickResult, rather than overwriting it", async () => {
     const one = new FakeDuty("duty.one");
     const two = new FakeDuty("duty.two");
     // Each duty's OWN earliest-recorded period, far enough in the past that a later, narrower

@@ -304,7 +304,7 @@ async function seedVenue(db: Database): Promise<Venue> {
       sql`insert into nodes (location_id, name) values (${locationId}, ${`Nodo ${i}`}) returning id`,
     );
     const nodeId = brandNodeId(node.rows[0]!.id);
-    // Codes are unique per (tenant, node, code), so 'A'/'R' can repeat across the two nodes.
+    // Codes are unique per (node_id, code), so 'A'/'R' can repeat across the two nodes.
     const series = await db.execute<{ id: string }>(
       sql`insert into invoice_series (node_id, code) values (${nodeId}, 'A') returning id`,
     );

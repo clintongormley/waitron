@@ -150,7 +150,7 @@ describe("createJoinRequest", () => {
   it("refuses to mint the second DECOY once every other value is already someone's real number (rule: decoys avoid existing reals)", async () => {
     const venue = await setupVenue(suite.admin);
     // 98 of the 100 two-digit values are already reals, seeded under a DIFFERENT kind so the
-    // per-(tenant, kind) cap (10) never trips on them — pendingNumbers reads across BOTH kinds
+    // per-KIND cap (10) never trips on them — pendingNumbers reads across BOTH kinds
     // (design §1.2 rule 3), so they still count toward this request's forbidden set. "00" and "01"
     // are the only two values left free.
     await suite.admin.execute(sql`
@@ -169,7 +169,7 @@ describe("createJoinRequest", () => {
     });
   });
 
-  it("refuses past the cap, per (tenant, kind)", async () => {
+  it("refuses past the cap, per kind", async () => {
     const venue = await setupVenue(suite.admin);
     await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
@@ -185,7 +185,7 @@ describe("createJoinRequest", () => {
           label: "one too many",
         }),
       ).rejects.toMatchObject({ code: "device.join_full" });
-      // The OTHER kind is unaffected — the cap is per (tenant, kind).
+      // The OTHER kind is unaffected — the cap is per KIND.
       await expect(
         createJoinRequest(tx, venue.cfg, {
           kind: "print_agent",
@@ -299,7 +299,7 @@ describe("createJoinRequest — per-tenant serialization of number allocation an
 
   it("nine pending plus two overlapping creations never exceed the cap; the loser gets device.join_full", async () => {
     const venue = await setupVenue(suite.admin);
-    // Seed nine pending (tenant, device) directly — one shy of the cap. Reals 01..09, empty decoys.
+    // Seed nine pending `device` requests directly — one shy of the cap. Reals 01..09, empty decoys.
     await suite.admin.execute(sql`
       insert into join_requests (location_id, kind, label, token_hash, verification_number, decoy_numbers)
       select ${venue.cfg.locationId}, 'device'::join_request_kind,

@@ -80,7 +80,7 @@ describe("verifyDailyCloseChain — the chain re-walk", () => {
     expect(await verify()).toEqual({ ok: true });
   });
 
-  it("passes a (tenant, node) that has never closed (vacuously ok)", async () => {
+  it("passes a node that has never closed (vacuously ok)", async () => {
     expect(await verify()).toEqual({ ok: true });
   });
 

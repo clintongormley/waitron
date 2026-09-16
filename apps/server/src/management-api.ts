@@ -289,7 +289,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "receipt.invalid": 400,
   // Canvas CRUD + tenant theme (Task 11). A GET-by-id (or a malformed id screened to it by
   // `requireCanvasId`) that names no canvas the tenant owns → 404 (`canvas.not_found`); a duplicate
-  // canvas name collides on the `(tenant, name)` unique, translated from 23505 by `canvas-store.ts`
+  // canvas name collides on the `(name)` unique, translated from 23505 by `canvas-store.ts`
   // → 409 (`canvas.name_taken`), the same conflict shape a taken station/zone name has. An invalid
   // `definition`/`theme` payload is refused by the store's validator → 400 (`canvas.invalid` /
   // `theme.invalid`), the same family as the layout/receipt validation faults above. The `?? 400`
@@ -305,14 +305,14 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "shared.invalid_id": 400,
   // Service-status config CRUD (TS-2). An unknown status id (or a malformed one screened to it at the
   // PATCH/DELETE routes) names no status → 404 (`status.not_found`); a duplicate label collides on the
-  // `(tenant, label)` unique → 409 (`status.label_taken`), the same conflict shape a taken table label
+  // `(label)` unique → 409 (`status.label_taken`), the same conflict shape a taken table label
   // has on the till surface. (`status.inactive` is a till-surface set-time fault, not reachable on this
   // config surface, so it is deliberately absent here.)
   "status.not_found": 404,
   "status.label_taken": 409,
   // Floor-zone + table config CRUD (FP-1). An unknown zone/table id (or a malformed one screened to it
   // at the PATCH/DELETE routes) names no row → 404 (`zone.not_found` / `table.not_found`); a duplicate
-  // name/label collides on the `(tenant, location, …)` unique → 409 (`zone.name_taken` /
+  // name/label collides on the `(location, …)` unique → 409 (`zone.name_taken` /
   // `table.label_taken`), the same conflict shape a taken status label has. `zone.not_found` is ALSO
   // surfaced by the table routes when a `zoneId` names no `floor_zones` row (the FK, mapped in
   // the verb). The code's own semantics already imply these statuses, but they are listed explicitly as
@@ -330,7 +330,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "placement.invalid": 400,
   // Kitchen-station config CRUD (KDS-1). An unknown station id (or a malformed one screened to it at the
   // PATCH/DELETE/default routes), OR a deactivated station named as a routing/default target, names no
-  // LIVE station → 404 (`station.not_found`); a duplicate name collides on the `(tenant, location, name)`
+  // LIVE station → 404 (`station.not_found`); a duplicate name collides on the `(location, name)`
   // unique → 409 (`station.name_taken`), the same conflict shape a taken zone name has. (`station.no_default`
   // is a FIRE-time code on the till surface, never thrown by these config routes, so it is absent here.)
   "station.not_found": 404,
@@ -338,7 +338,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // Kitchen-course config CRUD (KDS-2, design §3a). An unknown course id (or a malformed one screened to
   // it at the PATCH/DELETE routes), OR a retired/cross-venue course named as a product's default route,
   // names no LIVE course → 404 (`course.not_found`); a duplicate name collides on the
-  // `(tenant, location, name)` unique → 409 (`course.name_taken`), the same conflict shape a taken
+  // `(location, name)` unique → 409 (`course.name_taken`), the same conflict shape a taken
   // station name has. Courses are a management/config concern, so both codes are mapped HERE — beside the
   // station codes above; `course.not_found` is ALSO mapped on the till surface (`till-api.ts`), where the
   // OPERATIONAL fire route surfaces it. The code's own semantics imply these statuses, but they are
@@ -347,7 +347,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "course.name_taken": 409,
   // Device-profile CRUD (Task 4, design 2026-09-05 §5.1). A GET/PUT/DELETE-by-id (or a malformed id
   // screened to it by `requireDeviceProfileId`) that names no profile the tenant owns → 404
-  // (`device_profile.not_found`); a duplicate profile name collides on the `(tenant, name)` unique,
+  // (`device_profile.not_found`); a duplicate profile name collides on the `(name)` unique,
   // translated from 23505 by `device-profile-store.ts` → 409 (`device_profile.name_taken`), the same
   // conflict shape a taken canvas name has. An unknown capability flag (fail-closed `validateCapabilities`)
   // OR a `canvasId` naming no canvas (the FK 23503) is refused → 400 (`device_profile.invalid`,

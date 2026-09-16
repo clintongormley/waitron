@@ -84,7 +84,7 @@ export interface DailyCloseRecord {
   id: string;
   nodeId: NodeId;
   businessDay: string;
-  /** 1-based chain position within the (tenant, node) chain. */
+  /** 1-based chain position within the node's chain. */
   sequenceNo: number;
   prevEntryHash: string;
   entryHash: string;

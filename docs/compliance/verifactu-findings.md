@@ -263,14 +263,25 @@ table regardless of what any one session's policy would let it read.
 tenant's own session can never `SELECT` the conflicting row. This is the property that actually
 makes never-reuse hold, not a convention the application is trusted to keep.
 
-> **The setup that experiment ran against is gone, and the conclusion is unaffected** (note added
-> 2026-09-16). Row-level security was dropped in #255 and the tenant column in every table on
+> **The "verified live" receipt above is RETIRED, and what the index covers has narrowed** (note
+> added 2026-09-16). Row-level security was dropped in #255 and the tenant column in every table on
 > 2026-09-14, so neither the `FORCE ROW LEVEL SECURITY` premise nor the two-tenant database the
-> probe used can be reproduced today. What the paragraphs above are really about — that uniqueness
-> must be enforced by an index over the whole table rather than by anything that filters what a
-> session can see — is untouched by either change, and both indexes still exist:
-> `registro_sif_instalacion_uq` (`packages/fiscal-verifactu/drizzle/0000_fiscal_baseline.sql`) and
-> the counter table `contadores_instalacion`, still keyed by NIF.
+> probe used can be built today: that experiment cannot be re-run, and it should not be cited as
+> though it could. The design reasoning it was offered for is untouched — uniqueness has to be
+> enforced by an index over the whole table rather than by anything that filters what a session can
+> see — and both objects still exist, read back from a database built by applying every migration
+> set on 2026-09-16: `registro_sif_instalacion_uq` is `UNIQUE (nif, id_sistema_informatico,
+> numero_instalacion)` and `contadores_instalacion` is keyed `(nif, id_sistema_informatico)`.
+>
+> **What the index can no longer be said to do is span taxpayers.** One database holds one taxpayer,
+> so "across every tenant a multi-tenant deployment serves" now describes a deployment shape Waitron
+> does not have; within a database the index still refuses a reused number. The control that carries
+> never-reuse ACROSS DATABASES — the case the sentence was really reaching for, a box rebuilt from a
+> backup — is the cold restore raising `contadores_instalacion` to a floor taken from the CLOCK
+> (`installationFloor` / `raiseInstallationFloor`, `packages/fiscal-verifactu/src/restore.ts`;
+> `CLAUDE.md` §5). That control states its own limit and it is worth reading: a restore in the same
+> second, or on a clock behind the previous restore, computes the same floor, and nothing protects
+> numbers that an older dump never recorded while the clock has not moved past them.
 
 The identical reasoning governs the counter that mints these numbers
 (`contadores_instalacion`, same file): it carries no `tenant_id` and no RLS at all, keyed by NIF —

@@ -69,7 +69,7 @@ export async function aggregateVatByRate(
 }
 
 /**
- * VAT summary for one (tenant, node) over one business day, anchored on issuance. Delegates to the
+ * VAT summary for one node over one business day, anchored on issuance. Delegates to the
  * shared `aggregateVatByRate` core with the daily-close's `= businessDay` date filter, so its suite is
  * the behaviour-preserving guard for the extraction.
  */

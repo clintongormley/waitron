@@ -985,7 +985,7 @@ export async function payWorkingOrderIntegrated(
  * `recordSale` collides on that unique key and this replays the winner's settled ticket rather than
  * filing a second unrepairable record. The SEQUENTIAL retry never reaches here — P1's `for update` read
  * already saw the order `settled` and replayed there. Two concurrent captures are ALSO serialised one
- * level down, inside `recordSale` itself: `checkIntegrity` takes the (tenant, node) chain-head row lock
+ * level down, inside `recordSale` itself: `checkIntegrity` takes the NODE's chain-head row lock
  * as its first statement and holds it until commit (`packages/core/src/record-sale.ts:181-185`), so the
  * second caller cannot even start its own `checkIntegrity` until the first has fully committed — by
  * which point the first's `sales` row already exists, and the second's own insert (step 4, after the

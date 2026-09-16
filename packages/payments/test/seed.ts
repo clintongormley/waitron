@@ -28,7 +28,7 @@ export function freshNif(): string {
 
 /** Seeds tenant → location → till → node → open working_order and returns their ids. The `node`
  * is what the fiscal chain/series/SIF identity is keyed on; it is
- * created at the same (tenant, location) as the till. Uses the fixture connection directly. */
+ * created at the same location as the till. Uses the fixture connection directly. */
 export async function seedWorkingOrder(db: Database, nif = "B00000000"): Promise<Seeded> {
   await db.execute(sql`
     insert into tenants (id, country, tax_id, legal_name) values (1, 'ES', ${nif}, 'Test SL')

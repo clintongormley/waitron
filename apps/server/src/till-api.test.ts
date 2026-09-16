@@ -1783,7 +1783,7 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { id: string; orderNumber: number };
     expect(body.id).toBe(id);
-    // Per-(tenant,node) counter shared across this suite's tests, so assert the shape, not the value.
+    // Per-NODE counter shared across this suite's tests, so assert the shape, not the value.
     expect(Number.isInteger(body.orderNumber)).toBe(true);
     expect(body.orderNumber).toBeGreaterThanOrEqual(1);
 

@@ -300,8 +300,8 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   tenant clause, and that a configuration route compares `authorizeManager`'s tenant with the
   configured one; both are marked superseded in
   [conventions-data.md](docs/developers/conventions-data.md). Guard:
-  `scripts/no-tenant-column.test.ts`, which is weaker than its name in three ways it states in its
-  own header — it matches the column's SPELLINGS, so a column reintroduced under an unrelated name
+  `scripts/no-tenant-column.test.ts`, which is weaker than its name in three ways, among those its
+  own header states — it matches the column's SPELLINGS, so a column reintroduced under an unrelated name
   passes; it does not read test files; and it exempts, whole, each of the core migration files that
   historically carried the column, so a column re-added inside one of those is seen by nothing.
 - **A new table is classified `ledger`, `state` or `local` in its module's `<MODULE>_CLASSIFICATION`

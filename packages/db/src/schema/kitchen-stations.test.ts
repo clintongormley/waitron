@@ -115,7 +115,7 @@ describe("kitchen_stations schema (columns, threshold CHECK, partial unique)", (
     // Exactly one default per location: the first is_default row is accepted, a second at the SAME
     // location is a unique_violation (23505). A non-default second row is fine (only is_default rows
     // are indexed), and a default at a DIFFERENT location is fine (the index keys on location too) —
-    // both asserted so the failure is the partial predicate, not a plain (tenant, location) unique.
+    // both asserted so the failure is the partial predicate, not a plain (location_id, name) unique.
     await seedStation(TENANT_A, LOCATION_A, "Default one", true);
     // A non-default sibling at the same location — permitted (not covered by the partial index).
     await seedStation(TENANT_A, LOCATION_A, "Non-default sibling", false);

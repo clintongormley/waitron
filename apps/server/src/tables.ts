@@ -228,7 +228,7 @@ export async function deactivateTable(
  * 2. the `zoneId` is a LIVE zone of this LOCATION — present, `active`, and `location_id =
  *    cfg.locationId` (else `zone.not_found`; an inactive/absent/foreign/cross-location zone folds
  *    into the one code, matching the spec's "a live zone"). The `dining_tables_zone_fk` {@link
- *    createTable}/{@link updateTable} lean on is (tenant, zone) only — it can see neither
+ *    createTable}/{@link updateTable} lean on is (zone) only — it can see neither
  *    `active` nor the location — so this is an explicit read rather than a caught FK violation;
  * 3. `posX`/`posY` integer in `0..1000`, `shape` in the `floor_table_shape` enum, `rotation`
  *    integer in `0..359` — each failure is `placement.invalid` naming THAT field, never the
@@ -318,7 +318,7 @@ export interface FloorZone {
 
 /**
  * Create a floor-plan zone in the till's venue (its `cfg.locationId`), returning the minted id. Runs on
- * the CALLER's transaction as app_user. A duplicate `(tenant, location, name)`
+ * the CALLER's transaction as app_user. A duplicate `(location, name)`
  * collides on `floor_zones_name_key` (the only unique an INSERT can trip — `id` is fresh) and is
  * surfaced as `zone.name_taken` rather than the raw 23505 — the same shape {@link createTable} maps
  * `table.label_taken` with.
@@ -455,7 +455,7 @@ async function requireConfigure(tx: Transaction, managementSessionId: string): P
 /**
  * Create a service status in the tenant's configured set. Manager/admin only (`venue.configure`, the
  * #81 venue-config permission — reused, not renamed): the authorize gate runs BEFORE any DB write,
- * proven by-deletion in the suite. A duplicate `(tenant, label)` collides on
+ * proven by-deletion in the suite. A duplicate `(label)` collides on
  * `table_service_statuses_tenant_label_key` and is surfaced as `status.label_taken`.
  */
 export async function createStatus(

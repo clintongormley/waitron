@@ -22,7 +22,7 @@ import type { DailyClose } from "./types.js";
 
 /**
  * The single active writer's path for one frozen daily close (cierre Z, design §"The close
- * operation"), run inside the caller's transaction. It locks the (tenant, node) chain head, computes
+ * operation"), run inside the caller's transaction. It locks the node's chain head, computes
  * the VAT-exact close (8a), reconciles the physical cash counts against it per till, and appends one
  * immutable, hash-chained `daily_closes` row — advancing the head under the same lock.
  *

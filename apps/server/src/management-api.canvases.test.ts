@@ -37,7 +37,7 @@ function nextNif(): string {
 }
 
 /** A canvas name unique within the shared tenant, so tests are order-independent (CLAUDE.md §4) — the
- *  canvas set accumulates per tenant and `(tenant, name)` is unique, so a fixed name could collide. */
+ *  canvas set accumulates across tests and `(name)` is unique, so a fixed name could collide. */
 function uniqueName(base: string): string {
   return `${base}-${randomUUID().slice(0, 8)}`;
 }

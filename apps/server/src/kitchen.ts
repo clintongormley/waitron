@@ -85,7 +85,7 @@ async function clearDefault(tx: Transaction, cfg: TillConfig): Promise<void> {
 
 /**
  * Create a kitchen station in the till's venue (its `cfg.locationId`), returning the minted id. A
- * duplicate `(tenant, location, name)` collides on `kitchen_stations_name_key` and is surfaced as
+ * duplicate `(location, name)` collides on `kitchen_stations_name_key` and is surfaced as
  * `station.name_taken` rather than the raw 23505 — the same shape tables.ts's `createZone` maps
  * `zone.name_taken` with. Marking the station default ADOPTS it as THE default: it clears any prior
  * default first (in this same tx), exactly as {@link setDefaultStation} does — so WITHIN one tx the
@@ -379,7 +379,7 @@ export async function setFireControl(
 // has no `is_default` (a null course simply fires earliest, spec §2b), so there is no clear-then-set
 // dance and no partial unique to protect. Same shape otherwise — plain inserts / by-id UPDATEs on the
 // caller's transaction as app_user, `course.name_taken` on a duplicate
-// `(tenant, location, name)` and `course.not_found` for an id this venue may not reach; the
+// `(location, name)` and `course.not_found` for an id this venue may not reach; the
 // `till.configure` gate is applied at the ROUTE layer (Task 5), exactly as the station verbs rely on.
 
 /** A configured kitchen course as the CRUD surface returns it — the slim shape the Cursos config editor
@@ -450,7 +450,7 @@ export async function requireCourse(
 
 /**
  * Create a kitchen course in the till's venue (its `cfg.locationId`), returning the minted id. A
- * duplicate `(tenant, location, name)` collides on `kitchen_courses_name_key` and is surfaced as
+ * duplicate `(location, name)` collides on `kitchen_courses_name_key` and is surfaced as
  * `course.name_taken` rather than the raw 23505 — the same shape {@link createStation} maps
  * `station.name_taken` with. Simpler than `createStation`: no default to adopt, so no clear-then-set.
  */

@@ -103,7 +103,7 @@ async function setupVenue(): Promise<Venue> {
   };
 }
 
-/** One Hono app per venue — `mountReportApi` binds ONE (tenant, node) via `cfg`, so each venue's route
+/** One Hono app per venue — `mountReportApi` binds ONE node via `cfg`, so each venue's route
  * needs its own app (mirrors `purchasing-api.pg.test.ts`). The `nodeId` scopes the overview route; the
  * modelo 303 export ignores it. */
 function mountApp(v: Pick<Venue, "nodeId">): Hono {

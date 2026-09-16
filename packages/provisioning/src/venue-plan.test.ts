@@ -263,7 +263,7 @@ describe("planVenue", () => {
   });
 
   it("REFUSES equal standard and rectificative series codes before emitting anything", () => {
-    // Equal codes collide on the series natural key (tenant, node, code), so ON CONFLICT would
+    // Equal codes collide on the series natural key (node_id, code), so ON CONFLICT would
     // silently drop the second and leave the venue with ONE series and no way to issue corrections.
     // Rejected in the pure planner, like the other D4 input refusals.
     try {

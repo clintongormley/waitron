@@ -140,7 +140,7 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
     expect(pgErrorCode(e)).toBe("42P01");
   });
 
-  it("allows many NULL node_id agents but at most one per (tenant, node_id)", async () => {
+  it("allows many NULL node_id agents but at most one per node_id", async () => {
     // Two manual agents (node_id NULL) coexist — NULLS DISTINCT is the Postgres default.
     await seedAgent("till A");
     await seedAgent("till B");

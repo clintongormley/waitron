@@ -4,7 +4,7 @@ import { activeSalesClause, businessDayClause, nodeScopeClause } from "./busines
 import type { CloseCounts, DailyCloseInput } from "./types.js";
 
 /**
- * Operational record counts for one (tenant, node) — or the whole tenant when `input.nodeId` is
+ * Operational record counts for one node — or the whole venue when `input.nodeId` is
  * omitted — over one business day. `sales` and `corrections` are issued-in-day (excluding voided;
  * `sales` also excludes F3-canje substitutes — same exclusions as the VAT half). `voids` counts void
  * EVENTS whose voided_at falls in the day, for this node's sales. The node predicate is applied via

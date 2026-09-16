@@ -57,7 +57,7 @@ export interface LedgerRow {
 }
 
 /**
- * Everything derivation needs about one (tenant, duty), read in one place so the derivation itself
+ * Everything derivation needs about one duty, read in one place so the derivation itself
  * stays pure.
  *
  * `rows` deliberately spans TWO ranges: every row at or above the horizon start (gap derivation
@@ -95,7 +95,7 @@ export interface Derivation {
   /** Earliest FUTURE time work appears, as of the SNAPSHOT this derivation read — necessarily
    * before any duty ran. `runDue` folds in the backoff and re-sweep times its own runs then write,
    * and overrides the whole thing with `now` when work is available immediately (the per-tick cap
-   * deferred some, or a (tenant, duty) was skipped). */
+   * deferred some, or a duty was skipped). */
   nextDueAt: Date;
 }
 
@@ -112,7 +112,7 @@ export const DEFAULTS = {
   backoffBaseMs: 15 * 60 * 1000,
   staleAfterMs: 60 * 60 * 1000,
   /**
-   * How long after a SKIPPED (tenant, duty) pair `runDue` reports work is due again.
+   * How long after a SKIPPED duty `runDue` reports work is due again.
    *
    * Bounded below by not spinning: a skip used to report `now`, which a host sleeping on
    * `nextDueAt` turns into its MIN_TICK floor — 5 seconds, forever, for a pair whose failure only

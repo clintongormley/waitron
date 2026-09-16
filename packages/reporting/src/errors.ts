@@ -12,7 +12,7 @@ import "@waitron/shared";
  */
 declare module "@waitron/shared" {
   interface ErrorParams {
-    /** The (tenant, node) day is already closed — the immutable `UNIQUE(tenant, node, business_day)`
+    /** The node's day is already closed — the immutable `UNIQUE(node_id, business_day)`
      * rejected a second close. `businessDay` is the "YYYY-MM-DD" that was already closed. */
     "close.already_closed": { businessDay: string };
     /** A supplied cash count was rejected: a negative figure, a count for an unknown till, or a till

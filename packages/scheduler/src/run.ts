@@ -141,7 +141,7 @@ export async function runDue(deps: SchedulerDeps, now: Date): Promise<TickResult
   // every-pair-skipped case structural rather than a trick to be re-derived: `earliestFuture` is
   // still `Infinity` when nothing ran, so this line makes it finite, and the `null` branch below
   // becomes unreachable whenever anything was skipped. `null` therefore keeps meaning exactly what
-  // `TickResult.nextDueAt` says it means — no (tenant, duty) pair at all.
+  // `TickResult.nextDueAt` says it means — no due duty at all.
   if (result.skipped.length > 0) {
     earliestFuture = Math.min(earliestFuture, now.getTime() + deps.skipRetryMs);
   }

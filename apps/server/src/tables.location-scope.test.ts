@@ -81,7 +81,7 @@ describe("placement verbs are LOCATION-scoped (a same-tenant cross-location writ
     const { a, b } = await setupTwoVenues();
     const { id: tableA } = await asApp(a, (tx) => createTable(tx, a, { label: "A-1" }));
     const { id: zoneB } = await asApp(b, (tx) => createZone(tx, b, { name: "Zona B" }));
-    // Table A is in scope, but zone B is another venue's. The `dining_tables_zone_fk` is (tenant, zone)
+    // Table A is in scope, but zone B is another venue's. The `dining_tables_zone_fk` is (zone)
     // only, so without the explicit location predicate the cross-location zone would be accepted.
     await expect(
       asApp(a, (tx) => setTablePlacement(tx, a, tableA, { zoneId: zoneB, ...P })),

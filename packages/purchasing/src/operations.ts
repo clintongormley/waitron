@@ -175,7 +175,7 @@ async function selectLines(tx: Transaction, invoiceId: string): Promise<Purchase
 /**
  * Insert a received invoice and its VAT lines in the caller's transaction. Validates the header's
  * prorrata seam and the lines (≥1 line, non-negative base/VAT amount, rate 0–100 → `purchase.invalid`)
- * BEFORE any write; a collision on the `(tenant, supplier, supplier's number)` unique index becomes
+ * BEFORE any write; a collision on the `(supplier, supplier's number)` unique index becomes
  * `purchase.duplicate` (the VAT record-book no-duplicate rule). `regime`/`deductibleProportion`/`kind`
  * omitted fall to their column defaults.
  */

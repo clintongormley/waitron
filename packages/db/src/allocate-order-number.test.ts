@@ -54,7 +54,7 @@ describeEachTarget("allocateOrderNumber", (target) => {
     if (db !== undefined) await db.close();
   });
 
-  it("allocates 1, then 2, for a (tenant, node)", async () => {
+  it("allocates 1, then 2, for a node", async () => {
     // Run under the non-owner app role so the INSERT and the ON CONFLICT UPDATE
     // both pass the counter's WITH CHECK and its SELECT/INSERT/UPDATE grants —
     // the allocator is the first writer of this table (Task 1's deferred Minor).
@@ -65,7 +65,7 @@ describeEachTarget("allocateOrderNumber", (target) => {
     });
   });
 
-  it("numbers each (tenant, node) independently", async () => {
+  it("numbers each node independently", async () => {
     const a1 = await withTransaction(db, (tx) => allocateOrderNumber(tx, nodeA1));
     const a2 = await withTransaction(db, (tx) => allocateOrderNumber(tx, nodeA1));
     // nodeA2's counter is untouched by nodeA1's two allocations: it starts at 1.

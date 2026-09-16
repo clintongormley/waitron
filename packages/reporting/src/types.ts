@@ -31,7 +31,7 @@ export interface PeriodVatInput {
   dayCutover: string;
 }
 
-/** The top-sellers query: the same (tenant, optional node, business-day range, clock) scope as a
+/** The top-sellers query: the same (optional node, business-day range, clock) scope as a
  * period VAT roll-up, plus how many rows to return. */
 export interface TopSellersInput extends PeriodVatInput {
   /** How many top products to return. Must be a positive integer. */

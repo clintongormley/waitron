@@ -406,7 +406,7 @@ async function provisionVenue(
  * The bindings mirror `resolveDeviceBinding`'s form-factor rules (device.ts):
  *  - the TILL profile AUTO-CREATES its own register named after the device, so the till device is
  *    "Mostrador" — NOT "Caja 1", the register provisioning already made, which would trip the
- *    `tills (tenant, location, name)` unique index → `device.register_name_taken`;
+ *    `tills (location, name)` unique index → `device.register_name_taken`;
  *  - the HANDHELD binds to the counter till device's OWN register ("Mostrador") — the deli shape where
  *    the waiter's phone rings into the same drawer as the counter, adding no third register;
  *  - the KITCHEN display binds to the venue's default preparation station. The demo may rename that

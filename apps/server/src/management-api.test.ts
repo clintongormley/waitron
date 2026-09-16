@@ -43,7 +43,7 @@ function nextNif(): string {
 }
 
 /** A name/label unique within the shared tenant+location, so tests are order-independent (CLAUDE.md §4):
- *  the zone/table set accumulates across tests and `(tenant, location, name|label)` is unique, so a fixed
+ *  the zone/table set accumulates across tests and `(location, name|label)` is unique, so a fixed
  *  value would collide. Every list assertion is therefore a membership check, never an exact-list one. */
 function unique(base: string): string {
   return `${base}-${randomUUID().slice(0, 8)}`;

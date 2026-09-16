@@ -108,7 +108,7 @@ describe("one pass as the non-superuser deployment role", () => {
 
       // A `drain.tenant_skipped` or `reconcile.pair_skipped` WARNING is exactly what a missing
       // grant looks like from the outside: `runDue` catches the underlying permission-denied error
-      // per (tenant, duty) and folds it into `TickResult.skipped` rather than throwing, so
+      // per duty and folds it into `TickResult.skipped` rather than throwing, so
       // `report.duties.every(ok)` above stays `true` even when a grant is missing — see the ledger
       // count below, which is what actually catches that case. Nothing above `info` here is the
       // positive control: a real grants problem would show up as a warning line this asserts away.

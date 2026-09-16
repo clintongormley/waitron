@@ -97,18 +97,18 @@ export interface DutyRecord {
 }
 
 /**
- * C2: a per-tenant skip is treated as the duty FAILING this pass, even though `DutyReport.ok` is
+ * C2: a contained skip is treated as the duty FAILING this pass, even though `DutyReport.ok` is
  * `true` for it — `attempt` (pass.ts) only ever sets `ok: false` on a THROW, so a `drain` or
- * `runDue` call that returned normally with tenants in its `skipped` list still reports `ok: true`.
+ * `runDue` call that returned normally with entries in its `skipped` list still reports `ok: true`.
  * Before this function read `entry.skipped`, that meant `lastOkAt` refreshed and
- * `consecutiveFailures` reset on a pass that left a tenant's fiscal obligation unsubmitted — the
+ * `consecutiveFailures` reset on a pass that left a fiscal obligation unsubmitted — the
  * exact "up-but-stuck reads as healthy" gap spec §6 calls "the one place the absence of
  * configuration is itself the finding", closed here by NOT treating `ok: true, skipped > 0` as a
  * success.
  *
  * A pre-merge review found the IDENTICAL gap one duty over, on the money path: `runDue`
  * (`@waitron/scheduler`) parks a reconcile run after `maxAttempts`, which writes
- * `next_attempt_at = null` and never claims that (tenant, duty, period) again — terminal, exactly
+ * `next_attempt_at = null` and never claims that (duty, period) again — terminal, exactly
  * like a skipped pair, but recorded in `TickResult.ran` rather than `.skipped`, with `ok: true`
  * for the identical reason (a park is not an infrastructure failure mid-sweep; the duty ran and
  * lost every attempt). `duty.parked` is read the same way `duty.skipped` is, for the same reason —
@@ -121,13 +121,14 @@ export interface DutyRecord {
  * produce the same 503 as a genuine, permanent abandonment: exactly the false-alarm noise that
  * would make the one real signal here easy to ignore.
  *
- * The consequence, stated rather than left for a reader to wonder about: if tenant A's work
- * submits fine this pass and tenant B's is skipped (or a reconcile period of B's is parked), the
- * WHOLE duty reads not-ok — including for A, who was served. That is correct, not an oversight:
- * the host is failing its obligation for B, `/health` models one boolean per DUTY (spec §9's
- * shape), and per-tenant health is not something this endpoint represents at all. A 503 here means
- * "at least one tenant's fiscal submission is not being met" (or, for reconcile, "at least one
- * settlement-audit period has been permanently abandoned"), never "nothing is happening."
+ * The consequence, stated rather than left for a reader to wonder about: `runDue` loops over
+ * several scheduler duties (`packages/scheduler/src/run.ts`), so if one of them sweeps clean this
+ * pass and another is skipped or parked, the WHOLE `payments.reconcile.stripe` duty reads not-ok —
+ * including for the one that was served. That is correct, not an oversight: the host is failing an
+ * obligation, `/health` models one boolean per top-level DUTY (spec §9's shape), and a finer
+ * breakdown is not something this endpoint represents at all. A 503 here means "a fiscal
+ * submission is not being met" (or, for reconcile, "at least one settlement-audit period has been
+ * permanently abandoned"), never "nothing is happening."
  *
  * Returns one `DutyRecord` per entry in `report.duties` — what this call just recorded for it,
  * including the SAME `degraded` this function used to decide whether `lastOkAt` advances above.

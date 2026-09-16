@@ -502,7 +502,7 @@ export async function selfEnrolNodeAgent(
 
   // First enrol for this node. No advisory lock (unlike createJoinRequest): exactly one agent process
   // runs per box, so two concurrent first-time enrols for the SAME node are not a real shape. If they
-  // ever raced, the loser hits the `(tenant, node_id)` unique index as a 23505 and its agent simply
+  // ever raced, the loser hits the `(node_id)` unique index as a 23505 and its agent simply
   // re-asks next tick, finding the row and refreshing — no wrong row, no duplicate. That backstop, not
   // a lock, is what keeps the invariant.
   const agentId = randomUUID();

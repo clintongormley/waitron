@@ -79,7 +79,7 @@ let secondaryDatabaseUrl: string;
 let primaryDatabaseUrl: string;
 
 /**
- * Seed the FK identity (tenant, location, node, till, series) with the WAITRON_TILL_*_ID on one
+ * Seed the venue identity — the taxpayer row, location, node, till and series — with the WAITRON_TILL_*_ID on one
  * clone, as the container superuser — mirrors boot.mirror.test.ts's `seedIdentity`.
  */
 async function seedIdentity(admin: Database): Promise<void> {

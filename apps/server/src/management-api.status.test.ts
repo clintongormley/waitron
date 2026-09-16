@@ -33,7 +33,7 @@ function nextNif(): string {
 }
 
 /** A label unique within the shared tenant, so tests are order-independent (CLAUDE.md §4) — the status
- *  set accumulates across tests, and `(tenant, label)` is unique, so a fixed label would collide. */
+ *  set accumulates across tests, and `(label)` is unique, so a fixed label would collide. */
 function uniqueLabel(base: string): string {
   return `${base}-${randomUUID().slice(0, 8)}`;
 }

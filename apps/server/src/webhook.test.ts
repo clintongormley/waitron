@@ -121,7 +121,7 @@ async function settledAt(db: Database, sessionId: string): Promise<string | null
   return rows.rows[0]?.settled_at;
 }
 
-/** POSTs a webhook to a tenant's path with the given signature header. */
+/** POSTs a webhook to the single `/webhooks/stripe` route with the given signature header. */
 async function post(app: Hono, body: string, signature: string): Promise<Response> {
   return app.request("/webhooks/stripe", {
     method: "POST",

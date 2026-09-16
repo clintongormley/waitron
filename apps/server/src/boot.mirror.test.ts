@@ -112,8 +112,8 @@ let primaryDatabaseUrl: string;
 let adoptingDatabaseUrl: string;
 
 /**
- * Seed the FK identity (tenant, location, node, till, series) with the WAITRON_TILL_*_ID on one
- * clone, as the container superuser.
+ * Seed the venue identity — the taxpayer row, then the location, node, till and series the
+ * WAITRON_TILL_*_ID name — on one clone, as the container superuser.
  */
 async function seedIdentity(admin: Database): Promise<void> {
   await admin.execute(sql`insert into tenants (id, country, tax_id, legal_name)

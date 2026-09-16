@@ -1640,14 +1640,22 @@ turns out to need a design moves to its track.
 
 **Correctness:**
 
-1. ~~**Two order verbs still read `working_orders` by id alone.**~~ **Superseded 2026-09-14.**
-   The rule it cited is retired: there is no tenant column, so a by-id read has no tenant clause to
-   be missing (`CLAUDE.md` §3). The LOCATION half of the worry is real and unaffected — it is item 3
-   below, and that is where a by-id verb still wants scoping.
+1. **Four order paths read `working_orders` by id alone, with nothing narrowing them to the caller's
+   location.** The TENANT half of this item is retired — there is no tenant column, so a by-id read
+   has no tenant clause to be missing (`CLAUDE.md` §3) — but the location half is untouched and is
+   NOT covered by item 3, which names a different set of verbs. All four are in
+   `apps/server/src/working-order.ts` and were read on 2026-09-16 rather than inferred:
+   `markCollected` takes a `TillConfig` and discards it (`void cfg;`), then selects and updates on
+   `eq(workingOrders.id, id)`; `cancelPlacedOrder` selects and updates the same way and uses `cfg`
+   only to stamp the amendment's till and node; `readLockedLines` takes no `cfg` at all, and neither
+   does its one caller `priceStoredOrder`, which is reached from six sites in `till-sale.ts` and one
+   inside `working-order.ts` itself. Named by function rather than by line, because the line numbers
+   this item used to carry went stale when the file moved.
 2. **A concurrent-corrective race in `settleSale` is untranslated** — a raw `P0001` from the coverage
    trigger with no `sale.*` code. Give the trigger a SQLSTATE and translate it when reachable.
 3. **Location-scope the by-id verb family together** (`getHeldOrder`/`updateHeldOrder`/
-   `abandonHeldOrder`, `updateTable`/`deactivateTable`/`openTab`) when multi-location lands.
+   `abandonHeldOrder`, `updateTable`/`deactivateTable`/`openTab`) when multi-location lands —
+   together with the four paths in item 1, which are the same problem in the same file.
 4. **Nothing stops two queries being started at once on one transaction.** The rule and its receipt
    are in `docs/developers/conventions-data.md` under "Multi-table writes share ONE transaction"; no
    test or lint rule enforces it. A guard could fail a test whenever a query is issued on a
@@ -1658,17 +1666,23 @@ turns out to need a design moves to its track.
 
 **Names left behind by the tenant-column removal (2026-09-14):**
 
-- **Twelve index and key names still read `tenant`, and the columns they name are gone.** Eight in
-  core and Veri\*Factu — `canvases_tenant_name_key`, `device_profiles_tenant_name_key`,
-  `print_agents_tenant_node_key`, `purchase_invoices_tenant_received_idx`, `sales_tenant_issued_idx`,
-  `table_service_statuses_tenant_label_key`, `working_orders_tenant_status_idx` and
-  `registros_tenant_node_secuencia_uq` — plus four in identity: `persons_tenant_email_uq`,
-  `persons_tenant_live_display_name_uq`, `persons_tenant_google_subject_uq` and
-  `persons_tenant_pending_email_uq`. (The `tenants*`, `tenant_themes*`, `tenant_receipts*` and
-  `tenant_credentials*` names are correct — those tables really are about the taxpayer — and stay.)
-  This is its own slice, not a tidy-up: two of the four `persons_*` names are matched BY NAME in
-  production error translation (`packages/identity/src/staff.ts`, `account-action.ts`), so renaming
-  them changes behaviour and wants its own failing tests first.
+- **Thirteen index and key names still read `tenant`, and the columns they name are gone.** Read
+  off a database built by applying every migration set in manifest order (2026-09-16), with each
+  name's real columns beside it: `canvases_tenant_name_key` `(name)`,
+  `device_profiles_tenant_name_key` `(name)`, `print_agents_tenant_node_key` `(node_id)`,
+  `purchase_invoices_tenant_received_idx` `(received_on)`, `sales_tenant_issued_idx` `(issued_at)`,
+  `table_service_statuses_tenant_label_key` `(label)`, `tills_tenant_location_name_key`
+  `(location_id, name)`, `working_orders_tenant_status_idx` `(status)`,
+  `registros_tenant_node_secuencia_uq` `(node_id, secuencia)`, and four in identity:
+  `persons_tenant_email_uq`, `persons_tenant_live_display_name_uq` and
+  `persons_tenant_pending_email_uq` (all three over expressions) and
+  `persons_tenant_google_subject_uq` `(google_subject)`. (The `tenants*`, `tenant_themes*`,
+  `tenant_receipts*` and `tenant_credentials*` names are correct — those tables really are about the
+  taxpayer — and stay.) This is its own slice, not a tidy-up: THREE of the four `persons_*` names
+  are matched BY NAME in production error translation — `persons_tenant_email_uq`
+  (`packages/identity/src/staff.ts` and `account-action.ts`), `persons_tenant_live_display_name_uq`
+  and `persons_tenant_pending_email_uq` (`staff.ts`) — so renaming them changes behaviour and wants
+  its own failing tests first. Only `persons_tenant_google_subject_uq` is declared and never matched.
 - **`DrainResult.tenantsWithWork` is named for a count that can now only be 0 or 1.** One database
   files for one taxpayer (`packages/fiscal/src/backend.ts`), and the field reaches `apps/server`'s
   awaiting-certificate flag (`apps/server/src/pass.ts`, which keys off `> 0`) and `fiscal-none`. A
@@ -1786,9 +1800,13 @@ turns out to need a design moves to its track.
   in `packages/fiscal-verifactu/src/backend.ts`. Safe
   seam: a helper taking the assembled `Omit<AltaInput,"Encadenamiento">` plus a `buildDesglose`; needs
   a huella-invariance re-run across all three.
-- Left behind by the RLS drop: `sales_assert_tenders_cover`'s "even though the definer sees every
-  row" clause is false — thin on first change; `scripts/schema-equivalence-fold.test.py` is run by no
-  gate.
+- ~~Left behind by the RLS drop: `sales_assert_tenders_cover`'s "even though the definer sees every
+  row" clause is false.~~ **Closed 2026-09-14.** `packages/db/drizzle/0032_drop_tenant_id_after_sql.sql`
+  replaces the function with `CREATE OR REPLACE`, and the body a database built today actually runs
+  carries neither that clause nor the "tenant-consistent FK" one (read back from `pg_proc.prosrc` on
+  2026-09-16). The two sentences survive only in `0001_db_baseline_sql.sql`, which is an applied
+  migration and is never edited. Still open from the same row:
+  `scripts/schema-equivalence-fold.test.py` is run by no gate.
 - `tenant.not_found` has no production thrower — keep or remove is an owner call; `mirror-bundle.ts`'s
   `r.series ?? []` branch is un-exercised; export `ID_SISTEMA_MAX_LENGTH` when either package is next
   touched; `insertNodeSeriesTx`'s held-code check is SELECT-then-INSERT; the SP-3d restore overlapping

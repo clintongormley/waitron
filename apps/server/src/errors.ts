@@ -1119,9 +1119,9 @@ declare module "@waitron/shared" {
      */
     "device.pairing_closed": Record<string, never>;
     /**
-     * The tenant already holds the cap of pending DEVICE join requests (design §1.2's decoy rule needs
-     * room, and an uncapped pending list is a denial-of-service on the admin's attention). Per (tenant,
-     * kind), so ten agents mid-install cannot lock devices out. HTTP 429.
+     * This database already holds the cap of pending DEVICE join requests (design §1.2's decoy rule
+     * needs room, and an uncapped pending list is a denial-of-service on the admin's attention). Per
+     * KIND, so ten agents mid-install cannot lock devices out. HTTP 429.
      */
     "device.join_full": Record<string, never>;
     /**

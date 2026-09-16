@@ -11,7 +11,7 @@ import type {
 } from "./types.js";
 
 /**
- * Operational cash-up for one (tenant, node) — or the whole tenant when `input.nodeId` is omitted —
+ * Operational cash-up for one node — or the whole venue when `input.nodeId` is omitted —
  * over one business day, anchored on settlement. Reads `tenders` joined to `sales` (for node scoping
  * and till_id); groups by (till, method). `cashTakings` per till is Σ cash-method amount (design §5).
  * The node predicate is applied via `nodeScopeClause` only when a node is fixed (a venue-wide overview
