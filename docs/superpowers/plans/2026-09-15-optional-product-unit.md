@@ -1,5 +1,10 @@
 # Optional product unit + click-a-unit-to-see-products — Implementation Plan
 
+> **2026-09-16 — a unit-row click is now identified as deletion.** It still loads the products that
+> must be reassigned first, but its accessible label and modal heading now say Delete unit; the
+> `units.view_products` string was retired. Current regressions:
+> `apps/dashboard/src/screens/units-screen.test.ts`.
+
 > **2026-09-14 — the tenant column is gone.** Every `tenant_id` column, every tenant argument and
 > the `WAITRON_TILL_TENANT_ID` environment variable were removed: one database holds one taxpayer,
 > as the single row of `tenants`, and nothing filters by a tenant. The text below is left as the

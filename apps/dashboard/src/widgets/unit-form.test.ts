@@ -29,6 +29,23 @@ describe("unit-form", () => {
     expect([...precision.options].map((option) => option.value)).toEqual(["0", "1", "2", "3"]);
   });
 
+  it("shows an existing unit's precision in the dropdown", async () => {
+    const { el } = await mountWidget<UnitForm>("dashboard-unit-form", {
+      open: true,
+      locales: ["en"],
+      value: {
+        id: "u1",
+        name: { en: "kilogram" },
+        abbreviation: { en: "kg" },
+        precision: 3,
+      },
+    });
+
+    expect(el.shadowRoot!.querySelector<HTMLSelectElement>("select[name=precision]")!.value).toBe(
+      "3",
+    );
+  });
+
   it("returns a canonical input without mutating the supplied unit", async () => {
     const value = {
       id: "u1",
