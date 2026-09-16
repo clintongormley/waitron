@@ -17,8 +17,8 @@ migration the plan names was NOT renumbered and is on disk exactly as written be
 
 **Error code renamed, 2026-09-16:** the code this plan calls `product.variants_min_two` shipped as
 `product.variant_count_invalid` with a `minimum` parameter, to match its siblings' singular stem and
-the house rule that a bound rides in a parameter rather than in a code's name. The steps below keep
-the old name because they record what was planned.
+to keep the number out of the code's name the way every other bounded code here does. The steps
+below keep the old name because they record what was planned.
 
 **Spec:** [docs/superpowers/specs/2026-09-15-product-editor-rework-design.md](../specs/2026-09-15-product-editor-rework-design.md). Read it alongside this plan. It supersedes the layout and naming model in `2026-09-12-product-editor-design.md`; that older spec's rules on menus, variant pricing precedence, tax choice, allergens and dietary suitability still stand.
 
