@@ -1373,7 +1373,7 @@ describe("/management-api/stations (KDS-1 config)", () => {
       const product = await createProduct(tx, brandTenantId(venue.tenantId), {
         catalogueId: catalogue.id,
         categoryId: category.id,
-        descriptions: { [LOCALE]: unique("Prod") },
+        name: unique("Prod"),
         pricingUnit: "each",
         unitPrice: "1.50",
         vatClass: "general",
@@ -1639,7 +1639,7 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
       const product = await createProduct(tx, brandTenantId(venue.tenantId), {
         catalogueId: catalogue.id,
         categoryId: category.id,
-        descriptions: { [LOCALE]: unique("Prod") },
+        name: unique("Prod"),
         pricingUnit: "each",
         unitPrice: "1.50",
         vatClass: "general",

@@ -173,9 +173,13 @@ export async function seedCatalogues(
         const created = await createProduct(tx, tenantId, {
           catalogueId: catalogue.id,
           categoryId: category.id,
-          // Only the active locale's text — the till reads the venue's locale, and a single-locale
-          // description is what the demo needs (the other locale lives in menu.ts for reuse).
-          descriptions: product.descriptions,
+          // The staff-facing name is the authored short label where the menu gives one, so the demo
+          // shows a different string from the customer-facing name on every screen bound to the staff
+          // name. Where the menu gives none the two are the same word anyway, and it falls back to the
+          // seeded locale's entry. The customer-facing map keeps both locales, so a receipt in the
+          // venue's invoice locale reads the authored translation.
+          name: product.staffName ?? product.customerName[locale],
+          customerName: product.customerName,
           description: product.description,
           kitchenName: product.kitchenName,
           dietaryDeclarations: product.dietaryDeclarations,
@@ -197,7 +201,10 @@ export async function seedCatalogues(
             tenantId,
             created.id,
             product.variants.map((variant) => ({
-              name: variant.name,
+              name: variant.staffName ?? variant.customerName[locale],
+              customerName: variant.customerName,
+              kitchenName: variant.kitchenName ?? null,
+              image: null,
               unitPrice: variant.productPrice,
               available: variant.available,
             })),

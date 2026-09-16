@@ -9,7 +9,8 @@ import type { TillProduct } from "../api/client.js";
 // A plain product with NO option groups — the common tap, which must ring up straight away.
 const cafe: TillProduct = {
   id: "cafe",
-  descriptions: { es: "Café" },
+  name: "Café",
+  customerName: { es: "Café para el cliente" },
   pricingUnit: "each",
   unitPrice: "1.50",
   vatClass: "general",
@@ -20,7 +21,8 @@ const cafe: TillProduct = {
 // A weight product — the kg-keypad path, which the picker must never intercept.
 const jamon: TillProduct = {
   id: "jamon",
-  descriptions: { es: "Jamón" },
+  name: "Jamón",
+  customerName: { es: "Jamón para el cliente" },
   pricingUnit: "weight",
   unitPrice: "10.00",
   vatClass: "reduced",
@@ -32,7 +34,8 @@ const jamon: TillProduct = {
 // "extras" bounded at maxSelect 2 (checkboxes).
 const burger: TillProduct = {
   id: "burger",
-  descriptions: { en: "Burger", es: "Hamburguesa" },
+  name: "Burger",
+  customerName: { en: "Burger for the customer", es: "Hamburguesa para el cliente" },
   pricingUnit: "each",
   unitPrice: "8.00",
   vatClass: "general",
@@ -105,7 +108,8 @@ const burger: TillProduct = {
 // but the group cap of 3 bites first → stepper), and "oat milk" once (maxQuantity 1 → plain checkbox).
 const coffee: TillProduct = {
   id: "coffee",
-  descriptions: { en: "Coffee", es: "Café" },
+  name: "Coffee",
+  customerName: { en: "Coffee for the customer", es: "Café para el cliente" },
   pricingUnit: "each",
   unitPrice: "2.00",
   vatClass: "general",
@@ -153,7 +157,8 @@ const coffee: TillProduct = {
 // render RADIOS, never a stepper, regardless of the item's maxQuantity.
 const sizedDrink: TillProduct = {
   id: "sized",
-  descriptions: { en: "Sized drink", es: "Bebida" },
+  name: "Sized drink",
+  customerName: { en: "Sized drink for the customer", es: "Bebida para el cliente" },
   pricingUnit: "each",
   unitPrice: "3.00",
   vatClass: "general",
@@ -192,7 +197,8 @@ const sizedDrink: TillProduct = {
 // group. The empty group must be skipped by the picker and must NOT block "Add" (the Task 3 carry).
 const soup: TillProduct = {
   id: "soup",
-  descriptions: { en: "Soup", es: "Sopa" },
+  name: "Soup",
+  customerName: { en: "Soup for the customer", es: "Sopa para el cliente" },
   pricingUnit: "each",
   unitPrice: "5.00",
   vatClass: "reduced",
@@ -231,7 +237,8 @@ const soup: TillProduct = {
 // wedged behind a pointless dialog: it rings up straight away.
 const brokenProduct: TillProduct = {
   id: "broken",
-  descriptions: { en: "Broken", es: "Roto" },
+  name: "Broken",
+  customerName: { en: "Broken for the customer", es: "Roto para el cliente" },
   pricingUnit: "each",
   unitPrice: "3.00",
   vatClass: "general",
@@ -253,7 +260,8 @@ const brokenProduct: TillProduct = {
 // doneness picker must appear for it. Leaving the optional side blank keeps "Add" enabled.
 const steak: TillProduct = {
   id: "steak",
-  descriptions: { en: "Steak", es: "Filete" },
+  name: "Steak",
+  customerName: { en: "Steak for the customer", es: "Filete para el cliente" },
   pricingUnit: "each",
   unitPrice: "18.00",
   vatClass: "general",
@@ -285,7 +293,8 @@ const steak: TillProduct = {
 // be HIDDEN for it, exactly as it is for a product with no diet at all (burger).
 const seabass: TillProduct = {
   id: "seabass",
-  descriptions: { en: "Sea bass", es: "Lubina" },
+  name: "Sea bass",
+  customerName: { en: "Sea bass for the customer", es: "Lubina para el cliente" },
   pricingUnit: "each",
   unitPrice: "16.00",
   vatClass: "general",
@@ -411,14 +420,28 @@ describe("till-modifier-picker", () => {
     expect(pickerOf(el)).toBeNull();
   });
 
-  it("requires an available variant and rings its menu price and translated identity", async () => {
+  it("requires an available variant, lists its STAFF name and rings its menu price", async () => {
     const store = new WorkingOrderStore();
     const variantProduct: TillProduct = {
       ...cafe,
       menuItemId: "offer-coffee",
       variants: [
-        { id: "single", name: { en: "Single", es: "Solo" }, unitPrice: "1.75", available: true },
-        { id: "double", name: { en: "Double", es: "Doble" }, unitPrice: "2.60", available: false },
+        {
+          id: "single",
+          name: "Single",
+          customerName: { en: "Single cup", es: "Taza sencilla" },
+          kitchenName: "SGL",
+          unitPrice: "1.75",
+          available: true,
+        },
+        {
+          id: "double",
+          name: "Double",
+          customerName: { en: "Double cup", es: "Taza doble" },
+          kitchenName: "DBL",
+          unitPrice: "2.60",
+          available: false,
+        },
       ],
     };
     const { el } = await mountWidget<TillProductGrid>("till-product-grid", {
@@ -430,17 +453,26 @@ describe("till-modifier-picker", () => {
     const picker = pickerOf(el)!;
     await picker.updateComplete;
     expect(addButton(picker).disabled).toBe(true);
-    expect(picker.shadowRoot!.textContent).not.toContain("Doble");
+    // The unavailable variant is absent under EITHER name, and the available one is offered by its
+    // staff name, never its customer translation.
+    expect(picker.shadowRoot!.textContent).not.toContain("Double");
+    expect(picker.shadowRoot!.textContent).not.toContain("Taza doble");
+    expect(picker.shadowRoot!.textContent).toContain("Single");
+    expect(picker.shadowRoot!.textContent).not.toContain("Taza sencilla");
     picker.shadowRoot!.querySelector<HTMLInputElement>('[value="single"]')!.click();
     await picker.updateComplete;
     expect(picker.shadowRoot!.textContent).toContain(formatMoney("1.75"));
     addButton(picker).click();
     await el.updateComplete;
+    // The variant's three names ride ALONGSIDE the product's — nothing is folded into the product's
+    // own name, so each surface can join the one it shows.
     expect(store.lines[0]!.product).toMatchObject({
+      name: "Café",
       variantId: "single",
-      variantName: { en: "Single", es: "Solo" },
+      variantName: "Single",
+      variantCustomerName: { en: "Single cup", es: "Taza sencilla" },
+      variantKitchenName: "SGL",
       unitPrice: "1.75",
-      descriptions: { en: "Café · Single", es: "Café · Solo" },
     });
   });
 

@@ -37,9 +37,19 @@ export const SEED_INVOICE_LOCALE: Record<SeedLocale, string> = {
   es: "es-ES",
 };
 
-/** A demo product: both-locale descriptions, its pricing/VAT, and the PNG basename Task 9 supplies. */
+/** A demo product: its both-locale customer-facing name, its pricing/VAT, and the PNG basename Task 9
+ * supplies.
+ *
+ * `staffName` is the short label staff use — the till button and the dashboard row. It is a single
+ * plain string, not a map, because a staff name carries no translations. Where it is given it is
+ * DELIBERATELY different from the customer-facing name, so a walk through the demo can tell a screen
+ * showing the right name from one showing the wrong one. Omitted, it falls back to the seeded
+ * locale's customer-facing entry (seed-catalogue.ts), which is fine for a product whose two names
+ * would be the same word anyway. `kitchenName` is the third name, the one the kitchen ticket and the
+ * kitchen display carry. */
 export interface SeedProduct {
-  descriptions: Record<SeedLocale, string>;
+  customerName: Record<SeedLocale, string>;
+  staffName?: string;
   description?: Record<SeedLocale, string>;
   kitchenName?: string;
   dietaryDeclarations?: DietaryLabel[];
@@ -49,7 +59,9 @@ export interface SeedProduct {
     abbreviation: Record<SeedLocale, string>;
   };
   variants?: {
-    name: Record<SeedLocale, string>;
+    customerName: Record<SeedLocale, string>;
+    staffName?: string;
+    kitchenName?: string;
     productPrice: string;
     menuPrice: string;
     available: boolean;
@@ -80,7 +92,7 @@ export interface SeedCatalogue {
 // ── Ordering modifiers (Phase 4, Task 13) ──────────────────────────────────────────────────────────
 // Demo `option_groups`/`option_group_items` content, authored bare-locale like everything else in this
 // file. Attached (by `seed-options.ts`, via `seedCatalogues`' image→productId map) to exactly two
-// products below: "Coffee" (image `cafe-solo.png`) and "Sirloin in whisky sauce"
+// products below: "Café" (image `cafe-solo.png`) and "Solomillo"
 // (image `solomillo.png`), the closest analogues on this Spanish menu to a size/milk coffee order and a
 // cooked-to-order dish with extras. `vatClass: null` on every item below means INHERIT the dish's own
 // rate — a milk splash or a steak topping follows the same VAT treatment as the dish it rides on.
@@ -95,7 +107,7 @@ export interface SeedOptionItem {
 
 /** A demo option group: both-locale name, its select bounds, and its items — the same shape
  * `createOptionGroup`/`createOptionGroupItem` (`@waitron/catalogue`) take, narrowed to one locale at
- * creation time exactly as `seedCatalogues` narrows `SeedProduct.descriptions`. */
+ * creation time exactly as `seedCatalogues` narrows `SeedProduct.customerName`. */
 export interface SeedOptionGroup {
   name: Record<SeedLocale, string>;
   minSelect: number;
@@ -185,7 +197,7 @@ const COMBINED_CASA_DELGADO: SeedCatalogue = {
       station: "kitchen",
       products: [
         {
-          descriptions: {
+          customerName: {
             en: "Sliced Iberian ham (per kg)",
             es: "Jamón ibérico cortado (por kg)",
           },
@@ -195,7 +207,7 @@ const COMBINED_CASA_DELGADO: SeedCatalogue = {
           image: "jamon-iberico.png",
         },
         {
-          descriptions: {
+          customerName: {
             en: "Iberian chorizo (per kg)",
             es: "Chorizo ibérico (por kg)",
           },
@@ -205,21 +217,21 @@ const COMBINED_CASA_DELGADO: SeedCatalogue = {
           image: "chorizo-iberico.png",
         },
         {
-          descriptions: { en: "Cured pork loin (per kg)", es: "Lomo embuchado (por kg)" },
+          customerName: { en: "Cured pork loin (per kg)", es: "Lomo embuchado (por kg)" },
           pricingUnit: "weight",
           unitPrice: "32.00",
           vatClass: "reduced",
           image: "lomo-embuchado.png",
         },
         {
-          descriptions: { en: "Salchichón sausage (per kg)", es: "Salchichón (por kg)" },
+          customerName: { en: "Salchichón sausage (per kg)", es: "Salchichón (por kg)" },
           pricingUnit: "weight",
           unitPrice: "19.90",
           vatClass: "reduced",
           image: "salchichon.png",
         },
         {
-          descriptions: {
+          customerName: {
             en: "Cured beef cecina (per kg)",
             es: "Cecina de León (por kg)",
           },
@@ -229,7 +241,7 @@ const COMBINED_CASA_DELGADO: SeedCatalogue = {
           image: "cecina.png",
         },
         {
-          descriptions: { en: "Mallorcan sobrasada (per kg)", es: "Sobrasada (por kg)" },
+          customerName: { en: "Mallorcan sobrasada (per kg)", es: "Sobrasada (por kg)" },
           pricingUnit: "weight",
           unitPrice: "18.00",
           vatClass: "reduced",
@@ -242,21 +254,21 @@ const COMBINED_CASA_DELGADO: SeedCatalogue = {
       station: "kitchen",
       products: [
         {
-          descriptions: { en: "Cured Manchego (per kg)", es: "Manchego curado (por kg)" },
+          customerName: { en: "Cured Manchego (per kg)", es: "Manchego curado (por kg)" },
           pricingUnit: "weight",
           unitPrice: "21.00",
           vatClass: "reduced",
           image: "manchego-curado.png",
         },
         {
-          descriptions: { en: "Cabrales blue cheese (per kg)", es: "Cabrales (por kg)" },
+          customerName: { en: "Cabrales blue cheese (per kg)", es: "Cabrales (por kg)" },
           pricingUnit: "weight",
           unitPrice: "28.50",
           vatClass: "reduced",
           image: "cabrales.png",
         },
         {
-          descriptions: {
+          customerName: {
             en: "Idiazábal smoked cheese (per kg)",
             es: "Idiazábal (por kg)",
           },
@@ -266,7 +278,7 @@ const COMBINED_CASA_DELGADO: SeedCatalogue = {
           image: "idiazabal.png",
         },
         {
-          descriptions: {
+          customerName: {
             en: "Torta del Casar (per kg)",
             es: "Torta del Casar (por kg)",
           },
@@ -276,7 +288,7 @@ const COMBINED_CASA_DELGADO: SeedCatalogue = {
           image: "torta-del-casar.png",
         },
         {
-          descriptions: { en: "Mahón cheese (per kg)", es: "Queso de Mahón (por kg)" },
+          customerName: { en: "Mahón cheese (per kg)", es: "Queso de Mahón (por kg)" },
           pricingUnit: "weight",
           unitPrice: "19.50",
           vatClass: "reduced",
@@ -289,7 +301,7 @@ const COMBINED_CASA_DELGADO: SeedCatalogue = {
       station: "kitchen",
       products: [
         {
-          descriptions: {
+          customerName: {
             en: "Cantabrian anchovies (per kg)",
             es: "Anchoas del Cantábrico (por kg)",
           },
@@ -299,7 +311,7 @@ const COMBINED_CASA_DELGADO: SeedCatalogue = {
           image: "anchoas.png",
         },
         {
-          descriptions: {
+          customerName: {
             en: "Marinated olives (per kg)",
             es: "Aceitunas aliñadas (por kg)",
           },
@@ -309,7 +321,7 @@ const COMBINED_CASA_DELGADO: SeedCatalogue = {
           image: "aceitunas.png",
         },
         {
-          descriptions: {
+          customerName: {
             en: "Octopus in olive oil (per kg)",
             es: "Pulpo en aceite (por kg)",
           },
@@ -319,7 +331,7 @@ const COMBINED_CASA_DELGADO: SeedCatalogue = {
           image: "pulpo-en-aceite.png",
         },
         {
-          descriptions: {
+          customerName: {
             en: "White tuna belly (per kg)",
             es: "Ventresca de bonito (por kg)",
           },
@@ -336,42 +348,48 @@ const COMBINED_CASA_DELGADO: SeedCatalogue = {
       station: "kitchen",
       products: [
         {
-          descriptions: { en: "Spicy potatoes", es: "Patatas bravas" },
+          customerName: { en: "Spicy potatoes", es: "Patatas bravas" },
+          staffName: "Bravas",
+          kitchenName: "BRAVAS",
           pricingUnit: "each",
           unitPrice: "6.50",
           vatClass: "reduced",
           image: "patatas-bravas.png",
         },
         {
-          descriptions: { en: "Ham croquettes", es: "Croquetas de jamón" },
+          customerName: { en: "Ham croquettes", es: "Croquetas de jamón" },
+          staffName: "Croquetas",
+          kitchenName: "CROQ JAMON",
           pricingUnit: "each",
           unitPrice: "7.80",
           vatClass: "reduced",
           image: "croquetas.png",
         },
         {
-          descriptions: { en: "Garlic prawns", es: "Gambas al ajillo" },
+          customerName: { en: "Garlic prawns", es: "Gambas al ajillo" },
+          staffName: "Gambas",
+          kitchenName: "GAMBAS AJILLO",
           pricingUnit: "each",
           unitPrice: "9.90",
           vatClass: "reduced",
           image: "gambas-al-ajillo.png",
         },
         {
-          descriptions: { en: "Spanish omelette", es: "Tortilla española" },
+          customerName: { en: "Spanish omelette", es: "Tortilla española" },
           pricingUnit: "each",
           unitPrice: "5.50",
           vatClass: "reduced",
           image: "tortilla.png",
         },
         {
-          descriptions: { en: "House bread", es: "Pan de la casa" },
+          customerName: { en: "House bread", es: "Pan de la casa" },
           pricingUnit: "each",
           unitPrice: "2.20",
           vatClass: "super_reduced",
           image: "pan-de-la-casa.png",
         },
         {
-          descriptions: { en: "Bread with tomato", es: "Pan con tomate" },
+          customerName: { en: "Bread with tomato", es: "Pan con tomate" },
           pricingUnit: "each",
           unitPrice: "3.20",
           vatClass: "reduced",
@@ -384,28 +402,30 @@ const COMBINED_CASA_DELGADO: SeedCatalogue = {
       station: "kitchen",
       products: [
         {
-          descriptions: { en: "Galician-style octopus", es: "Pulpo a la gallega" },
+          customerName: { en: "Galician-style octopus", es: "Pulpo a la gallega" },
+          staffName: "Pulpo",
+          kitchenName: "PULPO GALLEGA",
           pricingUnit: "each",
           unitPrice: "16.50",
           vatClass: "reduced",
           image: "pulpo-a-la-gallega.png",
         },
         {
-          descriptions: { en: "Padrón peppers", es: "Pimientos de Padrón" },
+          customerName: { en: "Padrón peppers", es: "Pimientos de Padrón" },
           pricingUnit: "each",
           unitPrice: "7.00",
           vatClass: "reduced",
           image: "pimientos-de-padron.png",
         },
         {
-          descriptions: { en: "Fried calamari", es: "Calamares a la romana" },
+          customerName: { en: "Fried calamari", es: "Calamares a la romana" },
           pricingUnit: "each",
           unitPrice: "11.00",
           vatClass: "reduced",
           image: "calamares.png",
         },
         {
-          descriptions: { en: "Cheese board", es: "Tabla de quesos" },
+          customerName: { en: "Cheese board", es: "Tabla de quesos" },
           pricingUnit: "each",
           unitPrice: "14.50",
           vatClass: "reduced",
@@ -418,28 +438,32 @@ const COMBINED_CASA_DELGADO: SeedCatalogue = {
       station: "kitchen",
       products: [
         {
-          descriptions: { en: "Seafood paella", es: "Paella de marisco" },
+          customerName: { en: "Seafood paella", es: "Paella de marisco" },
+          staffName: "Paella",
+          kitchenName: "PAELLA MARISCO",
           pricingUnit: "each",
           unitPrice: "18.90",
           vatClass: "reduced",
           image: "paella.png",
         },
         {
-          descriptions: { en: "Sirloin in whisky sauce", es: "Solomillo al whisky" },
+          customerName: { en: "Sirloin in whisky sauce", es: "Solomillo al whisky" },
+          staffName: "Solomillo",
+          kitchenName: "SOLOMILLO WHISKY",
           pricingUnit: "each",
           unitPrice: "21.50",
           vatClass: "reduced",
           image: "solomillo.png",
         },
         {
-          descriptions: { en: "Cod pil-pil", es: "Bacalao al pil-pil" },
+          customerName: { en: "Cod pil-pil", es: "Bacalao al pil-pil" },
           pricingUnit: "each",
           unitPrice: "19.00",
           vatClass: "reduced",
           image: "bacalao.png",
         },
         {
-          descriptions: { en: "Grilled hake", es: "Merluza a la plancha" },
+          customerName: { en: "Grilled hake", es: "Merluza a la plancha" },
           pricingUnit: "each",
           unitPrice: "17.50",
           vatClass: "reduced",
@@ -452,28 +476,29 @@ const COMBINED_CASA_DELGADO: SeedCatalogue = {
       station: "kitchen",
       products: [
         {
-          descriptions: { en: "Catalan cream", es: "Crema catalana" },
+          customerName: { en: "Catalan cream", es: "Crema catalana" },
           pricingUnit: "each",
           unitPrice: "5.00",
           vatClass: "reduced",
           image: "crema-catalana.png",
         },
         {
-          descriptions: { en: "Santiago almond cake", es: "Tarta de Santiago" },
+          customerName: { en: "Santiago almond cake", es: "Tarta de Santiago" },
+          staffName: "Tarta Santiago",
           pricingUnit: "each",
           unitPrice: "5.50",
           vatClass: "reduced",
           image: "tarta-de-santiago.png",
         },
         {
-          descriptions: { en: "Home-made flan", es: "Flan casero" },
+          customerName: { en: "Home-made flan", es: "Flan casero" },
           pricingUnit: "each",
           unitPrice: "4.50",
           vatClass: "reduced",
           image: "flan.png",
         },
         {
-          descriptions: { en: "Rice pudding", es: "Arroz con leche" },
+          customerName: { en: "Rice pudding", es: "Arroz con leche" },
           pricingUnit: "each",
           unitPrice: "4.80",
           vatClass: "reduced",
@@ -487,35 +512,38 @@ const COMBINED_CASA_DELGADO: SeedCatalogue = {
       station: "bar",
       products: [
         {
-          descriptions: { en: "Negroni", es: "Negroni" },
+          customerName: { en: "Negroni", es: "Negroni" },
           pricingUnit: "each",
           unitPrice: "11.00",
           vatClass: "general",
           image: "negroni.png",
         },
         {
-          descriptions: { en: "Glass of house red", es: "Copa de vino tinto de la casa" },
+          customerName: { en: "Glass of house red", es: "Copa de vino tinto de la casa" },
+          staffName: "Tinto casa",
           pricingUnit: "each",
           unitPrice: "3.50",
           vatClass: "general",
           image: "vino-tinto.png",
         },
         {
-          descriptions: { en: "Draught beer", es: "Caña de cerveza" },
+          customerName: { en: "Draught beer", es: "Caña de cerveza" },
+          staffName: "Caña",
           pricingUnit: "each",
           unitPrice: "2.80",
           vatClass: "general",
           image: "cana-cerveza.png",
         },
         {
-          descriptions: { en: "Cola soft drink", es: "Refresco de cola" },
+          customerName: { en: "Cola soft drink", es: "Refresco de cola" },
           pricingUnit: "each",
           unitPrice: "2.50",
           vatClass: "general",
           image: "refresco-cola.png",
         },
         {
-          descriptions: { en: "Coffee", es: "Café" },
+          customerName: { en: "Coffee", es: "Café" },
+          staffName: "Café",
           description: {
             en: "Freshly ground espresso from the downstairs bar",
             es: "Espresso recién molido de la barra de abajo",
@@ -524,13 +552,19 @@ const COMBINED_CASA_DELGADO: SeedCatalogue = {
           dietaryDeclarations: ["vegetarian", "halal"],
           variants: [
             {
-              name: { en: "Single", es: "Solo" },
+              customerName: { en: "Single", es: "Solo" },
+              staffName: "Solo",
+              kitchenName: "SOLO",
               productPrice: "1.40",
               menuPrice: "1.75",
               available: true,
             },
             {
-              name: { en: "Double", es: "Doble" },
+              // No kitchen name of its own, so the kitchen ticket falls back to this variant's staff
+              // name while the product half still resolves its own — the independent fallback the
+              // developer guide describes.
+              customerName: { en: "Double", es: "Doble" },
+              staffName: "Doble",
               productPrice: "2.10",
               menuPrice: "2.60",
               available: true,
@@ -542,14 +576,14 @@ const COMBINED_CASA_DELGADO: SeedCatalogue = {
           image: "cafe-solo.png",
         },
         {
-          descriptions: { en: "Bottled mineral water", es: "Agua mineral" },
+          customerName: { en: "Bottled mineral water", es: "Agua mineral" },
           pricingUnit: "each",
           unitPrice: "1.80",
           vatClass: "reduced",
           image: "agua-mineral.png",
         },
         {
-          descriptions: { en: "Orange juice", es: "Zumo de naranja" },
+          customerName: { en: "Orange juice", es: "Zumo de naranja" },
           pricingUnit: "each",
           unitPrice: "2.90",
           vatClass: "general",
@@ -583,7 +617,7 @@ export const MENU_DEL_DIA: SeedCatalogue = {
       station: "kitchen",
       products: [
         {
-          descriptions: { en: "Mixed salad", es: "Ensalada mixta" },
+          customerName: { en: "Mixed salad", es: "Ensalada mixta" },
           description: {
             en: "Tomato, leaves and onion with dressing on the side",
             es: "Tomate, hojas y cebolla con el aliño aparte",
@@ -601,14 +635,16 @@ export const MENU_DEL_DIA: SeedCatalogue = {
           image: "ensalada-mixta.png",
         },
         {
-          descriptions: { en: "Andalusian gazpacho", es: "Gazpacho andaluz" },
+          customerName: { en: "Andalusian gazpacho", es: "Gazpacho andaluz" },
+          staffName: "Gazpacho",
+          kitchenName: "GAZPACHO",
           pricingUnit: "each",
           unitPrice: "5.50",
           vatClass: "reduced",
           image: "gazpacho.png",
         },
         {
-          descriptions: { en: "Stewed lentils", es: "Lentejas estofadas" },
+          customerName: { en: "Stewed lentils", es: "Lentejas estofadas" },
           pricingUnit: "each",
           unitPrice: "6.50",
           vatClass: "reduced",
@@ -621,14 +657,16 @@ export const MENU_DEL_DIA: SeedCatalogue = {
       station: "kitchen",
       products: [
         {
-          descriptions: { en: "Roast chicken with chips", es: "Pollo asado con patatas" },
+          customerName: { en: "Roast chicken with chips", es: "Pollo asado con patatas" },
+          staffName: "Pollo asado",
+          kitchenName: "POLLO + PATATAS",
           pricingUnit: "each",
           unitPrice: "9.50",
           vatClass: "reduced",
           image: "pollo-asado.png",
         },
         {
-          descriptions: { en: "Battered hake", es: "Merluza rebozada" },
+          customerName: { en: "Battered hake", es: "Merluza rebozada" },
           pricingUnit: "each",
           unitPrice: "10.50",
           vatClass: "reduced",

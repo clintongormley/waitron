@@ -506,7 +506,8 @@ describe("DashboardApi", () => {
       categoryId: "cat1",
       categoryIds: ["cat1"],
       primaryCategoryId: "cat1",
-      descriptions: { es: "Croquetas" },
+      name: "Croquetas",
+      customerName: { es: "Croquetas caseras" },
       pricingUnit: "each",
       unitPrice: "8.00",
       vatClass: "reduced",
@@ -523,9 +524,7 @@ describe("DashboardApi", () => {
       .mockResolvedValueOnce(jsonResponse({ ...category, image: "food.jpg" }))
       .mockResolvedValueOnce(emptyResponse())
       .mockResolvedValueOnce(
-        jsonResponse([
-          { id: "p1", descriptions: { es: "Croquetas" }, active: true, ...memberships },
-        ]),
+        jsonResponse([{ id: "p1", name: "Croquetas", active: true, ...memberships }]),
       )
       .mockResolvedValueOnce(jsonResponse([product]))
       .mockResolvedValueOnce(jsonResponse(memberships))
@@ -538,7 +537,7 @@ describe("DashboardApi", () => {
     });
     await api.deleteCategory("cat1");
     expect(await api.listCategoryProducts("cat1")).toEqual([
-      { id: "p1", descriptions: { es: "Croquetas" }, active: true, ...memberships },
+      { id: "p1", name: "Croquetas", active: true, ...memberships },
     ]);
     expect(await api.listLibraryProducts()).toEqual([product]);
     expect(await api.getProductCategories("p1")).toEqual(memberships);
@@ -620,7 +619,8 @@ describe("DashboardApi", () => {
         categoryId: null,
         categoryIds: [],
         primaryCategoryId: null,
-        descriptions: { es: "Café solo" },
+        name: "Café solo",
+        customerName: { es: "Café solo de la casa" },
         pricingUnit: "each",
         unitPrice: "1.50",
         vatClass: "general",
@@ -642,7 +642,8 @@ describe("DashboardApi", () => {
     const input = {
       catalogueId: "c1",
       categoryId: "cat1",
-      descriptions: { es: "Tarta de queso" },
+      name: "Tarta de queso",
+      customerName: { es: "Tarta de queso de la abuela" },
       pricingUnit: "each" as const,
       unitPrice: "4.00",
       vatClass: "reduced" as const,
@@ -1737,30 +1738,6 @@ describe("DashboardApi — kitchen stations + routing (KDS-1)", () => {
     });
   });
 
-  it("setProductStation PUTs { stationId } to the product's station route (empty 204 body)", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
-    const api = new DashboardApi("", fetchImpl);
-    await expect(api.setProductStation("p1", "s1")).resolves.toBeUndefined();
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/products/p1/station", {
-      method: "PUT",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ stationId: "s1" }),
-    });
-  });
-
-  it("setProductStation carries a null stationId to CLEAR the product override", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
-    const api = new DashboardApi("", fetchImpl);
-    await api.setProductStation("p1", null);
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/products/p1/station", {
-      method: "PUT",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ stationId: null }),
-    });
-  });
-
   it("setBumpMode PUTs { mode } to /management-api/bump-mode (empty 204 body)", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     const api = new DashboardApi("", fetchImpl);
@@ -1851,30 +1828,6 @@ describe("DashboardApi — kitchen stations + routing (KDS-1)", () => {
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/courses/k1", {
       method: "DELETE",
       credentials: "include",
-    });
-  });
-
-  it("setProductCourse PUTs { courseId } to the product's course route (empty 204 body)", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
-    const api = new DashboardApi("", fetchImpl);
-    await expect(api.setProductCourse("p1", "k1")).resolves.toBeUndefined();
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/products/p1/course", {
-      method: "PUT",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ courseId: "k1" }),
-    });
-  });
-
-  it("setProductCourse carries a null courseId to CLEAR the product default", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
-    const api = new DashboardApi("", fetchImpl);
-    await api.setProductCourse("p1", null);
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/products/p1/course", {
-      method: "PUT",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ courseId: null }),
     });
   });
 
@@ -2712,15 +2665,13 @@ describe("DashboardApi — printing (agents + printers + jobs)", () => {
 describe("DashboardApi — reporting (sales & takings)", () => {
   it("getSalesOverview GETs the overview route and returns the parsed shape", async () => {
     // Canned JSON mirroring `apps/server/src/report-api.ts`'s overview handler: money as decimal
-    // strings, counts, the open-tables tile and top sellers (frozen `descriptions` snapshot).
+    // strings, counts, the open-tables tile and top sellers (the frozen STAFF name, not a locale map).
     const overview = {
       businessDay: "2026-08-29",
       takings: { tenderTotal: "1234.50", tipTotal: "42.00", grossTotal: "1234.50" },
       counts: { sales: 37, corrections: 1, voids: 2 },
       openTables: { open: 3, total: 12 },
-      topSellers: [
-        { descriptions: { es: "Café", en: "Coffee" }, quantity: "18.000", total: "36.00" },
-      ],
+      topSellers: [{ name: "Café", quantity: "18.000", total: "36.00" }],
     };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(overview));
     const api = new DashboardApi("", fetchImpl);
@@ -2757,7 +2708,7 @@ describe("DashboardApi — reporting (sales & takings)", () => {
         tipTotal: "5.00",
       },
       counts: { sales: 12, corrections: 0, voids: 1 },
-      topSellers: [{ descriptions: { es: "Tapa" }, quantity: "9.000", total: "45.00" }],
+      topSellers: [{ name: "Tapa", quantity: "9.000", total: "45.00" }],
     };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(close));
     const api = new DashboardApi("", fetchImpl);
@@ -2779,7 +2730,7 @@ describe("DashboardApi — reporting (sales & takings)", () => {
         taxTotal: "50.00",
         grossTotal: "550.00",
       },
-      topSellers: [{ descriptions: { es: "Menú" }, quantity: "120.000", total: "1440.00" }],
+      topSellers: [{ name: "Menú", quantity: "120.000", total: "1440.00" }],
     };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(period));
     const api = new DashboardApi("", fetchImpl);
@@ -2953,7 +2904,8 @@ describe("DashboardApi — option groups + product attach (Task 11/12)", () => {
     const input = {
       catalogueId: "c1",
       categoryId: null,
-      descriptions: { es: "Bocadillo" },
+      name: "Bocadillo",
+      customerName: { es: "Bocadillo del día" },
       pricingUnit: "each" as const,
       unitPrice: "4.00",
       vatClass: "general" as const,

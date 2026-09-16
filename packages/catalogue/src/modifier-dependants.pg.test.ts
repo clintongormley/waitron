@@ -52,7 +52,7 @@ it("reports products, menus and the open-order count a delete would touch", asyn
     const productP = await createProduct(tx, tenantId, {
       catalogueId: menu.id,
       categoryId: null,
-      descriptions: { en: "Coffee" },
+      name: "Coffee",
       pricingUnit: "each",
       unitPrice: "2.00",
       vatClass: "reduced",
@@ -60,7 +60,7 @@ it("reports products, menus and the open-order count a delete would touch", asyn
     const productQ = await createProduct(tx, tenantId, {
       catalogueId: menu.id,
       categoryId: null,
-      descriptions: { en: "Tea" },
+      name: "Tea",
       pricingUnit: "each",
       unitPrice: "2.00",
       vatClass: "reduced",
@@ -88,6 +88,7 @@ it("reports products, menus and the open-order count a delete would touch", asyn
       workingOrderId: order!.id,
       productId: productQ.id,
       lineNo: 1,
+      name: "Tea",
       descriptions: { "en-GB": "Tea" },
       optionGroupItemId: choice.id,
       quantity: "1",
@@ -104,9 +105,9 @@ it("reports products, menus and the open-order count a delete would touch", asyn
   expect(dependants.products.map((p) => p.id)).toContain(seeded.productP.id);
   expect(dependants.products.map((p) => p.id)).toContain(seeded.productQ.id);
   expect(dependants.products).toHaveLength(2);
-  expect(dependants.products.map((p) => p.name)).toContainEqual({ en: "Coffee" });
+  expect(dependants.products.map((p) => p.name)).toContain("Coffee");
   expect(dependants.menus.map((m) => m.id)).toContain(seeded.itemQ.id);
-  expect(dependants.menus.map((m) => m.name)).toContainEqual({ en: "Tea" });
+  expect(dependants.menus.map((m) => m.name)).toContain("Tea");
   expect(dependants.orders).toBe(1);
 });
 

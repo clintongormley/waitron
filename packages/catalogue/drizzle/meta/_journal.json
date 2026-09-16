@@ -99,6 +99,13 @@
       "when": 1789452400171,
       "tag": "0013_unit_abbreviation",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1789493944645,
+      "tag": "0014_variant_names_image",
+      "breakpoints": true
     }
   ]
 }

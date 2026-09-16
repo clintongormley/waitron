@@ -86,7 +86,7 @@ export async function seedCatalogueFixture(
   const slicedHam = await createProduct(tx, venue.tenantId, {
     catalogueId: catalogue.id,
     categoryId: food.id,
-    descriptions: { en: "sliced ham" },
+    name: "sliced ham",
     unitId: kgUnitId,
     unitPrice: "24.90",
     vatClass: "reduced",
@@ -94,7 +94,7 @@ export async function seedCatalogueFixture(
   const water = await createProduct(tx, venue.tenantId, {
     catalogueId: catalogue.id,
     categoryId: drinks.id,
-    descriptions: { en: "water" },
+    name: "water",
     unitId: eachUnitId,
     unitPrice: "1.50",
     vatClass: "general",

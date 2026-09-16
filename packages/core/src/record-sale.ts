@@ -44,6 +44,8 @@ import { settleSale } from "./settle-sale.js";
 
 export interface RecordSaleLine {
   lineNo: number;
+  /** The staff-facing product name, frozen onto the line at add time. Never a catalogue reference. */
+  name: string;
   /** locale -> text, snapshotted at line-add time. Never a catalogue reference. */
   descriptions: Record<string, string>;
   /** Unit label and accepted precision frozen when the item was selected. */
@@ -68,7 +70,13 @@ export interface RecordSaleLine {
   modifierSnapshots?: ModifierSnapshot[];
   /** Selected product variant and its presentation facts, frozen with the line. */
   variantId?: string | null;
-  variantName?: Record<string, string> | null;
+  /** The variant's staff-facing name (the mirror of `name`); `null` when the line names no variant. */
+  variantName?: string | null;
+  /** The variant's customer-facing text, locale -> text (the mirror of `descriptions`), snapshotted
+   * with the line; `null` when it names no variant. */
+  variantDescriptions?: Record<string, string> | null;
+  /** The variant's kitchen-facing name; `null` when the line names no variant. */
+  variantKitchenName?: string | null;
   kitchenName?: string | null;
 }
 

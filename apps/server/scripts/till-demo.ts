@@ -162,7 +162,7 @@ async function main(): Promise<void> {
       await createProduct(tx, cfg.tenantId, {
         catalogueId: cat.id,
         categoryId: comida.id,
-        descriptions: { [LOCALE]: "Jamón cortado" },
+        name: "Jamón cortado",
         pricingUnit: "weight",
         unitPrice: "24.90", // €/kg, gross (VAT-inclusive), reduced (10%)
         vatClass: "reduced",
@@ -170,7 +170,7 @@ async function main(): Promise<void> {
       await createProduct(tx, cfg.tenantId, {
         catalogueId: cat.id,
         categoryId: bebidas.id,
-        descriptions: { [LOCALE]: "Agua mineral" },
+        name: "Agua mineral",
         pricingUnit: "each",
         unitPrice: "1.50", // €/item, gross, general (21%)
         vatClass: "general",

@@ -6,8 +6,17 @@ import { usePgliteDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, hashPin, startManagementSession } from "@waitron/identity";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
+import {
+  locationId as brandLocationId,
+  nodeId as brandNodeId,
+  seriesId as brandSeriesId,
+  tenantId as brandTenantId,
+  tillId as brandTillId,
+} from "@waitron/shared";
 import type { Logger } from "./logger.js";
 import { mountCatalogueApi } from "./catalogue-api.js";
+import { createCourse, createStation } from "./kitchen.js";
+import type { TillConfig } from "./till-config.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import "./errors.js";
@@ -66,6 +75,25 @@ const suite = usePgliteDb({
   },
 });
 
+/**
+ * The venue the product editor's kitchen routing is checked against. Only `tenantId` and `locationId`
+ * are read by `setProductStation`/`setProductCourse`; the fiscal ids are shape-fillers, as they are in
+ * the other route suites.
+ */
+function venueCfgFor(mountedTenantId: string): TillConfig {
+  return {
+    tenantId: brandTenantId(mountedTenantId),
+    tillId: brandTillId(crypto.randomUUID()),
+    nodeId: brandNodeId("11111111-1111-4111-8111-111111111111"),
+    seriesId: brandSeriesId(crypto.randomUUID()),
+    locationId: brandLocationId(locationId),
+    locale: "es-ES",
+    invoiceLocales: ["es-ES"],
+    tipsEnabled: false,
+    orderFlow: "prepay",
+  };
+}
+
 function mountApp(venueLocale = "es-ES", mountedTenantId = tenantId): Hono {
   const app = new Hono();
   mountCatalogueApi(
@@ -75,11 +103,23 @@ function mountApp(venueLocale = "es-ES", mountedTenantId = tenantId): Hono {
     {
       db: suite.db,
       cfg: { tenantId: mountedTenantId, nodeId: "11111111-1111-4111-8111-111111111111" },
+      venueCfg: venueCfgFor(mountedTenantId),
       venueLocale,
     },
     noopLog,
   );
   return app;
+}
+
+/** A live kitchen station and course of the seeded venue, as the app role. */
+async function seedRouting(): Promise<{ stationId: string; courseId: string }> {
+  return withTenant(suite.db, tenantId, async (tx) => {
+    await asAppUser(tx);
+    const cfg = venueCfgFor(tenantId);
+    const station = await createStation(tx, cfg, { name: `Pass ${crypto.randomUUID()}` });
+    const course = await createCourse(tx, cfg, { name: `Course ${crypto.randomUUID()}` });
+    return { stationId: station.id, courseId: course.id };
+  });
 }
 
 describe("content-language configuration", () => {
@@ -129,7 +169,8 @@ describe("content-language configuration", () => {
     const product = {
       catalogueId,
       categoryId: null,
-      descriptions: { fr: "Pain" },
+      name: "Pain",
+      customerName: { fr: "Pain" },
       pricingUnit: "each",
       unitPrice: "2.00",
       vatClass: "general",
@@ -142,7 +183,7 @@ describe("content-language configuration", () => {
     expect(
       (
         await send(app, "POST", "/management-api/products", {
-          body: { ...product, descriptions: { en: "Bread" } },
+          body: { ...product, customerName: { en: "Bread" } },
         })
       ).status,
     ).toBe(201);
@@ -208,7 +249,7 @@ async function createNamedProductVia(app: Hono, name: string): Promise<string> {
     body: {
       catalogueId,
       categoryId: null,
-      descriptions: { es: name },
+      name: name,
       pricingUnit: "each",
       unitPrice: "1.00",
       vatClass: "general",
@@ -513,7 +554,7 @@ describe("mountCatalogueApi — categories", () => {
     const res = await send(app, "GET", `/management-api/categories/${parent}/dependants`);
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
-      products: [{ id: productId, name: { es: "Rioja" }, reporting: true }],
+      products: [{ id: productId, name: "Rioja", reporting: true }],
       children: [{ id: childId, name: { es: "Vinos" } }],
       parentId: null,
       // The venue-service module is not migrated in this suite, so the optional route table is
@@ -634,7 +675,8 @@ describe("mountCatalogueApi — products", () => {
       body: {
         catalogueId: productsMenuId,
         categoryId: null,
-        descriptions: { en: "Negroni", es: "Negroni" },
+        name: "Negroni",
+        customerName: { en: "Negroni", es: "Negroni" },
         pricingUnit: "each",
         unitPrice: "0.00",
         vatClass: "general",
@@ -718,7 +760,8 @@ describe("mountCatalogueApi — products", () => {
       body: {
         catalogueId,
         categoryId,
-        descriptions: { es: "Café solo" },
+        name: "Café solo",
+        customerName: { es: "Café con leche" },
         pricingUnit: "each",
         unitPrice: "1.20",
         vatClass: "general",
@@ -732,7 +775,8 @@ describe("mountCatalogueApi — products", () => {
       catalogueId: string;
       categoryIds: string[];
       primaryCategoryId: string | null;
-      descriptions: Record<string, string>;
+      name: string;
+      customerName: Record<string, string> | null;
       unitPrice: string;
       vatClass: string;
       pricingUnit: string;
@@ -744,7 +788,8 @@ describe("mountCatalogueApi — products", () => {
       catalogueId,
       categoryIds: [categoryId],
       primaryCategoryId: categoryId,
-      descriptions: { es: "Café solo" },
+      name: "Café solo",
+      customerName: { es: "Café con leche" },
       unitPrice: "1.20",
       vatClass: "general",
       pricingUnit: "each",
@@ -776,7 +821,8 @@ describe("mountCatalogueApi — products", () => {
     });
     const modifierId = ((await modifier.json()) as { modifier: { id: string } }).modifier.id;
     const value = {
-      name: { es: "Café" },
+      name: "Café",
+      customerName: { es: "Café recién molido" },
       description: { es: "Recién molido" },
       kitchenName: "CAFÉ BAR",
       image: null,
@@ -784,7 +830,24 @@ describe("mountCatalogueApi — products", () => {
       unitPrice: "2.00",
       available: true,
       vatClass: "general",
-      variants: [{ name: { es: "Doble" }, unitPrice: "3.25", available: true }],
+      variants: [
+        {
+          name: "Doble",
+          customerName: { es: "Doble ración" },
+          kitchenName: "DBL",
+          image: null,
+          unitPrice: "3.25",
+          available: true,
+        },
+        {
+          name: "Sencillo",
+          customerName: null,
+          kitchenName: null,
+          image: null,
+          unitPrice: "2.00",
+          available: true,
+        },
+      ],
       categoryIds: [categoryId],
       primaryCategoryId: categoryId,
       modifierIds: [modifierId],
@@ -851,6 +914,110 @@ describe("mountCatalogueApi — products", () => {
     });
   });
 
+  /** The smallest body the editor parser accepts, plus whatever a test wants on top. */
+  async function editorBody(
+    app: Hono,
+    extra: Record<string, unknown> = {},
+  ): Promise<Record<string, unknown>> {
+    const unitId = (
+      await suite.db.execute<{ id: string }>(
+        sql`select id from units where tenant_id = ${tenantId} and seed_key = 'each'`,
+      )
+    ).rows[0]!.id;
+    void app;
+    return {
+      name: "Rutas",
+      customerName: null,
+      description: null,
+      kitchenName: null,
+      image: null,
+      unitId,
+      unitPrice: "2.00",
+      available: true,
+      vatClass: "general",
+      variants: [],
+      categoryIds: [],
+      primaryCategoryId: null,
+      modifierIds: [],
+      allergens: null,
+      dietaryDeclarations: [],
+      ...extra,
+    };
+  }
+
+  it("creates a product with its kitchen station and course in one save", async () => {
+    const app = mountApp("es-ES");
+    const catalogueId = await createCatalogueVia(app, "Routing catalogue");
+    const { stationId, courseId } = await seedRouting();
+    const created = await send(
+      app,
+      "POST",
+      `/management-api/catalogues/${catalogueId}/product-editor`,
+      { body: await editorBody(app, { stationId, courseId }) },
+    );
+    expect(created.status).toBe(201);
+    expect(await created.json()).toMatchObject({ stationId, courseId });
+  });
+
+  it("saves the kitchen station and course on the editor PUT and reads them back", async () => {
+    const app = mountApp("es-ES");
+    const catalogueId = await createCatalogueVia(app, "Routing catalogue");
+    const { stationId, courseId } = await seedRouting();
+    const created = await send(
+      app,
+      "POST",
+      `/management-api/catalogues/${catalogueId}/product-editor`,
+      { body: await editorBody(app) },
+    );
+    const productId = ((await created.json()) as { id: string }).id;
+
+    const updated = await send(app, "PUT", `/management-api/products/${productId}/editor`, {
+      body: await editorBody(app, { name: "Rutas cambiadas", stationId, courseId }),
+    });
+    expect(updated.status).toBe(200);
+    expect(await updated.json()).toMatchObject({ name: "Rutas cambiadas", stationId, courseId });
+    const read = await send(app, "GET", `/management-api/products/${productId}/editor`);
+    expect(await read.json()).toMatchObject({ stationId, courseId });
+  });
+
+  it("rolls the WHOLE product back when the save names a station this venue does not have", async () => {
+    const app = mountApp("es-ES");
+    const catalogueId = await createCatalogueVia(app, "Routing catalogue");
+    const { courseId } = await seedRouting();
+    const created = await send(
+      app,
+      "POST",
+      `/management-api/catalogues/${catalogueId}/product-editor`,
+      { body: await editorBody(app) },
+    );
+    const productId = ((await created.json()) as { id: string }).id;
+    const before = await send(app, "GET", `/management-api/products/${productId}/editor`);
+    const beforeValue = await before.json();
+
+    const rejected = await send(app, "PUT", `/management-api/products/${productId}/editor`, {
+      body: await editorBody(app, {
+        name: "Nombre que no debe guardarse",
+        unitPrice: "9.99",
+        stationId: crypto.randomUUID(),
+        courseId,
+      }),
+    });
+    expect(rejected.status).toBe(404);
+    expect(await rejected.json()).toMatchObject({ error: { code: "station.not_found" } });
+    // A malformed id is the same refusal, not an opaque 500 from a uuid cast.
+    const malformed = await send(app, "PUT", `/management-api/products/${productId}/editor`, {
+      body: await editorBody(app, { stationId: "not-a-uuid" }),
+    });
+    expect(malformed.status).toBe(404);
+    expect(await malformed.json()).toMatchObject({
+      error: { code: "station.not_found", params: { stationId: "not-a-uuid" } },
+    });
+    // Not one field of the product moved: the name, the price and the course all share the save's
+    // single transaction with the rejected routing write.
+    const after = await send(app, "GET", `/management-api/products/${productId}/editor`);
+    expect(await after.json()).toEqual(beforeValue);
+  });
+
   it("round-trips direct modifier dietary effects and rejects origin authoring", async () => {
     const app = mountApp("es-ES");
     const choiceId = crypto.randomUUID();
@@ -892,7 +1059,7 @@ describe("mountCatalogueApi — products", () => {
       body: {
         catalogueId,
         categoryId: null,
-        descriptions: { es: "No sellable yet" },
+        name: "No sellable yet",
         pricingUnit: "each",
         unitPrice: "1.00",
         vatClass: "general",
@@ -910,7 +1077,7 @@ describe("mountCatalogueApi — products", () => {
       body: {
         catalogueId,
         categoryId: null,
-        descriptions: { es: "Explícitamente activo" },
+        name: "Explícitamente activo",
         pricingUnit: "each",
         unitPrice: "1.00",
         vatClass: "general",
@@ -924,7 +1091,7 @@ describe("mountCatalogueApi — products", () => {
       body: {
         catalogueId,
         categoryId: null,
-        descriptions: { es: "Activo por defecto" },
+        name: "Activo por defecto",
         pricingUnit: "each",
         unitPrice: "1.00",
         vatClass: "general",
@@ -941,7 +1108,7 @@ describe("mountCatalogueApi — products", () => {
       body: {
         catalogueId,
         categoryId: null,
-        descriptions: { es: "Sin precio" },
+        name: "Sin precio",
         pricingUnit: "each",
         // unitPrice omitted
         vatClass: "general",
@@ -968,7 +1135,7 @@ describe("mountCatalogueApi — products", () => {
         body: {
           catalogueId,
           categoryId: null,
-          descriptions: { es: "Mal alérgeno" },
+          name: "Mal alérgeno",
           pricingUnit: "each",
           unitPrice: "1.00",
           vatClass: "general",
@@ -989,7 +1156,7 @@ describe("mountCatalogueApi — products", () => {
       body: {
         catalogueId,
         categoryId: null,
-        descriptions: { es: "Falafel" },
+        name: "Falafel",
         pricingUnit: "each",
         unitPrice: "5.00",
         vatClass: "general",
@@ -1022,7 +1189,7 @@ describe("mountCatalogueApi — products", () => {
         body: {
           catalogueId,
           categoryId: null,
-          descriptions: { es: "x" },
+          name: "x",
           pricingUnit: "each",
           unitPrice: "1.00",
           vatClass: "general",
@@ -1041,7 +1208,7 @@ describe("mountCatalogueApi — products", () => {
       body: {
         catalogueId,
         categoryId: null,
-        descriptions: { es: "x" },
+        name: "x",
         pricingUnit: "each",
         unitPrice: "1.00",
         vatClass: "general",
@@ -1063,7 +1230,7 @@ describe("mountCatalogueApi — products", () => {
       body: {
         catalogueId,
         categoryId: null,
-        descriptions: { es: "x" },
+        name: "x",
         pricingUnit: "each",
         unitPrice: "1.00",
         vatClass: "general",
@@ -1086,7 +1253,7 @@ describe("mountCatalogueApi — products", () => {
       body: {
         catalogueId,
         categoryId: null,
-        descriptions: { es: "Editar" },
+        name: "Editar",
         pricingUnit: "each",
         unitPrice: "2.00",
         vatClass: "general",
@@ -1115,6 +1282,56 @@ describe("mountCatalogueApi — products", () => {
     expect(row).toMatchObject({ unitPrice: "3.50", active: false, image: null });
   });
 
+  it("PATCH /management-api/products/:id sets the customer-facing name and clears it with null", async () => {
+    const app = mountApp();
+    const catalogueId = await createCatalogueVia(app, "Customer-name catalogue");
+    const createRes = await send(app, "POST", "/management-api/products", {
+      body: {
+        catalogueId,
+        categoryId: null,
+        name: "Café solo",
+        pricingUnit: "each",
+        unitPrice: "1.00",
+        vatClass: "general",
+      },
+    });
+    const productId = ((await createRes.json()) as { id: string }).id;
+    const readBack = async (): Promise<{ name: string; customerName: unknown }> => {
+      const list = await send(app, "GET", `/management-api/catalogues/${catalogueId}/products`);
+      return ((await list.json()) as { id: string; name: string; customerName: unknown }[]).find(
+        (r) => r.id === productId,
+      )!;
+    };
+    // Created without one: the staff name is what a receipt would fall back to.
+    expect(await readBack()).toMatchObject({ name: "Café solo", customerName: null });
+
+    const set = await send(app, "PATCH", `/management-api/products/${productId}`, {
+      body: { customerName: { es: "Café recién molido" } },
+    });
+    expect(set.status).toBe(204);
+    expect(await readBack()).toMatchObject({
+      name: "Café solo",
+      customerName: { es: "Café recién molido" },
+    });
+
+    // Explicit null clears it back to "no customer name", leaving the staff name untouched.
+    const cleared = await send(app, "PATCH", `/management-api/products/${productId}`, {
+      body: { customerName: null },
+    });
+    expect(cleared.status).toBe(204);
+    expect(await readBack()).toMatchObject({ name: "Café solo", customerName: null });
+
+    // A customer name that names no enabled language at all is a translation gap, not a clear.
+    const partial = await send(app, "PATCH", `/management-api/products/${productId}`, {
+      body: { customerName: { fr: "Café frais" } },
+    });
+    expect(partial.status).toBe(400);
+    expect(await partial.json()).toMatchObject({
+      error: { code: "content.translation_required" },
+    });
+    expect(await readBack()).toMatchObject({ customerName: null });
+  });
+
   it("PATCH /management-api/products/:id with a non-uuid id → shared.invalid_id 400", async () => {
     const res = await send(mountApp(), "PATCH", "/management-api/products/not-a-uuid", {
       body: { unitPrice: "1.00" },
@@ -1132,7 +1349,7 @@ describe("mountCatalogueApi — products", () => {
       body: {
         catalogueId,
         categoryId: null,
-        descriptions: { es: "Editar alérgeno" },
+        name: "Editar alérgeno",
         pricingUnit: "each",
         unitPrice: "2.00",
         vatClass: "general",
@@ -1158,7 +1375,7 @@ describe("mountCatalogueApi — product request-shape screens", () => {
   const productBase = {
     catalogueId: DUMMY_UUID,
     categoryId: null,
-    descriptions: { es: "x" },
+    name: "x",
     pricingUnit: "each",
     unitPrice: "1.00",
     vatClass: "general",
@@ -1167,8 +1384,11 @@ describe("mountCatalogueApi — product request-shape screens", () => {
   it.each([
     ["catalogueId", { ...productBase, catalogueId: 123 }],
     ["categoryId", { ...productBase, categoryId: 123 }],
-    ["descriptions", { ...productBase, descriptions: "nope" }],
-    ["descriptions", { ...productBase, descriptions: ["arr"] }],
+    ["name", { ...productBase, name: 123 }],
+    ["name", { ...productBase, name: "   " }],
+    ["customerName", { ...productBase, customerName: "nope" }],
+    ["customerName", { ...productBase, customerName: ["arr"] }],
+    ["customerName", { ...productBase, customerName: { es: 5 } }],
     ["pricingUnit", { ...productBase, pricingUnit: 5 }],
     ["vatClass", { ...productBase, vatClass: 5 }],
     ["image", { ...productBase, image: 5 }],
@@ -1195,8 +1415,10 @@ describe("mountCatalogueApi — product request-shape screens", () => {
   });
 
   it.each([
-    ["descriptions", { descriptions: "nope" }],
-    ["descriptions", { descriptions: ["arr"] }],
+    ["name", { name: 123 }],
+    ["name", { name: "   " }],
+    ["customerName", { customerName: "nope" }],
+    ["customerName", { customerName: ["arr"] }],
     ["unitPrice", { unitPrice: 5 }],
     ["vatClass", { vatClass: 5 }],
     ["pricingUnit", { pricingUnit: 5 }],
@@ -1216,7 +1438,7 @@ describe("mountCatalogueApi — product request-shape screens", () => {
     },
   );
 
-  it("PATCH /products/:id applies descriptions/vatClass/pricingUnit/categoryId/image (204) and they land", async () => {
+  it("PATCH /products/:id applies name/vatClass/pricingUnit/categoryId/image (204) and they land", async () => {
     const app = mountApp();
     const catalogueId = await createCatalogueVia(app, "Full-patch catalogue");
     const catRes = await send(app, "POST", "/management-api/categories", {
@@ -1227,7 +1449,7 @@ describe("mountCatalogueApi — product request-shape screens", () => {
       body: {
         catalogueId,
         categoryId: null,
-        descriptions: { es: "antes" },
+        name: "antes",
         pricingUnit: "each",
         unitPrice: "1.00",
         vatClass: "general",
@@ -1237,7 +1459,7 @@ describe("mountCatalogueApi — product request-shape screens", () => {
 
     const res = await send(app, "PATCH", `/management-api/products/${productId}`, {
       body: {
-        descriptions: { es: "después" },
+        name: "después",
         vatClass: "reduced",
         pricingUnit: "weight",
         categoryId,
@@ -1250,7 +1472,7 @@ describe("mountCatalogueApi — product request-shape screens", () => {
     const row = (
       (await list.json()) as {
         id: string;
-        descriptions: Record<string, string>;
+        name: string;
         vatClass: string;
         pricingUnit: string;
         categoryIds: string[];
@@ -1259,7 +1481,7 @@ describe("mountCatalogueApi — product request-shape screens", () => {
       }[]
     ).find((r) => r.id === productId)!;
     expect(row).toMatchObject({
-      descriptions: { es: "después" },
+      name: "después",
       vatClass: "reduced",
       pricingUnit: "weight",
       categoryIds: [categoryId],
@@ -1275,7 +1497,7 @@ describe("mountCatalogueApi — product request-shape screens", () => {
       body: {
         catalogueId,
         categoryId: null,
-        descriptions: { es: "sin cambios" },
+        name: "sin cambios",
         pricingUnit: "each",
         unitPrice: "1.00",
         vatClass: "general",
@@ -1373,7 +1595,7 @@ async function createProductVia(app: Hono, catalogueId: string): Promise<string>
     body: {
       catalogueId,
       categoryId: null,
-      descriptions: { es: "Producto con opciones" },
+      name: "Producto con opciones",
       pricingUnit: "each",
       unitPrice: "5.00",
       vatClass: "general",
@@ -1838,7 +2060,7 @@ describe("mountCatalogueApi — attaching option groups to products", () => {
       body: {
         catalogueId,
         categoryId: null,
-        descriptions: { es: "Entrecot" },
+        name: "Entrecot",
         pricingUnit: "each",
         unitPrice: "18.00",
         vatClass: "general",
@@ -1930,7 +2152,7 @@ describe("mountCatalogueApi — attaching option groups to products", () => {
         body: {
           catalogueId,
           categoryId: null,
-          descriptions: { es: "x" },
+          name: "x",
           pricingUnit: "each",
           unitPrice: "1.00",
           vatClass: "general",
@@ -1953,7 +2175,7 @@ describe("mountCatalogueApi — attaching option groups to products", () => {
       body: {
         catalogueId,
         categoryId: null,
-        descriptions: { es: "x" },
+        name: "x",
         pricingUnit: "each",
         unitPrice: "1.00",
         vatClass: "general",
@@ -1982,7 +2204,7 @@ describe("mountCatalogueApi — attaching option groups to products", () => {
       body: {
         catalogueId,
         categoryId: null,
-        descriptions: { es: "Entrecot" },
+        name: "Entrecot",
         pricingUnit: "each",
         unitPrice: "18.00",
         vatClass: "general",
@@ -1996,7 +2218,7 @@ describe("mountCatalogueApi — attaching option groups to products", () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { dependants: unknown };
     expect(body.dependants).toMatchObject({
-      products: [{ id: productId, name: { es: "Entrecot" } }],
+      products: [{ id: productId, name: "Entrecot" }],
       menus: [],
       orders: 0,
     });
@@ -2205,8 +2427,8 @@ describe("catalogue API tenant authorization", () => {
       sql`insert into catalogues (tenant_id, name) values (${other}, 'Private products') returning id`,
     );
     await suite.db
-      .execute(sql`insert into products (tenant_id, catalogue_id, descriptions, pricing_unit, unit_price, vat_class)
-      values (${other}, ${foreign.rows[0]!.id}, '{"es":"Privado"}'::jsonb, 'each', '2', 'general')`);
+      .execute(sql`insert into products (tenant_id, catalogue_id, name, pricing_unit, unit_price, vat_class)
+      values (${other}, ${foreign.rows[0]!.id}, 'Privado', 'each', '2', 'general')`);
     const app = mountApp();
     const ownMenuId = await createCatalogueVia(app, "Own products");
     const ownProductId = await createProductVia(app, ownMenuId);
@@ -2246,19 +2468,19 @@ describe("catalogue API tenant authorization", () => {
     );
     const product = await suite.db.execute<{
       id: string;
-    }>(sql`insert into products (tenant_id, catalogue_id, descriptions, pricing_unit, unit_price, vat_class, image)
-      values (${other}, ${menu.rows[0]!.id}, '{"es":"Pan"}'::jsonb, 'each', '2', 'general', 'original.png') returning id`);
+    }>(sql`insert into products (tenant_id, catalogue_id, name, pricing_unit, unit_price, vat_class, image)
+      values (${other}, ${menu.rows[0]!.id}, 'Pan', 'each', '2', 'general', 'original.png') returning id`);
     const result = await send(
       mountApp(),
       "PATCH",
       `/management-api/products/${product.rows[0]!.id}`,
-      { body: { image: null, descriptions: { es: "Cambio" } } },
+      { body: { image: null, name: "Cambio" } },
     );
     expect(result.status).toBe(403);
     const after = await suite.db.execute(
-      sql`select image, descriptions from products where tenant_id = ${other} and id = ${product.rows[0]!.id}`,
+      sql`select image, name from products where tenant_id = ${other} and id = ${product.rows[0]!.id}`,
     );
-    expect(after.rows).toEqual([{ image: "original.png", descriptions: { es: "Pan" } }]);
+    expect(after.rows).toEqual([{ image: "original.png", name: "Pan" }]);
   });
 
   it("refuses foreign modifier edits and a mismatched item group, including empty patches", async () => {
@@ -2327,7 +2549,7 @@ it("authors translated hierarchy and shares full membership replacement through 
     body: {
       catalogueId,
       categoryId: null,
-      descriptions: { en: "Toast" },
+      name: "Toast",
       unitPrice: "2",
       pricingUnit: "each",
       vatClass: "general",

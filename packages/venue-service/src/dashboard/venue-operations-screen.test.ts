@@ -80,10 +80,19 @@ const model: VenueServiceView = {
   products: [
     {
       id: "p1",
-      descriptions: { en: "Negroni" },
+      name: "Negroni",
+      customerName: { en: "House Aperitivo" },
       pricingUnit: "each",
       active: true,
-      variants: [{ id: "v1", name: { en: "Double" }, unitPrice: "13.00", available: true }],
+      variants: [
+        {
+          id: "v1",
+          name: "Double",
+          customerName: { en: "Generous Pour" },
+          unitPrice: "13.00",
+          available: true,
+        },
+      ],
     },
   ],
   sections: [],
@@ -94,9 +103,18 @@ const model: VenueServiceView = {
       productId: "p1",
       sectionId: "sec1",
       sectionName: { en: "Cocktails" },
-      descriptions: { en: "Negroni" },
+      name: "Negroni",
+      customerName: { en: "House Aperitivo" },
       grossPrice: "11.00",
-      variants: [{ id: "v1", name: { en: "Double" }, unitPrice: "15.00", available: true }],
+      variants: [
+        {
+          id: "v1",
+          name: "Double",
+          customerName: { en: "Generous Pour" },
+          unitPrice: "15.00",
+          available: true,
+        },
+      ],
     },
   ],
 };
@@ -345,22 +363,24 @@ describe("venue operations screen", () => {
     });
   });
 
+  // Section names are still a language map, so they are what these two cases exercise. A product's
+  // name is not: it is the one plain staff string, shown unchanged whatever the content languages are.
   it("uses the configured fallback and repaints when content languages change", async () => {
     setContentLanguages({ defaultLanguage: "fr", languages: ["fr", "de"] });
     const api = {
       load: vi.fn().mockResolvedValue({
         ...model,
-        products: [{ ...model.products[0], descriptions: { de: "Wasser", fr: "Eau" } }],
+        offers: [{ ...model.offers[0], sectionName: { de: "Wasser", fr: "Eau" } }],
       }),
     } as unknown as VenueServiceApi;
     const el = await mount(api);
     await selectTab(el, "menus");
+    expect(tableText(el, "menu-offers-m1")).toContain("Eau");
     await action(el, "new-offer-m2");
-    expect(field(el, "offer-product-m2").textContent).toContain("Eau");
     field(el, "offer-section-m2").value = "Draft";
     setContentLanguages({ defaultLanguage: "de", languages: ["de", "fr"] });
     await el.updateComplete;
-    expect(field(el, "offer-product-m2").textContent).toContain("Wasser");
+    expect(tableText(el, "menu-offers-m1")).toContain("Wasser");
     expect(field(el, "offer-section-m2").value).toBe("Draft");
     expect(field(el, "offer-section-m2").closest("label")!.textContent).toContain("French");
   });
@@ -370,14 +390,33 @@ describe("venue operations screen", () => {
     const api = {
       load: vi.fn().mockResolvedValue({
         ...model,
-        products: [{ ...model.products[0], descriptions: { en: "Water", fr: "Eau" } }],
+        offers: [{ ...model.offers[0], sectionName: { en: "Water", fr: "Eau" } }],
       }),
     } as unknown as VenueServiceApi;
     const el = await mount(api);
     await selectTab(el, "menus");
-    await action(el, "new-offer-m2");
-    expect(field(el, "offer-product-m2").textContent).toContain("Eau");
-    expect(field(el, "offer-product-m2").textContent).not.toContain("Water");
+    expect(tableText(el, "menu-offers-m1")).toContain("Eau");
+    expect(tableText(el, "menu-offers-m1")).not.toContain("Water");
+  });
+
+  it("shows the staff name, never the customer-facing one, on every product surface", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+    } as unknown as VenueServiceApi);
+    await selectTab(el, "menus");
+    expect(tableText(el, "menu-offers-m1")).toContain("Negroni");
+    expect(tableText(el, "menu-offers-m1")).not.toContain("House Aperitivo");
+    await action(el, "edit-offer-i1");
+    // The variant's price field is labelled with the variant's staff name, whole, not its first letter.
+    expect(field(el, "offer-variant-price-v1").closest("label")!.textContent).toContain("Double");
+    expect(field(el, "offer-variant-price-v1").closest("label")!.textContent).not.toContain(
+      "Generous Pour",
+    );
+    await action(el, "cancel-editor");
+    await selectTab(el, "routing");
+    await action(el, "new-route");
+    expect(field(el, "route-subject").textContent).toContain("Negroni");
+    expect(field(el, "route-subject").textContent).not.toContain("House Aperitivo");
   });
 
   it("reuses the default-language section name even when the interface displays another translation", async () => {
@@ -386,7 +425,13 @@ describe("venue operations screen", () => {
       ...model,
       products: [
         ...model.products,
-        { id: "p2", descriptions: { en: "Olives" }, pricingUnit: "each", active: true },
+        {
+          id: "p2",
+          name: "Olives",
+          customerName: { en: "Manzanilla Olives" },
+          pricingUnit: "each",
+          active: true,
+        },
       ],
       offers: [
         ...model.offers,
@@ -396,7 +441,8 @@ describe("venue operations screen", () => {
           productId: "p2",
           sectionId: "sec2",
           sectionName: { en: "Snacks", fr: "Collations" },
-          descriptions: { en: "Olives" },
+          name: "Olives",
+          customerName: { en: "Manzanilla Olives" },
           grossPrice: "4.00",
         },
       ],
@@ -521,7 +567,13 @@ describe("venue operations screen", () => {
         ...model,
         products: [
           ...model.products,
-          { id: "p2", descriptions: { en: "Olives" }, pricingUnit: "each", active: true },
+          {
+            id: "p2",
+            name: "Olives",
+            customerName: { en: "Manzanilla Olives" },
+            pricingUnit: "each",
+            active: true,
+          },
         ],
         offers: [{ ...model.offers[0], sectionName: { en: "Cocktails", de: "Getränke" } }],
       }),

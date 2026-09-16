@@ -156,7 +156,7 @@ describe("seedDemoRestaurant", () => {
         from menu_items mi
         join products p on p.tenant_id = mi.tenant_id and p.id = mi.product_id
         join catalogues c on c.tenant_id = mi.tenant_id and c.id = mi.menu_id
-        where p.descriptions->>'en' = 'Negroni'
+        where p.name = 'Negroni'
         order by mi.gross_price`);
       const { rows: cocktailRouteRows } = await tx.execute<{
         zone_name: string;
@@ -188,8 +188,8 @@ describe("seedDemoRestaurant", () => {
     // The coffee keeps the retained Size + Milk groups and demonstrates the three current modifier
     // modes (text, extras, options); the steak carries Extras + Cooking. The back-dated sales generator
     // rings at least one selection so the demo also contains persisted modifier sub-lines.
-    const coffee = read.products.find((p) => p.descriptions[LOCALE] === "Coffee");
-    const steak = read.products.find((p) => p.descriptions[LOCALE] === "Sirloin in whisky sauce");
+    const coffee = read.products.find((p) => p.name === "Café");
+    const steak = read.products.find((p) => p.name === "Solomillo");
     expect(coffee).toBeDefined();
     expect(steak).toBeDefined();
     expect(coffee!.optionGroups.map((g) => g.name[LOCALE]).sort()).toEqual([

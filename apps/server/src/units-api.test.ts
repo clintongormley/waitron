@@ -177,8 +177,8 @@ describe("unit management routes", () => {
       const ids: string[] = [];
       for (const name of ["A", "B"]) {
         const product = await tx.execute<{ id: string }>(sql`
-          insert into products (tenant_id, catalogue_id, descriptions, pricing_unit, unit_price, vat_class)
-          values (${tenantId}, ${menu.rows[0]!.id}, ${JSON.stringify({ en: name })}::jsonb, 'each', '1', 'general')
+          insert into products (tenant_id, catalogue_id, name, pricing_unit, unit_price, vat_class)
+          values (${tenantId}, ${menu.rows[0]!.id}, ${name}, 'each', '1', 'general')
           returning id`);
         await tx.execute(sql`
           insert into product_units (tenant_id, product_id, unit_id)
@@ -209,8 +209,8 @@ describe("unit management routes", () => {
       const menu = await tx.execute<{ id: string }>(sql`
         insert into catalogues (tenant_id, name) values (${tenantId}, 'Menu') returning id`);
       const product = await tx.execute<{ id: string }>(sql`
-        insert into products (tenant_id, catalogue_id, descriptions, pricing_unit, unit_price, vat_class)
-        values (${tenantId}, ${menu.rows[0]!.id}, ${JSON.stringify({ en: "A" })}::jsonb, 'each', '1', 'general')
+        insert into products (tenant_id, catalogue_id, name, pricing_unit, unit_price, vat_class)
+        values (${tenantId}, ${menu.rows[0]!.id}, 'A', 'each', '1', 'general')
         returning id`);
       await tx.execute(sql`
         insert into product_units (tenant_id, product_id, unit_id)
@@ -220,7 +220,7 @@ describe("unit management routes", () => {
 
     const res = await send("GET", `/management-api/units/${unit.id}/products`);
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual([{ id: p1, name: { en: "A" }, available: true }]);
+    expect(await res.json()).toEqual([{ id: p1, name: "A", available: true }]);
   });
 
   it("GET /management-api/units/:id/products 404s an unknown unit", async () => {
@@ -253,8 +253,8 @@ describe("unit management routes", () => {
       const menu = await tx.execute<{ id: string }>(sql`
         insert into catalogues (tenant_id, name) values (${tenantId}, 'Menu') returning id`);
       const product = await tx.execute<{ id: string }>(sql`
-        insert into products (tenant_id, catalogue_id, descriptions, pricing_unit, unit_price, vat_class)
-        values (${tenantId}, ${menu.rows[0]!.id}, ${JSON.stringify({ en: "A" })}::jsonb, 'each', '1', 'general')
+        insert into products (tenant_id, catalogue_id, name, pricing_unit, unit_price, vat_class)
+        values (${tenantId}, ${menu.rows[0]!.id}, 'A', 'each', '1', 'general')
         returning id`);
       await tx.execute(sql`
         insert into product_units (tenant_id, product_id, unit_id)

@@ -225,8 +225,8 @@ it("shows a spinner in the delete dialog and keeps delete disabled until the pre
 it("lists the affected products and menu items and enables delete", async () => {
   const client = api({
     getModifierDependants: vi.fn().mockResolvedValue({
-      products: [{ id: "p1", name: { es: "Café" } }],
-      menus: [{ id: "mn1", name: { es: "Desayuno" } }],
+      products: [{ id: "p1", name: "Café" }],
+      menus: [{ id: "mn1", name: "Desayuno" }],
       orders: 0,
     }),
   });
@@ -512,7 +512,7 @@ async function openProducts(el: ModifiersScreen, modifier: Modifier) {
 it("opens a products modal when a modifier row is clicked", async () => {
   const client = api({
     getModifierDependants: vi.fn().mockResolvedValue({
-      products: [{ id: "p1", name: { es: "Hamburguesa" } }],
+      products: [{ id: "p1", name: "Hamburguesa" }],
       menus: [],
       orders: 0,
     }),
@@ -528,8 +528,8 @@ it("opens a products modal when a modifier row is clicked", async () => {
 it("lists the menu items using a modifier in the products modal", async () => {
   const client = api({
     getModifierDependants: vi.fn().mockResolvedValue({
-      products: [{ id: "p1", name: { es: "Hamburguesa" } }],
-      menus: [{ id: "mn1", name: { es: "Menú del día" } }],
+      products: [{ id: "p1", name: "Hamburguesa" }],
+      menus: [{ id: "mn1", name: "Menú del día" }],
       orders: 0,
     }),
   });

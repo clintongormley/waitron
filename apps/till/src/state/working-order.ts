@@ -13,8 +13,11 @@
  * barrel. The barrel re-exports `operations.ts`, which pulls in `@waitron/db` and Node builtins and
  * would break the browser bundle; `pricing.ts` in isolation depends only on `@waitron/shared` (its
  * `@waitron/core`/`@waitron/fiscal` imports are `import type`, erased at build). `@waitron/catalogue`
- * has no `exports` map, so the deep subpath resolves, and Vite bundles only `pricing.ts` +
- * `@waitron/shared`. Using the real pricer — not a reimplementation — is what keeps the preview equal
+ * has no `exports` map, so a deep subpath resolves. What keeps the bundle small is a PROPERTY of
+ * every catalogue module reached that way, not how many there are: none pulls in anything at runtime
+ * beyond `@waitron/shared` and its own siblings, and any `@waitron/core`/`@waitron/fiscal` reference
+ * is an `import type`. A further deep import is safe only while that still holds — one that reaches
+ * `operations.ts` drags `@waitron/db` and Node builtins in behind it. Using the real pricer — not a reimplementation — is what keeps the preview equal
  * to the total the server re-prices at pay time ON THE WALK-UP PATH: there both sides run the same
  * `priceBasket` over the same live catalogue, so they cannot drift. It is NOT a guarantee for a
  * PLACED or RETRIEVED order (7c): the server files those from `priceLockedLines` over the ADD-TIME
@@ -22,13 +25,15 @@
  * the two DIVERGE if the catalogue price changed between add and pay — the deliberate line-add
  * snapshot, not a bug.
  */
-import { priceBasket } from "@waitron/catalogue/src/pricing.js";
+import { type BasketItem, priceBasket } from "@waitron/catalogue/src/pricing.js";
+import { customerPresentationText } from "@waitron/catalogue/src/product-presentation.js";
+import { currentContentLanguages } from "@waitron/ui";
 import { assertQuantityPrecision } from "@waitron/catalogue/src/unit-validation.js";
 import { sumDecimals } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
 import { lineGross } from "./order-line.js";
 import type { Doneness, TillProduct, ModifierSelection, ModifierSnapshot } from "../api/client.js";
-import { productUnit } from "../widgets/product-name.js";
+import { productUnit, toPresentation } from "../widgets/product-name.js";
 
 /**
  * One modifier the operator selected on a basket line (ordering modifiers, Task 9) — the client half
@@ -103,6 +108,31 @@ export type WorkingOrderListener = (payload?: unknown) => void;
 
 /** The priced shape `priceBasket` returns; used to type the getters without importing fiscal/core here. */
 type Priced = ReturnType<typeof priceBasket>;
+
+/**
+ * Resolve one basket line into the shape the pricer takes. The till carries the three names the way
+ * the catalogue stores them — a staff `name`, an optional per-language `customerName`, an optional
+ * `kitchenName`, each with the variant's own alongside — while a priced line wants the CUSTOMER text
+ * already resolved, so `customerPresentationText` (the one home for the blank-falls-back-to-the-staff-name
+ * rule) does that here. The product and the variant stay SEPARATE fields: the pricer freezes them into
+ * separate columns and joins nothing.
+ */
+function toPriceable(line: OrderLine): BasketItem {
+  const p = line.product;
+  const text = customerPresentationText(
+    toPresentation(p),
+    currentContentLanguages().defaultLanguage,
+  );
+  return {
+    ...line,
+    product: {
+      ...p,
+      descriptions: text.product,
+      variantDescriptions: text.variant,
+      unit: productUnit(p),
+    },
+  };
+}
 
 export class WorkingOrderStore {
   readonly #lines: OrderLine[] = [];
@@ -209,12 +239,7 @@ export class WorkingOrderStore {
   /** The memoised priced basket, recomputed only after a mutation cleared {@link #priced}. */
   get #pricedOrder(): Priced {
     if (this.#priced === null) {
-      this.#priced = priceBasket(
-        this.#lines.map((line) => ({
-          ...line,
-          product: { ...line.product, unit: productUnit(line.product) },
-        })),
-      );
+      this.#priced = priceBasket(this.#lines.map((line) => toPriceable(line)));
     }
     return this.#priced;
   }

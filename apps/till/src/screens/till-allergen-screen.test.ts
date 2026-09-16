@@ -8,7 +8,8 @@ import type { TillProduct } from "../api/client.js";
 // A product whose allergens have NOT been reviewed — `null`. Renders "pending", never all-clear.
 const coffee: TillProduct = {
   id: "coffee",
-  descriptions: { es: "Café", en: "Coffee" },
+  name: "Café",
+  customerName: { es: "Café para el cliente", en: "Coffee for the customer" },
   pricingUnit: "each",
   unitPrice: "1.50",
   vatClass: "general",
@@ -20,7 +21,8 @@ const coffee: TillProduct = {
 // (no source) — so a test can tell the two cells and the two detail rows apart.
 const sandwich: TillProduct = {
   id: "sandwich",
-  descriptions: { es: "Bocadillo", en: "Sandwich" },
+  name: "Bocadillo",
+  customerName: { es: "Bocadillo para el cliente", en: "Sandwich for the customer" },
   pricingUnit: "each",
   unitPrice: "4.00",
   vatClass: "reduced",
@@ -34,7 +36,8 @@ const sandwich: TillProduct = {
 // A reviewed product with NO declared allergens — `{}`. Distinct from `null`: reviewed/all-clear.
 const water: TillProduct = {
   id: "water",
-  descriptions: { es: "Agua", en: "Water" },
+  name: "Agua",
+  customerName: { es: "Agua para el cliente", en: "Water for the customer" },
   pricingUnit: "each",
   unitPrice: "1.00",
   vatClass: "general",
@@ -75,15 +78,18 @@ describe("till-allergen-screen", () => {
     expect(headers).toEqual(ALLERGEN_DISPLAY_ORDER.map((code) => allergenName(code, "en")));
   });
 
-  it("renders one row per product, each showing its name in the operator locale", async () => {
+  it("renders one row per product, each named by the venue's own STAFF name", async () => {
     const { el } = await mountWidget<TillAllergenScreen>("till-allergen-screen", {
       products,
       locale: "en",
     });
+    // `rowFor` matches the row-header text EXACTLY, and every fixture's English customer name
+    // ("Coffee for the customer", …) differs from its staff name — so a screen that resolved the
+    // customer map under this `locale: "en"` would find no row at all.
     expect(el.shadowRoot!.querySelectorAll("tbody tr")).toHaveLength(3);
-    expect(rowFor(el, "Coffee")).toBeDefined();
-    expect(rowFor(el, "Sandwich")).toBeDefined();
-    expect(rowFor(el, "Water")).toBeDefined();
+    expect(rowFor(el, "Café")).toBeDefined();
+    expect(rowFor(el, "Bocadillo")).toBeDefined();
+    expect(rowFor(el, "Agua")).toBeDefined();
   });
 
   it("marks a 'contains' cell distinctly from a 'may contain' cell", async () => {
@@ -91,7 +97,7 @@ describe("till-allergen-screen", () => {
       products,
       locale: "en",
     });
-    const row = rowFor(el, "Sandwich");
+    const row = rowFor(el, "Bocadillo");
     const gluten = row.querySelector('[data-code="gluten"]')!;
     const milk = row.querySelector('[data-code="milk"]')!;
     expect(gluten.classList.contains("contains")).toBe(true);
@@ -109,7 +115,7 @@ describe("till-allergen-screen", () => {
       products,
       locale: "en",
     });
-    rowFor(el, "Sandwich").querySelector<HTMLElement>(".row-open")!.click();
+    rowFor(el, "Bocadillo").querySelector<HTMLElement>(".row-open")!.click();
     await el.updateComplete;
     const dialog = el.shadowRoot!.querySelector("wt-dialog")!;
     expect(dialog.open).toBe(true);
@@ -127,7 +133,8 @@ describe("till-allergen-screen", () => {
     // dialog contradicts the matrix and the ALLERGEN_DISPLAY_ORDER doc's own guarantee.
     const wrap: TillProduct = {
       id: "wrap",
-      descriptions: { es: "Wrap", en: "Wrap" },
+      name: "Wrap",
+      customerName: { es: "Wrap para el cliente", en: "Wrap for the customer" },
       pricingUnit: "each",
       unitPrice: "3.50",
       vatClass: "reduced",
@@ -154,7 +161,7 @@ describe("till-allergen-screen", () => {
       products,
       locale: "en",
     });
-    const row = rowFor(el, "Coffee");
+    const row = rowFor(el, "Café");
     // Pending: the explicit pending treatment...
     expect(row.querySelector(".pending-cell")).not.toBeNull();
     expect(row.textContent).toContain(t("allergens.pending", "en"));
@@ -167,7 +174,7 @@ describe("till-allergen-screen", () => {
       products,
       locale: "en",
     });
-    const row = rowFor(el, "Water");
+    const row = rowFor(el, "Agua");
     expect(row.querySelector(".pending-cell")).toBeNull();
     expect(row.textContent).not.toContain(t("allergens.pending", "en"));
     // A full, reviewed cell row — all fourteen present and all blank (no allergens declared).
@@ -180,10 +187,10 @@ describe("till-allergen-screen", () => {
       products,
       locale: "en",
     });
-    rowFor(el, "Sandwich").querySelector<HTMLElement>(".row-open")!.click();
+    rowFor(el, "Bocadillo").querySelector<HTMLElement>(".row-open")!.click();
     await el.updateComplete;
     const dialog = el.shadowRoot!.querySelector("wt-dialog")!;
-    expect(dialog.heading).toBe("Sandwich");
+    expect(dialog.heading).toBe("Bocadillo");
   });
 
   it("a null product's detail dialog says pending, not a bare empty list", async () => {
@@ -191,7 +198,7 @@ describe("till-allergen-screen", () => {
       products,
       locale: "en",
     });
-    rowFor(el, "Coffee").querySelector<HTMLElement>(".row-open")!.click();
+    rowFor(el, "Café").querySelector<HTMLElement>(".row-open")!.click();
     await el.updateComplete;
     const dialog = el.shadowRoot!.querySelector("wt-dialog")!;
     expect(dialog.open).toBe(true);
@@ -203,7 +210,7 @@ describe("till-allergen-screen", () => {
       products,
       locale: "en",
     });
-    rowFor(el, "Water").querySelector<HTMLElement>(".row-open")!.click();
+    rowFor(el, "Agua").querySelector<HTMLElement>(".row-open")!.click();
     await el.updateComplete;
     const dialog = el.shadowRoot!.querySelector("wt-dialog")!;
     expect(dialog.open).toBe(true);
@@ -216,14 +223,15 @@ describe("till-allergen-screen", () => {
     const salad: TillProduct = {
       ...water,
       id: "salad",
-      descriptions: { es: "Ensalada", en: "Salad" },
+      name: "Ensalada",
+      customerName: { es: "Ensalada para el cliente", en: "Salad for the customer" },
       diet: { vegan: "yes", vegetarian: "yes", contains: [] },
     };
     const { el } = await mountWidget<TillAllergenScreen>("till-allergen-screen", {
       products: [salad],
       locale: "en",
     });
-    rowFor(el, "Salad").querySelector<HTMLElement>(".row-open")!.click();
+    rowFor(el, "Ensalada").querySelector<HTMLElement>(".row-open")!.click();
     await el.updateComplete;
     const dialog = el.shadowRoot!.querySelector("wt-dialog")!;
     expect(dialog.querySelector("[data-diet='vegan']")).not.toBeNull();
@@ -235,14 +243,15 @@ describe("till-allergen-screen", () => {
     const special: TillProduct = {
       ...water,
       id: "special",
-      descriptions: { es: "Especial", en: "Special" },
+      name: "Especial",
+      customerName: { es: "Especial para el cliente", en: "Special for the customer" },
       diet: { vegan: "unknown", vegetarian: "unknown", contains: [] },
     };
     const { el } = await mountWidget<TillAllergenScreen>("till-allergen-screen", {
       products: [special],
       locale: "en",
     });
-    rowFor(el, "Special").querySelector<HTMLElement>(".row-open")!.click();
+    rowFor(el, "Especial").querySelector<HTMLElement>(".row-open")!.click();
     await el.updateComplete;
     const dialog = el.shadowRoot!.querySelector("wt-dialog")!;
     expect(dialog.querySelector("[data-diet-pending]")).not.toBeNull();
@@ -254,7 +263,7 @@ describe("till-allergen-screen", () => {
       products, // coffee/sandwich/water — none carry a `diet`
       locale: "en",
     });
-    rowFor(el, "Sandwich").querySelector<HTMLElement>(".row-open")!.click();
+    rowFor(el, "Bocadillo").querySelector<HTMLElement>(".row-open")!.click();
     await el.updateComplete;
     const dialog = el.shadowRoot!.querySelector("wt-dialog")!;
     expect(dialog.querySelector(".detail-diet")).toBeNull();
@@ -265,7 +274,7 @@ describe("till-allergen-screen", () => {
       products,
       locale: "en",
     });
-    rowFor(el, "Sandwich").querySelector<HTMLElement>(".row-open")!.click();
+    rowFor(el, "Bocadillo").querySelector<HTMLElement>(".row-open")!.click();
     await el.updateComplete;
     const dialog = el.shadowRoot!.querySelector("wt-dialog")!;
     expect(dialog.open).toBe(true);
@@ -281,7 +290,7 @@ describe("till-allergen-screen", () => {
       products,
       locale: "en",
     });
-    rowFor(el, "Sandwich").querySelector<HTMLElement>(".row-open")!.click();
+    rowFor(el, "Bocadillo").querySelector<HTMLElement>(".row-open")!.click();
     await el.updateComplete;
     const dialog = el.shadowRoot!.querySelector("wt-dialog")!;
     expect(dialog.open).toBe(true);
@@ -318,6 +327,54 @@ describe("till-allergen-screen", () => {
       // Printed: the invoice locale (Spanish names) — mirrors till-ticket-view's invoiceLocale path.
       expect(printSpy).toHaveBeenCalledTimes(1);
       expect(el.shadowRoot!.textContent).toContain(ALLERGEN_NAMES.milk!.es); // "Leche"
+    } finally {
+      printSpy.mockRestore();
+    }
+  });
+
+  it("names products by the CUSTOMER name when printing, and by the staff name on screen", async () => {
+    // The printed sheet is a customer document (RD 126/2015 Art. 6.5.a.2° reaches consumers, not only
+    // staff and inspectors), so a diner must be able to match a dish on the customer menu to a row
+    // here. On screen the same matrix is an operator lookup and reads the venue's own name. Every
+    // fixture's two names differ, so each half of this fails if the other resolver is used.
+    const printSpy = vi.spyOn(window, "print").mockImplementation(() => {});
+    try {
+      const { el } = await mountWidget<TillAllergenScreen>("till-allergen-screen", {
+        products,
+        locale: "en",
+        invoiceLocale: "es-ES",
+      });
+      const rowNames = () =>
+        [...el.shadowRoot!.querySelectorAll(".row-open")].map((n) => n.textContent!.trim());
+      // On screen: the staff names.
+      expect(rowNames()).toEqual(["Café", "Bocadillo", "Agua"]);
+      el.shadowRoot!.querySelector<HTMLElement>("wt-button.print")!.click();
+      await el.updateComplete;
+      expect(printSpy).toHaveBeenCalledTimes(1);
+      // Printed: the customer text, resolved in the INVOICE locale (es-ES → the `es` entry), not the
+      // operator locale the screen was mounted with.
+      expect(rowNames()).toEqual([
+        "Café para el cliente",
+        "Bocadillo para el cliente",
+        "Agua para el cliente",
+      ]);
+    } finally {
+      printSpy.mockRestore();
+    }
+  });
+
+  it("names a printed product with its staff name when it has no customer text", async () => {
+    const printSpy = vi.spyOn(window, "print").mockImplementation(() => {});
+    try {
+      const plain: TillProduct = { ...water, id: "plain", name: "Sin carta", customerName: null };
+      const { el } = await mountWidget<TillAllergenScreen>("till-allergen-screen", {
+        products: [plain],
+        locale: "en",
+        invoiceLocale: "es-ES",
+      });
+      el.shadowRoot!.querySelector<HTMLElement>("wt-button.print")!.click();
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector(".row-open")!.textContent!.trim()).toBe("Sin carta");
     } finally {
       printSpy.mockRestore();
     }

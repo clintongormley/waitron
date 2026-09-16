@@ -65,6 +65,7 @@ import {
   type ProductAllergens,
   type UpdateOptionGroupInput,
   type UpdateOptionGroupItemInput,
+  type ProductEditorValue,
   type UpdateProductInput,
   type VatClass,
 } from "@waitron/catalogue";
@@ -73,6 +74,8 @@ import { createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody, requireString } from "@waitron/server-kit";
 import { requireManagementSession } from "@waitron/server-kit";
 import { isUuid } from "./till-session.js";
+import { setProductCourse, setProductStation } from "./kitchen.js";
+import type { TillConfig } from "./till-config.js";
 import type { Logger } from "./logger.js";
 
 /** Catalogue and content-language routes scope every operation to the configured tenant. */
@@ -88,6 +91,12 @@ export interface CatalogueApiDeps {
    * stamps a capture origin — the application outbox and its capture triggers were removed (native
    * replication ships every row). */
   cfg: { tenantId: string; nodeId: string };
+  /**
+   * The venue whose kitchen stations and courses the product editor may route a product to. OPTIONAL
+   * because `setProductStation`/`setProductCourse` check the id against `cfg.locationId`, which the
+   * tenant-only `cfg` above does not carry; `boot.ts` always supplies it for a real venue server.
+   */
+  venueCfg?: TillConfig;
   venueLocale?: string;
 }
 
@@ -150,6 +159,11 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "menu_item.not_found": 404,
   "product.not_found": 404,
   "menu_section.not_found": 404,
+  // The product editor's kitchen routing (`setProductStation`/`setProductCourse`): an id that names no
+  // LIVE station or course of this venue. 404 on every other surface that raises them
+  // (`management-api.ts`, `till-api.ts`, `print-api.ts`), so it is 404 here too.
+  "station.not_found": 404,
+  "course.not_found": 404,
   "allergen.invalid_code": 400,
   "allergen.invalid_presence": 400,
   "allergen.invalid_source": 400,
@@ -343,6 +357,60 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       }
       return fn(tx);
     });
+
+  /**
+   * Screen the editor body's OPTIONAL kitchen routing. `undefined` means "leave it alone"; `null`
+   * clears it. Only the SHAPE is checked here — `setProductStation`/`setProductCourse` are the
+   * authority on whether the id names a live station or course of this venue, and raise
+   * `station.not_found` / `course.not_found`.
+   */
+  const screenRouting = (body: Record<string, unknown>): ProductRouting => {
+    for (const field of ["stationId", "courseId"] as const) {
+      const value = body[field];
+      if (value !== undefined && value !== null && typeof value !== "string") {
+        throw new AppError("management.request_invalid", { field });
+      }
+      // A malformed id would reach a `uuid` comparison and come back as an opaque 500, so it is
+      // folded to the same not-found code an absent one gets — the shape `management-api.ts`'s
+      // station and course routes use.
+      if (typeof value === "string" && !isUuid(value)) {
+        throw field === "stationId"
+          ? new AppError("station.not_found", { stationId: value })
+          : new AppError("course.not_found", { courseId: value });
+      }
+    }
+    return {
+      stationId: body.stationId as string | null | undefined,
+      courseId: body.courseId as string | null | undefined,
+    };
+  };
+
+  /**
+   * Write the product's kitchen routing on the SAME transaction the product was saved on, then read
+   * the editor value back so the response shows what was stored. Sharing the transaction is the point:
+   * a station or course id the venue does not have rolls the whole product back rather than leaving a
+   * saved product with the routing it asked for missing. The two writes are awaited IN TURN, never
+   * `Promise.all` — queries on one transaction run one at a time.
+   *
+   * A body that names NEITHER field returns `saved` — which `saveProductEditor` has already read back
+   * — rather than reading the whole product a second time. Only a body that actually writes routing
+   * needs the re-read, so the common save costs one read, not two.
+   */
+  const applyRouting = async (
+    tx: Transaction,
+    saved: ProductEditorValue,
+    routing: ProductRouting,
+  ): Promise<ProductEditorValue> => {
+    if (routing.stationId === undefined && routing.courseId === undefined) return saved;
+    const cfg = requireVenueCfg(deps);
+    if (routing.stationId !== undefined) {
+      await setProductStation(tx, cfg, saved.id, routing.stationId);
+    }
+    if (routing.courseId !== undefined) {
+      await setProductCourse(tx, cfg, saved.id, routing.courseId);
+    }
+    return readProductEditor(tx, tenantId, saved.id);
+  };
 
   const assertOwned = async (
     tx: Transaction,
@@ -840,17 +908,19 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const catalogueId = requireUuidParam(c.req.param("id"), "CatalogueId");
-      const body = await readJsonBody(c);
-      const saved = await gated(sessionId, (tx) =>
-        saveProductEditor(
+      const body = await readJsonBody<Record<string, unknown>>(c);
+      const routing = screenRouting(body);
+      const saved = await gated(sessionId, async (tx) => {
+        const product = await saveProductEditor(
           tx,
           tenantId,
           null,
           catalogueId,
           body,
           deps.venueLocale ?? FALLBACK_LOCALE,
-        ),
-      );
+        );
+        return applyRouting(tx, product, routing);
+      });
       return c.json(saved, 201);
     }),
   );
@@ -867,18 +937,20 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const productId = requireUuidParam(c.req.param("id"), "ProductId");
-      const body = await readJsonBody(c);
+      const body = await readJsonBody<Record<string, unknown>>(c);
+      const routing = screenRouting(body);
       return c.json(
-        await gated(sessionId, (tx) =>
-          saveProductEditor(
+        await gated(sessionId, async (tx) => {
+          const product = await saveProductEditor(
             tx,
             tenantId,
             productId,
             "00000000-0000-0000-0000-000000000000",
             body,
             deps.venueLocale ?? FALLBACK_LOCALE,
-          ),
-        ),
+          );
+          return applyRouting(tx, product, routing);
+        }),
       );
     }),
   );
@@ -896,7 +968,8 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const body = await readJsonBody<{
         catalogueId?: unknown;
         categoryId?: unknown;
-        descriptions?: unknown;
+        name?: unknown;
+        customerName?: unknown;
         unitId?: unknown;
         pricingUnit?: unknown;
         unitPrice?: unknown;
@@ -914,9 +987,10 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       if (typeof body.categoryId !== "string" && body.categoryId !== null) {
         throw new AppError("management.request_invalid", { field: "categoryId" });
       }
-      if (!isPlainObject(body.descriptions)) {
-        throw new AppError("management.request_invalid", { field: "descriptions" });
+      if (typeof body.name !== "string" || !body.name.trim()) {
+        throw new AppError("management.request_invalid", { field: "name" });
       }
+      const customerName = screenCustomerName(body.customerName);
       if (body.unitId !== undefined && (typeof body.unitId !== "string" || !isUuid(body.unitId))) {
         throw new AppError("management.request_invalid", { field: "unitId" });
       }
@@ -953,7 +1027,8 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const input = {
         catalogueId: body.catalogueId,
         categoryId: body.categoryId,
-        descriptions: body.descriptions as Record<string, string>,
+        name: body.name.trim(),
+        customerName,
         ...(body.unitId === undefined
           ? { pricingUnit: body.pricingUnit as never }
           : { unitId: body.unitId as string }),
@@ -967,12 +1042,14 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         ...(body.active === undefined ? {} : { active: body.active }),
       };
       const created = await gated(sessionId, async (tx) => {
-        await validateContentTranslations(
-          tx,
-          tenantId,
-          input.descriptions,
-          deps.venueLocale ?? FALLBACK_LOCALE,
-        );
+        if (customerName !== null) {
+          await validateContentTranslations(
+            tx,
+            tenantId,
+            customerName,
+            deps.venueLocale ?? FALLBACK_LOCALE,
+          );
+        }
         const product = await createProduct(tx, tenantId, input);
         if (optionGroupIds !== undefined) {
           await setProductOptionGroups(tx, tenantId, product.id, optionGroupIds);
@@ -993,7 +1070,8 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       // `updateProduct` (the `allergen.*` authority). Only present keys enter `patch`, so an absent
       // field is never written.
       const body = await readJsonBody<{
-        descriptions?: unknown;
+        name?: unknown;
+        customerName?: unknown;
         unitPrice?: unknown;
         vatClass?: unknown;
         unitId?: unknown;
@@ -1007,11 +1085,14 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         modifierIds?: unknown;
       }>(c);
       const patch: UpdateProductInput = {};
-      if (body.descriptions !== undefined) {
-        if (!isPlainObject(body.descriptions)) {
-          throw new AppError("management.request_invalid", { field: "descriptions" });
+      if (body.name !== undefined) {
+        if (typeof body.name !== "string" || !body.name.trim()) {
+          throw new AppError("management.request_invalid", { field: "name" });
         }
-        patch.descriptions = body.descriptions as Record<string, string>;
+        patch.name = body.name.trim();
+      }
+      if (body.customerName !== undefined) {
+        patch.customerName = screenCustomerName(body.customerName);
       }
       if (body.unitPrice !== undefined) {
         if (typeof body.unitPrice !== "string") {
@@ -1076,11 +1157,14 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       );
       await gated(sessionId, async (tx) => {
         await assertOwned(tx, "products", productId);
-        if (patch.descriptions !== undefined)
+        // A customer-facing name is optional: absent or wholly blank, the staff name is what a
+        // receipt shows, so there is nothing to hold to the enabled languages. A PARTIAL one is a
+        // translation gap and is refused.
+        if (patch.customerName != null)
           await validateContentTranslations(
             tx,
             tenantId,
-            patch.descriptions,
+            patch.customerName,
             deps.venueLocale ?? FALLBACK_LOCALE,
           );
         await updateProduct(tx, tenantId, productId, patch);
@@ -1341,8 +1425,54 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
   );
 }
 
-/** True for a non-null, non-array object — the shape a JSON `descriptions` / allergen map must take
- * before it is handed on (a screen the management staff routes apply to their own object fields). */
+/** A product editor body's optional kitchen routing: absent leaves it alone, `null` clears it. */
+interface ProductRouting {
+  stationId?: string | null;
+  courseId?: string | null;
+}
+
+/**
+ * The venue config the product editor's kitchen routing needs (`deps.venueCfg`), or a fail-closed
+ * throw. `boot.ts` always supplies it for a real venue server, so this is a misconfiguration guard,
+ * not a request fault — the same posture `management-api.ts`'s namesake takes.
+ */
+function requireVenueCfg(deps: CatalogueApiDeps): TillConfig {
+  /* v8 ignore next 8 -- boot always threads a venueCfg of the mounted tenant; only a harness that
+     omits it or mounts a mismatched one AND sends editor routing reaches these, which no suite does —
+     a config error, surfaced as an opaque 500 by `run`. */
+  if (deps.venueCfg === undefined) {
+    throw new Error("mountCatalogueApi: venueCfg is required for the product editor's routing");
+  }
+  // The routing verbs scope their station/course check and their write to `venueCfg`, so a mount whose
+  // venue belongs to a DIFFERENT tenant than the one every other route is scoped to would check the
+  // wrong venue. The type permits that pairing; this refuses it rather than trusting the wiring.
+  if (deps.venueCfg.tenantId !== deps.cfg.tenantId) {
+    throw new Error("mountCatalogueApi: venueCfg must belong to the mounted tenant");
+  }
+  return deps.venueCfg;
+}
+
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Screen a product's optional customer-facing name: a language->text object, or `null` for "none".
+ * A map with no non-blank entry means the same as `null` — the staff name is what a receipt shows —
+ * so it is folded to `null` here and never reaches `validateContentTranslations`, which would
+ * otherwise refuse it for lacking the default language. The same fold the product editor's parser
+ * makes (`product-editor-input.ts`), so the two write paths agree. The per-LANGUAGE checks stay with
+ * `validateContentTranslations`, the authority on them.
+ */
+function screenCustomerName(value: unknown): Record<string, string> | null {
+  if (value === undefined || value === null) return null;
+  if (!isPlainObject(value)) {
+    throw new AppError("management.request_invalid", { field: "customerName" });
+  }
+  const entries = Object.entries(value);
+  if (entries.some(([, text]) => typeof text !== "string")) {
+    throw new AppError("management.request_invalid", { field: "customerName" });
+  }
+  const map = Object.fromEntries(entries) as Record<string, string>;
+  return Object.values(map).some((text) => text.trim()) ? map : null;
 }

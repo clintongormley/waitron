@@ -78,16 +78,20 @@ export interface VenueServiceChoices {
   offers: MenuOffer[];
   sections: MenuSection[];
 }
+/** The subset of `@waitron/catalogue`'s `Product` these screens read. `name` is the plain staff name
+ * every dashboard surface shows; `customerName` is the language map only a diner ever sees. */
 export interface Product {
   id: string;
-  descriptions: Record<string, string>;
+  name: string;
+  customerName: Record<string, string> | null;
   pricingUnit: "each" | "weight";
   active: boolean;
   variants?: ProductVariant[];
 }
 export interface ProductVariant {
   id: string;
-  name: Record<string, string>;
+  name: string;
+  customerName: Record<string, string> | null;
   unitPrice: string;
   available: boolean;
 }
@@ -109,7 +113,8 @@ export interface MenuOffer {
   productId: string;
   sectionId: string;
   sectionName: Record<string, string>;
-  descriptions: Record<string, string>;
+  name: string;
+  customerName: Record<string, string> | null;
   grossPrice: string;
   variants?: ProductVariant[];
 }

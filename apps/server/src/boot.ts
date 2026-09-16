@@ -2061,6 +2061,8 @@ export async function startServer(
     {
       db,
       cfg: { tenantId: till.tenantId, nodeId: till.nodeId },
+      // The venue the product editor routes a product's station/course against.
+      venueCfg: till,
       contentTranslationGaps: async (tx, tenantId, language) => {
         const gaps = [];
         for (const module of setsToMigrate) {

@@ -112,6 +112,7 @@ export async function submitFiscalReadiness(args: {
             lines: [
               {
                 lineNo: 1,
+                name: "Fiscal readiness test",
                 descriptions: { [args.venue.location.invoiceLocales[0]!]: "Fiscal readiness test" },
                 quantity: "1",
                 unitPrice: "1.00",

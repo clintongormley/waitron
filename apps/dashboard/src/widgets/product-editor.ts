@@ -1,37 +1,111 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { keyed } from "lit/directives/keyed.js";
+import { repeat } from "lit/directives/repeat.js";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, selectStyles, submitOnEnter } from "@waitron/ui";
+import { baseStyles, currentContentLanguages, selectStyles, submitOnEnter } from "@waitron/ui";
 import { resolveContentText } from "@waitron/shared";
 import {
   DIETARY_LABELS,
   expandDietaryDeclarations,
 } from "@waitron/catalogue/src/dietary-declarations.js";
+import { isProductPrice } from "@waitron/catalogue/src/modifier-limits.js";
 import { VAT_CLASSES, resolveVatRate } from "@waitron/catalogue/src/pricing.js";
 import "@waitron/ui/src/components/wt-modal.js";
-import "@waitron/ui/src/components/wt-card.js";
+import "@waitron/ui/src/components/wt-combobox.js";
+import "@waitron/ui/src/components/wt-disclosure.js";
+import "@waitron/ui/src/components/wt-icon.js";
 import "@waitron/ui/src/components/wt-input.js";
+import "@waitron/ui/src/components/wt-lozenge.js";
+import "@waitron/ui/src/components/wt-price-input.js";
+import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-form-error-summary.js";
 import "./allergen-picker.js";
+import "./category-membership-picker.js";
 import "./image-upload.js";
-import type { DashboardApi } from "../api/client.js";
+import "./variant-form.js";
+import "./variant-table.js";
+import { categoryPath } from "./category-form.js";
+import {
+  nonBlankNames,
+  optionalTextFields,
+  priceLabel,
+  switchField,
+  textField,
+  type FieldContext,
+} from "./form-fields.js";
+import { reorder } from "./reorder.js";
+import { ReorderController, type ReorderModel } from "./reorder-table.js";
+import type { CategorySummary, DashboardApi, ProductCategories } from "../api/client.js";
 import type {
   EditorChoice,
+  EditorVariant,
   UnitChoice,
+  LocalizedText,
   ProductEditorDraft,
   DietaryLabel,
   ProductRoutingChoice,
 } from "./product-editor-model.js";
-import { t } from "../i18n/t.js";
-import { vatClassName } from "../i18n/domain.js";
+import { t, currentLocale } from "../i18n/t.js";
+import { allergenName, vatClassName } from "../i18n/domain.js";
 
 const dietaryLabels: readonly DietaryLabel[] = DIETARY_LABELS;
+
+/** Separates the parts of a collapsed section's summary. This is NOT the product·variant name join,
+ * which belongs to `packages/catalogue/src/product-presentation.ts` and is never re-implemented. */
+const SUMMARY_SEPARATOR = " · ";
+
+/** The combobox row that opens the modifier form rather than attaching an existing modifier. */
+const CREATE_MODIFIER = "create";
+
+/** Which field names each collapsed section holds, as PREFIXES. A section holding a validation
+ * error cannot stay collapsed, and this is what its `has-error` is computed from. */
+const SECTION_FIELDS = {
+  kitchen: ["kitchen-name", "product-station", "product-course"],
+  descriptors: ["customer-name-", "description-", "image"],
+  nutrition: ["allergens", "dietary"],
+} as const;
+type SectionName = keyof typeof SECTION_FIELDS;
+
+/**
+ * The field names the SERVER uses when it rejects a product body
+ * (`packages/catalogue/src/product-editor-input.ts`), mapped onto this editor's own field names. A
+ * value ending in "-" names a translated field: the server names such a field once for all of its
+ * languages, so there is no single language to point at and the default content language's input is
+ * used.
+ */
+const SERVER_FIELDS: Record<string, string> = {
+  name: "name",
+  customerName: "customer-name-",
+  description: "description-",
+  kitchenName: "kitchen-name",
+  image: "image",
+  unitId: "unit",
+  unitPrice: "unit-price",
+  vatClass: "tax",
+  categoryIds: "primary",
+  primaryCategoryId: "primary",
+};
+
+/**
+ * The editor field a rejected product write's `field` belongs to, or null when nothing on this
+ * screen holds it. The composing screen uses it to put the server's refusal beside the field it
+ * names, which is also what opens the section that field is folded into.
+ */
+export function productEditorField(field: string, defaultLanguage: string): string | null {
+  const variant = /^variants\.(\d+)\.(name|unitPrice)$/.exec(field);
+  if (variant) return `variant-${variant[1]}-${variant[2] === "name" ? "name" : "price"}`;
+  const mapped = SERVER_FIELDS[field];
+  if (mapped === undefined) return null;
+  return mapped.endsWith("-") ? `${mapped}${defaultLanguage}` : mapped;
+}
+
 function emptyDraft(): ProductEditorDraft {
   return {
-    name: {},
+    name: "",
+    customerName: null,
     description: null,
     kitchenName: null,
     image: null,
@@ -45,46 +119,86 @@ function emptyDraft(): ProductEditorDraft {
     modifierIds: [],
     allergens: null,
     dietaryDeclarations: [],
+    stationId: null,
+    courseId: null,
   };
 }
 
+/**
+ * The product editor: one short form whose optional detail folds away behind `wt-disclosure`
+ * sections, over a draft nothing writes to the server until Save.
+ *
+ * The product's own name is the plain STAFF name. The translated customer-facing name and the
+ * kitchen name are separate optional fields that fall back to it, and both the fallback and the
+ * product·variant join belong to `packages/catalogue/src/product-presentation.ts`, never to a
+ * screen. The kitchen routing (station and course) travels in this form's own submitted value, so
+ * a station this venue does not have rolls the product back instead of leaving it half saved.
+ */
 @customElement("dashboard-product-editor")
 export class ProductEditor extends LitElement {
   static override styles = [
     baseStyles,
     selectStyles,
+    ReorderController.styles,
     css`
       :host {
         display: block;
       }
-      .cards,
-      .fields,
-      .selected {
+      .form,
+      .group {
         display: flex;
         flex-direction: column;
+        gap: var(--wt-space-3);
+      }
+      .form {
         gap: var(--wt-space-4);
       }
-      h3 {
-        margin: 0;
-        font-size: var(--wt-font-size-md);
+      .group-label {
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+        font-weight: var(--wt-font-weight-bold);
+        text-transform: uppercase;
       }
       label {
         display: flex;
         flex-direction: column;
         gap: var(--wt-space-2);
       }
-      .row {
+      .row,
+      .chips {
         display: flex;
         flex-wrap: wrap;
         align-items: center;
-        gap: var(--wt-space-3);
-      }
-      .row > label {
-        flex: 1;
+        gap: var(--wt-space-2);
       }
       .error {
         color: var(--wt-color-danger);
         font-size: var(--wt-font-size-sm);
+      }
+      /* A chip is the lozenge's tap target, so the BUTTON carries the minimum size rather than
+         stretching something inside it past its own box. */
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        min-width: var(--wt-tap-min);
+        min-height: var(--wt-tap-min);
+        padding: 0;
+        border: 0;
+        background: transparent;
+        color: var(--wt-color-text);
+        font: inherit;
+        cursor: pointer;
+      }
+      .chip:focus-visible {
+        outline: var(--wt-focus-ring);
+        outline-offset: var(--wt-focus-offset);
+      }
+      /* The reporting category is marked by a RING, not by its colour: a category's colour is
+         optional, so a colour-only rule leaves two identical chips whenever the reporting one has
+         none. The ring is drawn on the lozenge so it follows the pill rather than the 44px button. */
+      .chip.reporting wt-lozenge {
+        border-radius: var(--wt-radius-full);
+        box-shadow: 0 0 0 2px var(--wt-color-primary);
       }
       textarea {
         box-sizing: border-box;
@@ -107,9 +221,38 @@ export class ProductEditor extends LitElement {
         border-radius: var(--wt-radius-sm);
         font-size: var(--wt-font-size-sm);
       }
-      .variant {
-        border-top: 1px solid var(--wt-color-border);
-        padding-top: var(--wt-space-3);
+      /* The modifiers table may be wider than the form; its own scroller keeps the dialog from
+         scrolling sideways at phone width. */
+      .wrap {
+        overflow-x: auto;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      th,
+      td {
+        padding: var(--wt-space-2) var(--wt-space-1);
+        text-align: start;
+        vertical-align: middle;
+        border-bottom: 1px solid var(--wt-color-border);
+      }
+      th {
+        font-weight: var(--wt-font-weight-bold);
+      }
+      td:nth-child(2) {
+        max-width: var(--wt-cell-name-max-width);
+      }
+      .visually-hidden {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
       }
     `,
   ];
@@ -119,7 +262,7 @@ export class ProductEditor extends LitElement {
   @property({ attribute: false }) locales: string[] = [];
   @property({ attribute: false }) value: ProductEditorDraft | null = null;
   @property({ attribute: false }) units: UnitChoice[] = [];
-  @property({ attribute: false }) categories: EditorChoice[] = [];
+  @property({ attribute: false }) categories: CategorySummary[] = [];
   @property({ attribute: false }) modifiers: EditorChoice[] = [];
   @property({ attribute: false }) stations: ProductRoutingChoice[] = [];
   @property({ attribute: false }) courses: ProductRoutingChoice[] = [];
@@ -135,11 +278,35 @@ export class ProductEditor extends LitElement {
   @state() private imageOpen = false;
   @state() private dietaryPickerOpen = false;
   @state() private dietarySearch = "";
-  @state() private membershipPicker: "category" | "modifier" | null = null;
-  @state() private membershipSearch = "";
+  @state() private unitPickerOpen = false;
+  /** The memberships the categories modal opened with. Non-null exactly while it is open, and a
+   * stable object so the picker's own draft is not reseeded by an unrelated re-render. */
+  @state() private categoriesValue: ProductCategories | null = null;
+  @state() private variantOpen = false;
+  /** Which variant the variant window is editing, or null while it is adding a new one. */
+  @state() private variantIndex: number | null = null;
+  @state() private allergenOpen = false;
   private submitted = false;
   private generation = 0;
-  @state() private allergenOpen = false;
+  /** The field to put focus in once the update that reported an error has rendered. */
+  #focusField: string | null = null;
+
+  readonly #reorder = new ReorderController(this, {
+    order: () => this.draft.modifierIds,
+    move: (id, to) => {
+      const from = this.draft.modifierIds.indexOf(id);
+      if (from < 0 || from === to) return;
+      this.change("modifierIds", reorder(this.draft.modifierIds, from, to));
+    },
+    label: (id) => {
+      const choice = this.modifiers.find((modifier) => modifier.id === id);
+      return choice ? this.label(choice) : t("editor.modifier");
+    },
+    busy: () => this.suspended,
+    get reorderLabel(): string {
+      return t("editor.reorder_modifier");
+    },
+  } satisfies ReorderModel);
 
   override willUpdate(changed: PropertyValues): void {
     if (changed.has("value") || (changed.has("open") && this.open)) {
@@ -150,12 +317,42 @@ export class ProductEditor extends LitElement {
       this.errors = {};
       this.submitted = false;
       this.dietaryPickerOpen = false;
-      this.membershipPicker = null;
-      this.membershipSearch = "";
       this.dietarySearch = "";
+      this.unitPickerOpen = false;
+      this.categoriesValue = null;
+      this.variantOpen = false;
+      this.variantIndex = null;
+      this.#variantProblems = new Map();
     }
     if ((changed.has("busy") && !this.busy) || changed.has("fieldErrors")) this.submitted = false;
+    // A field error the SERVER reported is surfaced the same way a local one is: its section opens
+    // and focus goes to it, so a rejected save never hides its reason behind a folded header.
+    if (changed.has("fieldErrors")) {
+      this.aimFocus(this.fieldErrors);
+      this.recordVariantProblems();
+    }
   }
+
+  override updated(): void {
+    const name = this.#focusField;
+    if (name === null) return;
+    this.#focusField = null;
+    void this.focusField(name);
+  }
+  /** Puts focus in the field an error names. A field inside a collapsed section is still HIDDEN
+   * when this update finishes — the section opens itself on `has-error` during its own update —
+   * and focusing a hidden element silently does nothing, so wait for that section first. */
+  private async focusField(name: string): Promise<void> {
+    await this.updateComplete;
+    const field = this.shadowRoot?.querySelector<HTMLElement>(`[name="${name}"]`);
+    if (!field) return;
+    const section = field.closest<HTMLElement & { updateComplete?: Promise<unknown> }>(
+      "wt-disclosure",
+    );
+    await section?.updateComplete;
+    field.focus();
+  }
+
   get currentValue(): ProductEditorDraft {
     return structuredClone(this.draft);
   }
@@ -166,11 +363,54 @@ export class ProductEditor extends LitElement {
       this.imageOpen ||
       this.allergenOpen ||
       this.dietaryPickerOpen ||
-      this.membershipPicker !== null
+      this.variantOpen ||
+      this.categoriesValue !== null
     );
   }
   private error(name: string) {
     return this.fieldErrors[name] ?? this.errors[name] ?? "";
+  }
+  /** The reported problems in the order the fields appear, which is the order the summary lists
+   * them and the order the first-error focus follows. */
+  private get allErrors(): Record<string, string> {
+    return { ...this.errors, ...this.fieldErrors };
+  }
+  private aimFocus(errors: Record<string, string>): void {
+    this.#focusField = Object.keys(errors)[0] ?? null;
+  }
+  private sectionHasError(section: SectionName): boolean {
+    return Object.keys(this.allErrors).some((key) =>
+      SECTION_FIELDS[section].some((field) => key.startsWith(field)),
+    );
+  }
+  /**
+   * The reported problems that belong to a variant ROW, against the variant OBJECT rather than its
+   * position. A variant is edited in its own window, so the table is the only place in the editor
+   * its problem can be shown — and a reorder rewrites the array without revalidating, so a problem
+   * held against an index would move onto whichever variant landed there and leave the offending
+   * one unmarked. `dashboard-variant-table` keys its rows by the same identity, so the two agree.
+   *
+   * Editing or toggling a variant replaces its object and so drops its mark, which is right: that
+   * verdict was about the value the row no longer holds. The next Save re-reports whatever is still
+   * wrong.
+   */
+  #variantProblems = new Map<EditorVariant, string>();
+  private recordVariantProblems(): void {
+    const problems = new Map<EditorVariant, string>();
+    for (const [key, message] of Object.entries(this.allErrors)) {
+      const match = /^variant-(\d+)-(?:name|price)$/.exec(key);
+      const variant = match ? this.draft.variants[Number(match[1])] : undefined;
+      if (variant && !problems.has(variant)) problems.set(variant, message);
+    }
+    this.#variantProblems = problems;
+  }
+  private get variantErrors(): Record<number, string> {
+    const rows: Record<number, string> = {};
+    this.draft.variants.forEach((variant, index) => {
+      const message = this.#variantProblems.get(variant);
+      if (message !== undefined) rows[index] = message;
+    });
+    return rows;
   }
   private get taxes() {
     return (
@@ -178,39 +418,53 @@ export class ProductEditor extends LitElement {
       VAT_CLASSES.map((id) => ({ id, rate: resolveVatRate(id), label: vatClassName(id) }))
     );
   }
+  private get language() {
+    return this.locales[0] ?? "en";
+  }
+  private text(value: LocalizedText) {
+    return resolveContentText(value, this.language, this.language);
+  }
   private label(choice: EditorChoice) {
-    return resolveContentText(choice.name, this.locales[0] ?? "en", this.locales[0] ?? "en");
+    return this.text(choice.name);
   }
   private unitLabel(unit: UnitChoice) {
-    const name = resolveContentText(unit.name, this.locales[0] ?? "en", this.locales[0] ?? "en");
-    const abbr = resolveContentText(
-      unit.abbreviation,
-      this.locales[0] ?? "en",
-      this.locales[0] ?? "en",
-    );
+    const name = this.text(unit.name);
+    const abbr = this.text(unit.abbreviation);
     return abbr ? `${name} (${abbr})` : name;
+  }
+  /** The pricing unit's short form — what the price field's button and the variants table's price
+   * column header both show. Never empty: a product with no stored unit is sold by the each, and
+   * that is what it reads as. */
+  private get unitShortLabel(): string {
+    const unit = this.units.find((unit) => unit.id === this.draft.unitId);
+    if (!unit) return t("editor.unit_each");
+    return this.text(unit.abbreviation) || this.text(unit.name);
+  }
+  /** The unit dropdown is a chooser behind the price field's button. It also has to be on screen
+   * whenever the server has rejected the unit — a field carrying an error cannot hide behind a
+   * button that gives no sign anything is wrong. Having no unit is NOT such a case: it means Each,
+   * which the button names like any other unit. */
+  private get unitOpen(): boolean {
+    return this.unitPickerOpen || this.error("unit") !== "";
+  }
+  private fields(): FieldContext {
+    return { busy: this.busy, locales: this.locales, error: (key) => this.error(key) };
   }
   private change<K extends keyof ProductEditorDraft>(key: K, value: ProductEditorDraft[K]) {
     this.draft = { ...this.draft, [key]: value };
   }
-  private textField(
-    name: string,
-    label: string,
-    value: string,
-    change: (value: string) => void,
-    required = false,
-  ) {
-    return html`<wt-input
-      name=${name}
-      label=${label}
-      .value=${value}
-      .required=${required}
-      .error=${this.fieldErrors[name] ?? this.errors[name] ?? ""}
-      @wt-change=${(event: CustomEvent<{ value: string }>) => {
-        event.stopPropagation();
-        change(event.detail.value);
-      }}
-    ></wt-input>`;
+  /**
+   * The draft never holds exactly ONE variant: a lone variant is just the product's own price, so
+   * it folds back into `unitPrice` and its row disappears. The server refuses a single variant
+   * outright (`product.variants_min_two`), so this is the invariant, not a convenience. Only the
+   * price folds back — with no variants the product's own Available switch is what governs.
+   */
+  private setVariants(variants: EditorVariant[]): void {
+    if (variants.length === 1) {
+      this.draft = { ...this.draft, unitPrice: variants[0]!.unitPrice, variants: [] };
+      return;
+    }
+    this.change("variants", variants);
   }
   private related(event: Event, kind: "unit" | "category" | "modifier") {
     event.stopPropagation();
@@ -238,34 +492,36 @@ export class ProductEditor extends LitElement {
   private save(event: Event) {
     event.stopPropagation();
     if (this.suspended || this.submitted) return;
+    // Inserted in the order the fields are rendered, so the summary reads top to bottom and the
+    // first entry is the field focus lands in.
     const errors: Record<string, string> = {};
-    const defaultLanguage = this.locales[0] ?? "en";
-    if (!this.draft.name[defaultLanguage]?.trim())
-      errors[`name-${defaultLanguage}`] = t("editor.name_required");
-    const price = /^(0|[1-9]\d{0,9})(\.\d{1,2})?$/;
-    if (!price.test(this.draft.unitPrice)) errors["unit-price"] = t("editor.price_invalid");
-    if (!this.taxes.some((tax) => tax.id === this.draft.vatClass))
-      errors.tax = t("editor.tax_required");
-    for (const [index, variant] of this.draft.variants.entries()) {
-      if (!variant.name[defaultLanguage]?.trim())
-        errors[`variant-${index}-name-${defaultLanguage}`] = t("editor.variant_name_required");
-      if (!price.test(variant.unitPrice))
-        errors[`variant-${index}-price`] = t("editor.price_invalid");
-    }
+    if (!this.draft.name.trim()) errors.name = t("editor.name_required");
     if (
       this.draft.primaryCategoryId !== null &&
       !this.draft.categoryIds.includes(this.draft.primaryCategoryId)
     )
       errors.primary = t("editor.reporting_category_invalid");
+    if (!this.taxes.some((tax) => tax.id === this.draft.vatClass))
+      errors.tax = t("editor.tax_required");
+    if (this.draft.variants.length === 0 && !isProductPrice(this.draft.unitPrice))
+      errors["unit-price"] = t("editor.price_invalid");
+    for (const [index, variant] of this.draft.variants.entries()) {
+      if (!variant.name.trim()) errors[`variant-${index}-name`] = t("editor.variant_name_required");
+      if (!isProductPrice(variant.unitPrice))
+        errors[`variant-${index}-price`] = t("editor.price_invalid");
+    }
     this.errors = errors;
-    if (Object.keys(errors).length) return;
+    this.recordVariantProblems();
+    if (Object.keys(errors).length) {
+      this.aimFocus(errors);
+      return;
+    }
     this.submitted = true;
     const value = this.currentValue;
-    delete value.stationId;
-    delete value.courseId;
+    value.name = value.name.trim();
     value.kitchenName = value.kitchenName?.trim() || null;
-    if (!Object.values(value.description ?? {}).some((text) => text.trim()))
-      value.description = null;
+    value.customerName = blankToNull(value.customerName);
+    value.description = blankToNull(value.description);
     this.dispatchEvent(
       new CustomEvent("wt-submit", { detail: { value }, bubbles: true, composed: true }),
     );
@@ -275,526 +531,702 @@ export class ProductEditor extends LitElement {
     if (this.suspended) return;
     this.dispatchEvent(new CustomEvent("wt-cancel", { detail: {}, bubbles: true, composed: true }));
   }
-  private orderButtons(
-    prefix: string,
-    label: string,
-    index: number,
-    length: number,
-    move: (to: number) => void,
-  ) {
-    return html`<div class="row">
-      ${([-1, 1] as const).map((direction) => {
-        const action = direction === -1 ? "up" : "down";
-        const to = index + direction;
-        return html`<wt-button
-          variant="secondary"
-          data-test=${`${prefix}-${action}`}
-          aria-label=${`${t(`action.move_${action}`)}: ${label}`}
-          ?disabled=${to < 0 || to >= length}
-          @click=${(event: Event) => {
-            event.stopPropagation();
-            if (to >= 0 && to < length) move(to);
-          }}
-          >${t(`action.move_${action}`)}</wt-button
-        >`;
-      })}
-    </div>`;
+
+  private openCategories(event: Event) {
+    event.stopPropagation();
+    if (this.suspended) return;
+    this.categoriesValue = {
+      categoryIds: [...this.draft.categoryIds],
+      primaryCategoryId: this.draft.primaryCategoryId,
+    };
   }
-  private renderVariants() {
-    return html`<wt-card
-      ><h3 slot="header">${t("editor.variants")}</h3>
-      <div class="fields">
-        ${this.draft.variants.map(
-          (variant, index) =>
-            html`<div class="fields variant">
-              ${this.locales.map((locale) =>
-                this.textField(
-                  `variant-${index}-name-${locale}`,
-                  `${t("editor.name")} (${locale})`,
-                  variant.name[locale] ?? "",
-                  (value) => {
-                    this.change(
-                      "variants",
-                      this.draft.variants.map((v, i) =>
-                        i === index ? { ...v, name: { ...v.name, [locale]: value } } : v,
-                      ),
-                    );
-                  },
-                  locale === this.locales[0],
-                ),
-              )}
-              ${this.textField(
-                `variant-${index}-price`,
-                t("editor.price"),
-                variant.unitPrice,
-                (value) =>
-                  this.change(
-                    "variants",
-                    this.draft.variants.map((v, i) =>
-                      i === index ? { ...v, unitPrice: value } : v,
-                    ),
-                  ),
-                true,
-              )}
-              <wt-switch
-                name=${`variant-${index}-available`}
-                label=${t("editor.available")}
-                .checked=${variant.available}
-                @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
-                  event.stopPropagation();
-                  this.change(
-                    "variants",
-                    this.draft.variants.map((v, i) =>
-                      i === index ? { ...v, available: event.detail.checked } : v,
-                    ),
-                  );
-                }}
-              ></wt-switch>
-              ${this.orderButtons(
-                "variant",
-                this.label({ id: variant.id ?? "", name: variant.name }),
-                index,
-                this.draft.variants.length,
-                (to) => {
-                  const variants = [...this.draft.variants];
-                  [variants[index], variants[to]] = [variants[to]!, variants[index]!];
-                  this.change("variants", variants);
-                },
-              )}
-              <wt-button
-                variant="secondary"
-                aria-label=${`${t("action.remove")}: ${this.label({ id: variant.id ?? "", name: variant.name })}`}
-                @click=${(event: Event) => {
-                  event.stopPropagation();
-                  this.change(
-                    "variants",
-                    this.draft.variants.filter((_, i) => i !== index),
-                  );
-                }}
-                >${t("action.remove")}</wt-button
-              >
-            </div>`,
+
+  private addVariant(event: Event) {
+    event.stopPropagation();
+    if (this.suspended) return;
+    // The first Add turns the plain price into a "Regular" variant; the window that opens is for
+    // the SECOND one, so a product that gains variants always has at least two.
+    if (this.draft.variants.length === 0) {
+      // Check the price HERE, while its field is still on screen. Once it has been folded into a
+      // variant the field is gone, and an invalid value would have nowhere left to be corrected.
+      if (!isProductPrice(this.draft.unitPrice)) {
+        this.errors = { ...this.errors, "unit-price": t("editor.price_invalid") };
+        this.#focusField = "unit-price";
+        return;
+      }
+      this.change("variants", [
+        {
+          name: t("editor.variant_regular"),
+          customerName: null,
+          kitchenName: null,
+          image: null,
+          unitPrice: this.draft.unitPrice,
+          available: this.draft.available,
+        },
+      ]);
+    }
+    this.variantIndex = null;
+    this.variantOpen = true;
+  }
+
+  private closeVariant(): void {
+    this.variantOpen = false;
+    this.variantIndex = null;
+    // A cancelled first Add leaves the lone "Regular" variant behind; folding it back here is what
+    // makes cancelling a true undo.
+    this.setVariants(this.draft.variants);
+  }
+
+  private submitVariant(event: CustomEvent<{ value: EditorVariant }>): void {
+    event.stopPropagation();
+    const index = this.variantIndex;
+    const variants =
+      index === null
+        ? [...this.draft.variants, event.detail.value]
+        : this.draft.variants.map((variant, i) => (i === index ? event.detail.value : variant));
+    this.variantOpen = false;
+    this.variantIndex = null;
+    this.setVariants(variants);
+  }
+
+  private renderCategories() {
+    const chips = this.draft.categoryIds.map((id) => {
+      const category = this.categories.find((category) => category.id === id);
+      return {
+        id,
+        reporting: id === this.draft.primaryCategoryId,
+        color: category?.color ?? "",
+        path: category
+          ? categoryPath(category, this.categories, currentLocale(), currentContentLanguages())
+          : t("editor.missing_choice"),
+      };
+    });
+    return html`<div class="group" data-section="categories">
+      <span class="group-label">${t("editor.categories")}</span>
+      <div class="chips">
+        ${chips.map(
+          (chip) =>
+            html`<button
+              type="button"
+              class=${chip.reporting ? "chip reporting" : "chip"}
+              data-test="category-chip"
+              data-category=${chip.id}
+              aria-label=${`${chip.reporting ? t("editor.reporting_category") : t("editor.choose_categories")}: ${chip.path}`}
+              ?disabled=${this.suspended}
+              @click=${this.openCategories}
+            >
+              <wt-lozenge color=${chip.color}>${chip.path}</wt-lozenge>
+            </button>`,
         )}
         <wt-button
+          shape="round"
           variant="secondary"
-          @click=${(event: Event) => {
-            event.stopPropagation();
-            this.change("variants", [
-              ...this.draft.variants,
-              { name: {}, unitPrice: "0.00", available: true },
-            ]);
-          }}
-          >${t("editor.add_variant")}</wt-button
+          data-test="pick-categories"
+          aria-label=${t("editor.choose_categories")}
+          ?disabled=${this.suspended}
+          @click=${this.openCategories}
+          ><wt-icon name="plus"></wt-icon
+        ></wt-button>
+        <wt-button
+          variant="secondary"
+          data-test="add-category"
+          ?disabled=${this.suspended}
+          @click=${(event: Event) => this.related(event, "category")}
+          >${t("editor.add_category")}</wt-button
         >
-      </div></wt-card
+      </div>
+      <span class="error" id="primary-error">${this.error("primary")}</span>
+    </div>`;
+  }
+
+  private renderKitchen() {
+    const station = this.stations.find(({ id }) => id === this.draft.stationId)?.name;
+    const course = this.courses.find(({ id }) => id === this.draft.courseId)?.name;
+    const summary = [this.draft.kitchenName?.trim(), station, course]
+      .filter((part): part is string => !!part)
+      .join(SUMMARY_SEPARATOR);
+    return html`<wt-disclosure
+      data-section="kitchen"
+      heading=${t("editor.section_kitchen")}
+      summary=${summary}
+      ?has-error=${this.sectionHasError("kitchen")}
+    >
+      <div class="group">
+        ${textField(
+          this.fields(),
+          "kitchen-name",
+          t("editor.kitchen_name"),
+          this.draft.kitchenName ?? "",
+          (value) => this.change("kitchenName", value),
+        )}
+        ${this.renderRouting(
+          "product-station",
+          t("product.station"),
+          t("product.no_station"),
+          this.stations,
+          this.draft.stationId,
+          (id) => this.change("stationId", id),
+        )}
+        ${this.renderRouting(
+          "product-course",
+          t("product.course"),
+          t("product.no_course"),
+          this.courses,
+          this.draft.courseId,
+          (id) => this.change("courseId", id),
+        )}
+      </div>
+    </wt-disclosure>`;
+  }
+
+  private renderRouting(
+    name: string,
+    label: string,
+    noneLabel: string,
+    choices: ProductRoutingChoice[],
+    selected: string | null,
+    change: (id: string | null) => void,
+  ) {
+    return html`<label
+      >${label}<select
+        name=${name}
+        @change=${(event: Event) => {
+          event.stopPropagation();
+          change((event.target as HTMLSelectElement).value || null);
+        }}
+      >
+        <option value="" .selected=${selected === null}>${noneLabel}</option>
+        ${choices.map(
+          (choice) =>
+            html`<option value=${choice.id} .selected=${choice.id === selected}>
+              ${choice.name}
+            </option>`,
+        )}
+      </select></label
     >`;
   }
-  private renderMemberships(kind: "category" | "modifier", choices: EditorChoice[]) {
-    const selected = kind === "category" ? this.draft.categoryIds : this.draft.modifierIds;
-    return html`<wt-card
-      ><h3 slot="header">${t(kind === "category" ? "editor.categories" : "editor.modifiers")}</h3>
-      <div class="fields">
-        ${selected.map((id, index) => {
-          const choice = choices.find((choice) => choice.id === id);
-          const label = choice ? this.label(choice) : t("editor.missing_choice");
-          return html`<div class="row" data-test=${`selected-${kind}`}>
-            <span>${label}</span>
-            ${
-              kind === "modifier"
-                ? this.orderButtons("modifier", label, index, selected.length, (to) => {
-                    const ids = [...selected];
-                    [ids[index], ids[to]] = [ids[to]!, ids[index]!];
-                    this.change("modifierIds", ids);
-                  })
-                : nothing
-            }
-            <wt-button
+
+  private renderDescriptors() {
+    const named = (value: LocalizedText | null) => Object.keys(nonBlankNames(value ?? {}));
+    const customer = named(this.draft.customerName);
+    const described = named(this.draft.description);
+    const summary = [
+      customer.length
+        ? t("editor.summary_customer_name").replace("{languages}", customer.join(", "))
+        : "",
+      described.length
+        ? t("editor.summary_description").replace("{languages}", described.join(", "))
+        : "",
+      this.draft.image ? t("editor.summary_image") : "",
+    ]
+      .filter(Boolean)
+      .join(SUMMARY_SEPARATOR);
+    return html`<wt-disclosure
+      data-section="descriptors"
+      heading=${t("editor.section_descriptors")}
+      summary=${summary}
+      ?has-error=${this.sectionHasError("descriptors")}
+    >
+      <div class="group">
+        ${optionalTextFields(
+          this.fields(),
+          "customer-name",
+          t("editor.customer_name"),
+          this.draft.customerName ?? {},
+          (value) => this.change("customerName", value),
+        )}
+        ${this.locales.map(
+          (locale) =>
+            html`<label
+              >${t("editor.description")} (${locale})<textarea
+                name=${`description-${locale}`}
+                .value=${this.draft.description?.[locale] ?? ""}
+                @input=${(event: Event) => {
+                  event.stopPropagation();
+                  this.change("description", {
+                    ...this.draft.description,
+                    [locale]: (event.target as HTMLTextAreaElement).value,
+                  });
+                }}
+              ></textarea>
+            </label>`,
+        )}
+        ${
+          this.api
+            ? html`<dashboard-image-upload
+                .api=${this.api}
+                .image=${this.draft.image}
+                @image-changed=${(event: CustomEvent<{ image: string | null }>) => {
+                  event.stopPropagation();
+                  this.change("image", event.detail.image);
+                }}
+                @image-picker-state=${(event: CustomEvent<{ open: boolean }>) => {
+                  event.stopPropagation();
+                  this.imageOpen = event.detail.open;
+                }}
+              ></dashboard-image-upload>`
+            : nothing
+        }
+      </div>
+    </wt-disclosure>`;
+  }
+
+  private renderNutrition() {
+    const summary = [
+      ...Object.keys(this.draft.allergens ?? {}).map((code) => allergenName(code)),
+      ...this.draft.dietaryDeclarations.map((label) => t(`editor.diet.${label}`)),
+    ].join(SUMMARY_SEPARATOR);
+    return html`<wt-disclosure
+      data-section="nutrition"
+      heading=${t("editor.section_nutrition")}
+      summary=${summary}
+      ?has-error=${this.sectionHasError("nutrition")}
+    >
+      <div class="group">
+        <dashboard-allergen-picker
+          .declaration=${this.value?.allergens ?? null}
+          @wt-picker-state=${(event: CustomEvent<{ open: boolean }>) => {
+            event.stopPropagation();
+            this.allergenOpen = event.detail.open;
+          }}
+          @wt-allergens-change=${(
+            event: CustomEvent<{ value: ProductEditorDraft["allergens"] }>,
+          ) => {
+            event.stopPropagation();
+            this.change("allergens", event.detail.value);
+          }}
+        ></dashboard-allergen-picker>
+        ${this.renderDietary()}
+      </div>
+    </wt-disclosure>`;
+  }
+
+  private renderDietary() {
+    return html`<div class="group">
+      <span class="group-label">${t("editor.dietary")}</span>
+      ${this.draft.dietaryDeclarations.map(
+        (label) =>
+          html`<div class="row">
+            <span>${t(`editor.diet.${label}`)}</span
+            ><wt-button
               variant="secondary"
-              data-test=${`${kind}-remove`}
-              aria-label=${`${t("action.remove")}: ${label}`}
+              aria-label=${`${t("action.remove")}: ${t(`editor.diet.${label}`)}`}
               @click=${(event: Event) => {
                 event.stopPropagation();
-                const ids = selected.filter((value) => value !== id);
-                if (kind === "category")
-                  this.draft = {
-                    ...this.draft,
-                    categoryIds: ids,
-                    primaryCategoryId:
-                      this.draft.primaryCategoryId === id ? null : this.draft.primaryCategoryId,
-                  };
-                else this.change("modifierIds", ids);
+                this.change(
+                  "dietaryDeclarations",
+                  this.draft.dietaryDeclarations.filter((value) => value !== label),
+                );
               }}
               >${t("action.remove")}</wt-button
             >
-          </div>`;
-        })}
-        ${
-          kind === "category" && selected.length
-            ? html`<label
-                  >${t("editor.reporting_category")}<select
-                    name="reporting-category"
-                    .value=${this.draft.primaryCategoryId ?? ""}
-                    aria-invalid=${this.error("primary") ? "true" : "false"}
-                    aria-describedby="primary-error"
-                    @change=${(event: Event) => {
-                      event.stopPropagation();
-                      this.change(
-                        "primaryCategoryId",
-                        (event.target as HTMLSelectElement).value || null,
-                      );
-                    }}
-                  >
-                    <option value="">${t("editor.choose")}</option>
-                    ${this.categories.filter((c) => selected.includes(c.id)).map((c) => html`<option value=${c.id} .selected=${c.id === this.draft.primaryCategoryId}>${this.label(c)}</option>`)}
-                  </select></label
-                ><span class="error" id="primary-error">${this.error("primary")}</span>`
-            : nothing
-        }
-        <wt-button
-          variant="secondary"
-          data-test=${`pick-${kind}`}
-          ?disabled=${this.suspended && this.membershipPicker !== kind}
-          @click=${(event: Event) => {
-            event.stopPropagation();
-            this.membershipPicker = this.membershipPicker === kind ? null : kind;
-            this.membershipSearch = "";
-          }}
-          >${this.membershipPicker === kind ? t("action.cancel") : t(kind === "category" ? "editor.choose_categories" : "editor.choose_modifiers")}</wt-button
-        >
-        ${
-          this.membershipPicker === kind
-            ? html`<div class="fields" @keydown=${(event: Event) => event.stopPropagation()}>
-                ${this.textField(
-                  "membership-search",
-                  t("editor.search_choices"),
-                  this.membershipSearch,
-                  (value) => {
-                    this.membershipSearch = value;
-                  },
-                )}
-                ${choices
-                  .filter(
-                    (choice) =>
-                      !selected.includes(choice.id) &&
-                      this.label(choice)
-                        .toLocaleLowerCase()
-                        .includes(this.membershipSearch.toLocaleLowerCase()),
-                  )
-                  .map(
-                    (choice) =>
-                      html`<wt-button
-                        variant="secondary"
-                        data-test="membership-choice"
-                        @click=${(event: Event) => {
-                          event.stopPropagation();
-                          this.selectRelated(kind, choice.id);
-                          this.membershipPicker = null;
-                          this.shadowRoot!.querySelector<HTMLElement>(
-                            `[data-test=pick-${kind}]`,
-                          )?.focus();
-                        }}
-                        >${this.label(choice)}</wt-button
-                      >`,
-                  )}
-              </div>`
-            : nothing
-        }
-        <wt-button
-          variant="secondary"
-          data-test=${`add-${kind}`}
-          ?disabled=${this.suspended}
-          @click=${(event: Event) => this.related(event, kind)}
-          >${t(kind === "category" ? "editor.add_category" : "editor.add_modifier")}</wt-button
-        >
-      </div></wt-card
-    >`;
-  }
-  override render() {
-    return html`<wt-modal
-      .open=${this.open}
-      heading=${t(this.value?.id ? "product.edit" : "product.new")}
-      @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-test=save]"))}
-      @wt-close=${(event: Event) => {
-        if (event.target === event.currentTarget) this.cancel(event);
-      }}
-    >
-      <wt-form-error-summary
-        heading=${t("form.error_heading")}
-        .errors=${Object.values({ ...this.errors, ...this.fieldErrors })}
-      ></wt-form-error-summary>
-      <div class="cards">
-        <wt-card
-          ><h3 slot="header">${t("editor.content")}</h3>
-          <div class="fields">
-            ${this.locales.map((locale) => this.textField(`name-${locale}`, `${t("editor.name")} (${locale})`, this.draft.name[locale] ?? "", (value) => this.change("name", { ...this.draft.name, [locale]: value }), locale === this.locales[0]))}
-            ${this.locales.map(
-              (locale) =>
-                html`<label
-                  >${t("editor.description")} (${locale})<textarea
-                    name=${`description-${locale}`}
-                    .value=${this.draft.description?.[locale] ?? ""}
-                    @input=${(event: Event) => {
-                      event.stopPropagation();
-                      this.change("description", {
-                        ...this.draft.description,
-                        [locale]: (event.target as HTMLTextAreaElement).value,
-                      });
-                    }}
-                  ></textarea>
-                </label>`,
+          </div>`,
+      )}
+      <div class="row">
+        ${expandDietaryDeclarations(this.draft.dietaryDeclarations)
+          .filter((label) => !this.draft.dietaryDeclarations.includes(label))
+          .map(
+            (label) =>
+              html`<span class="badge" data-test="derived-diet" data-label=${label}
+                >${t(`editor.diet.${label}`)} · ${t("editor.inferred")}</span
+              >`,
+          )}
+      </div>
+      <wt-button
+        variant="secondary"
+        ?disabled=${this.suspended && !this.dietaryPickerOpen}
+        @click=${(event: Event) => {
+          event.stopPropagation();
+          this.dietaryPickerOpen = !this.dietaryPickerOpen;
+          this.dietarySearch = "";
+        }}
+        >${this.dietaryPickerOpen ? t("action.cancel") : t("editor.add_diet")}</wt-button
+      >
+      ${
+        this.dietaryPickerOpen
+          ? html`${textField(
+              this.fields(),
+              "diet-search",
+              t("editor.search_diets"),
+              this.dietarySearch,
+              (value) => {
+                this.dietarySearch = value;
+              },
             )}
-            ${this.textField("kitchen-name", t("editor.kitchen_name"), this.draft.kitchenName ?? "", (value) => this.change("kitchenName", value))}
-            ${
-              this.api
-                ? html`<dashboard-image-upload
-                    .api=${this.api}
-                    .image=${this.draft.image}
-                    @image-changed=${(event: CustomEvent<{ image: string | null }>) => {
-                      event.stopPropagation();
-                      this.change("image", event.detail.image);
-                    }}
-                    @image-picker-state=${(event: CustomEvent<{ open: boolean }>) => {
-                      event.stopPropagation();
-                      this.imageOpen = event.detail.open;
-                    }}
-                  ></dashboard-image-upload>`
-                : nothing
-            }
-          </div></wt-card
-        >
-        <wt-card
-          ><h3 slot="header">${t("editor.selling")}</h3>
-          <div class="fields">
-            <label
-              >${t("product.unit")}<select
-                name="unit"
-                .value=${this.draft.unitId ?? ""}
-                @change=${(event: Event) => {
-                  event.stopPropagation();
-                  this.change("unitId", (event.target as HTMLSelectElement).value || null);
-                }}
-              >
-                <option value="" .selected=${this.draft.unitId === null}>
-                  ${t("editor.unit_each")}
-                </option>
-                ${this.units.map((unit) => html`<option value=${unit.id} .selected=${unit.id === this.draft.unitId}>${this.unitLabel(unit)}</option>`)}
-              </select></label
-            >
-            <wt-button
-              variant="secondary"
-              data-test="add-unit"
-              ?disabled=${this.suspended}
-              @click=${(event: Event) => this.related(event, "unit")}
-              >${t("editor.add_unit")}</wt-button
-            >
-            ${this.textField("unit-price", t("editor.price"), this.draft.unitPrice, (value) => this.change("unitPrice", value), true)}
-            <label
-              >${t("product.vat")} *<select
-                name="tax"
-                .value=${this.draft.vatClass}
-                aria-required="true"
-                aria-invalid=${this.error("tax") ? "true" : "false"}
-                aria-describedby="tax-error"
-                @change=${(event: Event) => {
-                  event.stopPropagation();
-                  this.change(
-                    "vatClass",
-                    (event.target as HTMLSelectElement).value as ProductEditorDraft["vatClass"],
-                  );
-                }}
-              >
-                <option value="">${t("editor.choose")}</option>
-                ${this.taxes.map((tax) => html`<option value=${tax.id} .selected=${tax.id === this.draft.vatClass}>${tax.label} (${tax.rate.replace(/(\.\d*?[1-9])0+$|\.0+$/, "$1")}%)</option>`)}
-              </select></label
-            ><span class="error" id="tax-error">${this.error("tax")}</span>
-            <wt-switch
-              name="available"
-              label=${t("editor.available")}
-              .checked=${this.draft.available}
-              @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
-                event.stopPropagation();
-                this.change("available", event.detail.checked);
-              }}
-            ></wt-switch>
-            ${
-              this.value?.id
-                ? html`<label
-                      >${t("product.station")}<select
-                        name="product-station"
-                        .value=${this.draft.stationId ?? ""}
-                        @change=${(event: Event) => {
-                          event.stopPropagation();
-                          const stationId = (event.target as HTMLSelectElement).value || null;
-                          this.change("stationId", stationId);
-                          this.dispatchEvent(
-                            new CustomEvent("wt-set-product-station", {
-                              detail: { productId: this.value!.id, stationId },
-                              bubbles: true,
-                              composed: true,
-                            }),
-                          );
-                        }}
-                      >
-                        <option value="">${t("product.no_station")}</option>
-                        ${this.stations.map(
-                          (station) =>
-                            html`<option
-                              value=${station.id}
-                              .selected=${station.id === this.draft.stationId}
-                            >
-                              ${station.name}
-                            </option>`,
-                        )}
-                      </select></label
-                    ><label
-                      >${t("product.course")}<select
-                        name="product-course"
-                        .value=${this.draft.courseId ?? ""}
-                        @change=${(event: Event) => {
-                          event.stopPropagation();
-                          const courseId = (event.target as HTMLSelectElement).value || null;
-                          this.change("courseId", courseId);
-                          this.dispatchEvent(
-                            new CustomEvent("wt-set-product-course", {
-                              detail: { productId: this.value!.id, courseId },
-                              bubbles: true,
-                              composed: true,
-                            }),
-                          );
-                        }}
-                      >
-                        <option value="">${t("product.no_course")}</option>
-                        ${this.courses.map(
-                          (course) =>
-                            html`<option
-                              value=${course.id}
-                              .selected=${course.id === this.draft.courseId}
-                            >
-                              ${course.name}
-                            </option>`,
-                        )}
-                      </select></label
-                    >`
-                : nothing
-            }
-          </div></wt-card
-        >
-        ${this.renderVariants()} ${this.renderMemberships("category", this.categories)}
-        ${this.renderMemberships("modifier", this.modifiers)}
-        <wt-card
-          ><h3 slot="header">${t("editor.allergens")}</h3>
-          ${keyed(
-            this.generation,
-            html`<dashboard-allergen-picker
-              .declaration=${this.value?.allergens ?? null}
-              @wt-picker-state=${(event: CustomEvent<{ open: boolean }>) => {
-                event.stopPropagation();
-                this.allergenOpen = event.detail.open;
-              }}
-              @wt-allergens-change=${(
-                event: CustomEvent<{ value: ProductEditorDraft["allergens"] }>,
-              ) => {
-                event.stopPropagation();
-                this.change("allergens", event.detail.value);
-              }}
-            ></dashboard-allergen-picker>`,
-          )}</wt-card
-        >
-        <wt-card
-          ><h3 slot="header">${t("editor.dietary")}</h3>
-          <div class="selected">
-            ${this.draft.dietaryDeclarations.map(
-              (label) =>
-                html`<div class="row">
-                  <span>${t(`editor.diet.${label}`)}</span
-                  ><wt-button
+            ${dietaryLabels
+              .filter(
+                (label) =>
+                  !this.draft.dietaryDeclarations.includes(label) &&
+                  t(`editor.diet.${label}`)
+                    .toLocaleLowerCase()
+                    .includes(this.dietarySearch.toLocaleLowerCase()),
+              )
+              .map(
+                (label) =>
+                  html`<wt-button
                     variant="secondary"
-                    aria-label=${`${t("action.remove")}: ${t(`editor.diet.${label}`)}`}
                     @click=${(event: Event) => {
                       event.stopPropagation();
-                      this.change(
-                        "dietaryDeclarations",
-                        this.draft.dietaryDeclarations.filter((v) => v !== label),
-                      );
+                      this.change("dietaryDeclarations", [
+                        ...this.draft.dietaryDeclarations,
+                        label,
+                      ]);
+                      this.dietaryPickerOpen = false;
                     }}
-                    >${t("action.remove")}</wt-button
-                  >
-                </div>`,
-            )}
-            <div class="row">
-              ${expandDietaryDeclarations(this.draft.dietaryDeclarations)
-                .filter((label) => !this.draft.dietaryDeclarations.includes(label))
-                .map(
-                  (label) =>
-                    html`<span class="badge" data-test="derived-diet" data-label=${label}
-                      >${t(`editor.diet.${label}`)} · ${t("editor.inferred")}</span
-                    >`,
-                )}
-            </div>
-            <wt-button
-              variant="secondary"
-              ?disabled=${this.suspended && !this.dietaryPickerOpen}
-              @click=${(event: Event) => {
-                event.stopPropagation();
-                this.dietaryPickerOpen = !this.dietaryPickerOpen;
-                this.dietarySearch = "";
-              }}
-              >${this.dietaryPickerOpen ? t("action.cancel") : t("editor.add_diet")}</wt-button
-            >
-            ${
-              this.dietaryPickerOpen
-                ? html`${this.textField(
-                    "diet-search",
-                    t("editor.search_diets"),
-                    this.dietarySearch,
-                    (value) => {
-                      this.dietarySearch = value;
-                    },
-                  )}
-                  ${dietaryLabels
-                    .filter(
-                      (label) =>
-                        !this.draft.dietaryDeclarations.includes(label) &&
-                        t(`editor.diet.${label}`)
-                          .toLocaleLowerCase()
-                          .includes(this.dietarySearch.toLocaleLowerCase()),
-                    )
-                    .map(
-                      (label) =>
-                        html`<wt-button
-                          variant="secondary"
-                          @click=${(event: Event) => {
-                            event.stopPropagation();
-                            this.change("dietaryDeclarations", [
-                              ...this.draft.dietaryDeclarations,
-                              label,
-                            ]);
-                            this.dietaryPickerOpen = false;
-                          }}
-                          >${t(`editor.diet.${label}`)}</wt-button
-                        >`,
-                    )}`
-                : nothing
-            }
-          </div></wt-card
-        >
-      </div>
-      <wt-form-actions slot="footer"
-        ><wt-button
-          slot="cancel"
-          variant="secondary"
-          ?disabled=${this.suspended}
-          @click=${this.cancel}
-          >${t("action.cancel")}</wt-button
-        >
-        <wt-button
-          data-test="save"
-          .loading=${this.busy}
-          ?disabled=${this.suspended}
-          @click=${this.save}
-          >${t("action.save")}</wt-button
-        ></wt-form-actions
-      >
-    </wt-modal>`;
+                    >${t(`editor.diet.${label}`)}</wt-button
+                  >`,
+              )}`
+          : nothing
+      }
+    </div>`;
   }
+
+  private renderPrice() {
+    const unitLabel = this.unitShortLabel;
+    return html`<div class="group" data-section="price">
+      <span class="group-label">${t("product.price")}</span>
+      <label
+        >${t("product.vat")} *<select
+          name="tax"
+          aria-required="true"
+          aria-invalid=${this.error("tax") ? "true" : "false"}
+          aria-describedby="tax-error"
+          @change=${(event: Event) => {
+            event.stopPropagation();
+            this.change(
+              "vatClass",
+              (event.target as HTMLSelectElement).value as ProductEditorDraft["vatClass"],
+            );
+          }}
+        >
+          <option value="">${t("editor.choose")}</option>
+          ${this.taxes.map((tax) => html`<option value=${tax.id} .selected=${tax.id === this.draft.vatClass}>${tax.label} (${tax.rate.replace(/(\.\d*?[1-9])0+$|\.0+$/, "$1")}%)</option>`)}
+        </select></label
+      ><span class="error" id="tax-error">${this.error("tax")}</span>
+      ${
+        this.draft.variants.length === 0
+          ? html`<wt-price-input
+              name="unit-price"
+              label=${priceLabel(unitLabel)}
+              unit=${unitLabel}
+              required
+              .value=${this.draft.unitPrice}
+              .error=${this.error("unit-price")}
+              @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                event.stopPropagation();
+                this.change("unitPrice", event.detail.value);
+              }}
+              @wt-unit-click=${(event: Event) => {
+                event.stopPropagation();
+                this.unitPickerOpen = true;
+              }}
+            ></wt-price-input>`
+          : html`<dashboard-variant-table
+              .variants=${this.draft.variants}
+              unitLabel=${unitLabel}
+              .busy=${this.suspended}
+              .errors=${this.variantErrors}
+              @wt-reorder=${(event: CustomEvent<{ from: number; to: number }>) => {
+                event.stopPropagation();
+                // The table has ALREADY moved the row on screen, so a host that does not apply the
+                // same move leaves the draft silently out of step with what is displayed.
+                this.change(
+                  "variants",
+                  reorder(this.draft.variants, event.detail.from, event.detail.to),
+                );
+              }}
+              @wt-toggle-available=${(
+                event: CustomEvent<{ index: number; available: boolean }>,
+              ) => {
+                event.stopPropagation();
+                this.change(
+                  "variants",
+                  this.draft.variants.map((variant, index) =>
+                    index === event.detail.index
+                      ? { ...variant, available: event.detail.available }
+                      : variant,
+                  ),
+                );
+              }}
+              @wt-edit=${(event: CustomEvent<{ index: number }>) => {
+                event.stopPropagation();
+                this.variantIndex = event.detail.index;
+                this.variantOpen = true;
+              }}
+              @wt-remove=${(event: CustomEvent<{ index: number }>) => {
+                event.stopPropagation();
+                this.setVariants(
+                  this.draft.variants.filter((_, index) => index !== event.detail.index),
+                );
+              }}
+            ></dashboard-variant-table>`
+      }
+      ${
+        this.unitOpen
+          ? html`<label
+                >${t("product.unit")}<select
+                  name="unit"
+                  aria-invalid=${this.error("unit") ? "true" : "false"}
+                  aria-describedby="unit-error"
+                  @change=${(event: Event) => {
+                    event.stopPropagation();
+                    this.change("unitId", (event.target as HTMLSelectElement).value || null);
+                    this.unitPickerOpen = false;
+                  }}
+                >
+                  <option value="" .selected=${this.draft.unitId === null}>
+                    ${t("editor.unit_each")}
+                  </option>
+                  ${this.units.map((unit) => html`<option value=${unit.id} .selected=${unit.id === this.draft.unitId}>${this.unitLabel(unit)}</option>`)}
+                </select></label
+              ><span class="error" id="unit-error">${this.error("unit")}</span>
+              <div class="row">
+                <wt-button
+                  variant="secondary"
+                  data-test="add-unit"
+                  ?disabled=${this.suspended}
+                  @click=${(event: Event) => this.related(event, "unit")}
+                  >${t("editor.add_unit")}</wt-button
+                >
+              </div>`
+          : nothing
+      }
+      <div class="row">
+        <wt-button
+          variant="secondary"
+          data-test="add-variant"
+          ?disabled=${this.suspended}
+          @click=${this.addVariant}
+          >${t("editor.add_variant")}</wt-button
+        >${
+          // With variants the price field — and so its unit button — is gone, and the table's
+          // header only NAMES the unit. This is the one way left to change it.
+          this.draft.variants.length && !this.unitOpen
+            ? html`<wt-button
+                variant="secondary"
+                data-test="choose-unit"
+                ?disabled=${this.suspended}
+                @click=${(event: Event) => {
+                  event.stopPropagation();
+                  this.unitPickerOpen = true;
+                }}
+                >${t("product.unit")}: ${unitLabel}</wt-button
+              >`
+            : nothing
+        }
+      </div>
+    </div>`;
+  }
+
+  private renderModifierRow(id: string) {
+    const choice = this.modifiers.find((modifier) => modifier.id === id);
+    const label = choice ? this.label(choice) : t("editor.missing_choice");
+    return html`<tr data-test="attached-modifier" data-modifier=${id}>
+      <td>${this.#reorder.handle(id)}</td>
+      <td>${label}</td>
+      <td>
+        <wt-row-actions align="end" label=${`${t("editor.modifier_actions")}: ${label}`}
+          ><wt-button
+            variant="secondary"
+            data-test=${`edit-modifier-${id}`}
+            .disabled=${this.suspended}
+            @click=${(event: Event) => {
+              event.stopPropagation();
+              if (this.suspended) return;
+              this.dispatchEvent(
+                new CustomEvent("wt-edit-related", {
+                  detail: { kind: "modifier", id },
+                  bubbles: true,
+                  composed: true,
+                }),
+              );
+            }}
+            >${t("action.edit")}</wt-button
+          ><wt-button
+            variant="danger"
+            data-test=${`remove-modifier-${id}`}
+            .disabled=${this.suspended}
+            @click=${(event: Event) => {
+              event.stopPropagation();
+              if (this.suspended) return;
+              this.change(
+                "modifierIds",
+                this.draft.modifierIds.filter((value) => value !== id),
+              );
+            }}
+            >${t("action.remove")}</wt-button
+          ></wt-row-actions
+        >
+      </td>
+    </tr>`;
+  }
+
+  private renderModifiers() {
+    const attached = this.draft.modifierIds;
+    const options = [
+      { value: CREATE_MODIFIER, label: t("editor.create_modifier") },
+      ...this.modifiers
+        .filter((modifier) => !attached.includes(modifier.id))
+        .map((modifier) => ({ value: modifier.id, label: this.label(modifier) })),
+    ];
+    return html`<div class="group" data-section="modifiers">
+      <span class="group-label">${t("editor.modifiers")}</span>
+      ${
+        attached.length
+          ? html`<div class="wrap">
+              <table>
+                <caption class="visually-hidden">
+                  ${t("editor.modifiers")}
+                </caption>
+                <thead>
+                  <tr>
+                    <th scope="col">
+                      <span class="visually-hidden">${t("editor.reorder_modifier")}</span>
+                    </th>
+                    <th scope="col">${t("editor.name")}</th>
+                    <th scope="col">
+                      <span class="visually-hidden">${t("editor.modifier_actions")}</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${repeat(
+                    attached,
+                    (id) => id,
+                    (id) => this.renderModifierRow(id),
+                  )}
+                </tbody>
+              </table>
+            </div>`
+          : nothing
+      }
+      ${this.#reorder.liveRegion()}
+      <wt-combobox
+        name="modifier"
+        data-test="add-modifier"
+        label=${t("editor.add_modifier")}
+        placeholder=${t("editor.choose")}
+        searchPlaceholder=${t("editor.search_choices")}
+        noResultsLabel=${t("editor.no_modifiers")}
+        .disabled=${this.suspended}
+        .options=${options}
+        .value=${""}
+        @wt-change=${(event: CustomEvent<{ value: string }>) => {
+          event.stopPropagation();
+          if (event.detail.value === "") return;
+          if (event.detail.value === CREATE_MODIFIER) this.related(event, "modifier");
+          else this.selectRelated("modifier", event.detail.value);
+        }}
+      ></wt-combobox>
+    </div>`;
+  }
+
+  override render() {
+    const fields = this.fields();
+    return html`<wt-modal
+        .open=${this.open}
+        heading=${t(this.value?.id ? "product.edit" : "product.new")}
+        @keydown=${(event: KeyboardEvent) =>
+          submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-test=save]"))}
+        @wt-close=${(event: Event) => {
+          if (event.target === event.currentTarget) this.cancel(event);
+        }}
+      >
+        <wt-form-error-summary
+          heading=${t("form.error_heading")}
+          .errors=${Object.values(this.allErrors)}
+        ></wt-form-error-summary>
+        <div class="form">
+          <div class="group" data-section="name">
+            ${textField(
+              fields,
+              "name",
+              t("editor.name"),
+              this.draft.name,
+              (value) => this.change("name", value),
+              true,
+            )}
+          </div>
+          ${this.renderCategories()}
+          <div class="group" data-section="available">
+            ${switchField(
+              fields,
+              "available",
+              t("editor.available"),
+              this.draft.available,
+              (value) => this.change("available", value),
+            )}
+          </div>
+          ${keyed(this.generation, this.renderKitchen())}
+          ${keyed(this.generation, this.renderDescriptors())}
+          ${keyed(this.generation, this.renderNutrition())} ${this.renderPrice()}
+          ${this.renderModifiers()}
+        </div>
+        <wt-form-actions slot="footer"
+          ><wt-button
+            slot="cancel"
+            variant="secondary"
+            ?disabled=${this.suspended}
+            @click=${this.cancel}
+            >${t("action.cancel")}</wt-button
+          >
+          <wt-button
+            data-test="save"
+            .loading=${this.busy}
+            ?disabled=${this.suspended}
+            @click=${this.save}
+            >${t("action.save")}</wt-button
+          ></wt-form-actions
+        >
+      </wt-modal>
+      <dashboard-variant-form
+        .open=${this.variantOpen}
+        .locales=${this.locales}
+        .value=${
+          this.variantIndex === null ? null : (this.draft.variants[this.variantIndex] ?? null)
+        }
+        unitLabel=${this.unitShortLabel}
+        .api=${this.api}
+        @wt-submit=${this.submitVariant}
+        @wt-cancel=${(event: Event) => {
+          event.stopPropagation();
+          this.closeVariant();
+        }}
+      ></dashboard-variant-form>
+      ${
+        this.categoriesValue
+          ? html`<wt-modal
+              .open=${true}
+              heading=${t("editor.categories")}
+              @wt-close=${(event: Event) => {
+                if (event.target === event.currentTarget) this.categoriesValue = null;
+              }}
+              ><dashboard-category-membership-picker
+                .categories=${this.categories}
+                .languages=${currentContentLanguages()}
+                .value=${this.categoriesValue}
+                @wt-submit=${(event: CustomEvent<{ value: ProductCategories }>) => {
+                  event.stopPropagation();
+                  this.draft = {
+                    ...this.draft,
+                    categoryIds: [...event.detail.value.categoryIds],
+                    primaryCategoryId: event.detail.value.primaryCategoryId,
+                  };
+                  this.categoriesValue = null;
+                }}
+                @wt-cancel=${(event: Event) => {
+                  event.stopPropagation();
+                  this.categoriesValue = null;
+                }}
+              ></dashboard-category-membership-picker
+            ></wt-modal>`
+          : nothing
+      }`;
+  }
+}
+
+/** A translated field with nothing but blanks in it is absent, not empty text. */
+function blankToNull(value: LocalizedText | null): LocalizedText | null {
+  const kept = nonBlankNames(value ?? {});
+  return Object.keys(kept).length ? kept : null;
 }

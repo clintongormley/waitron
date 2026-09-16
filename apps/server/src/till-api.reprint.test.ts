@@ -73,7 +73,7 @@ const suite = usePgliteDb({
       const cafe = await createProduct(tx, tenantId, {
         catalogueId: catalogue.id,
         categoryId: null,
-        descriptions: { es: CAFE },
+        name: CAFE,
         pricingUnit: "each",
         unitPrice: "1.50",
         vatClass: "general",

@@ -483,14 +483,14 @@ export class CategoriesScreen extends LitElement {
       : html`<span part="muted" aria-hidden="true">—</span>`;
   }
   #nameSortValue(product: Product): string {
-    return this.#text(product.descriptions);
+    return product.name;
   }
   #reportingSortValue(product: Product): string {
     const category = this.#reportingCategory(product);
     return category ? this.#text(category.name) : "";
   }
   /** The shared column set behind every product table in this screen (members, add-products, and
-   * the delete preview). Name searches and sorts on the translated description; Reporting
+   * the delete preview). Name searches and sorts on the staff name; Reporting
    * category sorts and offers a dropdown filter over the reporting categories actually in use; the
    * Other-categories column searches on those category names so a product is found by any category
    * it belongs to. A caller passes its own trailing column (row actions, say) or none. */
@@ -499,8 +499,8 @@ export class CategoriesScreen extends LitElement {
       {
         key: "name",
         label: t("categories.name"),
-        cell: (product) => this.#text(product.descriptions),
-        searchValue: (product) => this.#text(product.descriptions),
+        cell: (product) => product.name,
+        searchValue: (product) => product.name,
         sortValue: (product) => this.#nameSortValue(product),
       },
       {
@@ -538,8 +538,7 @@ export class CategoriesScreen extends LitElement {
       key: "actions",
       label: t("categories.actions"),
       cell: (product) =>
-        html`<wt-row-actions
-          label=${`${t("categories.actions")}: ${this.#text(product.descriptions)}`}
+        html`<wt-row-actions label=${`${t("categories.actions")}: ${product.name}`}
           ><wt-button align="start" variant="ghost" @click=${() => this.#assign(product)}
             >${t("categories.edit_membership")}</wt-button
           ><wt-button
@@ -722,7 +721,7 @@ export class CategoriesScreen extends LitElement {
                   selectable
                   .selected=${[...this.picked]}
                   .selectionLabel=${(product: Product) =>
-                    `${t("categories.add_products")}: ${this.#text(product.descriptions)}`}
+                    `${t("categories.add_products")}: ${product.name}`}
                   selectAllLabel=${t("categories.select_all_products")}
                   @wt-selection-change=${(event: CustomEvent<{ selected: string[] }>) => {
                     event.stopPropagation();
@@ -853,7 +852,7 @@ export class CategoriesScreen extends LitElement {
         ${this.saveError ? html`<p role="alert">${this.saveError}</p>` : nothing}
         ${
           this.memberProduct
-            ? html`<p>${this.#text(this.memberProduct.descriptions)}</p>
+            ? html`<p>${this.memberProduct.name}</p>
                 <dashboard-category-membership-picker
                   .categories=${this.categories}
                   .languages=${this.languages}

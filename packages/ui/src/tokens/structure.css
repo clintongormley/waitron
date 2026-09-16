@@ -29,6 +29,12 @@
 
   --wt-dialog-max-width: min(90vw, 48rem);
 
+  /* The widest a row's NAME cell grows in a table a form owns — the modifier form's choices and the
+     product editor's variants. The name is the one cell that can be long, so capping it makes it
+     wrap and keeps the controls after it (a switch, a row menu) on screen at phone width instead of
+     pushing the row into a sideways scroll. */
+  --wt-cell-name-max-width: 140px;
+
   --wt-shadow-1: 0 1px 2px rgb(0 0 0 / 0.08);
   --wt-shadow-2: 0 8px 24px rgb(0 0 0 / 0.16);
 

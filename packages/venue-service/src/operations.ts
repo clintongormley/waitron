@@ -10,15 +10,9 @@ import {
   workingOrderLines,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { listMenuOffers, readContentLanguages, type MenuOffer } from "@waitron/catalogue";
+import { listMenuOffers, type MenuOffer } from "@waitron/catalogue";
 import type { PreparationRoute, ServiceMode } from "@waitron/module";
-import {
-  AppError,
-  FALLBACK_LOCALE,
-  resolveContentText,
-  type LocationId,
-  type TenantId,
-} from "@waitron/shared";
+import { AppError, type LocationId, type TenantId } from "@waitron/shared";
 import {
   departments,
   departmentHours,
@@ -368,7 +362,6 @@ export async function listVenueReadiness(
     )
     .orderBy(floorZones.displayOrder, floorZones.name, floorZones.id);
 
-  const { defaultLanguage } = await readContentLanguages(tx, cfg.tenantId, FALLBACK_LOCALE);
   const issues = zones.flatMap((zone): VenueReadinessIssue[] => {
     if (zone.departmentId === null || zone.departmentActive !== true) {
       return [{ code: "zone.department_missing", zoneId: zone.id, zoneName: zone.name }];
@@ -399,11 +392,13 @@ export async function listVenueReadiness(
         });
       }
     }
+    // The readiness list is staff-facing, so it names each product by its staff name rather than by
+    // resolving customer-facing text per language. The id fallback stays: `products.name` is only
+    // NOT NULL (`packages/db/src/schema/catalogue.ts:91` carries no non-blank check), and the sole
+    // write path that rejects a blank one is the editor's parser
+    // (`packages/catalogue/src/product-editor-input.ts:64`), so an empty name is storable.
     const productsById = new Map(
-      available.offers.map((offer) => [
-        offer.productId,
-        resolveContentText(offer.descriptions, defaultLanguage, defaultLanguage) || offer.productId,
-      ]),
+      available.offers.map((offer) => [offer.productId, offer.name || offer.productId]),
     );
     const outcomes = await resolvePreparationRouteOutcomes(tx, cfg, zone.id, [
       ...productsById.keys(),

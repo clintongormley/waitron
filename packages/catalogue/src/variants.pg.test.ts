@@ -1,11 +1,18 @@
 import { sql } from "drizzle-orm";
-import { expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { asAppUser, withTenant, type Database, type Transaction } from "@waitron/db";
 import { useTemplateDb } from "@waitron/db/testing/lifecycle.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { type TenantId } from "@waitron/shared";
 import { createCatalogue, createProduct, createMenuSection, createMenuItem } from "./operations.js";
-import { listProductVariants, setProductVariants, setMenuVariants } from "./variants.js";
+import {
+  listProductVariants,
+  setProductVariants,
+  setMenuVariants,
+  selectMenuVariant,
+  type ProductVariant,
+} from "./variants.js";
+import { staffPresentationName, customerPresentationText } from "./product-presentation.js";
 import { createUnit } from "./units.js";
 
 const suite = useTemplateDb({ template: "core" });
@@ -28,7 +35,7 @@ async function fixture() {
     const product = await createProduct(tx, tenantId, {
       catalogueId: menu.id,
       categoryId: null,
-      descriptions: { en: "Coffee" },
+      name: "Coffee",
       description: { en: "Freshly roasted" },
       kitchenName: "BAR COFFEE",
       unitId: unit.id,
@@ -51,7 +58,16 @@ async function fixture() {
       tx,
       tenantId,
       product.id,
-      [{ name: { en: "Small" }, unitPrice: "2.00", available: true }],
+      [
+        {
+          name: "Small",
+          customerName: null,
+          kitchenName: null,
+          image: null,
+          unitPrice: "2.00",
+          available: true,
+        },
+      ],
       "en",
     );
     return { tenantId, productId: product.id, offerId: offer.id, variant: variants[0]! };
@@ -132,4 +148,143 @@ it("a concurrent variant removal waits for publication and then reports the depe
     await publisher.close();
     await remover.close();
   }
+});
+
+// setProductVariants persists and listProductVariants reads back the widened variant shape (staff
+// name, customer name, kitchen name and image). Seeded with raw SQL so it does not depend on
+// createProduct (which a later task rewrites for the renamed products.name).
+it("a variant round-trips staff name, customer name, kitchen name and image through set/list", async () => {
+  const tenantId = await seedTenant(suite.admin);
+  const { id: catalogueId } = (
+    await suite.admin.execute<{ id: string }>(
+      sql`insert into catalogues (tenant_id, name) values (${tenantId}, 'Bar') returning id`,
+    )
+  ).rows[0]!;
+  const { id: productId } = (
+    await suite.admin.execute<{ id: string }>(
+      sql`insert into products (tenant_id, catalogue_id, name, pricing_unit, unit_price, vat_class)
+          values (${tenantId}, ${catalogueId}, 'Coffee', 'each', '9.00', 'reduced') returning id`,
+    )
+  ).rows[0]!;
+  await app(suite.admin, tenantId, async (tx) => {
+    await setProductVariants(
+      tx,
+      tenantId,
+      productId,
+      [
+        {
+          name: "Large",
+          customerName: { en: "Large cup" },
+          kitchenName: "LG",
+          image: "cup.png",
+          unitPrice: "3.00",
+          available: true,
+        },
+      ],
+      "en",
+    );
+    const [variant] = await listProductVariants(tx, tenantId, productId);
+    expect(variant).toMatchObject({
+      name: "Large",
+      customerName: { en: "Large cup" },
+      kitchenName: "LG",
+      image: "cup.png",
+      unitPrice: "3.00",
+      available: true,
+    });
+  });
+});
+
+// selectMenuVariant is the pure core of menu-variant resolution — no DB. It returns the six name
+// pieces (product staff/customer/kitchen and variant staff/customer/kitchen) separately, in the
+// exact shape product-presentation.ts consumes, so the display join and fallback are never
+// re-implemented here.
+describe("selectMenuVariant returns the six product and variant name pieces", () => {
+  const large: ProductVariant = {
+    id: "11111111-1111-1111-1111-111111111111",
+    name: "Large",
+    customerName: { en: "Large cup" },
+    kitchenName: "LG",
+    image: null,
+    unitPrice: "3.00",
+    available: true,
+  };
+  const offer = {
+    productId: "22222222-2222-2222-2222-222222222222",
+    name: "Coffee",
+    customerName: { en: "Fresh Coffee" },
+    kitchenName: "BAR COFFEE",
+    grossPrice: "8.00",
+    variants: [large],
+  };
+
+  it("carries the product's names and the chosen variant's own three names", () => {
+    const selected = selectMenuVariant(offer, [large], large.id);
+    expect(selected).toEqual({
+      variantId: large.id,
+      name: "Coffee",
+      customerName: { en: "Fresh Coffee" },
+      kitchenName: "BAR COFFEE",
+      variantName: "Large",
+      variantCustomerName: { en: "Large cup" },
+      variantKitchenName: "LG",
+      unitPrice: "3.00",
+    });
+    // The selection is a ProductPresentation superset, so T4's resolvers own the join/fallback.
+    expect(staffPresentationName(selected)).toBe("Coffee · Large");
+    expect(customerPresentationText(selected, "en")).toEqual({
+      product: { en: "Fresh Coffee" },
+      variant: { en: "Large cup" },
+    });
+  });
+
+  it("leaves all three variant name pieces null when no variant is chosen", () => {
+    const selected = selectMenuVariant({ ...offer, variants: [] }, [], null);
+    expect(selected).toEqual({
+      variantId: null,
+      name: "Coffee",
+      customerName: { en: "Fresh Coffee" },
+      kitchenName: "BAR COFFEE",
+      variantName: null,
+      variantCustomerName: null,
+      variantKitchenName: null,
+      unitPrice: "8.00",
+    });
+    expect(staffPresentationName(selected)).toBe("Coffee");
+  });
+});
+
+// Self-contained apply/round-trip proof for the A2 columns, seeded with raw SQL so it does not
+// depend on createProduct (which a later task rewrites for the renamed products.name).
+it("round-trips a variant's new name, customer_name, kitchen_name and image columns", async () => {
+  const tenantId = await seedTenant(suite.admin);
+  // The return type is INFERRED from `execute`, which widens to drizzle's `Assume<T, ...>`; writing
+  // `Promise<T>` here would need a cast, and each call site names a concrete row shape anyway.
+  async function one<T extends Record<string, unknown>>(query: ReturnType<typeof sql>) {
+    return (await suite.admin.execute<T>(query)).rows[0]!;
+  }
+  const { id: catalogueId } = await one<{ id: string }>(
+    sql`insert into catalogues (tenant_id, name) values (${tenantId}, 'Bar') returning id`,
+  );
+  const { id: productId } = await one<{ id: string }>(
+    sql`insert into products (tenant_id, catalogue_id, name, pricing_unit, unit_price, vat_class)
+        values (${tenantId}, ${catalogueId}, 'Coffee', 'each', '9.00', 'reduced') returning id`,
+  );
+  const row = await one<{
+    name: string;
+    customer_name: Record<string, string> | null;
+    kitchen_name: string | null;
+    image: string | null;
+  }>(
+    sql`insert into product_variants
+          (tenant_id, product_id, name, customer_name, kitchen_name, image, unit_price)
+        values (${tenantId}, ${productId}, 'Small', '{"en":"Small"}'::jsonb, 'SM COFFEE', 'abc123.jpg', '2.00')
+        returning name, customer_name, kitchen_name, image`,
+  );
+  expect(row).toEqual({
+    name: "Small",
+    customer_name: { en: "Small" },
+    kitchen_name: "SM COFFEE",
+    image: "abc123.jpg",
+  });
 });

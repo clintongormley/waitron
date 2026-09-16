@@ -309,8 +309,8 @@ export class UnitsScreen extends LitElement {
       {
         key: "name",
         label: t("units.name"),
-        cell: (product) => localizedName(product.name),
-        sortValue: (product) => localizedName(product.name),
+        cell: (product) => product.name,
+        sortValue: (product) => product.name,
       },
       {
         key: "availability",
@@ -408,9 +408,7 @@ export class UnitsScreen extends LitElement {
       productNeedle === ""
         ? this.inUseProducts
         : this.inUseProducts.filter((product) =>
-            Object.values(product.name).some((name) =>
-              name.toLocaleLowerCase().includes(productNeedle),
-            ),
+            product.name.toLocaleLowerCase().includes(productNeedle),
           );
     const otherUnits = this.units.filter((unit) => unit.id !== this.inUseUnitId);
     return html`
@@ -522,7 +520,7 @@ export class UnitsScreen extends LitElement {
                   .selectable=${true}
                   .selected=${this.selectedProducts}
                   .selectionLabel=${(product: ProductUsingUnit) =>
-                    `${t("units.select_product")}: ${localizedName(product.name)}`}
+                    `${t("units.select_product")}: ${product.name}`}
                   selectAllLabel=${t("units.select_all")}
                   @wt-selection-change=${this.#onSelectionChange}
                 ></wt-data-table>

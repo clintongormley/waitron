@@ -13,8 +13,8 @@ import { codeMessage } from "../i18n/codes.js";
 import { vatClassName } from "../i18n/domain.js";
 import type { AllergenDeclaration, OptionGroup, OptionGroupItem, VatClass } from "../api/client.js";
 
-/** The VAT bands the item VAT-override select offers — mirrors `product-form.ts`'s `VAT_CLASSES` (the
- * `products.vat_class` CHECK-set order, `schema/catalogue.ts`). Duplicated locally rather than shared:
+/** The VAT bands the item VAT-override select offers, in the `products.vat_class` CHECK-set order
+ * (`packages/db/src/schema/catalogue.ts`). Duplicated locally rather than shared:
  * no domain-constants module exports it, and every other enum-token table in this codebase (the LOCAL
  * type copies throughout `api/client.ts`, the `NameTable`s in `i18n/domain.ts`) is likewise a small,
  * deliberately-duplicated copy rather than an import, to keep each file's dependency edges obvious. */
@@ -29,7 +29,7 @@ function parseInteger(value: string): number | undefined {
 }
 
 /** Build the name map to emit from a per-locale draft: every locale whose value is non-empty
- * (trimmed), value kept as typed — mirrors `product-form.ts`'s `#buildDescriptions`. */
+ * (trimmed), value kept as typed. */
 function buildName(draft: Record<string, string>): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [locale, text] of Object.entries(draft)) {
@@ -56,10 +56,9 @@ function primaryName(name: Record<string, string>, primaryLocale: string, id: st
  *
  * TWO INLINE ERROR SLOTS, not the screen's top-of-page banner. The screen sets `groupError`/`itemError`
  * from a caught `{ code }` (`options.group_invalid` on an inconsistent min/max/required, or any other
- * rejection) and this widget renders it, localised via `codeMessage`, next to the form it belongs to —
- * mirrors `product-form.ts`'s own client-side `validationError` slot, except the codes here can
- * originate on the SERVER (a business-rule check, not a client-only shape check), so the screen is
- * still the one catching the rejection; this widget only owns where the message is shown.
+ * rejection) and this widget renders it, localised via `codeMessage`, next to the form it belongs to.
+ * These codes can originate on the SERVER (a business-rule check, not a client-only shape check), so
+ * the screen is still the one catching the rejection; this widget only owns where the message is shown.
  *
  * ITEMS ARE PER EXPANDED GROUP. `expandedGroupId` + `items` are both screen-owned: clicking a row's
  * "Items" button emits `toggle-option-group-items { groupId }`, and the screen decides whether that

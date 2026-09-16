@@ -60,9 +60,9 @@ describe("working_orders state machine (enforce_transition)", () => {
     return asApp((tx) =>
       tx.execute(
         sql`insert into working_order_lines
-              (tenant_id, working_order_id, line_no, product_id, descriptions,
+              (tenant_id, working_order_id, line_no, product_id, name, descriptions,
                quantity, unit_price, unit_price_gross, vat_rate, line_total)
-            values (${TENANT_A}, ${orderId}, ${lineNo}, ${productA}, ${DESCRIPTIONS_A}::jsonb,
+            values (${TENANT_A}, ${orderId}, ${lineNo}, ${productA}, 'Café solo', ${DESCRIPTIONS_A}::jsonb,
                '1.000', '1.00', '1.10', '10.00', '1.00')`,
       ),
     );
@@ -95,7 +95,7 @@ describe("working_orders state machine (enforce_transition)", () => {
       .values({
         tenantId: TENANT_A,
         catalogueId: catalogue.id,
-        descriptions: { es: "Café solo", ca: "Cafè sol" },
+        name: "Café solo",
         pricingUnit: "each",
         unitPrice: "1.00",
         vatClass: "general",

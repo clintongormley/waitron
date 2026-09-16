@@ -11,7 +11,8 @@ import type { SelectedLineOption } from "../state/working-order.js";
 
 const cafe: TillProduct = {
   id: "cafe",
-  descriptions: { es: "Café" },
+  name: "Café",
+  customerName: { es: "Café para el cliente" },
   pricingUnit: "each",
   unitPrice: "1.50",
   vatClass: "general",
@@ -21,7 +22,8 @@ const cafe: TillProduct = {
 
 const jamon: TillProduct = {
   id: "jamon",
-  descriptions: { es: "Jamón" },
+  name: "Jamón",
+  customerName: { es: "Jamón para el cliente" },
   pricingUnit: "weight",
   unitPrice: "10.00",
   vatClass: "reduced",
@@ -32,7 +34,10 @@ const jamon: TillProduct = {
 afterEach(cleanupWidgets);
 
 describe("till-basket", () => {
-  it("keeps retrieved receipt names while new basket content uses the configured default", async () => {
+  it("names a retrieved AND a new line by the staff name, whatever the content languages say", async () => {
+    // The till's operator reads the venue's internal name. Both products here carry customer text in
+    // the locale the till is showing AND in the only enabled content language, so a basket that
+    // resolved a customer map would read "Hogaza" and "Pa de pagès" instead.
     const previousLocale = currentLocale();
     setLocale("en-GB");
     setContentLanguages({ defaultLanguage: "ca", languages: ["ca"] });
@@ -41,22 +46,57 @@ describe("till-basket", () => {
       store.loadFrom("held", [
         {
           workingOrderLineId: "stored-line",
-          product: { ...cafe, descriptions: { "es-ES": "Pan" } },
+          product: {
+            ...cafe,
+            name: "Pan de pueblo",
+            customerName: { "en-GB": "Hogaza", ca: "Hogaza" },
+          },
           quantity: "1",
           options: [
             { optionGroupItemId: "butter", name: { "es-ES": "Mantequilla" }, priceDelta: "0.50" },
           ],
         },
       ]);
-      store.addProduct({ ...cafe, id: "fresh", descriptions: { en: "Bread", ca: "Pa" } }, "1");
+      store.addProduct(
+        {
+          ...cafe,
+          id: "fresh",
+          name: "Bread",
+          customerName: { "en-GB": "Pa de pagès", ca: "Pa de pagès" },
+        },
+        "1",
+      );
       const { el } = await mountWidget<TillBasket>("till-basket", { store });
       expect(
         [...el.shadowRoot!.querySelectorAll(".line > .name")].map((node) => node.textContent),
-      ).toEqual(["Pan", "Pa"]);
+      ).toEqual(["Pan de pueblo", "Bread"]);
+      // A modifier is still named from its own per-language map — only the DISH name changed.
       expect(el.shadowRoot!.querySelector(".option .name")!.textContent).toContain("Mantequilla");
       expect(el.shadowRoot!.querySelector(".step-inc")!.getAttribute("aria-label")).toContain(
-        "Pan",
+        "Pan de pueblo",
       );
+    } finally {
+      setLocale(previousLocale);
+    }
+  });
+
+  it("joins the chosen variant's staff name onto the line, not its customer translation", async () => {
+    const previousLocale = currentLocale();
+    setLocale("es-ES");
+    setContentLanguages({ defaultLanguage: "es", languages: ["es"] });
+    try {
+      const store = new WorkingOrderStore();
+      store.addProduct(
+        {
+          ...cafe,
+          variantId: "large",
+          variantName: "Large",
+          variantCustomerName: { es: "Taza grande", "es-ES": "Taza grande" },
+        },
+        "1",
+      );
+      const { el } = await mountWidget<TillBasket>("till-basket", { store });
+      expect(el.shadowRoot!.querySelector(".line > .name")!.textContent).toBe("Café · Large");
     } finally {
       setLocale(previousLocale);
     }
@@ -184,7 +224,8 @@ describe("till-basket", () => {
     const burger: TillProduct = {
       ...cafe,
       id: "burger",
-      descriptions: { es: "Hamburguesa" },
+      name: "Hamburguesa",
+      customerName: { es: "Hamburguesa para el cliente" },
       unitPrice: "10.00",
     };
     const extraCheese: SelectedLineOption = {
@@ -230,7 +271,8 @@ describe("till-basket", () => {
     const burger: TillProduct = {
       ...cafe,
       id: "burger",
-      descriptions: { es: "Hamburguesa" },
+      name: "Hamburguesa",
+      customerName: { es: "Hamburguesa para el cliente" },
       unitPrice: "10.00",
     };
     const extraShotX2: SelectedLineOption = {
@@ -258,7 +300,8 @@ describe("till-basket", () => {
     const burger: TillProduct = {
       ...cafe,
       id: "burger",
-      descriptions: { es: "Hamburguesa" },
+      name: "Hamburguesa",
+      customerName: { es: "Hamburguesa para el cliente" },
       unitPrice: "10.00",
     };
     const extraCheese: SelectedLineOption = {
@@ -298,7 +341,8 @@ describe("till-basket", () => {
     const burger: TillProduct = {
       ...cafe,
       id: "burger",
-      descriptions: { es: "Hamburguesa" },
+      name: "Hamburguesa",
+      customerName: { es: "Hamburguesa para el cliente" },
       unitPrice: "10.00",
       allergens: { gluten: { presence: "contains" } }, // base REVIEWED, declares gluten
       optionGroups: [
@@ -340,7 +384,7 @@ describe("till-basket", () => {
     const burger: TillProduct = {
       ...cafe,
       id: "burger",
-      descriptions: { es: "Hamburguesa" },
+      name: "Hamburguesa",
       unitPrice: "10.00",
       allergens: { gluten: { presence: "contains" } }, // the DISH's own allergen (not milk)
       optionGroups: [
@@ -392,7 +436,7 @@ describe("till-basket", () => {
     const burger: TillProduct = {
       ...cafe,
       id: "burger",
-      descriptions: { es: "Hamburguesa" },
+      name: "Hamburguesa",
       unitPrice: "10.00",
       allergens: { gluten: { presence: "contains" } },
       optionGroups: [
@@ -421,7 +465,7 @@ describe("till-basket", () => {
     const burger: TillProduct = {
       ...cafe,
       id: "burger",
-      descriptions: { es: "Hamburguesa" },
+      name: "Hamburguesa",
       unitPrice: "10.00",
       allergens: null,
       modifiers: [
@@ -472,7 +516,8 @@ describe("till-basket", () => {
     const burger: TillProduct = {
       ...cafe,
       id: "burger",
-      descriptions: { es: "Hamburguesa" },
+      name: "Hamburguesa",
+      customerName: { es: "Hamburguesa para el cliente" },
       unitPrice: "10.00",
       allergens: null, // base UNREVIEWED → the plate stays pending
       optionGroups: [
@@ -504,7 +549,8 @@ describe("till-basket", () => {
     const tostada: TillProduct = {
       ...cafe,
       id: "tostada",
-      descriptions: { es: "Tostada" },
+      name: "Tostada",
+      customerName: { es: "Tostada para el cliente" },
       allergens: { gluten: { presence: "contains" } },
     };
     const store = new WorkingOrderStore();
@@ -538,7 +584,8 @@ describe("till-basket", () => {
     const tostada: TillProduct = {
       ...cafe,
       id: "tostada-stale",
-      descriptions: { es: "Tostada" },
+      name: "Tostada",
+      customerName: { es: "Tostada para el cliente" },
       allergens: { gluten: { presence: "contains" } }, // base REVIEWED → the row renders
       optionGroups: [
         {
@@ -579,7 +626,8 @@ describe("till-basket", () => {
     const salad: TillProduct = {
       ...cafe,
       id: "salad",
-      descriptions: { es: "Ensalada" },
+      name: "Ensalada",
+      customerName: { es: "Ensalada para el cliente" },
       dietDerivation: { origins: ["plant"], pending: false },
     };
     const store = new WorkingOrderStore();
@@ -599,7 +647,8 @@ describe("till-basket", () => {
     const chuleta: TillProduct = {
       ...cafe,
       id: "chuleta",
-      descriptions: { es: "Chuleta" },
+      name: "Chuleta",
+      customerName: { es: "Chuleta para el cliente" },
       dietDerivation: { origins: ["meat"], pending: false },
     };
     const store = new WorkingOrderStore();
@@ -619,7 +668,8 @@ describe("till-basket", () => {
     const mystery: TillProduct = {
       ...cafe,
       id: "mystery",
-      descriptions: { es: "Plato del día" },
+      name: "Plato del día",
+      customerName: { es: "Plato del día para el cliente" },
       dietDerivation: { origins: [], pending: true },
     };
     const store = new WorkingOrderStore();
@@ -654,7 +704,8 @@ describe("till-basket", () => {
     const salad: TillProduct = {
       ...cafe,
       id: "salad-bacon",
-      descriptions: { es: "Ensalada" },
+      name: "Ensalada",
+      customerName: { es: "Ensalada para el cliente" },
       dietDerivation: { origins: ["plant"], pending: false },
       optionGroups: [
         {
@@ -685,7 +736,8 @@ describe("till-basket", () => {
     const kebab: TillProduct = {
       ...cafe,
       id: "kebab",
-      descriptions: { es: "Kebab" },
+      name: "Kebab",
+      customerName: { es: "Kebab para el cliente" },
       dietDerivation: { origins: ["meat"], pending: false },
       dietOverride: { halal: "yes", kosher: "yes" },
     };
@@ -708,7 +760,8 @@ describe("till-basket", () => {
     const mystery: TillProduct = {
       ...cafe,
       id: "mystery-partial-override",
-      descriptions: { es: "Plato del día" },
+      name: "Plato del día",
+      customerName: { es: "Plato del día para el cliente" },
       dietDerivation: { origins: [], pending: true },
       dietOverride: { vegan: "no" },
     };
@@ -729,7 +782,8 @@ describe("till-basket", () => {
     const gelatin: TillProduct = {
       ...cafe,
       id: "gelatin",
-      descriptions: { es: "Gelatina" },
+      name: "Gelatina",
+      customerName: { es: "Gelatina para el cliente" },
       // Reviewed (not pending), an animal origin that is neither meat/fish nor vegetarian-ok → vegan
       // "no", vegetarian "no", contains [] — the helper has nothing positive to show, so no row.
       dietDerivation: { origins: ["other_animal"], pending: false },
@@ -763,14 +817,16 @@ describe("till-basket", () => {
   const steak: TillProduct = {
     ...cafe,
     id: "steak",
-    descriptions: { es: "Filete" },
+    name: "Filete",
+    customerName: { es: "Filete para el cliente" },
     unitPrice: "18.00",
     diet: { vegan: "no", vegetarian: "no", contains: ["meat"] },
   };
   const seabass: TillProduct = {
     ...cafe,
     id: "seabass",
-    descriptions: { es: "Lubina" },
+    name: "Lubina",
+    customerName: { es: "Lubina para el cliente" },
     unitPrice: "16.00",
     diet: { vegan: "no", vegetarian: "no", contains: ["fish"] },
   };

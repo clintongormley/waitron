@@ -38,7 +38,7 @@ it("publishes an attached text modifier without requiring choice rows", async ()
     const product = await createProduct(tx, tenantId, {
       catalogueId: menu.id,
       categoryId: null,
-      descriptions: { en: "Coffee" },
+      name: "Coffee",
       pricingUnit: "each",
       unitPrice: "2.00",
       vatClass: "reduced",
@@ -81,7 +81,7 @@ it("projects only published available choices, clears excluded defaults, and kee
     const product = await createProduct(tx, tenantId, {
       catalogueId: menu.id,
       categoryId: null,
-      descriptions: { en: "Coffee" },
+      name: "Coffee",
       pricingUnit: "each",
       unitPrice: "2.00",
       vatClass: "reduced",

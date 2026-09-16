@@ -35,7 +35,11 @@ const SEED = {
   tipAmount: "5.00", // → takings.tipTotal
   lineQuantity: "2.000", // → topSellers[0].quantity
   lineTotal: "7.00", // → topSellers[0].total
-  descriptions: { "es-ES": "Café con leche" }, // → topSellers[0].descriptions
+  // Deliberately distinct: the STAFF name → topSellers[0].name; the customer-facing text is seeded
+  // too but never read by top-sellers (a sales report shows the staff name, CLAUDE.md's three-name
+  // table), so a test that reads the customer text instead would fail here.
+  name: "Coffee",
+  descriptions: { "es-ES": "Café con leche" },
 } as const;
 
 /** Seed one sale + its tender + one sale_line ON TODAY's business day (issued/settled at `now()`, so
@@ -56,8 +60,10 @@ async function seedTodaySale(db: Database): Promise<void> {
     insert into tenders (tenant_id, sale_id, method, amount, tip_amount, settled_at)
     values (${tenantId}, ${saleId}, 'cash', ${SEED.tenderAmount}, ${SEED.tipAmount}, now())`);
   await db.execute(sql`
-    insert into sale_lines (tenant_id, sale_id, line_no, descriptions, quantity, unit_price, vat_rate, line_total)
-    values (${tenantId}, ${saleId}, 1, ${JSON.stringify(SEED.descriptions)}::jsonb,
+    insert into sale_lines
+      (tenant_id, sale_id, line_no, name, descriptions, quantity, unit_price, vat_rate, line_total)
+    values (${tenantId}, ${saleId}, 1, ${SEED.name},
+            ${JSON.stringify(SEED.descriptions)}::jsonb,
             ${SEED.lineQuantity}, '3.50', '21.00', ${SEED.lineTotal})`);
 }
 
@@ -167,7 +173,7 @@ interface OverviewBody {
   takings: { tenderTotal: string; tipTotal: string; grossTotal: string };
   counts: { sales: number; corrections: number; voids: number };
   openTables: { open: number; total: number };
-  topSellers: { descriptions: Record<string, string>; quantity: string; total: string }[];
+  topSellers: { name: string; quantity: string; total: string }[];
 }
 
 describe("mountReportApi — /reports/overview", () => {
@@ -195,10 +201,10 @@ describe("mountReportApi — /reports/overview", () => {
     // `countOpenTables`'s `and dt.active = true` predicate would make this {open:2, total:3}.
     expect(body.openTables).toEqual({ open: 1, total: 2 });
 
-    // The single seeded line, keyed on its frozen descriptions snapshot.
+    // The single seeded line, keyed on its frozen STAFF name — never the customer-facing text.
     expect(body.topSellers).toEqual([
       {
-        descriptions: SEED.descriptions,
+        name: SEED.name,
         quantity: SEED.lineQuantity,
         total: SEED.lineTotal,
       },

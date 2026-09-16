@@ -11,15 +11,8 @@ const overview: SalesOverview = {
   counts: { sales: 42, corrections: 2, voids: 1 },
   openTables: { open: 3, total: 12 },
   topSellers: [
-    // FULL invoice-locale-tag keys — the shape the `/reports/overview` sale-line snapshot produces
-    // (its seed writes `{ "es-ES": … }`); localizedSnapshotName resolves it via the full-tag arm.
-    {
-      descriptions: { "es-ES": "Café con leche", "en-GB": "Latte" },
-      quantity: "18",
-      total: "36.00",
-    },
-    // Second row carries neither "es-ES" nor "es": exercises localizedSnapshotName's stored-language fallback.
-    { descriptions: { en: "Croissant" }, quantity: "12", total: "24.00" },
+    { name: "Café con leche", quantity: "18", total: "36.00" },
+    { name: "Croissant", quantity: "12", total: "24.00" },
   ],
 };
 
@@ -92,7 +85,7 @@ describe("dashboard-overview-screen", () => {
     expect(text).toContain("12");
   });
 
-  it("resolves each top-seller name via the current locale, falling back to the first value", async () => {
+  it("renders each top-seller row's plain staff name, in server order", async () => {
     const api = stubApi();
     const { el } = await mountWidget<OverviewScreen>("dashboard-overview-screen", { api });
     await flush(el);
@@ -103,7 +96,7 @@ describe("dashboard-overview-screen", () => {
     const names = [...el.shadowRoot!.querySelectorAll("[data-test=seller-name]")].map((n) =>
       n.textContent?.trim(),
     );
-    expect(names).toEqual(["Café con leche", "Croissant"]); // es-ES hit, then first-value fallback
+    expect(names).toEqual(["Café con leche", "Croissant"]);
   });
 
   it("shows the empty prompt when there are no top sellers", async () => {

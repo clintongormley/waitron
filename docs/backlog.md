@@ -554,6 +554,13 @@ choice no longer stops the till and kitchen calling a dish vegan. Each product a
 states its own positive `suitableFor` list, shown independently; the app no longer combines a dish
 with its extras. Product-level direct allergen/dietary declarations are unchanged.
 
+_Superseded 2026-09-15 (the product editor rework, below):_ "a translated name and optional
+description" no longer describes a product. A product's Name is plain staff-facing text; the
+translated name became a separate, optional customer-facing name, and a kitchen name sits beside
+both. The long stack of cards described above is now a short form with collapsible sections, and the
+station and course that used to save on their own now save with the product. The rest of the entry —
+menus, variant pricing, the till, the frozen sale facts, nested creation — still stands.
+
 What it left open:
 
 - **"No tax (0%)" is an open fiscal question, and it must be answered before the first live filing.**
@@ -608,12 +615,12 @@ three types are Text, Extras and Options. See
 
 What it left open:
 
-- **A keyboard-driven reorder says nothing to a screen reader.** Moving a choice with the arrow keys
-  changes the table and returns focus to the handle, but no live region announces the new position,
-  so somebody who cannot see the table gets no confirmation that the move happened. The accessibility
-  tests cannot catch this — axe checks static markup, and a missing announcement is not a markup
-  defect. **Next action:** add a polite live region to the choices table naming the moved choice and
-  its new position, and cover it with a test that reads the region's text after a key press.
+- ~~A keyboard-driven reorder says nothing to a screen reader.~~ **Closed by the product editor
+  rework** (the entry below; the same branch). The drag, the arrow-key move and the announcement were
+  extracted out of `modifier-form.ts` into a shared `ReorderController`
+  (`apps/dashboard/src/widgets/reorder-table.ts`), which renders a polite live region and names the
+  moved row and its new position after a key press. Both the choices table and the new variants table
+  use it, so the choices table gained the announcement it was missing.
 
 **Modifier nutrition redesign (pass 1) — LANDED #377 (2026-09-15).** Each modifier choice now carries
 its own simple nutrition information, and the app no longer combines a dish with its chosen extras. The
@@ -687,6 +694,52 @@ What it left open:
   distinction means for a product's own claims and for what the till withholds — it is not a
   mechanical copy, because a product declaring "may contain" is a real statement in a way a modifier
   choice's was not.
+
+**The product editor reworked — written on branch `feat/product-editor-rework`, not yet on `main`
+(2026-09-15).** Every other entry in this section names the pull request that landed it. This one
+cannot yet, because the branch is unmerged. **Next action:** when it merges, rewrite this heading as
+`LANDED #<pr> (<date>)`, in the follow-up `Backlog:` commit this repository always makes.
+
+A product's **Name** is no longer translated. It is plain staff-facing text, and it is what the
+dashboard, the till's buttons and basket, an open table's line list and the sales reports show. Two
+optional names sit beside it: a **customer-facing name**, translated, which the receipt and the
+invoice line filed with AEAT use, and a **kitchen name**, plain text, which the kitchen ticket and
+the kitchen screens use. Each falls back to Name on its own when left blank. A variant now carries
+the same three names plus its own image, and a variant's name is appended to the product's with a
+middot — `Coffee · Large` — with each half falling back independently. All of that resolution lives
+in one file, `packages/catalogue/src/product-presentation.ts`. The developer guide's table of which
+surface reads which name is the place to check before adding a new one.
+
+The editor itself is now a short form: the fields you change often are always visible and the rest
+fold away behind a section header showing a summary of what is inside it (Kitchen, Descriptors,
+Nutritional info). A section holding an error opens itself and cannot be closed until the error is
+fixed. Variants are a real table with drag and arrow-key reordering, a per-row Available switch and a
+row menu, and each variant is edited in its own small window. Categories now open the same picker the
+Categories screen uses, in a modal, instead of the editor's own controls.
+
+Two behaviour changes came with it. **A product's kitchen station and course now save with the
+product**, inside its one transaction, instead of being written the moment you picked them — so
+Cancel really cancels, a rejected station rolls the whole product back, and you can route a product
+as you create it. And **a product has no variants or at least two**: the first *Add variant* turns the
+plain price into a variant named "Regular" and opens the window for the second, removing down to one
+folds the price back, and the server refuses exactly one outright with `product.variants_min_two` so
+an API caller cannot reach a state the editor will not allow. Two new shared primitives came out of
+it, `wt-disclosure` and `wt-price-input`. Pre-production, so the columns were dropped and recreated
+rather than migrated (CLAUDE.md §3): `packages/db` migrations `0030`–`0031` and `packages/catalogue`
+`0014`. [Developer guide](developers/products.md), [operator guide](products.md),
+[design](superpowers/specs/2026-09-15-product-editor-rework-design.md),
+[plan](superpowers/plans/2026-09-15-product-editor-rework.md).
+
+What it left open:
+
+- **A variant's image has no foreign key, unlike a product's.** `products.image` carries a real
+  `ON DELETE RESTRICT` reference to `media_images`
+  (`packages/media/drizzle/0001_images_references_grants.sql`); `product_variants.image` is a plain
+  text column (`packages/catalogue/drizzle/0014_variant_names_image.sql`). The image library still
+  refuses to delete a photo a variant uses, because `listImageUsages` and `deleteImage` both scan
+  that column — but that is application-level protection only, and any delete path that skips
+  `deleteImage` is not stopped by the database. **Next action:** decide whether the variant column
+  should get the same foreign key the product column has.
 
 ### A1. Checking a fiscal record before it is written — LANDED #331 (2026-09-12)
 

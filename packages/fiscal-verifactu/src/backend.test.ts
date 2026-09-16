@@ -77,6 +77,7 @@ describe("zero-rate sales", () => {
           lines: [
             {
               lineNo: 1,
+              name: "Producto sin impuestos",
               descriptions: { "es-ES": "Producto sin impuestos" },
               quantity: "1",
               unitPrice: "5.00",

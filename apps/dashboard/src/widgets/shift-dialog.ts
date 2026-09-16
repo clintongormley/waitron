@@ -32,9 +32,9 @@ export interface UpdateShiftDetail {
  * The management dashboard's SHIFT DIALOG — a `wt-dialog` for adding, editing or removing one planned
  * shift on a person × day grid cell (design §3d). The roster screen drives it by setting `.open`,
  * `.day`, `.personId` and (for an edit) `.shift`, and hears one of three composed events: `add-shift`
- * (create), `update-shift { shiftId, patch }` (edit), `remove-shift { shiftId }` (delete). Like
- * `product-form`, the dialog does NOT call the API and does NOT close itself on confirm — the screen
- * closes it on a successful write, so a rejected write leaves the entered values in place.
+ * (create), `update-shift { shiftId, patch }` (edit), `remove-shift { shiftId }` (delete). The dialog
+ * does NOT call the API and does NOT close itself on confirm — the screen closes it on a successful
+ * write, so a rejected write leaves the entered values in place.
  *
  * Offset 0 (Resolved Q6): the entered `HH:MM` wall time is composed with the cell `day` into
  * `${day}T${HH:MM}:00Z`, i.e. the wall time stored AS the UTC instant, with `starts/ends_offset = 0`.

@@ -198,7 +198,7 @@ async function seedShop(emisorNif: string): Promise<Shop> {
     const agua = await createProduct(tx, cfg.tenantId, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
-      descriptions: { [LOCALE]: "Agua mineral" },
+      name: "Agua mineral",
       pricingUnit: "each",
       unitPrice: "1.50",
       vatClass: "general",
@@ -206,7 +206,7 @@ async function seedShop(emisorNif: string): Promise<Shop> {
     const cafe = await createProduct(tx, cfg.tenantId, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
-      descriptions: { [LOCALE]: "Café solo" },
+      name: "Café solo",
       pricingUnit: "each",
       unitPrice: "2.00",
       vatClass: "general",

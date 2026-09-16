@@ -1,12 +1,14 @@
 import { AppError, contentLanguageCode, decimal, isUuid, toScale } from "@waitron/shared";
 import { validateAllergens, type ProductAllergens } from "./allergens.js";
+import { isProductPrice } from "./modifier-limits.js";
 import { validateDietaryDeclarations, type DietaryLabel } from "./dietary-declarations.js";
 import type { ProductVariantInput } from "./variants.js";
 import type { VatClass } from "./pricing.js";
 import "./errors.js";
 
 export interface ProductEditorInput {
-  name: Record<string, string>;
+  name: string;
+  customerName: Record<string, string> | null;
   description: Record<string, string> | null;
   kitchenName: string | null;
   image: string | null;
@@ -52,7 +54,7 @@ function ids(value: unknown, field: string): string[] {
   return values;
 }
 function price(value: unknown, field: string): string {
-  if (typeof value !== "string" || !/^(0|[1-9]\d{0,9})(\.\d{1,2})?$/.test(value)) invalid(field);
+  if (typeof value !== "string" || !isProductPrice(value)) invalid(field);
   return toScale(decimal(value), 2);
 }
 function boolean(value: unknown, field: string): boolean {
@@ -60,15 +62,26 @@ function boolean(value: unknown, field: string): boolean {
   return value;
 }
 function nullableText(value: unknown, field: string): string | null {
-  if (value === null) return null;
+  if (value === null || value === undefined) return null;
   if (typeof value !== "string") invalid(field);
   return value.trim() || null;
+}
+function requiredText(value: unknown, field: string): string {
+  if (typeof value !== "string" || value.trim() === "") invalid(field);
+  return value.trim();
+}
+/** Optional translated text: null/absent or an all-blank map means "no value" (falls back to name). */
+function nullableTranslations(value: unknown, field: string): Record<string, string> | null {
+  if (value === null || value === undefined) return null;
+  const map = translations(value, field);
+  return Object.values(map).some((text) => text.trim()) ? map : null;
 }
 
 /** Parse the complete write body before touching storage; reference ownership is checked in the transaction. */
 export function parseProductEditorInput(value: unknown): ProductEditorInput {
   const body = object(value, "product");
-  const name = translations(body.name, "name");
+  const name = requiredText(body.name, "name");
+  const customerName = nullableTranslations(body.customerName, "customerName");
   const description =
     body.description === null ? null : translations(body.description, "description");
   const unitId = nullableId(body.unitId, "unitId");
@@ -99,11 +112,17 @@ export function parseProductEditorInput(value: unknown): ProductEditorInput {
     }
     return {
       ...(variantId === undefined ? {} : { id: variantId }),
-      name: translations(variant.name, `${field}.name`),
+      name: requiredText(variant.name, `${field}.name`),
+      customerName: nullableTranslations(variant.customerName, `${field}.customerName`),
+      kitchenName: nullableText(variant.kitchenName, `${field}.kitchenName`),
+      image: nullableText(variant.image, `${field}.image`),
       unitPrice: price(variant.unitPrice, `${field}.unitPrice`),
       available: boolean(variant.available, `${field}.available`),
     };
   });
+  // A product has NO variants or at least two; exactly one is refused so an API caller cannot bypass
+  // the editor's "Regular" default-variant rule (product.variants_min_two).
+  if (variants.length === 1) throw new AppError("product.variants_min_two", {});
   const allergens =
     body.allergens === null
       ? null
@@ -115,6 +134,7 @@ export function parseProductEditorInput(value: unknown): ProductEditorInput {
         );
   return {
     name,
+    customerName,
     description:
       description && Object.values(description).some((text) => text.trim()) ? description : null,
     kitchenName: nullableText(body.kitchenName, "kitchenName"),

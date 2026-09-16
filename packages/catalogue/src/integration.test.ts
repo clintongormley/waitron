@@ -17,6 +17,7 @@ import { replaceProductCategories } from "./categories.js";
 import { createUnit } from "./units.js";
 import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 import { priceBasket } from "./pricing.js";
+import { customerPresentationText } from "./product-presentation.js";
 import { seedVenue } from "../test/fixtures.js";
 
 /**
@@ -112,7 +113,7 @@ describe("catalogue → priceBasket → recordSale (end-to-end)", () => {
       const product = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: food.id,
-        descriptions: { en: "sliced ham" },
+        name: "sliced ham",
         unitId: kgUnitId,
         unitPrice: "24.90",
         vatClass: "reduced",
@@ -124,14 +125,26 @@ describe("catalogue → priceBasket → recordSale (end-to-end)", () => {
       });
       await assignCatalogueToLocation(tx, locationId, cat.id);
 
-      // The till's read → pricing → fiscal write, all from catalogue data. `listAvailableProducts`'
-      // `AvailableProduct` is fed straight into `priceBasket`, which only typechecks because it is
-      // structurally assignable to `PriceableProduct` (Task 5).
+      // The till's read → pricing → fiscal write, all from catalogue data. An `AvailableProduct` is
+      // NOT a `PriceableProduct`: it carries the staff `name` and the customer-facing `customerName`,
+      // so the customer text is resolved through `product-presentation.ts` first — the one home for
+      // the blank-falls-back-to-the-staff-name rule.
       const available = (await listAvailableProducts(tx, locationId)).products;
       expect(available.map((row) => row.id)).toEqual([product.id]);
       const [ham] = available;
       expect(ham).toBeDefined();
-      priced = priceBasket([{ product: ham!, quantity: "0.320" }]);
+      const descriptions = customerPresentationText(
+        {
+          name: ham!.name,
+          customerName: ham!.customerName,
+          kitchenName: null,
+          variantName: null,
+          variantCustomerName: null,
+          variantKitchenName: null,
+        },
+        "en",
+      ).product;
+      priced = priceBasket([{ product: { ...ham!, descriptions }, quantity: "0.320" }]);
 
       // Checkable by hand: 24.90/kg × 0.320 kg = 7.968 → 7.97 gross; at the reduced 10% rate the
       // gross-inclusive DIFFERENCE method gives base 7.25 and tax 0.72 (7.97 − 7.25), NOT the 0.73
@@ -167,10 +180,16 @@ describe("catalogue → priceBasket → recordSale (end-to-end)", () => {
     // category was snapshotted onto `sale_lines.category` from the catalogue product's resolved
     // category name.
     expect(await backend.recordsFor(nodeId)).toHaveLength(1);
-    const { rows } = await suite.db.execute<{ category: string | null }>(
-      sql`select category from sale_lines where sale_id = ${saleId}`,
-    );
+    // The staff name reaches `sale_lines.name` (NOT NULL) frozen from the catalogue row, and the
+    // customer-facing snapshot falls back to it because this product carries no customer name.
+    const { rows } = await suite.db.execute<{
+      category: string | null;
+      name: string;
+      descriptions: Record<string, string>;
+    }>(sql`select category, name, descriptions from sale_lines where sale_id = ${saleId}`);
     expect(rows).toHaveLength(1);
     expect(rows[0]!.category).toBe("Food");
+    expect(rows[0]!.name).toBe("sliced ham");
+    expect(rows[0]!.descriptions).toEqual({ en: "sliced ham" });
   });
 });

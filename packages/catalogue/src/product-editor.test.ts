@@ -27,7 +27,8 @@ beforeEach(async () => {
   }));
   catalogueId = setup.catalogue.id;
   input = {
-    name: { en: "Coffee", es: "Café" },
+    name: "Coffee",
+    customerName: { en: "Coffee", es: "Café" },
     description: { en: "Freshly roasted" },
     kitchenName: "BAR COFFEE",
     unitId: setup.unit.id,
@@ -35,7 +36,24 @@ beforeEach(async () => {
     available: false,
     vatClass: "reduced",
     image: null,
-    variants: [{ name: { en: "Small" }, unitPrice: "2.00", available: true }],
+    variants: [
+      {
+        name: "Small",
+        customerName: null,
+        kitchenName: null,
+        image: null,
+        unitPrice: "2.00",
+        available: true,
+      },
+      {
+        name: "Large",
+        customerName: null,
+        kitchenName: null,
+        image: null,
+        unitPrice: "3.00",
+        available: true,
+      },
+    ],
     categoryIds: [],
     primaryCategoryId: null,
     modifierIds: [],
@@ -66,7 +84,7 @@ it("saves and reads the canonical editor shape with independent content and vari
   expect(saved).toEqual({
     ...input,
     id: saved.id,
-    variants: [{ ...input.variants[0], id: saved.variants[0]!.id }],
+    variants: input.variants.map((v, i) => ({ ...v, id: saved.variants[i]!.id })),
     stationId: null,
     courseId: null,
   });
@@ -98,6 +116,28 @@ it("saves and reads the canonical editor shape with independent content and vari
     allergens: {},
     dietaryDeclarations: [],
   });
+});
+
+it("refuses a save with exactly one variant but allows none or two", async () => {
+  await expect(
+    withTenant(fx.db, tenantId, (tx) =>
+      saveProductEditor(
+        tx,
+        tenantId,
+        null,
+        catalogueId,
+        { ...input, variants: [input.variants[0]!] },
+        "en",
+      ),
+    ),
+  ).rejects.toMatchObject({ code: "product.variants_min_two" });
+  expect(
+    await withTenant(fx.db, tenantId, (tx) => listProducts(tx, tenantId, catalogueId)),
+  ).toEqual([]);
+  const none = await withTenant(fx.db, tenantId, (tx) =>
+    saveProductEditor(tx, tenantId, null, catalogueId, { ...input, variants: [] }, "en"),
+  );
+  expect(none.variants).toEqual([]);
 });
 
 it("changes the product's unit on update", async () => {

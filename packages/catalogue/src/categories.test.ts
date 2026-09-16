@@ -33,7 +33,7 @@ async function fixture() {
     createProduct(tx, tenantId, {
       catalogueId: menu.id,
       categoryId: null,
-      descriptions: { en: "Toast" },
+      name: "Toast",
       pricingUnit: "each",
       unitPrice: "2",
       vatClass: "general",
@@ -68,7 +68,7 @@ describe("category authoring", () => {
       expect(await app((tx) => listCategoryProducts(tx, tenantId, category.id))).toEqual([
         {
           id: product.id,
-          descriptions: product.descriptions,
+          name: product.name,
           active: true,
           primaryCategoryId: food.id,
           categoryIds: [food.id, drinks.id].sort(),
@@ -241,7 +241,7 @@ it("returns each product's own membership set when reading the unfiltered librar
     createProduct(tx, tenantId, {
       catalogueId: menu.id,
       categoryId: drinks.id,
-      descriptions: { en: "Coffee" },
+      name: "Coffee",
       pricingUnit: "each",
       unitPrice: "1",
       vatClass: "general",

@@ -6,8 +6,7 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-switch.js";
 // Value import (not `import type`): pull in the child widget module for its `@customElement` side
-// effect, so `<dashboard-allergen-picker>` is registered before this form renders it (the
-// widget-registration pattern `product-form` uses for the picker).
+// effect, so `<dashboard-allergen-picker>` is registered before this form renders it.
 import "./allergen-picker.js";
 // Value import (side effect): register `<dashboard-dietary-origin-picker>` before this form renders it.
 import "./dietary-origin-picker.js";
@@ -42,9 +41,9 @@ export interface UpdateIngredientDetail {
  * carries no `active`; de/reactivation is a PATCH-only concern), and the landed
  * `<dashboard-allergen-picker>`. The recipe screen (a later task) drives it by setting `.open` and
  * (for an edit) `.ingredient`, and hears one of two events: `create-ingredient` (create mode) or
- * `update-ingredient { id, patch }` (edit mode). Like `product-form`, the form does NOT call the API
- * and does NOT close itself on confirm — the screen closes it on a successful create/update, so a
- * rejected write leaves the entered values in place.
+ * `update-ingredient { id, patch }` (edit mode). The form does NOT call the API and does NOT close
+ * itself on confirm — the screen closes it on a successful create/update, so a rejected write leaves
+ * the entered values in place.
  *
  * SEEDING. `willUpdate` reseeds every field from `ingredient` whenever `ingredient` changes or the
  * dialog opens, so opening the form for an edit pre-fills it and opening it for a create (`ingredient`
@@ -62,7 +61,7 @@ export interface UpdateIngredientDetail {
  * A non-empty NAME is REQUIRED client-side — the column is NOT NULL and a nameless ingredient is a UI
  * error — so confirm is blocked and a `role="alert"` shown when it is empty. A single-flight `busy`
  * property (set by the screen while a create/update round-trips) makes confirm a no-op and disables the
- * control, mirroring `product-form` — the mutations are not server-idempotent.
+ * control — the mutations are not server-idempotent.
  */
 @customElement("dashboard-ingredient-form")
 export class IngredientForm extends LitElement {
@@ -201,9 +200,9 @@ export class IngredientForm extends LitElement {
   }
 
   /**
-   * The dialog closed. Drop our own `open` to stay self-consistent, and — like `product-form` —
-   * deliberately do NOT `stopPropagation`: the composed `wt-close` must bubble on to the screen (the
-   * owner of the open state). Fields are NOT reset here; `willUpdate` reseeds them on the next open.
+   * The dialog closed. Drop our own `open` to stay self-consistent, and deliberately do NOT
+   * `stopPropagation`: the composed `wt-close` must bubble on to the screen (the owner of the open
+   * state). Fields are NOT reset here; `willUpdate` reseeds them on the next open.
    */
   #onClose(): void {
     this.open = false;

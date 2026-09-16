@@ -1,18 +1,25 @@
 import { beforeEach, afterEach, describe, expect, it } from "vitest";
 import { setLocale } from "../i18n/t.js";
-import { productName, unitName } from "./product-name.js";
+import { customerProductName, lineProductName, productName, unitName } from "./product-name.js";
 import type { TillProduct } from "../api/client.js";
 import { setContentLanguages } from "@waitron/ui";
 
-function product(descriptions: Record<string, string>): TillProduct {
+/**
+ * The staff name and the customer name are DELIBERATELY different text in every fixture here. With
+ * the same text on both a test cannot tell which one the till rendered, and the assertion would hold
+ * whichever the code picked.
+ */
+function product(over: Partial<TillProduct> = {}): TillProduct {
   return {
     id: "p1",
-    descriptions,
+    name: "Coffee",
+    customerName: { es: "Café recién hecho", en: "Freshly ground coffee" },
     pricingUnit: "each",
     unitPrice: "1.00",
     vatClass: "general",
     category: null,
     allergens: null,
+    ...over,
   };
 }
 
@@ -25,38 +32,74 @@ afterEach(() => {
 });
 
 describe("productName", () => {
-  it("uses the site default for a missing translation regardless of object order", () => {
+  it("renders the staff name, not the customer translation for the current locale", () => {
+    setLocale("es-ES");
+    expect(productName(product())).toBe("Coffee");
+  });
+
+  it("renders the staff name under every content-language setting", () => {
+    // The staff name is plain text, so nothing about the enabled languages or the site default can
+    // move it. Both halves would read "Café recién hecho" if the customer map were consulted.
     setLocale("fr-FR");
     setContentLanguages({ defaultLanguage: "es", languages: ["es", "fr", "en"] });
-    expect(productName(product({ en: "Bread", es: "Pan" }))).toBe("Pan");
-  });
-  it("uses the current locale's description", () => {
-    setLocale("es-ES");
-    expect(productName(product({ "es-ES": "Café", en: "Coffee" }))).toBe("Café");
-  });
-
-  it("region-strips es-ES to bare es for BARE-keyed catalogue content (Feature B)", () => {
-    // /api/products returns bare-keyed content ({ en, es }); `en` is first, so without the
-    // region-strip tier this would resolve Object.values()[0] = "Coffee" under the es-ES till.
-    setLocale("es-ES");
-    expect(productName(product({ en: "Coffee", es: "Café" }))).toBe("Café");
+    expect(productName(product())).toBe("Coffee");
+    setLocale("en-GB");
+    setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
+    expect(productName(product())).toBe("Coffee");
   });
 
-  it("falls back to the configured English default when the current locale is missing", () => {
-    setLocale("es-ES");
-    setContentLanguages({ defaultLanguage: "en", languages: ["en", "es"] });
-    expect(productName(product({ en: "Coffee" }))).toBe("Coffee");
+  it("renders the staff name for a product with no customer name at all", () => {
+    expect(productName(product({ customerName: null }))).toBe("Coffee");
   });
 
-  it("falls back to the product id when there is no description at all", () => {
-    expect(productName(product({}))).toBe("p1");
+  it("names the product alone — a chosen variant is joined only onto a line", () => {
+    expect(productName(product({ variantId: "v1", variantName: "Large" }))).toBe("Coffee");
+  });
+});
+
+describe("customerProductName", () => {
+  it("reads an EXPLICIT locale over the current one — the printed sheet renders in the invoice locale", () => {
+    // The operator UI is Spanish, but the printed allergen sheet asks for the English customer text
+    // by locale: customer names are data keyed by locale, so passing one overrides the module-level
+    // current locale. This is the assertion the old `productName(product, "en")` test made.
+    setLocale("es-ES");
+    setContentLanguages({ defaultLanguage: "es", languages: ["es", "en"] });
+    expect(customerProductName(product(), "en")).toBe("Freshly ground coffee");
+    expect(customerProductName(product(), "es")).toBe("Café recién hecho");
   });
 
-  it("reads an EXPLICIT locale over the current one — the legal receipt renders in the invoice locale", () => {
-    // The operator UI is Spanish, but the ticket asks for the English description by locale: names
-    // are data keyed by locale, so passing one overrides the module-level current locale.
+  it("is the CUSTOMER text, never the staff name, whenever the product has one", () => {
+    expect(customerProductName(product(), "es")).not.toBe("Coffee");
+  });
+
+  it("falls back to the staff name when the product has no customer text at all", () => {
+    expect(customerProductName(product({ customerName: null }), "en")).toBe("Coffee");
+  });
+
+  it("falls back to the staff name when the customer map is blank", () => {
+    expect(customerProductName(product({ customerName: { es: "  " } }), "es")).toBe("Coffee");
+  });
+});
+
+describe("lineProductName", () => {
+  it("joins the variant's STAFF name onto the product's staff name", () => {
     setLocale("es-ES");
-    expect(productName(product({ "es-ES": "Café", en: "Coffee" }), "en")).toBe("Coffee");
+    const line = product({
+      variantId: "v1",
+      variantName: "Large",
+      variantCustomerName: { es: "Taza grande", en: "Large cup" },
+    });
+    expect(lineProductName(line)).toBe("Coffee · Large");
+  });
+
+  it("names the product alone when no variant was chosen", () => {
+    expect(lineProductName(product())).toBe("Coffee");
+  });
+
+  it("joins the variant's staff name even when the variant has no customer name", () => {
+    expect(lineProductName(product({ variantId: "v1", variantName: "Small" }))).toBe(
+      "Coffee · Small",
+    );
   });
 });
 
@@ -68,7 +111,7 @@ describe("unitName", () => {
 
   it("labels a product with its unit's abbreviation, not the full name", () => {
     const p: TillProduct = {
-      ...product({}),
+      ...product(),
       unit: {
         id: "u",
         name: { en: "Kilogram" },
@@ -81,12 +124,12 @@ describe("unitName", () => {
   });
 
   it("falls back to a synthesised weight abbreviation when the product carries no unit", () => {
-    const p = { ...product({}), pricingUnit: "weight" as const };
+    const p = { ...product(), pricingUnit: "weight" as const };
     expect(unitName(p)).toBe("kg");
   });
 
   it("falls back to the each abbreviation for a non-weight product with no unit", () => {
     // product() defaults pricingUnit to "each".
-    expect(unitName(product({}))).toBe("ea");
+    expect(unitName(product())).toBe("ea");
   });
 });

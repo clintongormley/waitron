@@ -217,9 +217,17 @@ export const saleLines = pgTable(
     tenantId: uuid("tenant_id").notNull(),
     saleId: uuid("sale_id").notNull(),
     lineNo: integer("line_no").notNull(),
+    // Frozen staff-facing product name (products.name at sale time) — snapshotted, never read live.
+    name: text("name").notNull(),
     descriptions: jsonb("descriptions").$type<Record<string, string>>().notNull(),
     variantId: uuid("variant_id"),
-    variantName: jsonb("variant_name").$type<Record<string, string>>(),
+    // Frozen variant staff name — plain text; null when the line names no variant.
+    variantName: text("variant_name"),
+    // Variant customer text, snapshotted under the venue's invoice locales like `descriptions` — the
+    // frozen copy of an already-validated working-order line, so no locales trigger guards it here.
+    variantDescriptions: jsonb("variant_descriptions").$type<Record<string, string>>(),
+    // Frozen variant kitchen name.
+    variantKitchenName: text("variant_kitchen_name"),
     kitchenName: text("kitchen_name"),
     modifierSnapshots: jsonb("modifier_snapshots")
       .$type<ModifierSnapshot[]>()

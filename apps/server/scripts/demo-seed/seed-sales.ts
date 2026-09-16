@@ -34,7 +34,11 @@ import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { TrustedClock, VatBreakdownLine } from "@waitron/fiscal";
 import { withTenant } from "@waitron/db";
 import type { Database } from "@waitron/db";
-import { resolveVatRate, toInvoiceLineDescriptions } from "@waitron/catalogue";
+import {
+  customerPresentationText,
+  resolveVatRate,
+  toInvoiceLineDescriptions,
+} from "@waitron/catalogue";
 import type { ResolvedOptionGroup, ResolvedOptionItem, VatClass } from "@waitron/catalogue";
 import {
   addDecimal,
@@ -42,6 +46,7 @@ import {
   divideDecimal,
   multiplyDecimal,
   percentOf,
+  resolveSnapshotText,
   sumDecimals,
   toScale,
   MONEY_SCALE,
@@ -68,9 +73,12 @@ export interface SeedSalesVenue {
  *  `sales`/`sale_lines` carry no product FK and snapshot the description, price and rate instead. */
 export interface SeedSalesProduct {
   id: string;
-  /** BARE content locale -> text (e.g. `{ es: "Café" }`), as `listAvailableProducts` returns it.
-   *  Re-keyed to the venue's full invoice tag before it lands on a line's `descriptions`. */
-  descriptions: Record<string, string>;
+  /** The staff-facing name, frozen onto the line's `name`. */
+  name: string;
+  /** BARE content locale -> customer-facing text (e.g. `{ es: "Café" }`), as `listAvailableProducts`
+   *  returns it; `null` or blank falls back to `name`. Resolved through `product-presentation.ts`
+   *  and then re-keyed to the venue's full invoice tag before it lands on a line's `descriptions`. */
+  customerName: Record<string, string> | null;
   /** GROSS (VAT-inclusive) unit price — the same figure `products.unit_price` stores. */
   unitPrice: string;
   vatClass: VatClass;
@@ -313,8 +321,19 @@ export async function seedSales(
         const parentLineNo = lines.length + 1;
         lines.push({
           lineNo: parentLineNo,
+          name: product.name,
           descriptions: toInvoiceLineDescriptions(
-            product.descriptions,
+            customerPresentationText(
+              {
+                name: product.name,
+                customerName: product.customerName,
+                kitchenName: null,
+                variantName: null,
+                variantCustomerName: null,
+                variantKitchenName: null,
+              },
+              invoiceLocale,
+            ).product,
             [invoiceLocale],
             invoiceLocale,
           ),
@@ -333,6 +352,8 @@ export async function seedSales(
           const optionBase = baseFromGross(optionGross, optionRate);
           lines.push({
             lineNo: lines.length + 1,
+            // A child line has no product: its staff name is the option's own label.
+            name: resolveSnapshotText(option.name, invoiceLocale, invoiceLocale),
             descriptions: toInvoiceLineDescriptions(option.name, [invoiceLocale], invoiceLocale),
             quantity: "1",
             unitPrice: optionBase,

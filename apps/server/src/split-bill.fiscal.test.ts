@@ -143,7 +143,7 @@ async function setupVenue(): Promise<Seeded> {
     const jamon = await createProduct(tx, cfg.tenantId, {
       catalogueId: cat.id,
       categoryId: comida.id,
-      descriptions: { [LOCALE]: "Jamón cortado" },
+      name: "Jamón cortado",
       pricingUnit: "weight",
       unitPrice: "24.90",
       vatClass: "reduced",
@@ -151,7 +151,7 @@ async function setupVenue(): Promise<Seeded> {
     const agua = await createProduct(tx, cfg.tenantId, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
-      descriptions: { [LOCALE]: "Agua mineral" },
+      name: "Agua mineral",
       pricingUnit: "each",
       unitPrice: "1.50",
       vatClass: "general",

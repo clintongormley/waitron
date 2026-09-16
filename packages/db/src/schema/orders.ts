@@ -161,6 +161,8 @@ export const workingOrderLines = pgTable(
     tenantId: uuid("tenant_id").notNull(),
     workingOrderId: uuid("working_order_id").notNull(),
     lineNo: integer("line_no").notNull(),
+    // Frozen staff-facing product name (products.name at add time) — snapshotted, never read live.
+    name: text("name").notNull(),
     // The priced product this draft line was built from — the pricing input described above.
     // NULLABLE (ordering modifiers, Task 2): a top-level dish line always carries a product, but a
     // CHILD MODIFIER line (parent_line_id set) has none — its price/name are snapshotted onto the
@@ -169,7 +171,14 @@ export const workingOrderLines = pgTable(
     // rows are unaffected), so this column carries no plain single-column `.references()` of its own.
     productId: uuid("product_id"),
     variantId: uuid("variant_id"),
-    variantName: jsonb("variant_name").$type<Record<string, string>>(),
+    // Frozen variant staff name — plain text; null when the line names no variant.
+    variantName: text("variant_name"),
+    // Variant customer text holding EXACTLY the venue's configured invoice locales (spec §9), checked
+    // by the working_order_lines_check_variant_locales trigger against locations.invoice_locales,
+    // mirroring `descriptions`. Null = the variant has no customer name.
+    variantDescriptions: jsonb("variant_descriptions").$type<Record<string, string>>(),
+    // Frozen variant kitchen name.
+    variantKitchenName: text("variant_kitchen_name"),
     kitchenName: text("kitchen_name"),
     descriptions: jsonb("descriptions").$type<Record<string, string>>().notNull(),
     modifierSnapshots: jsonb("modifier_snapshots")

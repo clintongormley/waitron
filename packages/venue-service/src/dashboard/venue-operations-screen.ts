@@ -283,6 +283,8 @@ export class VenueOperationsScreen extends LitElement {
       ...MODES.map((id) => ({ id, name: t(`venue.${id}`) })),
     ];
   }
+  /** Resolve a content-translated name — a menu section's or a category's. A product's, a variant's
+   * and an offer's name are plain staff strings and are rendered directly, never through here. */
   #name(names: Record<string, string>): string {
     return resolveEnabledContentText(names, currentLocale(), currentContentLanguages());
   }
@@ -531,8 +533,8 @@ export class VenueOperationsScreen extends LitElement {
                   {
                     key: "product",
                     label: t("venue.product"),
-                    cell: (row) => this.#name(row.descriptions),
-                    sortValue: (row) => this.#name(row.descriptions),
+                    cell: (row) => row.name,
+                    sortValue: (row) => row.name,
                   },
                   {
                     key: "price",
@@ -545,7 +547,7 @@ export class VenueOperationsScreen extends LitElement {
                     key: "actions",
                     label: t("venue.actions"),
                     cell: (row) =>
-                      this.#actions(this.#name(row.descriptions), [
+                      this.#actions(row.name, [
                         {
                           key: `edit-offer-${row.id}`,
                           label: t("venue.edit"),
@@ -555,7 +557,7 @@ export class VenueOperationsScreen extends LitElement {
                           key: `remove-offer-${row.id}`,
                           label: t("venue.remove_offer"),
                           run: () =>
-                            this.#confirm(this.#name(row.descriptions), () =>
+                            this.#confirm(row.name, () =>
                               this.api.deactivateMenuItem(menu.id, row.id),
                             ),
                         },
@@ -732,9 +734,7 @@ export class VenueOperationsScreen extends LitElement {
               row.productId === null
                 ? this.#name(model.categories.find((c) => c.id === row.categoryId)?.name ?? {}) ||
                   row.categoryId
-                : this.#name(
-                    model.products.find((p) => p.id === row.productId)?.descriptions ?? {},
-                  ),
+                : (model.products.find((p) => p.id === row.productId)?.name ?? row.productId),
           },
           {
             key: "zone",
@@ -883,13 +883,13 @@ export class VenueOperationsScreen extends LitElement {
           heading: `${model.menus.find((menu) => menu.id === menuId)?.name}: ${t(row ? "venue.edit_offer" : "venue.add_offer")}`,
           body: html`${
             row
-              ? html`<p>${this.#name(row.descriptions)} · ${this.#name(row.sectionName)}</p>`
+              ? html`<p>${row.name} · ${this.#name(row.sectionName)}</p>`
               : html`${this.#select(
                   `offer-product-${menuId}`,
                   t("venue.product"),
                   products.map((product) => ({
                     id: product.id,
-                    name: this.#name(product.descriptions),
+                    name: product.name,
                   })),
                   this.offerProductId,
                   true,
@@ -916,7 +916,7 @@ export class VenueOperationsScreen extends LitElement {
                       html`<div>
                         ${this.#input(
                           `offer-variant-price-${variant.id}`,
-                          `${this.#name(variant.name)} · ${t("venue.price")}`,
+                          `${variant.name} · ${t("venue.price")}`,
                           variant.unitPrice,
                         )}
                         <label>
@@ -1118,7 +1118,7 @@ export class VenueOperationsScreen extends LitElement {
         const row = editor.row;
         return {
           heading: t(row ? "venue.edit_route" : "venue.add_route"),
-          body: html`${this.#select("route-subject", t("venue.product_or_category"), [...model.categories.map((category) => ({ id: `category:${category.id}`, name: `${t("venue.category")}: ${this.#name(category.name)}` })), ...model.products.map((product) => ({ id: `product:${product.id}`, name: `${t("venue.product")}: ${this.#name(product.descriptions)}` }))], row ? (row.productId === null ? `category:${row.categoryId}` : `product:${row.productId}`) : undefined)}${this.#select("route-zone", t("venue.zone"), [{ id: "", name: t("venue.all_zones") }, ...model.floorZones], row?.zoneId ?? "", false)}${this.#select("route-target", t("venue.station"), [...model.stations, { id: "none", name: t("venue.no_preparation") }], row?.noPreparation ? "none" : (row?.stationId ?? undefined))}`,
+          body: html`${this.#select("route-subject", t("venue.product_or_category"), [...model.categories.map((category) => ({ id: `category:${category.id}`, name: `${t("venue.category")}: ${this.#name(category.name)}` })), ...model.products.map((product) => ({ id: `product:${product.id}`, name: `${t("venue.product")}: ${product.name}` }))], row ? (row.productId === null ? `category:${row.categoryId}` : `product:${row.productId}`) : undefined)}${this.#select("route-zone", t("venue.zone"), [{ id: "", name: t("venue.all_zones") }, ...model.floorZones], row?.zoneId ?? "", false)}${this.#select("route-target", t("venue.station"), [...model.stations, { id: "none", name: t("venue.no_preparation") }], row?.noPreparation ? "none" : (row?.stationId ?? undefined))}`,
           save: () => {
             if (
               !this.#validate([

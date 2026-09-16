@@ -1,0 +1,162 @@
+# Product names, variants and the product editor
+
+A product is sold by three different audiences at once. The waiter hunting for it on a till button
+wants the name the venue uses in the kitchen doorway. The diner reading the receipt wants it in their
+own language. The cook reading the ticket wants whatever fits on 42 characters of thermal paper.
+Those three are not the same string, and trying to serve all of them from one field is what this
+model replaces.
+
+So a product carries up to three names, and so does each of its variants.
+
+## The three names
+
+| Name | Stored as | Who reads it |
+| --- | --- | --- |
+| **Name** | `products.name` — plain text, `not null` | Staff. The dashboard, the till's product buttons and basket, a table tab's line list, the sales reports, the image library's "what uses this photo" list |
+| **Customer-facing name** | `products.customer_name` — a language map (JSON), nullable | Diners. The receipt, the invoice line filed with AEAT, the printed allergen sheet |
+| **Kitchen name** | `products.kitchen_name` — plain text, nullable | Cooks. The kitchen ticket and the kitchen display |
+
+A variant carries the same three, in `product_variants.name` (also `not null`),
+`product_variants.customer_name` and `product_variants.kitchen_name`.
+
+Two rules govern how those six fields become one displayed string, and both of them live in
+`packages/catalogue/src/product-presentation.ts`. Nothing else re-implements either one.
+
+**Each name falls back on its own.** A blank customer-facing name falls back to Name; a blank kitchen
+name falls back to Name. They do not fall back to each other, and a product with a customer-facing
+name but no kitchen name still prints its staff Name to the kitchen. The same is true of the
+variant's three fields, independently of the product's — which is the part that surprises people. A
+variant that has a customer-facing name but no kitchen name, on a product that has both, sends
+`Café con leche · Large` to the kitchen: the product half resolved its kitchen name, the variant half
+fell back to its staff name.
+
+**The variant's name is appended to the product's with `" · "`.** "Coffee" plus the variant "Large"
+is `Coffee · Large`. A line that names no variant renders exactly as it would have before variants
+existed — same bytes, no trailing separator.
+
+The three resolvers, one per audience:
+
+- `staffPresentationName` — the staff join. Takes only the two staff names, so a caller holding a
+  row with nothing else on it does not have to invent four empty fields.
+- `customerPresentationText` — applies the blank-falls-back-to-Name rule to the customer-facing
+  maps, and hands back the product's map and the variant's map still separate.
+- `kitchenPresentationName` — the kitchen name with its fallback, joined. It takes a `locale`
+  argument only to match the shape of its siblings; a kitchen name carries no per-language text, so
+  it never reads it.
+
+Joining two already-resolved customer maps into one is `joinCustomerPresentationText`, which is
+separate because its callers are rendering something already *sold* — see below.
+
+## What a sold line freezes
+
+A line freezes what it was sold as and never reads the catalogue again, so editing a product does not
+rewrite yesterday's receipt. `working_order_lines` and `sale_lines` each carry:
+
+- `name` — the product's staff name at add time. This is what the basket and a retrieved tab show
+  after the product has been renamed or deleted.
+- `descriptions` — the customer-facing text, already resolved through `customerPresentationText` and
+  then narrowed to exactly the venue's invoice languages by `toInvoiceLineDescriptions`.
+- `variant_name`, `variant_descriptions`, `variant_kitchen_name`, `kitchen_name` — the same four
+  facts for the chosen variant, plus the product's kitchen name.
+
+Because both halves had their fallback applied *before* being frozen, nothing falls back again at
+render time. `joinCustomerPresentationText` only joins.
+
+None of these columns enters the fiscal hash. They are presentation columns, like `unit_name`.
+
+Where each one surfaces:
+
+| Surface | Reads | Code |
+| --- | --- | --- |
+| Receipt line, and the goods description filed with AEAT | the two frozen customer maps, joined | `apps/server/src/receipt-lines.ts` |
+| Kitchen ticket | the four frozen staff and kitchen names | `apps/server/src/kitchen-print.ts` |
+| Kitchen display and the expediter's pass | the same four names, through the same resolver | `listStationQueue` and `listExpoQueue`, `apps/server/src/working-order.ts` |
+| Till buttons and basket | the staff names | `apps/till/src/widgets/product-name.ts` |
+| A table tab's line list | the staff names, joined server-side | `readTabLines`, `apps/server/src/working-order.ts` |
+| Printed allergen sheet | the live product's customer-facing name | `apps/till/src/screens/till-allergen-screen.ts` |
+| Top-sellers report | the frozen staff names, joined | `packages/reporting/src/top-sellers.ts` |
+
+Two of those rows are worth reading twice.
+
+A cook sees the same name whether the order arrives on paper or on a screen. The ticket, the station
+queue and the pass all resolve through `kitchenPresentationName`, so a venue that types a short
+kitchen name gets it everywhere a cook looks, and one that leaves it blank gets the staff name
+everywhere.
+
+The top-sellers report groups on the staff names — `sale_lines.name` and `sale_lines.variant_name` —
+and returns them through `staffPresentationName`. It is a staff-facing report, so it shows the name
+staff use, not the wording a diner reads on a receipt.
+
+## The translation gap report
+
+`listContentTranslationGaps` (`packages/catalogue/src/content-languages.ts`) is what refuses to let
+you switch your default content language while text is still missing. A product's and a variant's
+customer-facing name is **optional**, so a wholly absent one — `null` or `{}` — is never a gap. Only
+a partly filled one is: fill in Spanish and leave English blank, and that is a gap, because you
+clearly meant to translate it and stopped. Category, unit, menu-section and modifier names have no
+fallback of their own and stay required.
+
+## Variants
+
+A product has **no variants, or at least two**. Exactly one is refused with
+`product.variants_min_two`, thrown by `parseProductEditorInput`
+(`packages/catalogue/src/product-editor-input.ts`) — on the server, so an API caller cannot get to a
+state the editor will not let a person reach.
+
+The editor keeps that rule with a fold, in its own draft:
+
+- Pressing **Add variant** on a product with a plain price turns that price into a variant named with
+  the translated default "Regular", and opens the Add window for the *second* one. So the first Add
+  always produces two, never one.
+- The plain price is validated before the fold, while its field is still on screen. Once the price
+  has become a variant the field is gone, and a bad value would have nowhere left to be corrected.
+- Cancelling that first Add folds the lone "Regular" back into the plain price, which is what makes
+  Cancel a true undo.
+- Removing variants down to one folds that one's price back into the plain price field and drops the
+  row.
+
+A variant shares the product's unit, tax rate, categories, modifiers and allergen and dietary
+declarations. It has its own name (all three of them), price, availability and image.
+
+The image library refuses to delete a photo a variant still uses, and lists the variant among the
+uses it shows you — `listImageUsages` and `deleteImage` in `packages/media/src/images.ts` both cover
+`product_variants.image`. **That protection is application-level only.** Unlike `products.image`,
+which carries a real foreign key to `media_images` (`packages/media/drizzle/0001_images_references_grants.sql`),
+`product_variants.image` has none: it is a plain `text` column added by
+`packages/catalogue/drizzle/0014_variant_names_image.sql`. So a delete that does not go through
+`deleteImage` is not stopped by the database.
+
+## The editor form
+
+`dashboard-product-editor` (`apps/dashboard/src/widgets/product-editor.ts`) is one short form. The
+fields that change often are always visible; everything else is folded into a `wt-disclosure`
+section that shows a one-line summary of what is inside it, so nothing filled in is invisible while
+collapsed. Top to bottom: Name, Categories, Available, ▸ Kitchen, ▸ Descriptors, ▸ Nutritional info,
+Price (and the variants table, if there are variants), Modifiers, then Cancel and Save.
+
+Sections always start collapsed; open and closed state is not remembered. A section holding a
+validation error opens itself and cannot be collapsed until the error is fixed — that is
+`wt-disclosure`'s `has-error`, described in
+[the design system](design-system.md).
+
+Categories are chosen through the same `dashboard-category-membership-picker` the Categories screen
+uses, opened in a `wt-modal` from any of the category lozenges. The editor no longer has category
+controls of its own. See [Product categories](product-categories.md).
+
+## One save, one transaction
+
+**Station and course are saved with the product.** They used to be two save-on-change requests the
+editor fired the moment you picked one — written immediately, outside the product's own Save, so
+Cancel did not undo them, and only offered at all for a product that already existed (the events
+carried `this.value!.id`). Now `applyRouting` runs inside the same transaction the product write
+already opened (`apps/server/src/catalogue-api.ts`), so a station or course id the venue does not
+have rolls the whole product back rather than leaving a half-saved routing behind, and a brand-new
+product can be routed as you create it. The `wt-set-product-station` and `wt-set-product-course`
+events are gone.
+
+The product write body carries `name` (required, plain text), `customerName` (a language map or
+`null`), `description`, `kitchenName`, `image`, the price and tax fields, `categoryIds`,
+`primaryCategoryId`, `modifierIds`, the allergen and dietary declarations, and `variants` — each
+variant carrying `name`, `customerName`, `kitchenName`, `image`, `unitPrice` and `available`, plus
+`id` when it already exists. A customer-facing name whose every entry is blank parses to `null`, so
+"I typed spaces" and "I left it empty" store identically.

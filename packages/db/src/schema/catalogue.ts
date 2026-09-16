@@ -87,7 +87,11 @@ export const products = pgTable(
     categoryId: uuid("category_id").references(() => categories.id),
     stationId: uuid("station_id"),
     courseId: uuid("course_id"),
-    descriptions: jsonb("descriptions").$type<Record<string, string>>().notNull(),
+    // Staff-facing product name — plain text, shown on the dashboard, till buttons/basket and reports.
+    name: text("name").notNull(),
+    // Customer-facing translated name; null or a blank entry means "use `name`". Shown on receipts,
+    // invoice lines, the customer display and customer menus.
+    customerName: jsonb("customer_name").$type<Record<string, string>>(),
     description: jsonb("description").$type<Record<string, string>>(),
     kitchenName: text("kitchen_name"),
     dietaryDeclarations: jsonb("dietary_declarations").$type<string[]>().notNull().default([]),
@@ -97,9 +101,10 @@ export const products = pgTable(
     active: boolean("active").notNull().default(true),
     // A path REFERENCE to the product photo (a content-addressed `<sha256>.<ext>` filename served by
     // apps/server's /media route), never bytes. Nullable: a product legitimately has no photo, and
-    // null here just means "no picture" — unlike `allergens`' null, which is a load-bearing PENDING
-    // state. The table-level GRANT (0027) covers it with no change: a grant with no column list
-    // extends to a column added later (design §5a).
+    // null here just means "no picture" — unlike `allergens`' null, which is a PENDING state the
+    // till surfaces. `GRANT SELECT, INSERT, UPDATE ON "products" TO app_user`
+    // (`packages/db/drizzle/0001_db_baseline_sql.sql`) names no column list, so it covers this column
+    // and every column added to the table afterwards.
     image: text("image"),
     // Allergen declaration (EU 1169/2011 Annex II). NULL = not yet reviewed (a compliance gap the
     // till surfaces distinctly); {} = reviewed, contains none of the 14; else per-code presence +

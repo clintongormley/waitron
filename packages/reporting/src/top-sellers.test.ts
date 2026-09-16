@@ -20,9 +20,19 @@ const TZ = "Europe/Madrid";
 // 2026-08-04 12:00 local (Madrid is UTC+2 in August), well inside the 05:00-cutover business day.
 const noonUtc = new Date("2026-08-04T10:00:00Z").toISOString();
 
-const cafe = { es: "Café" };
-const tostada = { es: "Tostada" };
-const zumo = { es: "Zumo" };
+// Every product below carries a STAFF name and a customer-facing name that deliberately differ, so a
+// test that reads the customer text instead of the staff name fails rather than passing by
+// coincidence (this branch has already shipped one report defect for exactly that reason).
+const coffeeName = "Coffee";
+const coffeeText = { es: "Café" };
+const toastName = "Toast";
+const toastText = { es: "Tostada" };
+const juiceName = "Juice";
+const juiceText = { es: "Zumo" };
+const doubleName = "Double";
+const doubleText = { es: "Doble" };
+const singleName = "Single";
+const singleText = { es: "Sencillo" };
 
 beforeEach(async () => {
   venue = await seedVenue(suite.db);
@@ -56,19 +66,38 @@ describe("computeTopSellers", () => {
     await expect(run({ limit: -1 })).rejects.toThrow(/limit/i);
   });
 
-  it("ranks products by summed quantity desc and respects the limit", async () => {
+  it("ranks products by summed quantity desc and respects the limit, labelled with the STAFF name", async () => {
     await seedSale(suite.db, venue, {
       invoiceNumber: 1,
       issuedAt: noonUtc,
       total: "90.00",
       lines: [
-        { vatRate: "10.00", lineTotal: "50.00", descriptions: cafe, quantity: "5.000" },
-        { vatRate: "10.00", lineTotal: "30.00", descriptions: tostada, quantity: "3.000" },
-        { vatRate: "10.00", lineTotal: "10.00", descriptions: zumo, quantity: "1.000" },
+        {
+          vatRate: "10.00",
+          lineTotal: "50.00",
+          name: coffeeName,
+          descriptions: coffeeText,
+          quantity: "5.000",
+        },
+        {
+          vatRate: "10.00",
+          lineTotal: "30.00",
+          name: toastName,
+          descriptions: toastText,
+          quantity: "3.000",
+        },
+        {
+          vatRate: "10.00",
+          lineTotal: "10.00",
+          name: juiceName,
+          descriptions: juiceText,
+          quantity: "1.000",
+        },
       ],
     });
     const rows = await run({ limit: 2 });
-    expect(rows.map((r) => r.descriptions.es)).toEqual(["Café", "Tostada"]);
+    // The staff names ("Coffee"/"Toast"), never the customer text ("Café"/"Tostada").
+    expect(rows.map((r) => r.name)).toEqual([coffeeName, toastName]);
     expect(rows[0]!.quantity).toBe("5.000");
   });
 
@@ -77,30 +106,77 @@ describe("computeTopSellers", () => {
       invoiceNumber: 1,
       issuedAt: noonUtc,
       total: "20.00",
-      lines: [{ vatRate: "10.00", lineTotal: "20.00", descriptions: cafe, quantity: "2.000" }],
+      lines: [
+        {
+          vatRate: "10.00",
+          lineTotal: "20.00",
+          name: coffeeName,
+          descriptions: coffeeText,
+          quantity: "2.000",
+        },
+      ],
     });
     await seedSale(suite.db, venue, {
       invoiceNumber: 2,
       issuedAt: noonUtc,
       total: "20.00",
-      lines: [{ vatRate: "10.00", lineTotal: "20.00", descriptions: cafe, quantity: "2.000" }],
+      lines: [
+        {
+          vatRate: "10.00",
+          lineTotal: "20.00",
+          name: coffeeName,
+          descriptions: coffeeText,
+          quantity: "2.000",
+        },
+      ],
     });
     const rows = await run();
     expect(rows).toHaveLength(1);
-    expect(rows[0]).toEqual({ descriptions: cafe, quantity: "4.000", total: "40.00" });
+    expect(rows[0]).toEqual({ name: coffeeName, quantity: "4.000", total: "40.00" });
   });
 
-  it("returns the frozen descriptions map intact (jsonb → object)", async () => {
-    const label = { es: "Café", en: "Coffee" };
+  it("ranks a product's variants as separate sellers, each labelled with its own STAFF variant name", async () => {
     await seedSale(suite.db, venue, {
       invoiceNumber: 1,
       issuedAt: noonUtc,
-      total: "10.00",
-      lines: [{ vatRate: "10.00", lineTotal: "10.00", descriptions: label, quantity: "1.000" }],
+      total: "80.00",
+      lines: [
+        {
+          vatRate: "10.00",
+          lineTotal: "50.00",
+          name: coffeeName,
+          descriptions: coffeeText,
+          variantName: doubleName,
+          variantDescriptions: doubleText,
+          quantity: "5.000",
+        },
+        {
+          vatRate: "10.00",
+          lineTotal: "20.00",
+          name: coffeeName,
+          descriptions: coffeeText,
+          variantName: singleName,
+          variantDescriptions: singleText,
+          quantity: "2.000",
+        },
+        {
+          vatRate: "10.00",
+          lineTotal: "10.00",
+          name: toastName,
+          descriptions: toastText,
+          quantity: "1.000",
+        },
+      ],
     });
-    const rows = await run();
-    expect(rows[0]!.descriptions).toEqual(label);
-    expect(rows[0]!.descriptions.es).toBe("Café");
+
+    // Three rows, not two: the two coffees are different sellers, and each carries the STAFF label
+    // ("Coffee · Double"/"Coffee · Single"), never the customer text ("Café · Doble"/"Café ·
+    // Sencillo"). Collapsing them onto `name` alone would sum 5 + 2 into one "Coffee".
+    expect(await run()).toEqual([
+      { name: "Coffee · Double", quantity: "5.000", total: "50.00" },
+      { name: "Coffee · Single", quantity: "2.000", total: "20.00" },
+      { name: toastName, quantity: "1.000", total: "10.00" },
+    ]);
   });
 
   it("scopes to nodeId: a line under another node in the same tenant is excluded", async () => {
@@ -108,7 +184,15 @@ describe("computeTopSellers", () => {
       invoiceNumber: 1,
       issuedAt: noonUtc,
       total: "30.00",
-      lines: [{ vatRate: "10.00", lineTotal: "30.00", descriptions: cafe, quantity: "3.000" }],
+      lines: [
+        {
+          vatRate: "10.00",
+          lineTotal: "30.00",
+          name: coffeeName,
+          descriptions: coffeeText,
+          quantity: "3.000",
+        },
+      ],
     });
     const nodeB = await seedNodeAndSeries(suite.db, venue);
     await seedSale(
@@ -118,12 +202,20 @@ describe("computeTopSellers", () => {
         invoiceNumber: 1,
         issuedAt: noonUtc,
         total: "100.00",
-        lines: [{ vatRate: "10.00", lineTotal: "100.00", descriptions: cafe, quantity: "10.000" }],
+        lines: [
+          {
+            vatRate: "10.00",
+            lineTotal: "100.00",
+            name: coffeeName,
+            descriptions: coffeeText,
+            quantity: "10.000",
+          },
+        ],
       },
     );
     // Only node A's 3.000 — never node B's 10.000. Dropping the node predicate would total 13.000.
     const rows = await run();
-    expect(rows).toEqual([{ descriptions: cafe, quantity: "3.000", total: "30.00" }]);
+    expect(rows).toEqual([{ name: coffeeName, quantity: "3.000", total: "30.00" }]);
   });
 
   it("aggregates across all nodes when nodeId is omitted", async () => {
@@ -131,7 +223,15 @@ describe("computeTopSellers", () => {
       invoiceNumber: 1,
       issuedAt: noonUtc,
       total: "30.00",
-      lines: [{ vatRate: "10.00", lineTotal: "30.00", descriptions: cafe, quantity: "3.000" }],
+      lines: [
+        {
+          vatRate: "10.00",
+          lineTotal: "30.00",
+          name: coffeeName,
+          descriptions: coffeeText,
+          quantity: "3.000",
+        },
+      ],
     });
     const nodeB = await seedNodeAndSeries(suite.db, venue);
     await seedSale(
@@ -141,11 +241,19 @@ describe("computeTopSellers", () => {
         invoiceNumber: 1,
         issuedAt: noonUtc,
         total: "100.00",
-        lines: [{ vatRate: "10.00", lineTotal: "100.00", descriptions: cafe, quantity: "10.000" }],
+        lines: [
+          {
+            vatRate: "10.00",
+            lineTotal: "100.00",
+            name: coffeeName,
+            descriptions: coffeeText,
+            quantity: "10.000",
+          },
+        ],
       },
     );
     const rows = await run({ nodeId: undefined });
-    expect(rows).toEqual([{ descriptions: cafe, quantity: "13.000", total: "130.00" }]);
+    expect(rows).toEqual([{ name: coffeeName, quantity: "13.000", total: "130.00" }]);
   });
 
   it("excludes a voided sale", async () => {
@@ -153,18 +261,34 @@ describe("computeTopSellers", () => {
       invoiceNumber: 1,
       issuedAt: noonUtc,
       total: "50.00",
-      lines: [{ vatRate: "10.00", lineTotal: "50.00", descriptions: cafe, quantity: "5.000" }],
+      lines: [
+        {
+          vatRate: "10.00",
+          lineTotal: "50.00",
+          name: coffeeName,
+          descriptions: coffeeText,
+          quantity: "5.000",
+        },
+      ],
     });
     await seedVoid(suite.db, { tenantId: venue.tenantId, saleId: voided }, noonUtc);
     await seedSale(suite.db, venue, {
       invoiceNumber: 2,
       issuedAt: noonUtc,
       total: "10.00",
-      lines: [{ vatRate: "10.00", lineTotal: "10.00", descriptions: tostada, quantity: "1.000" }],
+      lines: [
+        {
+          vatRate: "10.00",
+          lineTotal: "10.00",
+          name: toastName,
+          descriptions: toastText,
+          quantity: "1.000",
+        },
+      ],
     });
-    // The voided Café is gone; only the live Tostada remains.
+    // The voided Coffee is gone; only the live Toast remains.
     const rows = await run();
-    expect(rows).toEqual([{ descriptions: tostada, quantity: "1.000", total: "10.00" }]);
+    expect(rows).toEqual([{ name: toastName, quantity: "1.000", total: "10.00" }]);
   });
 
   it("excludes an F3-canje substitute but keeps the substituted ticket", async () => {
@@ -172,13 +296,29 @@ describe("computeTopSellers", () => {
       invoiceNumber: 1,
       issuedAt: noonUtc,
       total: "20.00",
-      lines: [{ vatRate: "10.00", lineTotal: "20.00", descriptions: cafe, quantity: "2.000" }],
+      lines: [
+        {
+          vatRate: "10.00",
+          lineTotal: "20.00",
+          name: coffeeName,
+          descriptions: coffeeText,
+          quantity: "2.000",
+        },
+      ],
     });
     const f3 = await seedSale(suite.db, venue, {
       invoiceNumber: 2,
       issuedAt: noonUtc,
       total: "20.00",
-      lines: [{ vatRate: "10.00", lineTotal: "20.00", descriptions: cafe, quantity: "2.000" }],
+      lines: [
+        {
+          vatRate: "10.00",
+          lineTotal: "20.00",
+          name: coffeeName,
+          descriptions: coffeeText,
+          quantity: "2.000",
+        },
+      ],
     });
     await seedSubstitution(suite.db, {
       tenantId: venue.tenantId,
@@ -187,7 +327,7 @@ describe("computeTopSellers", () => {
     });
     // Only the ticket's 2.000, not doubled to 4.000 by the excluded F3 substitute.
     const rows = await run();
-    expect(rows).toEqual([{ descriptions: cafe, quantity: "2.000", total: "20.00" }]);
+    expect(rows).toEqual([{ name: coffeeName, quantity: "2.000", total: "20.00" }]);
   });
 
   it("nets a correction's signed quantity down into the product total", async () => {
@@ -195,18 +335,34 @@ describe("computeTopSellers", () => {
       invoiceNumber: 1,
       issuedAt: noonUtc,
       total: "30.00",
-      lines: [{ vatRate: "10.00", lineTotal: "30.00", descriptions: cafe, quantity: "3.000" }],
+      lines: [
+        {
+          vatRate: "10.00",
+          lineTotal: "30.00",
+          name: coffeeName,
+          descriptions: coffeeText,
+          quantity: "3.000",
+        },
+      ],
     });
     await seedSale(suite.db, venue, {
       invoiceNumber: 2,
       issuedAt: noonUtc,
       total: "-10.00",
       correctsSaleId: original,
-      lines: [{ vatRate: "10.00", lineTotal: "-10.00", descriptions: cafe, quantity: "-1.000" }],
+      lines: [
+        {
+          vatRate: "10.00",
+          lineTotal: "-10.00",
+          name: coffeeName,
+          descriptions: coffeeText,
+          quantity: "-1.000",
+        },
+      ],
     });
     // 3.000 sold − 1.000 returned = 2.000 net; 30.00 − 10.00 = 20.00 net.
     const rows = await run();
-    expect(rows).toEqual([{ descriptions: cafe, quantity: "2.000", total: "20.00" }]);
+    expect(rows).toEqual([{ name: coffeeName, quantity: "2.000", total: "20.00" }]);
   });
 
   it("buckets by issuance and the cutover: a 01:30-local sale is outside its calendar day", async () => {
@@ -215,11 +371,19 @@ describe("computeTopSellers", () => {
       invoiceNumber: 1,
       issuedAt: new Date("2026-08-03T23:30:00Z").toISOString(),
       total: "50.00",
-      lines: [{ vatRate: "10.00", lineTotal: "50.00", descriptions: cafe, quantity: "5.000" }],
+      lines: [
+        {
+          vatRate: "10.00",
+          lineTotal: "50.00",
+          name: coffeeName,
+          descriptions: coffeeText,
+          quantity: "5.000",
+        },
+      ],
     });
     expect(await run({ fromBusinessDay: "2026-08-04", toBusinessDay: "2026-08-04" })).toEqual([]);
     expect(await run({ fromBusinessDay: "2026-08-03", toBusinessDay: "2026-08-03" })).toEqual([
-      { descriptions: cafe, quantity: "5.000", total: "50.00" },
+      { name: coffeeName, quantity: "5.000", total: "50.00" },
     ]);
   });
 
@@ -233,7 +397,15 @@ describe("computeTopSellers", () => {
       invoiceNumber: 1,
       issuedAt: noonUtc,
       total: "50.00",
-      lines: [{ vatRate: "10.00", lineTotal: "50.00", descriptions: cafe, quantity: "5.000" }],
+      lines: [
+        {
+          vatRate: "10.00",
+          lineTotal: "50.00",
+          name: coffeeName,
+          descriptions: coffeeText,
+          quantity: "5.000",
+        },
+      ],
     });
     expect(await run()).toEqual([]);
   });

@@ -61,7 +61,9 @@ describe("VenueServiceApi", () => {
       )
       .mockResolvedValueOnce(jsonResponse([{ id: "s1", name: "Bar", isDefault: false }]))
       .mockResolvedValueOnce(jsonResponse([{ id: "z1", name: "Upstairs" }]))
-      .mockResolvedValueOnce(jsonResponse([{ id: "p1", descriptions: { en: "Negroni" } }]))
+      .mockResolvedValueOnce(
+        jsonResponse([{ id: "p1", name: "Negroni", customerName: { en: "House Aperitivo" } }]),
+      )
       .mockResolvedValueOnce(jsonResponse([{ id: "i1", productId: "p1", grossPrice: "9.00" }]))
       .mockResolvedValueOnce(
         jsonResponse([

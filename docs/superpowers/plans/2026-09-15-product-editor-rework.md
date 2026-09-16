@@ -8,6 +8,11 @@
 
 **Tech Stack:** TypeScript, Lit web components (dashboard + till + `@waitron/ui`), Drizzle ORM over PostgreSQL, Vitest (PGlite + Testcontainers real-PG + real headless Chromium for browser packages), Hono (server routes).
 
+**Migration numbers, 2026-09-16:** rebasing onto `main` collided with `0027`–`0029` there, so the
+three migrations this plan names below were regenerated as `packages/db/drizzle/0030_product_names_and_line_snapshots.sql`
+(Tasks A1 and B1 together) and `0031_variant_descriptions_locales.sql` (the custom trigger). Read the
+numbers below as the shape of the work, not as paths on disk.
+
 **Spec:** [docs/superpowers/specs/2026-09-15-product-editor-rework-design.md](../specs/2026-09-15-product-editor-rework-design.md). Read it alongside this plan. It supersedes the layout and naming model in `2026-09-12-product-editor-design.md`; that older spec's rules on menus, variant pricing precedence, tax choice, allergens and dietary suitability still stand.
 
 ## Global Constraints

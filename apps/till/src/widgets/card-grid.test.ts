@@ -54,7 +54,7 @@ const stationGroup: StationQueueGroup = {
       id: "ti-1",
       workingOrderLineId: "wol-1",
       state: "queued",
-      descriptions: { "es-ES": "Paella" },
+      name: "Paella",
       quantity: "2.000",
       course: null,
       firedAt: "2026-08-17T10:00:00.000Z",

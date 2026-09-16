@@ -145,14 +145,14 @@ describe("metadata, labels and references", () => {
       );
       const inserted = await tx.execute<{
         id: string;
-      }>(sql`insert into products (tenant_id, catalogue_id, descriptions, pricing_unit, unit_price, vat_class, image, active)
-        values (${tenantId}, ${menu.rows[0]!.id}, '{"en":"Bread"}'::jsonb, 'each', '2.00', 'general', ${image.filename}, false) returning id`);
+      }>(sql`insert into products (tenant_id, catalogue_id, name, pricing_unit, unit_price, vat_class, image, active)
+        values (${tenantId}, ${menu.rows[0]!.id}, 'Bread', 'each', '2.00', 'general', ${image.filename}, false) returning id`);
       const uses = [
         {
           kind: "product",
           id: inserted.rows[0]!.id,
           catalogueId: menu.rows[0]!.id,
-          names: { en: "Bread" },
+          name: "Bread",
           active: false,
         },
       ];
@@ -160,6 +160,50 @@ describe("metadata, labels and references", () => {
       expect(await deleteImage(tx, tenantId, image.id)).toEqual({ deleted: false, uses });
       expect((await readImage(tx, tenantId, image.id)).usageCount).toBe(1);
       await tx.execute(sql`update products set image = null where tenant_id = ${tenantId}`);
+      expect(await deleteImage(tx, tenantId, image.id)).toEqual({ deleted: true, uses: [] });
+    });
+  });
+
+  it("blocks deletion of a photo a product VARIANT uses, and releases it when cleared", async () => {
+    const tenantId = await seedTenant(suite.db);
+    await withTenant(suite.db, tenantId, async (tx) => {
+      const { image } = await uploadImage(
+        tx,
+        tenantId,
+        { bytes: photo, names: { en: "Large loaf" }, altText: { en: "Loaf" }, labels: [] },
+        { fallbackLanguage: "en", maxUploadBytes: 100 },
+      );
+      const menu = await tx.execute<{ id: string }>(
+        sql`insert into catalogues (tenant_id, name) values (${tenantId}, 'Lunch') returning id`,
+      );
+      // The PRODUCT carries no photo; only its variant does, which is the case a product-only scan
+      // misses — the variant photo would be deletable while the variant still points at it.
+      const product = await tx.execute<{ id: string }>(
+        sql`insert into products (tenant_id, catalogue_id, name, pricing_unit, unit_price, vat_class)
+          values (${tenantId}, ${menu.rows[0]!.id}, 'Bread', 'each', '2.00', 'general') returning id`,
+      );
+      const variant = await tx.execute<{ id: string }>(
+        sql`insert into product_variants (tenant_id, product_id, name, unit_price, image)
+          values (${tenantId}, ${product.rows[0]!.id}, 'Large', '3.00', ${image.filename}) returning id`,
+      );
+      const uses = [
+        {
+          kind: "variant",
+          id: variant.rows[0]!.id,
+          productId: product.rows[0]!.id,
+          catalogueId: menu.rows[0]!.id,
+          // The product and variant staff names, joined by `staffPresentationName`.
+          name: "Bread \u00b7 Large",
+          active: true,
+        },
+      ];
+      expect(await listImageUsages(tx, tenantId, image.id)).toEqual(uses);
+      expect(await deleteImage(tx, tenantId, image.id)).toEqual({ deleted: false, uses });
+      // The detail read and the list read must agree: the list's count is its own SQL, so a use the
+      // scan finds but the count misses would show the library a free photo that refuses to delete.
+      expect((await readImage(tx, tenantId, image.id)).usageCount).toBe(1);
+      expect((await listImages(tx, tenantId, {})).images[0]!.usageCount).toBe(1);
+      await tx.execute(sql`update product_variants set image = null where tenant_id = ${tenantId}`);
       expect(await deleteImage(tx, tenantId, image.id)).toEqual({ deleted: true, uses: [] });
     });
   });
@@ -532,8 +576,8 @@ it("protects an image used only by a category and releases it after clearing the
       insert into catalogues (tenant_id, name) values (${tenantId}, 'Lunch') returning id
     `);
     const product = await tx.execute<{ id: string }>(sql`
-      insert into products (tenant_id, catalogue_id, descriptions, pricing_unit, unit_price, vat_class, image)
-      values (${tenantId}, ${menu.rows[0]!.id}, '{"en":"Bread"}'::jsonb, 'each', 2, 'general', ${image.filename})
+      insert into products (tenant_id, catalogue_id, name, pricing_unit, unit_price, vat_class, image)
+      values (${tenantId}, ${menu.rows[0]!.id}, 'Bread', 'each', 2, 'general', ${image.filename})
       returning id
     `);
     const uses = [
@@ -541,7 +585,7 @@ it("protects an image used only by a category and releases it after clearing the
         kind: "product" as const,
         id: product.rows[0]!.id,
         catalogueId: menu.rows[0]!.id,
-        names: { en: "Bread" },
+        name: "Bread",
         active: true,
       },
       { kind: "category" as const, id: category.id, names: category.name },

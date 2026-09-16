@@ -211,6 +211,20 @@
       "when": 1789493685682,
       "tag": "0029_dietary_suitability",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1789542046254,
+      "tag": "0030_product_names_and_line_snapshots",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1789542056543,
+      "tag": "0031_variant_descriptions_locales",
+      "breakpoints": true
     }
   ]
 }

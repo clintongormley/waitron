@@ -48,7 +48,7 @@ it("cascades an option_groups delete through the published menu link rows", asyn
     const product = await createProduct(tx, tenantId, {
       catalogueId: menu.id,
       categoryId: null,
-      descriptions: { en: "Coffee" },
+      name: "Coffee",
       pricingUnit: "each",
       unitPrice: "2.00",
       vatClass: "reduced",

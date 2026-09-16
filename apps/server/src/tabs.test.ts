@@ -101,7 +101,7 @@ async function setupVenue(): Promise<Seeded> {
       const cafe = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: bebidas.id,
-        descriptions: { [LOCALE]: "Café" },
+        name: "Café",
         pricingUnit: "each",
         unitPrice: "1.50",
         vatClass: "general",
@@ -109,7 +109,7 @@ async function setupVenue(): Promise<Seeded> {
       const agua = await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: bebidas.id,
-        descriptions: { [LOCALE]: "Agua" },
+        name: "Agua",
         pricingUnit: "each",
         unitPrice: "2.00",
         vatClass: "general",
@@ -1003,14 +1003,13 @@ describe("addTabRound ring-time course resolution (override ?? product default ?
   });
 });
 
-it("returns a tab line's stored names and modifier answers", async () => {
+it("returns a tab line's stored staff names and modifier answers", async () => {
   const { cfg, cafeId, tableId } = await setupVenue();
   await asApp(cfg, async (tx) => {
     const { tabId } = await openTab(tx, cfg, {
       tableId,
       lines: [{ productId: cafeId, quantity: "1" }],
     });
-    const descriptions = { [LOCALE]: "Recorded coffee" };
     const modifierSnapshots = [
       {
         modifierId: randomUUID(),
@@ -1019,12 +1018,20 @@ it("returns a tab line's stored names and modifier answers", async () => {
         text: "Happy birthday",
       },
     ];
+    // The customer-facing map is planted alongside the staff names and must NOT come back: a tab's
+    // line list is what a waiter reads, so it shows the staff pair.
     await tx
       .update(workingOrderLines)
-      .set({ descriptions, modifierSnapshots })
+      .set({
+        name: "Recorded coffee",
+        variantName: "Large",
+        descriptions: { [LOCALE]: "Café recién molido" },
+        variantDescriptions: { [LOCALE]: "Taza grande" },
+        modifierSnapshots,
+      })
       .where(eq(workingOrderLines.workingOrderId, tabId));
     expect((await readTabLines(tx, cfg, tabId))[0]).toMatchObject({
-      descriptions,
+      name: "Recorded coffee · Large",
       modifierSnapshots,
     });
   });

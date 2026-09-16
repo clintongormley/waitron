@@ -34,8 +34,8 @@ async function fixture() {
   );
   const product = await suite.admin.execute<{
     id: string;
-  }>(sql`insert into products (tenant_id, catalogue_id, descriptions, pricing_unit, unit_price, vat_class)
-    values (${tenantId}, ${menu.rows[0]!.id}, '{"en":"Bread"}'::jsonb, 'each', '2.00', 'general') returning id`);
+  }>(sql`insert into products (tenant_id, catalogue_id, name, pricing_unit, unit_price, vat_class)
+    values (${tenantId}, ${menu.rows[0]!.id}, 'Bread', 'each', '2.00', 'general') returning id`);
   return { tenantId, image, productId: product.rows[0]!.id };
 }
 async function blocked(pid: number) {
@@ -101,7 +101,7 @@ it("refuses a product reference to another tenant's image or an absent filename"
             sql`insert into catalogues (tenant_id, name) values (${other}, 'Other') returning id`,
           );
           return tx.execute(
-            sql`insert into products (tenant_id, catalogue_id, descriptions, pricing_unit, unit_price, vat_class, image) values (${other}, ${menu.rows[0]!.id}, '{"en":"Bread"}'::jsonb, 'each', '2', 'general', ${filename})`,
+            sql`insert into products (tenant_id, catalogue_id, name, pricing_unit, unit_price, vat_class, image) values (${other}, ${menu.rows[0]!.id}, 'Bread', 'each', '2', 'general', ${filename})`,
           );
         }
         return tx.execute(

@@ -8,7 +8,8 @@ import { formatMoney } from "../i18n/format.js";
 
 const product = {
   id: "dish",
-  descriptions: { es: "Plato" },
+  name: "Plato",
+  customerName: { es: "Plato para el cliente" },
   pricingUnit: "each",
   unitPrice: "8.00",
   vatClass: "reduced",

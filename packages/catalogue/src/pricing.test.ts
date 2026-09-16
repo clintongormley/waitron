@@ -18,6 +18,7 @@ const each = (
   vatClass: PriceableProduct["vatClass"],
   category: string | null = null,
 ): PriceableProduct => ({
+  name: "item",
   descriptions: { en: "item" },
   unit: { name: { en: "each" }, precision: 0, abbreviation: { en: "ea" } },
   unitPrice,
@@ -25,6 +26,7 @@ const each = (
   category,
 });
 const weight = (unitPrice: string, vatClass: PriceableProduct["vatClass"]): PriceableProduct => ({
+  name: "sliced ham",
   descriptions: { en: "sliced ham" },
   unit: { name: { en: "kg" }, precision: 3, abbreviation: { en: "kg" } },
   unitPrice,
@@ -43,40 +45,49 @@ describe("resolveVatRate", () => {
 
 describe("priceBasket — difference method", () => {
   it("carries selected variant presentation facts through live and locked pricing", () => {
-    const product = {
+    const product: PriceableProduct = {
       ...each("4.10", "general"),
+      name: "Coffee",
+      descriptions: { en: "Our coffee" },
       variantId: "11111111-1111-4111-8111-111111111111",
-      variantName: { en: "Double" },
+      variantName: "Double",
+      variantDescriptions: { en: "Double shot" },
+      variantKitchenName: "DBL",
+      kitchenName: "COFFEE BAR",
+    };
+    const expected = {
+      name: "Coffee",
+      descriptions: { en: "Our coffee" },
+      variantId: product.variantId,
+      variantName: "Double",
+      variantDescriptions: { en: "Double shot" },
+      variantKitchenName: "DBL",
       kitchenName: "COFFEE BAR",
     };
     const live = priceBasket([{ product, quantity: "1" }]);
-    expect(live.lines[0]).toMatchObject({
-      variantId: product.variantId,
-      variantName: { en: "Double" },
-      kitchenName: "COFFEE BAR",
-    });
+    expect(live.lines[0]).toMatchObject(expected);
     const locked = priceLockedLines([
       {
         grossUnitPrice: "4.10",
         quantity: "1",
         vatRate: "21.00",
-        descriptions: { en: "Coffee · Double" },
+        name: product.name,
+        descriptions: product.descriptions,
         category: "Drinks",
         variantId: product.variantId,
         variantName: product.variantName,
+        variantDescriptions: product.variantDescriptions,
+        variantKitchenName: product.variantKitchenName,
         kitchenName: product.kitchenName,
       },
     ]);
-    expect(locked.lines[0]).toMatchObject({
-      variantId: product.variantId,
-      variantName: { en: "Double" },
-      kitchenName: "COFFEE BAR",
-    });
+    expect(locked.lines[0]).toMatchObject(expected);
   });
   it("prices a fractional quantity for a custom two-decimal unit", () => {
     const r = priceBasket([
       {
         product: {
+          name: "tea service",
           descriptions: { en: "tea service" },
           unit: { name: { en: "tray" }, precision: 2, abbreviation: { en: "tr" } },
           unitPrice: "8.00",
@@ -98,6 +109,7 @@ describe("priceBasket — difference method", () => {
     const priced = priceBasket([
       {
         product: {
+          name: "Olives",
           descriptions: { en: "Olives" },
           unit: { name: { en: "Kilogram" }, precision: 3, abbreviation: { en: "kg" } },
           unitPrice: "10.00",
@@ -192,18 +204,20 @@ describe("priceBasket — grossLineTotals (the working-order draft's customer-fa
 // A dish + its selected options price as a PARENT line followed by its CHILD lines, all flowing
 // through the SAME `priceRows` arithmetic core — a child is just another priced row (grossUnit = the
 // option's price delta, rate = its vatClass override or the dish's rate, quantity = the DISH's
-// quantity, descriptions = the option's name, category = the parent's).
+// quantity, name/descriptions = the option's own label, category = the parent's).
 describe("priceBasketWithOptions — parent + child priced lines", () => {
   const opt = (
     priceDelta: string,
     vatClass: SelectedOption["vatClass"],
-    name: Record<string, string> = { es: "opción" },
-  ): SelectedOption => ({ name, priceDelta, vatClass });
+    name = "opción",
+    descriptions: Record<string, string> = { es: "opción" },
+  ): SelectedOption => ({ name, descriptions, priceDelta, vatClass });
 
   it("prices a dish with options as parent + child lines (brief verbatim example)", () => {
     const priced = priceBasketWithOptions([
       {
         product: {
+          name: "Café",
           descriptions: { es: "Café" },
           unit: { name: { en: "each" }, precision: 0, abbreviation: { en: "ea" } },
           unitPrice: "2.50",
@@ -212,8 +226,13 @@ describe("priceBasketWithOptions — parent + child priced lines", () => {
         },
         quantity: "1",
         options: [
-          { name: { es: "Grande" }, priceDelta: "0.50", vatClass: null },
-          { name: { es: "Leche avena" }, priceDelta: "0.40", vatClass: null },
+          { name: "Grande", descriptions: { es: "Grande" }, priceDelta: "0.50", vatClass: null },
+          {
+            name: "Leche avena",
+            descriptions: { es: "Leche avena" },
+            priceDelta: "0.40",
+            vatClass: null,
+          },
         ],
       },
     ]);
@@ -227,7 +246,10 @@ describe("priceBasketWithOptions — parent + child priced lines", () => {
       {
         product: each("2.50", "reduced", "Drinks"),
         quantity: "1",
-        options: [opt("0.00", null, { es: "Sin azúcar" }), opt("0.50", null, { es: "Grande" })],
+        options: [
+          opt("0.00", null, "Sin azúcar", { es: "Sin azúcar" }),
+          opt("0.50", null, "Grande", { es: "Grande" }),
+        ],
       },
     ]);
     expect(priced.lines).toHaveLength(3);
@@ -293,7 +315,15 @@ describe("priceBasketWithOptions — parent + child priced lines", () => {
       {
         product: each("4.00", "general"),
         quantity: "3",
-        options: [{ name: { es: "Extra shot" }, priceDelta: "1.50", vatClass: null, quantity: 2 }],
+        options: [
+          {
+            name: "Extra shot",
+            descriptions: { es: "Extra shot" },
+            priceDelta: "1.50",
+            vatClass: null,
+            quantity: 2,
+          },
+        ],
       },
     ]);
     // The child carries dish×option = 3 × 2 = 6, priced at 1.50 each → 9.00 gross.
@@ -312,7 +342,8 @@ describe("priceBasketWithOptions — parent + child priced lines", () => {
         quantity: "2",
         options: [
           {
-            name: { es: "Grande" },
+            name: "Grande",
+            descriptions: { es: "Grande" },
             priceDelta: "1.30",
             vatClass: null,
             ...(quantity !== undefined ? { quantity } : {}),
@@ -350,6 +381,7 @@ describe("priceLockedLines — files a locked line to the walk-up VAT breakdown"
         grossUnitPrice: "1.50",
         quantity: "1",
         vatRate: "21.00",
+        name: "Café",
         descriptions: { es: "Café" },
         category: null,
       },
@@ -357,6 +389,7 @@ describe("priceLockedLines — files a locked line to the walk-up VAT breakdown"
         grossUnitPrice: "2.00",
         quantity: "2",
         vatRate: "21.00",
+        name: "Agua",
         descriptions: { es: "Agua" },
         category: null,
       },
@@ -387,6 +420,7 @@ describe("priceLockedLines — files a locked line to the walk-up VAT breakdown"
         grossUnitPrice: "9.99",
         quantity: "0.333",
         vatRate: "10.00",
+        name: "Jamón",
         descriptions: { es: "Jamón" },
         category: null,
       },
@@ -410,6 +444,7 @@ describe("priceLockedLines — files a locked line to the walk-up VAT breakdown"
         grossUnitPrice: "8.50",
         quantity: "2",
         vatRate: "21.00",
+        name: "item",
         descriptions: { en: "item" },
         category: null,
         unitName: { en: "ea" },
@@ -419,6 +454,7 @@ describe("priceLockedLines — files a locked line to the walk-up VAT breakdown"
         grossUnitPrice: "24.90",
         quantity: "0.320",
         vatRate: "10.00",
+        name: "sliced ham",
         descriptions: { en: "sliced ham" },
         category: "Food",
         unitName: { en: "kg" },
@@ -428,6 +464,7 @@ describe("priceLockedLines — files a locked line to the walk-up VAT breakdown"
         grossUnitPrice: "1.30",
         quantity: "5",
         vatRate: "4.00",
+        name: "item",
         descriptions: { en: "item" },
         category: null,
         unitName: { en: "ea" },
@@ -465,6 +502,7 @@ describe("structured modifier snapshots", () => {
         grossUnitPrice: "2.20",
         quantity: "2",
         vatRate: "10.00",
+        name: "item",
         descriptions: { en: "item" },
         category: null,
         modifierSnapshots,

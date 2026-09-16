@@ -21,7 +21,7 @@ import { codeMessage, codeOf } from "../i18n/codes.js";
 
 /** A product or menu item that uses a modifier, as `modifierDependants` returns it. Both the
  * row-click usage modal and the delete confirmation list these. */
-type Dependant = { id: string; name: Record<string, string> };
+type Dependant = { id: string; name: string };
 
 @customElement("dashboard-modifiers-screen")
 export class ModifiersScreen extends LitElement {
@@ -236,19 +236,16 @@ export class ModifiersScreen extends LitElement {
   #name(modifier: Modifier): string {
     return resolveEnabledContentText(modifier.name, currentLocale(), currentContentLanguages());
   }
-  #depName(entry: Dependant): string {
-    return resolveEnabledContentText(entry.name, currentLocale(), currentContentLanguages());
-  }
   /** The single Name column behind every dependant table (the usage modal and the delete preview),
-   * searching and sorting on the translated name so a product is found by what it is called. */
+   * searching and sorting on the staff name so a product is found by what the dashboard calls it. */
   #dependantColumns(): DataTableColumn<Dependant>[] {
     return [
       {
         key: "name",
         label: t("modifiers.name"),
-        cell: (entry) => this.#depName(entry),
-        searchValue: (entry) => this.#depName(entry),
-        sortValue: (entry) => this.#depName(entry),
+        cell: (entry) => entry.name,
+        searchValue: (entry) => entry.name,
+        sortValue: (entry) => entry.name,
       },
     ];
   }

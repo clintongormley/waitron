@@ -39,6 +39,7 @@ test("defines the structural contract", () => {
     "--wt-opacity-disabled",
     "--wt-opacity-hover",
     "--wt-dialog-max-width",
+    "--wt-cell-name-max-width",
   ]) {
     expect(token(el, name), `${name} should be defined`).not.toBe("");
   }
@@ -47,6 +48,16 @@ test("defines the structural contract", () => {
 test("dialog max width is 48rem, capped at 90% of the viewport", () => {
   const el = mount();
   expect(token(el, "--wt-dialog-max-width")).toBe("min(90vw, 48rem)");
+});
+
+test("a name cell may grow wider than the controls that sit beside it", () => {
+  // The cap exists to make a long name WRAP, not to squeeze the row: a value at or below the tap
+  // minimum would make the name column narrower than the switch or menu button next to it, which is
+  // the opposite of what it is for.
+  const el = mount();
+  expect(parseInt(token(el, "--wt-cell-name-max-width"), 10)).toBeGreaterThan(
+    parseInt(token(el, "--wt-tap-min"), 10),
+  );
 });
 
 test("minimum tap target is at least 44px", () => {

@@ -1,15 +1,25 @@
 export type LocalizedText = Record<string, string>;
 import type { DietaryLabel } from "@waitron/catalogue/src/dietary-declarations.js";
 export type { DietaryLabel };
+/**
+ * One variant as the product editor's draft holds it. The three names fall back INDEPENDENTLY —
+ * `name` is the plain staff-facing text, `customerName` the translated text a guest reads and
+ * `kitchenName` what a kitchen ticket prints — and the fallback itself belongs to
+ * `packages/catalogue/src/product-presentation.ts`, never to a screen.
+ */
 export interface EditorVariant {
   id?: string;
-  name: LocalizedText;
+  name: string;
+  customerName: LocalizedText | null;
+  kitchenName: string | null;
+  image: string | null;
   unitPrice: string;
   available: boolean;
 }
 export interface ProductEditorDraft {
   id?: string;
-  name: LocalizedText;
+  name: string;
+  customerName: LocalizedText | null;
   description: LocalizedText | null;
   kitchenName: string | null;
   image: string | null;
@@ -23,8 +33,10 @@ export interface ProductEditorDraft {
   modifierIds: string[];
   allergens: Record<string, { presence: "contains" | "may_contain" }> | null;
   dietaryDeclarations: DietaryLabel[];
-  stationId?: string | null;
-  courseId?: string | null;
+  /** The product's kitchen routing. Both travel in the product's own save, so neither is optional:
+   * an absent key and a cleared one would otherwise be the same submitted body. */
+  stationId: string | null;
+  courseId: string | null;
 }
 export interface EditorChoice {
   id: string;

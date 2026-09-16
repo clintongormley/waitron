@@ -44,7 +44,7 @@ export async function seedProduct(db: Database, tenantId: TenantId): Promise<str
     const p = await createProduct(tx, tenantId, {
       catalogueId: cat.id,
       categoryId: null,
-      descriptions: { en: "bocadillo" },
+      name: "bocadillo",
       unitId: unit.id,
       unitPrice: "3.50",
       vatClass: "general",

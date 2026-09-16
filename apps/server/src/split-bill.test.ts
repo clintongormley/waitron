@@ -86,7 +86,7 @@ async function setupVenue(): Promise<Seeded> {
     const agua = await createProduct(tx, tenantId, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
-      descriptions: { [LOCALE]: "Agua" },
+      name: "Agua",
       pricingUnit: "each",
       unitPrice: "1.50",
       vatClass: "general",
@@ -94,7 +94,7 @@ async function setupVenue(): Promise<Seeded> {
     const jamon = await createProduct(tx, tenantId, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
-      descriptions: { [LOCALE]: "Jamón" },
+      name: "Jamón",
       pricingUnit: "weight",
       unitPrice: "24.90",
       vatClass: "reduced",
@@ -489,7 +489,7 @@ describe("unjoinTable", () => {
   });
 });
 
-it("retains structured modifier snapshots when a dish quantity is split onto a check", async () => {
+it("retains the structured modifier snapshots and the frozen names when a dish quantity is split onto a check", async () => {
   const { cfg, aguaId, tableId } = await setupVenue();
   await asApp(cfg, async (tx) => {
     const { tabId } = await openTab(tx, cfg, {
@@ -505,15 +505,25 @@ it("retains structured modifier snapshots when a dish quantity is split onto a c
         choiceName: { [LOCALE]: "Oat" },
       },
     ];
+    // Frozen names the seeded product does not itself carry, so the split has something to lose:
+    // the destination line must inherit every per-unit value, never re-read the catalogue.
+    const names = {
+      variantName: "Con gas",
+      variantDescriptions: { [LOCALE]: "Con gas" },
+      variantKitchenName: "GAS",
+      kitchenName: "BAR",
+    };
     await tx
       .update(workingOrderLines)
-      .set({ modifierSnapshots })
+      .set({ modifierSnapshots, ...names })
       .where(eq(workingOrderLines.workingOrderId, tabId));
     const { checkId } = await splitOffCheck(tx, cfg, tabId, [{ lineNo: 1, quantity: "1" }]);
-    const source = await priceStoredOrder(tx, tabId);
-    const check = await priceStoredOrder(tx, checkId);
+    const source = await priceStoredOrder(tx, cfg, tabId);
+    const check = await priceStoredOrder(tx, cfg, checkId);
     expect(source.lines[0]!.modifierSnapshots).toEqual(modifierSnapshots);
     expect(check.lines[0]!.modifierSnapshots).toEqual(modifierSnapshots);
+    expect(check.lines[0]).toMatchObject({ name: "Agua", ...names });
+    expect(source.lines[0]).toMatchObject({ name: "Agua", ...names });
     expect(source.lines[0]!.quantity).toBe("2.000");
     expect(check.lines[0]!.quantity).toBe("1.000");
     expect(source.total).toBe("3.00");

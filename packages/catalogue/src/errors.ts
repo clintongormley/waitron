@@ -85,6 +85,9 @@ declare module "@waitron/shared" {
     /** A product-editor field is missing or malformed. */
     "product.invalid": { field: string };
     "product.not_found": { productId: string };
+    /** A product carries exactly one variant. A product has NO variants or at least two; refusing one
+     * here stops an API caller bypassing the editor's "Regular" default variant rule. */
+    "product.variants_min_two": Record<string, never>;
     "menu_section.not_found": { menuId?: string; sectionId: string };
     /**
      * An option group's AUTHORING config violated one of its DB invariants (ordering modifiers, Task

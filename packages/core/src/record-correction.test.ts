@@ -125,6 +125,7 @@ function saleInput(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
     lines: [
       {
         lineNo: 1,
+        name: "Coffee",
         descriptions: { "es-ES": "Coffee" },
         quantity: "2",
         unitPrice: "5.00",
@@ -133,6 +134,7 @@ function saleInput(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
       },
       {
         lineNo: 2,
+        name: "Water",
         descriptions: { "es-ES": "Water" },
         quantity: "1",
         unitPrice: "2.10",
@@ -167,6 +169,7 @@ function correctionInput(
     lines: [
       {
         lineNo: 1,
+        name: "Coffee",
         descriptions: { "es-ES": "Coffee" },
         quantity: "-2",
         unitPrice: "5.00",
@@ -175,6 +178,7 @@ function correctionInput(
       },
       {
         lineNo: 2,
+        name: "Water",
         descriptions: { "es-ES": "Water" },
         quantity: "-1",
         unitPrice: "2.10",

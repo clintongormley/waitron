@@ -93,9 +93,9 @@ describe("seedOptions", () => {
       };
     });
 
-    const coffee = products.find((p) => p.descriptions[LOCALE] === "Coffee");
-    const steak = products.find((p) => p.descriptions[LOCALE] === "Sirloin in whisky sauce");
-    const plain = products.find((p) => p.descriptions[LOCALE] === "Spicy potatoes");
+    const coffee = products.find((p) => p.name === "Café");
+    const steak = products.find((p) => p.name === "Solomillo");
+    const plain = products.find((p) => p.name === "Bravas");
     expect(coffee).toBeDefined();
     expect(steak).toBeDefined();
     expect(plain).toBeDefined();

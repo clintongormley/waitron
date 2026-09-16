@@ -61,7 +61,7 @@ let abel: { id: string };
 let venueTaxId: string;
 // The one product seeded into the counter location's DEFAULT catalogue, so `GET /api/products` has
 // something to return. Captured here so the success test can pin the exact `AvailableProduct` shape
-// the route reads back — id, descriptions, unit price, VAT class, the resolved category NAME, and its
+// the route reads back — id, the staff and customer names, unit price, VAT class, the resolved category NAME, and its
 // EU-14 allergen declaration, which the route carries through unchanged.
 let aguaProduct: { id: string; catalogueId: string };
 let eachUnit: {
@@ -149,7 +149,7 @@ const suite = usePgliteDb({
         const p = await createProduct(tx, tenantId, {
           catalogueId: cat.id,
           categoryId: bebidas.id,
-          descriptions: { es: "Agua mineral" },
+          name: "Agua mineral",
           pricingUnit: "each",
           unitPrice: "1.50",
           vatClass: "general",
@@ -163,7 +163,7 @@ const suite = usePgliteDb({
         const p2 = await createProduct(tx, tenantId, {
           catalogueId: cat2.id,
           categoryId: bebidas.id,
-          descriptions: { es: "Cerveza" },
+          name: "Cerveza",
           pricingUnit: "each",
           unitPrice: "2.50",
           vatClass: "general",
@@ -1533,7 +1533,8 @@ describe("GET /api/products (session-guarded catalogue)", () => {
       products: [
         {
           id: aguaProduct.id,
-          descriptions: { es: "Agua mineral" },
+          name: "Agua mineral",
+          customerName: null,
           pricingUnit: "each",
           unit: eachUnit,
           unitPrice: "1.50",
@@ -1557,7 +1558,8 @@ describe("GET /api/products (session-guarded catalogue)", () => {
         },
         {
           id: cervezaProduct.id,
-          descriptions: { es: "Cerveza" },
+          name: "Cerveza",
+          customerName: null,
           pricingUnit: "each",
           unit: eachUnit,
           unitPrice: "2.50",
@@ -3037,7 +3039,7 @@ async function modifierOfferFixture() {
     const product = await createProduct(tx, cfg.tenantId, {
       catalogueId: aguaProduct.catalogueId,
       categoryId: null,
-      descriptions: { es: "Prueba de modificadores" },
+      name: "Prueba de modificadores",
       pricingUnit: "each",
       unitPrice: "8.00",
       vatClass: "general",

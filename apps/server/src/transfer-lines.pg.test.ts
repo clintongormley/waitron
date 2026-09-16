@@ -150,7 +150,7 @@ async function setupVenue(): Promise<SeededVenue> {
     await createProduct(tx, cfg.tenantId, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
-      descriptions: { [LOCALE]: "Café" },
+      name: "Café",
       pricingUnit: "each",
       unitPrice: "1.50",
       vatClass: "general",
@@ -158,7 +158,7 @@ async function setupVenue(): Promise<SeededVenue> {
     await createProduct(tx, cfg.tenantId, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
-      descriptions: { [LOCALE]: "Agua" },
+      name: "Agua",
       pricingUnit: "each",
       unitPrice: "2.00",
       vatClass: "general",
@@ -166,8 +166,8 @@ async function setupVenue(): Promise<SeededVenue> {
     await assignCatalogueToLocation(tx, venue.locationId, cat.id);
     return (await listAvailableProducts(tx, cfg.locationId)).products;
   });
-  const cafe = available.find((p) => p.descriptions[LOCALE] === "Café")!;
-  const agua = available.find((p) => p.descriptions[LOCALE] === "Agua")!;
+  const cafe = available.find((p) => p.name === "Café")!;
+  const agua = available.find((p) => p.name === "Agua")!;
   return { cfg, available, cafe, agua };
 }
 

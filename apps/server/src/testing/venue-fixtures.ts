@@ -121,7 +121,7 @@ export async function setupVenue(db: Database): Promise<Venue> {
     const cafe = await createProduct(tx, cfg.tenantId, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
-      descriptions: { [LOCALE]: "Café" },
+      name: "Café",
       pricingUnit: "each",
       unitPrice: "1.50",
       vatClass: "general",
@@ -129,7 +129,7 @@ export async function setupVenue(db: Database): Promise<Venue> {
     const agua = await createProduct(tx, cfg.tenantId, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
-      descriptions: { [LOCALE]: "Agua" },
+      name: "Agua",
       pricingUnit: "each",
       unitPrice: "2.00",
       vatClass: "general",

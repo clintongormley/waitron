@@ -125,8 +125,15 @@ export async function seedSale(
     lines: Array<{
       vatRate: string;
       lineTotal: string;
-      /** Frozen analytics label; defaults to `{ "es-ES": "Item" }`. Top-sellers groups by it. */
+      /** Frozen staff-facing name; defaults to `"Item"`. Top-sellers groups and labels by it. */
+      name?: string;
+      /** Frozen customer-facing label (receipt/invoice text); defaults to `{ "es-ES": "Item" }`. */
       descriptions?: Record<string, string>;
+      /** The frozen VARIANT staff name; absent means the line named no variant. Top-sellers groups
+       *  by it alongside `name`, so two variants of one product rank apart. */
+      variantName?: string;
+      /** The frozen VARIANT customer-facing label; absent means the line named no variant. */
+      variantDescriptions?: Record<string, string>;
       /** numeric(12,3) line quantity; defaults to "1.000". May be negative on a rectificativa. */
       quantity?: string;
     }>;
@@ -166,7 +173,10 @@ export async function seedSale(
       tenantId: seed.tenantId,
       saleId,
       lineNo: i + 1,
+      name: line.name ?? "Item",
       descriptions: line.descriptions ?? { "es-ES": "Item" },
+      variantName: line.variantName ?? null,
+      variantDescriptions: line.variantDescriptions ?? null,
       quantity: line.quantity ?? "1.000",
       unitPrice: line.lineTotal,
       vatRate: line.vatRate,
@@ -301,7 +311,7 @@ export async function seedFiredLine(
     .values({
       tenantId: seed.tenantId,
       catalogueId: catalogue!.id,
-      descriptions: { "es-ES": "Item" },
+      name: "Item",
       pricingUnit: "each",
       unitPrice: "1.00",
       vatClass: "general",
@@ -314,6 +324,7 @@ export async function seedFiredLine(
       workingOrderId: opts.orderId,
       lineNo: opts.lineNo,
       productId: product!.id,
+      name: "Item",
       descriptions: { "es-ES": "Item" },
       quantity: "1.000",
       unitPrice: "1.00",

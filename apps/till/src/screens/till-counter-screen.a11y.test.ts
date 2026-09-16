@@ -8,7 +8,8 @@ import type { TillProduct } from "../api/client.js";
 const products: TillProduct[] = [
   {
     id: "p1",
-    descriptions: { "es-ES": "Café" },
+    name: "Café",
+    customerName: { "es-ES": "Café para el cliente" },
     pricingUnit: "each",
     unitPrice: "1.50",
     vatClass: "general",
@@ -17,7 +18,8 @@ const products: TillProduct[] = [
   },
   {
     id: "p2",
-    descriptions: { "es-ES": "Jamón" },
+    name: "Jamón",
+    customerName: { "es-ES": "Jamón para el cliente" },
     pricingUnit: "weight",
     unitPrice: "20.00",
     vatClass: "reduced",

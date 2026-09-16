@@ -1,7 +1,9 @@
 import { createHash } from "node:crypto";
 import {
   categoryDetails,
+  productVariants,
   readContentLanguages,
+  staffPresentationName,
   validateContentTranslations,
   validateImageBytes,
 } from "@waitron/catalogue";
@@ -26,6 +28,9 @@ export interface ImageRecord extends ImageMetadataInput {
   filename: string;
   createdAt: Date;
   updatedAt: Date;
+  /** How many products, product variants and categories reference this photo. `readImage` counts
+   * `listImageUsages`; `listImages` counts the same three sources in its own SQL, and the two must
+   * stay in step or the library shows a free photo that then refuses to delete. */
   usageCount: number;
 }
 export type ImageUsage =
@@ -34,7 +39,18 @@ export type ImageUsage =
       kind: "product";
       id: string;
       catalogueId: string;
-      names: Record<string, string>;
+      /** The staff-facing product name (`products.name`) — plain text, not per-language. */
+      name: string;
+      active: boolean;
+    }
+  | {
+      kind: "variant";
+      /** The variant's own id; `productId` is what a link to the editor needs. */
+      id: string;
+      productId: string;
+      catalogueId: string;
+      /** The product and variant staff names joined by `staffPresentationName`. */
+      name: string;
       active: boolean;
     };
 export interface UploadImageOptions {
@@ -135,12 +151,35 @@ export async function listImageUsages(
     .select({
       id: products.id,
       catalogueId: products.catalogueId,
-      names: products.descriptions,
+      name: products.name,
       active: products.active,
     })
     .from(products)
     .where(and(eq(products.tenantId, tenantId), eq(products.image, image[0].filename)))
     .orderBy(products.id);
+  // A variant carries its own photo, so a variant reference protects the image exactly as a
+  // product's does. Without this the picture behind a published variant could be deleted.
+  const variantRows = await tx
+    .select({
+      id: productVariants.id,
+      productId: productVariants.productId,
+      catalogueId: products.catalogueId,
+      productName: products.name,
+      variantName: productVariants.name,
+      active: products.active,
+    })
+    .from(productVariants)
+    .innerJoin(
+      products,
+      and(
+        eq(products.tenantId, productVariants.tenantId),
+        eq(products.id, productVariants.productId),
+      ),
+    )
+    .where(
+      and(eq(productVariants.tenantId, tenantId), eq(productVariants.image, image[0].filename)),
+    )
+    .orderBy(productVariants.id);
   const categoryRows = await tx
     .select({ id: categories.id, names: categories.name })
     .from(categoryDetails)
@@ -157,6 +196,12 @@ export async function listImageUsages(
     .orderBy(categories.id);
   return [
     ...rows.map((row): ImageUsage => ({ kind: "product", ...row })),
+    ...variantRows.map(({ productName, variantName, ...row }): ImageUsage => ({
+      kind: "variant",
+      ...row,
+      // The " · " join lives in product-presentation.ts and is called, never rewritten here.
+      name: staffPresentationName({ name: productName, variantName }),
+    })),
     ...categoryRows.map((row): ImageUsage => ({ kind: "category", ...row })),
   ];
 }
@@ -361,10 +406,12 @@ export async function listImages(
   const count = await tx.execute<{ total: number }>(
     sql`select count(*)::int as total from media_images m where ${where}`,
   );
+  // The three subqueries below are the SQL twin of `listImageUsages`' three scans; a source added
+  // there is added here too, or the list's count and the detail read disagree.
   const result = await tx.execute<ImageRecord & Record<string, unknown>>(sql`
     select m.id, m.filename, m.names, m.alt_text as "altText", m.labels,
       m.created_at as "createdAt", m.updated_at as "updatedAt",
-      ((select count(*)::int from products p where p.tenant_id = m.tenant_id and p.image = m.filename) + (select count(*)::int from category_details c where c.tenant_id = m.tenant_id and c.image = m.filename)) as "usageCount"
+      ((select count(*)::int from products p where p.tenant_id = m.tenant_id and p.image = m.filename) + (select count(*)::int from product_variants v where v.tenant_id = m.tenant_id and v.image = m.filename) + (select count(*)::int from category_details c where c.tenant_id = m.tenant_id and c.image = m.filename)) as "usageCount"
     from media_images m where ${where} order by ${order}, m.id asc limit ${limit} offset ${offset}
   `);
   return { images: result.rows, total: count.rows[0]!.total };

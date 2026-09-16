@@ -38,7 +38,8 @@ const products: Product[] = [
     categoryId: null,
     categoryIds: [],
     primaryCategoryId: null,
-    descriptions: { es: "Bizcocho" },
+    name: "Bizcocho",
+    customerName: { es: "Bizcocho de la abuela" },
     pricingUnit: "each",
     unitPrice: "3.50",
     vatClass: "reduced",
@@ -600,15 +601,16 @@ describe("recipe-screen", () => {
     expect(editor(el).recipe).toEqual(recipeB);
   });
 
+  // The recipe screen is staff-facing, so the picker labels every product with its staff name — the
+  // same text whichever content language is configured, and never a guest translation or a raw id.
   it.each(["es", "en"])(
-    "labels product options using the configured %s default, then the id",
+    "labels product options with the staff name under the %s default language",
     async (defaultLanguage) => {
       setContentLanguages({ defaultLanguage, languages: ["es", "en"] });
       const richProducts: Product[] = [
-        { ...products[0]!, id: "p-es", descriptions: { es: "Bizcocho" } },
-        { ...products[0]!, id: "p-en", descriptions: { en: "Sponge" } },
-        { ...products[0]!, id: "p-fr", descriptions: { fr: "Gâteau" } },
-        { ...products[0]!, id: "p-none", descriptions: {} }, // no descriptions → the id
+        { ...products[0]!, id: "p-1", name: "Bizcocho", customerName: { es: "Bizcocho casero" } },
+        { ...products[0]!, id: "p-2", name: "Sponge", customerName: { en: "Victoria sponge" } },
+        { ...products[0]!, id: "p-3", name: "Gâteau", customerName: null },
       ];
       const api = stubApi({ listProducts: vi.fn().mockResolvedValue(richProducts) });
       const { el } = await mountWidget<RecipeScreen>("dashboard-recipe-screen", { api });
@@ -623,12 +625,7 @@ describe("recipe-screen", () => {
       ]
         .filter((o) => o.value !== "") // drop the placeholder option
         .map((o) => o.textContent!.trim());
-      expect(labels).toEqual([
-        "Bizcocho",
-        defaultLanguage === "en" ? "Sponge" : "p-en",
-        "p-fr",
-        "p-none",
-      ]);
+      expect(labels).toEqual(["Bizcocho", "Sponge", "Gâteau"]);
     },
   );
 

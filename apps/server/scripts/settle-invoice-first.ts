@@ -129,6 +129,7 @@ async function main(): Promise<void> {
       lines: [
         {
           lineNo: 1,
+          name: "Comida",
           descriptions: { [LOCALE]: "Comida" },
           quantity: "1",
           unitPrice: saleBase,
@@ -182,6 +183,7 @@ async function main(): Promise<void> {
       lines: [
         {
           lineNo: 1,
+          name: "Descuento",
           descriptions: { [LOCALE]: "Descuento" },
           quantity: "1",
           unitPrice: corrBase,

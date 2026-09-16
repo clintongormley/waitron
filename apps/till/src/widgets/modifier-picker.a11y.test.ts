@@ -7,7 +7,8 @@ import type { TillProduct } from "../api/client.js";
 
 const burger: TillProduct = {
   id: "burger",
-  descriptions: { en: "Burger", es: "Hamburguesa" },
+  name: "Burger",
+  customerName: { en: "Burger for the customer", es: "Hamburguesa para el cliente" },
   pricingUnit: "each",
   unitPrice: "8.00",
   vatClass: "general",

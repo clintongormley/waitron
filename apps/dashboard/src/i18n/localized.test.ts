@@ -20,16 +20,17 @@ it("uses the site default rather than the first stored translation", () => {
 
 it("resolves a FULL invoice-locale-tag map (the receipt/invoice path, es-ES)", () => {
   setLocale("es-ES");
-  // The receipt path keys `descriptions` by the full tag ("es-ES"). "en-GB" is listed FIRST so a
+  // The receipt path keys its frozen name map by the full tag ("es-ES"). "en-GB" is listed FIRST so a
   // short-subtag-only lookup (map["es"] → undefined → Object.values[0] = "Latte") would return the
   // WRONG value — this discriminates the full-tag hit from the first-value fallback (proven by
   // deletion: it would FAIL under region-strip-only).
   expect(localizedName({ "en-GB": "Latte", "es-ES": "Café con leche" })).toBe("Café con leche");
 });
 
-it("resolves a SHORT language-subtag map (the catalogue/product path, es)", () => {
+it("resolves a SHORT language-subtag map (the catalogue path, es)", () => {
   setLocale("es-ES");
-  // The catalogue path keys `descriptions` by the short subtag ("es"). "en" is listed FIRST so a
+  // The catalogue path keys a translated name (a category's, or a product's customer-facing one) by
+  // the short subtag ("es"). "en" is listed FIRST so a
   // full-tag-only lookup (map["es-ES"] → undefined → Object.values[0] = "Coffee") would return the
   // WRONG value — this discriminates the short-subtag fallback from the first-value fallback (proven
   // by deletion: it would FAIL under full-tag-only).

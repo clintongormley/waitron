@@ -9,7 +9,8 @@ import type { TillProduct } from "../api/client.js";
 
 const cafe: TillProduct = {
   id: "cafe",
-  descriptions: { es: "Café" },
+  name: "Café",
+  customerName: { es: "Café para el cliente" },
   unit: {
     id: "unit-each",
     name: { es: "unidad" },
@@ -25,7 +26,8 @@ const cafe: TillProduct = {
 
 const jamon: TillProduct = {
   id: "jamon",
-  descriptions: { es: "Jamón" },
+  name: "Jamón",
+  customerName: { es: "Jamón para el cliente" },
   unit: {
     id: "unit-kg",
     name: { es: "kg" },
@@ -42,18 +44,36 @@ const jamon: TillProduct = {
 afterEach(cleanupWidgets);
 
 describe("till-product-grid", () => {
-  it("refreshes displayed names when the configured fallback changes", async () => {
+  it("refreshes the unit label when the configured fallback changes, and never the tile NAME", async () => {
+    // The unit abbreviation is per-language content and still re-resolves. The tile name is the
+    // venue's staff name — plain text — so the same change must leave it exactly where it was, even
+    // though this product carries a customer name in BOTH of the languages configured here.
     setLocale("es-ES");
     setContentLanguages({ defaultLanguage: "fr", languages: ["fr", "en"] });
     try {
       const { el } = await mountWidget<TillProductGrid>("till-product-grid", {
-        products: [{ ...cafe, descriptions: { fr: "Pain", en: "Bread" } }],
+        products: [
+          {
+            ...cafe,
+            name: "Pain",
+            customerName: { fr: "Baguette", en: "Bread" },
+            unit: {
+              id: "unit-each",
+              name: { fr: "pièce", en: "each" },
+              abbreviation: { fr: "pc", en: "ea" },
+              precision: 0,
+              hardwareUnit: null,
+            },
+          },
+        ],
         store: new WorkingOrderStore(),
       });
       expect(el.shadowRoot!.querySelector(".name")!.textContent).toBe("Pain");
+      expect(el.shadowRoot!.querySelector(".price")!.textContent).toContain("/pc");
       setContentLanguages({ defaultLanguage: "en", languages: ["en", "fr"] });
       await el.updateComplete;
-      expect(el.shadowRoot!.querySelector(".name")!.textContent).toBe("Bread");
+      expect(el.shadowRoot!.querySelector(".price")!.textContent).toContain("/ea");
+      expect(el.shadowRoot!.querySelector(".name")!.textContent).toBe("Pain");
     } finally {
       setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
     }

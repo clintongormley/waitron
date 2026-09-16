@@ -7,7 +7,8 @@ import type { TillProduct } from "../api/client.js";
 
 const cafe: TillProduct = {
   id: "cafe",
-  descriptions: { es: "Café" },
+  name: "Café",
+  customerName: { es: "Café para el cliente" },
   pricingUnit: "each",
   unitPrice: "1.50",
   vatClass: "general",
@@ -17,7 +18,8 @@ const cafe: TillProduct = {
 
 const jamon: TillProduct = {
   id: "jamon",
-  descriptions: { es: "Jamón" },
+  name: "Jamón",
+  customerName: { es: "Jamón para el cliente" },
   pricingUnit: "weight",
   unitPrice: "10.00",
   vatClass: "reduced",
@@ -46,7 +48,8 @@ describe.each(["light", "dark"] as const)("till-basket a11y (%s theme)", (theme)
     const steak: TillProduct = {
       ...cafe,
       id: "steak",
-      descriptions: { es: "Filete" },
+      name: "Filete",
+      customerName: { es: "Filete para el cliente" },
       unitPrice: "18.00",
       diet: { vegan: "no", vegetarian: "no", contains: ["meat"] },
     };
@@ -64,19 +67,22 @@ describe.each(["light", "dark"] as const)("till-basket a11y (%s theme)", (theme)
     const salad: TillProduct = {
       ...cafe,
       id: "salad",
-      descriptions: { es: "Ensalada" },
+      name: "Ensalada",
+      customerName: { es: "Ensalada para el cliente" },
       dietDerivation: { origins: ["plant"], pending: false },
     };
     const meat: TillProduct = {
       ...cafe,
       id: "meat",
-      descriptions: { es: "Chuleta" },
+      name: "Chuleta",
+      customerName: { es: "Chuleta para el cliente" },
       dietDerivation: { origins: ["meat"], pending: false },
     };
     const mystery: TillProduct = {
       ...cafe,
       id: "mystery",
-      descriptions: { es: "Plato del día" },
+      name: "Plato del día",
+      customerName: { es: "Plato del día para el cliente" },
       dietDerivation: { origins: [], pending: true },
     };
     store.addProduct(salad, "1");

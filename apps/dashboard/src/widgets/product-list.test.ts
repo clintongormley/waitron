@@ -14,8 +14,9 @@ async function tableRoot(el: ProductList): Promise<ShadowRoot> {
 
 /**
  * A representative product carrying every field the list reads; individual tests override the one
- * field they exercise (allergens, image, active, descriptions) via a spread so the fixture stays the
- * single source for the rest.
+ * field they exercise (allergens, image, active, name) via a spread so the fixture stays the
+ * single source for the rest. The staff name and the customer-facing name deliberately DIFFER, so a
+ * test cannot pass by reading whichever one it happened to find.
  */
 function product(overrides: Partial<Product> = {}): Product {
   return {
@@ -24,7 +25,8 @@ function product(overrides: Partial<Product> = {}): Product {
     categoryId: "category-1",
     categoryIds: ["category-1"],
     primaryCategoryId: "category-1",
-    descriptions: { es: "Croquetas de jamón" },
+    name: "Croquetas de jamón",
+    customerName: { es: "Croquetas caseras de jamón ibérico" },
     pricingUnit: "each",
     unitPrice: "8.50",
     vatClass: "reduced",
@@ -45,39 +47,29 @@ describe("product-list", () => {
     expect(rows.length).toBe(3);
   });
 
-  it("shows the name from the supplied primaryLocale", async () => {
+  // The list is a dashboard surface, so it shows the STAFF name — never the guest-facing
+  // translation, and never the id. The two fixture names differ, so this fails if either is swapped.
+  it("shows the staff name, not the customer-facing one and not the id", async () => {
     const products = [
-      product({ descriptions: { es: "Croquetas de jamón", en: "Ham croquettes" } }),
+      product({
+        name: "Croquetas",
+        customerName: { es: "Croquetas caseras", en: "Ham croquettes" },
+      }),
     ];
-    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
-      products,
-      primaryLocale: "es",
-    });
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", { products });
     const row = (await tableRoot(el)).querySelector("tbody tr")!;
-    expect(row.textContent).toContain("Croquetas de jamón");
+    expect(row.textContent).toContain("Croquetas");
+    expect(row.textContent).not.toContain("Croquetas caseras");
     expect(row.textContent).not.toContain("Ham croquettes");
+    expect(row.textContent).not.toContain(products[0]!.id);
   });
 
-  it("uses the id when the configured default translation is missing", async () => {
-    const products = [product({ descriptions: { en: "Ham croquettes" } })];
-    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
-      products,
-      primaryLocale: "es",
-    });
-    const row = (await tableRoot(el)).querySelector("tbody tr")!;
-    expect(row.textContent).toContain(products[0]!.id);
-    expect(row.textContent).not.toContain("Ham croquettes");
-  });
-
-  it("honours a non-default primaryLocale", async () => {
-    const products = [product({ descriptions: { es: "Croquetas", en: "Croquettes" } })];
-    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
-      products,
-      primaryLocale: "en",
-    });
-    const row = (await tableRoot(el)).querySelector("tbody tr")!;
-    expect(row.textContent).toContain("Croquettes");
-    expect(row.textContent).not.toContain("Croquetas");
+  // The row's Edit button is the only place a screen reader hears which product it is acting on.
+  it("names the product in the edit button's accessible label", async () => {
+    const products = [product({ id: "p7", name: "Tarta de queso" })];
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", { products });
+    const edit = (await tableRoot(el)).querySelector('[data-test="edit-p7"]')!;
+    expect(edit.getAttribute("aria-label")).toContain("Tarta de queso");
   });
 
   it("does not present the legacy product price as a selling price", async () => {
@@ -173,7 +165,7 @@ describe("product-list", () => {
 
   it("renders a decorative thumbnail served from /media when image is set", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
-      products: [product({ image: "abc123.webp", descriptions: { es: "Croquetas" } })],
+      products: [product({ image: "abc123.webp", name: "Croquetas" })],
     });
     const img = (await tableRoot(el)).querySelector<HTMLImageElement>("[data-test=thumb] img")!;
     expect(img).not.toBeNull();
@@ -181,6 +173,28 @@ describe("product-list", () => {
     // The adjacent strong element already names the product, so repeating it as alt text is noisy.
     expect(img.getAttribute("alt")).toBe("");
     expect((await tableRoot(el)).querySelector("[data-test=thumb-placeholder]")).toBeNull();
+  });
+
+  // The cell markup is parented in wt-data-table's shadow root, so a CSS class in this widget's
+  // stylesheet reaches none of it: the thumbnail frame and the badges would render as bare inline
+  // spans while every attribute assertion above still passed. Measuring the painted box is the only
+  // assertion that can tell the two apart.
+  it("paints the thumbnail frame and the badges through ::part, not a class", async () => {
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [product({ image: null })],
+    });
+    const root = await tableRoot(el);
+    const frame = getComputedStyle(
+      root.querySelector<HTMLElement>("[data-test=thumb-placeholder]")!,
+    );
+    expect(frame.width).not.toBe("auto");
+    expect(parseFloat(frame.width)).toBeGreaterThan(0);
+    expect(frame.width).toBe(frame.height);
+    expect(parseFloat(frame.borderTopWidth)).toBeGreaterThan(0);
+    const badge = getComputedStyle(root.querySelector<HTMLElement>("[data-test=active-badge]")!);
+    expect(badge.display).toBe("inline-flex");
+    expect(parseFloat(badge.borderTopWidth)).toBeGreaterThan(0);
+    expect(parseFloat(badge.paddingLeft)).toBeGreaterThan(0);
   });
 
   it("renders a placeholder (no <img>) when image is null", async () => {

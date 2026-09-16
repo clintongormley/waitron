@@ -33,8 +33,8 @@ async function seedFiredOrder(
     sql`insert into catalogues (tenant_id, name) values (${tenantId}, 'Test catalogue') returning id`,
   );
   const product = await db.execute<{ id: string }>(sql`
-    insert into products (tenant_id, catalogue_id, descriptions, pricing_unit, unit_price, vat_class)
-    values (${tenantId}, ${catalogue.rows[0]!.id}, '{"es-ES":"Item"}'::jsonb, 'each', '1.00', 'general')
+    insert into products (tenant_id, catalogue_id, name, pricing_unit, unit_price, vat_class)
+    values (${tenantId}, ${catalogue.rows[0]!.id}, 'Item', 'each', '1.00', 'general')
     returning id`);
   const order = await db.execute<{ id: string }>(sql`
     insert into working_orders (tenant_id, till_id, node_id, order_number, status)
@@ -42,10 +42,10 @@ async function seedFiredOrder(
   const orderId = order.rows[0]!.id;
   const line = await db.execute<{ id: string }>(sql`
     insert into working_order_lines (
-      tenant_id, working_order_id, line_no, product_id, descriptions, quantity,
+      tenant_id, working_order_id, line_no, product_id, name, descriptions, quantity,
       unit_price, unit_price_gross, vat_rate, line_total
     ) values (
-      ${tenantId}, ${orderId}, 1, ${product.rows[0]!.id}, '{"es-ES":"Item"}'::jsonb, '1.000',
+      ${tenantId}, ${orderId}, 1, ${product.rows[0]!.id}, 'Item', '{"es-ES":"Item"}'::jsonb, '1.000',
       '1.00', '1.00', '10.00', '1.00'
     ) returning id`);
   await db.execute(sql`

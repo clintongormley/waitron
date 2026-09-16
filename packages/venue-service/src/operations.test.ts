@@ -129,7 +129,8 @@ describe("venue service routing", () => {
       const product = await createProduct(tx, tenantId, {
         catalogueId: menu.id,
         categoryId: category.id,
-        descriptions: { en: "Sparkling water", fr: "Eau pétillante" },
+        name: "Sparkling water",
+        customerName: { en: "Sparkling water", fr: "Eau pétillante" },
         pricingUnit: "each",
         unitPrice: "0.00",
         vatClass: "general",
@@ -157,15 +158,36 @@ describe("venue service routing", () => {
         defaultLanguage: "fr",
         languages: ["fr", "en"],
       });
+      // The readiness list is staff-facing, so it keeps naming the product by its staff name even
+      // though the venue's default language changed and the product has French customer text.
       await expect(listVenueReadiness(tx, { tenantId, locationId })).resolves.toEqual([
         {
           code: "zone.route_missing",
           zoneId: zone.rows[0]!.id,
           zoneName: "Terrace",
           productId: product.id,
-          productName: "Eau pétillante",
+          productName: "Sparkling water",
         },
       ]);
+      // A blank staff name is storable — `products.name` is only NOT NULL — so the list falls back
+      // to the product id rather than rendering an empty name. Written with raw SQL because no
+      // write path reachable from here produces a blank one.
+      await tx.execute(
+        sql`update products set name = '' where tenant_id = ${tenantId} and id = ${product.id}`,
+      );
+      await expect(listVenueReadiness(tx, { tenantId, locationId })).resolves.toEqual([
+        {
+          code: "zone.route_missing",
+          zoneId: zone.rows[0]!.id,
+          zoneName: "Terrace",
+          productId: product.id,
+          productName: product.id,
+        },
+      ]);
+      await tx.execute(
+        sql`update products set name = 'Sparkling water'
+            where tenant_id = ${tenantId} and id = ${product.id}`,
+      );
       await createPreparationRoute(
         tx,
         { tenantId, locationId },
@@ -260,7 +282,7 @@ describe("venue service routing", () => {
       const negroni = await createProduct(tx, tenantId, {
         catalogueId: menu.id,
         categoryId: category.id,
-        descriptions: { en: "Negroni" },
+        name: "Negroni",
         pricingUnit: "each",
         unitPrice: "9.00",
         vatClass: "general",
@@ -337,7 +359,7 @@ describe("venue service routing", () => {
       const ham = await createProduct(tx, tenantId, {
         catalogueId: menu.id,
         categoryId: category.id,
-        descriptions: { en: "Sliced ham" },
+        name: "Sliced ham",
         pricingUnit: "weight",
         unitPrice: "0.00",
         vatClass: "reduced",
@@ -386,6 +408,7 @@ describe("venue service routing", () => {
         workingOrderId: "00000000-0000-4000-8000-000000000001",
         lineNo: 1,
         productId: ham.id,
+        name: "Sliced ham",
         descriptions: { "en-GB": "Sliced ham" },
         quantity: "0.250",
         unitPrice: "22.64",
@@ -498,6 +521,7 @@ describe("venue service routing", () => {
         workingOrderId: copiedOrderId,
         lineNo: 1,
         productId: ham.id,
+        name: "Sliced ham",
         descriptions: { "en-GB": "Sliced ham" },
         quantity: "0.100",
         unitPrice: "22.64",
@@ -566,7 +590,7 @@ describe("venue service routing", () => {
       const sweets = await createProduct(tx, tenantId, {
         catalogueId: menu.id,
         categoryId: null,
-        descriptions: { en: "Loose sweets" },
+        name: "Loose sweets",
         pricingUnit: "each",
         unitPrice: "0.00",
         vatClass: "general",
@@ -603,6 +627,7 @@ describe("venue service routing", () => {
         workingOrderId: orderId,
         lineNo: 1,
         productId: sweets.id,
+        name: "Loose sweets",
         descriptions: { "en-GB": "Loose sweets" },
         quantity: "1.000",
         unitPrice: "1.09",
@@ -708,7 +733,7 @@ describe("venue service routing", () => {
       const product = await createProduct(tx, tenantId, {
         catalogueId: menu.id,
         categoryId: category.id,
-        descriptions: { en: "Crisps" },
+        name: "Crisps",
         pricingUnit: "each",
         unitPrice: "0.00",
         vatClass: "reduced",
@@ -777,7 +802,7 @@ describe("venue service routing", () => {
       const product = await createProduct(tx, tenantId, {
         catalogueId: menu.id,
         categoryId: category.id,
-        descriptions: { en: "Negroni" },
+        name: "Negroni",
         pricingUnit: "each",
         unitPrice: "0.00",
         vatClass: "general",
@@ -860,7 +885,7 @@ async function productWithCategory(
   const product = await createProduct(tx, tenantId, {
     catalogueId: menuId,
     categoryId: category?.id ?? null,
-    descriptions: { en: name },
+    name,
     pricingUnit: "each",
     unitPrice: "0.00",
     vatClass: "general",

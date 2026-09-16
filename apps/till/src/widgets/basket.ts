@@ -17,7 +17,7 @@ import { dietBadgeStyles, dietBadges, extraNutrition } from "./diet-badges.js";
 import { lineExtrasEditorStyles, renderLineExtrasEditor } from "./line-extras-editor.js";
 import { StoreChangeController } from "../state/store-controller.js";
 import type { OrderLine, WorkingOrderStore } from "../state/working-order.js";
-import { productUnit } from "./product-name.js";
+import { lineProductName, productUnit } from "./product-name.js";
 
 /**
  * The multiplication sign for a per-option-quantity badge (`×2`). The SAME `×` (U+00D7) the printed
@@ -283,8 +283,11 @@ export class TillBasket extends LitElement {
       : snapshotDescriptionFor(text, fallback);
   }
 
+  /** The line's own label: the STAFF name, with any chosen variant joined on. A new line reads it
+   * from the live catalogue product; a retrieved line reads the name frozen onto it at add time. It
+   * is plain text either way, so unlike {@link #lineText} it needs no language fallback. */
   #lineName(line: OrderLine): string {
-    return this.#lineText(line, line.product.descriptions, line.product.id);
+    return lineProductName(line.product);
   }
 
   /**

@@ -83,7 +83,7 @@ describe("park & retrieve schema", () => {
       .values({
         tenantId: TENANT_A,
         catalogueId: catalogue.id,
-        descriptions: { es: "Café solo", ca: "Cafè sol" },
+        name: "Café solo",
         pricingUnit: "each",
         unitPrice: "1.00",
         vatClass: "general",
@@ -117,9 +117,9 @@ describe("park & retrieve schema", () => {
     // is the FK biting, not the line being malformed for some other reason.
     await suite.db.execute(
       sql`insert into working_order_lines
-        (tenant_id, working_order_id, line_no, product_id, descriptions,
+        (tenant_id, working_order_id, line_no, product_id, name, descriptions,
          quantity, unit_price, unit_price_gross, vat_rate, line_total)
-        values (${TENANT_A}, ${wo}, 1, ${productA}, ${DESCRIPTIONS_A}::jsonb,
+        values (${TENANT_A}, ${wo}, 1, ${productA}, 'Café solo', ${DESCRIPTIONS_A}::jsonb,
          '1.000', '1.00', '1.10', '10.00', '1.00')`,
     );
     // Negative: a product_id with no products row is refused 23503. The BEFORE triggers
@@ -128,9 +128,9 @@ describe("park & retrieve schema", () => {
     const error = await captureError(() =>
       suite.db.execute(
         sql`insert into working_order_lines
-          (tenant_id, working_order_id, line_no, product_id, descriptions,
+          (tenant_id, working_order_id, line_no, product_id, name, descriptions,
            quantity, unit_price, unit_price_gross, vat_rate, line_total)
-          values (${TENANT_A}, ${wo}, 2, ${BOGUS_PRODUCT}, ${DESCRIPTIONS_A}::jsonb,
+          values (${TENANT_A}, ${wo}, 2, ${BOGUS_PRODUCT}, 'Café solo', ${DESCRIPTIONS_A}::jsonb,
            '1.000', '1.00', '1.10', '10.00', '1.00')`,
       ),
     );

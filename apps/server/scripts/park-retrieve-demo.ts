@@ -192,7 +192,7 @@ async function main(): Promise<void> {
       await createProduct(tx, caja1.tenantId, {
         catalogueId: cat.id,
         categoryId: comida.id,
-        descriptions: { [LOCALE]: "Jamón cortado" },
+        name: "Jamón cortado",
         pricingUnit: "weight",
         unitPrice: "24.90", // €/kg, gross (VAT-inclusive), reduced (10%)
         vatClass: "reduced",
@@ -200,7 +200,7 @@ async function main(): Promise<void> {
       await createProduct(tx, caja1.tenantId, {
         catalogueId: cat.id,
         categoryId: bebidas.id,
-        descriptions: { [LOCALE]: "Agua mineral" },
+        name: "Agua mineral",
         pricingUnit: "each",
         unitPrice: "1.50", // €/item, gross, general (21%)
         vatClass: "general",
@@ -280,7 +280,7 @@ async function main(): Promise<void> {
     const describe = (productId: string | null): string =>
       productId === null
         ? "(modifier)"
-        : (available.find((p) => p.id === productId)?.descriptions[LOCALE] ?? productId);
+        : (available.find((p) => p.id === productId)?.name ?? productId);
 
     console.log(
       "park-retrieve-demo: an order parked on one register, retrieved and paid on another",

@@ -8,7 +8,8 @@ import type { TillProduct } from "../api/client.js";
 
 const cafe: TillProduct = {
   id: "cafe",
-  descriptions: { es: "Café" },
+  name: "Café",
+  customerName: { es: "Café para el cliente" },
   unit: {
     id: "unit-each",
     name: { en: "unit", es: "unidad" },
@@ -24,7 +25,8 @@ const cafe: TillProduct = {
 
 const jamon: TillProduct = {
   id: "jamon",
-  descriptions: { es: "Jamón" },
+  name: "Jamón",
+  customerName: { es: "Jamón para el cliente" },
   unit: {
     id: "unit-kg",
     name: { en: "kg", es: "kg" },

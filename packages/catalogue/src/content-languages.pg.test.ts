@@ -98,8 +98,8 @@ it("a default switch waits for an authoring transaction and rejects its newly co
       await validateContentTranslations(tx, tenantId, { en: "Bread" }, "es");
       ready();
       await wait;
-      await tx.execute(sql`insert into products (tenant_id, catalogue_id, descriptions, pricing_unit, unit_price, vat_class)
-        values (${tenantId}, ${menuId}, '{"en":"Bread"}'::jsonb, 'each', '2', 'general')`);
+      await tx.execute(sql`insert into products (tenant_id, catalogue_id, name, customer_name, pricing_unit, unit_price, vat_class)
+        values (${tenantId}, ${menuId}, 'Bread', '{"en":"Bread"}'::jsonb, 'each', '2', 'general')`);
     });
     await validated;
     const changing = app(configuration, tenantId, (tx) =>

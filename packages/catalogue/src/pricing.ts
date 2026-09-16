@@ -24,6 +24,11 @@ export interface UnitSnapshot {
 }
 
 export interface PriceableProduct {
+  /** The product's staff-facing name, frozen onto the sale line's `name`. A row read from the
+   * catalogue is resolved into this shape first — see `product-presentation.ts`, which owns the
+   * blank-falls-back-to-the-staff-name rule and the " · " product/variant join. */
+  name: string;
+  /** locale -> customer-facing text, already resolved by `customerPresentationText`. */
   descriptions: Record<string, string>;
   unit: UnitSnapshot;
   /** GROSS (VAT-inclusive): per selected unit. */
@@ -32,7 +37,12 @@ export interface PriceableProduct {
   /** Snapshotted analytics label, copied onto the sale line. */
   category: string | null;
   variantId?: string | null;
-  variantName?: Record<string, string> | null;
+  /** The variant's staff-facing name; `null` when no variant is selected. */
+  variantName?: string | null;
+  /** The variant's customer-facing text, locale -> text; `null` when no variant is selected. */
+  variantDescriptions?: Record<string, string> | null;
+  /** The variant's kitchen-facing name; `null` when no variant is selected. */
+  variantKitchenName?: string | null;
   kitchenName?: string | null;
 }
 
@@ -56,7 +66,9 @@ export interface LockedLine {
   quantity: string;
   /** The stored `working_order_lines.vat_rate`, a percentage literal e.g. "21.00" meaning 21%. */
   vatRate: string;
-  /** locale -> text, snapshotted at add-time; copied onto the sale line verbatim. */
+  /** The staff-facing name snapshotted at add-time; copied onto the sale line's `name` verbatim. */
+  name: string;
+  /** locale -> customer-facing text, snapshotted at add-time; copied onto the sale line verbatim. */
   descriptions: Record<string, string>;
   /** Snapshotted analytics label, copied onto the sale line; `null` when absent. */
   category: string | null;
@@ -71,7 +83,9 @@ export interface LockedLine {
   parentLineNo?: number | null;
   modifierSnapshots?: ModifierSnapshot[];
   variantId?: string | null;
-  variantName?: Record<string, string> | null;
+  variantName?: string | null;
+  variantDescriptions?: Record<string, string> | null;
+  variantKitchenName?: string | null;
   kitchenName?: string | null;
 }
 
@@ -131,6 +145,8 @@ interface PricingRow {
   quantity: string;
   /** The VAT rate as a percentage literal Decimal, e.g. "21.00". */
   rate: Decimal;
+  /** The staff-facing name; `sale_lines.name` is NOT NULL, so every row carries one. */
+  name: string;
   descriptions: Record<string, string>;
   category: string | null;
   unitName: Record<string, string> | null;
@@ -140,7 +156,9 @@ interface PricingRow {
   parentLineNo?: number | null;
   modifierSnapshots?: ModifierSnapshot[];
   variantId?: string | null;
-  variantName?: Record<string, string> | null;
+  variantName?: string | null;
+  variantDescriptions?: Record<string, string> | null;
+  variantKitchenName?: string | null;
   kitchenName?: string | null;
 }
 
@@ -165,6 +183,7 @@ function priceRows(rows: readonly PricingRow[]): PricedLines {
     const netUnit = baseFromGross(grossUnit, row.rate);
     lines.push({
       lineNo: i + 1,
+      name: row.name,
       descriptions: row.descriptions,
       modifierSnapshots: row.modifierSnapshots ?? [],
       quantity: row.quantity,
@@ -181,6 +200,8 @@ function priceRows(rows: readonly PricingRow[]): PricedLines {
       parentLineNo: row.parentLineNo ?? null,
       variantId: row.variantId ?? null,
       variantName: row.variantName ?? null,
+      variantDescriptions: row.variantDescriptions ?? null,
+      variantKitchenName: row.variantKitchenName ?? null,
       kitchenName: row.kitchenName ?? null,
     });
     grossLineTotals.push(gross); // parallel to `lines`; the customer-facing gross of this same line
@@ -215,6 +236,7 @@ export function priceBasket(items: readonly BasketItem[]): PricedLines {
         grossUnit: decimal(item.product.unitPrice),
         quantity: item.quantity,
         rate: resolveVatRate(item.product.vatClass),
+        name: item.product.name,
         descriptions: item.product.descriptions,
         category: item.product.category,
         // The printed label is the unit's abbreviation, frozen here onto working_order_lines.unit_name.
@@ -222,6 +244,8 @@ export function priceBasket(items: readonly BasketItem[]): PricedLines {
         unitPrecision: item.product.unit.precision,
         variantId: item.product.variantId ?? null,
         variantName: item.product.variantName ?? null,
+        variantDescriptions: item.product.variantDescriptions ?? null,
+        variantKitchenName: item.product.variantKitchenName ?? null,
         kitchenName: item.product.kitchenName ?? null,
       };
     }),
@@ -241,6 +265,7 @@ export function priceLockedLines(lines: readonly LockedLine[]): PricedLines {
       grossUnit: decimal(line.grossUnitPrice),
       quantity: line.quantity,
       rate: decimal(line.vatRate),
+      name: line.name,
       descriptions: line.descriptions,
       modifierSnapshots: line.modifierSnapshots ?? [],
       category: line.category,
@@ -253,6 +278,8 @@ export function priceLockedLines(lines: readonly LockedLine[]): PricedLines {
       parentLineNo: line.parentLineNo ?? null,
       variantId: line.variantId ?? null,
       variantName: line.variantName ?? null,
+      variantDescriptions: line.variantDescriptions ?? null,
+      variantKitchenName: line.variantKitchenName ?? null,
       kitchenName: line.kitchenName ?? null,
     })),
   );
@@ -260,8 +287,12 @@ export function priceLockedLines(lines: readonly LockedLine[]): PricedLines {
 
 /** A modifier chosen on a dish — one selected option from an option group. */
 export interface SelectedOption {
+  /** The option's staff-facing label, snapshotted at selection time; becomes the child line's
+   * `name`. The catalogue stores an option's label per language, and pricing holds no default
+   * language to choose one by, so the CALLER resolves it and passes the chosen text in. */
+  name: string;
   /** locale -> text, snapshotted at selection time; becomes the child line's `descriptions`. */
-  name: Record<string, string>;
+  descriptions: Record<string, string>;
   /** GROSS (VAT-inclusive) price change this option adds to the dish, as a `numeric(12,2)` literal.
    * `"0.00"` for a free option (which then contributes a zero-base child line). */
   priceDelta: string;
@@ -290,8 +321,8 @@ export interface BasketItemWithOptions {
  * another priced row through the ONE arithmetic core — its gross unit is the option's `priceDelta`,
  * its quantity the DISH's quantity times the option's own per-option count (`opt.quantity ?? 1`, so
  * a dish ×3 with an option ×2 prices the option 6 times), its rate the option's `vatClass` override
- * or (when `null`) the dish's own rate, its descriptions the option's `name`, and its category the
- * parent's snapshot — so
+ * or (when `null`) the dish's own rate, its name and descriptions the option's own, and its category
+ * the parent's snapshot — so
  * the difference-method VAT breakdown and `total` include the option amounts with no separate arithmetic.
  * With every item's `options` empty this is line-for-line identical to `priceBasket`.
  */
@@ -307,6 +338,7 @@ export function priceBasketWithOptions(items: readonly BasketItemWithOptions[]):
       grossUnit: decimal(item.product.unitPrice),
       quantity: item.quantity,
       rate: resolveVatRate(item.product.vatClass),
+      name: item.product.name,
       descriptions: item.product.descriptions,
       category: item.product.category,
       // The printed label is the unit's abbreviation, frozen here onto working_order_lines.unit_name.
@@ -316,6 +348,8 @@ export function priceBasketWithOptions(items: readonly BasketItemWithOptions[]):
       modifierSnapshots: item.modifierSnapshots ?? [],
       variantId: item.product.variantId ?? null,
       variantName: item.product.variantName ?? null,
+      variantDescriptions: item.product.variantDescriptions ?? null,
+      variantKitchenName: item.product.variantKitchenName ?? null,
       kitchenName: item.product.kitchenName ?? null,
     });
     for (const opt of item.options) {
@@ -331,7 +365,10 @@ export function priceBasketWithOptions(items: readonly BasketItemWithOptions[]):
           opt.vatClass === null
             ? resolveVatRate(item.product.vatClass)
             : resolveVatRate(opt.vatClass),
-        descriptions: opt.name,
+        // A child line's staff name is the modifier's OWN label, never the dish's: `sale_lines.name`
+        // is NOT NULL, so each emitted child carries one.
+        name: opt.name,
+        descriptions: opt.descriptions,
         category: item.product.category, // snapshot the parent's category
         unitName: null,
         unitPrecision: null,

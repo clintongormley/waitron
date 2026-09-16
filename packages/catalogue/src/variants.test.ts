@@ -20,6 +20,7 @@ import {
   resolveMenuVariant,
 } from "./variants.js";
 import { priceBasketWithOptions } from "./pricing.js";
+import { customerPresentationText } from "./product-presentation.js";
 import { createUnit } from "./units.js";
 import { useCatalogueDb } from "../test/fixtures.js";
 
@@ -30,7 +31,10 @@ let productId: string;
 let offerId: string;
 let menuId: string;
 const variant = (name: string, unitPrice: string) => ({
-  name: { en: name },
+  name,
+  customerName: null,
+  kitchenName: null,
+  image: null,
   unitPrice,
   available: true,
 });
@@ -50,7 +54,7 @@ beforeEach(async () => {
     const product = await createProduct(tx, tenantId, {
       catalogueId: menu.id,
       categoryId: null,
-      descriptions: { en: "Coffee" },
+      name: "Coffee",
       unitId: unit.id,
       unitPrice: "9.00",
       vatClass: "reduced",
@@ -79,18 +83,28 @@ describe("product variants", () => {
         tenantId,
         productId,
         [
-          { ...variant("Small", "2.00"), name: { en: "Small", es: "Pequeño" } },
+          { ...variant("Small", "2.00"), customerName: { en: "Small", es: "Pequeño" } },
           variant("Large", "3.00"),
         ],
         "en",
       ),
     );
-    expect(saved.map(({ name, unitPrice, available }) => ({ name, unitPrice, available }))).toEqual(
-      [
-        { name: { en: "Small", es: "Pequeño" }, unitPrice: "2.00", available: true },
-        { name: { en: "Large" }, unitPrice: "3.00", available: true },
-      ],
-    );
+    expect(
+      saved.map(({ name, customerName, unitPrice, available }) => ({
+        name,
+        customerName,
+        unitPrice,
+        available,
+      })),
+    ).toEqual([
+      {
+        name: "Small",
+        customerName: { en: "Small", es: "Pequeño" },
+        unitPrice: "2.00",
+        available: true,
+      },
+      { name: "Large", customerName: null, unitPrice: "3.00", available: true },
+    ]);
     expect(new Set(saved.map((v) => v.id)).size).toBe(2);
     const updated = await run((tx) =>
       setProductVariants(
@@ -152,14 +166,14 @@ describe("product variants", () => {
     expect(await run((tx) => listProductVariants(tx, other, productId))).toEqual([]);
   });
 
-  it("requires the default-language name while preserving disabled translations", async () => {
+  it("requires the default language in a variant's customer name when one is given", async () => {
     await expect(
       run((tx) =>
         setProductVariants(
           tx,
           tenantId,
           productId,
-          [{ ...variant("Small", "2.00"), name: { es: "Pequeño" } }],
+          [{ ...variant("Small", "2.00"), customerName: { es: "Pequeño" } }],
           "en",
         ),
       ),
@@ -194,15 +208,18 @@ describe("product variants", () => {
     const published = await run((tx) => listMenuVariants(tx, tenantId, offerId));
     expect(published).toEqual([{ variantId: variants[0]!.id, unitPrice: "4.00", available: true }]);
     expect((await run((tx) => listProducts(tx, tenantId)))[0]!.variants).toEqual([
-      expect.objectContaining({ id: variants[0]!.id, name: { en: "Small" }, unitPrice: "2.50" }),
-      expect.objectContaining({ id: variants[1]!.id, name: { en: "Large" }, unitPrice: "3.00" }),
+      expect.objectContaining({ id: variants[0]!.id, name: "Small", unitPrice: "2.50" }),
+      expect.objectContaining({ id: variants[1]!.id, name: "Large", unitPrice: "3.00" }),
     ]);
     expect(await run((tx) => listMenuOffers(tx, tenantId, []))).toEqual([]);
     const offers = await run((tx) => listMenuOffers(tx, tenantId, [menuId]));
     expect(offers[0]!.variants).toEqual([
       {
         id: variants[0]!.id,
-        name: { en: "Small" },
+        name: "Small",
+        customerName: null,
+        kitchenName: null,
+        image: null,
         unitPrice: "4.00",
         available: true,
       },
@@ -244,33 +261,60 @@ it("prices the required published variant instead of the base or product variant
   const selected = await run((tx) => resolveMenuVariant(tx, tenantId, offerId, small!.id));
   expect(selected).toEqual({
     variantId: small!.id,
-    productName: { en: "Coffee" },
-    variantName: { en: "Small" },
+    name: "Coffee",
+    customerName: null,
     kitchenName: null,
+    variantName: "Small",
+    variantCustomerName: null,
+    variantKitchenName: null,
     unitPrice: "4.00",
   });
+  // The selection is resolved into the priceable through `product-presentation.ts` — the one home
+  // for the blank-falls-back-to-the-staff-name rule — rather than a name written out by hand here.
+  const customer = customerPresentationText(selected, "en");
   const priced = priceBasketWithOptions([
     {
       product: {
-        descriptions: { en: "Coffee · Small" },
+        name: selected.name,
+        descriptions: customer.product,
+        variantId: selected.variantId,
+        variantName: selected.variantName,
+        variantDescriptions: customer.variant,
+        variantKitchenName: selected.variantKitchenName,
+        kitchenName: selected.kitchenName,
         unit: { name: { en: "each" }, precision: 0, abbreviation: { en: "ea" } },
         unitPrice: selected.unitPrice,
         vatClass: "reduced",
         category: null,
       },
       quantity: "2",
-      options: [{ name: { en: "Milk" }, priceDelta: "1.00", vatClass: null, quantity: 1 }],
+      options: [
+        {
+          name: "Milk",
+          descriptions: { en: "Milk" },
+          priceDelta: "1.00",
+          vatClass: null,
+          quantity: 1,
+        },
+      ],
     },
   ]);
   expect(priced.total).toBe("10.00");
+  // Neither variant carries customer text, so both fall back to the staff names.
+  expect(priced.lines[0]).toMatchObject({
+    name: "Coffee",
+    descriptions: { en: "Coffee" },
+    variantName: "Small",
+    variantDescriptions: { en: "Small" },
+  });
   await run((tx) =>
     updateProduct(tx, tenantId, productId, {
-      descriptions: { en: "Renamed" },
+      name: "Renamed",
       unitPrice: "99.00",
       active: false,
     }),
   );
-  expect(selected.productName).toEqual({ en: "Coffee" });
+  expect(selected.name).toBe("Coffee");
   expect(selected.unitPrice).toBe("4.00");
   await expect(
     run((tx) => resolveMenuVariant(tx, tenantId, offerId, small!.id)),

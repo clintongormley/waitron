@@ -18,7 +18,7 @@ async function fixture() {
     open: true,
     locales: ["en"],
   });
-  const change = el.shadowRoot!.querySelector("[name=name-en]")!;
+  const change = el.shadowRoot!.querySelector("[name=name]")!;
   change.dispatchEvent(
     new CustomEvent("wt-change", {
       detail: { value: "Dirty coffee" },
@@ -36,7 +36,8 @@ async function fixture() {
       value: { id: string; name: Record<string, string> },
     ) => {
       if (kind === "unit") el.units = [...el.units, { ...value, abbreviation: {} }];
-      if (kind === "category") el.categories = [...el.categories, value];
+      if (kind === "category")
+        el.categories = [...el.categories, { ...value, image: null, color: null, parentId: null }];
       if (kind === "modifier") el.modifiers = [...el.modifiers, value];
       el.selectRelated(kind, value.id);
     },
@@ -58,7 +59,7 @@ it.each(["unit", "category", "modifier"] as const)(
     expect(fx.accept).toHaveBeenCalledExactlyOnceWith(kind, saved);
     expect(fx.focus).toHaveBeenCalledWith(kind);
     expect(fx.loadError).toHaveBeenCalledOnce();
-    expect(fx.el.currentValue.name).toEqual({ en: "Dirty coffee" });
+    expect(fx.el.currentValue.name).toBe("Dirty coffee");
     expect(
       kind === "unit"
         ? fx.el.currentValue.unitId
@@ -88,7 +89,7 @@ it("retains a failed child and drops a duplicate submit while the write is pendi
   fx.controller.cancel();
   await fx.el.updateComplete;
   expect(fx.controller.kind).toBeNull();
-  expect(fx.el.currentValue.name).toEqual({ en: "Dirty coffee" });
+  expect(fx.el.currentValue.name).toBe("Dirty coffee");
 });
 
 it("does not attach a late write to a different product or release its child gate", async () => {

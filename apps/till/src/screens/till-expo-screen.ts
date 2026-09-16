@@ -616,7 +616,7 @@ export class TillExpoScreen extends LitElement {
     const held = item.firedAt === null;
     const forgotten = this.#itemBand(item) === "forgotten";
     const unit = item.unitName == null ? "" : ` ${snapshotDescriptionFor(item.unitName, "")}`;
-    const label = `${trimQuantity(item.qty)}${unit}× ${snapshotDescriptionFor(item.name, "")}`;
+    const label = `${trimQuantity(item.qty)}${unit}× ${item.name}`;
     return html`<span class="item state-${item.state} ${held ? "held" : ""}" data-item=${item.id}>
       <span class="item-main">
         <span class="item-name">${label}</span>

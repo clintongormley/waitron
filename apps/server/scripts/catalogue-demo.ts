@@ -48,9 +48,11 @@ import {
   createCatalogue,
   createCategory,
   createProduct,
+  customerPresentationText,
   listAvailableProducts,
   priceBasket,
 } from "@waitron/catalogue";
+import type { AvailableProduct, PriceableProduct } from "@waitron/catalogue";
 import { deploymentEnvironment } from "../src/config.js";
 import {
   nodeId as brandNodeId,
@@ -161,7 +163,7 @@ async function main(): Promise<void> {
       await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: comida.id,
-        descriptions: { [LOCALE]: "Jamón cortado" },
+        name: "Jamón cortado",
         pricingUnit: "weight",
         unitPrice: "24.90", // €/kg, gross (VAT-inclusive)
         vatClass: "reduced",
@@ -169,7 +171,7 @@ async function main(): Promise<void> {
       await createProduct(tx, tenantId, {
         catalogueId: cat.id,
         categoryId: bebidas.id,
-        descriptions: { [LOCALE]: "Agua mineral" },
+        name: "Agua mineral",
         pricingUnit: "each",
         unitPrice: "1.50", // €/item, gross
         vatClass: "general",
@@ -200,10 +202,30 @@ async function main(): Promise<void> {
     const { saleId, priced } = await withTenant(db, tenantId, async (tx) => {
       await asAppUser(tx);
       const { products: available } = await listAvailableProducts(tx, venue.locationId);
+      // A catalogue row carries the staff `name` and the customer-facing `customerName`; the sale
+      // line's per-language text is resolved from the pair by `product-presentation.ts`, which owns
+      // the blank-falls-back-to-the-staff-name rule.
+      const toPriceable = (p: AvailableProduct): PriceableProduct => ({
+        ...p,
+        descriptions: customerPresentationText(
+          {
+            name: p.name,
+            customerName: p.customerName,
+            kitchenName: null,
+            variantName: null,
+            variantCustomerName: null,
+            variantKitchenName: null,
+          },
+          LOCALE,
+        ).product,
+      });
       // 0.320 kg of ham + 2 waters — quantities a till would capture (a scale reading and a count).
       const priced = priceBasket([
-        { product: available.find((p) => p.pricingUnit === "weight")!, quantity: "0.320" },
-        { product: available.find((p) => p.pricingUnit === "each")!, quantity: "2" },
+        {
+          product: toPriceable(available.find((p) => p.pricingUnit === "weight")!),
+          quantity: "0.320",
+        },
+        { product: toPriceable(available.find((p) => p.pricingUnit === "each")!), quantity: "2" },
       ]);
       const input: RecordSaleInput = {
         tenantId,

@@ -41,7 +41,7 @@ const queue: ExpoOrder[] = [
         items: [
           {
             id: "ti-0",
-            name: { "es-ES": "Pan" },
+            name: "Pan",
             qty: "1.000",
             stationName: "Barra",
             state: "ready",
@@ -71,7 +71,7 @@ const queue: ExpoOrder[] = [
         items: [
           {
             id: "ti-1",
-            name: { "es-ES": "Croquetas" },
+            name: "Croquetas",
             qty: "2.000",
             stationName: "Cocina",
             state: "ready", // all-ready → the En camino (away) lever
@@ -92,7 +92,7 @@ const queue: ExpoOrder[] = [
         items: [
           {
             id: "ti-2",
-            name: { "es-ES": "Solomillo" },
+            name: "Solomillo",
             qty: "1.000",
             stationName: "Parrilla",
             state: "queued",
@@ -127,7 +127,7 @@ const queue: ExpoOrder[] = [
         items: [
           {
             id: "ti-3",
-            name: { "es-ES": "Flan" },
+            name: "Flan",
             qty: "1.000",
             stationName: "Cocina",
             state: "preparing", // fired, not-all-ready → the Curso listo lever

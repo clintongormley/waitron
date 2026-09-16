@@ -47,6 +47,8 @@ import { ALL_MODULES } from "./modules.js";
 import type { TillConfig } from "./till-config.js";
 import { payWorkingOrder, recordTillSale } from "./till-sale.js";
 import { addTabRound, createOpenOrder, openTab, voidTabLine } from "./working-order.js";
+import { formatReceipt } from "./receipt-ticket.js";
+import { printedLines } from "./testing/decode-ticket.js";
 
 // Exercise the sale path and chained fiscal write as app_user on PostgreSQL. Provision as owner.
 const LOCALE = "es-ES";
@@ -163,7 +165,7 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
     await createProduct(tx, cfg.tenantId, {
       catalogueId: cat.id,
       categoryId: comida.id,
-      descriptions: { [LOCALE]: "Jamón cortado" },
+      name: "Jamón cortado",
       pricingUnit: "weight",
       unitPrice: "24.90",
       vatClass: "reduced",
@@ -171,7 +173,7 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
     const water = await createProduct(tx, cfg.tenantId, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
-      descriptions: { [LOCALE]: "Agua mineral" },
+      name: "Agua mineral",
       pricingUnit: "each",
       unitPrice: "1.50",
       vatClass: "general",
@@ -198,9 +200,26 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
         tx,
         cfg.tenantId,
         water.id,
+        // "Doble" carries all three names and "Fuera" only its staff name, so a frozen line shows the
+        // variant's customer text and kitchen name each falling back on its own. The product itself
+        // has no customer name, so its own customer text falls back to "Agua mineral".
         [
-          { name: { [LOCALE]: "Doble" }, unitPrice: "3.20", available: true },
-          { name: { [LOCALE]: "Fuera" }, unitPrice: "3.80", available: true },
+          {
+            name: "Doble",
+            customerName: { [LOCALE]: "Doble ración" },
+            kitchenName: "DBL",
+            image: null,
+            unitPrice: "3.20",
+            available: true,
+          },
+          {
+            name: "Fuera",
+            customerName: null,
+            kitchenName: null,
+            image: null,
+            unitPrice: "3.80",
+            available: true,
+          },
         ],
         LOCALE,
       );
@@ -269,36 +288,64 @@ describe("recordTillSale", () => {
       tender: { method: "cash", amount: "8.20" },
     });
     expect(result.total).toBe("8.20");
+    // The filed sale line carries the SAME six names as the frozen order line — filing copies the
+    // snapshot rather than resolving the catalogue a second time.
     const snapshots = await suite.admin.execute<{
       variant_id: string;
-      variant_name: Record<string, string>;
-      kitchen_name: string;
+      name: string;
+      variant_name: string | null;
+      kitchen_name: string | null;
+      variant_kitchen_name: string | null;
       descriptions: Record<string, string>;
+      variant_descriptions: Record<string, string> | null;
       unit_price_gross?: string;
     }>(sql`
-      select variant_id, variant_name, kitchen_name, descriptions, unit_price_gross
+      select variant_id, name, variant_name, kitchen_name, variant_kitchen_name, descriptions,
+             variant_descriptions, unit_price_gross
       from working_order_lines where tenant_id = ${cfg.tenantId}
       union all
-      select variant_id, variant_name, kitchen_name, descriptions, null
+      select variant_id, name, variant_name, kitchen_name, variant_kitchen_name, descriptions,
+             variant_descriptions, null
       from sale_lines where tenant_id = ${cfg.tenantId}
       order by unit_price_gross nulls last`);
+    const names = {
+      variant_id: variantIds!.double,
+      name: "Agua mineral",
+      variant_name: "Doble",
+      kitchen_name: "COLD BAR",
+      variant_kitchen_name: "DBL",
+      descriptions: { [LOCALE]: "Agua mineral" },
+      variant_descriptions: { [LOCALE]: "Doble ración" },
+    };
     expect(snapshots.rows).toEqual([
-      {
-        variant_id: variantIds!.double,
-        variant_name: { [LOCALE]: "Doble" },
-        kitchen_name: "COLD BAR",
-        descriptions: { [LOCALE]: "Agua mineral · Doble" },
-        unit_price_gross: "4.10",
-      },
-      {
-        variant_id: variantIds!.double,
-        variant_name: { [LOCALE]: "Doble" },
-        kitchen_name: "COLD BAR",
-        descriptions: { [LOCALE]: "Agua mineral · Doble" },
-        unit_price_gross: null,
-      },
+      { ...names, unit_price_gross: "4.10" },
+      { ...names, unit_price_gross: null },
     ]);
   });
+  it("prints the variant on the receipt line that identifies the goods (art. 7.1.e)", async () => {
+    const { cfg, zoneId, waterOfferId, variantIds } = await setupVenue({ variants: true });
+    const result = await recordTillSale({ db: suite.admin, backend, clock }, cfg, {
+      zoneId,
+      lines: [{ menuItemId: waterOfferId, variantId: variantIds!.double, quantity: "1" }],
+      tender: { method: "cash", amount: "4.10" },
+    });
+
+    // Straight from the filed sale into the REAL receipt formatter, so this is the paper a customer
+    // is handed. RD 1619/2012 art. 7.1.e is the identification of the goods: a 4.10 line that reads
+    // only "Agua mineral" does not say which size was sold, and the price makes sense only with it.
+    const paper = printedLines(
+      formatReceipt({
+        result,
+        issuer: { venueName: "Deli Test SL", nif: "B12345678" },
+        receipt: {},
+        invoiceLocale: LOCALE,
+        printer: { paperWidth: "80mm", resolution: "203dpi", characterSet: "pc858" },
+      }),
+    ).join("\n");
+    expect(result.lines[0]!.descriptions).toEqual({ [LOCALE]: "Agua mineral · Doble ración" });
+    expect(paper).toContain("Agua mineral · Doble ración");
+  });
+
   it("keeps distinct variants and their parked facts after live catalogue edits", async () => {
     const { cfg, zoneId, waterOfferId, waterProductId, variantIds } = await setupVenue({
       variants: true,
@@ -322,7 +369,7 @@ describe("recordTillSale", () => {
         { zoneId },
       );
       await updateProduct(tx, cfg.tenantId, waterProductId, {
-        descriptions: { [LOCALE]: "Agua renombrada" },
+        name: "Agua renombrada",
         kitchenName: "NEW BAR",
         unitPrice: "99.00",
       });
@@ -333,13 +380,19 @@ describe("recordTillSale", () => {
         [
           {
             id: variantIds!.double,
-            name: { [LOCALE]: "Doble nuevo" },
+            name: "Doble nuevo",
+            customerName: null,
+            kitchenName: null,
+            image: null,
             unitPrice: "30.00",
             available: true,
           },
           {
             id: variantIds!.unavailable,
-            name: { [LOCALE]: "Fuera nuevo" },
+            name: "Fuera nuevo",
+            customerName: null,
+            kitchenName: null,
+            image: null,
             unitPrice: "40.00",
             available: true,
           },
@@ -360,25 +413,35 @@ describe("recordTillSale", () => {
     expect(result.total).toBe("8.90");
     const stored = await suite.admin.execute<{
       variant_id: string;
-      variant_name: Record<string, string>;
-      kitchen_name: string;
+      name: string;
+      variant_name: string | null;
+      kitchen_name: string | null;
+      variant_kitchen_name: string | null;
       descriptions: Record<string, string>;
+      variant_descriptions: Record<string, string> | null;
     }>(sql`
-      select variant_id, variant_name, kitchen_name, descriptions
+      select variant_id, name, variant_name, kitchen_name, variant_kitchen_name, descriptions,
+             variant_descriptions
       from sale_lines where tenant_id = ${cfg.tenantId}
       order by line_no`);
     expect(stored.rows).toEqual([
       {
         variant_id: variantIds!.double,
-        variant_name: { [LOCALE]: "Doble" },
+        name: "Agua mineral",
+        variant_name: "Doble",
         kitchen_name: "COLD BAR",
-        descriptions: { [LOCALE]: "Agua mineral · Doble" },
+        variant_kitchen_name: "DBL",
+        descriptions: { [LOCALE]: "Agua mineral" },
+        variant_descriptions: { [LOCALE]: "Doble ración" },
       },
       {
         variant_id: variantIds!.unavailable,
-        variant_name: { [LOCALE]: "Fuera" },
+        name: "Agua mineral",
+        variant_name: "Fuera",
         kitchen_name: "COLD BAR",
-        descriptions: { [LOCALE]: "Agua mineral · Fuera" },
+        variant_kitchen_name: null,
+        descriptions: { [LOCALE]: "Agua mineral" },
+        variant_descriptions: { [LOCALE]: "Fuera" },
       },
     ]);
   });
@@ -546,9 +609,12 @@ describe("recordTillSale", () => {
  * the point. A bare-`es` product on a `{es-ES}` venue would otherwise be REJECTED by the trigger.
  */
 describe("priceOrderLines re-keys bare catalogue content to the venue invoice_locales", () => {
+  // `customerName` is the per-language text the re-key acts on. The staff `name` is deliberately a
+  // string no assertion expects, so a line that fell back to it instead of re-keying the customer
+  // name would fail rather than pass by coincidence.
   async function setupBareVenue(
     invoiceLocales: string[],
-    descriptions: Record<string, string>,
+    customerName: Record<string, string>,
   ): Promise<{ cfg: TillConfig; productId: string }> {
     const venue = await applyVenue(
       planVenue(
@@ -591,7 +657,8 @@ describe("priceOrderLines re-keys bare catalogue content to the venue invoice_lo
       const product = await createProduct(tx, cfg.tenantId, {
         catalogueId: cat.id,
         categoryId: bebidas.id,
-        descriptions,
+        name: "Bare staff name",
+        customerName,
         pricingUnit: "each",
         unitPrice: "1.50",
         vatClass: "general",
@@ -731,7 +798,7 @@ describe("ordering modifiers — parent + child lines", () => {
       const burger = await createProduct(tx, cfg.tenantId, {
         catalogueId: cat.id,
         categoryId: comida.id,
-        descriptions: { es: "Hamburguesa" },
+        name: "Hamburguesa",
         pricingUnit: "each",
         unitPrice: "9.00",
         vatClass: "general",
@@ -739,7 +806,7 @@ describe("ordering modifiers — parent + child lines", () => {
       const menu = await createProduct(tx, cfg.tenantId, {
         catalogueId: cat.id,
         categoryId: comida.id,
-        descriptions: { es: "Menú" },
+        name: "Menú",
         pricingUnit: "each",
         unitPrice: "12.00",
         vatClass: "general",
@@ -747,7 +814,7 @@ describe("ordering modifiers — parent + child lines", () => {
       await createProduct(tx, cfg.tenantId, {
         catalogueId: cat.id,
         categoryId: comida.id,
-        descriptions: { es: "Jamón" },
+        name: "Jamón",
         pricingUnit: "weight",
         unitPrice: "24.90",
         vatClass: "reduced",
@@ -757,7 +824,7 @@ describe("ordering modifiers — parent + child lines", () => {
       const combo = await createProduct(tx, cfg.tenantId, {
         catalogueId: cat.id,
         categoryId: comida.id,
-        descriptions: { es: "Combo" },
+        name: "Combo",
         pricingUnit: "each",
         unitPrice: "8.00",
         vatClass: "general",
@@ -767,7 +834,7 @@ describe("ordering modifiers — parent + child lines", () => {
       const plato = await createProduct(tx, cfg.tenantId, {
         catalogueId: cat.id,
         categoryId: comida.id,
-        descriptions: { es: "Plato" },
+        name: "Plato",
         pricingUnit: "each",
         unitPrice: "10.00",
         vatClass: "general",
@@ -907,12 +974,11 @@ describe("ordering modifiers — parent + child lines", () => {
     return { cfg, available };
   }
 
-  const burgerOf = (v: ModifierVenue) =>
-    v.available.find((p) => p.descriptions.es === "Hamburguesa")!;
-  const menuOf = (v: ModifierVenue) => v.available.find((p) => p.descriptions.es === "Menú")!;
-  const jamonOf = (v: ModifierVenue) => v.available.find((p) => p.descriptions.es === "Jamón")!;
-  const comboOf = (v: ModifierVenue) => v.available.find((p) => p.descriptions.es === "Combo")!;
-  const platoOf = (v: ModifierVenue) => v.available.find((p) => p.descriptions.es === "Plato")!;
+  const burgerOf = (v: ModifierVenue) => v.available.find((p) => p.name === "Hamburguesa")!;
+  const menuOf = (v: ModifierVenue) => v.available.find((p) => p.name === "Menú")!;
+  const jamonOf = (v: ModifierVenue) => v.available.find((p) => p.name === "Jamón")!;
+  const comboOf = (v: ModifierVenue) => v.available.find((p) => p.name === "Combo")!;
+  const platoOf = (v: ModifierVenue) => v.available.find((p) => p.name === "Plato")!;
   const itemOf = (p: AvailableProduct, name: string) =>
     p.optionGroups.flatMap((g) => g.items).find((i) => i.name.es === name)!;
 

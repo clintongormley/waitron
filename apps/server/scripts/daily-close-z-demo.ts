@@ -157,6 +157,7 @@ async function ringSale(
     lines: [
       {
         lineNo: 1,
+        name: spec.description,
         descriptions: { [LOCALE]: spec.description },
         quantity: "1",
         unitPrice: spec.base,

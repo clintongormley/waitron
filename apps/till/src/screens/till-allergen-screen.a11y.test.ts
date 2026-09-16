@@ -9,7 +9,8 @@ import type { TillProduct } from "../api/client.js";
 const products: TillProduct[] = [
   {
     id: "coffee",
-    descriptions: { es: "Café", en: "Coffee" },
+    name: "Café",
+    customerName: { es: "Café para el cliente", en: "Coffee for the customer" },
     pricingUnit: "each",
     unitPrice: "1.50",
     vatClass: "general",
@@ -18,7 +19,8 @@ const products: TillProduct[] = [
   },
   {
     id: "sandwich",
-    descriptions: { es: "Bocadillo", en: "Sandwich" },
+    name: "Bocadillo",
+    customerName: { es: "Bocadillo para el cliente", en: "Sandwich for the customer" },
     pricingUnit: "each",
     unitPrice: "4.00",
     vatClass: "reduced",
@@ -33,7 +35,8 @@ const products: TillProduct[] = [
   },
   {
     id: "water",
-    descriptions: { es: "Agua", en: "Water" },
+    name: "Agua",
+    customerName: { es: "Agua para el cliente", en: "Water for the customer" },
     pricingUnit: "each",
     unitPrice: "1.00",
     vatClass: "general",
@@ -62,7 +65,7 @@ describe.each(["light", "dark"] as const)("till-allergen-screen a11y (%s theme)"
     );
     const rows = [...el.shadowRoot!.querySelectorAll<HTMLTableRowElement>("tbody tr")];
     const sandwich = rows.find((r) =>
-      r.querySelector(".row-open")?.textContent?.includes("Sandwich"),
+      r.querySelector(".row-open")?.textContent?.includes("Bocadillo"),
     );
     sandwich!.querySelector<HTMLElement>(".row-open")!.click();
     await el.updateComplete;

@@ -53,6 +53,7 @@ function buildInput(s: SeededForSale, settledAt: Date): RecordSaleInput {
     lines: [
       {
         lineNo: 1,
+        name: "Item",
         descriptions: { es: "Item" },
         quantity: "1",
         unitPrice: "10.00",

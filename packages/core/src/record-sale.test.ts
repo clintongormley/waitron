@@ -124,6 +124,7 @@ function input(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
     lines: [
       {
         lineNo: 1,
+        name: "Café solo",
         descriptions: { "es-ES": "Café solo", "ca-ES": "Cafè sol" },
         quantity: "2",
         unitPrice: "5.00",
@@ -132,6 +133,7 @@ function input(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
       },
       {
         lineNo: 2,
+        name: "Agua",
         descriptions: { "es-ES": "Agua", "ca-ES": "Aigua" },
         quantity: "1",
         unitPrice: "2.10",
@@ -341,6 +343,7 @@ describe("recordSale — the happy path", () => {
       lines: [
         {
           lineNo: 1,
+          name: "Café solo",
           descriptions: { "es-ES": "Café solo" },
           quantity: "1",
           unitPrice: "5.00",
@@ -349,6 +352,7 @@ describe("recordSale — the happy path", () => {
         },
         {
           lineNo: 2,
+          name: "Té",
           descriptions: { "es-ES": "Té" },
           quantity: "1",
           unitPrice: "3.00",
@@ -389,6 +393,7 @@ describe("recordSale — the happy path", () => {
       lines: [
         {
           lineNo: 1,
+          name: "Café solo",
           descriptions: { "es-ES": "Café solo" },
           quantity: "1",
           unitPrice: "8.26",
@@ -397,6 +402,7 @@ describe("recordSale — the happy path", () => {
         },
         {
           lineNo: 2,
+          name: "Agua",
           descriptions: { "es-ES": "Agua" },
           quantity: "1",
           unitPrice: "5.00",
@@ -760,6 +766,7 @@ describe("recordSale — settlement modes", () => {
       lines: [
         {
           lineNo: 1,
+          name: "Free item",
           descriptions: { "es-ES": "Free item", "ca-ES": "Free item" },
           quantity: "1",
           unitPrice: "0.00",
@@ -978,6 +985,7 @@ describe("recordSale — caller-supplied vatBreakdown and line category", () => 
       lines: [
         {
           lineNo: 1,
+          name: "x",
           descriptions: { en: "x" },
           quantity: "0.320",
           unitPrice: "22.64",
@@ -1002,6 +1010,7 @@ describe("recordSale — caller-supplied vatBreakdown and line category", () => 
       lines: [
         {
           lineNo: 1,
+          name: "x",
           descriptions: { en: "x" },
           quantity: "1",
           unitPrice: "10.00",
@@ -1031,6 +1040,7 @@ describe("recordSale — caller-supplied vatBreakdown and line category", () => 
         lines: [
           {
             lineNo: 1,
+            name: "x",
             descriptions: { en: "x" },
             quantity: "1",
             unitPrice: "7.25",
@@ -1054,6 +1064,7 @@ describe("recordSale — caller-supplied vatBreakdown and line category", () => 
       lines: [
         {
           lineNo: 1,
+          name: "Water",
           descriptions: { en: "Water" },
           quantity: "1",
           unitPrice: "1.50",
@@ -1078,6 +1089,7 @@ describe("recordSale — caller-supplied vatBreakdown and line category", () => 
       lines: [
         {
           lineNo: 1,
+          name: "Water",
           descriptions: { en: "Water" },
           quantity: "1",
           unitPrice: "1.50",
@@ -1105,6 +1117,7 @@ describe("recordSale — modifier child lines (parent_line_id)", () => {
       lines: [
         {
           lineNo: 1,
+          name: "Hamburguesa",
           descriptions: { "es-ES": "Hamburguesa" },
           quantity: "1",
           unitPrice: "5.00",
@@ -1113,6 +1126,7 @@ describe("recordSale — modifier child lines (parent_line_id)", () => {
         },
         {
           lineNo: 2,
+          name: "Extra de queso",
           descriptions: { "es-ES": "Extra de queso" },
           quantity: "1",
           unitPrice: "1.00",
@@ -1146,6 +1160,7 @@ describe("recordSale — modifier child lines (parent_line_id)", () => {
       lines: [
         {
           lineNo: 1,
+          name: "Hamburguesa",
           descriptions: { "es-ES": "Hamburguesa" },
           quantity: "1",
           unitPrice: "5.00",
@@ -1154,6 +1169,7 @@ describe("recordSale — modifier child lines (parent_line_id)", () => {
         },
         {
           lineNo: 2,
+          name: "Agua",
           descriptions: { "es-ES": "Agua" },
           quantity: "1",
           unitPrice: "1.05",
@@ -1179,6 +1195,7 @@ describe("recordSale — modifier child lines (parent_line_id)", () => {
       lines: [
         {
           lineNo: 1,
+          name: "Hamburguesa",
           descriptions: { "es-ES": "Hamburguesa" },
           quantity: "1",
           unitPrice: "5.00",
@@ -1187,6 +1204,7 @@ describe("recordSale — modifier child lines (parent_line_id)", () => {
         },
         {
           lineNo: 2,
+          name: "Extra de queso",
           descriptions: { "es-ES": "Extra de queso" },
           quantity: "1",
           unitPrice: "1.05",
@@ -1215,6 +1233,7 @@ describe("recordSale — modifier child lines (parent_line_id)", () => {
       lines: [
         {
           lineNo: 1,
+          name: "Hamburguesa",
           descriptions: { "es-ES": "Hamburguesa" },
           quantity: "1",
           unitPrice: "5.00",
@@ -1223,6 +1242,7 @@ describe("recordSale — modifier child lines (parent_line_id)", () => {
         },
         {
           lineNo: 2,
+          name: "Extra de queso",
           descriptions: { "es-ES": "Extra de queso" },
           quantity: "1",
           unitPrice: "1.00",

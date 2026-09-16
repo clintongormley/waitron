@@ -34,8 +34,8 @@ async function product(tenantId: string, id: string | null = null): Promise<stri
     insert into catalogues (tenant_id, name) values (${tenantId}, 'Menu') returning id`);
   return (
     await suite.admin.execute<{ id: string }>(sql`
-      insert into products (id, tenant_id, catalogue_id, descriptions, pricing_unit, unit_price, vat_class)
-      values (coalesce(${id}::uuid, gen_random_uuid()), ${tenantId}, ${menu.rows[0]!.id}, '{"en":"Soup"}', 'each', 1, 'general')
+      insert into products (id, tenant_id, catalogue_id, name, pricing_unit, unit_price, vat_class)
+      values (coalesce(${id}::uuid, gen_random_uuid()), ${tenantId}, ${menu.rows[0]!.id}, 'Soup', 'each', 1, 'general')
       returning id`)
   ).rows[0]!.id;
 }

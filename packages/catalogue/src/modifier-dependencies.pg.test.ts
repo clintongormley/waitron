@@ -65,7 +65,7 @@ async function fixture() {
     const product = await createProduct(tx, venue.tenantId, {
       catalogueId: menu.id,
       categoryId: null,
-      descriptions: { en: "Coffee" },
+      name: "Coffee",
       pricingUnit: "each",
       unitPrice: "2.00",
       vatClass: "reduced",
@@ -253,6 +253,7 @@ it("refuses deletion solely because an actual order retains a saved modifier sna
       workingOrderId: order!.id,
       productId: product.id,
       lineNo: 1,
+      name: "Coffee",
       descriptions: { "en-GB": "Coffee" },
       modifierSnapshots: snapshots,
       quantity: "1",

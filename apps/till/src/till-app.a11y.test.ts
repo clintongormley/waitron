@@ -9,7 +9,8 @@ const defaultMenu = { id: "cat-default", name: "Carta", isDefault: true };
 const products: TillProduct[] = [
   {
     id: "p1",
-    descriptions: { "es-ES": "Café" },
+    name: "Café",
+    customerName: { "es-ES": "Café para el cliente" },
     pricingUnit: "each",
     unitPrice: "1.50",
     vatClass: "general",
@@ -50,7 +51,8 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
           active: true,
           menuName: defaultMenu.name,
           sectionName: { en: "Other" },
-          descriptions: products[0]!.descriptions,
+          name: products[0]!.name,
+          customerName: products[0]!.customerName ?? null,
           pricingUnit: products[0]!.pricingUnit,
           vatClass: products[0]!.vatClass,
           category: "Other",

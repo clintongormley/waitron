@@ -14,7 +14,8 @@ import type { TillProduct } from "../api/client.js";
 // A gross-1.50 espresso at the general rate; the brief's worked example (×2 = "3.00").
 const cafe: TillProduct = {
   id: "cafe",
-  descriptions: { es: "Café" },
+  name: "Café",
+  customerName: { es: "Café para el cliente" },
   unit: {
     id: "unit-each",
     name: { en: "unit", es: "unidad" },
@@ -31,7 +32,8 @@ const cafe: TillProduct = {
 // A weight product priced per kg: 10.00/kg gross at the reduced rate.
 const jamon: TillProduct = {
   id: "jamon",
-  descriptions: { es: "Jamón" },
+  name: "Jamón",
+  customerName: { es: "Jamón para el cliente" },
   unit: {
     id: "unit-kg",
     name: { en: "kg", es: "kg" },

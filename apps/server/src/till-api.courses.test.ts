@@ -54,8 +54,9 @@ let ana: { id: string };
 let entCourseId: string;
 let priCourseId: string;
 
-// Distinct `es-ES` descriptions, so a queue item can be matched back to the product it was fired from
-// (the queue serialises `descriptions`, not `productId`). `PAN` carries NO course (course: null) — it
+// Distinct staff names, so a queue item can be matched back to the product it was fired from (the
+// queue serialises the resolved kitchen name, not `productId`, and none of these three carries a
+// kitchen name of its own so each falls back to its staff name). `PAN` carries NO course (course: null) — it
 // fires immediately like the earliest course (§2b) — proving the null-course serialisation too.
 const SOPA = "Sopa"; // Entrantes (earliest) → auto-fires
 const FILETE = "Filete"; // Principales (later) → held
@@ -102,7 +103,7 @@ const suite = usePgliteDb({
         const p = await createProduct(tx, tenantId, {
           catalogueId: catalogue.id,
           categoryId: category.id,
-          descriptions: { es: description },
+          name: description,
           pricingUnit: "each",
           unitPrice: "1.50",
           vatClass: "general",
@@ -200,7 +201,7 @@ async function openSession(db: Database): Promise<string> {
 type QueueCourse = { id: string; name: string; displayOrder: number } | null;
 type QueueItem = {
   id: string;
-  descriptions: Record<string, string>;
+  name: string;
   state: string;
   course: QueueCourse;
   firedAt: string | null;
@@ -242,38 +243,33 @@ async function cocinaId(): Promise<string> {
 }
 
 /** The order's items at the default station, keyed by their `es-ES` description. */
-async function queueItemsByDescription(
-  orderId: string,
-  station: string,
-): Promise<Map<string, QueueItem>> {
+async function queueItemsByName(orderId: string, station: string): Promise<Map<string, QueueItem>> {
   const res = await app.request(`/api/stations/${station}/queue`, { headers: { cookie } });
   expect(res.status).toBe(200);
   const groups = (await res.json()) as QueueGroup[];
   const group = groups.find((g) => g.orderId === orderId)!;
-  return new Map(group.items.map((i) => [i.descriptions["es-ES"]!, i]));
+  return new Map(group.items.map((i) => [i.name, i]));
 }
 
-// The product ids are resolved once (by description) from GET /api/products, so park bodies can name
-// them — the queue serialises descriptions, not productId, so this is the only place ids are needed.
+// The product ids are resolved once (by staff name) from GET /api/products, so park bodies can name
+// them — the queue serialises names, not productId, so this is the only place ids are needed.
 // The route now returns `{ menus, products }`; only `products` is needed here.
-async function productIdsByDescription(): Promise<Map<string, string>> {
+async function productIdsByName(): Promise<Map<string, string>> {
   const res = await app.request("/api/products", { headers: { cookie } });
   expect(res.status).toBe(200);
-  const { products } = (await res.json()) as {
-    products: { id: string; descriptions: Record<string, string> }[];
-  };
-  return new Map(products.map((p) => [p.descriptions.es!, p.id]));
+  const { products } = (await res.json()) as { products: { id: string; name: string }[] };
+  return new Map(products.map((p) => [p.name, p.id]));
 }
 
-async function placeOrder(descriptions: string[]): Promise<string> {
-  const ids = await productIdsByDescription();
+async function placeOrder(names: string[]): Promise<string> {
+  const ids = await productIdsByName();
   const id = randomUUID();
   const park = await app.request("/api/working-orders", {
     method: "POST",
     headers: { "content-type": "application/json", cookie },
     body: JSON.stringify({
       id,
-      lines: descriptions.map((d) => ({ productId: ids.get(d)!, quantity: "1" })),
+      lines: names.map((d) => ({ productId: ids.get(d)!, quantity: "1" })),
     }),
   });
   expect(park.status).toBe(200);
@@ -289,7 +285,7 @@ async function placeOrder(descriptions: string[]): Promise<string> {
  *  2) as one round; returns the tab id. SOPA is fired-not-started (recallable); FILETE holds a Principales
  *  ticket-item snapshot until it is sent. Shared by the A1 re-course, A2 send and A4 recall blocks. */
 async function tabWithSopaAndFilete(): Promise<string> {
-  const ids = await productIdsByDescription();
+  const ids = await productIdsByName();
   const table = await app.request("/api/tables", {
     method: "POST",
     headers: { "content-type": "application/json", cookie },
@@ -322,7 +318,7 @@ describe("KDS-2 fire route + station-queue course/firedAt serialisation", () => 
   it("auto-fires the earliest course + the loose line, holds the later course, and the queue carries course + firedAt", async () => {
     const orderId = await placeOrder([SOPA, FILETE, PAN]);
     const station = await cocinaId();
-    const items = await queueItemsByDescription(orderId, station);
+    const items = await queueItemsByName(orderId, station);
     expect(items.size).toBe(3);
 
     // The loose (courseless) line fires immediately and serialises course: null.
@@ -349,7 +345,7 @@ describe("KDS-2 fire route + station-queue course/firedAt serialisation", () => 
   it("a HELD item cannot advance (409 ticket.item_held); firing its course releases it, and it then advances", async () => {
     const orderId = await placeOrder([SOPA, FILETE]);
     const station = await cocinaId();
-    const heldItemId = (await queueItemsByDescription(orderId, station)).get(FILETE)!.id;
+    const heldItemId = (await queueItemsByName(orderId, station)).get(FILETE)!.id;
 
     // Before firing: the held item is non-advanceable — the kitchen must not bump food not yet started.
     const held = await app.request(`/api/ticket-items/${heldItemId}/advance`, {
@@ -369,7 +365,7 @@ describe("KDS-2 fire route + station-queue course/firedAt serialisation", () => 
     });
     expect(fire.status).toBe(200);
     expect(await fire.text()).toBe("");
-    expect((await queueItemsByDescription(orderId, station)).get(FILETE)!.firedAt).not.toBeNull();
+    expect((await queueItemsByName(orderId, station)).get(FILETE)!.firedAt).not.toBeNull();
 
     // Now the (fired) item advances.
     const advance = await app.request(`/api/ticket-items/${heldItemId}/advance`, {
@@ -378,7 +374,7 @@ describe("KDS-2 fire route + station-queue course/firedAt serialisation", () => 
       body: JSON.stringify({ to: "preparing" }),
     });
     expect(advance.status).toBe(200);
-    expect((await queueItemsByDescription(orderId, station)).get(FILETE)!.state).toBe("preparing");
+    expect((await queueItemsByName(orderId, station)).get(FILETE)!.state).toBe("preparing");
   });
 
   it("fire with an unknown or malformed course → 404 course.not_found; a malformed order → 404 working_order.not_found", async () => {
@@ -426,9 +422,7 @@ describe("PATCH /api/working-orders/:id/lines/:lineNo/course (A1 re-course a hel
     const tabId = await tabWithSopaAndFilete();
     const station = await cocinaId();
     // The held Principales line (line 2) carries a Principales course snapshot in the queue.
-    expect((await queueItemsByDescription(tabId, station)).get(FILETE)!.course!.id).toBe(
-      priCourseId,
-    );
+    expect((await queueItemsByName(tabId, station)).get(FILETE)!.course!.id).toBe(priCourseId);
 
     // Move it onto Entrantes.
     const move = await app.request(`/api/working-orders/${tabId}/lines/2/course`, {
@@ -437,9 +431,7 @@ describe("PATCH /api/working-orders/:id/lines/:lineNo/course (A1 re-course a hel
       body: JSON.stringify({ courseId: entCourseId }),
     });
     expect(move.status).toBe(200);
-    expect((await queueItemsByDescription(tabId, station)).get(FILETE)!.course!.id).toBe(
-      entCourseId,
-    );
+    expect((await queueItemsByName(tabId, station)).get(FILETE)!.course!.id).toBe(entCourseId);
 
     // Clear it to null (the courseId === null route branch) — the item now serialises no course.
     const clear = await app.request(`/api/working-orders/${tabId}/lines/2/course`, {
@@ -448,7 +440,7 @@ describe("PATCH /api/working-orders/:id/lines/:lineNo/course (A1 re-course a hel
       body: JSON.stringify({ courseId: null }),
     });
     expect(clear.status).toBe(200);
-    expect((await queueItemsByDescription(tabId, station)).get(FILETE)!.course).toBeNull();
+    expect((await queueItemsByName(tabId, station)).get(FILETE)!.course).toBeNull();
   });
 
   it("an empty {} body (courseId key absent) clears the course cleanly (200), never a 500", async () => {
@@ -459,9 +451,7 @@ describe("PATCH /api/working-orders/:id/lines/:lineNo/course (A1 re-course a hel
     // priCourseId; an empty-body PATCH must land it on null, not error.
     const tabId = await tabWithSopaAndFilete();
     const station = await cocinaId();
-    expect((await queueItemsByDescription(tabId, station)).get(FILETE)!.course!.id).toBe(
-      priCourseId,
-    );
+    expect((await queueItemsByName(tabId, station)).get(FILETE)!.course!.id).toBe(priCourseId);
 
     const res = await app.request(`/api/working-orders/${tabId}/lines/2/course`, {
       method: "PATCH",
@@ -469,7 +459,7 @@ describe("PATCH /api/working-orders/:id/lines/:lineNo/course (A1 re-course a hel
       body: JSON.stringify({}),
     });
     expect(res.status).toBe(200);
-    expect((await queueItemsByDescription(tabId, station)).get(FILETE)!.course).toBeNull();
+    expect((await queueItemsByName(tabId, station)).get(FILETE)!.course).toBeNull();
   });
 
   it("a malformed courseId is 404 course.not_found, screened before any DB touch", async () => {
@@ -504,7 +494,7 @@ describe("POST /api/working-orders/:id/lines/send (A2 fire specific held lines /
     const tabId = await tabWithSopaAndFilete();
     const station = await cocinaId();
     // The Principales line (line 2) is held — no fired_at in the station queue yet.
-    expect((await queueItemsByDescription(tabId, station)).get(FILETE)!.firedAt).toBeNull();
+    expect((await queueItemsByName(tabId, station)).get(FILETE)!.firedAt).toBeNull();
 
     const res = await app.request(`/api/working-orders/${tabId}/lines/send`, {
       method: "POST",
@@ -513,13 +503,13 @@ describe("POST /api/working-orders/:id/lines/send (A2 fire specific held lines /
     });
     expect(res.status).toBe(200);
     // Sent → fired_at now set, so the kitchen can start it.
-    expect((await queueItemsByDescription(tabId, station)).get(FILETE)!.firedAt).not.toBeNull();
+    expect((await queueItemsByName(tabId, station)).get(FILETE)!.firedAt).not.toBeNull();
   });
 
   it("an OMITTED line list sends all held lines (200) — the send-all default", async () => {
     const tabId = await tabWithSopaAndFilete();
     const station = await cocinaId();
-    expect((await queueItemsByDescription(tabId, station)).get(FILETE)!.firedAt).toBeNull();
+    expect((await queueItemsByName(tabId, station)).get(FILETE)!.firedAt).toBeNull();
 
     // No `lineNos` in the body → `body.lineNos ?? []` → release every held line of the tab.
     const res = await app.request(`/api/working-orders/${tabId}/lines/send`, {
@@ -528,7 +518,7 @@ describe("POST /api/working-orders/:id/lines/send (A2 fire specific held lines /
       body: JSON.stringify({}),
     });
     expect(res.status).toBe(200);
-    expect((await queueItemsByDescription(tabId, station)).get(FILETE)!.firedAt).not.toBeNull();
+    expect((await queueItemsByName(tabId, station)).get(FILETE)!.firedAt).not.toBeNull();
   });
 
   it("a malformed tab id is 409 tab.not_open, screened by requireTabParam before any DB touch", async () => {
@@ -561,7 +551,7 @@ describe("POST /api/working-orders/:id/lines/recall (A4 un-send a not-started li
     const tabId = await tabWithSopaAndFilete();
     const station = await cocinaId();
     // SOPA (line 1) auto-fired at round-send — the queue shows it fired.
-    expect((await queueItemsByDescription(tabId, station)).get(SOPA)!.firedAt).not.toBeNull();
+    expect((await queueItemsByName(tabId, station)).get(SOPA)!.firedAt).not.toBeNull();
 
     const res = await app.request(`/api/working-orders/${tabId}/lines/recall`, {
       method: "POST",
@@ -570,13 +560,13 @@ describe("POST /api/working-orders/:id/lines/recall (A4 un-send a not-started li
     });
     expect(res.status).toBe(200);
     // Recalled → fired_at cleared, so the line greys back to held on the station display.
-    expect((await queueItemsByDescription(tabId, station)).get(SOPA)!.firedAt).toBeNull();
+    expect((await queueItemsByName(tabId, station)).get(SOPA)!.firedAt).toBeNull();
   });
 
   it("refuses a STARTED line (409 ticket.already_started), naming its item id", async () => {
     const tabId = await tabWithSopaAndFilete();
     const station = await cocinaId();
-    const sopaItemId = (await queueItemsByDescription(tabId, station)).get(SOPA)!.id;
+    const sopaItemId = (await queueItemsByName(tabId, station)).get(SOPA)!.id;
 
     // The kitchen begins the (fired) SOPA line — advance it to `preparing` via the bump route.
     const advance = await app.request(`/api/ticket-items/${sopaItemId}/advance`, {
@@ -626,7 +616,7 @@ describe("POST /api/working-orders/:id/lines/recall (A4 un-send a not-started li
 // KDS-3 expo (pass) routes: the cross-station queue read + the whole-course `ready`/`away` verbs, over
 // the SAME seeded courses/products/station as the KDS-2 block above (shared `suite`/`app`/`cookie`).
 type ExpoItem = {
-  name: Record<string, string>;
+  name: string;
   stationName: string;
   state: string;
   firedAt: string | null;
@@ -652,16 +642,16 @@ async function expoOrder(orderId: string): Promise<ExpoOrder> {
   return orders.find((o) => o.orderId === orderId)!;
 }
 
-/** An expo order's items across ALL its courses, keyed by their `es-ES` description. */
-function itemsByDescription(order: ExpoOrder): Map<string, ExpoItem> {
-  return new Map(order.courses.flatMap((c) => c.items).map((i) => [i.name["es-ES"]!, i]));
+/** An expo order's items across ALL its courses, keyed by their resolved kitchen name. */
+function itemsByName(order: ExpoOrder): Map<string, ExpoItem> {
+  return new Map(order.courses.flatMap((c) => c.items).map((i) => [i.name, i]));
 }
 
 describe("KDS-3 expo routes: cross-station queue read + whole-course ready/away", () => {
   it("GET /api/expo/queue aggregates the node's order into courses; each item carries its station name + fired/away roll-ups", async () => {
     const orderId = await placeOrder([SOPA, FILETE, PAN]);
     const order = await expoOrder(orderId);
-    const items = itemsByDescription(order);
+    const items = itemsByName(order);
     expect(items.size).toBe(3);
 
     // Every item carries the cross-station label the station-scoped read omits (the seeded default "Cocina").
@@ -679,7 +669,7 @@ describe("KDS-3 expo routes: cross-station queue read + whole-course ready/away"
     // Nothing dispatched yet → away:false everywhere, and the loose PAN line sits in the null course.
     expect(ent.away).toBe(false);
     expect(items.get(SOPA)!.awayAt).toBeNull();
-    expect(order.courses.find((c) => c.courseId === null)!.items[0]!.name["es-ES"]).toBe(PAN);
+    expect(order.courses.find((c) => c.courseId === null)!.items[0]!.name).toBe(PAN);
   });
 
   it("the ready route bumps a fired course to `ready` across stations; the away route then dispatches it", async () => {
@@ -692,7 +682,7 @@ describe("KDS-3 expo routes: cross-station queue read + whole-course ready/away"
     });
     expect(ready.status).toBe(200);
     expect(await ready.text()).toBe("");
-    expect(itemsByDescription(await expoOrder(orderId)).get(SOPA)!.state).toBe("ready");
+    expect(itemsByName(await expoOrder(orderId)).get(SOPA)!.state).toBe("ready");
 
     // Dispatch the plated course to the floor → away_at stamped on its ready items.
     const away = await app.request(`/api/orders/${orderId}/courses/${entCourseId}/away`, {
@@ -702,7 +692,7 @@ describe("KDS-3 expo routes: cross-station queue read + whole-course ready/away"
     expect(away.status).toBe(200);
     expect(await away.text()).toBe("");
     // The order survives the read (its held Principales is not away), so the dispatched item is still visible.
-    expect(itemsByDescription(await expoOrder(orderId)).get(SOPA)!.awayAt).not.toBeNull();
+    expect(itemsByName(await expoOrder(orderId)).get(SOPA)!.awayAt).not.toBeNull();
   });
 
   it("away → 404 course.not_found for an unknown/malformed course; ready no-ops (200) on an unknown course; a malformed order → 404 working_order.not_found", async () => {
