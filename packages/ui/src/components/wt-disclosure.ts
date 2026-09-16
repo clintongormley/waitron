@@ -16,8 +16,10 @@ import "./wt-icon.js";
  */
 @customElement("wt-disclosure")
 export class WtDisclosure extends LitElement {
-  // Delegates .focus() on the host to the header button — the product editor focuses the section
-  // that holds a reported error.
+  // Every interactive primitive delegates focus, so `.focus()` on the host reaches the control
+  // inside — here the header button (design-system.md, "Focus delegation"). Nothing calls it on a
+  // disclosure today: the rule is here so the first consumer that does is not met by a host that
+  // takes focus and leaves the button untouched.
   static override shadowRootOptions = delegatesFocusShadowRootOptions;
 
   static override styles = [

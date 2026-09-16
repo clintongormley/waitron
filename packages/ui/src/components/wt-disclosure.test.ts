@@ -67,8 +67,8 @@ test("summary paints from the muted-text token", async () => {
 });
 
 test("focusing the host delegates focus to the header button", async () => {
-  // The editor moves focus to the section holding a reported error; without delegation the host
-  // takes focus and the header button never becomes the active element.
+  // Without delegation the host itself becomes the active element and nothing inside the shadow
+  // root is focused, which is the state every other interactive primitive here avoids.
   const el = await mount('<wt-disclosure heading="Kitchen"><p>body</p></wt-disclosure>');
   el.focus();
   expect(el.shadowRoot!.activeElement).toBe(el.shadowRoot!.querySelector("button.header"));
