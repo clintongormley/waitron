@@ -123,8 +123,8 @@ export async function recoverProvisionedVenue(
  * unrecoverable SIF/hash chain, §5): a `provision-only` module that is NOT a fiscal-slot member must
  * not be disabled (`module.provision_only_disabled`), and the fiscal slot must resolve to exactly one
  * enabled module (`module.fiscal_slot_empty` / `module.fiscal_slot_ambiguous`).
- * Callers must serialize provisioning: the existence checks and applyVenue use separate transactions.
- * The setup route supplies a process-local latch; these checks reject sequential retries.
+ * Callers must serialize provisioning: the tenant-exists read is not atomic with `applyVenue`.
+ * The setup route supplies a process-local latch; the checks below reject sequential retries.
  * applyVenue commits the tenant, venue rows and enabled module seeds together. After the mint commits,
  * `provisionVenue` writes the resolved `moduleConfig` to `<stateDir>/modules.json` so the trading boot's
  * fiscal slot resolves. The caller persists the remaining configuration and seals credentials after
@@ -162,9 +162,9 @@ export async function provisionVenue(
   // this order: a FOREIGN identity is refused first (`provisioning.foreign_tenant`), because the two
   // businesses' rows would otherwise share one database; only then, if any row is present at all, is
   // it a re-provision (`setup.already_provisioned`) — `tenants_singleton_ck` pins the id to 1, so
-  // the table holds at most one row and a non-empty read IS the taxpayer. The applied identity is the plan's `ensure-tenant` action,
-  // canonicalized by planVenue, so it compares like-for-like with the stored row. Both decisions run
-  // before stamping or minting another venue.
+  // the table holds at most one row and a non-empty read IS the taxpayer. The applied identity is
+  // the plan's `ensure-tenant` action, canonicalized by planVenue, so it compares like-for-like
+  // with the stored row. Both decisions run before stamping or minting another venue.
   const ensure = plan.find((a) => a.kind === "ensure-tenant");
   const present = await readTenantIdentities(deps.ownerDb);
   if (ensure !== undefined && ensure.kind === "ensure-tenant") {

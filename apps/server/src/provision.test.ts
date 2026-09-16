@@ -288,14 +288,14 @@ describe("provisionVenue", () => {
     // NON-canonical casing — a lowercase country and a lowercase NIF, where `nextNif()` ends in an
     // uppercase "K" — so it also pins that casing plays no part in the decision.
     //
-    // WHICH layer refuses it, and what happens without that layer, measured rather than reasoned:
-    // the double-provision guard (`provision.ts`) asks whether the taxpayer row exists at all
-    // — `present.length > 0` on the identities it has already read — and throws
-    // `setup.already_provisioned`. Delete that
-    // guard and this case prints `expected 'provisioning.second_venue' to be
-    // 'setup.already_provisioned'` — so applyVenue's own existing-venue check still stops the second
-    // chain one layer deeper, and what this case pins is that the operator gets the SETUP code rather
-    // than the provisioning one. Both layers are in the diff; neither is redundant.
+    // WHICH layer refuses it, and what happens without that layer. The experiment: delete the
+    // `present.length > 0` throw in `provision.ts` and run this case — it then prints `expected
+    // 'provisioning.second_venue' to be 'setup.already_provisioned'`. So the double-provision guard
+    // asks whether the taxpayer row exists at all — `present.length > 0` on the identities it has
+    // already read — and throws `setup.already_provisioned`; without it, applyVenue's own
+    // existing-venue check still stops the second chain one layer deeper, and what this case pins
+    // is that the operator gets the SETUP code rather than the provisioning one. Both layers are in
+    // the diff; neither is redundant.
     const db = ownerDb();
     const nif = nextNif(); // e.g. "60000001K" — canonical (uppercase)
     const env = "preproduction" as const;

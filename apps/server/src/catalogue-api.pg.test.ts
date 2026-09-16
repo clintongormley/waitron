@@ -23,9 +23,10 @@ const suite = useTemplateDb({ template: "manifest" });
 /** A no-op logger: only the HTTP responses and the database state matter here. */
 const noopLog: Logger = () => {};
 
-// Tenants accumulate for the life of the shared container and `tenants_country_tax_id_key` is unique,
-// so each provisioned venue needs its own NIF — the same per-suite counter `management-api.pg.test.ts`
-// uses.
+// A distinct NIF per provisioned venue — the same per-suite counter `management-api.pg.test.ts`
+// uses. Nothing here depends on them differing: `useTemplateDb` resets the clone between tests and
+// `tenants_singleton_ck` allows one row inside one, so every test provisions into an empty
+// `tenants`.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;

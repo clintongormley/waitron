@@ -87,9 +87,9 @@ export interface CatalogueApiDeps {
   db: Database;
   /**
    * The venue whose kitchen stations and courses the product editor may route a product to. OPTIONAL
-   * because a suite asserting only the permission gate can mount without it; `boot.ts` always
-   * supplies it for a real venue server, and `requireVenueCfg` throws on a routing request that
-   * arrives without one.
+   * so a suite that never routes a product to a station or course can mount without it; `boot.ts`
+   * always supplies it for a real venue server, and `requireVenueCfg` throws on a routing request
+   * that arrives without one.
    */
   venueCfg?: TillConfig;
   venueLocale?: string;
