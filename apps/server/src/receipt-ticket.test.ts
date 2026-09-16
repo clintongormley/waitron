@@ -36,11 +36,13 @@ const PRINTER_80: ReceiptPrinterSettings = {
   paperWidth: "80mm",
   resolution: "180dpi",
   characterSet: "wpc1252",
+  characterTable: 16,
 };
 const PRINTER_58: ReceiptPrinterSettings = {
   paperWidth: "58mm",
   resolution: "180dpi",
   characterSet: "pc858",
+  characterTable: 19,
 };
 
 /**
@@ -213,7 +215,7 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
       }),
     );
 
-    expect(s).toContain("PRUEBA - SIN COBRO REAL");
+    expect(s.match(/PRUEBA - SIN COBRO REAL/g)).toHaveLength(2);
     expect(s).toContain("VERI*FACTU");
   });
 
@@ -733,8 +735,13 @@ describe("formatReceipt — printer layout", () => {
   it.each([
     PRINTER_80,
     PRINTER_58,
-    { paperWidth: "58mm", resolution: "203dpi", characterSet: "plain" } as const,
-    { paperWidth: "80mm", resolution: "203dpi", characterSet: "pc858" } as const,
+    { paperWidth: "58mm", resolution: "203dpi", characterSet: "plain", characterTable: 0 } as const,
+    {
+      paperWidth: "80mm",
+      resolution: "203dpi",
+      characterSet: "pc858",
+      characterTable: 19,
+    } as const,
   ])("keeps every printed line within the column count ($paperWidth, $characterSet)", (printer) => {
     const lines = printedLines(
       formatReceipt({
@@ -895,7 +902,12 @@ describe("formatReceipt — printer layout", () => {
         issuer: ISSUER,
         receipt: {},
         invoiceLocale: "es-ES",
-        printer: { paperWidth: "58mm", resolution: "180dpi", characterSet: "plain" },
+        printer: {
+          paperWidth: "58mm",
+          resolution: "180dpi",
+          characterSet: "plain",
+          characterTable: 0,
+        },
       }),
     );
     expect(lines).toContain(`TOTAL${" ".repeat(16)}20,90 EUR`);
@@ -914,7 +926,7 @@ describe("formatReceipt — printer layout", () => {
           issuer: ISSUER,
           receipt: {},
           invoiceLocale: "es-ES",
-          printer: { paperWidth, resolution, characterSet: "wpc1252" },
+          printer: { paperWidth, resolution, characterSet: "wpc1252", characterTable: 16 },
         });
         expect(bytesInclude(bytes, QR_LEAD_BYTES)).toBe(false);
         const at = bytes.findIndex((_, i) => RASTER_LEAD_BYTES.every((v, j) => bytes[i + j] === v));

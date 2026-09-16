@@ -13,7 +13,12 @@
  * match those documented sequences, which escpos.test.ts pins byte for byte.
  */
 
-import { CHARSET_SELECT, encodeText, type CharacterSet } from "./charset.js";
+import {
+  DEFAULT_CHARACTER_TABLE,
+  encodeText,
+  selectCharacterTable,
+  type CharacterSet,
+} from "./charset.js";
 
 /** ESC — the escape lead byte (0x1B) beginning most two/three-byte commands. */
 const ESC = 0x1b;
@@ -69,21 +74,29 @@ export class EscBuilder {
   private readonly parts: number[] = [];
 
   /** `charset` undefined keeps the Latin-1 builder that selects no table (the drawer kick, legacy jobs). */
-  constructor(private current?: CharacterSet) {}
+  constructor(
+    private current?: CharacterSet,
+    private currentTable: number | undefined = current === undefined
+      ? undefined
+      : DEFAULT_CHARACTER_TABLE[current],
+  ) {}
 
   /** Reset, select the configured table and cancel Kanji mode for single-byte text. */
   init(): this {
     this.parts.push(ESC, 0x40);
     if (this.current !== undefined) {
-      this.parts.push(...CHARSET_SELECT[this.current], 0x1c, 0x2e);
+      if (this.current !== "plain" && this.currentTable !== undefined)
+        this.parts.push(...selectCharacterTable(this.currentTable));
+      this.parts.push(0x1c, 0x2e);
     }
     return this;
   }
 
   /** Switch character set mid-payload: emits its `ESC t` (nothing for `plain`) and encodes later text with it. */
-  charset(cs: CharacterSet): this {
+  charset(cs: CharacterSet, table: number | undefined = DEFAULT_CHARACTER_TABLE[cs]): this {
     this.current = cs;
-    this.parts.push(...CHARSET_SELECT[cs]);
+    this.currentTable = table;
+    if (cs !== "plain" && table !== undefined) this.parts.push(...selectCharacterTable(table));
     return this;
   }
 
@@ -254,6 +267,6 @@ export class EscBuilder {
 }
 
 /** Start a new ESC/POS command chain, optionally for a character set. */
-export function esc(charset?: CharacterSet): EscBuilder {
-  return new EscBuilder(charset);
+export function esc(charset?: CharacterSet, characterTable?: number): EscBuilder {
+  return new EscBuilder(charset, characterTable);
 }

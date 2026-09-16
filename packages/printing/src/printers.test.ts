@@ -348,7 +348,7 @@ describe("isPgError (@waitron/db SQLSTATE cause-walk, as printers.ts uses it)", 
 });
 
 describe("printer layout settings", () => {
-  it("defaults to 80mm, 180dpi and wpc1252, and stores, updates and lists each setting", async () => {
+  it("defaults to 80mm, 180dpi, wpc1252 table 16, and stores, updates and lists each setting", async () => {
     const cfg = await setup();
     const defaulted = await seedPrinter(cfg, "Defaults");
     const { id } = await asTx(cfg, (tx) =>
@@ -358,19 +358,24 @@ describe("printer layout settings", () => {
         host: "10.0.0.10",
         paperWidth: "58mm",
         characterSet: "pc858",
+        characterTable: 19,
       }),
     );
-    await asTx(cfg, (tx) => updatePrinter(tx, cfg, id, { resolution: "203dpi" }));
+    await asTx(cfg, (tx) =>
+      updatePrinter(tx, cfg, id, { resolution: "203dpi", characterTable: 6 }),
+    );
     const rows = await asTx(cfg, (tx) => listPrinters(tx, cfg));
     expect(rows.find((r) => r.id === defaulted)).toMatchObject({
       paperWidth: "80mm",
       resolution: "180dpi",
       characterSet: "wpc1252",
+      characterTable: 16,
     });
     expect(rows.find((r) => r.id === id)).toMatchObject({
       paperWidth: "58mm",
       resolution: "203dpi",
       characterSet: "pc858",
+      characterTable: 6,
     });
   });
 });

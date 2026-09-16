@@ -235,6 +235,45 @@ describe("character sets", () => {
     expect(result).toMatchObject({ text: "é\né\n", unsupported: false, truncated: false });
   });
 
+  it("uses the printer charset only as the starting table, then follows payload table changes", () => {
+    const payload = esc("wpc1252", 6)
+      .init()
+      .line("Café 5 €")
+      .charset("pc858", 19)
+      .line("Café 5 €")
+      .bytes();
+    const result = previewPrintJob(payload, {
+      columns: 42,
+      dpi: 203,
+      characterSet: "wpc1252",
+      characterTable: 6,
+    });
+    expect(result).toMatchObject({
+      text: "Café 5 €\nCafé 5 €\n",
+      unsupported: false,
+      truncated: false,
+    });
+
+    expect(
+      previewPrintJob(Uint8Array.of(0x1b, 0x40, 0x1b, 0x74, 99, 0x41), {
+        columns: 42,
+        dpi: 203,
+        characterSet: "wpc1252",
+        characterTable: 6,
+      }).unsupported,
+    ).toBe(true);
+  });
+
+  it("uses the printer profile to decode its model-specific table number", () => {
+    const result = previewPrintJob(esc("wpc1252", 7).init().line("Café 5 €").bytes(), {
+      columns: 42,
+      dpi: 203,
+      characterSet: "wpc1252",
+      characterTable: 7,
+    });
+    expect(result).toMatchObject({ text: "Café 5 €\n", unsupported: false, truncated: false });
+  });
+
   it("stops at a byte 0x80-0x9F when no table was selected", () => {
     expect(previewPrintJob(Uint8Array.of(0x41, 0x80, 0x0a)).unsupported).toBe(true);
   });

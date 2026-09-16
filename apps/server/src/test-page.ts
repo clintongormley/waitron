@@ -1,5 +1,5 @@
 import { esc, withQuietZone, wrapText } from "@waitron/printing";
-import { TEST_CHARSET_SAMPLES } from "@waitron/printing/src/test-page-samples.js";
+import { testCharsetSamples } from "@waitron/printing/src/test-page-samples.js";
 import type { SupportedLocale } from "@waitron/shared";
 import { qrModules } from "./qr-matrix.js";
 
@@ -11,8 +11,6 @@ import { qrModules } from "./qr-matrix.js";
 interface Captions {
   widthQuestion: string;
   qrQuestion: string;
-  qrForAC: string;
-  qrForBD: string;
   charsetQuestion: string;
 }
 
@@ -20,18 +18,14 @@ const CAPTIONS: Readonly<Record<SupportedLocale, Captions>> = {
   "es-ES": {
     widthQuestion: "Cual es la linea mas larga cuyo | queda en la misma fila?",
     qrQuestion:
-      "Mida el cuadrado negro del QR de su linea. Ignore el borde blanco. Debe medir entre 30 y 40 mm. No hace falta escanear el codigo.",
-    qrForAC: "Para A o C:",
-    qrForBD: "Para B o D:",
-    charsetQuestion: "Elija la primera linea que se lea bien. La linea 3 siempre se lee bien.",
+      "Mida con una regla el cuadrado negro del QR. Ignore el borde blanco. Mide mas cerca de 40 mm o de 45 mm? No hace falta escanear el codigo.",
+    charsetQuestion: "Elija la primera linea que se lea bien. La linea 4 siempre se lee bien.",
   },
   "en-GB": {
     widthQuestion: "Which is the longest line whose | is on the same row?",
     qrQuestion:
-      "Measure the black square of the QR for your line. Ignore the white border. It must be between 30 and 40 mm. No need to scan the code.",
-    qrForAC: "For A or C:",
-    qrForBD: "For B or D:",
-    charsetQuestion: "Choose the first line that reads correctly. Line 3 always does.",
+      "Measure the black square of the QR with a ruler. Ignore the white border. Is it closer to 40 mm or 45 mm? No need to scan the code.",
+    charsetQuestion: "Choose the first line that reads correctly. Line 4 always does.",
   },
 };
 
@@ -45,7 +39,13 @@ function widthLine(label: string, length: number): string {
   return `${label} ${"-".repeat(length - 3)}|`;
 }
 
-export function formatTestPage({ locale }: { locale: SupportedLocale }): Uint8Array {
+export function formatTestPage({
+  locale,
+  calibrationLocale = locale,
+}: {
+  locale: SupportedLocale;
+  calibrationLocale?: SupportedLocale;
+}): Uint8Array {
   const c = CAPTIONS[locale];
   const b = esc("plain").init();
   const caption = (text: string): void => {
@@ -64,17 +64,17 @@ export function formatTestPage({ locale }: { locale: SupportedLocale }): Uint8Ar
   b.line();
 
   caption(c.qrQuestion);
-  // 45 squares at 5 dots: 31.8 mm at 180 dpi. With its full border it is 265 dots wide.
-  caption(c.qrForAC);
-  b.qrRaster(withQuietZone(qrModules(SAMPLE_QR_TEXT, { version: 7 }), 4), { moduleSize: 5 }).line();
   // 53 squares at 6 dots: 39.8 mm at 203 dpi. A 3-square border keeps it at 354 dots, within 360.
-  caption(c.qrForBD);
   b.qrRaster(withQuietZone(qrModules(SAMPLE_QR_TEXT, { version: 9 }), 3), { moduleSize: 6 }).line();
   b.line();
 
   caption(c.charsetQuestion);
-  for (const { value, characterSet, text } of TEST_CHARSET_SAMPLES) {
-    b.charset(characterSet).line(`${value}: ${text}`);
+  for (const { value, characterSet, characterTable, text } of testCharsetSamples(
+    calibrationLocale,
+  )) {
+    b.charset(characterSet, characterSet === "plain" ? undefined : characterTable).line(
+      `${value}: ${text}`,
+    );
   }
 
   return b.feedAndCut().bytes();

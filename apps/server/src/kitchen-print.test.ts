@@ -503,7 +503,10 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
       await updatePrinter(tx, printCfg(cfg), narrow, { paperWidth: "58mm" });
       const pass = await makePrinter(tx, cfg, "Pase 1252", "order");
       const passPc858 = await makePrinter(tx, cfg, "Pase 858", "order");
-      await updatePrinter(tx, printCfg(cfg), passPc858, { characterSet: "pc858" });
+      await updatePrinter(tx, printCfg(cfg), passPc858, {
+        characterSet: "pc858",
+        characterTable: 19,
+      });
       for (const printerId of [wide, wideTwin, narrow, pass, passPc858]) {
         await attachPrinterToStation(tx, { stationId: cocina.id, printerId });
       }

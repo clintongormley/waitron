@@ -121,6 +121,7 @@ function emitItem(b: ReturnType<typeof esc>, item: KitchenTicketItem, layout: Ki
 export interface KitchenLayout {
   columns: number;
   charset: CharacterSet;
+  characterTable: number;
 }
 
 /** Local `HH:MM`, zero-padded — the fire time as the kitchen reads it off the wall clock. */
@@ -135,7 +136,7 @@ function hhmm(at: Date): string {
  * header-only ticket rather than throwing (the caller filters out stations with nothing fired).
  */
 export function formatKitchenTicket(ticket: KitchenTicket, layout: KitchenLayout): Uint8Array {
-  const b = esc(layout.charset).init();
+  const b = esc(layout.charset, layout.characterTable).init();
   const text = (s: string): void => {
     for (const line of wrapText(prepareText(s, layout.charset), layout.columns)) b.line(line);
   };
@@ -184,7 +185,7 @@ export interface CorrectionSlip {
  * table).
  */
 export function formatCorrectionSlip(slip: CorrectionSlip, layout: KitchenLayout): Uint8Array {
-  const b = esc(layout.charset).init();
+  const b = esc(layout.charset, layout.characterTable).init();
   const text = (s: string): void => {
     for (const line of wrapText(prepareText(s, layout.charset), layout.columns)) b.line(line);
   };

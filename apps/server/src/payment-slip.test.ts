@@ -12,7 +12,7 @@ const input = {
   charged: "1.50",
   invoiceLocale: "es-ES",
   card: { scheme: "VISA", last4: "5838", entryMode: "contactless" as const, authCode: "328600" },
-  printer: { paperWidth: "80mm", characterSet: "wpc1252" } as const,
+  printer: { paperWidth: "80mm", characterSet: "wpc1252", characterTable: 16 } as const,
 };
 describe("payment slip (pure renderer, no database)", () => {
   it("prints payment identity, grouping and amounts without fiscal identifiers or QR", () => {
@@ -69,6 +69,14 @@ describe("payment slip (pure renderer, no database)", () => {
 });
 
 describe("payment slip printer layout", () => {
+  it("selects the printer's configured table instead of the encoding default", () => {
+    const bytes = formatPaymentSlip({
+      ...input,
+      printer: { ...input.printer, characterTable: 6 },
+    });
+    expect([...bytes.slice(0, 5)]).toEqual([0x1b, 0x40, 0x1b, 0x74, 6]);
+  });
+
   it("separates each amount from the euro sign with an ASCII space", () => {
     const bytes = formatPaymentSlip(input);
     const euro = 0x80; // € in Windows-1252
@@ -78,9 +86,9 @@ describe("payment slip printer layout", () => {
   });
 
   it.each([
-    { paperWidth: "80mm", characterSet: "wpc1252" },
-    { paperWidth: "58mm", characterSet: "pc858" },
-    { paperWidth: "58mm", characterSet: "plain" },
+    { paperWidth: "80mm", characterSet: "wpc1252", characterTable: 16 },
+    { paperWidth: "58mm", characterSet: "pc858", characterTable: 19 },
+    { paperWidth: "58mm", characterSet: "plain", characterTable: 0 },
   ] as const)(
     "keeps every line within the column count ($paperWidth, $characterSet)",
     (printer) => {

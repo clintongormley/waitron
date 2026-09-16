@@ -39,27 +39,28 @@ describe("formatTestPage", () => {
     }
   });
 
-  it("prints two QR samples: 45 squares at 5 dots and 53 squares at 6 dots, each within 360 dots", () => {
+  it("prints one QR sample whose measurement distinguishes 180 from 203 dpi", () => {
     const headers = rasterHeaders(formatTestPage({ locale: "es-ES" }));
-    expect(headers).toEqual([
-      { widthBytes: 34, heightDots: (45 + 8) * 5 },
-      { widthBytes: 45, heightDots: (53 + 6) * 6 },
-    ]);
+    expect(headers).toEqual([{ widthBytes: 45, heightDots: (53 + 6) * 6 }]);
     for (const { widthBytes } of headers) expect(widthBytes * 8).toBeLessThanOrEqual(360);
   });
 
   it("sends each sample line in its own character table, and each reads correctly", () => {
     const bytes = formatTestPage({ locale: "en-GB" });
     expect(
-      bytesInclude(bytes, Uint8Array.from([0x1b, 0x74, 16, ...encodeText("1: Café", "wpc1252")])),
+      bytesInclude(bytes, Uint8Array.from([0x1b, 0x74, 6, ...encodeText("1: Café", "wpc1252")])),
     ).toBe(true);
     expect(
-      bytesInclude(bytes, Uint8Array.from([0x1b, 0x74, 19, ...encodeText("2: Café", "pc858")])),
+      bytesInclude(bytes, Uint8Array.from([0x1b, 0x74, 16, ...encodeText("2: Café", "wpc1252")])),
+    ).toBe(true);
+    expect(
+      bytesInclude(bytes, Uint8Array.from([0x1b, 0x74, 19, ...encodeText("3: Café", "pc858")])),
     ).toBe(true);
     const lines = printedLines(bytes);
     expect(lines).toContain("1: Café jamón Ñ ¿¡ ç ü 5 €");
     expect(lines).toContain("2: Café jamón Ñ ¿¡ ç ü 5 €");
-    expect(lines).toContain("3: Cafe jamon N ?! c u 5 EUR");
+    expect(lines).toContain("3: Café jamón Ñ ¿¡ ç ü 5 €");
+    expect(lines).toContain("4: Cafe jamon N ?! c u 5 EUR");
   });
 
   it("prints its captions in the requested language, as ASCII", () => {
@@ -70,9 +71,11 @@ describe("formatTestPage", () => {
     expect(en).toContain("Which is the longest line");
     expect(en).not.toContain("Cual");
     expect(en).toContain("Measure the black square");
+    expect(en).toContain("Is it closer to 40 mm or 45 mm");
     expect(en).toContain("Ignore the white border");
     expect(en).toContain("No need to scan");
-    expect(es).toContain("Mida el cuadrado negro");
+    expect(es).toContain("Mida con una regla el cuadrado negro");
+    expect(es).toContain("Mide mas cerca de 40 mm o de 45 mm");
     expect(es).toContain("Ignore el borde blanco");
     expect(es).toContain("No hace falta escanear");
     const bytes = formatTestPage({ locale: "es-ES" });

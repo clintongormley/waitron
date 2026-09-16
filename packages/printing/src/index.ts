@@ -22,7 +22,13 @@ export type {
 } from "./printers.js";
 export { enqueuePrintJob, resendPrintJob, canResendPrintJob } from "./outbox.js";
 export { FEED_BEFORE_CUT, EscBuilder, esc } from "./escpos.js";
-export { decodeBytes, encodeText, prepareText } from "./charset.js";
+export {
+  DEFAULT_CHARACTER_TABLE,
+  decodeBytes,
+  encodeText,
+  prepareText,
+  selectCharacterTable,
+} from "./charset.js";
 export type { CharacterSet } from "./charset.js";
 export {
   QR_QUIET_ZONE,

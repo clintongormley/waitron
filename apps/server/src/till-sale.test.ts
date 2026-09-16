@@ -336,7 +336,12 @@ describe("recordTillSale", () => {
         issuer: { venueName: "Deli Test SL", nif: "B12345678" },
         receipt: {},
         invoiceLocale: LOCALE,
-        printer: { paperWidth: "80mm", resolution: "203dpi", characterSet: "pc858" },
+        printer: {
+          paperWidth: "80mm",
+          resolution: "203dpi",
+          characterSet: "pc858",
+          characterTable: 19,
+        },
       }),
     ).join("\n");
     expect(result.lines[0]!.descriptions).toEqual({ [LOCALE]: "Agua mineral · Doble ración" });

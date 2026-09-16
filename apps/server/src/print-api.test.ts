@@ -25,6 +25,8 @@ import {
 import type { Logger } from "./logger.js";
 import { mountPrintApi } from "./print-api.js";
 import { formatTestPage } from "./test-page.js";
+import { formatSampleReceipt } from "./sample-receipt.js";
+import { formatCharacterTableTest } from "./character-table-test.js";
 import { acceptPrintAgentJoinRequest } from "./join-requests.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
@@ -1260,6 +1262,7 @@ describe("mountPrintApi — management: printers CRUD", () => {
         host: "10.0.0.31",
         paperWidth: "58mm",
         characterSet: "pc858",
+        characterTable: 19,
       },
     });
     expect(created.status).toBe(201);
@@ -1267,21 +1270,29 @@ describe("mountPrintApi — management: printers CRUD", () => {
     const defaulted = await createNetworkPrinter(app, "10.0.0.32", 9100, "Por defecto");
     const patched = await send(app, "PATCH", `/management-api/printers/${id}`, {
       cookie: managerCookie,
-      body: { resolution: "203dpi" },
+      body: { resolution: "203dpi", characterTable: 6 },
     });
     expect(patched.status).toBe(204);
     const listed = (await (
       await send(app, "GET", "/management-api/printers", { cookie: managerCookie })
-    ).json()) as { id: string; paperWidth: string; resolution: string; characterSet: string }[];
+    ).json()) as {
+      id: string;
+      paperWidth: string;
+      resolution: string;
+      characterSet: string;
+      characterTable: number;
+    }[];
     expect(listed.find((p) => p.id === id)).toMatchObject({
       paperWidth: "58mm",
       resolution: "203dpi",
       characterSet: "pc858",
+      characterTable: 6,
     });
     expect(listed.find((p) => p.id === defaulted)).toMatchObject({
       paperWidth: "80mm",
       resolution: "180dpi",
       characterSet: "wpc1252",
+      characterTable: 16,
     });
     for (const [method, path, body, field] of [
       [
@@ -1292,6 +1303,8 @@ describe("mountPrintApi — management: printers CRUD", () => {
       ],
       ["PATCH", `/management-api/printers/${id}`, { resolution: "300dpi" }, "resolution"],
       ["PATCH", `/management-api/printers/${id}`, { characterSet: "cp437" }, "characterSet"],
+      ["PATCH", `/management-api/printers/${id}`, { characterTable: 256 }, "characterTable"],
+      ["PATCH", `/management-api/printers/${id}`, { characterTable: 1.5 }, "characterTable"],
     ] as const) {
       const res = await send(app, method, path, { cookie: managerCookie, body });
       expect(res.status).toBe(400);
@@ -1337,13 +1350,17 @@ describe("mountPrintApi — management: test-print", () => {
           headers: { cookie: managerCookie, "accept-language": browserLocale },
         });
         expect(res.status).toBe(202);
-        const { jobId } = (await res.json()) as { jobId: string };
+        const { jobId, calibrationLocale } = (await res.json()) as {
+          jobId: string;
+          calibrationLocale: SupportedLocale;
+        };
+        expect(calibrationLocale).toBe(venueLocale);
         const [job] = await suite.db
           .select({ payload: printJobs.payload })
           .from(printJobs)
           .where(eq(printJobs.id, jobId));
         expect([...new Uint8Array(job!.payload)]).toEqual([
-          ...formatTestPage({ locale: expected }),
+          ...formatTestPage({ locale: expected, calibrationLocale: venueLocale }),
         ]);
       } finally {
         await setLocale(null);
@@ -1369,6 +1386,73 @@ describe("mountPrintApi — management: test-print", () => {
       await send(app, "GET", "/management-api/print-jobs", { cookie: managerCookie })
     ).json()) as { id: string; printerId: string }[];
     expect(jobs.find((j) => j.id === jobId)?.printerId).toBe(printerId);
+  });
+
+  it("prints a sample receipt with the unsaved layout and character-table settings", async () => {
+    const app = mountApp();
+    const printerId = await createNetworkPrinter(app, "10.0.0.43", 9100, "Sample receipt");
+    const settings = {
+      paperWidth: "58mm" as const,
+      resolution: "203dpi" as const,
+      characterSet: "wpc1252" as const,
+      characterTable: 6,
+    };
+    const res = await send(app, "POST", `/management-api/printers/${printerId}/sample-receipt`, {
+      cookie: managerCookie,
+      body: settings,
+    });
+    expect(res.status).toBe(202);
+    const { jobId } = (await res.json()) as { jobId: string };
+    const [job] = await suite.db
+      .select({ payload: printJobs.payload })
+      .from(printJobs)
+      .where(eq(printJobs.id, jobId));
+    expect([...new Uint8Array(job!.payload)]).toEqual([...formatSampleReceipt(settings)]);
+  });
+
+  it("rejects an invalid sample-receipt character table", async () => {
+    const app = mountApp();
+    const printerId = await createNetworkPrinter(app, "10.0.0.44", 9100, "Bad sample");
+    const res = await send(app, "POST", `/management-api/printers/${printerId}/sample-receipt`, {
+      cookie: managerCookie,
+      body: {
+        paperWidth: "80mm",
+        resolution: "180dpi",
+        characterSet: "wpc1252",
+        characterTable: 256,
+      },
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "characterTable" } },
+    });
+  });
+
+  it("prints a sixteen-number character-table finder from the requested starting table", async () => {
+    const app = mountApp();
+    const printerId = await createNetworkPrinter(app, "10.0.0.45", 9100, "Table finder");
+    const res = await app.request(`/management-api/printers/${printerId}/character-table-test`, {
+      method: "POST",
+      headers: {
+        cookie: managerCookie,
+        "content-type": "application/json",
+        "accept-language": "es-ES",
+      },
+      body: JSON.stringify({ startTable: 32 }),
+    });
+    expect(res.status).toBe(202);
+    const { jobId } = (await res.json()) as { jobId: string };
+    const [job] = await suite.db
+      .select({ payload: printJobs.payload })
+      .from(printJobs)
+      .where(eq(printJobs.id, jobId));
+    expect([...new Uint8Array(job!.payload)]).toEqual([
+      ...formatCharacterTableTest({
+        startTable: 32,
+        locale: "es-ES",
+        calibrationLocale: "es-ES",
+      }),
+    ]);
   });
 
   it("test-print for an unknown printer id → 404 printer.not_found; a non-uuid id → 400", async () => {
@@ -1441,10 +1525,12 @@ describe("mountPrintApi — management: recent jobs", () => {
         host: "10.0.0.42",
         paperWidth: "58mm",
         resolution: "203dpi",
+        characterSet: "wpc1252",
+        characterTable: 7,
       },
     });
     const { id: narrow } = (await created.json()) as { id: string };
-    const narrowJob = await enqueue(narrow, esc("pc858").init().line("Café 12,50 €").bytes());
+    const narrowJob = await enqueue(narrow, esc("wpc1252", 7).init().line("Café 12,50 €").bytes());
     const narrowPreview = await send(
       app,
       "GET",

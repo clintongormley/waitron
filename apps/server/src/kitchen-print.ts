@@ -104,6 +104,7 @@ async function lockActivePrinters(
     ticketScope: "station" | "order";
     paperWidth: PaperWidth;
     characterSet: CharacterSet;
+    characterTable: number;
   }[]
 > {
   return tx
@@ -113,6 +114,7 @@ async function lockActivePrinters(
       ticketScope: printers.ticketScope,
       paperWidth: printers.paperWidth,
       characterSet: printers.characterSet,
+      characterTable: printers.characterTable,
     })
     .from(stationPrinters)
     .innerJoin(printers, eq(stationPrinters.printerId, printers.id))
@@ -124,17 +126,22 @@ async function lockActivePrinters(
 interface KitchenPrinterLayout {
   paperWidth: PaperWidth;
   characterSet: CharacterSet;
+  characterTable: number;
 }
 
 function layoutOf(printer: KitchenPrinterLayout): KitchenLayout {
-  return { columns: columnsFor(printer.paperWidth), charset: printer.characterSet };
+  return {
+    columns: columnsFor(printer.paperWidth),
+    charset: printer.characterSet,
+    characterTable: printer.characterTable,
+  };
 }
 
 /** `printers` grouped by paper width and character set, in first-seen order: one ticket per group. */
 function groupByLayout<T extends KitchenPrinterLayout>(printers: readonly T[]): T[][] {
   const groups = new Map<string, T[]>();
   for (const printer of printers) {
-    const key = `${printer.paperWidth}|${printer.characterSet}`;
+    const key = `${printer.paperWidth}|${printer.characterSet}|${printer.characterTable}`;
     const group = groups.get(key);
     if (group === undefined) groups.set(key, [printer]);
     else group.push(printer);
@@ -354,6 +361,7 @@ export async function enqueueKitchenTickets(
       ticketScope: mapping.ticketScope,
       paperWidth: mapping.paperWidth,
       characterSet: mapping.characterSet,
+      characterTable: mapping.characterTable,
     });
     printersByStation.set(mapping.stationId, bucket);
   }
@@ -466,6 +474,7 @@ export async function enqueueCorrectionSlips(
       printerId: mapping.printerId,
       paperWidth: mapping.paperWidth,
       characterSet: mapping.characterSet,
+      characterTable: mapping.characterTable,
     });
     printersByStation.set(mapping.stationId, bucket);
   }

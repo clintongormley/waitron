@@ -260,6 +260,13 @@
       "when": 1789559064518,
       "tag": "0036_tenants_singleton",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1789582981275,
+      "tag": "0037_normal_red_ghost",
+      "breakpoints": true
     }
   ]
 }

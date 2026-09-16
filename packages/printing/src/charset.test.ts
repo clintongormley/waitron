@@ -1,19 +1,26 @@
 import { describe, expect, it } from "vitest";
-import { TEST_CHARSET_SAMPLES } from "./test-page-samples.js";
+import { SUPPORTED_LOCALES } from "@waitron/shared";
 import {
-  CHARSET_SELECT,
+  characterCalibration,
+  characterSetOptions,
+  testCharsetSamples,
+} from "./test-page-samples.js";
+import {
   PC858_TO_UNICODE,
   WPC1252_TO_UNICODE,
   decodeBytes,
   encodeText,
   prepareText,
+  selectCharacterTable,
 } from "./charset.js";
 
-describe("CHARSET_SELECT", () => {
-  it("selects table 16 for wpc1252, 19 for pc858, nothing for plain", () => {
-    expect([...CHARSET_SELECT.wpc1252]).toEqual([0x1b, 0x74, 16]);
-    expect([...CHARSET_SELECT.pc858]).toEqual([0x1b, 0x74, 19]);
-    expect([...CHARSET_SELECT.plain]).toEqual([]);
+describe("selectCharacterTable", () => {
+  it("builds ESC t for any byte-sized printer table number", () => {
+    expect(selectCharacterTable(6)).toEqual([0x1b, 0x74, 6]);
+    expect(selectCharacterTable(255)).toEqual([0x1b, 0x74, 255]);
+    expect(() => selectCharacterTable(-1)).toThrow(RangeError);
+    expect(() => selectCharacterTable(256)).toThrow(RangeError);
+    expect(() => selectCharacterTable(1.5)).toThrow(RangeError);
   });
 });
 
@@ -87,15 +94,31 @@ describe("prepareText / encodeText", () => {
   });
 
   it("round-trips the numbered test-page samples through their character sets", () => {
-    expect(TEST_CHARSET_SAMPLES).toEqual([
-      { value: "1", characterSet: "wpc1252", text: "Café jamón Ñ ¿¡ ç ü 5 €" },
-      { value: "2", characterSet: "pc858", text: "Café jamón Ñ ¿¡ ç ü 5 €" },
-      { value: "3", characterSet: "plain", text: "Cafe jamon N ?! c u 5 EUR" },
-    ]);
-    for (const { value, characterSet: cs, text } of TEST_CHARSET_SAMPLES) {
-      const sample = `${value}: ${text}`;
-      expect(prepareText(sample, cs)).toBe(sample);
-      expect(decodeBytes(encodeText(sample, cs), cs)).toBe(sample);
+    for (const { code } of SUPPORTED_LOCALES) {
+      const samples = testCharsetSamples(code);
+      expect(samples).toEqual([
+        { value: "1", characterSet: "wpc1252", characterTable: 6, text: "Café jamón Ñ ¿¡ ç ü 5 €" },
+        {
+          value: "2",
+          characterSet: "wpc1252",
+          characterTable: 16,
+          text: "Café jamón Ñ ¿¡ ç ü 5 €",
+        },
+        { value: "3", characterSet: "pc858", characterTable: 19, text: "Café jamón Ñ ¿¡ ç ü 5 €" },
+        { value: "4", characterSet: "plain", characterTable: 0, text: "Cafe jamon N ?! c u 5 EUR" },
+      ]);
+      expect(characterCalibration(code).finderEncodings.map(({ label }) => label)).toEqual([
+        "W",
+        "8",
+      ]);
+      const options = characterSetOptions(code);
+      expect(options.map(({ value }) => value)).toEqual(["wpc1252", "pc858", "plain"]);
+      expect(options[0]!.label).toContain(code === "es-ES" ? "Latino occidental" : "Western Latin");
+      for (const { value, characterSet: cs, text } of samples) {
+        const sample = `${value}: ${text}`;
+        expect(prepareText(sample, cs)).toBe(sample);
+        expect(decodeBytes(encodeText(sample, cs), cs)).toBe(sample);
+      }
     }
   });
 

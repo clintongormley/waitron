@@ -13,8 +13,8 @@ import { decodeTicket, printedLines } from "./testing/decode-ticket.js";
 const CUT_BYTES = [0x1d, 0x56, 0x00];
 /** ESC d n — the shared feed before every cut, so the tear-off clears the print head. */
 const FEED_THEN_CUT = [0x1b, 0x64, FEED_BEFORE_CUT, ...CUT_BYTES];
-const KITCHEN_80: KitchenLayout = { columns: 42, charset: "wpc1252" };
-const KITCHEN_58: KitchenLayout = { columns: 30, charset: "pc858" };
+const KITCHEN_80: KitchenLayout = { columns: 42, charset: "wpc1252", characterTable: 16 };
+const KITCHEN_58: KitchenLayout = { columns: 30, charset: "pc858", characterTable: 19 };
 
 describe("formatKitchenTicket", () => {
   describe("station scope", () => {
@@ -349,6 +349,14 @@ describe("kitchen paper layout", () => {
     expect(bytes.slice(0, 5)).toEqual([0x1b, 0x40, 0x1b, 0x74, 19]);
     expect(bytes).toContain(0x82); // é in code page 858
     expect(bytes).not.toContain(0xe9);
+
+    const tableSix = [
+      ...formatKitchenTicket(
+        { ...ticket, items: [{ qty: 1, name: "Café" }] },
+        { ...KITCHEN_80, characterTable: 6 },
+      ),
+    ];
+    expect(tableSix.slice(0, 5)).toEqual([0x1b, 0x40, 0x1b, 0x74, 6]);
   });
 
   it("wraps a correction slip to the layout too", () => {

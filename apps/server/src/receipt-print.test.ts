@@ -427,6 +427,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
       await updatePrinter(tx, printCfg(cfg), printerId, {
         paperWidth: "58mm",
         characterSet: "pc858",
+        characterTable: 19,
       });
     });
     await configureReceipt(cfg, { mode: "auto", printerId });

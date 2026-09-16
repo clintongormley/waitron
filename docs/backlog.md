@@ -1137,11 +1137,18 @@ confirmed during investigation. Configured text initialization now cancels
 Kanji mode before sending single-byte text, as documented by the NT-806 manual.
 [Design and incident evidence](superpowers/specs/2026-09-16-printer-setup-refinements.md).
 
-- **The NT-806 needs another physical test page**, and nobody has printed one since the change.
-  Until someone does, we cannot say the Kanji-mode cancel is what fixed the garbled accents that
-  printer produced earlier — the change matches what its manual documents, which is not the same as
-  having watched it work. Next action: print a test page from the printer editor to the NT-806 and
-  read the accented characters on the paper.
+**Printer calibration follow-up — IN PROGRESS (2026-09-16).** A physical NT-806 byte-grid print
+identified Windows-1252 at table 6, CP866 at table 16 and CP737 at table 19, contradicting that
+unit's supplied table list. Encoding and `ESC t` table number are now independent printer settings.
+The normal test covers common pairs; a sixteen-table batched finder handles other printer firmware.
+Calibration uses one measured QR, and the editor can print a clearly simulated sample receipt with
+its unsaved settings. The Add-printer layout also collapses the known-address form, places Scan at
+the trailing edge, orders unsupported results last, and hides a redundant status filter for an
+all-active or all-disabled list.
+[Physical evidence and updated decisions](superpowers/specs/2026-09-16-printer-setup-refinements.md#owner-follow-up-and-physical-character-table-probe-2026-09-16).
+
+- **NT-806 profile established on paper:** Windows-1252 bytes with `ESC t 6`. The earlier Kanji-mode
+  correction did not make the manual's table 16 or 19 assignments true on this firmware.
 - **On-paper verification is still owed on the TM-T88III** (spec "Verification on paper" steps 1-6):
   whether the printer's built-in QR command prints anything at all, and whether the mandated 30-40mm
   QR size is meant to count the code's blank border or only its dark squares.
@@ -1168,13 +1175,11 @@ Kanji mode before sending single-byte text, as documented by the NT-806 manual.
 - A long single-token manual card reference wraps as "Ref." alone with the token split across the
   following lines, and a 61-character invoice number splits over three lines at 58mm — both stay
   within the column count and are correct, just awkward to read.
-- No committed test proves `app_user` can WRITE the three new `printers` columns — the schema test
-  only inserts with their defaults. A real-PostgreSQL upgrade probe run during review did confirm the
-  write works; a committed grant-write assertion is still owed.
 - No test covers `updatePrinter` receiving an explicit `undefined` for one of these settings — today
   both Drizzle and `updatePrinter` silently drop it, same as an absent field.
-- The invalid-value error code is tested for 3 of the 6 field × route combinations these settings
-  offer, matching this file's existing convention for `transport`/`ticketScope`.
+- The invalid-value error code is sampled across the create and update routes rather than exhaustively
+  covering every field × route combination, matching this file's convention for `transport` and
+  `ticketScope`.
 - The QR preview decoder's format-information reader reads an inverted level-Q QR as level M — not a
   false pass with any data seen so far, but worth tightening.
 - `PC858_HIGH` (the character set's upper half) is pinned at 18 of its 128 positions in the committed

@@ -87,3 +87,32 @@ updated the expected prefix to include FS . while retaining the no-table-selecti
 and EUR assertions. `TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/server exec vitest run
 src/till-api.receipt.test.ts` then passed all 29 tests. The other jobs in that CI run passed; the
 corrected commit requires a fresh current-head CI run.
+
+## Owner follow-up review, 2026-09-16
+
+After the NT-806 physical table probe, the owner requested generic table identification and a sample
+receipt. A second isolated run-it review of that new production work completed in 204 seconds. It
+found that supplying the printer's configured encoding to preview prevented later `ESC t` commands
+from changing encoding and hid unknown-table failures. A new regression failed with mojibake, then
+passed after the configured encoding became only the starting/reset state. A second regression then
+proved that preview also needs the saved numeric table to decode model-specific mappings outside the
+three common test-page numbers.
+
+Other accepted findings added table-6 byte assertions to the kitchen and payment renderers, localized
+the table finder, made its final block cover all sixteen values, tested every printed line at 58 mm,
+changed DPI calibration to choose the measurement closer to 40 or 45 mm, refused an empty table
+field, repeated the sample warning at the tear-off edge, and committed a real-PostgreSQL assertion
+that `app_user` can update the new column. Automatic backfill of old `pc858` rows was rejected because
+this repository forbids compatibility and data migrations before production; every existing
+pre-production printer must be recalibrated through the new test flow.
+
+Review artifacts: `/tmp/waitron-printers-review-0SKhyV/` holds the brief, report, timing, usage and
+triage. The physical table probe itself is recorded in the design rather than repeated by review.
+
+The owner then clarified that calibration must follow the site's language rather than assume Western
+Europe forever. The character-set type now derives from the database enum, and exhaustive locale and
+encoding records own the calibration samples, finder candidates and localized setting labels.
+Instructions retain the operator's locale, while the site locale selects those samples and travels
+back to the dashboard with the queued job. English and Spanish intentionally share today's profile.
+Adding a future locale produces type errors until its printer calibration entry and setting labels
+are supplied; a Ukrainian entry must deliberately add and test its Cyrillic encoding path.
