@@ -1083,8 +1083,7 @@ declare module "@waitron/shared" {
     "device.register_name_taken": Record<string, never>;
     /**
      * A request named a device binding id — a `till_id`, `receipt_printer_id` or `device_profile_id` —
-     * that matches no row of THIS tenant (absent, or another tenant's, which the tenant-consistent
-     * composite FK rejects too). Surfaced by translating the `23503` a composite FK on `devices` raises
+     * that matches no row in this database. Surfaced by translating the `23503` an FK on `devices` raises
      * (the assign-device-profile UPDATE, the hardware PATCH), keyed on the CONSTRAINT NAME
      * (`devices_device_profile_fk` / `devices_receipt_printer_fk`) — the `isZoneFkViolation` idiom
      * (`tables.ts`) — or raised directly by the accept path's explicit register read, which sees the

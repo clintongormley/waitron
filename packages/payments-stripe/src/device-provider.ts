@@ -45,9 +45,9 @@ export interface StripeOnDeviceProviderOptions {
   /** A plain `Database` handle. `collect`/`forward`/`reverse` open their own transactions and scope
    * each one with `withTransaction(db, …)`, so nothing is required of the handle itself. */
   db: Database;
-  /** Stamped on the incident `forward` raises for a declined payment. */
-  /** This node's id, passed on to `reverseViaStripe` to identify the node for the record path.
-   * Known at construction (one node per till). */
+  /** This node's id, passed on to `reverseViaStripe` to identify the node for the record path, and
+   * stamped on the incident `forward` raises for a declined payment. Known at construction (one node
+   * per till). */
   nodeId: string;
 }
 

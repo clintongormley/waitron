@@ -905,9 +905,9 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
     capturedAmount: string,
   ): Promise<{ id: string; externalRef: string }> {
     const id = randomUUID();
-    // `payments_provider_ref_key` is tenant-scoped but `payments_provider_external_ref_key` is GLOBAL
-    // per provider, and the shared container accumulates every test's rows, so both refs are made
-    // unique per seed (mirrors `nextNif`'s reason for per-venue NIFs).
+    // `payments_provider_ref_key` and `payments_provider_external_ref_key` are both unique per
+    // provider across the database, and the shared container accumulates every test's rows, so both
+    // refs are made unique per seed (mirrors `nextNif`'s reason for per-venue NIFs).
     const externalRef = `pi_lost_${randomUUID()}`;
     await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);

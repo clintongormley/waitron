@@ -2558,7 +2558,6 @@ async function carveOffLines(
       const splitLineId = randomUUID();
       await tx.insert(workingOrderLines).values({
         id: splitLineId,
-        // Stamp the destination line with the configured tenant id.
         workingOrderId: toTabId,
         lineNo: maxLineNo! + i + 1,
         productId: line.productId,

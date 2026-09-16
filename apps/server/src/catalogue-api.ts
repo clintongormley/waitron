@@ -246,13 +246,13 @@ async function requireCatalogueIdBody(c: Context): Promise<string> {
 }
 
 /**
- * The deployment holds one tenant per database. The trust-boundary check for an untrusted
+ * The deployment holds one taxpayer per database. The trust-boundary check for an untrusted
  * `catalogueId` a location-menu WRITE will reference: refuse it as `catalogue.not_found` (404)
  * unless it names a catalogue present in this database. Runs inside `gated`'s transaction;
- * `catalogueExists` checks by id only. This is the CLEAN-error front of a two-layer defense: both
- * write targets carry a tenant-consistent composite FK (`locations.catalogue_id` → 0078,
- * `location_catalogues.catalogue_id` → 0074) that 23503-rejects a cross-tenant id at the data
- * layer anyway — see the route comment.
+ * `catalogueExists` checks by id only. This is the CLEAN-error front: the write targets carry a
+ * plain by-id FK on `catalogues(id)` (`locations.catalogue_id`, `location_catalogues.catalogue_id`)
+ * which 23503-rejects an ABSENT id at the data layer — the id is all either layer can check, since
+ * every catalogue in the database belongs to the one taxpayer.
  */
 async function assertCatalogueVisible(tx: Transaction, catalogueId: string): Promise<void> {
   if (!(await catalogueExists(tx, catalogueId))) {
@@ -705,12 +705,11 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
   // default is demoted, never dropped). The two routes that WRITE a `catalogueId` reference (POST
   // add, PUT default) guard it with `catalogueExists` FIRST — an absent id is refused
   // `catalogue.not_found` (404). The lookup is by id. This is defense-in-depth, not the sole
-  // protection: BOTH write targets carry a tenant-consistent composite FK —
-  // `locations.catalogue_id` → catalogues(id), `location_catalogues.catalogue_id` → catalogues(id) —
-  // that 23503-rejects a foreign-tenant id at the DATA layer. The guard gives an absent id a
-  // clean error. A foreign row seeded into the same database passes that by-id lookup, but the
-  // composite FK still rejects the write with 23503. DELETE needs no guard: removing a non-member
-  // row is a no-op.
+  // protection: BOTH write targets carry a by-id FK on `catalogues(id)`
+  // (`locations.catalogue_id`, `location_catalogues.catalogue_id`) that 23503-rejects an absent id
+  // at the DATA layer even if the guard is skipped; the guard is what turns that into a clean 404.
+  // Neither layer can check more than the id, because every catalogue in the database belongs to
+  // the one taxpayer. DELETE needs no guard: removing a non-member row is a no-op.
   app.get("/management-api/locations/:locationId/catalogues", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1318,9 +1317,9 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
           ? {}
           : { addAllergens: body.addAllergens as ProductAllergens | null }),
       };
-      // The group :id is screened for SHAPE only; a well-formed-but-missing/foreign group makes the
-      // tenant-consistent (group_id) FK raise 23503 → the opaque 500 the STATUS map documents
-      // for a foreign id, the same posture the product routes take on a foreign catalogueId.
+      // The group :id is screened for SHAPE only; a well-formed-but-missing group makes the
+      // `group_id` FK raise 23503 → the opaque 500 the STATUS map documents,
+      // the same posture the product routes take on a missing catalogueId.
       const created = await gated(sessionId, async (tx) => {
         await validateContentTranslations(tx, input.name, deps.venueLocale ?? FALLBACK_LOCALE);
         return createOptionGroupItem(tx, groupId, input);

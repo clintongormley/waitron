@@ -23,7 +23,7 @@ function nextNif(): string {
   return `${String(70_000_000 + nifCounter).padStart(8, "0")}K`;
 }
 
-/** Provision a fresh chained venue (as the owner) and return the tenant id the seed needs. */
+/** Provision a fresh chained venue (as the owner) for the seed to run against. */
 async function provisionVenue(): Promise<void> {
   await applyVenue(
     planVenue(

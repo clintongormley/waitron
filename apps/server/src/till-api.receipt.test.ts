@@ -342,9 +342,9 @@ async function login(app: Hono, cfg: TillConfig, operatorId: string): Promise<st
  *  enrolled device, and the device's till IS the venue till, so the filed record is unchanged. */
 let tillDeviceCounter = 0;
 async function enrolTillCookie(cfg: TillConfig): Promise<string> {
-  // A device-gated login (§5/§6) plus a sale both enrol a till device in the SAME tenant, so the
+  // A device-gated login (§5/§6) plus a sale both enrol a till device in the SAME database, so the
   // profile name AND the device name (which the auto-created register is named after) must be unique
-  // per call — both carry a tenant-scoped unique index.
+  // per call — both carry a unique index.
   tillDeviceCounter += 1;
   const n = tillDeviceCounter;
   // A `till` device is defined by a `till`-form-factor profile (Task 7); `resolveDeviceBinding`

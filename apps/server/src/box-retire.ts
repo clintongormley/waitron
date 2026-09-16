@@ -16,8 +16,8 @@ export type BoxRetireDeps = {
   appDb: Database;
   /** The box key ring — unseals this node's identity key so the minted eviction can be signed. */
   ring: KeyRing;
-  /** This node's tenant — scopes the identity-key read the mint performs. */
-  /** THIS (departing) node — the node that becomes `evicted`, and the eviction document's signer. */
+  /** THIS (departing) node — the node that becomes `evicted`, the eviction document's signer, and
+   * what the identity-key read the mint performs is keyed on. */
   nodeId: string;
   /** The native slot-drain reader (the same slot box-status's `disposal` surface reads), or `undefined`
    * when the held document names no carrier — which retireSelf refuses as `node.retire_no_carrier`. */

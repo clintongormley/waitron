@@ -36,14 +36,15 @@ export type { DeviceKind };
 const FOREIGN_KEY_VIOLATION = "23503";
 
 /**
- * A device composite binding FK and the input FIELD it guards. A 23503 on one of these means a device
- * write (enrol, `assign-device-profile`, or the hardware PATCH) named a binding that no row of this
- * tenant matches — the composite makes each check tenant-isolated and atomic with the write (no
- * read-then-write race), so the routes translate it here rather than pre-checking:
- *  - `devices_device_profile_fk (device_profile_id)` — a reassign to an unknown/foreign
+ * A device binding FK and the input FIELD it guards. A 23503 on one of these means a device
+ * write (enrol, `assign-device-profile`, or the hardware PATCH) named a binding no row matches —
+ * the FK makes that check atomic with the write (no read-then-write race), so the routes translate it
+ * here rather than pre-checking. Existence is all it can check: every profile and printer in the
+ * database belongs to the one taxpayer.
+ *  - `devices_device_profile_fk (device_profile_id)` — a reassign to an unknown
  *    profile (`deviceProfileId`);
  *  - `devices_receipt_printer_fk (receipt_printer_id)` — a hardware PATCH naming an
- *    unknown/foreign printer (`receiptPrinterId`).
+ *    unknown printer (`receiptPrinterId`).
  * Only `devices` carries a binding FK: a join request names none, so nothing at knock time can trip one.
  */
 const BINDING_FK_FIELD: Record<string, "deviceProfileId" | "receiptPrinterId"> = {

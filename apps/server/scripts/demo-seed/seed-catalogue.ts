@@ -1,5 +1,5 @@
 // Seed both demo menus in the caller's transaction and return the image-to-product map.
-// The explicit tenant id supplies writes; this module resolves the kitchen stations.
+// The caller supplies the location; this module resolves the kitchen stations.
 
 import { sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
@@ -98,7 +98,7 @@ async function resolveStationIds(
 }
 
 /**
- * Seed both demo menus onto `locationId` under the caller's tenant context, routing each category to
+ * Seed both demo menus onto `locationId` in the caller's transaction, routing each category to
  * its KDS station, setting Casa Delgado as the location DEFAULT and Menú del Día as an accessible
  * second menu. Returns the image→productId map for the downstream media/sales steps.
  */

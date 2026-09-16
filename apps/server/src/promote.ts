@@ -60,8 +60,8 @@ export interface PromoteDeps {
   readonly log: Logger;
   /** The box key ring — unseals this node's identity private key to sign the minted document. */
   readonly ring: KeyRing;
-  /** This node's tenant — scopes the identity-key read and the trust set. */
-  /** This node's id — the new document's `signerNodeId` and the node that becomes serving-primary. */
+  /** This node's id — the new document's `signerNodeId`, the node that becomes serving-primary, and
+   * what the identity-key read, the series read and the endorsement read are each keyed on. */
   readonly nodeId: string;
 }
 

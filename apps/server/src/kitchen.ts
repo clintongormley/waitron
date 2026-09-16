@@ -42,12 +42,12 @@ export interface Station {
 }
 
 /**
- * The deployment holds one tenant per database. Assert `stationId` names a LIVE station of THIS
+ * The deployment holds one taxpayer per database. Assert `stationId` names a LIVE station of THIS
  * venue — present, `active`, and in `cfg.locationId`. NULL-or-false → `station.not_found`,
  * folding "absent / another venue's" and "deactivated" into the one code (errors.ts explains why
- * the inactive case is not distinct). The tenant-consistent
- * `categories_station_fk`/`products_station_fk` (and the default's own scope) enforce only
- * same-TENANT existence — they can see neither `active` nor the location — so this explicit read
+ * the inactive case is not distinct). The by-id
+ * `categories_station_fk`/`products_station_fk` enforce EXISTENCE only — they can see neither
+ * `active` nor the location — so this explicit read
  * is what rejects a retired or cross-venue station the FK would accept. One round trip via a
  * scalar subquery, the shape tables.ts's `setTableStatus` uses; the `location_id` predicate
  * narrows it to this venue.
@@ -396,8 +396,8 @@ export interface Course {
  * Assert `courseId` names a LIVE course of THIS venue — present, `active`, and in
  * `cfg.locationId`. NULL-or-false → `course.not_found`, folding "absent / another venue's" and
  * "deactivated" into the one code (errors.ts explains why the inactive case is not distinct),
- * exactly as {@link requireLiveStation} does for a station. The tenant-consistent
- * `products_course_fk` enforces only same-TENANT existence — it can see neither `active` nor the
+ * exactly as {@link requireLiveStation} does for a station. The by-id
+ * `products_course_fk` enforces EXISTENCE only — it can see neither `active` nor the
  * location — so this explicit read is what rejects a retired or cross-venue course the FK would
  * accept. One round trip via a scalar subquery.
  *

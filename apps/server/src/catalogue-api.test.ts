@@ -26,7 +26,7 @@ import "./errors.js";
 // same way `till-api.test.ts` proves the till routes. The catalogue tables live in CORE_MIGRATIONS and
 // the management session/persons in IDENTITY_MIGRATIONS, and every DB touch runs `withTransaction` +
 // `asAppUser` exactly as production does. The gate-by-DELETION proof (removing `authorizeManager`
-// turns the staff refusals green→red) and the option-group attach's tenant-consistent composite FK are
+// turns the staff refusals green→red) and the option-group attach's by-id FK are
 // the real-Postgres suite (`catalogue-api.pg.test.ts`); PGlite connects as a superuser holding every
 // grant (CLAUDE.md §4).
 const noopLog: Logger = () => {};

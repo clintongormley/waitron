@@ -60,10 +60,9 @@ const RING: KeyRing = loadKeyRing({
 const STANDBY_PUB = generateNodeKeyPair().publicKey;
 
 // Reset per test (the default): each test provisions its OWN venue and then mutates the membership
-// document (appends standbys, bumps the term, reserves identities), so tests must not accumulate
-// tenants in one database — with the tenant filters removed, a membership/reserved-identity read
-// across accumulated tenants returns the wrong row. The reset wipes the deployment stamp, so it is
-// re-applied in beforeEach.
+// document (appends standbys, bumps the term, reserves identities). No read here filters by anything
+// but id, so two venues left in one database would let a membership/reserved-identity read return the
+// wrong row. The reset wipes the deployment stamp, so it is re-applied in beforeEach.
 const suite = useTemplateDb({ template: "manifest" });
 
 // Tenants accumulate for the life of the shared container and `tenants_country_tax_id_key` is unique,

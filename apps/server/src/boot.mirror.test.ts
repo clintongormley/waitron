@@ -557,13 +557,14 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
 
   it("boots adoption-pending on an EMPTY database with status and public certificate help", async () => {
     // C6 / derived fact 1: an adopted mirror restarts while its native initial copy is still running,
-    // so the tenant rows are absent. A pending-adoption.json is present. Boot must enter the
-    // adoption-pending branch and serve a minimal status surface WITHOUT touching tenant-scoped rows.
+    // so the copied rows are absent. A pending-adoption.json is present. Boot must enter the
+    // adoption-pending branch and serve a minimal status surface WITHOUT reading any of them.
     //
-    // FAILING CASE (proven by the empty database here): without the adoption-pending guard, boot would
-    // reach `ensureMirrorViewer(db)`, whose `persons` insert FKs to a `tenants` row the copy
-    // has not brought — a foreign-key violation that would throw out of `startServer`. That this boot
-    // returns a serving box instead is the guard working: the identity was never seeded on `adopting`.
+    // WHAT THE EMPTY DATABASE PROVES: that this boot returns a serving box at all, and that the
+    // mirror viewer was never seeded, so nothing on the pending branch read a row the copy has not
+    // brought. It no longer proves a particular failure without the guard: the receipt that used to
+    // stand here named a foreign key from `persons` to `tenants`, and this branch removed every
+    // foreign key to that table. What would break without the guard is not re-derived here.
     const stateDir = mkdtempSync(join(tmpdir(), "waitron-adopting-state-"));
     // A `modules.json` resolving the fiscal slot, matching the suite convention (the shared prefix
     // migrates the enabled set before the branch is entered).

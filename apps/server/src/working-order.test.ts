@@ -4146,13 +4146,13 @@ describe("bumpCourseReady / markCourseAway (KDS-3 expo/pass coordination verbs)"
 
 // KDS-2 A1 — the per-line `courseId` OVERRIDE is screened at the shared ring-time resolver
 // (`priceOrderLines`), the ONE course-write path that formerly skipped `requireLiveCourse`. A crafted
-// override — malformed, well-formed-but-unknown, a DIFFERENT venue's course of the same tenant (the
-// working_order_lines.course_id FK is tenant-scoped only, not location-scoped), or a deactivated one —
+// override — malformed, well-formed-but-unknown, a DIFFERENT venue's course in the same database (the
+// working_order_lines.course_id FK is by id only, not location-scoped), or a deactivated one —
 // is a clean `course.not_found` rather than an opaque 500 (22P02/23503) or a silently-accepted
 // cross-venue line. The product DEFAULT (`product.course_id`) is an already-valid stored FK and is NOT
 // re-screened (that would reject a legitimately-deactivated default). Exercised through `addTabRound`
 // (the round path that threads the override today); the screen lives in `priceOrderLines`, so the order
-// paths are covered by the SAME code. PGlite: plain SQL + the tenant-consistent FK, no privilege or
+// paths are covered by the SAME code. PGlite: plain SQL + the by-id FK, no privilege or
 // concurrency dimension.
 // ---------------------------------------------------------------------------------------------------
 describe("voidTabLine modifier cascade (FIX 2)", () => {
@@ -4755,8 +4755,8 @@ describe("priceOrderLines course-override validation (KDS-2 A1)", () => {
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const cafe = await makeProduct(tx, cfg, catalogueId, {});
       const tabId = await openEmptyTab(tx, cfg);
-      // A second venue of the SAME tenant, and a course that lives there. The tenant-consistent FK on
-      // working_order_lines.course_id would ACCEPT it (same tenant), but requireLiveCourse is
+      // A second venue in the same database, and a course that lives there. The by-id FK on
+      // working_order_lines.course_id would ACCEPT it, but requireLiveCourse is
       // location-scoped, so the cross-venue override is refused — the exact silent-accept bug A1 closes.
       const loc2 = await tx.execute<{ id: string }>(sql`
         insert into locations (name, invoice_locales, operation_description)

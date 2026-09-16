@@ -52,8 +52,9 @@ export interface TopSeller {
   total: Decimal;
 }
 
+/** The obligado is the database's one taxpayer, so a modelo 303 aggregates ALL nodes of the legal
+ * entity with no node predicate — this takes only the period to report on. */
 export interface VatReturnInput {
-  /** The obligado — a modelo 303 aggregates ALL nodes of the legal entity (no node predicate). */
   /** Civil calendar year of the liquidation period, e.g. 2026 (must be an integer). */
   year: number;
   /** The liquidation period (month/quarter/year). */

@@ -249,7 +249,7 @@ async function main(): Promise<void> {
     });
 
     // LIST on Caja 2: the OTHER register sees the order Caja 1 parked — the held list is venue-wide
-    // (tenant-scoped, till-reroute §3.6), not register-owned.
+    // (till-reroute §3.6), not register-owned.
     const heldOnCaja2 = await listHeldOrders({ db }, caja2);
 
     // RETRIEVE on Caja 2: rebuild the basket from the parked order's pricing inputs.

@@ -6,8 +6,6 @@ import type { VerifactuClient } from "@waitron/verifactu";
 
 const BASE = new Date("2026-03-01T13:05:00+01:00");
 
-/** See `saleInput` below: an inert value for a core input field nothing reads any more. */
-
 /**
  * `VerifactuBackendOptions.resolveClient` (Task 5) is required by the constructor, and is read by
  * both `drain` and `reconcile` (`drain.test.ts`, `acks.test.ts`, `drain.concurrency.test.ts`, and

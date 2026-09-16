@@ -460,11 +460,11 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       // `management.request_invalid` 400 naming the field), the shared `requireBodyUuid` screen.
       const body = await readJsonBody<{ deviceProfileId?: unknown }>(c);
       const deviceProfileId = requireBodyUuid(body.deviceProfileId, "deviceProfileId");
-      // A non-null target must be one of THIS tenant's own device profiles. Rather than
+      // A non-null target must name a device profile that exists. Rather than
       // a read-then-write pre-check (which leaves a delete-between-check-and-update race surfacing a
-      // raw FK 500), let the composite FK `devices_device_profile_fk (device_profile_id)` be
-      // the guard: tenant-isolated (a cross-tenant id looks for `(this_tenant, id)` and misses — never
-      // binds, never leaks) AND atomic with the UPDATE (no window). A 23503 on it → `device.binding_invalid`
+      // raw FK 500), let the FK `devices_device_profile_fk (device_profile_id)` be
+      // the guard: it is atomic with the UPDATE (no window). Existence is all it can check — every
+      // profile in the database belongs to the one taxpayer. A 23503 on it → `device.binding_invalid`
       // naming the field, the SAME code+shape the enrol path raises via the same `bindingFkField` helper.
       // Any other error rethrows raw.
       let updated: { id: string }[];
@@ -526,8 +526,8 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
         throw new AppError("management.request_invalid", { field: "hardware" });
       }
       // By-id scope — an unknown device id updates 0 rows → 404, the assign-device-profile / revoke
-      // by-id idiom. A `receiptPrinterId` naming no printer of this
-      // tenant reaches the composite `devices_receipt_printer_fk` and is translated to
+      // by-id idiom. A `receiptPrinterId` naming no printer at all
+      // reaches `devices_receipt_printer_fk` and is translated to
       // `device.binding_invalid` naming the field (the same `bindingFkField` helper + shape the reassign
       // route uses); any other error rethrows raw.
       let updated: {

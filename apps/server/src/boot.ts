@@ -316,6 +316,8 @@ export const BOX_HOSTNAME = "waitron.local";
  * precisely (a `file.size` check → `media.too_large`); exported here so that route and this boot
  * agree on one value rather than two literals that could drift.
  */
+export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
+
 /** What `reconcile` reports when the Stripe credential is not provisioned: no runs, nothing
  * deferred, nothing dropped by the horizon, nothing skipped, and no next due time — the same shape
  * `runDue` returns for a tick with no work, so `runPass` and `health.ts` need no special case. */
@@ -326,8 +328,6 @@ const NOTHING_TO_RECONCILE: TickResult = {
   skipped: [],
   nextDueAt: null,
 };
-
-export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 
 /**
  * The card-payment provider a Demo or default-Prepare till drives: the local simulator, built once at
@@ -1351,7 +1351,7 @@ export async function startServer(
   };
 
   // Adoption-pending boot (C6 / derived fact 1): an adopted mirror restarts into a database whose
-  // native initial copy is still running (spec §2.2, "minutes over a WAN"), so its tenant-scoped rows
+  // native initial copy is still running (spec §2.2, "minutes over a WAN"), so the copied rows
   // are not there yet. Boot must NOT touch them until the copy completes — it serves `/health` and a
   // minimal `/api/box/status` reporting `adoption: pending`, ensures the two publications, and starts
   // `runFinishAdoption`, which seals the reserved identity + ambient viewer once every table has

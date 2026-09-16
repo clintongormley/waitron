@@ -1682,9 +1682,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           .select({ policy: locations.drawerOpenPolicy })
           .from(locations)
           .where(eq(locations.id, deps.cfg.locationId));
-        // The till's own location is selected by id and tenant id (like the receipt-mode read in
-        // `receipt-print.ts`); if it somehow does not, fall back to the SECURE 'gated' default so
-        // a missing row can never leave the gate open.
+        // The till's own location is selected by id (like the receipt-mode read in
+        // `receipt-print.ts`); if it somehow returns nothing, fall back to the SECURE 'gated'
+        // default so a missing row can never leave the gate open.
         /* v8 ignore next -- unreachable: the provisioned till's own location row exists */
         const policy = loc?.policy ?? "gated";
 
@@ -1846,10 +1846,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // The deployment holds one tenant per database. The venue's ACTIVE service statuses (FP-1,
+  // The deployment holds one taxpayer per database. The venue's ACTIVE service statuses (FP-1,
   // TS-2), for the table-order screen's Estado picker. SESSION-GUARDED (operator PIN, NOT the
-  // manager-only `listStatuses`): `requireSession` runs FIRST, and `listServiceStatuses` reads
-  // without a tenant filter. LIST-ONLY, active-only (a deactivated status can't be applied);
+  // manager-only `listStatuses`): `requireSession` runs FIRST, and `listServiceStatuses` reads the
+  // whole table. LIST-ONLY, active-only (a deactivated status can't be applied);
   // status CRUD is the management API's, so this surface throws no domain code.
   app.get("/api/statuses", (c) =>
     run(c, log, async () => {

@@ -282,23 +282,19 @@ describe("provisionVenue", () => {
     expect(await fiscalCounts(db)).toEqual(afterFirst);
   });
 
-  it("refuses a re-provision of the SAME business in a DIFFERENT casing — cross-layer invariance (§5)", async () => {
-    // The most load-bearing path: the double-provision guard (provision.ts) recomputes the tenant id
-    // from the RAW request (`deriveTenantId(req.venue.country, req.venue.taxId)`), while the stored
-    // id comes from `planVenue` (which canonicalizes country/taxId). For the guard to recognize a
-    // re-provision in a different casing, BOTH normalization layers must agree: planVenue canonicalizes
-    // the plan/stored row, and deriveTenantId self-normalizes the id the guard recomputes. Without
-    // the latter, a re-provision in a NON-canonical casing recomputes a raw id that MISSES the stored
-    // (canonical) tenant, so the guard passes and applyVenue ADDS a second node → a second, permanent,
-    // unmergeable SIF/hash chain (§5). No existing test catches this: "refuses a second provision" sends
-    // byte-identical requests, so its guard id matches trivially.
+  it("refuses a re-provision of the SAME business in a DIFFERENT casing, BY NAME (§5)", async () => {
+    // A re-provision of an already-provisioned box must never mint a second node, because that is a
+    // second permanent, unmergeable SIF and hash chain (§5). This case sends the SECOND request in a
+    // NON-canonical casing — a lowercase country and a lowercase NIF, where `nextNif()` ends in an
+    // uppercase "K" — so it also pins that casing plays no part in the decision.
     //
-    // The re-provision is SECOND in a NON-canonical casing on purpose: the guard reads the SECOND
-    // call's raw request, so that call must be non-canonical for the cross-layer invariance to be under
-    // test. (A canonical second call derives the canonical id directly and would be refused even with
-    // deriveTenantId's normalization removed — a false green.) `nextNif()` ends in an uppercase "K",
-    // so lower-casing the NIF plus a lowercase country gives a genuinely non-canonical re-provision of
-    // the same business.
+    // WHICH layer refuses it, and what happens without that layer, measured rather than reasoned:
+    // the double-provision guard (`provision.ts`) asks whether the taxpayer row exists at all
+    // (`select 1 from tenants where id = 1`) and throws `setup.already_provisioned`. Delete that
+    // guard and this case prints `expected 'provisioning.second_venue' to be
+    // 'setup.already_provisioned'` — so applyVenue's own existing-venue check still stops the second
+    // chain one layer deeper, and what this case pins is that the operator gets the SETUP code rather
+    // than the provisioning one. Both layers are in the diff; neither is redundant.
     const db = ownerDb();
     const nif = nextNif(); // e.g. "60000001K" — canonical (uppercase)
     const env = "preproduction" as const;
@@ -320,8 +316,7 @@ describe("provisionVenue", () => {
     expect(isAppError(error)).toBe(true);
     expect(isAppError(error) && error.code).toBe("setup.already_provisioned");
 
-    // One tenant, one SIF/series set, one node — no duplicate chain. (Strip tenant-id.ts's
-    // self-normalization and this reads {sif:2, series:4, nodes:2}, the reviewer's negative control.)
+    // One taxpayer, one SIF/series set, one node — no duplicate chain.
     const tenants = await db.execute<{ n: number }>(sql`select count(*)::int as n from tenants`);
     expect(tenants.rows[0]!.n).toBe(1);
     expect(await fiscalCounts(db)).toEqual(afterFirst);

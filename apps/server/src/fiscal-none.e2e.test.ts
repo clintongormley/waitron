@@ -92,7 +92,8 @@ interface GbVenue {
 /** Provision a fresh GB venue (country `GB`, territory `GB-vat`, `fiscal-none` enabled /
  *  `fiscal-verifactu` disabled — the set `venueModuleConfig` produces) as the owner, then open a
  *  shift session for its seeded admin (who holds every permission, so it authorizes voids and
- *  corrections). Each test gets its OWN tenant so the tenant-scoped counts are order-independent. */
+ *  corrections). `useTemplateDb` resets the clone between tests, so each test provisions into an
+ *  empty database and the counts below are order-independent. */
 async function setupGbVenue(): Promise<GbVenue> {
   const venue: VenueResult = await applyVenue(
     planVenue(

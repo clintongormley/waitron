@@ -44,8 +44,7 @@ function requirePlacementInt(value: number, max: number, field: string): void {
 
 /**
  * Is this (or anything it wraps) a foreign-key violation on `dining_tables_zone_fk` — a `zone_id`
- * naming no `floor_zones` row for this tenant (a missing zone, or another tenant's, which the
- * tenant-consistent composite FK rejects too)? Walks the cause chain because Drizzle wraps every
+ * naming no `floor_zones` row at all? Walks the cause chain because Drizzle wraps every
  * failed query in a `DrizzleQueryError` whose own `.code` is undefined; the real SQLSTATE and the
  * `.constraint` name live on `.cause` (node-postgres), one level deeper still under PGlite — verified
  * against this file's PGlite suite, where the 23503 arrives at depth 1 with `constraint =
@@ -97,10 +96,10 @@ export interface DiningTable {
 
 /**
  * Create a dining table in the till's venue (its `cfg.locationId`), returning the minted id. Runs on the
- * CALLER's transaction as app_user. A duplicate `(tenant, location, label)` collides
+ * CALLER's transaction as app_user. A duplicate `(location, label)` collides
  * on `dining_tables_location_label_key` (the only unique an INSERT can trip — `id` is fresh) and is
  * surfaced as `table.label_taken` rather than the raw 23505. A `zoneId` naming no `floor_zones` row
- * (or another tenant's) trips the composite `dining_tables_zone_fk` (23503) and is surfaced as
+ * trips `dining_tables_zone_fk` (23503) and is surfaced as
  * `zone.not_found` — the location FK is a 23503 too, so the check reads the CONSTRAINT NAME
  * (`isZoneFkViolation`) rather than the bare code.
  */
@@ -157,9 +156,8 @@ export async function listTables(tx: Transaction, cfg: TillConfig): Promise<Dini
 
 /**
  * Edit a table's `label`/`zoneId`/`capacity` (any subset). An absent id throws `table.not_found`;
- * a label collision throws `table.label_taken`; a `zoneId` naming no `floor_zones` row (or
- * another tenant's) throws `zone.not_found` (the composite `dining_tables_zone_fk`,
- * `isZoneFkViolation`). Reactivate is `updateTable`-shaped and kept trivial — this task
+ * a label collision throws `table.label_taken`; a `zoneId` naming no `floor_zones` row throws
+ * `zone.not_found` (`dining_tables_zone_fk`, `isZoneFkViolation`). Reactivate is `updateTable`-shaped and kept trivial — this task
  * deactivates via {@link deactivateTable}.
  */
 export async function updateTable(
@@ -505,8 +503,8 @@ export interface ServiceStatusOption {
  * operator cannot apply (`setTableStatus` rejects `status.inactive`) must not be offered.
  * SESSION-gated at the route — NOT `requireConfigure`, unlike the manager-only {@link
  * listStatuses}: an operator holds a till session, not a management one, so it takes no
- * `managementSessionId`. Takes NO `cfg`: the statuses table is tenant-wide with no location
- * column, so the read is unfiltered, unlike {@link listZones}'s location filter.
+ * `managementSessionId`. Takes NO `cfg`: the statuses table carries no location column, so the read
+ * is unfiltered, unlike {@link listZones}'s location filter.
  */
 export async function listServiceStatuses(tx: Transaction): Promise<ServiceStatusOption[]> {
   return tx

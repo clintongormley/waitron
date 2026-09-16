@@ -48,7 +48,7 @@ function toTableCfg(locationId: string, locale: SeedLocale): TillConfig {
 }
 
 /**
- * Seed the floor plan onto `locationId` under the caller's tenant context: five service zones,
+ * Seed the floor plan onto `locationId` in the caller's transaction: five service zones,
  * ~16 placed tables, and the four service statuses. Zones are created
  * before any table (a table's `zoneId` must name a LIVE zone of this location — `setTablePlacement`
  * enforces it, `zone.not_found` otherwise), and each table is placed (`setTablePlacement`)

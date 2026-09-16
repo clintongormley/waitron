@@ -14,7 +14,7 @@ import { ALL_MODULES } from "./modules.js";
 // Real Postgres, not PGlite: the route mechanics (body/id screens) are already proven
 // in-process on PGlite (`catalogue-api.test.ts`); what needs the real cluster is the write group run
 // as the non-superuser `app_user` — its table grants are enforced here and held unconditionally by
-// PGlite's superuser (CLAUDE.md §4) — and the tenant-consistent composite FK on the option-group
+// PGlite's superuser (CLAUDE.md §4) — and the by-id FK on the option-group
 // attach. The `person.manage` gate is proven by deletion on the block below.
 const LOCALE = "es-ES";
 
@@ -266,7 +266,7 @@ describe("category dependants and bulk add over real Postgres", () => {
   });
 });
 
-describe("Catalogue API over real Postgres (option groups, gates, tenant-consistent FKs)", () => {
+describe("Catalogue API over real Postgres (option groups, gates, by-id FKs)", () => {
   it("refuses every catalogue write route to a staff-role session — 403 authorization.not_permitted", async () => {
     // Every write shares the permission gate; invalid resource ids must not reveal lookup results
     // to a staff session that cannot manage the catalogue.

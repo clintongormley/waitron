@@ -1040,7 +1040,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   );
 
   // Create a pending person and issue their invitation in the same transaction. Body validation
-  // happens before the transaction; identity owns authorization and tenant-wide uniqueness.
+  // happens before the transaction; identity owns authorization and the uniqueness check.
   app.post("/management-api/staff", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1236,10 +1236,10 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   );
 
   // ── Receipt configuration (Task 7; receipt rehomed in SP-B4) ──────────────────────────────────
-  // The deployment holds one tenant per database. The dashboard's receipt-trim editor
+  // The deployment holds one taxpayer per database. The dashboard's receipt-trim editor
   // surface. Both routes are gated (`requireManagementSession` first, 401 before any DB work) and
   // every DB touch runs under `withTransaction` + `asAppUser`, in this database; the receipt store
-  // upserts on the tenant id. The receipt routes read/write the tenant's own
+  // upserts on `id = 1`. The receipt routes read/write the database's one
   // `tenant_receipts` row (SP-B4 — the trim moved out of the old widget-layout model, now
   // removed). The PUT delegates the authorize + validate + upsert to `@waitron/layouts`'s
   // `putReceipt`; the GET calls `getReceipt`, which does NOT authorize (it is shared with the
@@ -1296,10 +1296,10 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   );
 
   // ── Canvases + tenant theme (Task 11) ──────────────────────────────────────────────────────
-  // The deployment holds one tenant per database. The dashboard's reusable-canvas CRUD
-  // and the tenant's base theme (design §4/§9, SP-A.2 §16.3). All routes are gated
+  // The deployment holds one taxpayer per database. The dashboard's reusable-canvas CRUD
+  // and the box's base theme (design §4/§9, SP-A.2 §16.3). All routes are gated
   // (`requireManagementSession` first, 401 before any DB work) and every DB touch runs
-  // `withTransaction` + `asAppUser`, in this database; the theme store upserts on the tenant id and
+  // `withTransaction` + `asAppUser`, in this database; the theme store upserts on `id = 1` and
   // the canvas store reads by id alone. The READS (`GET /canvases`, `/canvases/:id`, `/theme`) carry their own
   // explicit `authorizeManager(..., "layout.configure")` — `listCanvases`/`getCanvas`/
   // `getTenantTheme` do NOT self-authorize (mirroring `GET /management-api/receipt`) — while the
@@ -1885,7 +1885,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
 
   // Create a table (thin wrapper over TS-1's `createTable`). Body { label, zoneId?, capacity? }; a bad
   // shape → management.request_invalid naming the FIELD; a duplicate label → table.label_taken (409); a
-  // `zoneId` naming no floor_zones row (or another tenant's) → zone.not_found (404), mapped in the verb
+  // `zoneId` naming no floor_zones row → zone.not_found (404), mapped in the verb
   // (`isZoneFkViolation`) and NOT re-mapped here. Returns the new id at 201 (the management-surface
   // create convention; TS-1's till POST returns 200, but this surface is 201 throughout).
   app.post("/management-api/tables", (c) =>
