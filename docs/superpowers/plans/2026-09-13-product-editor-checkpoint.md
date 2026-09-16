@@ -1,5 +1,15 @@
 # Products implementation checkpoint
 
+> **Partly superseded, 2026-09-16** (branch `feat/product-editor-rework`). This records where the
+> work stood on 2026-09-13; two statements under "Implemented behavior" would now mislead anyone
+> acting on them, so read them as history rather than as instructions. A product no longer has
+> "distinct translated names and optional descriptions": its Name is plain staff-facing text, a
+> translated customer-facing name is a separate optional field, and the `descriptions` column is
+> gone. And station and course are no longer separate controls that "remain available after a
+> product exists": they save inside the product's own transaction, so a product can be routed as it
+> is created. The current account is
+> [docs/developers/products.md](../../developers/products.md).
+
 The `products-editor` branch is rebased on current `origin/main` at `89b57526`, which includes the
 three landed supporting builds. Units, Categories and Modifiers now use their real operations and
 forms in the replacement Products screen.

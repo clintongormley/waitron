@@ -6,11 +6,23 @@ product editor and the final integration of Units, Categories and Modifiers.
 Naming decision, 2026-09-13: display `primaryCategoryId` as **Reporting Category**. Use this name
 in its label and validation messages, as confirmed in the shared design.
 
-Update, 2026-09-15: the Unit field below is no longer required. A product may have no unit, which
-shows as **Each** and is never stored; the seeded "each" unit was dropped. The "Required, defaults
-to the existing each unit" row in the field table records the original design, not current
-behaviour. See `2026-09-15-optional-product-unit-design.md`; the current product-editor design is
-`2026-09-15-product-editor-rework-design.md`.
+Update, 2026-09-15, widened 2026-09-16: two parts of what follows record the original design rather
+than current behaviour.
+
+1. The Unit field is no longer required. A product may have no unit, which shows as **Each** and is
+   never stored; the seeded "each" unit was dropped. The "Required, defaults to the existing each
+   unit" row in the field table is the original design. See
+   `2026-09-15-optional-product-unit-design.md`.
+2. The naming model changed. A product's Name is now plain staff-facing text, with an optional
+   translated **customer-facing name** as a separate field beside it and the optional single-language
+   kitchen name as before; a variant carries the same three, plus its own image. The old plural
+   `descriptions` field is gone — it became `name` plus `customer_name` — while the singular
+   translated `description` is unchanged. So the Name row in the field table, the Variants row's and
+   the "Variants and menu prices" section's "translated name", the public-field list's
+   `name: LocalizedText`, and the paragraph about auditing the old `descriptions` field all describe
+   the design before this change.
+
+The current product-editor design is `2026-09-15-product-editor-rework-design.md`.
 
 You build a product from a name, unit, price and tax choice, then add the detail it needs. You can
 choose existing categories/modifiers/units or create them without leaving the product draft. The

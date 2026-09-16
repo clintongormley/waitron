@@ -1,6 +1,6 @@
 # Languages and photographs for your menu
 
-You can add French descriptions to a Spanish menu without changing the language of the dashboard
+You can add French text to a Spanish menu without changing the language of the dashboard
 or your receipts. Start by choosing the languages your content supports, then add translations as
 you need them. The image library uses the same choices as your products, menu sections and
 [modifiers](modifiers.md). Modifier names and choices participate in the default-language
@@ -21,7 +21,7 @@ This fallback uses the Spanish text without copying it into the English field, s
 remain visible where the translation is still missing.
 
 Required fields need text in the default language. Other translations can wait. To change the
-default to English, first complete the required English descriptions and image names.
+default to English, first complete the required English translations and image names.
 If the change is refused, check your products, modifiers, menu sections and image metadata for
 missing translations. You can edit sections with no products through **Venue operations**,
 **Menus**, **Sections**.

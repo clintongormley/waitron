@@ -95,6 +95,10 @@ Postgres. Retain receipt snapshot assertions when threading the content default 
 
 ## Inspected starting points, 2026-09-12
 
+> **Pointer, 2026-09-16** (branch `feat/product-editor-rework`): `apps/dashboard/src/widgets/product-form.ts`
+> below no longer exists. The product editor is now `apps/dashboard/src/widgets/product-editor.ts`,
+> and the rest of this list is a record of what was read on 2026-09-12, not of the tree today.
+
 - `packages/shared/src/locales.ts`: shipped interface languages.
 - `packages/db/src/schema/tenants.ts:122`: location receipt-language configuration.
 - `packages/country-es/src/spain.ts:201`: country pack receipt-language choices.
