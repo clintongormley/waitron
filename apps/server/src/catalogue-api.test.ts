@@ -10,7 +10,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tenantId as brandTenantId,
   tillId as brandTillId,
 } from "@waitron/shared";
 import type { Logger } from "./logger.js";
@@ -110,7 +109,7 @@ function mountApp(venueLocale = "es-ES"): Hono {
 
 /** A live kitchen station and course of the seeded venue, as the app role. */
 async function seedRouting(): Promise<{ stationId: string; courseId: string }> {
-  return withTenant(suite.db, tenantId, async (tx) => {
+  return withTransaction(suite.db, async (tx) => {
     await asAppUser(tx);
     const cfg = venueCfg();
     const station = await createStation(tx, cfg, { name: `Pass ${crypto.randomUUID()}` });
@@ -915,9 +914,7 @@ describe("mountCatalogueApi — products", () => {
     extra: Record<string, unknown> = {},
   ): Promise<Record<string, unknown>> {
     const unitId = (
-      await suite.db.execute<{ id: string }>(
-        sql`select id from units where tenant_id = ${tenantId} and seed_key = 'each'`,
-      )
+      await suite.db.execute<{ id: string }>(sql`select id from units where seed_key = 'each'`)
     ).rows[0]!.id;
     void app;
     return {

@@ -164,16 +164,8 @@ export async function listImageUsages(tx: Transaction, imageId: string): Promise
       active: products.active,
     })
     .from(productVariants)
-    .innerJoin(
-      products,
-      and(
-        eq(products.tenantId, productVariants.tenantId),
-        eq(products.id, productVariants.productId),
-      ),
-    )
-    .where(
-      and(eq(productVariants.tenantId, tenantId), eq(productVariants.image, image[0].filename)),
-    )
+    .innerJoin(products, eq(products.id, productVariants.productId))
+    .where(eq(productVariants.image, image[0].filename))
     .orderBy(productVariants.id);
   const categoryRows = await tx
     .select({ id: categories.id, names: categories.name })

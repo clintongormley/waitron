@@ -24,15 +24,14 @@ export async function seedMedia(
   // The image library names a photo per language, so a product's customer-facing name is what a tile
   // is named by — falling back to the staff name in the venue's default content language, which is
   // the one `uploadImage` requires an entry for.
-  const { defaultLanguage } = await readContentLanguages(tx, tenantId, FALLBACK_LOCALE);
+  const { defaultLanguage } = await readContentLanguages(tx, FALLBACK_LOCALE);
   for (const [imageBasename, productId] of productsByImage) {
     const { rows } = await tx.execute<{
       name: string;
       customer_name: Record<string, string> | null;
     }>(sql`select name, customer_name from products where id = ${productId}`);
     const product = rows[0];
-    if (product === undefined)
-      throw new Error("demo-seed: image product does not belong to this venue");
+    if (product === undefined) throw new Error("demo-seed: image product does not exist");
     const names = customerPresentationText(
       {
         name: product.name,

@@ -403,7 +403,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     if (routing.courseId !== undefined) {
       await setProductCourse(tx, cfg, saved.id, routing.courseId);
     }
-    return readProductEditor(tx, tenantId, saved.id);
+    return readProductEditor(tx, saved.id);
   };
 
   const assertOwned = async (
@@ -1024,11 +1024,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       };
       const created = await gated(sessionId, async (tx) => {
         if (customerName !== null) {
-          await validateContentTranslations(
-            tx,
-            customerName,
-            deps.venueLocale ?? FALLBACK_LOCALE,
-          );
+          await validateContentTranslations(tx, customerName, deps.venueLocale ?? FALLBACK_LOCALE);
         }
         const product = await createProduct(tx, input);
         if (optionGroupIds !== undefined) {
@@ -1394,17 +1390,10 @@ interface ProductRouting {
  * not a request fault — the same posture `management-api.ts`'s namesake takes.
  */
 function requireVenueCfg(deps: CatalogueApiDeps): TillConfig {
-  /* v8 ignore next 8 -- boot always threads a venueCfg of the mounted tenant; only a harness that
-     omits it or mounts a mismatched one AND sends editor routing reaches these, which no suite does —
-     a config error, surfaced as an opaque 500 by `run`. */
+  /* v8 ignore next 4 -- boot always threads a venueCfg; only a harness that omits it AND sends editor
+     routing reaches this, which no suite does — a config error, surfaced as an opaque 500 by `run`. */
   if (deps.venueCfg === undefined) {
     throw new Error("mountCatalogueApi: venueCfg is required for the product editor's routing");
-  }
-  // The routing verbs scope their station/course check and their write to `venueCfg`, so a mount whose
-  // venue belongs to a DIFFERENT tenant than the one every other route is scoped to would check the
-  // wrong venue. The type permits that pairing; this refuses it rather than trusting the wiring.
-  if (deps.venueCfg.tenantId !== deps.cfg.tenantId) {
-    throw new Error("mountCatalogueApi: venueCfg must belong to the mounted tenant");
   }
   return deps.venueCfg;
 }

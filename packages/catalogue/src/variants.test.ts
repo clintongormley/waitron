@@ -149,7 +149,7 @@ describe("product variants", () => {
     ).rejects.toMatchObject({ code: "product.variant_not_found" });
   });
 
-  it("requires the default-language name while preserving disabled translations", async () => {
+  it("requires the default language in a variant's customer name when one is given", async () => {
     await expect(
       run((tx) =>
         setProductVariants(
@@ -220,11 +220,10 @@ describe("product variants", () => {
     const [foreign] = await run(async (tx) => {
       const unit = await createUnit(
         tx,
-        tenantId,
         { name: { en: "plate" }, precision: 0, abbreviation: { en: "pl" } },
         "en",
       );
-      const other = await createProduct(tx, tenantId, {
+      const other = await createProduct(tx, {
         catalogueId: menuId,
         categoryId: null,
         name: "Bravas",
@@ -232,14 +231,14 @@ describe("product variants", () => {
         unitPrice: "6.00",
         vatClass: "reduced",
       });
-      return setProductVariants(tx, tenantId, other.id, [variant("Half portion", "4.00")], "en");
+      return setProductVariants(tx, other.id, [variant("Half portion", "4.00")], "en");
     });
     const [own] = await run((tx) =>
-      setProductVariants(tx, tenantId, productId, [variant("Small", "2.00")], "en"),
+      setProductVariants(tx, productId, [variant("Small", "2.00")], "en"),
     );
     await expect(
       run((tx) =>
-        setMenuVariants(tx, tenantId, offerId, [
+        setMenuVariants(tx, offerId, [
           { variantId: own!.id, unitPrice: "4.00", available: true },
           { variantId: foreign!.id, unitPrice: "5.00", available: true },
         ]),
@@ -248,7 +247,7 @@ describe("product variants", () => {
       code: "product.variant_not_found",
       params: { variantId: foreign!.id },
     });
-    expect(await run((tx) => listMenuVariants(tx, tenantId, offerId))).toEqual([]);
+    expect(await run((tx) => listMenuVariants(tx, offerId))).toEqual([]);
   });
 });
 

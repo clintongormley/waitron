@@ -459,7 +459,7 @@ export async function payWorkingOrder(
         // never a re-price of a client basket (`req.lines` is IGNORED). It runs the SAME
         // difference-method arithmetic over the locked gross that `priceBasket` runs over a live
         // catalogue, so a catalogue price change between park and pay never moves the filed total.
-        priced = await priceStoredOrder(tx, cfg, req.id);
+        priced = await priceStoredOrder(tx, req.id);
       }
 
       const serviceContext = await VENUE_SERVICE.findOrderContext(tx, cfg, req.id);
@@ -546,7 +546,7 @@ async function readSettledTicket(
   // walk-up (`createOpenOrder` stored the priced lock) and a retrieved/placed order. Read straight
   // back rather than recomputed from `sale_lines` (which stores the NET base, so recovering the gross
   // would drift by a cent), so the replayed receipt's line list matches the invoice exactly.
-  const ticketLines = ticketLinesFrom(await priceStoredOrder(tx, cfg, workingOrderId));
+  const ticketLines = ticketLinesFrom(await priceStoredOrder(tx, workingOrderId));
 
   // Read the QR + the exact filed desglose back from the immutable fiscal record, in this same
   // transaction. This reads nothing but the already-filed alta — never re-files, never re-hashes.
@@ -904,7 +904,7 @@ export async function payWorkingOrderIntegrated(
         zoneId: req.zoneId,
       }));
     } else {
-      priced = await priceStoredOrder(tx, cfg, req.id);
+      priced = await priceStoredOrder(tx, req.id);
     }
     // A `placed` order at this read is a genuine COUNTER COLLECT (the card is being tendered at the
     // collect stage of a prepared order) rather than a walk-up `open` → settle; `finalizeCapture`
@@ -1180,7 +1180,7 @@ async function finalizeRecovery(
 
     // File from the STORED locked lines — the SAME `priceStoredOrder` reader P1 priced with, so
     // `priced.total` equals what `collect` charged (ex any tip). NOT a re-price of `req.lines`.
-    const priced = await priceStoredOrder(tx, cfg, req.id);
+    const priced = await priceStoredOrder(tx, req.id);
     const capturedAmount = decimal(captured.amount);
 
     // Corruption guard (Decision 2 / §5): the charge cannot cover the locked total → file nothing,
@@ -1698,7 +1698,7 @@ export async function collectOrder(
     // order's stored locked lines and move placed → settled (the shared filing path). `markCollected`
     // = true stamps `collected_at` in that same settle UPDATE (this IS a collect), dropping the order
     // from its station queue; the fiscal filing itself is byte-identical to a walk-up's.
-    const priced = await priceStoredOrder(tx, cfg, req.id);
+    const priced = await priceStoredOrder(tx, req.id);
     return fileImmediateSale(tx, deps, cfg, req.id, req.tender, priced, operatorId, true);
   });
 }

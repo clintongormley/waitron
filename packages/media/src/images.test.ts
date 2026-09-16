@@ -154,26 +154,25 @@ describe("metadata, labels and references", () => {
   });
 
   it("blocks deletion of a photo a product VARIANT uses, and releases it when cleared", async () => {
-    const tenantId = await seedTenant(suite.db);
-    await withTenant(suite.db, tenantId, async (tx) => {
+    await seedTenant(suite.db);
+    await withTransaction(suite.db, async (tx) => {
       const { image } = await uploadImage(
         tx,
-        tenantId,
         { bytes: photo, names: { en: "Large loaf" }, altText: { en: "Loaf" }, labels: [] },
         { fallbackLanguage: "en", maxUploadBytes: 100 },
       );
       const menu = await tx.execute<{ id: string }>(
-        sql`insert into catalogues (tenant_id, name) values (${tenantId}, 'Lunch') returning id`,
+        sql`insert into catalogues (name) values ('Lunch') returning id`,
       );
       // The PRODUCT carries no photo; only its variant does, which is the case a product-only scan
       // misses — the variant photo would be deletable while the variant still points at it.
       const product = await tx.execute<{ id: string }>(
-        sql`insert into products (tenant_id, catalogue_id, name, pricing_unit, unit_price, vat_class)
-          values (${tenantId}, ${menu.rows[0]!.id}, 'Bread', 'each', '2.00', 'general') returning id`,
+        sql`insert into products (catalogue_id, name, pricing_unit, unit_price, vat_class)
+          values (${menu.rows[0]!.id}, 'Bread', 'each', '2.00', 'general') returning id`,
       );
       const variant = await tx.execute<{ id: string }>(
-        sql`insert into product_variants (tenant_id, product_id, name, unit_price, image)
-          values (${tenantId}, ${product.rows[0]!.id}, 'Large', '3.00', ${image.filename}) returning id`,
+        sql`insert into product_variants (product_id, name, unit_price, image)
+          values (${product.rows[0]!.id}, 'Large', '3.00', ${image.filename}) returning id`,
       );
       const uses = [
         {
@@ -186,14 +185,14 @@ describe("metadata, labels and references", () => {
           active: true,
         },
       ];
-      expect(await listImageUsages(tx, tenantId, image.id)).toEqual(uses);
-      expect(await deleteImage(tx, tenantId, image.id)).toEqual({ deleted: false, uses });
+      expect(await listImageUsages(tx, image.id)).toEqual(uses);
+      expect(await deleteImage(tx, image.id)).toEqual({ deleted: false, uses });
       // The detail read and the list read must agree: the list's count is its own SQL, so a use the
       // scan finds but the count misses would show the library a free photo that refuses to delete.
-      expect((await readImage(tx, tenantId, image.id)).usageCount).toBe(1);
-      expect((await listImages(tx, tenantId, {})).images[0]!.usageCount).toBe(1);
-      await tx.execute(sql`update product_variants set image = null where tenant_id = ${tenantId}`);
-      expect(await deleteImage(tx, tenantId, image.id)).toEqual({ deleted: true, uses: [] });
+      expect((await readImage(tx, image.id)).usageCount).toBe(1);
+      expect((await listImages(tx, {})).images[0]!.usageCount).toBe(1);
+      await tx.execute(sql`update product_variants set image = null`);
+      expect(await deleteImage(tx, image.id)).toEqual({ deleted: true, uses: [] });
     });
   });
 

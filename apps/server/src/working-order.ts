@@ -247,7 +247,7 @@ async function priceOrderLines(
   // Read ONCE, before the line loop: the venue's default content language is what resolves a
   // product's, a variant's and a modifier's text below, and what re-keys each line's customer text
   // onto the invoice locales after pricing.
-  const contentConfig = await readContentLanguages(tx, cfg.tenantId, cfg.locale);
+  const contentConfig = await readContentLanguages(tx, cfg.locale);
   // `priceBasketWithOptions` selects by its historical `productId` field. In offer mode that selector
   // is the menu-item id; keep the underlying product id separately for persisted rows and errors.
   const lines = requestedLines.map((line) => ({
@@ -685,7 +685,6 @@ async function priceOrderLines(
  */
 export async function readLockedLines(
   tx: Transaction,
-  cfg: TillConfig,
   workingOrderId: string,
 ): Promise<LockedLine[]> {
   const stored = await tx
@@ -709,12 +708,7 @@ export async function readLockedLines(
       kitchenName: workingOrderLines.kitchenName,
     })
     .from(workingOrderLines)
-    .where(
-      and(
-        eq(workingOrderLines.tenantId, cfg.tenantId),
-        eq(workingOrderLines.workingOrderId, workingOrderId),
-      ),
-    )
+    .where(eq(workingOrderLines.workingOrderId, workingOrderId))
     .orderBy(workingOrderLines.lineNo);
   if (stored.length === 0) {
     throw new AppError("sale.empty_basket", {});
@@ -765,10 +759,9 @@ export async function readLockedLines(
  */
 export async function priceStoredOrder(
   tx: Transaction,
-  cfg: TillConfig,
   workingOrderId: string,
 ): Promise<PricedLines> {
-  return priceLockedLines(await readLockedLines(tx, cfg, workingOrderId));
+  return priceLockedLines(await readLockedLines(tx, workingOrderId));
 }
 
 /**
@@ -2036,9 +2029,7 @@ export async function readTabLines(
   cfg: TillConfig,
   tabId: string,
 ): Promise<TabLine[]> {
-  // `assertTabOpen` is tenant-scoped, so a foreign tab id never reaches the read below. The read
-  // names the tenant anyway: a by-id read is never allowed to rest on a predicate somewhere above it
-  // (CLAUDE.md §3).
+  // `assertTabOpen` refuses a tab that is not open before the read below runs.
   await assertTabOpen(tx, cfg, tabId);
   // LEFT JOIN each line's kitchen ticket item (KDS-2) to carry its `fired_at` AND `state` (coursing
   // corrections, C1) — one item per line at most (`ticket_items` is UNIQUE on
@@ -3319,7 +3310,7 @@ export async function placeOrder(
     let placeResult: PlaceOrderResult = { id, status: "placed" };
     let issuedOrderLabel: string | null | undefined;
     if (orderFlow === "invoice_first") {
-      const priced = await priceStoredOrder(tx, cfg, id);
+      const priced = await priceStoredOrder(tx, id);
       // SP-A.2 §16.4 split: the fiscal record's `till_id` is the DEVICE till (`saleTillId`), while the
       // `order_placed` amendment below records the box's CONFIGURED register (`cfg.tillId`). `nodeId`/
       // `seriesId` stay `cfg` — the chain is keyed by the node's SIF, not the device.

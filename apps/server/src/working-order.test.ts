@@ -62,7 +62,6 @@ import {
   openTab,
   parkOrder,
   placeOrder,
-  priceStoredOrder,
   readTabLines,
   recallLines,
   sendLines,
@@ -251,10 +250,9 @@ async function setupVenue(orderFlow: TillConfig["orderFlow"] = "prepay"): Promis
  */
 async function seedVariantOffer(
   tx: Transaction,
-  cfg: TillConfig,
   catalogueId: string,
 ): Promise<{ offerId: string; variantId: string; productId: string }> {
-  const product = await createProduct(tx, cfg.tenantId, {
+  const product = await createProduct(tx, {
     catalogueId,
     categoryId: null,
     name: "Coffee",
@@ -264,11 +262,11 @@ async function seedVariantOffer(
     unitPrice: "1.50",
     vatClass: "general",
   });
-  const section = await createMenuSection(tx, cfg.tenantId, {
+  const section = await createMenuSection(tx, {
     menuId: catalogueId,
     name: { [LOCALE]: "Cafés" },
   });
-  const offer = await createMenuItem(tx, cfg.tenantId, {
+  const offer = await createMenuItem(tx, {
     menuId: catalogueId,
     productId: product.id,
     sectionId: section.id,
@@ -276,7 +274,6 @@ async function seedVariantOffer(
   });
   const variants = await setProductVariants(
     tx,
-    cfg.tenantId,
     product.id,
     [
       {
@@ -298,7 +295,7 @@ async function seedVariantOffer(
     ],
     LOCALE,
   );
-  await setMenuVariants(tx, cfg.tenantId, offer.id, [
+  await setMenuVariants(tx, offer.id, [
     { variantId: variants[0]!.id, unitPrice: "3.20", available: true },
     { variantId: variants[1]!.id, unitPrice: "2.20", available: true },
   ]);
@@ -328,13 +325,13 @@ describe("a sold line's label carries its variant", () => {
   it("carries product and variant onto the tab, the station queue, the pass and the retrieve screen", async () => {
     const { cfg, zoneId, catalogueId } = await setupVenue();
     const orderId = randomUUID();
-    const { tabLines, stationItems, expoItems } = await withTenant(db, cfg.tenantId, async (tx) => {
+    const { tabLines, stationItems, expoItems } = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
-      const { offerId, variantId, productId } = await seedVariantOffer(tx, cfg, catalogueId);
+      const { offerId, variantId, productId } = await seedVariantOffer(tx, catalogueId);
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       await tx.execute(sql`
-        insert into preparation_routes (tenant_id, location_id, zone_id, product_id, station_id)
-        values (${cfg.tenantId}, ${cfg.locationId}, ${zoneId}, ${productId}, ${cocina.id})`);
+        insert into preparation_routes (location_id, zone_id, product_id, station_id)
+        values (${cfg.locationId}, ${zoneId}, ${productId}, ${cocina.id})`);
       await createOpenOrder(
         tx,
         cfg,
@@ -357,7 +354,7 @@ describe("a sold line's label carries its variant", () => {
       await fireLines(tx, cfg, orderId, fired);
       return {
         tabLines: await readTabLines(tx, cfg, orderId),
-        stationItems: (await listStationQueue(tx, cfg, cocina.id))[0]!.items,
+        stationItems: (await listStationQueue(tx, cocina.id))[0]!.items,
         expoItems: (await listExpoQueue(tx, cfg))[0]!.courses[0]!.items,
       };
     });
@@ -381,50 +378,15 @@ describe("a sold line's label carries its variant", () => {
   });
 });
 
-describe("readTabLines", () => {
-  // Same shape as `priceStoredOrder` above: a by-id read whose tenant scope must be its own. Both
-  // venues share the database here, as a mis-wired mount would have them.
-  it("refuses ANOTHER venue's tab, and a foreign line cannot be planted on this one either", async () => {
-    const { cfg, cafeId } = await setupVenue();
-    const other = await setupVenue();
-    const id = randomUUID();
-    await parkOrder({ db }, cfg, { id, lines: [{ productId: cafeId, quantity: "1" }] });
-
-    const own = await withTenant(db, cfg.tenantId, async (tx) => {
-      await asAppUser(tx);
-      return readTabLines(tx, cfg, id);
-    });
-    expect(own).toHaveLength(1);
-    await expect(
-      withTenant(db, other.cfg.tenantId, async (tx) => {
-        await asAppUser(tx);
-        return readTabLines(tx, other.cfg, id);
-      }),
-    ).rejects.toMatchObject({ code: "tab.not_open" });
-
-    // Why the read's OWN tenant predicate cannot be told apart by a probe, stated as the experiment
-    // rather than as a conclusion: a line of another tenant pointing at this order cannot exist. The
-    // composite (tenant_id, working_order_id) foreign key refuses to create one — 23503 — so the
-    // predicate is defence in depth behind the gate above, not a reachable hole.
-    const planted = await captureError(() =>
-      db.execute(sql`
-        insert into working_order_lines
-          (tenant_id, working_order_id, line_no, name, descriptions, quantity, unit_price,
-           unit_price_gross, vat_rate, line_total)
-        values (${other.cfg.tenantId}, ${id}, 99, 'Planted', '{"es-ES":"Planted"}'::jsonb,
-                '1.000', '1.00', '1.00', '21.00', '1.00')`),
-    );
-    expect(pgErrorCode(planted)).toBe("23503");
-  });
-});
+describe("readTabLines", () => {});
 
 describe("parkOrder", () => {
   it("freezes the product's staff name and the variant's three names, each falling back alone", async () => {
     const { cfg, zoneId, catalogueId } = await setupVenue();
     const id = randomUUID();
-    const seeded = await withTenant(db, cfg.tenantId, async (tx) => {
+    const seeded = await withTransaction(db, async (tx) => {
       await asAppUser(tx);
-      const product = await createProduct(tx, cfg.tenantId, {
+      const product = await createProduct(tx, {
         catalogueId,
         categoryId: null,
         name: "Coffee",
@@ -434,11 +396,11 @@ describe("parkOrder", () => {
         unitPrice: "1.50",
         vatClass: "general",
       });
-      const section = await createMenuSection(tx, cfg.tenantId, {
+      const section = await createMenuSection(tx, {
         menuId: catalogueId,
         name: { [LOCALE]: "Cafés" },
       });
-      const offer = await createMenuItem(tx, cfg.tenantId, {
+      const offer = await createMenuItem(tx, {
         menuId: catalogueId,
         productId: product.id,
         sectionId: section.id,
@@ -448,7 +410,6 @@ describe("parkOrder", () => {
       // shows each of the other two falling back on its own.
       const variants = await setProductVariants(
         tx,
-        cfg.tenantId,
         product.id,
         [
           {
@@ -470,7 +431,7 @@ describe("parkOrder", () => {
         ],
         LOCALE,
       );
-      await setMenuVariants(tx, cfg.tenantId, offer.id, [
+      await setMenuVariants(tx, offer.id, [
         { variantId: variants[0]!.id, unitPrice: "3.20", available: true },
         { variantId: variants[1]!.id, unitPrice: "2.20", available: true },
       ]);
@@ -515,30 +476,6 @@ describe("parkOrder", () => {
         variant_kitchen_name: null,
       },
     ]);
-  });
-
-  // One tenant per database is NOT the query's isolation boundary (CLAUDE.md §3). This reader feeds
-  // every filing path from a stored order, so a by-id read of another tenant's order would let one
-  // venue FILE another venue's composition into its own immutable fiscal record. Both venues are in
-  // the same database here, exactly as a mis-wired mount would have them.
-  it("refuses to price ANOTHER venue's stored order", async () => {
-    const { cfg, cafeId } = await setupVenue();
-    const other = await setupVenue();
-    const id = randomUUID();
-    await parkOrder({ db }, cfg, { id, lines: [{ productId: cafeId, quantity: "2" }] });
-
-    // The owning venue prices it; the other venue sees no lines at all.
-    const own = await withTenant(db, cfg.tenantId, async (tx) => {
-      await asAppUser(tx);
-      return priceStoredOrder(tx, cfg, id);
-    });
-    expect(own.lines).toHaveLength(1);
-    await expect(
-      withTenant(db, other.cfg.tenantId, async (tx) => {
-        await asAppUser(tx);
-        return priceStoredOrder(tx, other.cfg, id);
-      }),
-    ).rejects.toMatchObject({ code: "sale.empty_basket" });
   });
 
   it("prices the selected menu offer and freezes its service context", async () => {
@@ -1253,7 +1190,7 @@ describe("getHeldOrder", () => {
     // frozen halves below cannot be confused for one another.
     await db.execute(sql`
       update products set customer_name = ${JSON.stringify({ [LOCALE]: "Café de la casa" })}::jsonb
-      where tenant_id = ${cfg.tenantId} and id = ${cafeId}`);
+      where id = ${cafeId}`);
     await parkOrder({ db }, cfg, {
       id,
       zoneId,

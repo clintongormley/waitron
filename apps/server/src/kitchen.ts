@@ -276,13 +276,11 @@ export async function setCategoryStation(
 }
 
 /**
- * The deployment holds one tenant per database. Set (or clear, with `null`) a product's OVERRIDE
- * routing station (KDS-1 §2b) — the per-product route that wins over its category default. Same
- * shape as {@link setCategoryStation}: a non-null `stationId` must be a LIVE station of this
- * venue (`station.not_found` otherwise), null clears it, and the UPDATE names the product by id AND
- * by tenant (an absent or FOREIGN `productId` is a no-op — the route layer resolves product ids, and
- * KDS-1 mints no `product.not_found`). The tenant predicate is this by-id write's own isolation
- * boundary: one tenant per database is a deployment invariant, not something the query may lean on.
+ * Set (or clear, with `null`) a product's OVERRIDE routing station (KDS-1 §2b) — the per-product
+ * route that wins over its category default. Same shape as {@link setCategoryStation}: a non-null
+ * `stationId` must be a LIVE station of this venue (`station.not_found` otherwise), null clears it,
+ * and the UPDATE names the product by id (an absent `productId` is a no-op — the route layer
+ * resolves product ids, and KDS-1 mints no `product.not_found`).
  */
 export async function setProductStation(
   tx: Transaction,
@@ -293,10 +291,7 @@ export async function setProductStation(
   if (stationId !== null) {
     await requireLiveStation(tx, cfg, stationId);
   }
-  await tx
-    .update(products)
-    .set({ stationId })
-    .where(and(eq(products.tenantId, cfg.tenantId), eq(products.id, productId)));
+  await tx.update(products).set({ stationId }).where(eq(products.id, productId));
 }
 
 /** The KDS-1 whole-ticket bump mode (§2e). `line` = per-line bump only; `ticket` = the station display
@@ -554,14 +549,12 @@ export async function deactivateCourse(
 }
 
 /**
- * The deployment holds one tenant per database. Set (or clear, with `null`) a product's DEFAULT
- * kitchen course (KDS-2 §2b) — the per-product course a line falls to at ring time when the line
- * carries no override. Same shape as {@link setProductStation}: a non-null `courseId` must be a
- * LIVE course of this venue ({@link requireLiveCourse}, `course.not_found` otherwise), null
- * clears it, and the UPDATE names the product by id AND by tenant (an absent or FOREIGN `productId`
- * is a no-op — the route layer resolves product ids, and KDS-2 mints no `product.not_found`). The
- * tenant predicate is this by-id write's own isolation boundary, as it is for
- * {@link setProductStation}.
+ * Set (or clear, with `null`) a product's DEFAULT kitchen course (KDS-2 §2b) — the per-product
+ * course a line falls to at ring time when the line carries no override. Same shape as
+ * {@link setProductStation}: a non-null `courseId` must be a LIVE course of this venue
+ * ({@link requireLiveCourse}, `course.not_found` otherwise), null clears it, and the UPDATE names
+ * the product by id (an absent `productId` is a no-op — the route layer resolves product ids, and
+ * KDS-2 mints no `product.not_found`).
  */
 export async function setProductCourse(
   tx: Transaction,
@@ -572,8 +565,5 @@ export async function setProductCourse(
   if (courseId !== null) {
     await requireLiveCourse(tx, cfg, courseId);
   }
-  await tx
-    .update(products)
-    .set({ courseId })
-    .where(and(eq(products.tenantId, cfg.tenantId), eq(products.id, productId)));
+  await tx.update(products).set({ courseId }).where(eq(products.id, productId));
 }

@@ -68,12 +68,11 @@ describe("site content languages", () => {
     });
   });
   it("counts a partial customer name as a gap but a blank one as none", async () => {
-    const tenantId = await seedTenant(suite.db);
-    await withTenant(suite.db, tenantId, async (tx) => {
-      const catalogue = await createCatalogue(tx, tenantId, { name: "Bar" });
+    await seedTenant(suite.db);
+    await withTransaction(suite.db, async (tx) => {
+      const catalogue = await createCatalogue(tx, { name: "Bar" });
       const unit = await createUnit(
         tx,
-        tenantId,
         { name: { en: "each" }, precision: 0, abbreviation: { en: "u" } },
         "en",
       );
@@ -84,13 +83,13 @@ describe("site content languages", () => {
         vatClass: "reduced" as const,
       };
       // No customer name → never a gap in any language.
-      const plain = await createProduct(tx, tenantId, {
+      const plain = await createProduct(tx, {
         ...base,
         name: "Water",
         unitPrice: "1.00",
       });
       // A customer name in en only → a gap for es.
-      const partial = await createProduct(tx, tenantId, {
+      const partial = await createProduct(tx, {
         ...base,
         name: "Coffee",
         customerName: { en: "Fresh Coffee" },
@@ -99,7 +98,6 @@ describe("site content languages", () => {
       // A variant with no customer name → not a gap.
       const variants = await setProductVariants(
         tx,
-        tenantId,
         partial.id,
         [
           {
@@ -121,12 +119,12 @@ describe("site content languages", () => {
         ],
         "en",
       );
-      const esGaps = await listContentTranslationGaps(tx, tenantId, "es");
+      const esGaps = await listContentTranslationGaps(tx, "es");
       expect(esGaps).toContainEqual({ kind: "product", id: partial.id });
       expect(esGaps).not.toContainEqual({ kind: "product", id: plain.id });
       for (const v of variants) expect(esGaps).not.toContainEqual({ kind: "variant", id: v.id });
       // In en, even the partial customer name is complete → no product/variant gap.
-      const enGaps = await listContentTranslationGaps(tx, tenantId, "en");
+      const enGaps = await listContentTranslationGaps(tx, "en");
       expect(enGaps).not.toContainEqual({ kind: "product", id: partial.id });
     });
   });
@@ -216,7 +214,9 @@ describe("site content languages", () => {
     });
     await withTransaction(suite.db, async (tx) => {
       expect((await readContentLanguages(tx, "es")).defaultLanguage).toBe("en");
-      await tx.execute(sql`update products set customer_name = '{"en":"Bread","fr":"Pain"}'::jsonb`);
+      await tx.execute(
+        sql`update products set customer_name = '{"en":"Bread","fr":"Pain"}'::jsonb`,
+      );
       await writeContentLanguages(tx, { defaultLanguage: "fr", languages: ["en", "fr"] });
       expect(await readContentLanguages(tx, "es")).toEqual({
         defaultLanguage: "fr",

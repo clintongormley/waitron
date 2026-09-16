@@ -110,22 +110,13 @@ it("saves and reads the canonical editor shape with independent content and vari
 
 it("refuses a save with exactly one variant but allows none or two", async () => {
   await expect(
-    withTenant(fx.db, tenantId, (tx) =>
-      saveProductEditor(
-        tx,
-        tenantId,
-        null,
-        catalogueId,
-        { ...input, variants: [input.variants[0]!] },
-        "en",
-      ),
+    withTransaction(fx.db, (tx) =>
+      saveProductEditor(tx, null, catalogueId, { ...input, variants: [input.variants[0]!] }, "en"),
     ),
   ).rejects.toMatchObject({ code: "product.variant_count_invalid", params: { minimum: 2 } });
-  expect(
-    await withTenant(fx.db, tenantId, (tx) => listProducts(tx, tenantId, catalogueId)),
-  ).toEqual([]);
-  const none = await withTenant(fx.db, tenantId, (tx) =>
-    saveProductEditor(tx, tenantId, null, catalogueId, { ...input, variants: [] }, "en"),
+  expect(await withTransaction(fx.db, (tx) => listProducts(tx, catalogueId))).toEqual([]);
+  const none = await withTransaction(fx.db, (tx) =>
+    saveProductEditor(tx, null, catalogueId, { ...input, variants: [] }, "en"),
   );
   expect(none.variants).toEqual([]);
 });
@@ -248,8 +239,8 @@ it.each([
  * them, rather than assumed at the end that reads them.
  */
 async function refusal(value: unknown): Promise<{ code: string; params: unknown }> {
-  const error = await withTenant(fx.db, tenantId, (tx) =>
-    saveProductEditor(tx, tenantId, null, catalogueId, value, "en").then(
+  const error = await withTransaction(fx.db, (tx) =>
+    saveProductEditor(tx, null, catalogueId, value, "en").then(
       () => null,
       (error: unknown) => error as { code: string; params: unknown },
     ),

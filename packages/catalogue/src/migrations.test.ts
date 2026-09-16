@@ -179,8 +179,8 @@ describe("the catalogue foreign keys refuse a missing or mismatched target", () 
     const otherMenuId = await one(
       sql`insert into catalogues (name) values ('Dinner') returning id`,
     );
-    const product = (description: string) =>
-      one(sql`insert into products (catalogue_id, descriptions, pricing_unit, unit_price, vat_class) values (${menuId}, ${JSON.stringify({ en: description })}::jsonb, 'each', 1, 'general')
+    const product = (name: string) =>
+      one(sql`insert into products (catalogue_id, name, pricing_unit, unit_price, vat_class) values (${menuId}, ${name}, 'each', 1, 'general')
         returning id`);
     const productId = await product("Soup");
     const otherProductId = await product("Bread");

@@ -146,22 +146,21 @@ it("a concurrent variant removal waits for publication and then reports the depe
 // name, customer name, kitchen name and image). Seeded with raw SQL so it does not depend on
 // createProduct (which a later task rewrites for the renamed products.name).
 it("a variant round-trips staff name, customer name, kitchen name and image through set/list", async () => {
-  const tenantId = await seedTenant(suite.admin);
+  await seedTenant(suite.admin);
   const { id: catalogueId } = (
     await suite.admin.execute<{ id: string }>(
-      sql`insert into catalogues (tenant_id, name) values (${tenantId}, 'Bar') returning id`,
+      sql`insert into catalogues (name) values ('Bar') returning id`,
     )
   ).rows[0]!;
   const { id: productId } = (
     await suite.admin.execute<{ id: string }>(
-      sql`insert into products (tenant_id, catalogue_id, name, pricing_unit, unit_price, vat_class)
-          values (${tenantId}, ${catalogueId}, 'Coffee', 'each', '9.00', 'reduced') returning id`,
+      sql`insert into products (catalogue_id, name, pricing_unit, unit_price, vat_class)
+          values (${catalogueId}, 'Coffee', 'each', '9.00', 'reduced') returning id`,
     )
   ).rows[0]!;
-  await app(suite.admin, tenantId, async (tx) => {
+  await app(suite.admin, async (tx) => {
     await setProductVariants(
       tx,
-      tenantId,
       productId,
       [
         {
@@ -175,7 +174,7 @@ it("a variant round-trips staff name, customer name, kitchen name and image thro
       ],
       "en",
     );
-    const [variant] = await listProductVariants(tx, tenantId, productId);
+    const [variant] = await listProductVariants(tx, productId);
     expect(variant).toMatchObject({
       name: "Large",
       customerName: { en: "Large cup" },
@@ -249,18 +248,18 @@ describe("selectMenuVariant returns the six product and variant name pieces", ()
 // Self-contained apply/round-trip proof for the A2 columns, seeded with raw SQL so it does not
 // depend on createProduct (which a later task rewrites for the renamed products.name).
 it("round-trips a variant's new name, customer_name, kitchen_name and image columns", async () => {
-  const tenantId = await seedTenant(suite.admin);
+  await seedTenant(suite.admin);
   // The return type is INFERRED from `execute`, which widens to drizzle's `Assume<T, ...>`; writing
   // `Promise<T>` here would need a cast, and each call site names a concrete row shape anyway.
   async function one<T extends Record<string, unknown>>(query: ReturnType<typeof sql>) {
     return (await suite.admin.execute<T>(query)).rows[0]!;
   }
   const { id: catalogueId } = await one<{ id: string }>(
-    sql`insert into catalogues (tenant_id, name) values (${tenantId}, 'Bar') returning id`,
+    sql`insert into catalogues (name) values ('Bar') returning id`,
   );
   const { id: productId } = await one<{ id: string }>(
-    sql`insert into products (tenant_id, catalogue_id, name, pricing_unit, unit_price, vat_class)
-        values (${tenantId}, ${catalogueId}, 'Coffee', 'each', '9.00', 'reduced') returning id`,
+    sql`insert into products (catalogue_id, name, pricing_unit, unit_price, vat_class)
+        values (${catalogueId}, 'Coffee', 'each', '9.00', 'reduced') returning id`,
   );
   const row = await one<{
     name: string;
@@ -269,8 +268,8 @@ it("round-trips a variant's new name, customer_name, kitchen_name and image colu
     image: string | null;
   }>(
     sql`insert into product_variants
-          (tenant_id, product_id, name, customer_name, kitchen_name, image, unit_price)
-        values (${tenantId}, ${productId}, 'Small', '{"en":"Small"}'::jsonb, 'SM COFFEE', 'abc123.jpg', '2.00')
+          (product_id, name, customer_name, kitchen_name, image, unit_price)
+        values (${productId}, 'Small', '{"en":"Small"}'::jsonb, 'SM COFFEE', 'abc123.jpg', '2.00')
         returning name, customer_name, kitchen_name, image`,
   );
   expect(row).toEqual({

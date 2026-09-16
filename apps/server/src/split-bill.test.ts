@@ -513,8 +513,8 @@ it("retains the structured modifier snapshots and the frozen names when a dish q
       .set({ modifierSnapshots, ...names })
       .where(eq(workingOrderLines.workingOrderId, tabId));
     const { checkId } = await splitOffCheck(tx, cfg, tabId, [{ lineNo: 1, quantity: "1" }]);
-    const source = await priceStoredOrder(tx, cfg, tabId);
-    const check = await priceStoredOrder(tx, cfg, checkId);
+    const source = await priceStoredOrder(tx, tabId);
+    const check = await priceStoredOrder(tx, checkId);
     expect(source.lines[0]!.modifierSnapshots).toEqual(modifierSnapshots);
     expect(check.lines[0]!.modifierSnapshots).toEqual(modifierSnapshots);
     expect(check.lines[0]).toMatchObject({ name: "Agua", ...names });

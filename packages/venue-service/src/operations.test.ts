@@ -162,10 +162,8 @@ describe("venue service routing", () => {
       // A blank staff name is storable — `products.name` is only NOT NULL — so the list falls back
       // to the product id rather than rendering an empty name. Written with raw SQL because no
       // write path reachable from here produces a blank one.
-      await tx.execute(
-        sql`update products set name = '' where tenant_id = ${tenantId} and id = ${product.id}`,
-      );
-      await expect(listVenueReadiness(tx, { tenantId, locationId })).resolves.toEqual([
+      await tx.execute(sql`update products set name = '' where id = ${product.id}`);
+      await expect(listVenueReadiness(tx, { locationId })).resolves.toEqual([
         {
           code: "zone.route_missing",
           zoneId: zone.rows[0]!.id,
@@ -174,10 +172,7 @@ describe("venue service routing", () => {
           productName: product.id,
         },
       ]);
-      await tx.execute(
-        sql`update products set name = 'Sparkling water'
-            where tenant_id = ${tenantId} and id = ${product.id}`,
-      );
+      await tx.execute(sql`update products set name = 'Sparkling water' where id = ${product.id}`);
       await createPreparationRoute(
         tx,
         { locationId },

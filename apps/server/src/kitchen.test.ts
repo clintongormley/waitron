@@ -280,23 +280,6 @@ describe("routing config", () => {
     expect(await categoryStation(categoryId)).toBeNull();
   });
 
-  // One tenant per database is NOT the query's isolation boundary (CLAUDE.md §3): a by-id write needs
-  // its own tenant predicate. Both venues live in the SAME database here, exactly as a mis-wired mount
-  // would, so a write that keyed on the id alone would land on the other venue's product.
-  it("refuses to route ANOTHER venue's product, even with a live station of its own", async () => {
-    const cfg = await setupVenue();
-    const other = await setupVenue();
-    const foreignProductId = await seedProduct(other);
-    const { id: stationId } = await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Pase" }));
-    const { id: courseId } = await asApp(cfg, (tx) => createCourse(tx, cfg, { name: "Entrantes" }));
-
-    await asApp(cfg, (tx) => setProductStation(tx, cfg, foreignProductId, stationId));
-    await asApp(cfg, (tx) => setProductCourse(tx, cfg, foreignProductId, courseId));
-
-    expect(await productStation(foreignProductId)).toBeNull();
-    expect(await productCourse(foreignProductId)).toBeNull();
-  });
-
   it("setProductStation sets then clears the product's override station", async () => {
     const cfg = await setupVenue();
     const productId = await seedProduct();
