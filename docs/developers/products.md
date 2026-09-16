@@ -13,7 +13,7 @@ So a product carries up to three names, and so does each of its variants.
 | Name | Stored as | Who reads it |
 | --- | --- | --- |
 | **Name** | `products.name` — plain text, `not null` | Staff. The dashboard, the till's product buttons and basket, a table tab's line list, the sales reports, the image library's "what uses this photo" list |
-| **Customer-facing name** | `products.customer_name` — a language map (JSON), nullable | Diners. The receipt, the invoice line filed with AEAT, the printed allergen sheet |
+| **Customer-facing name** | `products.customer_name` — a language map (JSON), nullable | Diners. The printed receipt and the printed allergen sheet |
 | **Kitchen name** | `products.kitchen_name` — plain text, nullable | Cooks. The kitchen ticket and the kitchen display |
 
 A variant carries the same three, in `product_variants.name` (also `not null`),
@@ -62,13 +62,20 @@ rewrite yesterday's receipt. `working_order_lines` and `sale_lines` each carry:
 Because both halves had their fallback applied *before* being frozen, nothing falls back again at
 render time. `joinCustomerPresentationText` only joins.
 
-None of these columns enters the fiscal hash. They are presentation columns, like `unit_name`.
+None of these columns enters the fiscal hash, and none of them is sent to AEAT either. A filed
+Veri\*Factu record has no line list at all — the goods reach it only as the sale's total, its VAT
+breakdown, and one `DescripcionOperacion` string for the whole sale. That string is the venue's
+configured operation description, which `packages/fiscal-verifactu` offers as "Venta en
+establecimiento" (`packages/fiscal-verifactu/src/slot.ts`): `packages/core/src/record-sale.ts` reads
+it from `locations.operation_description` and hands it to the fiscal backend as
+`descriptionOfOperation`, and `packages/fiscal-verifactu/src/backend.ts` files it. These columns are
+presentation columns, like `unit_name`.
 
 Where each one surfaces:
 
 | Surface | Reads | Code |
 | --- | --- | --- |
-| Receipt line, and the goods description filed with AEAT | the two frozen customer maps, joined | `apps/server/src/receipt-lines.ts` |
+| Receipt line — the goods identification, art. 7.1.e | the two frozen customer maps, joined | `apps/server/src/receipt-lines.ts` |
 | Kitchen ticket | the four frozen staff and kitchen names | `apps/server/src/kitchen-print.ts` |
 | Kitchen display and the expediter's pass | the same four names, through the same resolver | `listStationQueue` and `listExpoQueue`, `apps/server/src/working-order.ts` |
 | Till buttons and basket | the staff names | `apps/till/src/widgets/product-name.ts` |

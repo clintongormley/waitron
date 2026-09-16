@@ -24,8 +24,14 @@ export function staffPresentationName(
 }
 
 /**
- * The ONE customer-facing label for a line and its variant, joined per locale — the receipt line and
- * the goods description filed with AEAT. It takes the two SNAPSHOT maps a sold line froze
+ * The ONE customer-facing label for a line and its variant, joined per locale — the printed
+ * receipt's line, where the goods are identified for the diner (art. 7.1.e;
+ * `apps/server/src/receipt-lines.ts` is what calls this). It is NOT what AEAT is sent. A filed
+ * record carries no per-line text at all: the only description of what was sold in it is one
+ * `DescripcionOperacion` string for the whole sale, taken from `locations.operation_description`
+ * (`packages/core/src/record-sale.ts` reads it as `descriptionOfOperation`,
+ * `packages/fiscal-verifactu/src/backend.ts` files it), and `SaleForFiscalRecord` has no per-line
+ * field for this text to travel in. It takes the two SNAPSHOT maps a sold line froze
  * (`descriptions` and `variant_descriptions`), not a live catalogue row, because the caller is
  * rendering something already sold.
  *

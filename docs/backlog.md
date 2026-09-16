@@ -702,11 +702,12 @@ cannot yet, because the branch is unmerged. **Next action:** when it merges, rew
 
 A product's **Name** is no longer translated. It is plain staff-facing text, and it is what the
 dashboard, the till's buttons and basket, an open table's line list and the sales reports show. Two
-optional names sit beside it: a **customer-facing name**, translated, which the receipt and the
-invoice line filed with AEAT use, and a **kitchen name**, plain text, which the kitchen ticket and
-the kitchen screens use. Each falls back to Name on its own when left blank. A variant now carries
-the same three names plus its own image, and a variant's name is appended to the product's with a
-middot — `Coffee · Large` — with each half falling back independently. All of that resolution lives
+optional names sit beside it: a **customer-facing name**, translated, which the printed receipt uses
+— what goes to AEAT is the venue's single configured operation description, never a line's name —
+and a **kitchen name**, plain text, which the kitchen ticket and the kitchen screens use. Each falls
+back to Name on its own when left blank. A variant now carries the same three names plus its own
+image, and a variant's name is appended to the product's with a middot — `Coffee · Large` — with
+each half falling back independently. All of that resolution lives
 in one file, `packages/catalogue/src/product-presentation.ts`. The developer guide's table of which
 surface reads which name is the place to check before adding a new one.
 
