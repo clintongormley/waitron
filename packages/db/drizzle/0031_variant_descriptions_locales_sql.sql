@@ -1,8 +1,16 @@
 -- Companion to working_order_lines_check_locales (0001): the optional variant_descriptions map, when
 -- present, must carry EXACTLY the venue's configured invoice locales. Same join path and search_path
 -- posture as the descriptions check; the only difference is the NULL short-circuit for the nullable
--- column. sale_lines is deliberately left uncovered — like descriptions, its snapshot is the frozen
--- copy of an already-validated working-order line.
+-- column. sale_lines is deliberately left uncovered, and nothing in the database covers it instead:
+-- on PGlite over the real core migrations, a sale_lines insert carrying variant_descriptions
+-- {"zz":"Unconfigured"} commits and reads back unchanged, while the same map on working_order_lines
+-- is refused ("variant_descriptions must carry exactly the venue locales {es,ca} (got {zz})").
+-- What holds the rule for a sold line is the ROUTE: the till files from a persisted working order,
+-- whose lines this trigger already checked, and core copies those maps across verbatim
+-- (packages/core/src/sale-line-rows.ts). A caller that builds its own lines rather than retrieving a
+-- working order carries the rule itself -- submitFiscalReadiness in
+-- apps/server/src/fiscal-readiness-runner.ts is one such caller in this repo, and supplies the
+-- venue's invoice locales by hand.
 CREATE FUNCTION working_order_lines_check_variant_locales()
   RETURNS trigger
   LANGUAGE plpgsql
