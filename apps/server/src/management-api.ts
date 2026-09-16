@@ -136,9 +136,7 @@ import {
  */
 export interface ManagementApiDeps {
   db: Database;
-  /** `nodeId` is this node's id, carried on the uniform write-path `cfg` shape every mounted API
-   * takes; it no longer stamps a capture origin (the application outbox and its capture triggers were
-   * removed). */
+  /** This node's own id. */
   cfg: { nodeId: string };
   /**
    * The venue's own config — the LOCATION the floor-zone and table config routes (FP-1) scope

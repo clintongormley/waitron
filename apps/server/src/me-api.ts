@@ -63,11 +63,7 @@ import type { AccountEmailSender } from "./account-email.js";
  */
 export interface MeApiDeps {
   db: Database;
-  /**
-   * `nodeId` is this node's id, carried on the uniform write-path `cfg` shape every mounted API
-   * takes; it no longer stamps a capture origin (the application outbox and its capture triggers
-   * were removed).
-   */
+  /** This node's own id. */
   cfg: { nodeId: string };
   /**
    * The venue's DEFAULT UI locale, derived ONCE at boot (`readVenueLocale`, boot.ts). Surfaced by the

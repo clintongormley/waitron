@@ -1989,8 +1989,6 @@ export async function startServer(
     app,
     {
       db,
-      // `nodeId` is THIS node's id (the same `till.nodeId` the adjacent `mountCatalogueApi`
-      // receives — one source of truth), carried on the uniform write-path `cfg` shape.
       cfg: { nodeId: till.nodeId },
       // The venue's own config (its location) the FP-1 zone/table config routes scope to — the
       // SAME `till` config `mountTillApi` receives above, so the dashboard "Sala" surface and the till
@@ -2125,8 +2123,6 @@ export async function startServer(
   // `db` plus this node's id; no fiscal backend, clock or card provider. Routes only.
   mountMeApi(
     app,
-    // `nodeId` is THIS node's id (the same `till.nodeId` `mountManagementApi`/`mountCatalogueApi`
-    // receive), carried on the uniform write-path `cfg` shape.
     // `modules` is the enabled-module set (`setsToMigrate`, boot.ts above) by name — surfaced by
     // `GET /session/me` so the dashboard activates and shows only enabled modules. Includes `core`
     // harmlessly (the browser registry only matches UI-bearing ids).
