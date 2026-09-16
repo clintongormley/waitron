@@ -1621,6 +1621,32 @@ image constraints under *Detail → Box image*.
   outputs before calling a branch green. On #338 itself every package job skipped on `code=false`,
   which was correct: it changed no file under `packages/` or `apps/`.
 
+- **A merge could get no CI run at all, and nothing was red — LANDED #384 (2026-09-16).** Every run
+  for a ref shared one concurrency group, and GitHub keeps only ONE run pending per group: a newer
+  push cancels the one already waiting. The `docs(backlog)` commit that follows every merge was
+  therefore evicting the merge's own run whenever the previous merge's run was still going, so that
+  merge got no unfiltered suite and no image. #380 is the one that surfaced it, because it happened
+  to be the newest code merge; its image was republished by re-running the cancelled run. Each push
+  now runs in a group of its own, and — since two `main` runs can now overlap and a registry tag is
+  last-write-wins — the publish job asks `scripts/main-tag-guard.sh` whether a newer commit already
+  holds `:main` before moving it. **What is still open:**
+  - **The publish path has never executed this code.** Nothing on a pull request runs the publish
+    job, and #384's own merge is machinery-only (`code=false`), so the job skipped there too. The
+    first real execution is the next code merge to `main`. **Next action:** on that merge, read the
+    `publish` job's "Work out the tags to publish" step, which prints either the tag list or the line
+    explaining why it left `:main` alone. The guard script itself was run end to end against the live
+    registry and API before landing (PR #384's comment has the output), so what is unproven is the
+    wiring, not the script.
+  - **Two states stop publishing until a person intervenes:** a `:main` carrying no
+    `WAITRON_BUILD_ID`, and one built from a commit this repository's history does not contain (an
+    image built outside CI, or a rewritten history). Both wedge every later publish identically; the
+    `sha-` tags keep coming. The repair is to delete or retag `:main` by hand. Nothing alerts on it.
+  - **The first publish into a brand-new package will stop**, because GHCR answers `403 Forbidden`
+    for a package that does not exist rather than `not found`, and treating a 403 as "no tag yet" is
+    exactly the broadening that would publish a backwards tag. It matters only to a fork.
+  - **The guard sees ci.yml alone.** `scripts/ci-workflow.test.mjs` reads that one file as text, so a
+    future push-triggered workflow that groups by ref is seen by nothing.
+
 - **Three unexplained incidents, each seen once or twice; on recurrence retain the log before
   retrying** (standing rule: a flaky test is fixed at the root): eleven UI suites failing to load with
   "Vitest failed to find the current suite/runner" after a rebase (2026-09-11); a test PostgreSQL
