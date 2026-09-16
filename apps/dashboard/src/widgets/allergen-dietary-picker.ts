@@ -85,11 +85,8 @@ export class AllergenDietaryPicker extends LitElement {
     this.shadowRoot?.querySelector<HTMLElement>(`[data-test="${field}"]`)?.focus();
   }
 
-  #finishEditing(field: "allergens" | "dietary", event: FocusEvent): void {
-    const combobox = event.currentTarget as HTMLElement;
-    queueMicrotask(() => {
-      if (this.editing === field && !combobox.matches(":focus-within")) this.editing = null;
-    });
+  #finishEditing(field: "allergens" | "dietary"): void {
+    if (this.editing === field) this.editing = null;
   }
 
   #onAllergens(event: CustomEvent<{ values: string[] }>): void {
@@ -110,8 +107,8 @@ export class AllergenDietaryPicker extends LitElement {
 
   override render() {
     return html`
-      <div class="field">
-        <span class="label">${t("modifiers.allergens")}</span>
+      <div class="field" role="group" aria-labelledby="allergens-label">
+        <span id="allergens-label" class="label">${t("modifiers.allergens")}</span>
         ${
           this.editing === "allergens"
             ? html`<wt-combobox
@@ -123,9 +120,9 @@ export class AllergenDietaryPicker extends LitElement {
                 .options=${this.#allergenOptions()}
                 .values=${this.value.allergens}
                 .countLabel=${(count: number) =>
-                  t("modifiers.selected_count").replace("{count}", String(count))}
+                  t("modifiers.allergens_selected_count").replace("{count}", String(count))}
                 @wt-change=${(e: CustomEvent<{ values: string[] }>) => this.#onAllergens(e)}
-                @focusout=${(e: FocusEvent) => this.#finishEditing("allergens", e)}
+                @focusout=${() => this.#finishEditing("allergens")}
               ></wt-combobox>`
             : html`<div class="summary">
                 <span data-test="allergens-summary"
@@ -142,8 +139,8 @@ export class AllergenDietaryPicker extends LitElement {
               </div>`
         }
       </div>
-      <div class="field">
-        <span class="label">${t("modifiers.dietary_preferences")}</span>
+      <div class="field" role="group" aria-labelledby="dietary-label">
+        <span id="dietary-label" class="label">${t("modifiers.dietary_preferences")}</span>
         ${
           this.editing === "dietary"
             ? html`<wt-combobox
@@ -155,9 +152,9 @@ export class AllergenDietaryPicker extends LitElement {
                 .options=${this.#dietaryOptions()}
                 .values=${this.value.dietary}
                 .countLabel=${(count: number) =>
-                  t("modifiers.selected_count").replace("{count}", String(count))}
+                  t("modifiers.dietary_selected_count").replace("{count}", String(count))}
                 @wt-change=${(e: CustomEvent<{ values: string[] }>) => this.#onDietary(e)}
-                @focusout=${(e: FocusEvent) => this.#finishEditing("dietary", e)}
+                @focusout=${() => this.#finishEditing("dietary")}
               ></wt-combobox>`
             : html`<div class="summary">
                 <span data-test="dietary-summary"

@@ -44,6 +44,20 @@ describe("allergen-dietary-picker", () => {
     expect(el.shadowRoot!.querySelector('[data-test="dietary-summary"]')!.textContent).toBe(
       t("modifiers.none_selected"),
     );
+    const allergenGroup = el
+      .shadowRoot!.querySelector('[data-test="allergens-summary"]')!
+      .closest('[role="group"]');
+    const dietaryGroup = el
+      .shadowRoot!.querySelector('[data-test="dietary-summary"]')!
+      .closest('[role="group"]');
+    expect(allergenGroup?.getAttribute("aria-labelledby")).toBe("allergens-label");
+    expect(allergenGroup?.querySelector("#allergens-label")?.textContent).toBe(
+      t("modifiers.allergens"),
+    );
+    expect(dietaryGroup?.getAttribute("aria-labelledby")).toBe("dietary-label");
+    expect(dietaryGroup?.querySelector("#dietary-label")?.textContent).toBe(
+      t("modifiers.dietary_preferences"),
+    );
     expect(el.shadowRoot!.querySelectorAll("wt-combobox")).toHaveLength(0);
   });
 
@@ -58,11 +72,15 @@ describe("allergen-dietary-picker", () => {
         multiple: boolean;
         name: string;
         values: string[];
+        countLabel: (count: number) => string;
       }
     >('[data-test="allergens"]')!;
     expect(allergens.multiple).toBe(true);
     expect(allergens.name).toBe("allergens");
     expect(allergens.values).toEqual(["milk"]);
+    expect(allergens.countLabel(2)).toBe(
+      t("modifiers.allergens_selected_count").replace("{count}", "2"),
+    );
 
     el.shadowRoot!.querySelector<HTMLElement>('[data-test="edit-dietary"]')!.click();
     await el.updateComplete;
@@ -71,11 +89,15 @@ describe("allergen-dietary-picker", () => {
         multiple: boolean;
         name: string;
         values: string[];
+        countLabel: (count: number) => string;
       }
     >('[data-test="dietary"]')!;
     expect(dietary.multiple).toBe(true);
     expect(dietary.name).toBe("dietary-preferences");
     expect(dietary.values).toEqual(["vegan"]);
+    expect(dietary.countLabel(2)).toBe(
+      t("modifiers.dietary_selected_count").replace("{count}", "2"),
+    );
   });
 
   it("emits the chosen allergens and re-dispatches only its own wt-change", async () => {

@@ -261,10 +261,24 @@ it("lists the affected products and menu items and enables delete", async () => 
   );
   // The affected products and menu items now render in a wt-data-table (matching the categories
   // delete dialog), so their names live in the table's shadow root, not the host's light DOM.
-  const deleteProducts = dialog.querySelector('[data-test="modifier-delete-products"]')!;
-  const deleteMenus = dialog.querySelector('[data-test="modifier-delete-menus"]')!;
+  const deleteProducts = dialog.querySelector(
+    '[data-test="modifier-delete-products"]',
+  )! as unknown as {
+    searchLabel: string;
+    noMatchesMessage: string;
+    shadowRoot: ShadowRoot;
+  };
+  const deleteMenus = dialog.querySelector('[data-test="modifier-delete-menus"]')! as unknown as {
+    searchLabel: string;
+    noMatchesMessage: string;
+    shadowRoot: ShadowRoot;
+  };
   await vi.waitFor(() => expect(deleteProducts.shadowRoot!.textContent).toContain("Café"));
   await vi.waitFor(() => expect(deleteMenus.shadowRoot!.textContent).toContain("Desayuno"));
+  expect(deleteProducts.searchLabel).toBe(t("modifiers.search_products"));
+  expect(deleteProducts.noMatchesMessage).toBe(t("modifiers.products_no_matches"));
+  expect(deleteMenus.searchLabel).toBe(t("modifiers.search_menus"));
+  expect(deleteMenus.noMatchesMessage).toBe(t("modifiers.menus_no_matches"));
   expect(dialog.querySelector('[data-test="orders-block"]')).toBeNull();
   expect(confirmDelete(el).disabled).toBe(false);
 });
@@ -538,6 +552,8 @@ it("combines products and menu items in one searchable, filterable, sortable tab
     rows: { id: string; name: string; type: string }[];
     columns: { key: string; sortValue?: unknown; filter?: unknown }[];
     searchable: boolean;
+    searchLabel: string;
+    noMatchesMessage: string;
     sortKey: string;
     sortDirection: string;
     shadowRoot: ShadowRoot;
@@ -549,10 +565,17 @@ it("combines products and menu items in one searchable, filterable, sortable tab
     { id: "mn1", name: "Menú del día", type: "menu" },
   ]);
   expect(usage.searchable).toBe(true);
+  expect(usage.searchLabel).toBe(t("modifiers.search_usage"));
+  expect(usage.noMatchesMessage).toBe(t("modifiers.usage_no_matches"));
   expect(usage.sortKey).toBe("name");
   expect(usage.sortDirection).toBe("ascending");
   expect(usage.columns.find((column) => column.key === "name")?.sortValue).toBeTypeOf("function");
   expect(usage.columns.find((column) => column.key === "type")?.filter).toBeTruthy();
+  const typeFilter = usage.shadowRoot.querySelector<HTMLSelectElement>('[name="type-filter"]')!;
+  typeFilter.value = "menu";
+  typeFilter.dispatchEvent(new Event("change", { bubbles: true }));
+  await vi.waitFor(() => expect(usage.shadowRoot.textContent).not.toContain("Hamburguesa"));
+  expect(usage.shadowRoot.textContent).toContain("Menú del día");
   expect(el.shadowRoot!.querySelector('[data-test="modifier-products"]')).toBeNull();
   expect(el.shadowRoot!.querySelector('[data-test="modifier-usage-menus"]')).toBeNull();
 });

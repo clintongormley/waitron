@@ -290,14 +290,16 @@ export class ModifiersScreen extends LitElement {
     label: string,
     viewKey: string,
     emptyMessage: string,
+    searchLabel: string,
+    noMatchesMessage: string,
     rows: Dependant[],
   ) {
     return html`<wt-data-table
       data-test=${testId}
       aria-label=${label}
       searchable
-      searchLabel=${t("modifiers.search_products")}
-      noMatchesMessage=${t("modifiers.products_no_matches")}
+      searchLabel=${searchLabel}
+      noMatchesMessage=${noMatchesMessage}
       viewKey=${viewKey}
       .rows=${rows}
       .columns=${this.#dependantColumns()}
@@ -323,8 +325,8 @@ export class ModifiersScreen extends LitElement {
       data-test="modifier-usage"
       aria-label=${t("modifiers.products_modal")}
       searchable
-      searchLabel=${t("modifiers.search_products")}
-      noMatchesMessage=${t("modifiers.products_no_matches")}
+      searchLabel=${t("modifiers.search_usage")}
+      noMatchesMessage=${t("modifiers.usage_no_matches")}
       viewKey="waitron.modifiers.usage.table"
       sortKey="name"
       sortDirection="ascending"
@@ -380,6 +382,8 @@ export class ModifiersScreen extends LitElement {
             t("modifiers.affected_products"),
             "waitron.modifiers.delete.products.table",
             t("modifiers.no_products"),
+            t("modifiers.search_products"),
+            t("modifiers.products_no_matches"),
             dependants.products,
           )
         : nothing
@@ -390,6 +394,8 @@ export class ModifiersScreen extends LitElement {
             t("modifiers.affected_menus"),
             "waitron.modifiers.delete.menus.table",
             t("modifiers.no_menus"),
+            t("modifiers.search_menus"),
+            t("modifiers.menus_no_matches"),
             dependants.menus,
           )
         : nothing
