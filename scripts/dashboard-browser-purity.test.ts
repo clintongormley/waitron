@@ -152,15 +152,16 @@ describe("module dashboard sub-paths import no server-only specifier", () => {
     expect(forbiddenImports(probe)).toEqual(["@waitron/db"]);
   });
 
-  describe("the catalogue product-types leaf stays type-only (emits no runtime)", () => {
-    // `packages/catalogue/src/product-types.ts` holds the product wire shapes the dashboard imports
-    // DIRECTLY (`@waitron/catalogue/src/product-types.js`). It is a PURE type module: every import is
-    // `import type`, every export is a type/interface, and it declares no value — so it compiles to an
-    // empty runtime module and contributes NO code, and no runtime dependency, to any browser bundle.
-    // That is a STRONGER, more precise guarantee than the reachable-specifier scan above, which here
-    // would false-positive on a harmless `import type` edge (the leaves it draws types from reach
-    // `errors.ts`, whose own `import type { ProductUsingUnit } from "./units.js"` is erased at build
-    // time but text-visible); the check is on THIS file's own statements instead.
+  describe("the catalogue wire-shape leaves stay type-only (emit no runtime)", () => {
+    // `packages/catalogue/src/product-types.ts` (the product editor shapes, imported by the dashboard)
+    // and `menu-types.ts` (the sell-side shapes, imported by the till) each hold wire shapes a browser
+    // app imports DIRECTLY (`@waitron/catalogue/src/<leaf>.js`). Each is a PURE type module: every
+    // import is `import type`, every export is a type/interface, and it declares no value — so it
+    // compiles to an empty runtime module and contributes NO code, and no runtime dependency, to any
+    // browser bundle. That is a STRONGER, more precise guarantee than the reachable-specifier scan
+    // above, which here would false-positive on a harmless `import type` edge (the leaves they draw
+    // types from reach `errors.ts`, whose own `import type { ProductUsingUnit } from "./units.js"` is
+    // erased at build time but text-visible); the check is on each leaf's own statements instead.
     //
     // HEDGE (it reads TEXT, not the compiler): it flags the runtime forms that actually occur — an
     // `import` that is not `import type` (a side-effect `import "x"` or a value import, RELATIVE OR NOT,
@@ -169,8 +170,11 @@ describe("module dashboard sub-paths import no server-only specifier", () => {
     // declaration (`const`/`let`/`var`/`function`/`class`/`enum`). It would NOT catch an exotic
     // top-level expression statement (`sideEffect();`) — which no type file writes; the transpile check
     // (typescript is not a root dependency) is left to the `bundle-smoke` backstop. Prove-by-deletion:
-    // add `import "@waitron/db";` or `export const x = 1;` to product-types.ts and it goes red.
-    const text = readFileSync(join(REPO, "packages/catalogue/src/product-types.ts"), "utf8");
+    // add `import "@waitron/db";` or `export const x = 1;` to either leaf and it goes red.
+    const LEAVES = [
+      "packages/catalogue/src/product-types.ts",
+      "packages/catalogue/src/menu-types.ts",
+    ];
 
     /** Every top-level statement in `src` that would emit runtime JS: an `import` that is not
      * `import type`, an `export` that is not `export type`/`export interface`, or a bare value
@@ -194,12 +198,12 @@ describe("module dashboard sub-paths import no server-only specifier", () => {
       return out;
     }
 
-    it("imports at least one type (not vacuous)", () => {
-      expect(/import\s+type\s/.test(text)).toBe(true);
+    it.each(LEAVES)("%s imports at least one type (not vacuous)", (leaf) => {
+      expect(/import\s+type\s/.test(readFileSync(join(REPO, leaf), "utf8"))).toBe(true);
     });
 
-    it("is type-only: no runtime import, export, or declaration", () => {
-      expect(runtimeStatements(text)).toEqual([]);
+    it.each(LEAVES)("%s is type-only: no runtime import, export, or declaration", (leaf) => {
+      expect(runtimeStatements(readFileSync(join(REPO, leaf), "utf8"))).toEqual([]);
     });
 
     it("flags planted runtime constructs, ignores type-only ones (control)", () => {

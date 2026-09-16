@@ -550,7 +550,7 @@ describe("catalogue operations", () => {
           unitPrice: "0.00",
           vatClass: "general",
         }),
-      ).rejects.toMatchObject({ code: "management.request_invalid" });
+      ).rejects.toMatchObject({ code: "product.invalid" });
     });
   });
 
@@ -568,7 +568,7 @@ describe("catalogue operations", () => {
           vatClass: "general",
         }),
       ).rejects.toMatchObject({
-        code: "management.request_invalid",
+        code: "product.invalid",
         params: { field: "pricingUnit" },
       });
     });
@@ -588,7 +588,7 @@ describe("catalogue operations", () => {
       await expect(
         updateProduct(tx, product.id, { pricingUnit: "portion" as PricingUnit }),
       ).rejects.toMatchObject({
-        code: "management.request_invalid",
+        code: "product.invalid",
         params: { field: "pricingUnit" },
       });
     });

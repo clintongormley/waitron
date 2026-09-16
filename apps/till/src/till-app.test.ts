@@ -2,6 +2,7 @@ import { page } from "@vitest/browser/context";
 import { currentContentLanguages } from "@waitron/ui";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
+import { productUnit } from "./widgets/product-name.js";
 import { TillApp } from "./till-app.js";
 import { ServerRouter } from "./api/server-router.js";
 import { diag } from "./diagnostics.js";
@@ -284,7 +285,7 @@ function fixtureOffers(catalogue: ProductCatalogue): ZoneOfferCatalogue {
     context: { zoneId: "zone-counter", departmentId: "department-default", serviceMode: "prepay" },
     defaultMenuId,
     menus: catalogue.menus,
-    offers: catalogue.products.map((product, index) => ({
+    offers: catalogue.products.map((product, index): ZoneOfferCatalogue["offers"][number] => ({
       id: product.menuItemId ?? `menu-item-${product.id}-${index}`,
       menuId: product.catalogueId ?? defaultMenuId ?? "menu-fixture",
       productId: product.productId ?? product.id,
@@ -297,13 +298,25 @@ function fixtureOffers(catalogue: ProductCatalogue): ZoneOfferCatalogue {
       name: product.name,
       customerName: product.customerName ?? null,
       kitchenName: product.kitchenName ?? null,
-      pricingUnit: product.pricingUnit,
+      // A `MenuOffer` always carries its full sell-side `unit`, `dietaryDeclarations`, `modifiers`
+      // and `variants`; the fixture fills them from the looser source product (or an empty default),
+      // which is the drift the shared shape now forbids leaving out. `productUnit` is the till's own
+      // fallback (the source product's `unit`, else the each/kg synthetic by `pricingUnit`), reused so
+      // the fixture cannot drift from it.
+      unit: productUnit(product),
       vatClass: product.vatClass,
       category: product.category ?? "Other",
       allergens: product.allergens,
       diet: product.diet ?? null,
       dietDerivation: product.dietDerivation ?? null,
       dietOverride: product.dietOverride ?? null,
+      // The source `TillProduct` types these two looser than the offer's wire shape (declarations as
+      // plain `string[]`, variants with the three names optional), so the fixture narrows them — the
+      // fixtures only ever supply real labels and complete variants.
+      dietaryDeclarations: (product.dietaryDeclarations ??
+        []) as ZoneOfferCatalogue["offers"][number]["dietaryDeclarations"],
+      modifiers: product.modifiers ?? [],
+      variants: (product.variants ?? []) as ZoneOfferCatalogue["offers"][number]["variants"],
       courseId: product.courseId ?? null,
       optionGroups: (product.optionGroups ?? []).map((group) => ({
         id: group.id,

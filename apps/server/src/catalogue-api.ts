@@ -154,6 +154,10 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "category.color_invalid": 400,
   "menu_item.not_found": 404,
   "product.not_found": 404,
+  // A product write's own domain validation (`createProduct`/`updateProduct` in `operations.ts`)
+  // refused a malformed unit field — a CLIENT request fault → 400. Listed explicitly as the house
+  // style requires; the `?? 400` default already covers it.
+  "product.invalid": 400,
   // A product editor save carrying exactly one variant: a product has no variants or at least two, so
   // this is a CLIENT request fault → 400. Listed explicitly as the house style requires; the `?? 400`
   // default already covers it.

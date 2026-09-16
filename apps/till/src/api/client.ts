@@ -9,13 +9,25 @@ import type { ContentLanguages } from "@waitron/shared";
  * Every request sends `credentials: "include"` so the httpOnly session cookie the login route set
  * rides along; without it the session-guarded routes (`GET /api/products`, `POST /api/sales`) 401.
  *
- * The response interfaces below are LOCAL copies of the server's JSON shapes, deliberately NOT
- * imported from `@waitron/catalogue`/`@waitron/identity`. A runtime import from those packages would
- * drag their barrels — and through them `@waitron/db` and Node builtins — into the browser bundle.
- * A handful of duplicated field lists is the price of keeping the bundle free of server code, and is
- * the decoupling the task brief calls for. `TillProduct` mirrors catalogue's `AvailableProduct`;
- * `TillSaleResult` mirrors the server's `TillSaleResult`. If those server shapes change, these
- * follow — a mismatch surfaces as a runtime shape error a view test catches, not a compile break.
+ * Most response interfaces below are LOCAL copies of the server's JSON shapes. A RUNTIME import from a
+ * server package would drag its barrel — and through it `@waitron/db` and Node builtins — into the
+ * browser bundle, so those copies keep the bundle free of server code; a mismatch with the server then
+ * surfaces as a runtime shape error a view test catches, not a compile break. `TillSaleResult` mirrors
+ * the server's `TillSaleResult` this way.
+ *
+ * The OFFER and MENU shapes are the exception: `TillMenuOffer` and `TillMenu` are `import type` ALIASES
+ * of catalogue's authoritative `MenuOffer`/`AccessibleCatalogue`, taken from the browser-safe TYPE leaf
+ * `@waitron/catalogue/src/menu-types.js` (see that import). A type-only import from a leaf that holds
+ * only type definitions pulls ZERO runtime, so it keeps the decoupling while ending the hand-copied
+ * drift these two once had: the till's DECLARED offer shape can no longer diverge from catalogue's
+ * declared `MenuOffer`, and removing or retyping a field the till reads is now a compile break here
+ * rather than a silent runtime shape error (an added field the till ignores is not — the shared type
+ * checks the declared shape, not the server's exact serialized keys). The other sell-side types the
+ * till consumes — `TillProduct` and its `TillOptionGroup`/`TillOptionItem` sub-shapes — are NOT aliased
+ * and stay LOCAL: `TillProduct` is the till's own display model (built by {@link menuOfferToTillProduct}
+ * from an offer and by `getHeldOrder` from a retrieved line, never received as one wire shape), and the
+ * option sub-shapes remain hand-mirrored for now (they could be aliased to catalogue's resolved-option
+ * types the same way, a follow-up this change did not take).
  */
 
 // The till's LOCAL canvas/receipt shapes (`../layout.ts`) — plain data, browser-safe, bundle-decoupled
@@ -27,6 +39,9 @@ import type { CanvasDef, CapabilityFlag, ReceiptConfig } from "../layout.js";
 // the note above warns about — every till widget already depends on `@waitron/shared` for money/locale
 // primitives.
 import type { StationThresholds, TimingBand } from "@waitron/shared";
+// The offer/menu shapes, type-only from catalogue's browser-safe leaf — see the file header for why
+// this pulls no runtime. `MenuOffer` is the body `GET /api/service-zones/:zoneId/offers` returns.
+import type { AccessibleCatalogue, MenuOffer } from "@waitron/catalogue/src/menu-types.js";
 
 /** The subset of `fetch` this client uses; the global satisfies it, and a test injects a stub. */
 export type FetchLike = typeof fetch;
@@ -456,79 +471,30 @@ export interface TillProduct {
 }
 
 /**
- * One menu (catalogue) the till's location may sell from — the `menus[]` half of `GET /api/products`.
- * Mirrors catalogue's `AccessibleCatalogue` (NOT imported — the bundle rule). Ordered default-first by
- * the server; `isDefault` flags the location's own catalogue, which the switcher pre-selects.
+ * One menu (catalogue) the till's location may sell from — the `menus[]` half of the zone-offers body.
+ * The catalogue's authoritative sell-side shape ({@link AccessibleCatalogue}), imported from the
+ * browser-safe leaf rather than re-declared. Ordered default-first by the server; `isDefault` flags the
+ * location's own catalogue, which the switcher pre-selects.
  */
-export interface TillMenu {
-  id: string;
-  name: string;
-  isDefault: boolean;
-}
+export type TillMenu = AccessibleCatalogue;
 
 /** The `GET /api/products` payload: the location's accessible menus + every sellable product across
- * them (each tagged with its {@link TillProduct.catalogueId}). The till filters `products` by the
- * selected menu client-side; a single-menu location renders exactly as before (no switcher). */
+ * them (each tagged with its {@link TillProduct.catalogueId}). The app builds its product grid from
+ * zone offers ({@link menuOfferToTillProduct}), not this route — {@link TillApi.listProducts} has no
+ * app caller — but the test harness uses it as its fixture seam, so it and this shape stay. */
 export interface ProductCatalogue {
   menus: TillMenu[];
   products: TillProduct[];
 }
 
-/** A product's distinct selling identity on one menu. Its id selects this price and option set. */
-export interface TillMenuOffer {
-  modifiers?: Modifier[];
-  id: string;
-  menuId: string;
-  productId: string;
-  sectionId: string;
-  grossPrice: string;
-  displayOrder: number;
-  active: boolean;
-  menuName: string;
-  sectionName: Record<string, string>;
-  /** The product's staff-facing name (`products.name`) — plain text, not per-language. */
-  name: string;
-  /** The product's customer-facing text, locale -> text; null or blank falls back to `name`. */
-  customerName: Record<string, string> | null;
-  kitchenName: string | null;
-  unit?: TillProduct["unit"];
-  pricingUnit?: "each" | "weight";
-  vatClass: "general" | "reduced" | "super_reduced" | "zero";
-  category: string | null;
-  allergens: Record<string, { presence: "contains" | "may_contain"; source?: string }> | null;
-  diet: DietProfile | null;
-  dietDerivation: DietDerivation | null;
-  dietOverride: DietOverride | null;
-  dietaryDeclarations?: string[];
-  courseId: string | null;
-  variants?: {
-    id: string;
-    name: string;
-    customerName?: Record<string, string> | null;
-    kitchenName?: string | null;
-    image?: string | null;
-    unitPrice: string;
-    available: boolean;
-  }[];
-  optionGroups: {
-    id: string;
-    name: Record<string, string>;
-    minSelect: number;
-    maxSelect: number;
-    required: boolean;
-    options: {
-      id: string;
-      name: Record<string, string>;
-      priceDelta: string;
-      maxQuantity: number;
-      vatClass: "general" | "reduced" | "super_reduced" | "zero" | null;
-      addAllergens: Record<
-        string,
-        { presence: "contains" | "may_contain"; source?: string }
-      > | null;
-    }[];
-  }[];
-}
+/**
+ * A product's distinct selling identity on one menu — the `offers[]` entries
+ * `GET /api/service-zones/:zoneId/offers` returns. This IS the catalogue's authoritative
+ * {@link MenuOffer} (the server sends `MenuOffer[]` straight through — see `listZoneOffers` in
+ * `@waitron/venue-service`), imported from the browser-safe leaf rather than mirrored by hand, so the
+ * two can no longer drift. {@link menuOfferToTillProduct} adapts one into the till's display model.
+ */
+export type TillMenuOffer = MenuOffer;
 
 export interface ZoneOfferCatalogue {
   context: {
@@ -560,7 +526,12 @@ export function menuOfferToTillProduct(offer: TillMenuOffer): TillProduct {
     customerName: offer.customerName,
     kitchenName: offer.kitchenName,
     unit: offer.unit,
-    pricingUnit: offer.pricingUnit,
+    // No `pricingUnit`: a `MenuOffer` carries its full `unit` (with `hardwareUnit`/`precision`), which
+    // is what the till weighs from — `productUnit()` only consults `pricingUnit` as a synthetic-unit
+    // fallback when `unit` is absent, and an offer-derived product always has a unit. The server DOES
+    // send a `pricingUnit` on the offer body (`listMenuOffers` projects `products.pricingUnit`), but
+    // `MenuOffer` does not model it and this path does not need it, so the copy the old hand mirror made
+    // here was redundant — dropping it changes no behaviour (the full unit wins).
     unitPrice: offer.grossPrice,
     vatClass: offer.vatClass,
     category: offer.category,
@@ -568,11 +539,11 @@ export function menuOfferToTillProduct(offer: TillMenuOffer): TillProduct {
     courseId: offer.courseId,
     catalogueId: offer.menuId,
     catalogueName: offer.menuName,
-    ...(offer.variants === undefined ? {} : { variants: offer.variants }),
-    ...(offer.modifiers === undefined ? {} : { modifiers: offer.modifiers }),
-    ...(offer.dietaryDeclarations === undefined
-      ? {}
-      : { dietaryDeclarations: offer.dietaryDeclarations }),
+    // `variants`, `modifiers` and `dietaryDeclarations` are always present on a `MenuOffer` (the server
+    // sends them for every offer), so they are assigned directly rather than spread-when-present.
+    variants: offer.variants,
+    modifiers: offer.modifiers,
+    dietaryDeclarations: offer.dietaryDeclarations,
     optionGroups: offer.optionGroups.map((group) => ({
       id: group.id,
       name: group.name,
@@ -1481,9 +1452,9 @@ export class TillApi {
 
   /**
    * `GET /api/products` — the location's accessible menus + every sellable product across them (each
-   * tagged with its `catalogueId`). Returns the whole {@link ProductCatalogue}; the till holds all the
-   * products and filters them by the selected menu client-side (a menu switch never re-fetches). SESSION
-   * -guarded server-side — the app calls this only after login.
+   * tagged with its `catalogueId`). SESSION-guarded server-side. The app itself builds its grid from
+   * zone offers, not this route (see {@link ProductCatalogue}); it remains for the test harness's
+   * fixtures.
    */
   listProducts(): Promise<ProductCatalogue> {
     return this.#request<ProductCatalogue>("/api/products", "GET");

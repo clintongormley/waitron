@@ -1398,8 +1398,10 @@ describe("mountCatalogueApi — product request-shape screens", () => {
       body: { ...productBase, pricingUnit: "portion" },
     });
     expect(res.status).toBe(400);
+    // The unknown-legacy-value rejection is `createProduct`'s own domain check (`operations.ts`), so it
+    // throws the catalogue-owned `product.invalid`, not the route screen's `management.request_invalid`.
     expect(await res.json()).toMatchObject({
-      error: { code: "management.request_invalid", params: { field: "pricingUnit" } },
+      error: { code: "product.invalid", params: { field: "pricingUnit" } },
     });
   });
 
