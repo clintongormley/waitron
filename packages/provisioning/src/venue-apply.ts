@@ -39,8 +39,9 @@ export interface VenueResult {
  *
  * A database contains one taxpayer and one operational venue. Repeating the same plan returns the
  * existing location, till, node and series without rerunning module seeds. A different location is
- * refused; so is a different taxpayer. Two plans racing to be the first are serialised by the
- * taxpayer row's own insert, not by a lock — see the ensure-tenant case for the measurement.
+ * refused; so is a different taxpayer. Two plans that overlap are serialised on the taxpayer row —
+ * the insert holds the loser back on a virgin database, the `for update` read-back holds it back
+ * when the row is already there. See the ensure-tenant case for both measurements.
  */
 export async function applyVenue(
   actions: readonly VenueAction[],
@@ -80,6 +81,17 @@ export async function applyVenue(
           // `23505 / tenants_country_tax_id_key` for the same-identity race and
           // `23505 / tenants_pkey` for the different-identity one if this is put back either way.
           //
+          // The read-back is `for update`, and that is the lock the REST of the plan runs under.
+          // The insert alone serialises only the virgin-database case: the loser's insert waits on
+          // the winner's uncommitted row, and so on the winner's whole transaction. Against a
+          // taxpayer row that is already committed the insert conflicts with nothing, returns at
+          // once, and two plans then run every step below side by side — measured on
+          // postgres:18-alpine, that ends with one call rejected on `23505 /
+          // persons_tenant_email_uq`, because both read no admin at `seed-admin`'s `where not
+          // exists`. Taking the row lock here puts the second plan behind the first in both cases,
+          // so it reads what the first committed and reuses the venue. Standing case, both shapes:
+          // `venue-apply.race.pg.test.ts`.
+          //
           // Comparison is on the canonical values (trimmed, upper-cased — the same normalisation
           // `planVenue` applies before it builds the action), so `es`/`ES` and stray surrounding
           // space are the SAME taxpayer and the re-run stays idempotent.
@@ -88,7 +100,7 @@ export async function applyVenue(
             values (1, ${action.country}, ${action.taxId}, ${action.legalName})
             on conflict do nothing`);
           const stored = await tx.execute<{ country: string; tax_id: string }>(
-            sql`select country, tax_id from tenants where id = 1`,
+            sql`select country, tax_id from tenants where id = 1 for update`,
           );
           const row = stored.rows[0]!;
           const sameIdentity =
