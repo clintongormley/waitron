@@ -29,4 +29,12 @@ describe.each(["light", "dark"] as const)("wt-price-input a11y (%s theme)", (the
     );
     await expectNoA11yViolations(host);
   });
+
+  test("disabled", async () => {
+    await mountThemed(
+      '<wt-price-input label="Price" name="price" unit="ea" value="9.90" disabled></wt-price-input>',
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
 });

@@ -152,3 +152,24 @@ test("focusing the host delegates focus to the inner field", async () => {
   el.focus();
   expect(el.shadowRoot!.activeElement).toBe(el.shadowRoot!.querySelector("input"));
 });
+
+test("a disabled field refuses typing and refuses to open the unit picker", async () => {
+  const el = await mount('<wt-price-input unit="kg" disabled></wt-price-input>');
+  let unitClicks = 0;
+  el.addEventListener("wt-unit-click", () => unitClicks++);
+  const input = el.shadowRoot!.querySelector("input") as HTMLInputElement;
+  const button = el.shadowRoot!.querySelector<HTMLButtonElement>("button.unit")!;
+
+  expect(input.disabled).toBe(true);
+  expect(button.disabled).toBe(true);
+  // A disabled control fires no click, so the consumer never sees the unit picker request.
+  button.click();
+  expect(unitClicks).toBe(0);
+});
+
+test("a disabled field dims via the disabled-opacity token", async () => {
+  const el = await mount('<wt-price-input unit="kg" disabled></wt-price-input>');
+  host.style.setProperty("--wt-opacity-disabled", "0.3");
+  expect(getComputedStyle(el.shadowRoot!.querySelector("input")!).opacity).toBe("0.3");
+  expect(getComputedStyle(el.shadowRoot!.querySelector("button.unit")!).opacity).toBe("0.3");
+});

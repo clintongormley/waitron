@@ -875,6 +875,33 @@ it("opens the unit dropdown from the button beside Add variant", async () => {
   expect(el.currentValue.unitId).toBeNull();
 });
 
+it("locks the plain price field while a save is in flight, like every other field on the form", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: product,
+    locales: ["en"],
+    units: [unit],
+    taxChoices: reduced,
+    busy: true,
+  });
+  const price = el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+    "[name=unit-price]",
+  )!;
+  // The staff-name field beside it is the form's settled behaviour; the price field has to match,
+  // or a person can keep typing a price into a product that is already being written.
+  const staffName = el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+    "[name=name]",
+  )!;
+  expect(staffName.disabled).toBe(true);
+  expect(price.disabled).toBe(true);
+  // Pressing the price field's own unit button is the only way into the unit dropdown from here,
+  // and a disabled button fires no click at all, so the dropdown stays shut.
+  await (price as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+  price.shadowRoot!.querySelector<HTMLButtonElement>("button.unit")!.click();
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("[name=unit]")).toBeNull();
+});
+
 it("maps a rejected product body's field onto the editor field that holds it", () => {
   expect(productEditorField("name", "es")).toBe("name");
   expect(productEditorField("customerName", "es")).toBe("customer-name-es");

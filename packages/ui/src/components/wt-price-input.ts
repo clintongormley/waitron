@@ -1,6 +1,6 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
-import { baseStyles } from "../base-styles.js";
+import { baseStyles, disabledStyles } from "../base-styles.js";
 import { delegatesFocusShadowRootOptions, dispatchWtChange, uniqueId } from "../interactive.js";
 
 /**
@@ -56,6 +56,10 @@ export class WtPriceInput extends LitElement {
         font: inherit;
       }
 
+      input:disabled {
+        ${disabledStyles}
+      }
+
       input[aria-invalid="true"] {
         border-color: var(--wt-color-danger);
       }
@@ -72,6 +76,10 @@ export class WtPriceInput extends LitElement {
         color: var(--wt-color-text);
         font: inherit;
         cursor: pointer;
+      }
+
+      .unit:disabled {
+        ${disabledStyles}
       }
 
       .required,
@@ -96,6 +104,7 @@ export class WtPriceInput extends LitElement {
   @property() unit = "";
   @property() error = "";
   @property({ type: Boolean, reflect: true }) required = false;
+  @property({ type: Boolean, reflect: true }) disabled = false;
 
   // A named field uses its semantic name for both the input's id and name; an unnamed one falls
   // back to a per-instance id so its label association never collides with another field's.
@@ -140,11 +149,14 @@ export class WtPriceInput extends LitElement {
           .value=${this.value}
           inputmode="decimal"
           ?required=${this.required}
+          ?disabled=${this.disabled}
           aria-invalid=${hasError}
           aria-describedby=${hasError ? this.errorId : nothing}
           @input=${this.onInput}
         />
-        <button type="button" class="unit" @click=${this.onUnitClick}>${this.unit}</button>
+        <button type="button" class="unit" ?disabled=${this.disabled} @click=${this.onUnitClick}>
+          ${this.unit}
+        </button>
       </div>
       ${hasError ? html`<p id=${this.errorId} class="error" data-error>${this.error}</p>` : nothing}
     `;

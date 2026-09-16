@@ -910,6 +910,7 @@ export class ProductEditor extends LitElement {
               label=${priceLabel(unitLabel)}
               unit=${unitLabel}
               required
+              ?disabled=${this.suspended}
               .value=${this.draft.unitPrice}
               .error=${this.error("unit-price")}
               @wt-change=${(event: CustomEvent<{ value: string }>) => {
