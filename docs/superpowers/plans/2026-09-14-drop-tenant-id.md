@@ -394,7 +394,7 @@ By now no `.tenantId` field survives, so every `TenantId` usage is either the br
 
 - [ ] **Step 1:** `pnpm -r typecheck && pnpm format:check && pnpm lint`
 - [ ] **Step 2:** `pnpm exec vitest run scripts/` → PASS (new guard, journal-monotonic, classification, append-only, claude-md-pointers).
-- [ ] **Step 3:** `wa-wt reset demo <worktree-name>`, boot, confirm no `migrations.*` error, re-enrol the dev till at `http://localhost:5190` with code `DEMO`.
+- [ ] **Step 3:** `wa-wt reset demo <worktree-name>`, boot, confirm no `migrations.*` error, open the dev till at `http://localhost:5190` — under devMode its join request is accepted automatically, so there is no pairing code to type. (This line originally said to re-enrol with the fixed code `DEMO`, which was already gone when the plan was written: #287 deleted it on 2026-09-09. Corrected 2026-09-16.)
 - [ ] **Step 4:** Announce branch readiness; run `/finish-branch` (full ceremony). Run-it seat brief: insert a second `tenants` row as `app_user` → the singleton check refuses it; boot with `WAITRON_TILL_TENANT_ID` still set → ignored; re-run `applyVenue` with a different tax id → `provisioning.tenant_identity_mismatch`.
 
 ---

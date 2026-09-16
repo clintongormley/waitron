@@ -1501,6 +1501,12 @@ image constraints under *Detail → Box image*.
   waiting for is done: `feat/drop-tenant-id` took the tenant parameter out of both functions
   (2026-09-14), so this is unblocked. Unchanged by this decision: `rotate` re-checks every secret against the current list, so an out-of-date one
   still stops a key rotation until it is re-entered (commented above `rotateCredentials`).
+- **`CardProviderBuildDeps.nodeId` is dead weight — nothing reads it** (2026-09-16, traced through
+  both adapters). `packages/payments-sumup/src/provider.ts` declares the field and never touches it,
+  and `reverseViaStripe` (`packages/payments-stripe/src/reverse.ts`) requires it on its options
+  object but destructures only `resolveProcessorRef`. Removing it is a code change, deliberately
+  left out of the claims-only fix wave that found it. **Next action:** delete the field and the
+  values every caller passes, or, if a record path is meant to use it, wire it up and say where.
 - **The same hand-built SQL array appears in several packages** — `sql.join` of each value inside
   `array[...]::text[]`, in `packages/catalogue/src/provisioning.ts`,
   `packages/provisioning/src/venue-apply.ts` and `apps/server/src/configuration-transfer.ts` (find
