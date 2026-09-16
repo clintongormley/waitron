@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 /**
- * Makes the tenant-scoping invariant STRUCTURAL rather than a rule three doc comments happen to
- * describe.
+ * Makes the transaction-boundary invariant STRUCTURAL rather than a rule three doc comments happen
+ * to describe. (The file is still named for the tenant scoping this guard was first written for; the
+ * tenant column it scoped to is gone, the guard is not.)
  *
  * Adapters use `withTransaction` for their transaction boundaries and node origin attribution.
  * The source scan rejects bare `.transaction(` calls in production sources.

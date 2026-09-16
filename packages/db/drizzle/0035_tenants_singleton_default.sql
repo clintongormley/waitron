@@ -1,0 +1,1 @@
+ALTER TABLE "tenants" ALTER COLUMN "id" SET DEFAULT 1;

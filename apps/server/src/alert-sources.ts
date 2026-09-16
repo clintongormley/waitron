@@ -104,7 +104,7 @@ export function backupAlertSource(deps: {
 
 /**
  * The awaiting-certificate alert source. `holder` is the same in-memory cell the fiscal pass flips
- * (`AwaitingCertStatus`, `apps/server/src/pass.ts`) when a drain skips a tenant for a missing AEAT
+ * (`AwaitingCertStatus`, `apps/server/src/pass.ts`) when a drain pass is skipped for a missing AEAT
  * certificate — no database read. Shares the `fiscal` area with the module's own submission source
  * (`packages/fiscal-verifactu/src/submission-alerts.ts`); Task 1's relaxed registry is what lets two
  * sources own the same area.

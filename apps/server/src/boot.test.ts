@@ -129,7 +129,7 @@ beforeEach(() => {
  * `/health` come back `200`. The first test below additionally captures the real, hardcoded stdout
  * `boot.ts` logs to (deliberately not injectable — see its own doc comment) and asserts the logged
  * `loop.sleeping` line's `sleepMs`, which `sleepMsFor` derives from `maxTickMs` alone whenever
- * nothing is due — exactly this suite's own case, with zero tenants enrolled for either duty.
+ * nothing is due — exactly this suite's own case, with no due work seeded for either duty.
  *
  * `DATABASE_URL` is the deployment role, not the container's superuser default (`pg.connect()`'s
  * role): spec §10 states plainly that `DATABASE_URL` "must be the non-superuser deployment role".
@@ -625,7 +625,7 @@ describe("startServer, against a real container as the deployment role", () => {
         WAITRON_MIN_TICK_MS: "1000",
         WAITRON_MAX_TICK_MS: "94327",
         // Within [minTickMs, maxTickMs] only to satisfy `loadConfig`'s guard (F1 of the 2026-07-27
-        // pre-merge review) — zero tenants are enrolled for either duty below, so neither drain nor
+        // pre-merge review) — no due work is seeded for either duty below, so neither drain nor
         // reconcile ever reports a skip, and this value plays no part in `sleeping.sleepMs` below.
         WAITRON_SKIP_RETRY_MS: "9000",
         WAITRON_SETTLEMENT_LAG_MS: "1000",
@@ -2185,7 +2185,7 @@ describe("startServer, against a real container as the deployment role", () => {
     try {
       await waitForPass(server.health);
       // The pool itself is on `RUNTIME_ROLE`: a pass that reached `ok` proves the duty work (reading
-      // `credential_tenants`/`envios_tenants_with_work` through their SECURITY DEFINER seams, and
+      // `credential_tenants`/`envios_work_due` through their SECURITY DEFINER seams, and
       // `runDue`'s own `scheduled_runs` reads) also succeeds under `app_user` membership alone, with
       // none of `PROBE_ROLE`'s extra migration-only grants.
       expect(
@@ -2300,7 +2300,8 @@ describe("startServer, against a real container as the deployment role", () => {
   // and nothing proves this branch's headline behaviour end to end. `boot.ts` passes
   // `skipRetryMs: config.skipRetryMs` to both `drain` and `runDue` — `tsc` only pins that the
   // field is PRESENT, `config.test.ts` pins parsing, and the fold unit tests
-  // (`drain.fold.test.ts`, `run.test.ts`) pin behaviour GIVEN a value. None of them would notice
+  // (`drain.test.ts`'s "nextDueAt is folded as a minimum, never assigned" block, `run.test.ts`) pin
+  // behaviour GIVEN a value. None of them would notice
   // `skipRetryMs: config.minTickMs` at either call site: 13/13 typecheck, every unit test and 100%
   // coverage would all stay green while silently reintroducing the exact 5-second spin this branch
   // exists to remove. This test seeds a real, due `envios` row for a tenant with no `fiscal.aeat`
@@ -2385,13 +2386,11 @@ describe("startServer, against a real container as the deployment role", () => {
         await server.close();
       }
     } finally {
-      // The ONLY row that makes this tenant perpetually due: `envios_tenants_with_work`
-      // (drain.ts) reads `envios`, not `tenants`/`tills`/`registros_facturacion`/`sales`/
-      // `registro_sif`, so deleting just this is what stops the tenant from being enumerated
-      // again — and it sidesteps the FK-ordered teardown a full tenant delete would need
-      // (`registros_facturacion`/`sales`/`invoice_series` all reference `tenants` with
-      // `onDelete: "restrict"`). Runs regardless of how the block above finishes, so a failed
-      // assertion still leaves the container clean for whatever test runs next.
+      // The ONLY row that keeps this database perpetually due: `envios_work_due` (drain.ts) reads
+      // `envios`, not `tenants`/`tills`/`registros_facturacion`/`sales`/`registro_sif`, so deleting
+      // just this is what stops the drain from finding work again. Runs regardless of how the block
+      // above finishes, so a failed assertion still leaves the container clean for whatever test
+      // runs next.
       await suite.admin.execute(sql`delete from envios where registro_id in ${seeded.registroIds}`);
     }
   }, 60_000);
@@ -2465,10 +2464,10 @@ describe("startServer, against a real container as the deployment role", () => {
       }
     } finally {
       closeSpy.mockRestore();
-      // Same reasoning as the skip-retry test above: only the `envios` row makes this tenant
+      // Same reasoning as the skip-retry test above: only the `envios` row keeps the database
       // perpetually due, so deleting it is enough to keep this test order-independent. The
-      // `tenant_credentials` row this test also inserted is not read by `envios_tenants_with_work`
-      // and is left in place, matching every other tenant/credential this file's suite seeds.
+      // `tenant_credentials` row this test also inserted is not read by `envios_work_due` and is
+      // left in place, matching every other credential this file's suite seeds.
       //
       // `incidents` also needs cleanup here, unlike the skip-retry test above: with `WAITRON_ENV`
       // now agreeing with the seeded `entorno`, the mocked `undici` fetch (this file's own header

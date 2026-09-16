@@ -82,10 +82,10 @@ export class StripeOnDeviceProvider implements PaymentProvider {
     return this.opts.client.createConnectionToken();
   }
 
-  /** Every database phase runs through here, so no transaction this adapter opens can be left
-   * unscoped — the failure that made `collect` charge cards without recording them and `forward` a
-   * permanent silent no-op under a real role. */
-  private inTenant<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
+  /** The adapter's ONE transaction boundary: every database phase runs through here, and the
+   * adapter opens no transaction of its own. `tenant-scoping.test.ts` is the guard — it refuses a
+   * bare `.transaction(` anywhere in this package's production sources. */
+  private inTransaction<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
     return withTransaction(this.opts.db, fn);
   }
 
@@ -97,7 +97,7 @@ export class StripeOnDeviceProvider implements PaymentProvider {
     const stripeIdempotencyKey = workingOrderIdempotencyKey(params.workingOrderId);
     // Gate up front: the neutral policy decides whether offline is permitted for THIS transaction,
     // which configures the device's offline behaviour BEFORE anything is stored.
-    const offlineAllowed = await this.inTenant(async (tx) => {
+    const offlineAllowed = await this.inTransaction(async (tx) => {
       const policy = await getPaymentPolicy(tx);
       return (
         resolveOfflineDecision(policy, params.allowOffline ?? false, params.amount) === "accept"
@@ -135,7 +135,7 @@ export class StripeOnDeviceProvider implements PaymentProvider {
       };
     }
     if (outcome.outcome === "declined") {
-      await this.inTenant((tx) => insertFailedPayment(tx, common));
+      await this.inTransaction((tx) => insertFailedPayment(tx, common));
       return {
         provider: PROVIDER,
         paymentRef,
@@ -159,7 +159,7 @@ export class StripeOnDeviceProvider implements PaymentProvider {
     /* v8 ignore stop */
     const settledAt = new Date();
     if (outcome.outcome === "accepted_offline") {
-      await this.inTenant((tx) =>
+      await this.inTransaction((tx) =>
         insertAcceptedOffline(tx, { ...common, settledAt, externalRef: outcome.externalRef }),
       );
       return {
@@ -172,7 +172,7 @@ export class StripeOnDeviceProvider implements PaymentProvider {
       };
     }
     // captured (online single-message)
-    await this.inTenant((tx) =>
+    await this.inTransaction((tx) =>
       insertCapturedPayment(tx, { ...common, settledAt, externalRef: outcome.externalRef }),
     );
     return { provider: PROVIDER, paymentRef, state: "captured", amount: params.amount, settledAt };
@@ -180,7 +180,7 @@ export class StripeOnDeviceProvider implements PaymentProvider {
 
   async forward(now: Date): Promise<ForwardResult> {
     // T1 (read, no lock): list our pending offline payments. Never hold a lock across the device sync.
-    const pending = await this.inTenant((tx) => listAcceptedOffline(tx, PROVIDER));
+    const pending = await this.inTransaction((tx) => listAcceptedOffline(tx, PROVIDER));
     if (pending.length === 0) {
       return { nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 };
     }
@@ -219,7 +219,7 @@ export class StripeOnDeviceProvider implements PaymentProvider {
     // double (both advance the same row, the second a no-op) — a benign log-line inaccuracy the
     // design accepts; the incident count stays exact because recordIncidentOnce reports real
     // inserts.
-    return this.inTenant(async (tx) => {
+    return this.inTransaction(async (tx) => {
       let forwarded = 0;
       let declinedCount = 0;
       let incidentsRaised = 0;

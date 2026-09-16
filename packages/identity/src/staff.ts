@@ -656,7 +656,6 @@ export async function listPersons(
       totpSecret: persons.totpSecret,
     })
     .from(persons)
-
     .orderBy(persons.displayName);
   return rows.map((r) => ({
     personId: r.personId,

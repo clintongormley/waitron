@@ -249,7 +249,10 @@ opened. Before `planVenue` runs, the command reaches the fiscal regime's own ven
 refuses a legal name or operation description carrying a character XML forbids, an operation
 description over 500 characters, and either series code outside AEAT's character set or longer than
 the 38-character base (`setup.request_invalid`, naming the offending field). A concurrent run that
-races a conflicting row is caught as `provisioning.venue_conflict`.
+races a conflicting row is caught as `provisioning.venue_conflict`. A re-run against a database whose
+taxpayer row names a different country or tax id is refused with
+`provisioning.tenant_identity_mismatch`; a difference of letter case or surrounding space is the same
+taxpayer, so that re-run is the no-op a re-provision should be.
 
 A worked invocation with the full option set is in
 [`apps/server/README.md`](../../apps/server/README.md#provisioning-a-venue).

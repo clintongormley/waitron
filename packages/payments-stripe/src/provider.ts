@@ -62,9 +62,10 @@ export class StripeTerminalProvider implements PaymentProvider {
     this.poll = { ...DEFAULT_POLL, ...opts.poll };
   }
 
-  /** Every database phase runs through here, so no transaction this adapter opens can be left
-   * unscoped — the failure that made `collect` throw `42501` on every sale under a real role. */
-  private inTenant<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
+  /** The adapter's ONE transaction boundary: every database phase runs through here, and the
+   * adapter opens no transaction of its own. `tenant-scoping.test.ts` is the guard — it refuses a
+   * bare `.transaction(` anywhere in this package's production sources. */
+  private inTransaction<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
     return withTransaction(this.opts.db, fn);
   }
 
@@ -83,7 +84,7 @@ export class StripeTerminalProvider implements PaymentProvider {
     const key = { provider: PROVIDER, paymentRef };
 
     // T1 — commit the attempt before any network call.
-    await this.inTenant((tx) =>
+    await this.inTransaction((tx) =>
       insertAttempting(tx, {
         workingOrderId: params.workingOrderId,
         provider: PROVIDER,
@@ -96,7 +97,7 @@ export class StripeTerminalProvider implements PaymentProvider {
     const outcome = await this.drive(readerId, params.amount, stripeIdempotencyKey);
 
     // T2 — persist the terminal outcome.
-    const row = await this.inTenant((tx) =>
+    const row = await this.inTransaction((tx) =>
       outcome.captured
         ? captureAttempting(tx, { ...key, settledAt: outcome.settledAt, externalRef: outcome.piId })
         : failAttempting(tx, key),

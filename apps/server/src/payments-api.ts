@@ -364,7 +364,6 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
             canEnable: sql<boolean>`${cardReaders.unpairedAt} is null`,
           })
           .from(cardReaders)
-
           .orderBy(cardReaders.name),
         counts: await tx
           .select({
@@ -372,7 +371,6 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
             n: sql<number>`count(*)::int`,
           })
           .from(deviceCardReaders)
-
           .groupBy(deviceCardReaders.readerId),
       }));
       const countByReader = new Map(counts.map((r) => [r.readerId, r.n]));

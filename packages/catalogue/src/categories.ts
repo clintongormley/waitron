@@ -44,7 +44,6 @@ export async function listCategories(tx: Transaction): Promise<Category[]> {
     .select(columns)
     .from(categories)
     .leftJoin(categoryDetails, eq(categoryDetails.categoryId, categories.id))
-
     .orderBy(categories.createdAt, categories.id);
 }
 export async function readCategory(tx: Transaction, id: string): Promise<Category> {
@@ -183,7 +182,6 @@ export async function categoryDependants(tx: Transaction, id: string): Promise<C
       productCategories,
       and(eq(productCategories.productId, products.id), eq(productCategories.categoryId, id)),
     )
-
     .orderBy(products.id);
   const childRows = await tx
     .select({ id: categories.id, name: categories.name })
@@ -328,7 +326,6 @@ export async function listCategoryProducts(tx: Transaction, categoryId: string) 
       and(eq(selected.productId, products.id), eq(selected.categoryId, categoryId)),
     )
     .innerJoin(productCategories, eq(productCategories.productId, products.id))
-
     .groupBy(products.id)
     .orderBy(products.id);
 }

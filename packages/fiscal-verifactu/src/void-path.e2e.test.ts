@@ -103,7 +103,6 @@ describe("alta and anulación interleave in one chain", () => {
     const rows = await pg.db
       .select()
       .from(registrosFacturacion)
-
       .orderBy(asc(registrosFacturacion.secuencia));
 
     expect(rows.map((r) => r.tipoRegistro)).toEqual(["alta", "alta", "anulacion"]);

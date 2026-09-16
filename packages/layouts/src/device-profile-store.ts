@@ -127,7 +127,6 @@ export async function listDeviceProfiles(tx: Transaction): Promise<DeviceProfile
   const rows = await tx
     .select(PROFILE_COLUMNS)
     .from(deviceProfiles)
-
     .orderBy(asc(deviceProfiles.name));
   return rows.map(toRow);
 }

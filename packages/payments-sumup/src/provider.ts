@@ -119,7 +119,9 @@ export class SumUpCloudProvider implements PaymentProvider {
     this.now = opts.now ?? (() => new Date());
   }
 
-  private inTenant<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
+  /** The adapter's ONE transaction boundary: every database phase runs through here, and the
+   * adapter opens no transaction of its own. */
+  private inTransaction<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
     return withTransaction(this.opts.db, fn);
   }
 
@@ -136,7 +138,7 @@ export class SumUpCloudProvider implements PaymentProvider {
     const key = { provider: SUMUP_PROVIDER, paymentRef };
 
     // T1
-    await this.inTenant((tx) =>
+    await this.inTransaction((tx) =>
       insertAttempting(tx, {
         workingOrderId: params.workingOrderId,
         provider: SUMUP_PROVIDER,
@@ -159,7 +161,7 @@ export class SumUpCloudProvider implements PaymentProvider {
       return this.pendingResult(paymentRef, params.amount);
     }
     if (!created.accepted) {
-      const row = await this.inTenant((tx) => failAttempting(tx, key));
+      const row = await this.inTransaction((tx) => failAttempting(tx, key));
       return {
         provider: SUMUP_PROVIDER,
         paymentRef,
@@ -170,7 +172,7 @@ export class SumUpCloudProvider implements PaymentProvider {
     }
 
     // T1.5
-    await this.inTenant((tx) => stampAttemptingRef(tx, key, created.clientTransactionId));
+    await this.inTransaction((tx) => stampAttemptingRef(tx, key, created.clientTransactionId));
 
     // Poll — outside any transaction.
     const outcome = await this.pollUntilResolved({
@@ -182,7 +184,7 @@ export class SumUpCloudProvider implements PaymentProvider {
       return this.pendingResult(paymentRef, params.amount);
     }
     const card = outcome.kind === "captured" ? outcome.card : undefined;
-    const row = await this.inTenant((tx) =>
+    const row = await this.inTransaction((tx) =>
       outcome.kind === "captured"
         ? captureAttempting(tx, {
             ...key,
@@ -276,11 +278,11 @@ export class SumUpCloudProvider implements PaymentProvider {
    * lifted out and batched.
    */
   async resolvePending(now: Date): Promise<ForwardResult> {
-    const rows = await this.inTenant((tx) => listAttempting(tx, SUMUP_PROVIDER));
+    const rows = await this.inTransaction((tx) => listAttempting(tx, SUMUP_PROVIDER));
     if (rows.length === 0) {
       return { nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 };
     }
-    const tills = await this.inTenant((tx) =>
+    const tills = await this.inTransaction((tx) =>
       tillsForWorkingOrders(
         tx,
         rows.map((r) => r.workingOrderId),
@@ -299,7 +301,7 @@ export class SumUpCloudProvider implements PaymentProvider {
       workingOrderId: string,
       status: string | null,
     ): Promise<boolean> =>
-      this.inTenant(async (tx) => {
+      this.inTransaction(async (tx) => {
         await failAttempting(tx, key);
         if (status === null) return false;
         const tillId = tills.get(workingOrderId);
@@ -343,7 +345,7 @@ export class SumUpCloudProvider implements PaymentProvider {
         continue;
       }
       if (outcome.kind === "captured") {
-        await this.inTenant((tx) =>
+        await this.inTransaction((tx) =>
           captureAttempting(tx, {
             ...key,
             settledAt: outcome.settledAt,

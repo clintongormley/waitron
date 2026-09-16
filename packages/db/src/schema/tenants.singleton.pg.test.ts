@@ -55,6 +55,19 @@ describe("tenants is one row, keyed 1", () => {
     expect(still.rows[0]!.n).toBe(1);
   });
 
+  it("defaults id to 1, so a row that omits it meets the singleton rather than a NOT NULL error", async () => {
+    // The two answers are deliberately different. Without the column default this insert fails
+    // `23502` — id is NOT NULL and nothing supplied it. With the default it fails `23505`, the
+    // primary key refusing a SECOND row 1, which can only happen if the default put the 1 there.
+    // The row seeded in `beforeAll` is what separates them.
+    const omitted = await captureError(() =>
+      owner.execute(
+        sql`insert into tenants (country, tax_id, legal_name) values ('ES', 'B77777777', 'Third SL')`,
+      ),
+    );
+    expect(pgErrorCode(omitted)).toBe("23505");
+  });
+
   it("refuses an INSERT from app_user before either constraint is reached", async () => {
     // The privilege half, and the one that needs the role switch: `app_user` holds SELECT on
     // `tenants` and deliberately no INSERT, so the app role is stopped by the GRANT (42501) rather

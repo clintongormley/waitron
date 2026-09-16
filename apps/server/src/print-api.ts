@@ -517,7 +517,6 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             enrolledAt: printAgents.enrolledAt,
           })
           .from(printAgents)
-
           .orderBy(desc(printAgents.enrolledAt)),
       );
       return c.json(rows);

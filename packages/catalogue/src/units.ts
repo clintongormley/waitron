@@ -97,11 +97,7 @@ export async function createUnit(
 }
 
 export async function listUnits(tx: Transaction): Promise<Unit[]> {
-  return tx
-    .select(UNIT_COLUMNS)
-    .from(units)
-
-    .orderBy(asc(units.id));
+  return tx.select(UNIT_COLUMNS).from(units).orderBy(asc(units.id));
 }
 
 export async function getUnit(tx: Transaction, unitId: string): Promise<Unit> {

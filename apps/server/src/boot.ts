@@ -331,7 +331,7 @@ const NOTHING_TO_RECONCILE: TickResult = {
 
 /**
  * The card-payment provider a Demo or default-Prepare till drives: the local simulator, built once at
- * boot for this till's tenant. Every OTHER card sale routes to its reader's own provider through the
+ * boot. Every OTHER card sale routes to its reader's own provider through the
  * pool at collect time (Task 12 cutover), so a live/integration till returns `undefined` here — there
  * is no single per-till provider any more. Prepare that explicitly opts into real test providers
  * (`paymentTestProviders`) also returns `undefined` and uses real readers.
@@ -1357,8 +1357,10 @@ export async function startServer(
   // `runFinishAdoption`, which seals the reserved identity + ambient viewer once every table has
   // copied, then the box restarts into normal mirror mode. It reads no deployment axes / membership,
   // mounts no mirror session and no till/node-scoped read path — `ensureMirrorViewer` in particular
-  // would throw a `persons`→`tenants` FK violation on the still-empty database (mirror-session.ts).
-  // Entered BEFORE the axes read below for that reason.
+  // WRITES into `persons` and `management_sessions` (mirror-session.ts), two tables the initial copy
+  // is still filling. What that write would break is not established: the receipt that stood here
+  // named a foreign key from `persons` to `tenants`, and this repo no longer has one (the open
+  // question is in `docs/backlog.md`). Entered BEFORE the axes read below.
   const pendingAdoption = await readPendingAdoption(config.stateDir);
   if (pendingAdoption !== null) {
     // A dedicated small OWNER pool (M8 — `replicationDb`, NEVER `ownerDb`, already declared from a
@@ -1990,10 +1992,10 @@ export async function startServer(
       // `nodeId` is THIS node's id (the same `till.nodeId` the adjacent `mountCatalogueApi`
       // receives — one source of truth), carried on the uniform write-path `cfg` shape.
       cfg: { nodeId: till.nodeId },
-      // The venue's own config (tenant + location) the FP-1 zone/table config routes scope to — the
+      // The venue's own config (its location) the FP-1 zone/table config routes scope to — the
       // SAME `till` config `mountTillApi` receives above, so the dashboard "Sala" surface and the till
-      // surface CRUD the same `floor_zones`/`dining_tables` under one location. Only tenant + location
-      // are read there (the fiscal ids are inert — these are config routes touching no fiscal path).
+      // surface CRUD the same `floor_zones`/`dining_tables` under one location. Only `locationId` is
+      // read there (the fiscal ids are inert — these are config routes touching no fiscal path).
       venueCfg: till,
       secureCookies,
       rpId: config.managementRpId,
@@ -2114,14 +2116,14 @@ export async function startServer(
   mountWorkforceApi(app, { db, cfg: { nodeId: till.nodeId } }, log);
   // The STAFF-FACING half of the schedule surface on the SAME app — the till-session-gated request
   // routes (view my shifts/swaps/absences, request a swap or absence, accept a swap offered to me),
-  // the counterpart to mountWorkforceApi's manager approval half. Same minimal deps (db + this venue's
-  // tenant); the till PIN session gates it (requireSession), not a management session. Routes only.
+  // the counterpart to mountWorkforceApi's manager approval half. Minimal deps — `db` alone; the till
+  // PIN session gates it (requireSession), not a management session. Routes only.
   mountScheduleApi(app, { db }, log);
   // The STAFF SELF-SERVICE half of the management dashboard on the SAME app — the browser twin of the
   // till's mountScheduleApi. Its whoami (`GET /management-api/session/me`) + `/management-api/me/schedule/*`
   // routes gate on the MANAGEMENT session (requireManagementSession + resolveManagementSession), never
-  // authorizeManager, so a staff-role person acts on their own roster/swaps/absences. Same minimal deps
-  // (db + this venue's tenant); no fiscal backend, clock or card provider. Routes only.
+  // authorizeManager, so a staff-role person acts on their own roster/swaps/absences. Minimal deps —
+  // `db` plus this node's id; no fiscal backend, clock or card provider. Routes only.
   mountMeApi(
     app,
     // `nodeId` is THIS node's id (the same `till.nodeId` `mountManagementApi`/`mountCatalogueApi`
@@ -2601,7 +2603,7 @@ export async function startServer(
           runPass(
             {
               // The regime owns the submission transport: `enabledFiscal.drain` builds a per-pass mTLS
-              // resolver (one TLS pool per tenant with due work, released in its own `finally`) and runs
+              // resolver (one TLS pool for the pass, released in its own `finally`) and runs
               // the pass. The host injects only the vault ring, the deployment identity and the cadence —
               // `config.environment` is the `WAITRON_ENV`-derived value `deployment-guard.ts` pinned
               // against the database at boot, and the regime's `entorno` guard refuses any due registro

@@ -22,11 +22,7 @@ import { validateContentTranslations } from "./content-languages.js";
 import "./errors.js";
 
 export async function listModifiers(tx: Transaction): Promise<Modifier[]> {
-  const groups = await tx
-    .select()
-    .from(optionGroups)
-
-    .orderBy(optionGroups.sort, optionGroups.id);
+  const groups = await tx.select().from(optionGroups).orderBy(optionGroups.sort, optionGroups.id);
   if (groups.length === 0) return [];
   const items = await tx
     .select()

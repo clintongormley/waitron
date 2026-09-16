@@ -441,11 +441,7 @@ export async function createCatalogue(
 }
 
 export async function listCatalogues(tx: Transaction): Promise<Catalogue[]> {
-  return tx
-    .select(CATALOGUE_COLUMNS)
-    .from(catalogues)
-
-    .orderBy(catalogues.createdAt, catalogues.id);
+  return tx.select(CATALOGUE_COLUMNS).from(catalogues).orderBy(catalogues.createdAt, catalogues.id);
 }
 
 export async function createMenuSection(

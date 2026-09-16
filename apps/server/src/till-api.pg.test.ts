@@ -668,11 +668,7 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
     // the stored 64-hex huella the append-only table pins.
     const registros = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
-      return tx
-        .select()
-        .from(registrosFacturacion)
-
-        .orderBy(registrosFacturacion.secuencia);
+      return tx.select().from(registrosFacturacion).orderBy(registrosFacturacion.secuencia);
     });
     expect(registros).toHaveLength(2);
 
@@ -1813,11 +1809,7 @@ describe("handheld sales and device capability gates", () => {
     // separate device metadata; it never keys the chain.
     const registros = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
-      return tx
-        .select()
-        .from(registrosFacturacion)
-
-        .orderBy(registrosFacturacion.secuencia);
+      return tx.select().from(registrosFacturacion).orderBy(registrosFacturacion.secuencia);
     });
     expect(registros).toHaveLength(1);
     const [only] = registros;
@@ -1865,11 +1857,7 @@ describe("handheld sales and device capability gates", () => {
     // huella), plus the deployment `entorno`. `tillId` is separate device metadata; it never keys the chain.
     const registros = await withTransaction(suite.admin, async (tx) => {
       await asAppUser(tx);
-      return tx
-        .select()
-        .from(registrosFacturacion)
-
-        .orderBy(registrosFacturacion.secuencia);
+      return tx.select().from(registrosFacturacion).orderBy(registrosFacturacion.secuencia);
     });
     expect(registros).toHaveLength(1);
     const [only] = registros;

@@ -47,11 +47,7 @@ type StationIds = Record<"kitchen" | "bar" | "deli", string> & {
 };
 
 /** Resolve the location's provisioned Cocina station and create its non-default Barra station. */
-async function resolveStationIds(
-  tx: Transaction,
-
-  locationId: string,
-): Promise<StationIds> {
+async function resolveStationIds(tx: Transaction, locationId: string): Promise<StationIds> {
   const { rows: cocina } = await tx.execute<{ id: string }>(sql`
     select id from kitchen_stations
     where location_id = ${locationId} and name = 'Cocina'

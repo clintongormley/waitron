@@ -74,11 +74,7 @@ export function canResendPrintJob(job: {
 }
 
 /** Resend the opaque document to its original printer and location, preserving delivery history. */
-export async function resendPrintJob(
-  tx: Transaction,
-
-  jobId: string,
-): Promise<{ jobId: string }> {
+export async function resendPrintJob(tx: Transaction, jobId: string): Promise<{ jobId: string }> {
   const [job] = await tx.select().from(printJobs).where(eq(printJobs.id, jobId));
   if (job === undefined) throw new AppError("print_job.not_found", { id: jobId });
   if (!canResendPrintJob(job)) throw new AppError("print_job.not_resendable", { id: jobId });

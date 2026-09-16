@@ -83,12 +83,7 @@ const TILL_NAME_UNIQUE = "tills_tenant_location_name_key";
  * unique index is the whole guard (`tills` is a `state` table), keyed by CONSTRAINT NAME so an unrelated
  * unique violation is rethrown raw — the `translateWriteError` idiom (device-profile-store.ts).
  */
-async function createRegister(
-  tx: Transaction,
-
-  locationId: string,
-  name: string,
-): Promise<string> {
+async function createRegister(tx: Transaction, locationId: string, name: string): Promise<string> {
   try {
     const [till] = await tx.insert(tills).values({ locationId, name }).returning({ id: tills.id });
     return till!.id;

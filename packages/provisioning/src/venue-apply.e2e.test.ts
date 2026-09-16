@@ -31,8 +31,9 @@ import { applyVenue } from "./venue-apply.js";
  * PGlite is sufficient for sale chaining and login behavior; venue-apply.pg.test.ts
  * exercises provisioning as a non-superuser owner on real Postgres.
  *
- * The full manifest is migrated in dependency order. The real
- * `applyVenue` now seeds an admin `persons` row, which carries a foreign key onto `tenants`.
+ * The full manifest is migrated in dependency order. The real `applyVenue` now seeds an admin
+ * `persons` row, so identity's set has to be migrated here too. (`persons` no longer has a foreign
+ * key onto `tenants` — the column it used to carry is gone.)
  */
 const suite = usePgliteDb({
   migrations: migrationOptionsFor(manifestSets(), null),

@@ -36,7 +36,7 @@
 // for P1, inside the function itself; `821-822` for P3, inside `finalizeCapture`, which it
 // calls). The PROVIDER's own writes do not, here: `collect`'s T1/T2
 // (`insertAttempting`/`captureAttempting`/ `failAttempting`) go through
-// `StripeTerminalProvider`'s private `inTenant`, which calls only `withTransaction(this.opts.db, …)` —
+// `StripeTerminalProvider`'s private `inTransaction`, which calls only `withTransaction(this.opts.db, …)` —
 // never `asAppUser` (`provider.ts:97-98`). `this.opts.db` is the plain connection-owner `db` this
 // script passes into the provider's constructor below, so in THIS demo those particular writes
 // run as the connection owner, not as `app_user`. This demo therefore proves the fiscal record

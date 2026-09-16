@@ -3878,7 +3878,6 @@ async function readQueueSubItems(
 
 export async function listStationQueue(
   tx: Transaction,
-
   stationId: string,
 ): Promise<StationQueueGroup[]> {
   const rows = await tx

@@ -312,7 +312,7 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
     // A replicated pending envío this node must NOT submit (fresh FK closure + registro + a 'pendiente'
     // `envios` row). `entorno` matches this box's stamp so the row is genuinely due for the environment
     // the primary control below drains for — `resolveClient` is resolved BEFORE the entorno guard
-    // regardless (drain.ts:226), so the tripwire fires on the tenant either way.
+    // regardless (drain.ts:187), so the tripwire fires either way.
     const seeded = await seedFiscalRegistro(mirror.admin, {
       ids: {
         locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
@@ -327,8 +327,8 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
     });
 
     let resolveClientCalled = false;
-    // The reject-if-called tripwire: drain resolves one of these per tenant with due work
-    // (drain.ts:226). Reaching it at all on a mirror is the failure this gate catches.
+    // The reject-if-called tripwire: a drain pass that finds due work resolves one of these
+    // (drain.ts:187). Reaching it at all on a mirror is the failure this gate catches.
     const tripwireResolveClient = (): Promise<never> => {
       resolveClientCalled = true;
       return Promise.reject(new Error("mirror must not contact AEAT"));
@@ -373,7 +373,7 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
     expect(role).toBe("secondary");
 
     // Drive the pass an hour ahead of wall-clock so the seeded envío is unambiguously DUE for the
-    // primary control below (`envios_tenants_with_work` gates on `proximo_intento_en <= now`, whose
+    // primary control below (`envios_work_due` gates on `proximo_intento_en <= now`, whose
     // default is the CONTAINER's `now()` at insert — which can sit microseconds ahead of the host's
     // `new Date()`, leaving the row not-yet-due and the tripwire silent for a clock-skew reason). The
     // mirror direction ignores `now` (the gate short-circuits), so one instant serves both.
@@ -397,12 +397,12 @@ describe("mirror-mode boot (real Postgres, deployment.mode = 'mirror')", () => {
     // fires. (Documented RED confirmed in a scratch run before this control was added; see the report.)
     const primaryReport = await buildPass(() => "primary")(drainAt);
     expect(resolveClientCalled).toBe(true);
-    // drain contains the tripwire rejection per-tenant (drain.ts:228 → `skipped`), so the pass still
+    // drain contains the tripwire rejection (drain.ts:192 → `skipped`), so the pass still
     // completes with a drain duty entry rather than throwing — the drainer genuinely RAN on the primary.
     expect(primaryReport.duties.some((d) => d.duty === DRAIN_DUTY)).toBe(true);
 
-    // The envío is STILL 'pendiente' even on the primary run: `resolveClient` throws before `drainTenant`
-    // (drain.ts:226-227), so nothing was ever submitted — the tripwire proves reachability, not filing.
+    // The envío is STILL 'pendiente' even on the primary run: `resolveClient` throws before `drainDue`
+    // (drain.ts:187-188), so nothing was ever submitted — the tripwire proves reachability, not filing.
     const afterPrimary = await mirror.admin.execute<{ estado: string }>(
       sql`select estado from envios where registro_id = ${seeded.registroId}`,
     );

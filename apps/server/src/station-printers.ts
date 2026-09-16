@@ -49,7 +49,6 @@ export interface StationPrinter {
  */
 export async function attachPrinterToStation(
   tx: Transaction,
-
   { stationId, printerId }: StationPrinter,
 ): Promise<void> {
   const [live] = await tx
