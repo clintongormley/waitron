@@ -71,11 +71,11 @@ describe("formatTestPage", () => {
     expect(en).toContain("Which is the longest line");
     expect(en).not.toContain("Cual");
     expect(en).toContain("Measure the black square");
-    expect(en).toContain("Is it between 30 and 40 mm");
+    expect(en).toContain("Is it closer to 40 mm or 45 mm");
     expect(en).toContain("Ignore the white border");
     expect(en).toContain("No need to scan");
     expect(es).toContain("Mida con una regla el cuadrado negro");
-    expect(es).toContain("Mide entre 30 y 40 mm");
+    expect(es).toContain("Mide mas cerca de 40 mm o de 45 mm");
     expect(es).toContain("Ignore el borde blanco");
     expect(es).toContain("No hace falta escanear");
     const bytes = formatTestPage({ locale: "es-ES" });

@@ -1175,9 +1175,6 @@ all-active or all-disabled list.
 - A long single-token manual card reference wraps as "Ref." alone with the token split across the
   following lines, and a 61-character invoice number splits over three lines at 58mm — both stay
   within the column count and are correct, just awkward to read.
-- No committed test proves `app_user` can WRITE the four printer-layout columns — the schema test
-  only inserts with their defaults. A real-PostgreSQL upgrade probe run during review did confirm the
-  write works; a committed grant-write assertion is still owed.
 - No test covers `updatePrinter` receiving an explicit `undefined` for one of these settings — today
   both Drizzle and `updatePrinter` silently drop it, same as an absent field.
 - The invalid-value error code is sampled across the create and update routes rather than exhaustively

@@ -177,7 +177,7 @@ function stubApi(pairingOpen = false): DashboardApi {
     createPrinter: vi.fn().mockResolvedValue({ id: "p9" }),
     updatePrinter: vi.fn().mockResolvedValue(undefined),
     deactivatePrinter: vi.fn().mockResolvedValue(undefined),
-    testPrint: vi.fn().mockResolvedValue({ jobId: "j9" }),
+    testPrint: vi.fn().mockResolvedValue({ jobId: "j9", calibrationLocale: "es-ES" }),
     startPrinterDiscovery: vi.fn().mockResolvedValue({ discoveryUntil: Date.now() + 60_000 }),
     listDiscoveredPrinters: vi.fn().mockResolvedValue(discovered),
     listTills: vi.fn().mockResolvedValue(tills),

@@ -690,13 +690,10 @@ export const en = {
   "printers.resolution_180": "180 dpi",
   "printers.resolution_203": "203 dpi",
   "printers.character_set": "Text encoding",
-  "printers.character_set_wpc1252": "Western Latin with Spanish and € (WPC1252)",
-  "printers.character_set_pc858": "Multilingual with Spanish and € (PC858)",
-  "printers.character_set_plain": "Plain letters, no accents",
   "printers.character_table": "Printer table number",
   "printers.character_table_hint":
-    "Enter the first number to test. If a Tnnn W line is correct, choose Western Latin and enter nnn. If Tnnn 8 is correct, choose PC858. If none is correct, start with the next 16.",
-  "printers.character_table_test": "Test 16 tables starting here",
+    "If a Tnnn W line is correct, choose Western Latin and enter nnn. If Tnnn 8 is correct, choose PC858. Try another block if none is correct. The Plain letters option ignores the saved table number.",
+  "printers.character_table_test": "Test the block of 16 containing this table",
   "printers.character_table_invalid": "Enter a whole table number from 0 to 255",
   "printers.test_page": "Print test page",
   "printers.sample_receipt": "Print sample receipt",
@@ -712,9 +709,9 @@ export const en = {
   "printers.refresh_failed": "Could not refresh the printer information.",
   "printers.refresh_lists": "Refresh lists",
   "printers.test_qr_help":
-    "Measure the QR code’s black square with a ruler, excluding the white border. Is it 30–40 mm wide? You do not need to scan it.",
-  "printers.test_qr_yes": "Yes, it is 30–40 mm wide",
-  "printers.test_qr_no": "No, it is wider than 40 mm",
+    "Measure the QR code’s black square with a ruler, excluding the white border. Which size is it closer to? You do not need to scan it.",
+  "printers.test_qr_40": "Closer to 40 mm",
+  "printers.test_qr_45": "Closer to 45 mm",
   "printers.test_plain_hint":
     "Choose the first line that prints Spanish letters and € correctly. Plain letters is the final fallback.",
   "printers.agent_step_open":
@@ -1974,13 +1971,10 @@ export const es: Record<StringKey, string> = {
   "printers.resolution_180": "180 ppp",
   "printers.resolution_203": "203 ppp",
   "printers.character_set": "Codificación del texto",
-  "printers.character_set_wpc1252": "Latino occidental con español y € (WPC1252)",
-  "printers.character_set_pc858": "Multilingüe con español y € (PC858)",
-  "printers.character_set_plain": "Letras sin acentos",
   "printers.character_table": "Número de tabla de la impresora",
   "printers.character_table_hint":
-    "Introduce el primer número que quieras probar. Si una línea Tnnn W es correcta, elige Latino occidental e introduce nnn. Si Tnnn 8 es correcta, elige PC858. Si ninguna es correcta, continúa con las 16 siguientes.",
-  "printers.character_table_test": "Probar 16 tablas desde este número",
+    "Si una línea Tnnn W es correcta, elige Latino occidental e introduce nnn. Si Tnnn 8 es correcta, elige PC858. Prueba otro bloque si ninguna es correcta. La opción Letras sin acentos ignora el número guardado.",
+  "printers.character_table_test": "Probar el bloque de 16 que contiene esta tabla",
   "printers.character_table_invalid": "Introduce un número de tabla entero entre 0 y 255",
   "printers.test_page": "Imprimir página de prueba",
   "printers.sample_receipt": "Imprimir recibo de muestra",
@@ -1997,9 +1991,9 @@ export const es: Record<StringKey, string> = {
   "printers.refresh_failed": "No se pudo actualizar la información de las impresoras.",
   "printers.refresh_lists": "Actualizar listas",
   "printers.test_qr_help":
-    "Mide con una regla el cuadrado negro del código QR, sin incluir el borde blanco. ¿Mide entre 30 y 40 mm? No necesitas escanearlo.",
-  "printers.test_qr_yes": "Sí, mide entre 30 y 40 mm",
-  "printers.test_qr_no": "No, mide más de 40 mm",
+    "Mide con una regla el cuadrado negro del código QR, sin incluir el borde blanco. ¿A qué medida se acerca más? No necesitas escanearlo.",
+  "printers.test_qr_40": "Más cerca de 40 mm",
+  "printers.test_qr_45": "Más cerca de 45 mm",
   "printers.test_plain_hint":
     "Elige la primera línea que imprima bien las letras españolas y el símbolo €. Las letras sin acentos son la última alternativa.",
   "printers.agent_step_open":

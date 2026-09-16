@@ -12,7 +12,7 @@ describe("formatSampleReceipt", () => {
     });
     expect([...bytes.slice(0, 7)]).toEqual([0x1b, 0x40, 0x1b, 0x74, 6, 0x1c, 0x2e]);
     const text = printedLines(bytes).join("\n");
-    expect(text).toContain("PRUEBA - SIN COBRO REAL");
+    expect(text.match(/PRUEBA - SIN COBRO REAL/g)).toHaveLength(2);
     expect(text).toContain("Café y tostada");
     expect(text).toContain("5,50 €");
     expect(text).toContain("MUESTRA/1");

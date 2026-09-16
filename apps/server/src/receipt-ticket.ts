@@ -306,5 +306,12 @@ export function formatReceipt({
   // Non-fiscal footer trim, under the legend.
   if (receipt.footerMessage) text(receipt.footerMessage);
 
+  // Repeat the practice warning at the tear-off edge so either end of a separated ticket identifies
+  // the document as simulated.
+  if (simulated) {
+    b.line();
+    text("PRUEBA - SIN COBRO REAL");
+  }
+
   return b.feedAndCut().bytes();
 }

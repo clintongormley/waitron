@@ -1,21 +1,52 @@
-import { esc, prepareText } from "@waitron/printing";
+import { esc, prepareText, wrapText } from "@waitron/printing";
+import {
+  characterCalibration,
+  characterEncodingName,
+} from "@waitron/printing/src/test-page-samples.js";
+import type { SupportedLocale } from "@waitron/shared";
 
-const SAMPLE = "Café niño pingüino 5 €";
+const CAPTIONS: Readonly<Record<SupportedLocale, { title: string; instruction: string }>> = {
+  "en-GB": {
+    title: "CHARACTER TABLE FINDER",
+    instruction: "Choose a fully correct line.",
+  },
+  "es-ES": {
+    title: "BUSCADOR DE TABLAS",
+    instruction: "Elige una linea correcta.",
+  },
+};
 
-/** Print a human-readable probe for up to sixteen model-specific `ESC t n` assignments. */
-export function formatCharacterTableTest(startTable: number): Uint8Array {
+/** Print a human-readable probe for the sixteen-table block containing `startTable`. */
+export function formatCharacterTableTest({
+  startTable,
+  locale,
+  calibrationLocale = locale,
+}: {
+  startTable: number;
+  locale: SupportedLocale;
+  calibrationLocale?: SupportedLocale;
+}): Uint8Array {
   if (!Number.isInteger(startTable) || startTable < 0 || startTable > 0xff) {
     throw new RangeError(`start table must be an integer in [0, 255], got ${startTable}`);
   }
+  const firstTable = Math.min(startTable, 0xf0);
+  const captions = CAPTIONS[locale];
+  const calibration = characterCalibration(calibrationLocale);
   const b = esc("plain").init();
-  b.line("CHARACTER TABLE FINDER");
-  b.line("Choose a fully correct line.");
-  b.line("W = Windows-1252; 8 = PC858");
+  const legend = calibration.finderEncodings
+    .map(({ label, characterSet }) => `${label} = ${characterEncodingName(characterSet)}`)
+    .join("; ");
+  for (const caption of [captions.title, captions.instruction, legend]) {
+    for (const line of wrapText(caption, 30)) b.line(line);
+  }
   b.line();
-  for (let table = startTable; table <= Math.min(0xff, startTable + 15); table++) {
+  for (let table = firstTable; table < firstTable + 16; table++) {
     const label = `T${String(table).padStart(3, "0")}`;
-    b.charset("wpc1252", table).line(`${label} W: ${prepareText(SAMPLE, "wpc1252")}`);
-    b.charset("pc858", table).line(`${label} 8: ${prepareText(SAMPLE, "pc858")}`);
+    for (const encoding of calibration.finderEncodings) {
+      b.charset(encoding.characterSet, table).line(
+        `${label} ${encoding.label}: ${prepareText(calibration.finderSampleText, encoding.characterSet)}`,
+      );
+    }
   }
   return b.feedAndCut().bytes();
 }

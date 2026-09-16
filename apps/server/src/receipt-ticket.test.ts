@@ -215,7 +215,7 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
       }),
     );
 
-    expect(s).toContain("PRUEBA - SIN COBRO REAL");
+    expect(s.match(/PRUEBA - SIN COBRO REAL/g)).toHaveLength(2);
     expect(s).toContain("VERI*FACTU");
   });
 

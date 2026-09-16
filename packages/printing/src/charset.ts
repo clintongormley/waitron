@@ -1,7 +1,9 @@
+import type { printCharacterSet } from "@waitron/db";
+
 /**
- * The three encodings Waitron can use for receipt text. The printer's numeric `ESC t n` table is a
- * separate setting: physical testing found the same Windows-1252 glyph map at table 6 on an NT-806
- * while other ESC/POS manuals assign it to table 16.
+ * Receipt text uses a named byte encoding. The printer's numeric `ESC t n` table is a separate
+ * setting: physical testing found the same Windows-1252 glyph map at table 6 on an NT-806 while
+ * other ESC/POS manuals assign it to table 16.
  *
  * Source of the tables: the 0x80-0xFF halves below were generated with Python 3's `cp1252` codec
  * (which CPython generates from the Unicode Consortium file MAPPINGS/VENDORS/MICSFT/WINDOWS/CP1252.TXT)
@@ -9,7 +11,7 @@
  * cp1252 leaves undefined (0x81, 0x8D, 0x8F, 0x90, 0x9D) map to the same code point, as the WHATWG
  * windows-1252 decoder does. charset.test.ts pins both tables.
  */
-export type CharacterSet = "wpc1252" | "pc858" | "plain";
+export type CharacterSet = (typeof printCharacterSet.enumValues)[number];
 
 /** Legacy/common defaults used only when a caller has no printer profile. */
 export const DEFAULT_CHARACTER_TABLE: Readonly<Record<CharacterSet, number | undefined>> = {

@@ -69,6 +69,14 @@ describe("payment slip (pure renderer, no database)", () => {
 });
 
 describe("payment slip printer layout", () => {
+  it("selects the printer's configured table instead of the encoding default", () => {
+    const bytes = formatPaymentSlip({
+      ...input,
+      printer: { ...input.printer, characterTable: 6 },
+    });
+    expect([...bytes.slice(0, 5)]).toEqual([0x1b, 0x40, 0x1b, 0x74, 6]);
+  });
+
   it("separates each amount from the euro sign with an ASCII space", () => {
     const bytes = formatPaymentSlip(input);
     const euro = 0x80; // € in Windows-1252

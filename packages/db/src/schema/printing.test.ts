@@ -183,6 +183,15 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
     expect(row!.characterSet).toBe("wpc1252");
     expect(row!.characterTable).toBe(16);
     expect(row!.active).toBe(false);
+
+    await asApp((tx) => tx.execute(sql`update printers set character_table = 6 where id = ${id}`));
+    const [updated] = await asApp((tx) =>
+      tx
+        .select({ characterTable: printers.characterTable })
+        .from(printers)
+        .where(sql`id = ${id}`),
+    );
+    expect(updated!.characterTable).toBe(6);
   });
 
   it("printers: rejects a character table outside the ESC/POS byte range", async () => {

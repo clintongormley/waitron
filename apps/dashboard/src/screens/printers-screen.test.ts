@@ -230,7 +230,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     createPrinter: vi.fn().mockResolvedValue({ id: "p9" }),
     updatePrinter: vi.fn().mockResolvedValue(undefined),
     deactivatePrinter: vi.fn().mockResolvedValue(undefined),
-    testPrint: vi.fn().mockResolvedValue({ jobId: "j9" }),
+    testPrint: vi.fn().mockResolvedValue({ jobId: "j9", calibrationLocale: "es-ES" }),
     sampleReceipt: vi.fn().mockResolvedValue({ jobId: "j10" }),
     testCharacterTables: vi.fn().mockResolvedValue({ jobId: "j11" }),
     startPrinterDiscovery: vi.fn().mockResolvedValue({ discoveryUntil: Date.now() + 60_000 }),
@@ -2756,6 +2756,23 @@ describe("printer layout settings", () => {
     });
   });
 
+  it("refuses an empty printer table instead of silently saving table zero", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    await openPrinter(el, "p1");
+    typeField(el, 'wt-input[name="printer-character-table"]', "");
+    q(el, "[data-test=save-printer-p1]")!.click();
+    await flush(el);
+    expect(api.updatePrinter).not.toHaveBeenCalled();
+    const field = q(
+      el,
+      'wt-input[name="printer-character-table"]',
+    ) as import("@waitron/ui").WtInput;
+    expect(field.invalid).toBe(true);
+    expect(field.error).toBe(t("printers.character_table_invalid"));
+  });
+
   it("prints the test page, turns the three answers into settings, and prints a sample receipt", async () => {
     const api = stubApi();
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
@@ -2793,7 +2810,7 @@ describe("printer layout settings", () => {
     expect(q(el, "[data-test=test-qr-help] legend")?.textContent?.trim()).toBe(
       t("printers.test_qr_help"),
     );
-    await answer("printer-test-qr-fits", "no");
+    await answer("printer-test-qr-fits", "45");
     await answer("printer-test-line-reads", "4");
     q(el, '[data-test="apply-printer-test"]')!.click();
     await flush(el);
@@ -2814,7 +2831,7 @@ describe("printer layout settings", () => {
     q(el, '[data-test="print-test-page-p1"]')!.click();
     await flush(el);
     await answer("printer-test-line-fits", "D");
-    await answer("printer-test-qr-fits", "yes");
+    await answer("printer-test-qr-fits", "40");
     q(el, '[data-test="apply-printer-test"]')!.click();
     await flush(el);
     q(el, "[data-test=save-printer-p1]")!.click();
@@ -2918,7 +2935,7 @@ it("keeps a reopened test dialog independent of a pending earlier print", async 
             rejectOld = reject;
           }),
       )
-      .mockResolvedValue({ jobId: "j-new" }),
+      .mockResolvedValue({ jobId: "j-new", calibrationLocale: "es-ES" }),
   });
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
   await flush(el);

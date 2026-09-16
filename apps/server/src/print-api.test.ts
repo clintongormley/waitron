@@ -1350,13 +1350,17 @@ describe("mountPrintApi — management: test-print", () => {
           headers: { cookie: managerCookie, "accept-language": browserLocale },
         });
         expect(res.status).toBe(202);
-        const { jobId } = (await res.json()) as { jobId: string };
+        const { jobId, calibrationLocale } = (await res.json()) as {
+          jobId: string;
+          calibrationLocale: SupportedLocale;
+        };
+        expect(calibrationLocale).toBe(venueLocale);
         const [job] = await suite.db
           .select({ payload: printJobs.payload })
           .from(printJobs)
           .where(eq(printJobs.id, jobId));
         expect([...new Uint8Array(job!.payload)]).toEqual([
-          ...formatTestPage({ locale: expected }),
+          ...formatTestPage({ locale: expected, calibrationLocale: venueLocale }),
         ]);
       } finally {
         await setLocale(null);
@@ -1427,19 +1431,28 @@ describe("mountPrintApi — management: test-print", () => {
   it("prints a sixteen-number character-table finder from the requested starting table", async () => {
     const app = mountApp();
     const printerId = await createNetworkPrinter(app, "10.0.0.45", 9100, "Table finder");
-    const res = await send(
-      app,
-      "POST",
-      `/management-api/printers/${printerId}/character-table-test`,
-      { cookie: managerCookie, body: { startTable: 32 } },
-    );
+    const res = await app.request(`/management-api/printers/${printerId}/character-table-test`, {
+      method: "POST",
+      headers: {
+        cookie: managerCookie,
+        "content-type": "application/json",
+        "accept-language": "es-ES",
+      },
+      body: JSON.stringify({ startTable: 32 }),
+    });
     expect(res.status).toBe(202);
     const { jobId } = (await res.json()) as { jobId: string };
     const [job] = await suite.db
       .select({ payload: printJobs.payload })
       .from(printJobs)
       .where(eq(printJobs.id, jobId));
-    expect([...new Uint8Array(job!.payload)]).toEqual([...formatCharacterTableTest(32)]);
+    expect([...new Uint8Array(job!.payload)]).toEqual([
+      ...formatCharacterTableTest({
+        startTable: 32,
+        locale: "es-ES",
+        calibrationLocale: "es-ES",
+      }),
+    ]);
   });
 
   it("test-print for an unknown printer id → 404 printer.not_found; a non-uuid id → 400", async () => {
@@ -1512,12 +1525,12 @@ describe("mountPrintApi — management: recent jobs", () => {
         host: "10.0.0.42",
         paperWidth: "58mm",
         resolution: "203dpi",
-        characterSet: "pc858",
-        characterTable: 19,
+        characterSet: "wpc1252",
+        characterTable: 7,
       },
     });
     const { id: narrow } = (await created.json()) as { id: string };
-    const narrowJob = await enqueue(narrow, esc("pc858").init().line("Café 12,50 €").bytes());
+    const narrowJob = await enqueue(narrow, esc("wpc1252", 7).init().line("Café 12,50 €").bytes());
     const narrowPreview = await send(
       app,
       "GET",

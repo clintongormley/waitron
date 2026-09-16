@@ -1,4 +1,5 @@
-import type { ContentLanguages } from "@waitron/shared";
+import type { ContentLanguages, SupportedLocale } from "@waitron/shared";
+import type { CharacterSet } from "@waitron/printing/src/charset.js";
 
 /**
  * The browser-side face of the management dashboard's HTTP API — one thin `fetch` wrapper per
@@ -1036,7 +1037,7 @@ export type PrintTicketScope = "station" | "order";
 /** A printer's layout settings — mirrors `@waitron/printing`'s `PaperWidth`, `Resolution`, `CharacterSet`. */
 export type PrintPaperWidth = "58mm" | "80mm";
 export type PrintResolution = "180dpi" | "203dpi";
-export type PrintCharacterSet = "wpc1252" | "pc858" | "plain";
+export type PrintCharacterSet = CharacterSet;
 
 /** One outbox job's lifecycle state — the `print_job_status` pgEnum (schema/print-jobs.ts). */
 export type PrintJobStatus = "queued" | "printing" | "done" | "failed";
@@ -2700,10 +2701,11 @@ export class DashboardApi {
   }
 
   /** `POST /management-api/printers/:id/test-print` — enqueue a known diagnostic payload on the printer
-   * so the operator can confirm it (and its agent) are wired up. Returns the queued `{ jobId }` (202);
-   * an unknown id rejects `{ code: "printer.not_found" }`. Enqueue only — never blocks on the printer. */
-  testPrint(printerId: string): Promise<{ jobId: string }> {
-    return this.#request<{ jobId: string }>(
+   * so the operator can confirm it (and its agent) are wired up. Returns the queued job and the site
+   * locale used for its encoding samples; an unknown id rejects `{ code: "printer.not_found" }`.
+   * Enqueue only — never blocks on the printer. */
+  testPrint(printerId: string): Promise<{ jobId: string; calibrationLocale: SupportedLocale }> {
+    return this.#request<{ jobId: string; calibrationLocale: SupportedLocale }>(
       `/management-api/printers/${printerId}/test-print`,
       "POST",
     );

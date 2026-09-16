@@ -2487,10 +2487,12 @@ describe("DashboardApi — printing (agents + printers + jobs)", () => {
     });
   });
 
-  it("testPrint POSTs the printer's test-print route and returns { jobId } (202)", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ jobId: "j9" }, true, 202));
+  it("testPrint POSTs the printer's test-print route and returns its calibration locale", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ jobId: "j9", calibrationLocale: "es-ES" }, true, 202));
     const api = new DashboardApi("", fetchImpl);
-    expect(await api.testPrint("p1")).toEqual({ jobId: "j9" });
+    expect(await api.testPrint("p1")).toEqual({ jobId: "j9", calibrationLocale: "es-ES" });
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/printers/p1/test-print", {
       method: "POST",
       credentials: "include",

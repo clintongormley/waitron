@@ -349,6 +349,14 @@ describe("kitchen paper layout", () => {
     expect(bytes.slice(0, 5)).toEqual([0x1b, 0x40, 0x1b, 0x74, 19]);
     expect(bytes).toContain(0x82); // é in code page 858
     expect(bytes).not.toContain(0xe9);
+
+    const tableSix = [
+      ...formatKitchenTicket(
+        { ...ticket, items: [{ qty: 1, name: "Café" }] },
+        { ...KITCHEN_80, characterTable: 6 },
+      ),
+    ];
+    expect(tableSix.slice(0, 5)).toEqual([0x1b, 0x40, 0x1b, 0x74, 6]);
   });
 
   it("wraps a correction slip to the layout too", () => {

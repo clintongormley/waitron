@@ -838,7 +838,13 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           session.locale,
           resolveLoginLocale(c.req.header("Accept-Language"), deps.venueLocale),
         );
-        return enqueuePrintJob(tx, deps.cfg, id, formatTestPage({ locale }));
+        const queued = await enqueuePrintJob(
+          tx,
+          deps.cfg,
+          id,
+          formatTestPage({ locale, calibrationLocale: deps.venueLocale }),
+        );
+        return { ...queued, calibrationLocale: deps.venueLocale };
       });
       // 202 Accepted: the job is QUEUED for asynchronous delivery, not printed within the request.
       return c.json(result, 202);
@@ -875,9 +881,23 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       if (startTable === undefined) {
         throw new AppError("management.request_invalid", { field: "startTable" });
       }
-      const result = await gated(sessionId, (tx) =>
-        enqueuePrintJob(tx, deps.cfg, id, formatCharacterTableTest(startTable)),
-      );
+      const result = await gated(sessionId, async (tx) => {
+        const session = await resolveManagementSession(tx, sessionId, { touch: false });
+        const locale = resolveActiveLocale(
+          session.locale,
+          resolveLoginLocale(c.req.header("Accept-Language"), deps.venueLocale),
+        );
+        return enqueuePrintJob(
+          tx,
+          deps.cfg,
+          id,
+          formatCharacterTableTest({
+            startTable,
+            locale,
+            calibrationLocale: deps.venueLocale,
+          }),
+        );
+      });
       return c.json(result, 202);
     }),
   );
@@ -952,6 +972,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             paperWidth: printers.paperWidth,
             resolution: printers.resolution,
             characterSet: printers.characterSet,
+            characterTable: printers.characterTable,
           })
           .from(printJobs)
           .innerJoin(printers, eq(printers.id, printJobs.printerId))
@@ -964,6 +985,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           columns: columnsFor(job.paperWidth),
           dpi: dpiValue(job.resolution),
           characterSet: job.characterSet,
+          characterTable: job.characterTable,
         }),
       );
     }),

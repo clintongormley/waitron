@@ -3,7 +3,8 @@ import { AppError } from "./errors.js";
 /**
  * The languages the apps can actually render (a catalogue exists for each).
  * `label` is the language's own endonym, shown in the picker. Adding a locale
- * is: a catalogue in each app's strings.ts + one entry here — no migration.
+ * requires catalogues in each app and a printer calibration profile in
+ * `packages/printing/src/test-page-samples.ts`; adding the entry here makes omissions type errors.
  */
 export const SUPPORTED_LOCALES = [
   { code: "es-ES", label: "Español" },
